@@ -6,7 +6,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as f]
-            [crux.fixtures.kv :as fkv :refer [*kv*]]
+            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.tx :as tx])

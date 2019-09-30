@@ -30,9 +30,9 @@
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
       (with-open [standalone-node (Crux/startNode {:crux.bootstrap/node-config :crux.standalone/node-config
-                                                   :db-dir db-dir
-                                                   :kv-backend "crux.kv.memdb.MemKv"
-                                                   :event-log-dir event-log-dir})]
+                                                   :crux.kv/db-dir db-dir
+                                                   :crux.kv/kv-backend "crux.kv.memdb.MemKv"
+                                                   :crux.standalone/event-log-dir event-log-dir})]
         (binding [*api* standalone-node]
           (f)))
       (finally

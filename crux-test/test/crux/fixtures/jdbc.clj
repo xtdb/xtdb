@@ -1,6 +1,5 @@
 (ns crux.fixtures.jdbc
   (:require [crux.fixtures.api :as api]
-            [crux.fixtures.kv :as kvf :refer [*kv-backend*]]
             [crux.io :as cio]
             [crux.jdbc :as j]
             [next.jdbc :as jdbc]))
@@ -11,8 +10,7 @@
   (let [dbtype (name dbtype)
         options (merge {:crux.bootstrap/node-config :crux.jdbc/node-config
                         :dbtype (name dbtype)
-                        :dbname "cruxtest"
-                        :kv-backend *kv-backend*}
+                        :dbname "cruxtest"}
                        opts)
         ds (jdbc/get-datasource options)]
     (binding [*dbtype* dbtype]

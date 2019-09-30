@@ -7,7 +7,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.kv :as fkv :refer [*kv*]]
+            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.rdf :as rdf]

@@ -32,7 +32,6 @@
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
 (s/def ::event-log-kv-opts (s/keys :req [::event-log-dir ::event-log-kv-backend]
-                                   :req-un [:crux.kv/db-dir]
                                    :opt-un [:crux.kv/sync?]
                                    :opt [::event-log-sync-interval-ms]))
 

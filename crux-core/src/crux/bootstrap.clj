@@ -32,7 +32,6 @@
                       :create-topics true
                       :doc-partitions 1
                       :replication-factor 1
-                      :db-dir "data"
                       :server-port 3000
                       :await-tx-timeout 10000})
 
@@ -140,7 +139,7 @@
 (defn start-kv-store
   (^java.io.Closeable [_ options]
    (start-kv-store options))
-  (^java.io.Closeable [{:keys [db-dir
+  (^java.io.Closeable [{:keys [crux.kv/db-dir
                                crux.kv/kv-backend
                                sync?
                                crux.index/check-and-store-index-version]
@@ -211,7 +210,6 @@
                                   default-options (into {} (map (juxt key (comp :default val))
                                                                 (filter #(find (val %) :default) meta-args)))
                                   options (merge default-options options)]
-                              (println k options default-options)
                               (when spec
                                 (s/assert spec options))
                               [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
@@ -247,7 +245,10 @@
                :crux.kv/options
                {:crux.kv/kv-backend
                 {:doc "Key/Value store to use for node persistence."
-                 :default "crux.kv.rocksdb.RocksKv"}}])
+                 :default "crux.kv.rocksdb.RocksKv"}
+                :crux.kv/db-dir
+                {:doc "Directory to store K/V files"
+                 :default "data"}}])
 
 (def base-node-config {:kv-store kv-store
                        :raw-object-store raw-object-store

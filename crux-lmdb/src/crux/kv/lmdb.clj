@@ -197,7 +197,7 @@
 
 (s/def ::env-flags nat-int?)
 
-(s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+(s/def ::options (s/keys :req [:crux.kv/db-dir]
                          :opt-un [:crux.kv/sync?]
                          :opt [::env-flags]))
 
@@ -206,7 +206,7 @@
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
-  (open [this {:keys [db-dir sync? crux.kv.lmdb/env-flags] :as options}]
+  (open [this {:keys [crux.kv/db-dir sync? crux.kv.lmdb/env-flags] :as options}]
     (s/assert ::options options)
     (let [env-flags (or env-flags
                         (bit-or default-env-flags

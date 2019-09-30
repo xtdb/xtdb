@@ -11,8 +11,8 @@
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
-      (binding [*kv* (b/start-kv-store {:db-dir (str db-dir)
-                                        :kv-backend *kv-backend*
+      (binding [*kv* (b/start-kv-store {:crux.kv/db-dir (str db-dir)
+                                        :crux.kv/kv-backend *kv-backend*
                                         :crux.index/check-and-store-index-version *check-and-store-index-version*})]
         (with-open [*kv* ^Closeable *kv*]
           (f)))

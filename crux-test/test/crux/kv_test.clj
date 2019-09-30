@@ -6,14 +6,12 @@
             [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.fixtures :as f]
-            [crux.fixtures.kv :as fkv :refer [*kv* *kv-backend*]]
+            [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-backend*]]
+            [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem]
-            [crux.io :as cio])
-  (:import java.io.Closeable
-           [java.nio ByteBuffer ByteOrder]
-           org.agrona.concurrent.UnsafeBuffer
-           crux.ByteUtils))
+            [crux.memory :as mem])
+  (:import java.nio.ByteOrder
+           org.agrona.concurrent.UnsafeBuffer))
 
 (t/use-fixtures :each
                 fkv/with-each-kv-store-implementation
@@ -22,7 +20,6 @@
                 f/with-silent-test-check)
 
 (declare value seek seek-and-iterate long->bytes bytes->long compare-bytes bytes=?)
-
 (t/deftest test-store-and-value []
   (t/testing "store, retrieve and seek value"
     (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
@@ -103,8 +100,8 @@
       (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (kv/backup *kv* backup-dir)
-      (with-open [restored-kv (b/start-kv-store {:db-dir (str backup-dir)
-                                                 :kv-backend *kv-backend*})]
+      (with-open [restored-kv (b/start-kv-store {:crux.kv/db-dir (str backup-dir)
+                                                 :crux.kv/kv-backend *kv-backend*})]
         (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
 
         (t/testing "backup and original are different"
@@ -118,9 +115,9 @@
 (t/deftest test-sanity-check-can-start-with-sync-enabled
   (let [sync-dir (cio/create-tmpdir "kv-store-sync")]
     (try
-      (with-open [sync-kv (b/start-kv-store {:db-dir (str sync-dir)
+      (with-open [sync-kv (b/start-kv-store {:crux.kv/db-dir (str sync-dir)
                                              :sync? true
-                                             :kv-backend *kv-backend*})]
+                                             :crux.kv/kv-backend *kv-backend*})]
         (kv/store sync-kv [[(long->bytes 1) (.getBytes "Crux")]])
         (t/is (= "Crux" (String. ^bytes (value sync-kv (long->bytes 1))))))
       (finally

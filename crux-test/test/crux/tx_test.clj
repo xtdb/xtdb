@@ -6,7 +6,7 @@
             [crux.index :as idx]
             [crux.fixtures :as f]
             [crux.fixtures.standalone :as fs]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :refer [*api*] :as apif]
             [crux.fixtures.kv :as fkv]
             [crux.tx :as tx]
             [crux.kv :as kv]
@@ -15,7 +15,7 @@
             [crux.query :as q])
   (:import java.util.Date))
 
-(t/use-fixtures :each fkv/with-rocksdb fs/with-standalone-node f/with-silent-test-check)
+(t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir apif/with-node f/with-silent-test-check)
 
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.

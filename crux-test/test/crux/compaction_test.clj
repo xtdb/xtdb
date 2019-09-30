@@ -20,8 +20,8 @@
         opts {:crux.bootstrap/node-config :crux.jdbc/node-config
               :dbtype "h2"
               :dbname "cruxtest"
-              :db-dir db-dir
-              :kv-backend "crux.kv.memdb.MemKv"}]
+              :crux.kv/db-dir db-dir
+              :crux.kv/kv-backend "crux.kv.memdb.MemKv"}]
     (try
       (let [api (Crux/startNode opts)
             {:keys [crux.tx/tx-time]} (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]

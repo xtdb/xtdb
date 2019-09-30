@@ -5,7 +5,7 @@
             [clojure.test.check.properties :as prop]
             [crux.codec :as c]
             [crux.fixtures :as f]
-            [crux.fixtures.kv :as fkv :refer [*kv* *kv-backend*]]
+            [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-backend*]]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.status :as status])

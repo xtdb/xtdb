@@ -39,7 +39,7 @@
   (close [_]
     (.close tx)))
 
-(s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+(s/def ::options (s/keys :req [:crux.kv/db-dir]
                          :opt-un [:crux.kv/sync?]))
 
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
@@ -59,7 +59,7 @@
 
 (defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi]
   kv/KvStore
-  (open [this {:keys [db-dir sync? crux.kv.lmdb.java/env-flags] :as options}]
+  (open [this {:keys [crux.kv/db-dir sync? crux.kv.lmdb.java/env-flags] :as options}]
     (s/assert ::options options)
     (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
                      (io/file db-dir)
