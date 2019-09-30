@@ -20,6 +20,8 @@
 (def ^:private q-form-styles
   [:style
    (garden/css
+     [:.examples-wrapper
+      {:overflow :auto}]
      [:.q-form
       {:position :relative
        :display  :grid
@@ -114,7 +116,8 @@
         [time-controls/root]]
        (if @ex
          [:div.q-form__examples
-          [query-examples/root]])
+          [:div.examples-wrapper
+           [query-examples/root]]])
        [:div.q-form__submit
         (let [qa @-sub-query-analysis]
           [comps/button-cta
