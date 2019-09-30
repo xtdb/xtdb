@@ -8,7 +8,6 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.kafka :as fk])
   (:import (java.sql Date)))
 
@@ -129,7 +128,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                cn/with-cluster-node
+                fk/with-cluster-node
                 with-stocks-history-data)
 
 (defn not-really-benchmarking [query db n]
