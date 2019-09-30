@@ -2,7 +2,6 @@
   (:require [garden.core :as garden]
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
-            [juxt.crux-ui.frontend.views.commons.tiny-components  :as comps]
             [juxt.crux-ui.frontend.views.output.react-tree :as q-results-tree]
             [juxt.crux-ui.frontend.views.output.tx-history :as output-txes]
             [juxt.crux-ui.frontend.views.output.attr-history :as output-attr-history]
@@ -12,8 +11,6 @@
             [juxt.crux-ui.frontend.views.output.table :as q-results-table]
             [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.attr-stats :as attr-stats]
-            [juxt.crux-ui.frontend.views.codemirror :as cm]
-            [reagent.core :as r]
             [juxt.crux-ui.frontend.routes :as routes]
             [juxt.crux-ui.frontend.views.commons.tabs :as tabs]))
 
