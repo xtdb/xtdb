@@ -30,8 +30,8 @@
 
 (def col-base {:h 197 :s 80 :l 65 :a 0.8})
 
-(def btn-color--base       (s/hsl (assoc col-base :a 0.5)))
 (def btn-color--cta        (s/hsl col-base))
+(def btn-color--inactive   (s/hsl (assoc col-base :a 0.5)))
 (def btn-color--cta-hover  (s/hsl (assoc col-base :a 0.9)))
 (def btn-color--cta-active (s/hsl (assoc col-base :a 1)))
 
@@ -50,6 +50,8 @@
      :background :none}]
    [:&--active
     {:font-weight 400}]
+   [:&--cta.button--inactive
+    {:background btn-color--inactive}]
    [:&--cta
     {:background    btn-color--cta
      :border-radius :2px
@@ -63,10 +65,11 @@
     [:&:active
      {:background btn-color--cta-active}]]])
 
-(defn- button [main-mod {:keys [on-click active? text] :as params}]
+(defn- button [main-mod {:keys [on-click active? text css-mods] :as params}]
   [:button
-   {:type :button :on-click on-click
-    :class (vu/bem-str :button main-mod {:active active?})}
+   {:type :button
+    :on-click on-click
+    :class (vu/bem-str :button main-mod css-mods {:active active?})}
    (if (:icon params)
      [:div.button__icon [icon' (:icon params)]])
    [:span.button__text text]])

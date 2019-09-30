@@ -17,7 +17,7 @@
 
 (defn on-sidebar-bg-click [evt]
   (if (= "root__sidebar" (some-> evt (f/jsget "target" "id")))
-    (rf/dispatch [:evt.ui.sidebar/toggle])))
+    (rf/dispatch [:evt.ui.second-layer/toggle])))
 
 (def ^:private root-styles
   [:style
@@ -32,7 +32,6 @@
        [:h3 :h4
         {:font-weight 300
          :letter-spacing :0.05em}]
-       [:.g-mr]
        [:.g-nolink
         :.g-nolink:active
         :.g-nolink:visited

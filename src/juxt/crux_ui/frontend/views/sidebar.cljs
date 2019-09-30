@@ -17,10 +17,10 @@
    (garden/css
      [:.sidebar
       {:width :100%
-       :height :100%
+       :min-height :100%
        :background :white
        :border-radius :2px
-       :padding "0px 0px"}
+       :padding "0px 0px 48px"}
       [:&__item
        {:cursor :pointer
         :padding "16px 24px"}
@@ -52,8 +52,8 @@
     (fn []
       [:div.sidebar
        sidebar-styles
-       [-item {:class "sidebar__item--logo"
-               :dispatch [:evt.ui.sidebar/toggle]} [css-logo/root]]
+       [-item {:class    "sidebar__item--logo"
+               :dispatch [:evt.ui.second-layer/toggle]} [css-logo/root]]
        [-item {:dispatch [:evt.ui/fullscreen]} "Fullscreen mode"]
        (if @-sub-qmap?
          [-item {:dispatch [:evt.ui/toggle-polling]} "Toggle polling"])

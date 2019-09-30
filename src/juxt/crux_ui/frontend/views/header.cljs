@@ -16,8 +16,8 @@
 (defn disable-toggle-display-mode []
   (rf/dispatch [:evt.ui.display-mode/toggle]))
 
-(defn dispatch-sidebar-toggle []
-  (rf/dispatch [:evt.ui.sidebar/toggle]))
+(defn dispatch-second-layer-toggle []
+  (rf/dispatch [:evt.ui.second-layer/toggle]))
 
 
 (def ^:private header-styles
@@ -73,7 +73,7 @@
 (defn root []
   [:header.header
    header-styles
-   [:div.header__logo {:on-click dispatch-sidebar-toggle}
+   [:div.header__logo {:on-click dispatch-second-layer-toggle}
     [css-logo/root]]
    [:div.header__status
     [node-status/node-status]]

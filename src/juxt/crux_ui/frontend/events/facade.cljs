@@ -233,6 +233,13 @@
     (assoc db prop-name value)))
 
 (rf/reg-event-fx
+  :evt.db/props-change
+  (fn [{db :db :as cofx} [_ props]]
+    (let [host (:db.sys/host props)]
+      (cond-> {:db (merge db props)}
+        host (assoc :dispatch [:evt.db/host-change host])))))
+
+(rf/reg-event-fx
   :evt.db/host-change
   (fn [{:keys [db] :as cofx} [_ new-host]]
     (println :evt.db/host-change new-host)
@@ -331,7 +338,7 @@
     (assoc db :db.ui/screen-size new-size)))
 
 (rf/reg-event-db
-  :evt.ui.sidebar/toggle
+  :evt.ui.second-layer/toggle
   (fn [db [_ new-size]]
     (update db :db.ui/second-layer not)))
 
