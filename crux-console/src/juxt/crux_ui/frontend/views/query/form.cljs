@@ -5,6 +5,7 @@
             [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.query.editor :as q-editor]
             [juxt.crux-ui.frontend.views.query.time-controls :as time-controls]
+            [juxt.crux-ui.frontend.views.commons.tiny-components :as comps]
             [juxt.crux-ui.frontend.views.query.examples :as query-examples]
             [juxt.crux-ui.frontend.views.functions :as vu]))
 
@@ -15,24 +16,6 @@
 (defn- on-submit [e]
   (rf/dispatch [:evt.ui.query/submit {:evt/push-url? true}]))
 
-
-(def col-base {:h 197 :s 80 :l 65 :a 0.8})
-
-(def btn-color--base       (s/hsl (assoc col-base :a 0.5)))
-(def btn-color--cta        (s/hsl col-base))
-(def btn-color--cta-hover  (s/hsl (assoc col-base :a 0.9)))
-(def btn-color--cta-active (s/hsl (assoc col-base :a 1)))
-
-
-
-(defn btn-cta-styles [] ; todo move into comps
-  {:background    btn-color--base
-   :color         "white"
-   :cursor        :pointer
-   :border        0
-   :letter-spacing "0.03em"
-   :padding       "8px 14px"
-   :border-radius :2px})
 
 (def ^:private q-form-styles
   [:style
@@ -71,14 +54,7 @@
         {:font-size :0.8em
          :color s/color-font-secondary}]]
 
-      [:&__submit-btn
-       (btn-cta-styles)
-       [:&--cta
-        {:background btn-color--cta}]
-       [:&:hover
-        {:background btn-color--cta-hover}]
-       [:&:active
-        {:background btn-color--cta-active}]]
+
 
       [:&__examples
        {:grid-area :examples
@@ -126,7 +102,6 @@
           {:padding "0 16px"
            :justify-self :start}]]))])
 
-
 (defn root []
   (let [ex (rf/subscribe [:subs.query/examples])]
     (fn []
@@ -142,9 +117,7 @@
           [query-examples/root]])
        [:div.q-form__submit
         (let [qa @-sub-query-analysis]
-          [:button.q-form__submit-btn
+          [comps/button-cta
            {:on-click on-submit
-            :class (if qa "q-form__submit-btn--cta")}
-           [:span "Run Query"]])
-        #_[:small "[ctrl + enter]"]]])))
-
+            :css-mods [(if qa "cta" "inactive")]
+            :label "Run Query"}])]])))

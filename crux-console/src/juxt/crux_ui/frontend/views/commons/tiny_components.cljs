@@ -2,7 +2,8 @@
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.functions :as vu]
             [garden.core :as garden]
-            [juxt.crux-ui.frontend.svg-icons :as icon]))
+            [juxt.crux-ui.frontend.svg-icons :as icon]
+            [juxt.crux-ui.frontend.views.style :as s]))
 
 
 (defn icon' [icon-name]
@@ -27,8 +28,16 @@
      (if label
        [:div.link__label label])]))
 
+(def col-base {:h 197 :s 80 :l 65 :a 0.8})
 
-(def button-textual-styles
+(def btn-color--base       (s/hsl (assoc col-base :a 0.5)))
+(def btn-color--cta        (s/hsl col-base))
+(def btn-color--cta-hover  (s/hsl (assoc col-base :a 0.9)))
+(def btn-color--cta-active (s/hsl (assoc col-base :a 1)))
+
+
+
+(def button-styles
   [:.button
    {:cursor :pointer
     :background :none
@@ -40,21 +49,28 @@
     {:border :none
      :background :none}]
    [:&--active
-    {:font-weight 400}]])
+    {:font-weight 400}]
+   [:&--cta
+    {:background    btn-color--cta
+     :border-radius :2px
+     :color         "white"
+     :cursor        :pointer
+     :border        0
+     :letter-spacing "0.03em"
+     :padding       "8px 14px"}
+    [:&:hover
+     {:background btn-color--cta-hover}]
+    [:&:active
+     {:background btn-color--cta-active}]]])
 
-(defn button-textual [{:keys [on-click active? text] :as params}]
+(defn- button [main-mod {:keys [on-click active? text] :as params}]
   [:button
    {:type :button :on-click on-click
-    :class (vu/bem-str :button :textual {:active active?})}
+    :class (vu/bem-str :button main-mod {:active active?})}
    (if (:icon params)
      [:div.button__icon [icon' (:icon params)]])
    [:span.button__text text]])
 
-(defn button-bordered [{:keys [on-click active? text] :as params}]
-  [:button
-   {:type :button :on-click on-click
-    :class (vu/bem-str :button {:active active?})}
-   (if (:icon params)
-     [:div.button__icon [icon' (:icon params)]])
-   [:span.button__text text]])
-
+(def button-textual (partial button :textual))
+(def button-cta (partial button :cta))
+(def button-bordered (partial button :bordered))

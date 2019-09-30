@@ -26,9 +26,13 @@
         {:color color-link}
         [:&:visited {:color color-link}]
         [:&:hover {:color color-link--hover}]]
-       [:h1 :h2 :h3 :h4
+       [:h1 :h2
         {:font-weight 300
          :letter-spacing :0.19em}]
+       [:h3 :h4
+        {:font-weight 300
+         :letter-spacing :0.05em}]
+       [:.g-mr]
        [:.g-nolink
         :.g-nolink:active
         :.g-nolink:visited
@@ -38,7 +42,7 @@
          {:font-size :1rem}]
        input/styles
        icon/styles
-       comps/button-textual-styles
+       comps/button-styles
        [:html :body :#app
         {:font-family "Helvetica Neue, Helvetica, BlinkMacSystemFont, -apple-system, Roboto, 'Segoe UI', sans-serif"
          :height "100%"
