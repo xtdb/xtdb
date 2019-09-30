@@ -35,9 +35,7 @@
                       :db-dir "data"
                       :kv-backend "crux.kv.rocksdb.RocksKv"
                       :server-port 3000
-                      :await-tx-timeout 10000
-                      :doc-cache-size (* 128 1024)
-                      :object-store "crux.index.KvObjectStore"})
+                      :await-tx-timeout 10000})
 
 (defrecord CruxVersion [version revision]
   status/Status
@@ -161,9 +159,7 @@
          (.close ^Closeable kv)
          (throw t))))))
 
-(defn start-object-store ^java.io.Closeable [partial-node {:keys [object-store]
-                                                           :or {object-store (:object-store default-options)}
-                                                           :as options}]
+(defn start-object-store ^java.io.Closeable [partial-node {:keys [crux.db/object-store] :as options}]
   (-> (db/require-and-ensure-object-store-record object-store)
       (cio/new-record)
       (db/init partial-node options)))
@@ -171,9 +167,8 @@
 (defn start-raw-object-store [{:keys [kv-store]} options]
   (start-object-store {:kv kv-store} options))
 
-(defn- start-cached-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
-  (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
-                           (start-object-store {:kv kv-store} options)))
+(defn- start-cached-object-store [{:keys [raw-object-store]} {:keys [crux.lru/doc-cache-size]}]
+  (lru/->CachedObjectStore (lru/new-cache doc-cache-size) raw-object-store))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
@@ -212,8 +207,10 @@
         start-order (start-order node-system)
         started-modules (try
                           (for [k start-order]
-                            (let [[start-fn deps spec] (node-system k)
-                                  deps (select-keys @started deps)]
+                            (let [[start-fn deps spec meta-args] (node-system k)
+                                  deps (select-keys @started deps)
+                                  default-options (into {} (map (juxt key (comp :default val)) meta-args))
+                                  options (merge default-options options)]
                               (when spec
                                 (s/assert spec options))
                               [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
@@ -233,8 +230,16 @@
                   :b (fn [deps] :start-b)
                   :c (fn [deps] :start-c)}))
 
-(def raw-object-store [start-raw-object-store [:kv-store] (s/keys :opt-un [:crux.db/object-store])])
-(def object-store [start-cached-object-store [:kv-store] (s/keys :opt-un [:crux.lru/doc-cache-size])])
+(def raw-object-store [start-raw-object-store
+                       [:kv-store]
+                       (s/keys :req [:crux.db/object-store])
+                       {:crux.db/object-store {:doc "Node local store for documents/objects"
+                                               :default "crux.index.KvObjectStore"}}])
+(def object-store [start-cached-object-store
+                   [:raw-object-store]
+                   (s/keys :req [:crux.lru/doc-cache-size])
+                   {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
+                                              :default lru/default-doc-cache-size}}])
 (def kv-indexer [start-kv-indexer [:kv-store :tx-log :object-store]])
 (def kv-store [start-kv-store [] :crux.kv/options])
 
