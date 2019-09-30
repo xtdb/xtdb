@@ -4,14 +4,16 @@
             [crux.fixtures.standalone :as fs]
             [crux.moberg]
             [crux.codec :as c]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :refer [*api*] :as apif]
+            [crux.fixtures.kv :as kvf]
             [crux.fixtures.kafka :as fk]
             crux.jdbc
             [crux.fixtures.jdbc :as fj]
-            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
+            [crux.fixtures.kafka :as kf]
             [crux.rdf :as rdf]
-            [crux.api :as api])
+            [crux.api :as api]
+            [crux.fixtures.api :as apif])
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
@@ -22,7 +24,7 @@
 
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
-    (cn/with-cluster-node f))
+    (kf/with-cluster-node f))
   (t/testing "Local API StandaloneNode"
     (fs/with-standalone-node f))
   (t/testing "JDBC Node"
@@ -31,10 +33,10 @@
     (fn [f]
       (fh/with-http-server
         (fn [f]
-          (cn/with-cluster-node f))))))
+          (kf/with-cluster-node f))))))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each with-each-api-implementation)
+(t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir apif/with-node)
 
 (declare execute-sparql)
 

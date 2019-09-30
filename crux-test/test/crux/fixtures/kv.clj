@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [crux.bootstrap :as b]
             [crux.index :as idx]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.fixtures.api :as apif])
   (:import java.io.Closeable))
 
 (def ^:dynamic *kv*)
@@ -12,6 +13,13 @@
 (defn without-kv-index-version [f]
   (binding [*check-and-store-index-version* false]
     (f)))
+
+(defn with-kv-dir [f]
+  (let [db-dir (cio/create-tmpdir "kv-store")]
+    (try
+      (apif/with-opts {:db-dir (str db-dir)} f)
+      (finally
+        (cio/delete-dir db-dir)))))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]

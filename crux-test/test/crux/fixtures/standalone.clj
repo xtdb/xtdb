@@ -1,22 +1,16 @@
 (ns crux.fixtures.standalone
-  (:require [crux.fixtures.http-server :refer [*api-url*]]
+  (:require [crux.fixtures.api :as apif]
             [crux.fixtures.kv :refer [*kv* *kv-backend*]]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.io :as cio])
-  (:import [crux.api Crux ICruxAPI]))
+            [crux.io :as cio]))
 
 (defn with-standalone-node [f]
   (assert (not (bound? #'*kv*)))
-  (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
+  (let [event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
-      (with-open [standalone-node (Crux/startNode {:crux.bootstrap/node-config :crux.standalone/node-config
-                                                   :db-dir db-dir
-                                                   :kv-backend *kv-backend*
-                                                   :crux.standalone/event-log-kv-backend *kv-backend*
-                                                   :event-log-dir event-log-dir})]
-        (binding [*api* standalone-node]
-          (f)))
+      (binding [apif/*opts* {:crux.bootstrap/node-config :crux.standalone/node-config
+                             :kv-backend *kv-backend*
+                             :crux.standalone/event-log-kv-backend *kv-backend*
+                             :event-log-dir event-log-dir}]
+        (f))
       (finally
-        (cio/delete-dir db-dir)
         (cio/delete-dir event-log-dir)))))

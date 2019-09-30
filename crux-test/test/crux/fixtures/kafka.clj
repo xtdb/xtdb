@@ -1,16 +1,14 @@
 (ns crux.fixtures.kafka
   (:require [clojure.java.io :as io]
+            [crux.fixtures.api :as apif]
+            [crux.fixtures.kv :refer [*kv-backend*]]
             [crux.io :as cio]
             [crux.kafka :as k]
-            [crux.api]
-            [crux.fixtures.kv :refer [*kv-backend*]]
             [crux.kafka.embedded :as ek])
   (:import [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
            org.apache.kafka.clients.consumer.KafkaConsumer
-           org.apache.kafka.clients.producer.KafkaProducer
-           [crux.api Crux ICruxAPI]
-           java.util.UUID))
+           org.apache.kafka.clients.producer.KafkaProducer))
 
 (def ^:dynamic *kafka-bootstrap-servers*)
 (def ^:dynamic ^String *tx-topic*)
@@ -68,18 +66,11 @@
 
 (defn with-cluster-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
-  (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        test-id (UUID/randomUUID)]
+  (let [test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
-      (try
-        (with-open [cluster-node (Crux/startNode {:crux.bootstrap/node-config :crux.kafka/node-config
-                                                  :db-dir db-dir
-                                                  :kv-backend *kv-backend*
-                                                  :tx-topic *tx-topic*
-                                                  :doc-topic *doc-topic*
-                                                  :bootstrap-servers *kafka-bootstrap-servers*})]
-          (binding [*cluster-node* cluster-node]
-            (f)))
-        (finally
-          (cio/delete-dir db-dir))))))
+      (apif/with-opts {:crux.bootstrap/node-config :crux.kafka/node-config
+                       :kv-backend *kv-backend*
+                       :tx-topic *tx-topic*
+                       :doc-topic *doc-topic*
+                       :bootstrap-servers *kafka-bootstrap-servers*} f))))
