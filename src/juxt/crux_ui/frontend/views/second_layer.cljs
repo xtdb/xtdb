@@ -23,7 +23,9 @@
       [:&__main
        {:grid-area :main
         :background :white
-        :border-radius :2px}]])])
+        :border-radius :2px
+        :height :100%
+        :overflow :scroll}]])])
 
 (defn root []
   (let [-sub-second-layer-main-pane (rf/subscribe [:subs.db.ui.second-layer/main-pane])]
@@ -33,6 +35,6 @@
          root-styles
          [:div.second-layer__side
           [sidebar/root]]
-         [:div.second-layer__main
-          (if mpv [mpv])]]))))
+         (if mpv
+           [:div.second-layer__main [mpv]])]))))
 

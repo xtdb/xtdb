@@ -14,7 +14,7 @@
        [:button
          {:font-size :1rem}]
        icon/styles
-       comps/button-textual-styles
+       comps/button-styles
        [:html :body :#app
         {:font-family "Helvetica Neue, Helvetica, BlinkMacSystemFont, -apple-system, Roboto, 'Segoe UI', sans-serif"
          :height "100%"
