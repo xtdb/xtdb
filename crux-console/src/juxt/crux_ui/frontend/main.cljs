@@ -23,6 +23,8 @@
       :ui.screen/inner-width js/window.innerWidth}]))
 
 (defn- listen-keyboard-shortcuts [evt]
+  (when (and (.-ctrlKey evt) (= 69 (.-keyCode evt)))
+    (rf/dispatch [:evt.keyboard/ctrl-e]))
   (when (and (.-ctrlKey evt) (= 13 (.-keyCode evt)))
     (rf/dispatch [:evt.keyboard/ctrl-enter])))
 

@@ -290,6 +290,10 @@
   (fn []
     {:dispatch [:evt.ui.query/submit {:evt/push-url? true}]}))
 
+(rf/reg-event-fx
+  :evt.keyboard/ctrl-e
+  (fn []
+    {:dispatch [:evt.ui.form/toggle]}))
 
 
 ; --- ui ---
@@ -314,6 +318,11 @@
         (if (:ui/poll-interval-seconds? q)
           (o-fx-disable-polling {:db new-db} q)
           (o-fx-enable-polling {:db new-db} q))))))
+
+(rf/reg-event-db
+  :evt.ui.form/toggle
+  (fn [db]
+    (update db :db.ui/show-form? not)))
 
 (rf/reg-event-fx
   :evt.ui/fullscreen

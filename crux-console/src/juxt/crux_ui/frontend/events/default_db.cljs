@@ -29,6 +29,7 @@
    :db.ui/root-tab               :db.ui.root-tab/query-ui
    :db.ui/output-side-tab        nil ;:db.ui.output-tab/table
    :db.ui/editor-key             0
+   :db.ui/show-form?             true
    :db.ui/second-layer           false
    :db.ui.second-layer/main-pane nil
    :db.ui.attr-history/hint?     true

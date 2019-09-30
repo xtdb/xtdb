@@ -48,6 +48,7 @@
 (rf/reg-sub :subs.query/error  #(:db.query/error % false))
 (rf/reg-sub :subs.query/analysis-committed #(:db.query/analysis-committed % nil))
 (rf/reg-sub :subs.db.ui.attr-history/hint? #(:db.ui.attr-history/hint? % nil))
+(rf/reg-sub :subs.db.ui/show-form? #(:db.ui/show-form? % true))
 (rf/reg-sub :subs.db.ui/second-layer #(:db.ui/second-layer % false))
 (rf/reg-sub :subs.db.ui.second-layer/main-pane #(:db.ui.second-layer/main-pane % nil))
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
