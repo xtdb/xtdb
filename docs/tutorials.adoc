@@ -20,7 +20,7 @@ Tale].
 Otherwise, see the original the version in
 https://juxt.pro/blog/posts/a-bitemporal-tale.html[our blog post].
 
-[#edn]
+[#essential_edn]
 == Essential EDN
 
 === *edn* (Extensible Data Notation)

@@ -7,7 +7,7 @@ query. However, there are a few topics you might benefit from learning about
 before you get too far with attempting to use Crux:
 
 - *EDN* – the extensible data notation format used throughout
-  the Crux APIs, see <<tutorials.adoc#edn,Essential
+  the Crux APIs, see <<#essential_edn,Essential
 EDN for Crux>>.
 
 - The *Datalog* query language – Crux supports an EDN-flavoured version of
