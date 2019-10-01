@@ -57,14 +57,11 @@
 
 (defmethod handler ::static [{:keys [uri] :as req}]
   (let [relative-uri (s/replace uri #"^/" "")
-        resource (io/file (io/resource relative-uri))
+        resource (io/input-stream (io/resource relative-uri))
         mime-type (uri->mime-type uri)]
-    (println uri)
     {:status 200
      :headers {"content-type" mime-type}
      :body resource}))
-
-(handler {:uri "/static/styles/monokai.css"})
 
 (defmethod handler ::not-found [req]
   {:status 200

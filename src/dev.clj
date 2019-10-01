@@ -1,4 +1,11 @@
 (ns dev
-  (:require [crux-ui-server.main :as main]))
+  (:require [clojure.java.io :as io]
+            [crux-ui-server.main :as main]))
 
 (main/-main)
+
+(comment
+
+  (io/resource "/static/crux-ui/compiled/main.js")
+
+  (main/handler {:uri "/static/crux-ui/compiled/main.js"}))
