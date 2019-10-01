@@ -46,5 +46,5 @@
   {:extra-paths ["target/dev"]}
 
   :prod/build
-  {:extra-paths ["target/prod"]}
-  }}
+  {:extra-paths ["target/prod"]}}}
+
