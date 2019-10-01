@@ -1,12 +1,15 @@
 (ns juxt.crux-ui.server.main
   (:require [aleph.http :as http]
             [bidi.bidi :as bidi]
+            [crux.http-server]
+            [crux.api]
             [juxt.crux-ui.server.pages :as pages]
             [clojure.java.io :as io]
             [clojure.string :as s])
-  (:gen-class))
+  (:gen-class)
+  (:import (java.io Closeable)))
 
-(defonce srv (atom nil))
+(defonce closables (atom nil))
 
 (def routes
   [""
@@ -24,9 +27,6 @@
     [true ::not-found]]])
 
 
-(bidi/match-route routes "/static/333.js")
-
-
 (defmulti handler
   (fn [{:keys [uri] :as req}]
     (some-> (bidi/match-route routes uri) :handler)))
@@ -39,7 +39,6 @@
   {:status 200
    :headers {"content-type" "text/html"}
    :body (pages/gen-console-page req)})
-
 
 (defn uri->mime-type [uri]
   (cond
@@ -74,12 +73,35 @@
    :body "Not implemented"})
 
 
-(defn stop-server []
-  (when-let [closeable @srv]
-    (.close closeable)
-    (reset! srv nil)))
+(defn stop-servers []
+  (when-let [closables' @closables]
+    (doseq [^Closeable closable closables']
+      (.close closable))
+    (reset! closables nil)))
+
+(def node-opts
+  {:kv-backend "crux.kv.rocksdb.RocksKv"
+   :event-log-dir "data/eventlog-1"
+   :db-dir "data/db-dir-1"})
+
+(def http-opts
+  {:server-port 8080
+   :cors-access-control
+   [:access-control-allow-origin [#".*"]
+    :access-control-allow-headers ["X-Requested-With"
+                                   "Content-Type"
+                                   "Cache-Control"
+                                   "Origin"
+                                   "Accept"
+                                   "Authorization"
+                                   "X-Custom-Header"]
+    :access-control-allow-methods [:get :options :head :post]]})
+
 
 (defn -main []
   (println "starting console server")
-  (stop-server)
-  (reset! srv (http/start-server handler {:port 8300})))
+  (stop-servers)
+  (let [node (crux.api/start-standalone-node node-opts)
+        crux-http-server (crux.http-server/start-http-server node http-opts)
+        console-http-server (http/start-server handler {:port 8300})]
+    (reset! closables [node crux-http-server console-http-server])))
