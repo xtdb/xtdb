@@ -151,14 +151,14 @@ image::local-standalone-mode.svg[Local Standalone Mode,width=70%,align="center"]
 |tx-log|`event-log-dir`|where to store events locally, i.e. `"data/eventlog-1"`
 |===
 
-=== Project Dependency
+*Project Dependency*
 
 [source,clj]
 ----
 include::./deps.edn[tags=CruxDep]
 ----
 
-=== Start the standalone node:
+*Getting started*
 
 [source,clj]
 ----
@@ -194,17 +194,15 @@ Kafka Cluster Nodes have the following properties:
 |`replication-factor`|Number of times to replicate data on Kafka|*1*
 |===
 
-=== Project Dependencies
+*Project Dependencies*
 
 [source,clj]
 ----
 include::./deps.edn[tags=CruxDep]
-----
-
-[source,clj,subs="normal"]
-----
 include::./deps.edn[tags=KafkaClientsDeps]
 ----
+
+*Getting started*
 
 Use the API to start a cluster node, configuring it with the
 `bootstrap-servers` property in order to connect to Kafka:
@@ -230,14 +228,15 @@ include::./examples.clj[tags=close-node]
 Crux is ready to work with an embedded Kafka for when you don't have a independently
 running Kafka available to connect to (such as during development).
 
-Add `crux-kafka-embedded` to your project dependencies:
+*Project Depencies*
 
 [source,clj,subs="normal"]
 ----
+include::./deps.edn[tags=CruxDep]
 include::./deps.edn[tags=KafkaEmbeddedDeps]
 ----
 
-See the below example code:
+*Getting started*
 
 [source,clj]
 ----
@@ -273,12 +272,15 @@ Below is the minimal configuration you will need:
 |`db-dir`|For h2 and sqlite
 |===
 
-Add `crux-jdbc` to your project dependencies:
+*Project Dependencies*
 
-[source,clj,subs="normal"]
+[source,clj]
 ----
+include::./deps.edn[tags=CruxDep]
 include::./deps.edn[tags=JDBCDeps]
 ----
+
+*Getting started*
 
 Use the API to start a JDBC node, configuring it with the required
 parameters:
