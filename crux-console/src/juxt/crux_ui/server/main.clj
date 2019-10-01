@@ -1,6 +1,7 @@
 (ns juxt.crux-ui.server.main
   (:require [aleph.http :as http]
-            [bidi.bidi :as bidi])
+            [bidi.bidi :as bidi]
+            [juxt.crux-ui.server.pages :as pages])
   (:gen-class))
 
 (defonce srv (atom nil))
@@ -34,8 +35,8 @@
 
 (defmethod handler ::console [req]
   {:status 200
-   :headers {"content-type" "text/plain"}
-   :body "hello!"})
+   :headers {"content-type" "text/html"}
+   :body (pages/gen-console-page req)})
 
 (defmethod handler ::not-found [req]
   {:status 200
