@@ -1,4 +1,4 @@
-= *Kafka Connect Crux*
+= Kafka Connect Crux
 
 == Introduction
 
@@ -16,12 +16,17 @@ The Crux *source connector* will publish transacations on a node to a Kafka topi
 |EDN|Both
 |===
 
-== QuickStart
+To get started with the connector, there are two separate guides (depending on whether you are using a full *<<#confluent_quickstart,Confluent Platform>>* installation, or a basic *<<#kafka_quickstart,Kafka>>* installation):
 
-To get started with the connector, there are two separate guides (depending on whether you are using a full *Confluent Platform* installation, or a basic *Kafka* installation):
+[#confluent_quickstart]
+include::{path}/Confluent-QuickStart.adoc[leveloffset=+1]
 
-- *<<Confluent-QuickStart.adoc#,Confluent QuickStart Guide>>*
-- *<<Kafka-QuickStart.adoc#,Kafka QuickStart Guide>>*
+'''
+
+[#kafka_quickstart]
+include::{path}/Kafka-QuickStart.adoc[leveloffset=+1]
+
+'''
 
 == Source Configuration
 

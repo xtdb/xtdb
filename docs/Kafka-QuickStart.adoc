@@ -1,4 +1,4 @@
-= *Kafka Quickstart*
+= Kafka Quickstart
 
 == Installing the connector
 
