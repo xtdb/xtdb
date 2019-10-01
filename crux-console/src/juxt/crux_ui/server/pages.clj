@@ -1,19 +1,7 @@
 (ns juxt.crux-ui.server.pages
-  (:require
-    crux.api
-    [yada.yada :as yada]
-    [integrant.core :as ig]
-    [yada.yada :refer [handler listener]]
-    [hiccup2.core :refer [html]]
-    [hiccup.util]
-    [yada.resource :refer [resource]]
-    [yada.resources.classpath-resource]
-    [clojure.java.shell :refer [sh]]
-    [juxt.crux-ui.server.preloader :as preloader]
-    [yada.yada :as yada]
-    [page-renderer.api :as pr]
-    [integrant.core :as ig]
-    [clojure.java.io :as io]))
+  (:require [juxt.crux-ui.server.preloader :as preloader]
+            [page-renderer.api :as pr]
+            [clojure.java.io :as io]))
 
 (def id #uuid "50005565-299f-4c08-86d0-b1919bf4b7a9")
 
@@ -43,14 +31,13 @@
     [:meta {:name "google" :content "notranslate"}]]
    :body [:body [:div#app preloader/root]]})
 
-(defn- gen-console-page [ctx]
+(defn gen-console-page [req]
   (pr/render-page console-assets-frame))
 
-(defn- gen-service-worker [ctx]
+(defn gen-service-worker [req]
   (pr/generate-service-worker console-assets-frame))
 
-
-(defn- q-perf-page [ctx]
+(defn q-perf-page [req]
   (pr/render-page
     {:title            "Crux Console"
      :lang             "en"
@@ -63,7 +50,7 @@
        (slurp (io/resource "static/plots-data.edn"))]]
      :body [:body [:div#app preloader/root]]}))
 
-(defn- gen-home-page [ctx]
+(defn gen-home-page [req]
   (pr/render-page
     {:title "Crux Standalone Demo with HTTP"
      :lang "en"
@@ -86,70 +73,3 @@
         [:h3 "You should now be able to access this Crux standalone demo node using the HTTP API via localhost:8080"]]
 
        [:div#app]]}))
-
-
-(defmethod ig/init-key ::console
-  [_ {:keys [node]}]
-  (yada/resource
-    {:id ::console
-     :methods
-     {:get
-      {:produces ["text/html"]
-       :response gen-console-page}}}))
-
-(defmethod ig/init-key ::service-worker-for-console
-  [_ {:keys [node]}]
-  (yada/resource
-    {:id  ::service-worker-for-console
-     :methods
-         {:get
-          {:produces ["text/javascript"]
-           :response gen-service-worker}}}))
-
-(defmethod ig/init-key ::query-perf
-  [_ {:keys [system]}]
-  (yada/resource
-    {:id ::query-perf
-     :methods
-     {:get
-      {:produces ["text/html"]
-       :response q-perf-page}}}))
-
-(defmethod ig/init-key ::home
-  [_ {:keys [node]}]
-  (yada/resource
-    {:id ::home
-     :methods
-     {:get
-      {:produces ["text/html"]
-       :response gen-home-page}}}))
-
-
-(defmethod ig/init-key ::read-write
-  [_ {:keys [node]}]
-  (yada/resource
-    {:id ::read-write
-     :methods
-     {:get
-      {:produces ["text/html" "application/edn" "application/json"]
-       :response (fn [ctx]
-                   (let [db (crux.api/db node)]
-                     (map
-                       #(crux.api/entity db (first %))
-                       (crux.api/q
-                         db
-                         {:find '[?e]
-                          :where [['?e :crux.db/id id]]}))))}
-      :post
-      {:produces "text/plain"
-       :consumes "application/edn"
-       :response
-       (fn [ctx]
-         (crux.api/submit-tx
-           node
-           [[:crux.tx/put id
-             (merge {:crux.db/id id} (:body ctx))]])
-         (yada/redirect ctx ::read-write))}}}))
-
-;; To populate data using cURL:
-; $ curl -H "Content-Type: application/edn" -d '{:foo/username "Bart"}' localhost:8300/rw
