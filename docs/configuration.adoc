@@ -12,9 +12,9 @@ There are different configurations of a Crux node:
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Java API
-|Cluster|Uses Kafka|`Crux.startClusterNode options;`
-|JDBC|Uses JDBC event log|`Crux.startJDBCNode options;`
-|Standalone|Uses local event log|`Crux.startStandaloneNode options;`
+|<<#standalone, Standalone>>|Uses local event log|`Crux.startStandaloneNode options;`
+|<<#kafka, Cluster>>|Uses Kafka|`Crux.startClusterNode options;`
+|<<#jdbc, JDBC>>|Uses JDBC event log|`Crux.startJDBCNode options;`
 |===
 
 Use a cluster node when horizontal scalability is required or when
@@ -172,8 +172,118 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
-== Node Specific Configuration
+[#kafka]
+== Kafka Nodes
 
-<<configuration-kafka.adoc#,Kafka Nodes>>
+When using Crux at scale it is recommended to use multiple Crux nodes connected
+via a Kafka cluster.
 
-<<configuration-jdbc.adoc#,JDBC Nodes>>
+image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
+
+Kafka Cluster Nodes have the following properties:
+
+.Cluster Node Configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Property|Description|Default value
+|`bootstrap-servers`|List of Kafka Servers to connect to|*localhost:9092*
+|`tx-topic`|Name of Kafka topic to send transaction log|*crux-transaction-log*
+|`doc-topic`|Name of Kafka topic to send documents|*crux-docs*
+|`create-topics`|Option to automatically create Kafka topics if they do not already exist|*true*
+|`doc-partitions`|Number of partitions for the document topic|*1*
+|`replication-factor`|Number of times to replicate data on Kafka|*1*
+|===
+
+=== Project Dependencies
+
+[source,clj]
+----
+include::./deps.edn[tags=CruxDep]
+----
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=KafkaClientsDeps]
+----
+
+Use the API to start a cluster node, configuring it with the
+`bootstrap-servers` property in order to connect to Kafka:
+
+[source,clj]
+----
+include::./examples.clj[tags=start-cluster-node]
+----
+
+NOTE: If you don't specify `kv-backend` then by default the
+cluster node will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
+your list of project dependencies.
+
+You can later stop the node if you wish:
+
+[source,clj]
+----
+include::./examples.clj[tags=close-node]
+----
+
+=== Embedded Kafka
+
+Crux is ready to work with an embedded Kafka for when you don't have a independently
+running Kafka available to connect to (such as during development).
+
+Add `crux-kafka-embedded` to your project dependencies:
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=KafkaEmbeddedDeps]
+----
+
+See the below example code:
+
+[source,clj]
+----
+include::./examples.clj[tags=ek-example]
+----
+
+You can later stop the Embedded Kafka if you wish:
+
+[source,clj]
+----
+include::./examples.clj[tags=ek-close]
+----
+
+[#jdbc]
+== JDBC Nodes
+
+JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
+internally and pass through the relevant configuration options that
+you can find
+https://github.com/seancorfield/next-jdbc/blob/master/doc/all-the-options.md[here].
+
+Below is the minimal configuration you will need:
+
+.JDBC Configuration
+[#table-conversion%header,cols="d,d"]
+|===
+|Property|Description
+|`dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
+|`dbname`|Database Name
+|`host`|Database Host
+|`user`|Database Username
+|`password`|Database Password
+|`db-dir`|For h2 and sqlite
+|===
+
+Add `crux-jdbc` to your project dependencies:
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=JDBCDeps]
+----
+
+Use the API to start a JDBC node, configuring it with the required
+parameters:
+
+[source,clj]
+----
+include::./examples.clj[tags=start-jdbc-node]
+----
