@@ -12,31 +12,31 @@ Crux ultimately aims to make the use of bitemporal modelling intuitive and acces
 
 See: https://github.com/juxt/crux/graphs/contributors
 
-= Support
+== Support
 
 Please contact us if you would like to discuss your support requirements: crux@juxt.pro
 
-== Managed Hosting
+=== Managed Hosting
 
 JUXT offers a Managed Hosting service for Crux to accelerate your
 development and provide you with a secure and reliable service.
 
-== Software
+=== Software
 
 JUXT currently offers bespoke support packages for Crux with SLAs that can be customised to meet your requirements.
 
-== Reseller
+=== Reseller
 
 Are you looking to implement Crux as part of a solution for your client(s)? JUXT can provide Software Support and Managed Hosting on your behalf. Please consider joining our reseller program.
 
-== Deployment
+=== Deployment
 
 Engage JUXT for Deployment Services Support if you need help with the initial process of installing and configuring Crux in your environment.
 
-= Contributing
+== Contributing
 
 include::contributing.adoc[leveloffset=+1]
 
-== Releases
+=== Releases
 
 For technical changes, see:https://github.com/juxt/crux/blob/master/CHANGELOG.md
