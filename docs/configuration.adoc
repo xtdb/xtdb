@@ -91,7 +91,7 @@ Crux can be used programmatically as a library, but Crux also ships
 with an embedded HTTP server, that allows clients to use the API
 remotely via REST.
 
-image::remote-cluster-mode.svg[Remote Cluster Mode,width=70%,align="center"]
+image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,width=70%,align="center"]
 
 Set the `server-port` configuration property on a Crux node to
 expose a HTTP port that will accept REST requests:
@@ -142,7 +142,7 @@ you've started a standalone Crux instance as described below, you can
 then follow the <<get_started.adoc#,getting started
 example>>.
 
-image::local-standalone-mode.svg[Local Standalone Mode,width=70%,align="center"]
+image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
 
 .Standalone Configuration
 [#table-conversion%header,cols="d,d,d"]
@@ -178,7 +178,7 @@ include::./examples.clj[tags=close-node]
 When using Crux at scale it is recommended to use multiple Crux nodes connected
 via a Kafka cluster.
 
-image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
+image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
 
 Kafka Cluster Nodes have the following properties:
 
@@ -257,6 +257,8 @@ JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
 internally and pass through the relevant configuration options that
 you can find
 https://github.com/seancorfield/next-jdbc/blob/master/doc/all-the-options.md[here].
+
+image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
 
 Below is the minimal configuration you will need:
 
