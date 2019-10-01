@@ -1,9 +1,11 @@
 (defproject crux-console "derived-from-git"
   :dependencies
     [[org.clojure/clojure         "1.10.0"]
-     [page-renderer               "0.4.2"]
+     [yada/lean "1.2.15"]
+     [aleph "0.4.6"]
      [bidi                        "2.1.6"]
      [hiccup                      "1.0.5"]
+     [page-renderer               "0.4.2"]
      ;
      ; cljs deps
      ; also bidi
@@ -23,9 +25,21 @@
      [org.clojure/google-closure-library "0.0-20190213-2033d5d9"]]
 
   :min-lein-version "2.9.1"
+  :main juxt.crux-ui.server.main
+  :aot  [juxt.crux-ui.server.main]
+  :profiles
+  {:dev {:main dev
+         :repl-options {:init-ns dev}}}
   :repositories [["clojars" "https://repo.clojars.org"]]
   :plugins [;[lein-shadow "0.1.5"] ; nasty guy, deletes original shadow-cljs config if you run it
             [lein-shell  "0.5.0"]] ; https://github.com/hypirion/lein-shell
+
+  :clean-targets ^{:protect false} ["target" "resources/static/crux-ui/compiled"]
+
+  :source-paths ["src" "../common/src" "test" "node_modules"]
+
+  :resource-paths ["resources"]
+
   :aliases
   {"yarn"
    ["do" ["shell" "yarn" "install"]]
@@ -61,10 +75,5 @@
 
    "build-report"
    [["yarn"]
-    ["shadow" "run" "shadow.cljs.build-report" "app" "report.html"]]}
+    ["shadow" "run" "shadow.cljs.build-report" "app" "report.html"]]})
 
-  :clean-targets ^{:protect false} ["target" "resources/static/crux-ui/compiled"]
-
-  :source-paths ["src" "../common/src" "test" "node_modules"]
-
-  :resource-paths ["resources"])
