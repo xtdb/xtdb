@@ -1,3 +1,0 @@
-{:paths ["src"]
- :deps
- {fipp {:mvn/version "0.6.16"}}}
