@@ -1,7 +1,9 @@
 (ns juxt.crux-ui.server.main
   (:require [aleph.http :as http]
             [bidi.bidi :as bidi]
-            [juxt.crux-ui.server.pages :as pages])
+            [juxt.crux-ui.server.pages :as pages]
+            [clojure.java.io :as io]
+            [clojure.string :as s])
   (:gen-class))
 
 (defonce srv (atom nil))
@@ -17,16 +19,16 @@
       "/output" ::console
       ["/output/" :rd/out-tab] ::console
       ["/" :rd/tab] ::console}]
-    ["/static/" [::static :edge.yada.ig/resources]]
+    ["/static/"
+     {true ::static}]
     [true ::not-found]]])
 
 
-(bidi/match-route routes "/console")
+(bidi/match-route routes "/static/333.js")
 
 
 (defmulti handler
   (fn [{:keys [uri] :as req}]
-    (println :matching-route)
     (some-> (bidi/match-route routes uri) :handler)))
 
 (defmethod handler ::home [req]
@@ -37,6 +39,28 @@
   {:status 200
    :headers {"content-type" "text/html"}
    :body (pages/gen-console-page req)})
+
+
+(defn uri->mime-type [uri]
+  (cond
+    (re-find #".css$" uri) "text/css"
+    (re-find #".js$" uri) "text/javascript"
+    (re-find #".json$" uri) "application/json"
+    (re-find #".png$" uri) "image/png"
+    (re-find #".jpe?g$" uri) "image/jpeg"
+    (re-find #".svg$" uri) "image/svg"
+    :else "text/plain"))
+
+(defmethod handler ::static [{:keys [uri] :as req}]
+  (let [relative-uri (s/replace uri #"^/" "")
+        resource (io/file (io/resource relative-uri))
+        mime-type (uri->mime-type uri)]
+    (println uri)
+    {:status 200
+     :headers {"content-type" mime-type}
+     :body resource}))
+
+(handler {:uri "/static/styles/monokai.css"})
 
 (defmethod handler ::not-found [req]
   {:status 200

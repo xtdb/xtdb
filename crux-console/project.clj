@@ -11,6 +11,7 @@
      ; also bidi
      [org.clojure/clojurescript   "1.10.520"]
      [reagent                     "0.8.1"]
+     [juxt/crux-uberjar "19.09-1.4.0-alpha"]
      [re-frame                    "0.10.8"]
      [garden                      "1.3.9"]
      [stylefy                      "1.13.3"]
