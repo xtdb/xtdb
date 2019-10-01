@@ -51,7 +51,7 @@
     ["clean"]
     ["yarn"]
     ["shadow" "release" "app"]       ; compile
-    ["shadow" "release" "app-perf"]] ; compile production ready performance charts app
+    #_["shadow" "release" "app-perf"]] ; compile production ready performance charts app
 
    "ebs"
    ["do" ["shell" "sh" "./dev/build-ebs.sh"]]
@@ -59,6 +59,7 @@
    "build-ebs"
    ["do"
     ["build"]
+    ["uberjar"]
     ["ebs"]]
 
    "cljs-dev"

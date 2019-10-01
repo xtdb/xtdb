@@ -105,5 +105,5 @@
   (stop-servers)
   (let [node (crux.api/start-standalone-node node-opts)
         crux-http-server (crux.http-server/start-http-server node http-opts)
-        console-http-server (http/start-server handler {:port 8300})]
+        console-http-server (http/start-server handler {:port 5000})]
     (reset! closables [node crux-http-server console-http-server])))
