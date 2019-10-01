@@ -120,7 +120,7 @@
            [query-examples/root]]])
        [:div.q-form__submit
         (let [qa @-sub-query-analysis]
-          [comps/button-cta
+          [comps/button-bordered
            {:on-click on-submit
-            :css-mods [(if-not qa "inactive")]
+            :css-mods ["bright" (if-not qa "inactive")]
             :text "Run Query"}])]])))

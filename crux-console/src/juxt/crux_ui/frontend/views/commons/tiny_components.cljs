@@ -45,6 +45,9 @@
     :border-radius :2px
     :user-select :none
     :border "1px solid hsl(0, 0%, 85%)"}
+   [:&--bright
+    {:border  (str "1px solid " btn-color--cta-active)
+     :color    btn-color--cta-active}]
    [:&--textual
     {:border :none
      :background :none}]
