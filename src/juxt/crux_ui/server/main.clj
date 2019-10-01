@@ -40,6 +40,11 @@
    :headers {"content-type" "text/html"}
    :body (pages/gen-console-page req)})
 
+(defmethod handler ::service-worker-for-console [req]
+  {:status 200
+   :headers {"content-type" "text/javascript"}
+   :body (pages/gen-service-worker req)})
+
 (defn uri->mime-type [uri]
   (cond
     (re-find #".css$" uri) "text/css"
