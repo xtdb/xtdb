@@ -1,5 +1,5 @@
 ;; shadow-cljs configuration
-{:source-paths ["src" "../common/src" "test" "node_modules"]
+{:source-paths ["src" "test" "node_modules"]
 
  :dependencies
    [[reagent                      "0.8.1"]
@@ -17,14 +17,14 @@
  :builds
  {:app
   {:target :browser
-   :modules {:main {:init-fn juxt.crux-ui.frontend.main/init}}
+   :modules {:main {:init-fn crux-ui.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :compiler-options {:optimizations :advanced}
    :asset-path "/static/crux-ui/compiled"}
 
   :app-perf
   {:target :browser
-   :modules {:main-perf {:init-fn juxt.crux-ui.frontend.main-perf/init}}
+   :modules {:main-perf {:init-fn crux-ui.main-perf/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :compiler-options {:optimizations :advanced}
    :asset-path "/static/crux-ui/compiled"}
@@ -41,28 +41,28 @@
 
   :dev
   {:target :browser
-   :modules {:main {:init-fn juxt.crux-ui.frontend.main/init}}
+   :modules {:main {:init-fn crux-ui.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :asset-path "/static/crux-ui/compiled"
    :compiler-options {:closure-warnings {:global-this :off}
                       :closure-defines  {re-frame.trace.trace-enabled? true}
                       :optimizations :none}
    :devtools
-   {:after-load juxt.crux-ui.frontend.main/reload!
+   {:after-load crux-ui.main/reload!
     :preloads   [day8.re-frame-10x.preload]}}
 
   :dev-perf
   {:target :browser
    :modules
-   {:main-perf {:init-fn juxt.crux-ui.frontend.main-perf/init}}
+   {:main-perf {:init-fn crux-ui.main-perf/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :asset-path "/static/crux-ui/compiled"
    :compiler-options {:closure-warnings {:global-this :off}
                       :closure-defines  {re-frame.trace.trace-enabled? true}
                       :optimizations :none}
    :devtools
-   {:after-load juxt.crux-ui.frontend.main-perf/reload!
+   {:after-load crux-ui.main-perf/reload!
     :preloads   [day8.re-frame-10x.preload]}}}
 
  :nrepl {:port 55300
-         :init-ns juxt.crux-ui.frontend.main}}
+         :init-ns crux-ui.main}}

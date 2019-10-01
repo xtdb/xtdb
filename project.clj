@@ -25,8 +25,8 @@
      [org.clojure/google-closure-library "0.0-20190213-2033d5d9"]]
 
   :min-lein-version "2.9.1"
-  :main juxt.crux-ui.server.main
-  :aot  [juxt.crux-ui.server.main]
+  :main crux-ui-server.main
+  :aot  [crux-ui-server.main]
   :profiles
   {:dev {:main dev
          :repl-options {:init-ns dev}}}
