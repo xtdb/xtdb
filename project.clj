@@ -1,19 +1,22 @@
 (defproject crux-console "derived-from-git"
   :dependencies
     [[org.clojure/clojure         "1.10.0"]
-     [org.clojure/clojurescript   "1.10.520"]
      [page-renderer               "0.4.2"]
+     [bidi                        "2.1.6"]
+     [hiccup                      "1.0.5"]
+     ;
+     ; cljs deps
+     ; also bidi
+     [org.clojure/clojurescript   "1.10.520"]
      [reagent                     "0.8.1"]
      [re-frame                    "0.10.8"]
      [garden                      "1.3.9"]
-     [bidi                        "2.1.6"]
      [stylefy                      "1.13.3"]
      [medley                       "1.2.0"]
      [day8.re-frame/re-frame-10x  "0.3.3"]
      [funcool/promesa              "2.0.1"]
      [com.andrewmcveigh/cljs-time "0.5.2"]
      [binaryage/oops              "0.6.4"]
-     [hiccup                      "1.0.5"]
      [day8.re-frame/test          "0.1.5"]
      [thheller/shadow-cljs        "2.8.52"]
      [com.google.javascript/closure-compiler-unshaded "v20190819"]
