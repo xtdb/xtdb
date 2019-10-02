@@ -17,40 +17,39 @@ cp $CONNECTOR_PATH/etc/*.properties $KAFKA_HOME/config
 
 The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
-== Example usage
+== Creating the Crux node
 
-Open a REPL within `crux-dev`, and run the following commands:
+To use our connector, you must first have a *Crux node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
 
 [source,clj]
 ----
-(dev)
-(start)
+juxt/crux-core {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-kafka {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-http-server {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-rocksdb {:mvn/version "19.09-1.4.0-alpha"}
+----
+
+Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
+
+[source,clj]
+----
+(require '[crux.api :as crux]
+	 '[crux.kafka :as k]
+	 '[crux.http-server :as srv])
+(import (crux.api ICruxAPI))
+
+(def ^crux.api.ICruxAPI node
+  (crux/start-cluster-node {:bootstrap-servers "localhost:9092"
+                            :server-port 3000}))
+
+(srv/start-http-server node)
+----
+
+Finally, we create the topic _'connect-test'_, (used within the *local-crux-sink* and *local-crux-source* property files by default) and associate _node_ with it.
+
+[source,clj]
+----
 (k/create-topic (:admin-client node) "connect-test" 1 1 nil)
-----
-
-This will create an embedded Kafka broker within Crux, along with *Crux node* called _node_. The topic _'connect-test'_, (used within the *local-crux-sink* and *local-crux-source* property files by default) is then created by the embedded broker, with _node_ being associated with the topic.
-
-== Sink Connector
-
-Run the following command within the base of the Kafka folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
-
-----
-./bin/connect-standalone etc/connect-standalone.properties etc/local-crux-sink.properties etc/connect-file-source.properties
-----
-
-Run the following within your Kafka directory, to add a line of JSON to _'test.txt'_:
-
-----
-echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
-----
-
-Now, verify that this was transacted within your REPL:
-
-[source,clj]
-----
-(crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
-==>
-{:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
 ----
 
 == Source Connector

@@ -6,18 +6,40 @@ Use `confluent-hub install zip-file-name` to download and install the connector 
 
 The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
-== Example usage
+== Creating the Crux node
 
-Open a REPL within `crux-dev`, and run the following commands:
+To use our connector, you must first have a *Crux node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
 
 [source,clj]
 ----
-(dev)
-(start)
-(k/create-topic (:admin-client node) "connect-test" 1 1 nil)
+juxt/crux-core {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-kafka {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-http-server {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-rocksdb {:mvn/version "19.09-1.4.0-alpha"}
 ----
 
-This will create an embedded Kafka broker within Crux, along with *Crux node* called _node_. The topic _'connect-test'_, (used within the *local-crux-sink* and *local-crux-source* property files by default) is then created by the embedded broker, with _node_ being associated with the topic.
+Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
+
+[source,clj]
+----
+(require '[crux.api :as crux]
+	 '[crux.kafka :as k]
+	 '[crux.http-server :as srv])
+(import (crux.api ICruxAPI))
+
+(def ^crux.api.ICruxAPI node
+  (crux/start-cluster-node {:bootstrap-servers "localhost:9092"
+                            :server-port 3000}))
+
+(srv/start-http-server node)
+----
+
+Finally, we create the topic _'connect-test'_, (used within the *local-crux-sink* and *local-crux-source* property files by default) and associate _node_ with it.
+
+[source,clj]
+----
+(k/create-topic (:admin-client node) "connect-test" 1 1 nil)
+----
 
 == Sink Connector
 
