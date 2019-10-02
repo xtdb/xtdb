@@ -43,3 +43,9 @@ jobs:
       - run: lein do version, sub test, check
 
       - run: ./.circleci/bin/deploy_clojars.sh
+
+workflows:
+  version: 2
+  commit:
+    jobs:
+      - build
