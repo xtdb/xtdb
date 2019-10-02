@@ -57,7 +57,7 @@ Finally, we create the topic _'connect-test'_, (used within the *local-crux-sink
 Run the following command within the base of the Kafka folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
 
 ----
-./bin/connect-standalone config/connect-standalone.properties config/local-crux-sink.properties config/connect-file-source.properties
+./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-sink.properties config/connect-file-source.properties
 ----
 
 Run the following within your Kafka directory, to add a line of JSON to _'test.txt'_:
@@ -80,7 +80,7 @@ Now, verify that this was transacted within your REPL:
 Run the following command within the base of the Kafka folder, to create a worker connects to the 'connect-test' topic, ready to *receive* messages from the _node_. This also makes use of 'connect-file-sink', outputting transactions to your _node_ within _'test.sink.txt'_:
 
 ----
-./bin/connect-standalone config/connect-standalone.properties config/local-crux-source.properties config/connect-file-sink.properties
+./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-source.properties config/connect-file-sink.properties
 ----
 
 
