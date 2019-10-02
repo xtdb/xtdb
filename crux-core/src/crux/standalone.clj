@@ -38,11 +38,8 @@
 (defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv-backend
                                      crux.standalone/event-log-sync-interval-ms
                                      crux.standalone/event-log-dir
-                                     sync?]}]
-
-  ;; Can't remember what this means
-  ;; if you don't specifc the event-log-sync-internval-mx
-  (let [event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))]
+                                     crux.standalone/event-log-sync?]}]
+  (let [event-log-sync? (boolean (or event-log-sync? (not event-log-sync-interval-ms)))]
     (b/start-kv-store
      {:crux.kv/db-dir event-log-dir
       :crux.kv/kv-backend event-log-kv-backend
@@ -65,7 +62,10 @@
                     {:doc "Key/Value store to use for standalone event-log persistence. If not present, will use `crux.kv/kv-backend."
                      :default "crux.kv.rocksdb.RocksKv"}
                     ::event-log-dir
-                    {:doc "Directory used to store the event-log and used for backup/restore."}}])
+                    {:doc "Directory used to store the event-log and used for backup/restore."}
+                    ::event-log-sync?
+                    {:doc "Sync the event-log backed KV store to disk after every write."
+                     :default false}}])
 
 (def event-log-sync [start-event-log-fsync [:event-log-kv] ::event-log-fsync-opts])
 (def event-log-consumer [start-event-log-consumer [:event-log-kv :indexer]])
