@@ -39,11 +39,14 @@
                                      crux.standalone/event-log-sync-interval-ms
                                      crux.standalone/event-log-dir
                                      sync?]}]
+
+  ;; Can't remember what this means
+  ;; if you don't specifc the event-log-sync-internval-mx
   (let [event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))]
     (b/start-kv-store
      {:crux.kv/db-dir event-log-dir
       :crux.kv/kv-backend event-log-kv-backend
-      :sync? event-log-sync?
+      :crux.kv/sync? event-log-sync?
       :crux.index/check-and-store-index-version false})))
 
 (defn- start-event-log-consumer [{:keys [event-log-kv indexer]} _]

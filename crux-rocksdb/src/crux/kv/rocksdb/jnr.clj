@@ -205,15 +205,15 @@
 (s/def ::disable-wal? boolean?)
 
 (s/def ::options (s/keys :req [:crux.kv/db-dir]
-                         :opt-un [:crux.kv/sync?]
-                         :opt [::db-options
+                         :opt [:crux.kv/sync?
+                               ::db-options
                                ::disable-wal?]))
 
 (def ^:private rocksdb_lz4_compression 4)
 
 (defrecord RocksJNRKv [db-dir]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir sync? crux.kv.rocksdb.jnr/db-options crux.kv.rocksdb.jnr/disable-wal?] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.rocksdb.jnr/db-options crux.kv.rocksdb.jnr/disable-wal?] :as options}]
     (init-rocksdb-jnr!)
     (s/assert ::options options)
     (let [opts (.rocksdb_options_create rocksdb)

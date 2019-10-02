@@ -40,7 +40,7 @@
     (.close tx)))
 
 (s/def ::options (s/keys :req [:crux.kv/db-dir]
-                         :opt-un [:crux.kv/sync?]))
+                         :opt [:crux.kv/sync?]))
 
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
@@ -59,7 +59,7 @@
 
 (defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir sync? crux.kv.lmdb.java/env-flags] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.lmdb.java/env-flags] :as options}]
     (s/assert ::options options)
     (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
                      (io/file db-dir)

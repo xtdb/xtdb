@@ -66,12 +66,12 @@
 (s/def ::persist-on-close? boolean?)
 
 (s/def ::options (s/keys :opt [:crux.kv/db-dir
-                               ::persist-on-close?]
-                         :opt-un [:crux.kv/sync?]))
+                               :crux.kv/sync?
+                               ::persist-on-close?]))
 
 (defrecord MemKv [db db-dir persist-on-close?]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir sync? crux.memdb.kv/persist-on-close?] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.memdb.kv/persist-on-close?] :as options}]
     (s/assert ::options options)
     (when sync?
       (log/warn "Using sync? on MemKv has no effect."

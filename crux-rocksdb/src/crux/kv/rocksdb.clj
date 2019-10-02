@@ -56,8 +56,8 @@
 (s/def ::disable-wal? boolean?)
 
 (s/def ::options (s/keys :req [:crux.kv/db-dir]
-                         :opt-un [:crux.kv/sync?]
-                         :opt [::db-options
+                         :opt [:crux.kv/sync?
+                               ::db-options
                                ::disable-wal?]))
 
 (def ^:private default-block-cache-size (* 128 1024 1024))
@@ -75,7 +75,7 @@
 
 (defrecord RocksKv [db-dir]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir sync? ^Options crux.kv.rocksdb/db-options crux.kv.rocksdb/disable-wal?] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? ^Options crux.kv.rocksdb/db-options crux.kv.rocksdb/disable-wal?] :as options}]
     (s/assert ::options options)
     (RocksDB/loadLibrary)
     (let [opts (doto (or db-options (Options.))

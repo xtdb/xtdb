@@ -248,7 +248,10 @@
                  :default "crux.kv.rocksdb.RocksKv"}
                 :crux.kv/db-dir
                 {:doc "Directory to store K/V files"
-                 :default "data"}}])
+                 :default "data"}
+                :crux.kv/sync
+                {:doc "Sync the KV store to disk after every write."
+                 :default false}}])
 
 (def base-node-config {:kv-store kv-store
                        :raw-object-store raw-object-store

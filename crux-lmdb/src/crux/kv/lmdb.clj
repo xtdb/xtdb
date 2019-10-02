@@ -198,15 +198,14 @@
 (s/def ::env-flags nat-int?)
 
 (s/def ::options (s/keys :req [:crux.kv/db-dir]
-                         :opt-un [:crux.kv/sync?]
-                         :opt [::env-flags]))
+                         :opt [:crux.kv/sync? ::env-flags]))
 
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir sync? crux.kv.lmdb/env-flags] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.lmdb/env-flags] :as options}]
     (s/assert ::options options)
     (let [env-flags (or env-flags
                         (bit-or default-env-flags
