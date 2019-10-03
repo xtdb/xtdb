@@ -32,9 +32,7 @@
 ;; Create-topics -> create-topics?
 ;; Kafka consumer doing too much?
 
-(def default-options {
-                      :server-port 3000
-                      :await-tx-timeout 10000 ;; -< hard
+(def default-options {:await-tx-timeout 10000 ;; -< hard
                       })
 
 (defrecord CruxVersion [version revision]
