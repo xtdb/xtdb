@@ -44,17 +44,17 @@ otherwise restrict the execution of queries.
 [#table-conversion%header,cols="d,d,d"]
 |===
 |uri|method|description
-|<<#home,`/`>>|GET|returns various details about the state of the database
-|<<#document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
-|<<#documents `/documents`>>|POST|returns a map of document ids and respective documents for a given set of content hashes submitted in the request body
-|<<#entity, `/entity`>>|POST|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
-|<<#entity-tx, `/entity-tx`>>|POST|Returns the `:put` or `:cas` transaction that most recently set a key
-|<<#history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
-|<<#query, `/query`>>|POST|Takes a datalog query and returns its results
-|<<#query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
-|<<#sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
-|<<#tx-log, `/tx-log`>>|GET| Returns a list of all transactions
-|<<#tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
+|<<#rest-home,`/`>>|GET|returns various details about the state of the database
+|<<#rest-document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
+|<<#rest-documents, `/documents`>>|POST|returns a map of document ids and respective documents for a given set of content hashes submitted in the request body
+|<<#rest-entity, `/entity`>>|POST|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
+|<<#rest-entity-tx, `/entity-tx`>>|POST|Returns the `:put` or `:cas` transaction that most recently set a key
+|<<#rest-history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
+|<<#rest-query, `/query`>>|POST|Takes a datalog query and returns its results
+|<<#rest-query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
+|<<#rest-sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
+|<<#rest-tx-log, `/tx-log`>>|GET| Returns a list of all transactions
+|<<#rest-tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
 |===
 
 [#rest-home]

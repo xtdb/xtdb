@@ -102,7 +102,7 @@ expose a HTTP port that will accept REST requests:
 |http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
-Visit the guide on using the <<rest#rest,REST api>> for examples
+Visit the guide on using the <<#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
 
 [#config-docker]
@@ -140,7 +140,7 @@ for scaling purposes.
 
 Using a Crux standalone node is the best way to get started. Once
 you've started a standalone Crux instance as described below, you can
-then follow the <<get_started.adoc#,getting started
+then follow the <<#get-started,getting started
 example>>.
 
 image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
