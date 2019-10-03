@@ -25,7 +25,6 @@
 
 ;; Todo:
 ;; Use maps for module definitions
-;; Create a spec for module definition
 ;; Fix Uberjar
 ;; Pull out topology merge into modules
 ;; Change the kafka defaults (6 for doc-partitions, bootstrap-servers, ref-factor->3)
@@ -200,12 +199,20 @@
     (require (symbol (namespace v)))
     (var-get (find-var v))))
 
+(s/def ::module-def (s/cat :start-fn fn?
+                           :deps (s/? (s/every keyword?))
+                           :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
+                           :meta-args (s/? (s/map-of keyword?
+                                                     (s/keys :req-un [::doc]
+                                                             :opt-un [::default])))))
+
 (defn start-modules [node-system options]
   (let [started (atom {})
         start-order (start-order node-system)
         started-modules (try
                           (for [k start-order]
-                            (let [[start-fn deps spec meta-args] (node-system k)
+                            (let [_ (s/assert ::module-def (node-system k))
+                                  {:keys [start-fn deps spec meta-args]} (s/conform ::module-def (node-system k))
                                   deps (select-keys @started deps)
                                   default-options (into {} (map (juxt key (comp :default val))
                                                                 (filter #(find (val %) :default) meta-args)))
