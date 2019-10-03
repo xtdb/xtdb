@@ -1,4 +1,5 @@
 (ns crux-ui-server.main
+  "Routing and bootstrapping"
   (:require [aleph.http :as http]
             [bidi.bidi :as bidi]
             [crux.http-server]
@@ -74,9 +75,9 @@
    :headers {"location" "/console"}
    :body "Not implemented"})
 
-
 (defn stop-servers []
   (when-let [closables' @closables]
+    (println "stopping console server")
     (doseq [^Closeable closable closables']
       (.close closable))
     (reset! closables nil)))
@@ -99,10 +100,11 @@
                                    "X-Custom-Header"]
     :access-control-allow-methods [:get :options :head :post]]})
 
-
 (defn -main []
-  (println "starting console server")
+  (let [runtime (Runtime/getRuntime)]
+    (.addShutdownHook runtime (Thread. #'stop-servers)))
   (stop-servers)
+  (println "starting console server")
   (let [node (crux.api/start-standalone-node node-opts)
         crux-http-server (crux.http-server/start-http-server node http-opts)
         console-http-server (http/start-server handler {:port 5000})]
