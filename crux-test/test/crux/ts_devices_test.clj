@@ -24,6 +24,7 @@
 
 (def ^:const readings-chunk-size 1000)
 
+;; Submits data from devices database into Crux node.
 (defn submit-ts-devices-data
   ([node]
    (submit-ts-devices-data
