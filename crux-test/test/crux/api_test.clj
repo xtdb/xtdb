@@ -25,15 +25,16 @@
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
     (kf/with-cluster-node f))
-  (t/testing "Local API StandaloneNode"
-    (fs/with-standalone-node f))
-  (t/testing "JDBC Node"
-    (fj/with-jdbc-node :h2 f))
-  (t/testing "Remote API"
-    (fn [f]
-      (fh/with-http-server
-        (fn [f]
-          (kf/with-cluster-node f))))))
+  ;; (t/testing "Local API StandaloneNode"
+  ;;   (fs/with-standalone-node f))
+  ;; (t/testing "JDBC Node"
+  ;;   (fj/with-jdbc-node :h2 f))
+  ;; (t/testing "Remote API"
+  ;;   (fn [f]
+  ;;     (fh/with-http-server
+  ;;       (fn [f]
+  ;;         (kf/with-cluster-node f)))))
+  )
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir apif/with-node)

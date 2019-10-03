@@ -23,17 +23,19 @@
                    (Boolean/parseBoolean check-asserts)
                    true))
 
-(def default-options {:bootstrap-servers "localhost:9092"
-                      :group-id (str/trim (or (System/getenv "HOSTNAME")
-                                              (System/getenv "COMPUTERNAME")
-                                              (.toString (java.util.UUID/randomUUID))))
-                      :tx-topic "crux-transaction-log"
-                      :doc-topic "crux-docs"
-                      :create-topics true
-                      :doc-partitions 1
-                      :replication-factor 1
+;; Todo:
+;; Use maps for module definitions
+;; Create a spec for module definition
+;; Fix Uberjar
+;; Pull out topology merge into modules
+;; Change the kafka defaults (6 for doc-partitions, bootstrap-servers, ref-factor->3)
+;; Create-topics -> create-topics?
+;; Kafka consumer doing too much?
+
+(def default-options {
                       :server-port 3000
-                      :await-tx-timeout 10000})
+                      :await-tx-timeout 10000 ;; -< hard
+                      })
 
 (defrecord CruxVersion [version revision]
   status/Status
@@ -141,7 +143,7 @@
    (start-kv-store options))
   (^java.io.Closeable [{:keys [crux.kv/db-dir
                                crux.kv/kv-backend
-                               sync?
+                               crux.kv/sync?
                                crux.index/check-and-store-index-version]
                         :as options
                         :or {check-and-store-index-version true}}]
@@ -249,7 +251,7 @@
                 :crux.kv/db-dir
                 {:doc "Directory to store K/V files"
                  :default "data"}
-                :crux.kv/sync
+                :crux.kv/sync?
                 {:doc "Sync the KV store to disk after every write."
                  :default false}}])
 
