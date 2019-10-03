@@ -38,7 +38,6 @@
                       :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")
                             id (keyword "device-info" device-id)]]
                   [:crux.tx/put
-                   id
                    {:crux.db/id id
                     :device-info/api-version api-version
                     :device-info/manufacturer manufacturer
@@ -63,7 +62,6 @@
                                  reading-id (keyword "reading" device-id)
                                  device-id (keyword "device-info" device-id)]]
                        [:crux.tx/put
-                        reading-id
                         {:crux.db/id reading-id
                          :reading/time time
                          :reading/device-id device-id

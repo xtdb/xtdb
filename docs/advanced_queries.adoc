@@ -1,3 +1,4 @@
+[#advanced_queries]
 = Queries (Advanced)
 
 == Racket Datalog
@@ -13,6 +14,7 @@ Specifically, from https://github.com/racket/datalog/tree/master/tests/examples
 - bidipath.rkt
 - sym.rkt
 
+[#datalog]
 == Datalog Research
 
 Several Datalog examples from a classic Datalog paper have been translated and
@@ -31,6 +33,7 @@ Specifically:
 - "sgc"
 - 3 examples of "stratified Datalog"
 
+[#watdiv]
 == WatDiv SPARQL Tests
 
 ****
@@ -48,6 +51,7 @@ demonstrate comprehensive RDF subgraph matching. Note that Crux does not
 natively implement the RDF specification and only a simplified subset of the
 RDF tests have been translated for use in Crux. See the Crux tests for details.
 
+[#lubm]
 == LUBM Web Ontology Language (OWL) Tests
 
 ****

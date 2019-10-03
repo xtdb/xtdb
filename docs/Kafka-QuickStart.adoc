@@ -1,3 +1,4 @@
+[#kafka-quickstart]
 = Kafka Quickstart
 
 == Installing the connector

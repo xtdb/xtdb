@@ -1,17 +1,18 @@
-= Get Started
+[#get-started]
+== Get Started
 
-==  Introduction
+===  Introduction
 
 This guide contains simple steps showing how to transact data and run a simple
 query. However, there are a few topics you might benefit from learning about
 before you get too far with attempting to use Crux:
 
 - *EDN* – the extensible data notation format used throughout
-  the Crux APIs, see <<#essential_edn,Essential
+  the Crux APIs, see <<#tutorials-essential-edn,Essential
 EDN for Crux>>.
 
 - The *Datalog* query language – Crux supports an EDN-flavoured version of
-  Datalog. The <<queries.adoc#,Queries>> section within this documentation
+  Datalog. The <<#queries,Queries>> section within this documentation
 provides a good overview. You can also find an interactive tutorial for
 EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].
 
@@ -20,11 +21,12 @@ EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].
 language with strong support for immutability and parallelism.
 https://clojure.org/[See Clojure.org].
 
-== Setting Up
+[#get-started-setup]
+=== Setting Up
 
 Follow the below steps to quickly set yourself up a Crux playground:
 
-== Project Dependency
+=== Project Dependency
 
 First add Crux as a project dependency:
 
@@ -42,14 +44,14 @@ include::./examples.clj[tags=start-node]
 
 For the purposes of this Hello World, we are using the simplest configuration of Crux, where all of the pluggable components are in-memory. There is no Kafka or RocksDB to worry about.
 
-== Transacting
+=== Transacting
 
 [source,clj]
 ----
 include::./examples.clj[tags=submit-tx]
 ----
 
-== Querying
+=== Querying
 
 [source,clj]
 ----
@@ -75,6 +77,6 @@ You should get:
 include::./examples.clj[tags=should-get-entity]
 ----
 
-== Next Steps
+=== Next Steps
 
 Now you know the basics of how to interact with Crux you may want to dive into our <<tutorials.adoc#, tutorials>>. Otherwise, let's take a look at the kinds of things you are able to do with <<queries.adoc#,Queries>>.

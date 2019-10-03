@@ -1,5 +1,7 @@
+[#kafka-connect-crux]
 = Kafka Connect Crux
 
+[#kafka-connect-crux-intro]
 == Introduction
 
 A *Kafka Connect* plugin for transferring data between Crux nodes and Kafka.
@@ -16,18 +18,17 @@ The Crux *source connector* will publish transacations on a node to a Kafka topi
 |EDN|Both
 |===
 
-To get started with the connector, there are two separate guides (depending on whether you are using a full *<<#confluent_quickstart,Confluent Platform>>* installation, or a basic *<<#kafka_quickstart,Kafka>>* installation):
+To get started with the connector, there are two separate guides (depending on whether you are using a full *<<#confluent-quickstart,Confluent Platform>>* installation, or a basic *<<#kafka-quickstart,Kafka>>* installation):
 
-[#confluent_quickstart]
 include::{path}/Confluent-QuickStart.adoc[leveloffset=+1]
 
 '''
 
-[#kafka_quickstart]
 include::{path}/Kafka-QuickStart.adoc[leveloffset=+1]
 
 '''
 
+[#kafka-connect-source-config]
 == Source Configuration
 
 .*url*
@@ -60,6 +61,7 @@ include::{path}/Kafka-QuickStart.adoc[leveloffset=+1]
 * Importance: *LOW*
 * Default: _2000_
 
+[#kafka-connect-sink-config]
 == Sink Configuration
 
 .*url*

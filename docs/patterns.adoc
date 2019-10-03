@@ -1,5 +1,7 @@
+[#patterns]
 = Patterns
 
+[#patterns-intro]
 == Introduction
 
 Here we document patterns and helpful functions that have been
@@ -8,6 +10,7 @@ useful to guide iterations on the next generation of API layers for
 Crux. Some of these patterns may be appropriate candidates for
 evolving into easily consumable <<advanced.adoc#_decorators,decorators>>.
 
+[#patterns-contribute]
 == Contributing
 
 PRs are welcome, see <<contributing.adoc#,Contributing>> for guidelines. If you would prefer
@@ -25,7 +28,7 @@ link to it.
 
 ; by @spacegangster
 ```
-
+[#patterns-implicit]
 == Implicit Node
 
 ```
@@ -40,6 +43,7 @@ link to it.
 ; by @spacegangster
 ```
 
+[#patterns-entities]
 == Entities
 
 ```
@@ -86,6 +90,7 @@ link to it.
 ; by @spacegangster
 ```
 
+[#patterns-transaction-ops]
 == Transaction Ops
 
 ```

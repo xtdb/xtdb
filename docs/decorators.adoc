@@ -1,3 +1,4 @@
+[#decorators]
 = Decorators
 
 == Introduction

@@ -1,5 +1,7 @@
+[#bitemporality]
 = Bitemporality
 
+[#bitemp-overview]
 == Overview
 
 Crux is optimised for efficient and globally consistent point-in-time queries
@@ -62,6 +64,7 @@ NOTE: In Crux, when `transaction-time` isn't specified, it is set to
 _now_. When writing data, in case there isn’t any specific valid-time
 available, valid-time and transaction-time take the same value.
 
+[#bitemp-valid]
 == Valid Time
 
 In situations where your database is not the ultimate owner of the data—where
@@ -93,6 +96,7 @@ past, one needs bitemporality to ensure evolving but consistent views
 of the data.
 ****
 
+[#bitemp-transaction]
 == Transaction Time
 
 For audit reasons, we might wish to know with certainty the value of a
@@ -109,6 +113,7 @@ for audit reasons, would you want to consider using both
 transaction-time and valid-time.
 ****
 
+[#bitemp-domain]
 == Domain Time
 
 Valid time is valuable for tracking a consistent view of the entire state of
@@ -126,6 +131,7 @@ native indexes to support efficient execution, however Crux encourages you to
 build additional layers of functionality to do so. See <<advanced.adoc#decorators,
 Decorators>>.
 
+[#bitemp-uses]
 == Known Uses
 
 Recording bitemporal information with your data is essential when dealing with
@@ -181,9 +187,10 @@ and any subsequent laws that may be relevant and applied retrospectively
   information to aid predictions and understanding of motives across time
 - Criminal Investigations – efficiently organise analysis and evidence whilst
   enabling a simple retracing of investigative efforts
-
+[#bitemp-examples]
 == Example Queries
 
+[#bitemp-crime]
 === Crime Investigations
 
 This example is based on an academic paper.
@@ -367,6 +374,7 @@ known to have yet departed at this point:
 include::.//query_examples.clj[tags=bitempr]
 ----
 
+[#bitemp-related]
 == Related Concepts
 
 === Retroactive Data Structures
@@ -401,6 +409,7 @@ persistent and fully retroactive data structure".
 https://courses.csail.mit.edu/6.851/fall17/lectures/L02.html
 https://erikdemaine.org/papers/Retroactive_TALG/paper.pdf
 
+[#bitemp-references]
 == References
 
 * https://juxt.pro/blog/posts/value-of-bitemporality.html

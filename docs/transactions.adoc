@@ -1,5 +1,7 @@
+[#transactions]
 = Transactions
 
+[#transactions-overview]
 == Overview
 
 There are four transaction (write) operations:
@@ -46,6 +48,7 @@ the event log. The document itself is submitted to the `doc-topic`,
 using its content hash as key. In Kafka, the `doc-topic` is compacted,
 which enables later deletion of documents.
 
+[#transactions-valid-ids]
 == Valid IDs
 
 The following types of `:crux.db/id` are allowed:
@@ -56,11 +59,12 @@ The following types of `:crux.db/id` are allowed:
 * URL (e.g. `{:crux.db/id #crux/id "https://github.com/juxt/crux"}`), including `http`, `https`, `ftp` and `file` protocols
 
 The `#crux/id` reader literal will take any string and attempt to coerce it
-into a valid ID. Use of `#crux/id` with a valid ID type will also work 
+into a valid ID. Use of `#crux/id` with a valid ID type will also work
 (e.g. `{:crux.db/id #crux/id :my-id}`).
 
 URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
 
+[#transactions-put]
 == Put
 
 Put's a document into Crux. If a document already exists with the
@@ -85,6 +89,7 @@ Crux currently writes into the past at a single point, so to overwrite
 several versions or a range in time, one is required to submit a
 transaction containing several operations.
 
+[#transactions-cas]
 == CAS
 
 The CAS operation (_compare and swap_) swaps an existing document version with a
@@ -102,6 +107,7 @@ newer one, if the existing document is as expected.
 <2> New document
 <3> `valid time`
 
+[#transactions-delete]
 == Delete
 
 Deletes a document at a given `valid time`. Historical version of the
@@ -113,6 +119,7 @@ document will still be available.
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
 
+[#transactions-evict]
 == Evict
 
 Evicts a document from Crux. The transaction history will be

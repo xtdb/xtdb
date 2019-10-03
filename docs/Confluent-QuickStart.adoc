@@ -1,3 +1,4 @@
+[#confluent-quickstart]
 = Confluent Platform Quickstart
 
 == Installing the connector

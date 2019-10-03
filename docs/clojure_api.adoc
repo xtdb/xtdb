@@ -6,6 +6,7 @@ with few lifecycle members added.
 
 toc::[]
 
+[#clojure-api-icruxnode]
 === ICruxNode
 
 ==== db
@@ -150,7 +151,7 @@ toc::[]
 ----
 
 
-
+[#clojure-api-icruxnode]
 == ICruxDatasource
 Represents the database as of a specific valid and transaction time.
 

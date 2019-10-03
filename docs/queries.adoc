@@ -1,5 +1,7 @@
+[#queries]
 = Queries
 
+[#queries-intro]
 == Introduction
 
 Crux is a document database that provides you with a comprehensive means of
@@ -32,21 +34,23 @@ Note that all Crux Datalog queries run using a point-in-time view of the
 database which means the query capabilities and patterns presented in this
 section are not aware of valid times or transaction times.
 
+[#queries-reference]
 == Reference
 
-* <<_basic_query>>
-* <<_arguments,`:args`>>
-* <<_valid_time_travel>>
-* <<_history_api>>
-  ** <<_full_document_history>>
-  ** <<_document_history_range>>
-* <<_joins,Joins>>
-* <<_ordering_and_pagination>>
-* <<_rules,`:rules`>>
-* <<_lazy_queries>>
-* <<_clojure_tips>>
-* <<_datascript_differences>>
+* <<#queries_basic_query>>
+* <<#queries_arguments,`:args`>>
+* <<#queries_valid_time_travel>>
+* <<#queries_history_api>>
+  ** <<#history_full_document_history>>
+  ** <<#history_document_history_range>>
+* <<#queries_joins,Joins>>
+* <<#queries_ordering_and_pagination>>
+* <<#queries_rules,`:rules`>>
+* <<#queries_lazy_queries>>
+* <<#queries_clojure_tips>>
+* <<#queries_datascript_differences>>
 
+[#queries_basic_query]
 == Basic Query
 
 A Datalog query consists of a set of variables and a set of clauses. The result
@@ -119,6 +123,7 @@ The edn result set only contains the value `:smith`
 include::./query_examples.clj[tags=basic-query-r]
 ----
 
+[#queries_arguments]
 == Arguments
 
 For the next set of queries we will again use the same set of documents for our database as used in the previous section:
@@ -202,6 +207,7 @@ Result Set:
 include::./query_examples.clj[tags=query-with-arguments5-r]
 ----
 
+[#queries_valid_time_travel]
 === Valid time travel
 
 Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
@@ -257,8 +263,10 @@ Result Set:
 include::./query_examples.clj[tags=query-at-t-q2-r]
 ----
 
+[#queries_history_api]
 == History API
 
+[#history_full_document_history]
 === Full Document History
 Crux allows you to retrieve all versions of a document:
 [source,clj]
@@ -266,7 +274,7 @@ Crux allows you to retrieve all versions of a document:
 include::./query_examples.clj[tags=history-full]
 ----
 
-
+[#history_document_history_range]
 === Document History Range
 Retrievable document versions can be bounded by four time coordinates:
 
@@ -281,6 +289,7 @@ All coordinates are inclusive. All coordinates can be null.
 include::./query_examples.clj[tags=history-range]
 ----
 
+[#queries_joins]
 == Joins
 
 === Query: "Join across entities on a single attribute"
@@ -327,6 +336,7 @@ include::./query_examples.clj[tags=join2-r]
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
+[#queries_ordering_and_pagination]
 == Ordering and Pagination
 
 A Datalog query naturally returns a result set of tuples, however, the tuples
@@ -392,6 +402,7 @@ values, e.g. `{:crux.db/id :zoe :closest-friends [:amy :ben :chris]}`
 More powerful ordering and pagination features may be provided in the future.
 Feel free to open an issue or get in touch to discuss your requirements.
 
+[#queries_rules]
 == Rules
 
 This example of a rule demonstrates a recursive traversal of entities that are
@@ -409,6 +420,8 @@ connected to a given entity via the `:follow` attribute.
            (follow ?t ?e2)]]})
 ----
 
+
+[#queries_lazy_queries]
 == Lazy Queries
 
 The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
@@ -417,6 +430,7 @@ optionally a `snapshot` which is already opened and managed by the caller
 sequence of the results, while the other version provides a set. A snapshot can
 be retrieved from a `kv` instance via `crux.api/new-snapshot`.
 
+[#queries_clojure_tips]
 == Clojure Tips
 
 === Quoting
@@ -455,6 +469,7 @@ map:
      :args [{'?code my-code}]}))
 ----
 
+[#queries_datascript_differences]
 == DataScript Differences
 
 This list is not necessarily exhaustive and is based on the partial re-usage of

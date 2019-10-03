@@ -1,5 +1,6 @@
+[#configuration]
 = Configuration
-
+[#config-nodes]
 == Nodes
 
 To start a Crux node, use the
@@ -12,9 +13,9 @@ There are different configurations of a Crux node:
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Java API
-|<<#standalone, Standalone>>|Uses local event log|`Crux.startStandaloneNode options;`
-|<<#kafka, Cluster>>|Uses Kafka|`Crux.startClusterNode options;`
-|<<#jdbc, JDBC>>|Uses JDBC event log|`Crux.startJDBCNode options;`
+|<<#config-standalone, Standalone>>|Uses local event log|`Crux.startStandaloneNode options;`
+|<<#config-kafka, Cluster>>|Uses Kafka|`Crux.startClusterNode options;`
+|<<#config-jdbc, JDBC>>|Uses JDBC event log|`Crux.startJDBCNode options;`
 |===
 
 Use a cluster node when horizontal scalability is required or when
@@ -37,6 +38,7 @@ Crux nodes implement the `ICruxAPI` interface and are the
 starting point for making use of Crux. Nodes also implement
 `java.io.Closeable` and can therefore be lifecycle managed.
 
+[#config-properties]
 == Properties
 
 The following properties are used by any kind of Crux node:
@@ -49,10 +51,11 @@ The following properties are used by any kind of Crux node:
 |`db-dir`|Sets the data-directory to use|*data*
 |===
 
+[#config-rocksdb]
 == RocksDB
 
 [#rocksdep]
-=== Project Dependency
+*Project Dependency*
 
 Add RocksDB as a project dependency:
 
@@ -60,8 +63,8 @@ Add RocksDB as a project dependency:
 ----
 include::./deps.edn[tags=RocksDeps]
 ----
-
-=== Configuration
+[#rocksconfig]
+*Configuration*
 
 Set the following properties when configuring RocksDB in Crux:
 
@@ -80,6 +83,7 @@ For example, when constructing the standalone node:
 include::./examples.clj[tags=start-standalone-with-rocks]
 ----
 
+[#config-http]
 == Http
 
 Crux can be used programmatically as a library, but Crux also ships
@@ -101,6 +105,7 @@ expose a HTTP port that will accept REST requests:
 Visit the guide on using the <<rest#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
 
+[#config-docker]
 == Docker
 
 If you want to experiment with Crux using a demo Docker container from
@@ -110,6 +115,7 @@ https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[stan
 web service example]. You can also use this self-contained
 demonstration image to experiment with the <<rest.adoc#,REST API>>.
 
+[#config-backup]
 == Backup and Restore
 
 Crux provides utility APIs for local backup and restore when you are
@@ -129,7 +135,7 @@ instead be used for creating operational snapshots of a node's indexes
 for scaling purposes.
 
 
-[#standalone]
+[#config-standalone]
 == Standalone Node
 
 Using a Crux standalone node is the best way to get started. Once
@@ -145,14 +151,14 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,a
 |Component|Property|Description
 |tx-log|`event-log-dir`|where to store events locally, i.e. `"data/eventlog-1"`
 |===
-
+[#standalone-dependency]
 *Project Dependency*
 
 [source,clj]
 ----
 include::./deps.edn[tags=CruxDep]
 ----
-
+[#standalone-start]
 *Getting started*
 
 [source,clj]
@@ -167,7 +173,7 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
-[#kafka]
+[#config-kafka]
 == Kafka Nodes
 
 When using Crux at scale it is recommended to use multiple Crux nodes connected
@@ -189,6 +195,7 @@ Kafka Cluster Nodes have the following properties:
 |`replication-factor`|Number of times to replicate data on Kafka|*1*
 |===
 
+[#kafka-dependency]
 *Project Dependencies*
 
 [source,clj]
@@ -197,6 +204,7 @@ include::./deps.edn[tags=CruxDep]
 include::./deps.edn[tags=KafkaClientsDeps]
 ----
 
+[#kafka-start]
 *Getting started*
 
 Use the API to start a cluster node, configuring it with the
@@ -218,11 +226,13 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
+[#kafka-embed]
 === Embedded Kafka
 
 Crux is ready to work with an embedded Kafka for when you don't have a independently
 running Kafka available to connect to (such as during development).
 
+[#embedded-kafka-dependency]
 *Project Depencies*
 
 [source,clj,subs="normal"]
@@ -231,6 +241,7 @@ include::./deps.edn[tags=CruxDep]
 include::./deps.edn[tags=KafkaEmbeddedDeps]
 ----
 
+[#embedded-kafka-start]
 *Getting started*
 
 [source,clj]
@@ -245,7 +256,7 @@ You can later stop the Embedded Kafka if you wish:
 include::./examples.clj[tags=ek-close]
 ----
 
-[#jdbc]
+[#config-jdbc]
 == JDBC Nodes
 
 JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
@@ -269,6 +280,7 @@ Below is the minimal configuration you will need:
 |`db-dir`|For h2 and sqlite
 |===
 
+[#jdbc-dependency]
 *Project Dependencies*
 
 [source,clj]
@@ -277,6 +289,7 @@ include::./deps.edn[tags=CruxDep]
 include::./deps.edn[tags=JDBCDeps]
 ----
 
+[#jdbc-start]
 *Getting started*
 
 Use the API to start a JDBC node, configuring it with the required
