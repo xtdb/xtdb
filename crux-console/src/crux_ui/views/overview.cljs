@@ -40,6 +40,10 @@
    root-styles
    [:h1.overview__title "Console Overview"]
    [:section.overview__section.overview__section--shortcuts
+    [:h2.overview__header "Limitations"]
+    [:div.g-mt-2 "When you execute a normal query (not tx) not longer than 2000
+     characters it will be placed into your address bar so you can share it."]]
+   [:section.overview__section.overview__section--shortcuts
     [:h2.overview__header "Shortcuts"]
     [:div.g-mt-2 [:label "Query submit"] [:kbd "ctrl + enter"]]
     [:div.g-mt-2 [:label "Toggle editor"] [:kbd "ctrl + e"]]

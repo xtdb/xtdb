@@ -84,15 +84,19 @@
       (crux-api/status)
       (p/then on-status-success)))
 
-(defn fetch-history [eid]
-  (crux-api/historyRange @node-client eid nil nil nil nil))
+(defn fetch-history [eid time-bounds docs-limit]
+  (let [{:time/keys [tt-upper vt-upper]} time-bounds]
+    (-> @node-client
+       (crux-api/historyRange eid nil nil vt-upper tt-upper)
+       (p/then #(take docs-limit %)))))
 ; (fetch-history :ids/fashion-ticker-2)
 
 (defn fetch-histories
   "Fetches histories, without docs"
-  [eids]
-  (-> (p/all (map fetch-history eids))
-      (p/then #(zipmap eids %))
+  [{:q/keys [entity-ids time-bounds documents-per-entity-limit]
+    :as history-query}]
+  (-> (p/all (map #(fetch-history % time-bounds documents-per-entity-limit) entity-ids))
+      (p/then #(zipmap entity-ids %))
       (p/then on-histories-success)))
 ; (fetch-histories [:ids/fashion-ticker-2])
 

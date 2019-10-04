@@ -29,8 +29,8 @@
 
 (rf/reg-fx
   :fx.query/history
-  (fn [eids]
-    (q/fetch-histories eids)))
+  (fn [history-query]
+    (q/fetch-histories history-query)))
 
 (rf/reg-fx
   :fx.query/histories-docs

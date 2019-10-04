@@ -23,6 +23,7 @@
    :db.query/time                {:time/vt nil :time/tt nil}
    :db.query/input-committed     example-query-str
    :db.query/limit               10000
+   :db.query.attr-history/docs-limit 10000
    :db.sys/host                  (calc-initial-host)
    :db.sys/initialized?          false
    :db.sys/route                 {:r/handler :rd/query-ui :r/query-params {:r/output-tab :db.ui.output-tab/table}}
