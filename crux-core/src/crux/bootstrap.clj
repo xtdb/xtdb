@@ -1,7 +1,6 @@
 (ns crux.bootstrap
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
             [crux.backup :as backup]
@@ -16,8 +15,7 @@
             [crux.tx :as tx])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
            java.io.Closeable
-           [java.util.concurrent Executors ThreadFactory]
-           java.util.UUID))
+           [java.util.concurrent Executors ThreadFactory]))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
                    (Boolean/parseBoolean check-asserts)
@@ -25,14 +23,8 @@
 
 ;; Todo:
 ;; Use maps for module definitions
-;; Fix Uberjar
 ;; Pull out topology merge into modules
-;; Change the kafka defaults (6 for doc-partitions, bootstrap-servers, ref-factor->3)
 ;; Create-topics -> create-topics?
-;; Kafka consumer doing too much?
-
-(def default-options {:await-tx-timeout 10000 ;; -< hard
-                      })
 
 (defrecord CruxVersion [version revision]
   status/Status
@@ -246,7 +238,11 @@
                    (s/keys :req [:crux.lru/doc-cache-size])
                    {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
                                               :default lru/default-doc-cache-size}}])
-(def kv-indexer [start-kv-indexer [:kv-store :tx-log :object-store]])
+(def kv-indexer [start-kv-indexer
+                 [:kv-store :tx-log :object-store]
+                 {:crux.tx-log/await-tx-timeout
+                  {:doc "Timeout waiting for tx-time to be reached by a Crux node"
+                   :default crux.tx/default-await-tx-timeout}}])
 (def kv-store [start-kv-store
                []
                :crux.kv/options
