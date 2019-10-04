@@ -37,7 +37,7 @@
   :plugins [;[lein-shadow "0.1.5"] ; nasty guy, deletes original shadow-cljs config if you run it
             [lein-shell  "0.5.0"]] ; https://github.com/hypirion/lein-shell
 
-  :clean-targets ^{:protect false} ["target" "resources/static/crux-ui/compiled"]
+  :clean-targets ^{:protect false} ["target" #_"resources/static/crux-ui/compiled"]
 
   :aliases
   {"yarn"
