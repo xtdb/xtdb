@@ -114,9 +114,13 @@
           (and (:db.query/histories db)
                (:db.query/eid->simple-history db)))
     fx
-    (let [history-query
-          (take ui--history-max-entities
-                (:ra/entity-ids (:db.query/result-analysis db)))]
+    (let [time (:db.query/time db)
+          history-query
+          {:q/entity-ids
+           (take ui--history-max-entities
+                 (:ra/entity-ids (:db.query/result-analysis db)))
+           :q/time-bounds {:time/tt-upper (:time/tt time) :time/vt-upper (:time/vt time)}
+           :q/documents-per-entity-limit (:db.query.attr-history/docs-limit db)}]
       (-> fx
           (assoc :fx.query/history history-query)
           (update :db o-set-nw-in-progress)))))
