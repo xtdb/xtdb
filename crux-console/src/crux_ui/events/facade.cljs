@@ -311,6 +311,11 @@
   (fn [db]
     (assoc db :db.ui.second-layer/main-pane :db.ui.second-layer.main-pane/overview)))
 
+(rf/reg-event-db
+  :evt.ui.second-layer.main-pane/cancel
+  (fn [db [_ new-size]]
+    (assoc db :db.ui.second-layer/main-pane nil)))
+
 (rf/reg-event-fx
   :evt.ui/toggle-polling
   (fn [{:keys [db] :as cofx}]

@@ -3,6 +3,7 @@
             [crux-ui.views.sidebar :as sidebar]
             [crux-ui.views.overview :as overview]
             [garden.core :as garden]
+            [garden.stylesheet :as gs]
             [re-frame.core :as rf]))
 
 (def ^:private main-pane-views
@@ -26,16 +27,27 @@
         :background :white
         :border-radius :2px
         :height :100%
-        :overflow :scroll}]])])
+        :overflow :scroll}]]
+     (gs/at-media {:max-width :1000px}
+       [:.second-layer
+        {:grid-template "'main' 1fr / 1fr"}
+        [:&__side
+         {:grid-area :main}]
+        [:&__main
+         {:grid-area :main}]]))])
+
+(defn autoclose-on-fader-click [evt]
+  (let [target (.-target evt)]
+    (if (= "second-layer" (.-id target))
+      (rf/dispatch [:evt.ui.second-layer/toggle]))))
 
 (defn root []
   (let [-sub-second-layer-main-pane (rf/subscribe [:subs.db.ui.second-layer/main-pane])]
     (fn []
-      (let [mpv (main-pane-views @-sub-second-layer-main-pane)]
-        [:div.second-layer
-         root-styles
-         [:div.second-layer__side
-          [sidebar/root]]
+      [:div#second-layer.second-layer {:on-click autoclose-on-fader-click}
+       root-styles
+       [:div.second-layer__side [sidebar/root]]
+       (let [mpv (main-pane-views @-sub-second-layer-main-pane)]
          (if mpv
-           [:div.second-layer__main [mpv]])]))))
+           [:div.second-layer__main [mpv]]))])))
 

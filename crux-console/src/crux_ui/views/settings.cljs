@@ -1,10 +1,11 @@
 (ns crux-ui.views.settings
   (:require [garden.core :as garden]
+            [garden.stylesheet :as gs]
+            [reagent.core :as r]
             [re-frame.core :as rf]
             [crux-ui.views.commons.input :as input]
             [crux-ui.views.commons.form-line :as fl]
             [crux-ui.subs]
-            [reagent.core :as r]
             [crux-ui.functions :as f]
             [crux-ui.views.output.edn :as output-edn]
             [crux-ui.views.commons.tiny-components :as comps]))
@@ -62,7 +63,7 @@
   (rf/dispatch [:evt.db/props-change arg]))
 
 (defn close []
-  (rf/dispatch [:evt.ui.second-layer/toggle]))
+  (rf/dispatch [:evt.ui.second-layer.main-pane/cancel]))
 
 (defn root []
   (let [-sub-settings (rf/subscribe [:subs.sys/settings])

@@ -75,6 +75,16 @@
           :overflow :hidden
           :align-items :center
           :justify-content :center}]]
+
+       (gs/at-media {:max-width :375px}
+         [:h1
+          {:font-size :30px
+           :line-height 2.0
+           :letter-spacing :0.08em
+           :font-weight 400}]
+         [:h2
+          {:font-size :24px}])
+
        (gs/at-media {:max-width :375px}
          [:.root
           {:grid-template
