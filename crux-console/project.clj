@@ -17,7 +17,7 @@
 
   :profiles
   {:dev {:main dev :repl-options {:init-ns dev}}
-   :shadow-cljs
+   :shadow-cljs ; also see package.json deps
    {:dependencies
     [[org.clojure/clojurescript    "1.10.520"]
      [reagent                      "0.8.1"]

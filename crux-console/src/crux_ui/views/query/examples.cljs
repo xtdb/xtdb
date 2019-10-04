@@ -51,7 +51,8 @@
          :padding :8px}]]
       (gs/at-media {:max-width :1000px}
         [:.examples
-         {:display :none}]))])
+         {;:display :none
+          }]))])
 
 (def ^{:private true :const true} examples-close-text
   "Tap to close examples. You can always get them back by resetting the cookies on this host.")

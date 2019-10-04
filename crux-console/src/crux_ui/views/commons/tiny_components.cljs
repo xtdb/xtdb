@@ -30,11 +30,11 @@
 
 (def col-base {:h 197 :s 80 :l 65 :a 0.8})
 
+; cta – call to action
 (def btn-color--cta        (s/hsl col-base))
 (def btn-color--inactive   (s/hsl (assoc col-base :a 0.5)))
 (def btn-color--cta-hover  (s/hsl (assoc col-base :a 0.9)))
 (def btn-color--cta-active (s/hsl (assoc col-base :a 1)))
-
 
 
 (def button-styles
@@ -45,16 +45,23 @@
     :border-radius :2px
     :user-select :none
     :border "1px solid hsl(0, 0%, 85%)"}
+
+   ; bordered cta button
    [:&--bright
     {:border  (str "1px solid " btn-color--cta-active)
-     :color    btn-color--cta-active}]
+     :color    btn-color--cta-active}
+    [:&:hover
+     {:border (str "1px solid " btn-color--cta-hover)}]]
+   [:&--bright.button--inactive
+    {:border (str "1px solid " btn-color--inactive)
+     :color   btn-color--inactive}]
+
    [:&--textual
     {:border :none
      :background :none}]
    [:&--active
     {:font-weight 400}]
-   [:&--cta.button--inactive
-    {:background btn-color--inactive}]
+
    [:&--cta
     {:background    btn-color--cta
      :border-radius :2px
@@ -66,7 +73,9 @@
     [:&:hover
      {:background btn-color--cta-hover}]
     [:&:active
-     {:background btn-color--cta-active}]]])
+     {:background btn-color--cta-active}]]
+   [:&--cta.button--inactive
+    {:background btn-color--inactive}]])
 
 (defn- button [main-mod {:keys [on-click active? text css-mods] :as params}]
   [:button

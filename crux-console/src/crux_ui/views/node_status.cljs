@@ -1,6 +1,7 @@
 (ns crux-ui.views.node-status
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
+            [garden.stylesheet :as gs]
             [crux-ui.views.commons.contenteditable :as editable]
             [crux-ui.functions :as f]
             [crux-ui.views.commons.keycodes :as kc]
@@ -37,18 +38,18 @@
       [:>.node__status
        {:display :none}]
       [:&:hover
-        [:>.node__status
-         {:position      :absolute
-          :background    :white
-          :padding :8px
-         ;:max-width :500px
-          :font-family "monospace"
-          :display :block
-          :z-index       100
-          :font-size :1.2rem
-          :border-radius :2px
-          :border        s/q-ui-border
-          :top           :32px}]]
+       [:>.node__status
+        {:position      :absolute
+         :background    :white
+         :padding :8px
+        ;:max-width :500px
+         :font-family "monospace"
+         :display :block
+         :z-index       1000
+         :font-size :1.2rem
+         :border-radius :2px
+         :border        s/q-ui-border
+         :top           :32px}]]
       [:&__addr
        {:display "flex"
         :justify-content "space-between"
@@ -56,7 +57,10 @@
         :white-space :nowrap
         :text-overflow :ellipsis
         :flex "1 1 120px"
-        :align-items "center"}]])])
+        :align-items "center"}]]
+     (gs/at-media {:max-width :1000px}
+       [".node>.node__status"
+        {:display :none}]))])
 
 
 (defn led [on?]
