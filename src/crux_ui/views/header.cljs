@@ -35,8 +35,7 @@
        :justify-content :space-between
        :align-items :center}]
      [:&__status
-      {:grid-area :status
-       :overflow :hidden}]
+      {:grid-area :status}]
      [:&__display-mode-toggle
       {:display :none}]
      [:&__links
