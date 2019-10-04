@@ -43,6 +43,7 @@
 (rf/reg-sub :subs.sys/host  #(:db.sys/host % nil))
 (rf/reg-sub :subs.sys.host/status  #(:db.sys.host/status % nil))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
+(rf/reg-sub :subs.query.attr-history/docs-limit  #(:db.query.attr-history/docs-limit % 10000))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result #(:db.query/result % nil))
 (rf/reg-sub :subs.query/error  #(:db.query/error % false))
@@ -68,10 +69,12 @@
   :subs.sys/settings
   :<- [:subs.sys/host]
   :<- [:subs.sys.host/status]
+  :<- [:subs.query.attr-history/docs-limit]
   :<- [:subs.query/limit]
-  (fn [[host status limit]]
+  (fn [[host status docs-limit limit]]
     {:db.sys/host host
      :db.sys.host/status status
+     :db.query.attr-history/docs-limit docs-limit
      :db.query/limit limit}))
 
 (rf/reg-sub

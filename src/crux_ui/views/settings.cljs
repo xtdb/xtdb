@@ -8,7 +8,8 @@
             [crux-ui.subs]
             [crux-ui.functions :as f]
             [crux-ui.views.output.edn :as output-edn]
-            [crux-ui.views.commons.tiny-components :as comps]))
+            [crux-ui.views.commons.tiny-components :as comps]
+            [crux-ui.views.commons.dom :as dom]))
 
 
 (def ^:private root-styles
@@ -84,12 +85,23 @@
       [:div.settings
        root-styles
        [:h1.settings__title.g-sticky "Settings"]
+
+       [:div.settings__line
+        [fl/line
+         {:label "Attribute history data points limit per entity"
+          :control
+          [input/text :ui.settings/attr-qlimit
+           {:on-change-complete (r/partial on-prop-change :db.query.attr-history/docs-limit)
+            :parse-fn dom/parse-int-or-nil
+            :value (:db.query.attr-history/docs-limit @-local-atom)}]}]]
+
        [:div.settings__line
         [fl/line
          {:label "Query results limit"
           :control
           [input/text :ui.settings/qlimit
            {:on-change-complete (r/partial on-prop-change :db.query/limit)
+            :parse-fn dom/parse-int-or-nil
             :value (:db.query/limit @-local-atom)}]}]]
 
        [:div.settings__line

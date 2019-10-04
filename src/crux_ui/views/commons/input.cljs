@@ -36,12 +36,14 @@
 (defn text
   [id {:keys [on-change on-change-complete
               on-intent on-key-down
+              parse-fn
               value
               process-paste]
        :as opts}]
   (let [node          (r/atom nil)
         cur-val       (atom value)
-        get-cur-value #(some-> @node (.-value))
+        parse-fn      (or parse-fn identity)
+        get-cur-value #(some-> @node (.-value) parse-fn)
         on-key-down   (cond
                         on-intent   #(some-> % user-intents/key-down-evt->intent-evt on-intent)
                         on-key-down on-key-down
@@ -68,7 +70,7 @@
                 (let [paste-processed (if process-paste
                                         (process-paste cur-html)
                                         cur-html)]
-                  (on-change {:value paste-processed
+                  (on-change {:value (parse-fn paste-processed)
                               :target @node}))))))]
     (r/create-class
       {:display-name "SpaceInput"
