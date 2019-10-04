@@ -6,7 +6,7 @@ To use these steps you only need to have Docker installed, no JDK/JVM/Clojure et
 
 ```bash
 docker pull juxt/crux-standalone-webservice:latest
-mkdir my-crux-data & docker run -p 8090:8080 -p 8091:8081 -v $(pwd)/my-crux-data:/usr/src/app/data -i -t juxt/crux-standalone-webservice:latest
+mkdir -p my-crux-data && docker run -p 8090:8080 -p 8091:8081 -v $(pwd)/my-crux-data:/usr/src/app/data -i -t juxt/crux-standalone-webservice:latest
 ```
 
 Once the container is up and running you should see:
