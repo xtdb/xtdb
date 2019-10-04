@@ -258,8 +258,10 @@
   :evt.io/gist-success
   (fn [{:keys [db] :as cofx} [_ res]]
     (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
-      (let [db (-> (assoc db :db.ui.examples/imported edn)
-                   (update o-set-example (some-> edn first :query bp/better-printer)))]
+      (let [first-ex (some-> edn first :query bp/better-printer)
+            db (cond-> (assoc db :db.ui.examples/imported edn)
+                 first-ex
+                 (o-set-example first-ex))]
         {:db db})
       {:fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"})))
 
