@@ -14,16 +14,28 @@
     ;; Testing example submit-tx works properly (and wait for it to complete)
     (t/is (not= nil submitted))
     (crux/sync node (:crux.tx/tx-time submitted) nil)
-    ;; Testing example queries
+
+    ;; Testing 'getting started' example queries
     (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
               :name "Pablo"
               :last-name "Picasso"}
            (ex/example-query-entity node)))
     (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
     (t/is (not (empty? (ex/example-query-valid-time node))))
+
+    ;; Testing 'queries' example queries (with setup)
+    (crux/sync node (:crux.tx/tx-time (ex/query-example-setup node)) nil)
+
+    (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
+    (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
+    (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-2 node)))
+    (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-3 node)))
+    (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-4 node)))
+    (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
+
     ;; Testing example standalone node is closed properly
     (t/is (nil? (ex/example-close-node node)))))
-q
+
 (t/deftest test-example-kafka
   (let [embedded-kafka (ex/example-start-embedded-kafka)
         node (ex/example-start-cluster)]
