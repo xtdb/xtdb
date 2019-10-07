@@ -10,99 +10,98 @@
 ;; end::require-ek[]
 
 (defn example-start-standalone []
-  ;; tag::start-standalone-node[]
-  (def ^crux.api.ICruxAPI node
-    (crux/start-standalone-node {:kv-backend "crux.kv.memdb.MemKv"
-                                 :db-dir "data/db-dir-1"
-                                 :event-log-dir "data/eventlog-1"}))
-  ;; end::start-standalone-node[]
-  node)
+;; tag::start-standalone-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-standalone-node {:kv-backend "crux.kv.memdb.MemKv"
+                               :db-dir "data/db-dir-1"
+                               :event-log-dir "data/eventlog-1"}))
+;; end::start-standalone-node[]
+node)
 
 (defn example-close-node [node]
-  ;; tag::close-node[]
-  (.close node)
-  ;; end::close-node[]
+;; tag::close-node[]
+(.close node)
+;; end::close-node[]
  )
 
 (defn example-start-embedded-kafka []
-  ;; tag::ek-example[]
-  (def storage-dir "dev-storage")
-  (def embedded-kafka-options
-    {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
-     :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
-     :crux.kafka.embedded/kafka-port 9092})
+;; tag::ek-example[]
+(def storage-dir "dev-storage")
+(def embedded-kafka-options
+  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
+   :crux.kafka.embedded/kafka-port 9092})
 
-  (def embedded-kafka (ek/start-embedded-kafka embedded-kafka-options))
-  ;; end::ek-example[]
-  embedded-kafka
-  )
+(def embedded-kafka (ek/start-embedded-kafka embedded-kafka-options))
+;; end::ek-example[]
+embedded-kafka)
 
 (defn example-stop-embedded-kafka [embedded-kafka]
-  ;; tag::ek-close[]
-  (.close embedded-kafka)
-  ;; end::ek-close[]
+;; tag::ek-close[]
+(.close embedded-kafka)
+;; end::ek-close[]
 )
 
 (defn example-start-cluster []
-  ;; tag::start-cluster-node[]
-  (def ^crux.api.ICruxAPI node
-    (crux/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
-                              :bootstrap-servers "localhost:9092"}))
-  ;; end::start-cluster-node[]
-  node)
+;; tag::start-cluster-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
+                            :bootstrap-servers "localhost:9092"}))
+;; end::start-cluster-node[]
+node)
 
 (defn example-start-rocks []
-  ;; tag::start-standalone-with-rocks[]
-  (def ^crux.api.ICruxAPI node
-    (crux/start-standalone-node {:kv-backend "crux.kv.rocksdb.RocksKv"
-                                 :db-dir "data/db-dir-1"
-                                 :event-log-dir "data/eventlog-1"}))
-  ;; end::start-standalone-with-rocks[]
-  node)
+;; tag::start-standalone-with-rocks[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-standalone-node {:kv-backend "crux.kv.rocksdb.RocksKv"
+                               :db-dir "data/db-dir-1"
+                               :event-log-dir "data/eventlog-1"}))
+;; end::start-standalone-with-rocks[]
+node)
 
 (defn example-start-jdbc []
-  ;; tag::start-jdbc-node[]
-  (def ^crux.api.ICruxAPI node
-    (crux/start-jdbc-node {:dbtype "postgresql"
-                           :dbname "cruxdb"
-                           :host "<host>"
-                           :user "<user>"
-                           :password "<password>"})
-    ;; end::start-jdbc-node []
-    ))
+;; tag::start-jdbc-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-jdbc-node {:dbtype "postgresql"
+                         :dbname "cruxdb"
+                         :host "<host>"
+                         :user "<user>"
+                         :password "<password>"})
+;; end::start-jdbc-node[]
+  ))
 
 (defn example-submit-tx [node]
-  ;; tag::submit-tx[]
-  (crux/submit-tx
-   node
-   [[:crux.tx/put
-     {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
-      :name "Pablo"
-      :last-name "Picasso"}
-     #inst "2018-05-18T09:20:27.966-00:00"]]) ; valid time
-  ;; end::submit-tx[]
-  )
+;; tag::submit-tx[]
+(crux/submit-tx
+ node
+ [[:crux.tx/put
+   {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
+    :name "Pablo"
+    :last-name "Picasso"}
+   #inst "2018-05-18T09:20:27.966-00:00"]]) ; valid time
+;; end::submit-tx[]
+)
 
 (defn example-query [node]
-  ;; tag::query[]
-  (crux/q (crux/db node)
-          '{:find [e]
-            :where [[e :name "Pablo"]]})
-  ;; end::query[]
-  )
+;; tag::query[]
+(crux/q (crux/db node)
+        '{:find [e]
+          :where [[e :name "Pablo"]]})
+;; end::query[]
+)
 
 (defn example-query-entity [node]
-  ;; tag::query-entity[]
-  (crux/entity (crux/db node) :dbpedia.resource/Pablo-Picasso)
-  ;; end::query-entity[]
+;; tag::query-entity[]
+(crux/entity (crux/db node) :dbpedia.resource/Pablo-Picasso)
+;; end::query-entity[]
 )
 
 (defn example-query-valid-time [node]
-  ;; tag::query-valid-time[]
-  (crux/q (crux/db node #inst "2018-05-19T09:20:27.966-00:00")
-          '{:find [e]
-            :where [[e :name "Pablo"]]})
-  ;; end::query-valid-time[]
+;; tag::query-valid-time[]
+(crux/q (crux/db node #inst "2018-05-19T09:20:27.966-00:00")
+        '{:find [e]
+          :where [[e :name "Pablo"]]})
+;; end::query-valid-time[]
   )
 
 #_(comment
