@@ -103,7 +103,6 @@
 (defn -main []
   (let [runtime (Runtime/getRuntime)]
     (.addShutdownHook runtime (Thread. #'stop-servers)))
-  (stop-servers)
   (println "starting console server")
   (let [node (crux.api/start-standalone-node node-opts)
         crux-http-server (crux.http-server/start-http-server node http-opts)
