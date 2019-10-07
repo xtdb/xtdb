@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [crux-ui-server.main :as main]))
 
+(main/stop-servers)
 (main/-main)
 
 (comment

@@ -4,7 +4,8 @@
             [crux-ui.views.commons.tiny-components :as comps]
             [garden.core :as garden]
             [garden.stylesheet :as gs]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [crux-ui.config :as cfg]))
 
 (def ^:private root-styles
   [:style
@@ -40,6 +41,13 @@
    root-styles
    [:h1.overview__title "Console Overview"]
    [:section.overview__section.overview__section--shortcuts
+    [:h2.overview__header "Features"]
+    [:section.overview__section
+     [:h3.overview__header "Attribute history"]]
+    [:section.overview__section
+     [:h3.overview__header "Examples import"]
+     [:a {:href cfg/url-examples-gist :target :_blank} "Import example"]]]
+   [:section.overview__section
     [:h2.overview__header "Limitations"]
     [:div.g-mt-2 "When you execute a normal query (not tx) not longer than 2000
      characters it will be placed into your address bar so you can share it."]]
