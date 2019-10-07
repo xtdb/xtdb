@@ -15,12 +15,15 @@
     (t/is (not= nil submitted))
     (crux/sync node (:crux.tx/tx-time submitted) nil)
     ;; Testing example queries
-    (t/is (not (empty? (ex/example-query-entity node))))
-    (t/is (not (empty? (ex/example-query node))))
+    (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
+              :name "Pablo"
+              :last-name "Picasso"}
+           (ex/example-query-entity node)))
+    (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
     (t/is (not (empty? (ex/example-query-valid-time node))))
     ;; Testing example standalone node is closed properly
     (t/is (nil? (ex/example-close-node node)))))
-
+q
 (t/deftest test-example-kafka
   (let [embedded-kafka (ex/example-start-embedded-kafka)
         node (ex/example-start-cluster)]
