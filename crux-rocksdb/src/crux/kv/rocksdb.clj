@@ -145,10 +145,9 @@
 (def kv [(fn [_ {:keys [crux.kv/db-dir] :as options}]
            (lru/start-kv-store (map->RocksKv {:db-dir db-dir}) options))
          []
-         (s/keys :req [:crux.kv/db-dir]
-                 :opt [:crux.kv/sync?
-                       ::db-options
-                       ::disable-wal?])
-         (merge lru/kv-options
+         (s/and :crux.kv/options
+                (s/keys :opt [::db-options
+                              ::disable-wal?]))
+         (merge kv/options
                 {::db-options {:doc "RocksDB Options"}
                  ::disable-wal? {:doc "Disable Write Ahead Log"}})])

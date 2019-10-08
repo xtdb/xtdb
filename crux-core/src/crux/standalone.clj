@@ -30,21 +30,22 @@
         (some-> fsync-thread (.join))))))
 
 (s/def ::event-log-dir string?)
-(s/def ::event-log-kv-backend :crux.kv/kv-backend)
-(s/def ::event-log-kv-opts (s/keys :req [::event-log-dir ::event-log-kv-backend]
+;; TODO - make work from Java
+(s/def ::event-log-kv symbol?)
+(s/def ::event-log-kv-opts (s/keys :req [::event-log-dir
+                                         ::event-log-kv]
                                    :opt-un [:crux.kv/sync?]
                                    :opt [::event-log-sync-interval-ms]))
 
-(defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv-backend
+(defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv
                                      crux.standalone/event-log-sync-interval-ms
                                      crux.standalone/event-log-dir
                                      crux.standalone/event-log-sync?]}]
-  (let [event-log-sync? (boolean (or event-log-sync? (not event-log-sync-interval-ms)))]
-    (n/start-kv-store
-     {:crux.kv/db-dir event-log-dir
-      :crux.kv/kv-backend event-log-kv-backend
-      :crux.kv/sync? event-log-sync?
-      :crux.index/check-and-store-index-version false})))
+  (let [event-log-sync? (boolean (or event-log-sync? (not event-log-sync-interval-ms)))
+        options {:crux.kv/db-dir event-log-dir
+                 :crux.kv/sync? event-log-sync?
+                 :crux.index/check-and-store-index-version false}]
+    (n/start-module event-log-kv nil  options)))
 
 (defn- start-event-log-consumer [{:keys [event-log-kv indexer]} _]
   (when event-log-kv
@@ -58,9 +59,9 @@
 (def event-log-kv [start-event-log-kv
                    []
                    ::event-log-kv-opts
-                   {::event-log-kv-backend
+                   {::event-log-kv
                     {:doc "Key/Value store to use for standalone event-log persistence. If not present, will use `crux.kv/kv-backend."
-                     :default "crux.kv.rocksdb.RocksKv"}
+                     :default 'crux.kv.rocksdb/kv}
                     ::event-log-dir
                     {:doc "Directory used to store the event-log and used for backup/restore."}
                     ::event-log-sync?

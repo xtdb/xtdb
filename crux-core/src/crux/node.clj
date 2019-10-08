@@ -9,7 +9,6 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
-            crux.kv.memdb
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.status :as status]
@@ -123,28 +122,6 @@
   (close [_]
     (when close-fn (close-fn))))
 
-;; TODO kill:
-(defn start-kv-store
-  (^java.io.Closeable [_ options]
-   (start-kv-store options))
-  (^java.io.Closeable [{:keys [crux.kv/db-dir
-                               crux.kv/kv-backend
-                               crux.kv/sync?
-                               crux.index/check-and-store-index-version]
-                        :as options
-                        :or {check-and-store-index-version true}}]
-   (s/assert :crux.kv/options options)
-   (let [kv (-> (kv/new-kv-store kv-backend)
-                (lru/new-cache-providing-kv-store)
-                (kv/open options))]
-     (try
-       (if check-and-store-index-version
-         (idx/check-and-store-index-version kv)
-         kv)
-       (catch Throwable t
-         (.close ^Closeable kv)
-         (throw t))))))
-
 (defn start-object-store ^java.io.Closeable [partial-node {:keys [crux.db/object-store] :as options}]
   (-> (db/require-and-ensure-object-store-record object-store)
       (cio/new-record)
@@ -171,17 +148,6 @@
                        (doto (Thread. r)
                          (.setName "crux.tx.update-stats-thread")))))))
 
-(defn- start-order [system]
-  (let [g (reduce-kv (fn [g k module-def]
-                       (reduce (fn [g d] (dep/depend g k d)) g (second module-def)))
-                     (dep/graph)
-                     system)
-        dep-order (dep/topo-sort g)
-        dep-order (->> (keys system)
-                       (remove #(contains? (set dep-order) %))
-                       (into dep-order))]
-    dep-order))
-
 (defn resolve-topology-or-module [s]
   (assert s)
   (if (or (string? s) (keyword? s) (symbol? s))
@@ -195,6 +161,18 @@
 (defn options->topology [{:keys [crux.node/topology]}]
   (resolve-topology-or-module topology))
 
+(defn- start-order [system]
+  (let [g (reduce-kv (fn [g k m]
+                       (let [m (resolve-topology-or-module m)]
+                         (reduce (fn [g d] (dep/depend g k d)) g (second m))))
+                     (dep/graph)
+                     system)
+        dep-order (dep/topo-sort g)
+        dep-order (->> (keys system)
+                       (remove #(contains? (set dep-order) %))
+                       (into dep-order))]
+    dep-order))
+
 (s/def ::module-def (s/cat :start-fn fn?
                            :deps (s/? (s/every keyword?))
                            :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
@@ -203,8 +181,19 @@
                                                              :opt-un [::default])))))
 
 (defn- conform-topology [topology options]
-  (let [topology (merge topology (select-keys options (keys topology)))]
-    (into {} (map (juxt key (comp resolve-topology-or-module val)) topology))))
+  (merge topology (select-keys options (keys topology))))
+
+(defn start-module [m started options]
+  (let [m (resolve-topology-or-module m)
+        _ (s/assert ::module-def m)
+        {:keys [start-fn deps spec meta-args]} (s/conform ::module-def m)
+        deps (select-keys started deps)
+        default-options (into {} (map (juxt key (comp :default val))
+                                      (filter #(find (val %) :default) meta-args)))
+        options (merge default-options options)]
+    (when spec
+      (s/assert spec options))
+    (start-fn deps options)))
 
 (defn start-modules [topology options]
   (let [topology (conform-topology topology options)
@@ -212,15 +201,10 @@
         start-order (start-order topology)
         started-modules (try
                           (for [k start-order]
-                            (let [_ (s/assert ::module-def (topology k))
-                                  {:keys [start-fn deps spec meta-args]} (s/conform ::module-def (topology k))
-                                  deps (select-keys @started deps)
-                                  default-options (into {} (map (juxt key (comp :default val))
-                                                                (filter #(find (val %) :default) meta-args)))
-                                  options (merge default-options options)]
-                              (when spec
-                                (s/assert spec options))
-                              [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
+                            (let [m (topology k)
+                                  m (start-module m @started options)]
+                              (swap! started assoc k m)
+                              [k m]))
                           (catch Throwable t
                             (doseq [c (reverse @started)]
                               (when (instance? Closeable c)
@@ -231,11 +215,6 @@
                                          :let [m (get @started k)]
                                          :when (instance? Closeable m)]
                                    (cio/try-close m)))]))
-
-(comment
-  (start-modules {:a [(fn [deps] (println deps) :start-a) :b]
-                  :b (fn [deps] :start-b)
-                  :c (fn [deps] :start-c)}))
 
 (def raw-object-store [start-raw-object-store
                        [:kv-store]

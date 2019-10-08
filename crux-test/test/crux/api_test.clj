@@ -81,8 +81,10 @@
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
                      :crux.kv/estimate-num-keys
-                     :crux.tx-log/consumer-state :crux.kv/size
-                     :crux.version/version :crux.version/revision))))
+                     :crux.tx-log/consumer-state
+                     :crux.kv/size
+                     :crux.version/version
+                     :crux.version/revision))))
 
   (t/testing "empty db"
     (t/is (.db *api*)))

@@ -131,7 +131,7 @@
 (def kv [(fn [_ {:keys [crux.kv/db-dir] :as options}]
            (lru/start-kv-store (map->LMDBJNRKv {:db-dir db-dir}) options))
          []
-         (s/keys :req [:crux.kv/db-dir]
-                 :opt [:crux.kv/sync?])
-         (merge lru/kv-options
-                {::env-flags {:doc "LMDB Flags"}})])
+         (s/and :crux.kv/options
+                (s/keys :opt [:crux.kv.lmdb.java/env-flags]))
+         (merge kv/options
+                {:crux.kv.lmdb.java/env-flags {:doc "LMDB Flags"}})])

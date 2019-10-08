@@ -118,8 +118,7 @@
 (def kv [(fn [_ {:keys [crux.kv/db-dir crux.kv.memdb/persist-on-close?] :as options}]
            (lru/start-kv-store (map->MemKv {:db-dir db-dir :persist-on-close? persist-on-close?}) options))
          []
-         (s/keys :opt [:crux.kv/db-dir
-                       :crux.kv/sync?
-                       ::persist-on-close?])
-         (merge lru/kv-options
+         (s/and :crux.kv/options
+                (s/keys :opt [::persist-on-close?]))
+         (merge kv/options
                 {::persist-on-close? {:doc "Persist Mem Db on close"}})])

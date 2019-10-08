@@ -281,14 +281,3 @@
       (catch Throwable t
         (.close ^Closeable kv)
         (throw t)))))
-
-(def kv-options
-  {:crux.kv/db-dir
-   {:doc "Directory to store K/V files"
-    :default "data"}
-   :crux.kv/sync?
-   {:doc "Sync the KV store to disk after every write."
-    :default false}
-   :crux.kv/check-and-store-index-version
-   {:doc "Check and store index version upon start"
-    :default true}})
