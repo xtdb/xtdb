@@ -1,6 +1,6 @@
 (ns crux-console.query-analysis-test
   (:require [cljs.test :refer :all]
-            [juxt.crux-ui.frontend.logic.query-analysis :as qa]))
+            [crux-ui.logic.query-analysis :as qa]))
 
 (def q
   '{:find [e p]

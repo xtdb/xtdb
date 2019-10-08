@@ -9,7 +9,8 @@
             DMatrixSparse DMatrixSparseCSC]
            org.ejml.dense.row.CommonOps_DDRM
            [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
-           org.ejml.generic.GenericMatrixOps_F64))
+           org.ejml.generic.GenericMatrixOps_F64
+           [org.roaringbitmap FastRankRoaringBitmap RoaringBitmap]))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
 
@@ -786,23 +787,22 @@
 
 ;; k2-tree
 
-(defn bit-str->bitset [s]
-  (let [bs (java.util.BitSet.)
-        bits (->> s
-                  (remove #{\space})
-                  (vec))]
-    (dotimes [n (count bits)]
-      (when (= \1 (get bits n))
-        (.set bs n true)))
-    bs))
+(defn bit-str->bitset
+  (^org.roaringbitmap.RoaringBitmap [s]
+   (bit-str->bitset (RoaringBitmap.) s))
+  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap bs s]
+   (let [bits (->> s
+                   (remove #{\space})
+                   (vec))]
+     (dotimes [n (count bits)]
+       (when (= \1 (get bits n))
+         (.add bs n)))
+     bs)))
 
-;; TODO: Obviously slow, should use proper data structure.
-(defn bitset-rank ^long [^java.util.BitSet bs ^long n]
-  (loop [n (.previousSetBit bs n)
-         rank 0]
-    (if (= -1 n)
-      rank
-      (recur (.previousSetBit bs (dec n)) (inc rank)))))
+(defn bitset-rank ^long [^RoaringBitmap bs ^long n]
+  (if (= -1 n)
+    0
+    (.rank bs n)))
 
 (defn power-of? [^long x ^long y]
   (if (zero? (rem x y))
@@ -812,56 +812,61 @@
 (defn next-power-of ^long [^long x ^long y]
   (long (Math/pow 2 (long (Math/pow y (Math/log x))))))
 
+(defrecord K2Tree [^long n ^long k ^long k2 ^RoaringBitmap t ^long t-size ^RoaringBitmap l])
+
 (defn new-static-k2-tree [^long n ^long k tree-bit-str leaf-bit-str]
-  {:n (if (power-of? n k)
-        n
-        (next-power-of n k))
-   :k k
-   :k2 (long (Math/pow k 2))
-   :t (bit-str->bitset tree-bit-str)
-   :t-size (->> tree-bit-str
-                (remove #{\space})
-                (count))
-   :l (bit-str->bitset leaf-bit-str)})
+  (map->K2Tree
+   {:n (if (power-of? n k)
+         n
+         (next-power-of n k))
+    :k k
+    :k2 (long (Math/pow k 2))
+    :t (bit-str->bitset (FastRankRoaringBitmap.) tree-bit-str)
+    :t-size (->> tree-bit-str
+                 (remove #{\space})
+                 (count)
+                 (long))
+    :l (bit-str->bitset leaf-bit-str)}))
 
 ;; http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1
 ;; NOTE: Redefined in terms of k2-tree-range below.
-(defn k2-tree-check-link? [{:keys [^long n
-                                   ^long k
-                                   ^long k2
-                                   ^long t-size
-                                   ^java.util.BitSet t
-                                   ^java.util.BitSet l] :as k2-tree} ^long row ^long col]
-  (loop [n n
-         p row
-         q col
-         z -1]
-    (if (>= z t-size)
-      (.get l (- z t-size))
-      (if (or (= -1 z) (.get t z))
-        (let [n (quot n k)
-              y (* (bitset-rank t z) k2)
-              y (+ y
-                   (* (Math/abs (quot p n)) k)
-                   (Math/abs (quot q n)))]
-          (recur n
-                 (long (mod p n))
-                 (long (mod q n))
-                 y))
-        false))))
+(defn k2-tree-check-link? [^K2Tree k2-tree ^long row ^long col]
+  (let [n (.n k2-tree)
+        k (.k k2-tree)
+        k2 (.k2 k2-tree)
+        t ^RoaringBitmap (.t k2-tree)
+        t-size (.t-size k2-tree)
+        l ^RoaringBitmap (.l k2-tree)]
+    (loop [n n
+           p row
+           q col
+           z -1]
+      (if (>= z t-size)
+        (.contains l (- z t-size))
+        (if (or (= -1 z) (.contains t z))
+          (let [n (quot n k)
+                y (* (bitset-rank t z) k2)
+                y (+ y
+                     (* (Math/abs (quot p n)) k)
+                     (Math/abs (quot q n)))]
+            (recur n
+                   (rem p n)
+                   (rem q n)
+                   y))
+          false)))))
 
 ;; NOTE: All elements in a row.
 (defn k2-tree-succsessors [{:keys [^long n
                                    ^long k
                                    ^long k2
                                    ^long t-size
-                                   ^java.util.BitSet t
-                                   ^java.util.BitSet l] :as k2-tree} ^long row]
+                                   ^RoaringBitmap t
+                                   ^RoaringBitmap l] :as k2-tree} ^long row]
   ((fn step [^long n ^long p ^long q ^long z]
      (if (>= z t-size)
-       (when (.get l (- z t-size))
+       (when (.contains l (- z t-size))
          [q])
-       (when (or (= -1 z) (.get t z))
+       (when (or (= -1 z) (.contains t z))
          (let [n (quot n k)
                y (+ (* (bitset-rank t z) k2)
                     (* (Math/abs (quot p n)) k))]
@@ -875,13 +880,13 @@
                                     ^long k
                                     ^long k2
                                     ^long t-size
-                                    ^java.util.BitSet t
-                                    ^java.util.BitSet l] :as k2-tree} ^long col]
+                                    ^RoaringBitmap t
+                                    ^RoaringBitmap l] :as k2-tree} ^long col]
   ((fn step [^long n ^long q ^long p ^long z]
      (if (>= z t-size)
-       (when (.get l (- z t-size))
+       (when (.contains l (- z t-size))
          [p])
-       (when (or (= -1 z) (.get t z))
+       (when (or (= -1 z) (.contains t z))
          (let [n (quot n k)
                y (+ (* (bitset-rank t z) k2)
                     (Math/abs (quot q n)))]
@@ -895,8 +900,8 @@
                              ^long k
                              ^long k2
                              ^long t-size
-                             ^java.util.BitSet t
-                             ^java.util.BitSet l] :as k2-tree} row1 row2 col1 col2]
+                             ^RoaringBitmap t
+                             ^RoaringBitmap l] :as k2-tree} row1 row2 col1 col2]
   ((fn step [n p1 p2 q1 q2 dp dq z]
      (let [n (long n)
            z (long z)
@@ -907,9 +912,9 @@
            dp (long dp)
            dq (long dq)]
        (if (>= z t-size)
-         (when (.get l (- z t-size))
+         (when (.contains l (- z t-size))
            [[dp dq]])
-         (when (or (= -1 z) (.get t z))
+         (when (or (= -1 z) (.contains t z))
            (let [n (quot n k)
                  y (* (bitset-rank t z) k2)]
              (->> (for [^long i (range (quot p1 n) (inc (quot p2 n)))
@@ -931,6 +936,7 @@
    n row1 row2 col1 col2 0 0 -1))
 
 ;; NOTE: The above re-implemented in terms of k2-tree-range.
+;;       Original iterative version is order of magnitude faster.
 (defn k2-tree-check-link? [k2 row col]
   (->> (k2-tree-range k2 row row col col)
        (seq)
@@ -944,38 +950,52 @@
   (->> (k2-tree-range k2 0 n col col)
        (map first)))
 
+
 ;; Matrix data form https://arxiv.org/pdf/1707.02769.pdf page 8.
 (comment
   (let [k2 (new-static-k2-tree
             10
             2
             "1110 1101 1010 0100 0110 1001 0101 0010 1010 1100"
-            "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")]
-    [;; 3rd q
-     (k2-tree-check-link? k2 9 6)
-     (k2-tree-check-link? k2 8 6)
+            "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")
+        expected '[true
+                   true
+                   true
+                   true
+                   true
+                   true
+                   false
+                   ([5 8])
+                   ([1 2] [1 3] [1 4])
+                   ([3 6] [7 6] [8 6] [9 6])
+                   (2 3 4)
+                   (3 7 8 9)]]
+    (= expected
+       [;; 3rd q
+        (k2-tree-check-link? k2 9 6)
+        (k2-tree-check-link? k2 8 6)
 
-     ;; 1st q
-     (k2-tree-check-link? k2 1 2)
-     (k2-tree-check-link? k2 3 0)
+        ;; 1st q
+        (k2-tree-check-link? k2 1 2)
+        (k2-tree-check-link? k2 3 0)
 
-     ;; 2nd q
-     (k2-tree-check-link? k2 2 9)
-     (k2-tree-check-link? k2 5 8)
+        ;; 2nd q
+        (k2-tree-check-link? k2 2 9)
+        (k2-tree-check-link? k2 5 8)
 
-     ;; Should be false
-     (k2-tree-check-link? k2 0 0)
+        ;; Should be false
+        (k2-tree-check-link? k2 0 0)
 
-     (k2-tree-range k2 5 5 8 8)
+        (k2-tree-range k2 5 5 8 8)
 
-     (k2-tree-range k2 1 1 0 16)
-     (k2-tree-range k2 0 16 6 6)
+        (k2-tree-range k2 1 1 0 16)
+        (k2-tree-range k2 0 16 6 6)
 
-     ;; TODO: Does not work yet:
-     ;; Should return 2 3 4
-     (k2-tree-succsessors k2 1)
-     ;; Should return 3 7 8 9
-     (k2-tree-predecessors k2 6)]))
+        ;; TODO: Does not work yet:
+        ;; Should return 2 3 4
+        (k2-tree-succsessors k2 1)
+        ;; Should return 3 7 8 9
+        (k2-tree-predecessors k2 6)])))
 
 ;; WatDiv analysis helpers:
 
@@ -2193,3 +2213,70 @@
 ;; export PATH=$JAVA_HOME/bin:$PATH
 ;; CRUX_DISABLE_LIBGCRYPT=true CRUX_DISABLE_LIBCRYPTO=true lein with-profile graal,uberjar uberjar
 ;; native-image --no-server -H:+ReportExceptionStackTraces -H:+ReportUnsupportedElementsAtRuntime -H:ReflectionConfigurationFiles=~/dev/crux/resources/graal_reflectconfig.json -H:EnableURLProtocols=http -H:IncludeResources='.*/.*properties$' -H:IncludeResources='.*/.*so$' -H:IncludeResources='.*/.*xml$' -Dclojure.compiler.direct-linking=true -jar ./crux-0.1.0-SNAPSHOT-standalone.jar
+
+;; Priority Search Tree:
+
+;; Based on
+;; http://cs.brown.edu/courses/cs252/misc/resources/lectures/pdf/notes07.pdf
+;; https://pdfs.semanticscholar.org/ce68/4914d2ee4c870db16a2edc2dbceca4c2ad2c.pdf
+;; See also https://github.com/michalmarczyk/psq.clj
+;; https://github.com/spratt/PrioritySearchTree
+
+(def example-pst
+  [[[1 8] :n]
+   [[9 -3] :m]
+   [[10 -2] :e]
+   [[4 0] :k]
+   [[6 4] :g]
+   [[12 1] :c]
+   [[2 3] :j]
+   [[7 6] :h]
+   [[16 2] :b]
+   [[14 -1] :d]
+   [[-1 9] :f]
+   [[-2 5] :i]
+   [[15 7] :a]])
+
+(def expected-pst
+  [[[-1 9] :f 8]
+   [[[1 8] :n 3]
+    [[[-2 5] :i -2] [[[2 3] :j 2]]]
+    [[[7 6] :h 5] [[[4 0] :k 4]] [[[6 4] :g 6]]]]
+   [[[15 7] :a 11]
+    [[[10 -2] :e 10] [[[9 -3] :m 9]]]
+    [[[16 2] :b 13] [[[12 1] :c 12]] [[[14 -1] :d 14]]]]])
+
+(defn build-priority-search-tree [kvs]
+  (let [kvs (sort-by (comp second first) kvs)
+        [[x y] :as p] (last kvs)
+        s (disj (set kvs) p)]
+    (let [s (vec (sort-by ffirst s))
+          [lower upper] (split-at (quot (count s) 2) s)
+          x-of-p (if (<= (count s) 1)
+                   x
+                   (quot (+ (long (ffirst (last lower)))
+                            (long (ffirst (first upper))))
+                         2))]
+      (cond-> [(conj p x-of-p)]
+        (seq lower) (conj (build-priority-search-tree lower))
+        (seq upper) (conj (build-priority-search-tree upper))))))
+
+(def expected-pst-result
+  [[[1 8] :n 3]
+   [[7 6] :h 5]])
+
+(defn query-priority-search-tree [[[[x y] k x-of-p :as node] l r :as tree] x-min y-min x-max]
+  (when (and node (>= (double y) (double y-min)))
+    (concat
+     (when (<= x-min x x-max)
+       [node])
+     (when (< (double x-min) (double x-of-p))
+       (query-priority-search-tree l x-min y-min x-max))
+     (when (> (double x-max) (double x-of-p))
+       (query-priority-search-tree r x-min y-min x-max)))))
+
+(comment
+  (= expected-pst-result
+     (query-priority-search-tree
+      (build-priority-search-tree example-pst)
+      0 4.5 11)))
