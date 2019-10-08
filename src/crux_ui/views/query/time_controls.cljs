@@ -1,10 +1,12 @@
 (ns crux-ui.views.query.time-controls
   (:require [garden.core :as garden]
+            [garden.stylesheet :as gs]
             [crux-ui.views.commons.datepicker-native :as ndt]
             [crux-ui.views.query.datepicker-slider :as sdt]
             [re-frame.core :as rf]
             [reagent.core :as r]
-            [crux-ui.functions :as f]))
+            [crux-ui.functions :as f]
+            [crux-ui.views.functions :as vu]))
 
 (def -sub-time (rf/subscribe [:subs.query/time]))
 (def -sub-vt (rf/subscribe [:subs.query.time/vt]))
@@ -46,20 +48,25 @@
       [:&__item
        {:margin "8px 0"}]
       [:&__switcher
-       {:margin-top :16px}]])])
+       {:margin-top :16px}]]
+     (gs/at-media {:min-width :1000px}
+      [:.time-controls--column
+       {:flex-direction :row}]))])
 
 (def ^:private -sub-bp-375 (rf/subscribe [:subs.ui.responsive-breakpoints/width-lt-375]))
 
-(defn native-pickers []
+(defn native-pickers [layout]
   [:<>
    [:div.time-controls__item
     [ndt/picker
      {:label "Valid time"
+      :ui/layout layout
       :value @-sub-vt
       :on-change on-vt-change}]]
    [:div.time-controls__item
     [ndt/picker
      {:label (if @-sub-bp-375 "Tx time" "Transaction time")
+      :ui/layout layout
       :value @-sub-tt
       :on-change on-tt-change}]]])
 
@@ -89,11 +96,12 @@
          {:on-click toggle-time} "Valid time: " (str @-sub-vt)]]))))
 
 
-(defn root []
-  [:div.time-controls
-   sdt/style
+(defn root [{:ui/keys [layout]}]
+  [:div {:class (vu/bem-str :time-controls layout)}
+
+   #_sdt/style
    ndt/style
    time-controls-styles
-   [native-pickers]
+   [native-pickers layout]
    #_[range-pickers]])
 

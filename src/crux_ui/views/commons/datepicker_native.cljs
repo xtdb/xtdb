@@ -1,5 +1,6 @@
 (ns crux-ui.views.commons.datepicker-native
   (:require [garden.core :as garden]
+            [garden.stylesheet :as gs]
             [crux-ui.logging :as log]
             [crux-ui.functions :as f]
             [crux-ui.logic.time :as time]
@@ -7,7 +8,8 @@
             [crux-ui.views.commons.input :as input]
             [crux-ui.views.commons.keycodes :as kc]
             [reagent.core :as r]
-            [crux-ui.views.commons.dom :as dom]))
+            [crux-ui.views.commons.dom :as dom]
+            [crux-ui.views.functions :as vu]))
 
 
 (defn- on-time-change--native [on-change-external evt]
@@ -36,19 +38,32 @@
       [:&__input
        input/styles-src
        {:padding "4px 0"
-        :width :auto}]])])
+        :width :auto}]]
+     (gs/at-media {:min-width :1000px}
+       [:.native-date-time-picker--column
+        {:flex-direction :column
+         :align-items :flex-start}
+        ["> .native-date-time-picker__label"
+         {:font-size :16px
+          :width :auto
+          :letter-spacing :0.09em
+          :color :gray}]
+        ["> .native-date-time-picker__input"
+         {:line-height :32px
+          }]]))])
 
 
 (defn picker
   [{:keys
     [label
+     ui/layout
      ^js/Date value
      on-change]
     :as prms}]
   (let [state (r/atom {:value value})
         on-commit-internal  (r/partial on-time-change--native on-change)]
     (fn []
-      [:div.native-date-time-picker
+      [:div (vu/bem :native-date-time-picker layout)
        (if label
          [:label.native-date-time-picker__label label])
        [:input.native-date-time-picker__input
