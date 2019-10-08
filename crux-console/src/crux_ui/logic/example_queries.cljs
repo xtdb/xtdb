@@ -63,49 +63,48 @@
     :se/currency :currency/usd
     :se/country :se.country/USA}
 
+
+   ; NASDAQ subsidiaries
+   {:crux.db/id :se.id/CSE
+    :se/title "Copenhagen Stock Exchange"
+    :se/currency :currency/dkk
+    :se/country :se.country/Denmark}
+   {:crux.db/id  :se.id/STSE
+    :se/title    "Stockholm Stock Exchange"
+    :se/currency :currency/skk
+    :se/country  :se.country/Sweden}
+   {:crux.db/id :se.id/HSE
+    :se/title "Helsinki Stock Exchange"
+    :se/currency :currency/euro
+    :se/country :se.country/Finland}
+   {:crux.db/id :se.id/ISE
+    :se/title "Iceland Stock Exchange"
+    :se/currency :currency/skk
+    :se/country :se.country/Iceland}
+   {:crux.db/id :se.id/TSE
+    :se/title "Tallinn Stock Exchange"
+    :se/currency :currency/euro
+    :se/country :se.country/Estonia}
+   {:crux.db/id :se.id/RSE
+    :se/title "Riga Stock Exchange"
+    :se/currency :currency/euro
+    :se/country :se.country/Latvia}
+   {:crux.db/id :se.id/VSE
+    :se/title "Vilnius Stock Exchange"
+    :se/currency :currency/euro
+    :se/country :se.country/Lithuania}
+   {:crux.db/id :se.id/ASE
+    :se/title "Armenian Stock Exchange"
+    :se/currency :currency/usd
+    :se/country :se.country/Armenia}
+
    {:crux.db/id :se.id/NASDAQ
     :se/title "NASDAQ"
     :se/country :se.country/USA
     :se/subsidiaries
-    #{{:crux.db/id :se.id/CSE
-       :se/title "Copenhagen Stock Exchange"
-       :se/currency :currency/dkk
-       :se/country :se.country/Denmark}
-
-      {:crux.db/id :se.id/StockholmSE
-       :se/title "Stockholm Stock Exchange"
-       :se/currency :currency/skk
-       :se/country :se.country/Sweden}
-
-      {:crux.db/id :se.id/HSE
-       :se/title "Helsinki Stock Exchange"
-       :se/currency :currency/euro
-       :se/country :se.country/Finland}
-
-      {:crux.db/id :se.id/ISE
-       :se/title "Iceland Stock Exchange"
-       :se/currency :currency/skk
-       :se/country :se.country/Iceland}
-
-      {:crux.db/id :se.id/TSE
-       :se/title "Tallinn Stock Exchange"
-       :se/currency :currency/euro
-       :se/country :se.country/Estonia}
-
-      {:crux.db/id :se.id/RSE
-       :se/title "Riga Stock Exchange"
-       :se/currency :currency/euro
-       :se/country :se.country/Latvia}
-
-      {:crux.db/id :se.id/VSE
-       :se/title "Vilnius Stock Exchange"
-       :se/currency :currency/euro
-       :se/country :se.country/Lithuania}
-
-      {:crux.db/id :se.id/ASE
-       :se/title "Armenian Stock Exchange"
-       :se/currency :currency/usd
-       :se/country :se.country/Armenia}}}
+    #{:se.id/CSE :se.id/STSE :se.id/HSE
+      :se.id/ISE :se.id/TSE :se.id/RSE
+      :se.id/VSE :se.id/ASE}}
 
    {:crux.db/id :se.id/JEG
     :se/title "Japan Exchange Group"
