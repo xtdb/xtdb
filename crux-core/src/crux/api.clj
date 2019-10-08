@@ -306,7 +306,7 @@
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
   options
-  {:crux.node/node-topology e.g. \":crux.standalone/topology\"}
+  {:crux.node/topology e.g. \":crux.standalone/topology\"}
 
   returns a standalone node which implements ICruxAPI and
   java.io.Closeable. Latter allows the node to be stopped

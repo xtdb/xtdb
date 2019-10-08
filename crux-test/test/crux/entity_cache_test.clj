@@ -294,7 +294,7 @@
 
   (def node
     (api/start-node
-     {:crux.node/node-topology :crux.standalone/topology
+     {:crux.node/topology :crux.standalone/topology
       :db-dir        "console-data"
       :event-log-dir "console-data-log"
       :kv-backend    "crux.kv.rocksdb.RocksKv"}))

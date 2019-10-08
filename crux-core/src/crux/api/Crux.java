@@ -29,7 +29,7 @@ public class Crux {
     public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.node"));
         Object topology = Clojure.var("crux.node/options->topology").invoke(options);
-        return (ICruxAPI) Clojure.var("crux.node/start-node").invoke(topology, options);
+        return (ICruxAPI) Clojure.var("crux.node/start").invoke(topology, options);
     }
 
     /**
