@@ -73,7 +73,7 @@ Our first query runs on a database that contains the following 3 documents
 which get broken apart and indexed as "entities":
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-input]
+include::./src/docs/examples.clj[tags=query-input]
 ----
 
 Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as
@@ -86,7 +86,7 @@ once:
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=basic-query]
+include::./src/docs/examples.clj[tags=basic-query]
 ----
 
 Let's try to work out what these 3 clauses do...
@@ -120,7 +120,7 @@ The edn result set only contains the value `:smith`
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=basic-query-r]
+include::./src/docs/examples.clj[tags=basic-query-r]
 ----
 
 [#queries_arguments]
