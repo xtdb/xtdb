@@ -113,7 +113,7 @@
         ^{:key @-sub-editor-key}
         [q-editor/root]]
        [:div.q-form__time-controls
-        [time-controls/root]]
+        [time-controls/root {:ui/layout :ui.layout/column}]]
        (if @ex
          [:div.q-form__examples
           [:div.examples-wrapper
