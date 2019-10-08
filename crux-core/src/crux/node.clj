@@ -9,6 +9,7 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
+            crux.kv.memdb
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.status :as status]
@@ -122,6 +123,7 @@
   (close [_]
     (when close-fn (close-fn))))
 
+;; TODO kill:
 (defn start-kv-store
   (^java.io.Closeable [_ options]
    (start-kv-store options))
@@ -180,11 +182,18 @@
                        (into dep-order))]
     dep-order))
 
+(defn resolve-topology-or-module [s]
+  (assert s)
+  (if (or (string? s) (keyword? s) (symbol? s))
+    (let [v (symbol s)
+          ns (namespace v)]
+      (assert ns)
+      (require (symbol ns))
+      (var-get (find-var v)))
+    s))
+
 (defn options->topology [{:keys [crux.node/topology]}]
-  (assert topology)
-  (let [v (symbol topology)]
-    (require (symbol (namespace v)))
-    (var-get (find-var v))))
+  (resolve-topology-or-module topology))
 
 (s/def ::module-def (s/cat :start-fn fn?
                            :deps (s/? (s/every keyword?))
@@ -193,13 +202,18 @@
                                                      (s/keys :req-un [::doc]
                                                              :opt-un [::default])))))
 
-(defn start-modules [node-system options]
-  (let [started (atom {})
-        start-order (start-order node-system)
+(defn- conform-topology [topology options]
+  (let [topology (merge topology (select-keys options (keys topology)))]
+    (into {} (map (juxt key (comp resolve-topology-or-module val)) topology))))
+
+(defn start-modules [topology options]
+  (let [topology (conform-topology topology options)
+        started (atom {})
+        start-order (start-order topology)
         started-modules (try
                           (for [k start-order]
-                            (let [_ (s/assert ::module-def (node-system k))
-                                  {:keys [start-fn deps spec meta-args]} (s/conform ::module-def (node-system k))
+                            (let [_ (s/assert ::module-def (topology k))
+                                  {:keys [start-fn deps spec meta-args]} (s/conform ::module-def (topology k))
                                   deps (select-keys @started deps)
                                   default-options (into {} (map (juxt key (comp :default val))
                                                                 (filter #(find (val %) :default) meta-args)))
@@ -241,20 +255,7 @@
                   {:doc "Timeout waiting for tx-time to be reached by a Crux node"
                    :default crux.tx/default-await-tx-timeout}}])
 
-(def kv-store [start-kv-store
-               []
-               :crux.kv/options
-               {:crux.kv/kv-backend
-                {:doc "Key/Value store to use for node persistence."
-                 :default "crux.kv.rocksdb.RocksKv"}
-                :crux.kv/db-dir
-                {:doc "Directory to store K/V files"
-                 :default "data"}
-                :crux.kv/sync?
-                {:doc "Sync the KV store to disk after every write."
-                 :default false}}])
-
-(def base-topology {:kv-store kv-store
+(def base-topology {:kv-store 'crux.kv.rocksdb/kv
                     :raw-object-store raw-object-store
                     :object-store object-store
                     :indexer kv-indexer})

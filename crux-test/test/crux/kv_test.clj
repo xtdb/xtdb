@@ -6,7 +6,7 @@
             [crux.node :as n]
             [crux.codec :as c]
             [crux.fixtures :as f]
-            [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-backend*]]
+            [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-module*]]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem])
@@ -100,8 +100,7 @@
       (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (kv/backup *kv* backup-dir)
-      (with-open [restored-kv (n/start-kv-store {:crux.kv/db-dir (str backup-dir)
-                                                 :crux.kv/kv-backend *kv-backend*})]
+      (with-open [restored-kv (fkv/start-kv-store {:crux.kv/db-dir (str backup-dir)})]
         (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
 
         (t/testing "backup and original are different"
@@ -113,20 +112,16 @@
         (cio/delete-dir backup-dir)))))
 
 (t/deftest test-sanity-check-can-start-with-sync-enabled
-  (let [sync-dir (cio/create-tmpdir "kv-store-sync")]
-    (try
-      (with-open [sync-kv (n/start-kv-store {:crux.kv/db-dir (str sync-dir)
-                                             :sync? true
-                                             :crux.kv/kv-backend *kv-backend*})]
-        (kv/store sync-kv [[(long->bytes 1) (.getBytes "Crux")]])
-        (t/is (= "Crux" (String. ^bytes (value sync-kv (long->bytes 1))))))
-      (finally
-        (cio/delete-dir sync-dir)))))
+  (binding [fkv/*sync* true]
+    (fkv/with-kv-store
+      (fn []
+        (kv/store fkv/*kv* [[(long->bytes 1) (.getBytes "Crux")]])
+        (t/is (= "Crux" (String. ^bytes (value fkv/*kv* (long->bytes 1))))))))
 
-(t/deftest test-sanity-check-can-fsync
-  (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
-  (kv/fsync *kv*)
-  (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1))))))
+  (t/deftest test-sanity-check-can-fsync
+    (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
+    (kv/fsync *kv*)
+    (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))))
 
 (t/deftest test-can-get-from-snapshot
   (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
@@ -306,12 +301,12 @@
 (t/deftest test-performance-off-heap
   (if (and (Boolean/parseBoolean (System/getenv "CRUX_KV_PERFORMANCE"))
            (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
-             (= backend *kv-backend*)
+             (= backend (str *kv-module*))
              true))
     (let [n 1000000
           ks (vec (for [n (range n)]
                     (mem/->off-heap (.getBytes (format "%020x" n)))))]
-      (println *kv-backend* "off-heap")
+      (println *kv-module* "off-heap")
       (t/is (= n (count ks)))
       (t/is (mem/off-heap? (first ks)))
 

@@ -1,7 +1,7 @@
 (ns crux.fixtures.kafka
   (:require [clojure.java.io :as io]
             [crux.fixtures.api :as apif]
-            [crux.fixtures.kv-only :refer [*kv-backend*]]
+            [crux.fixtures.kv-only :refer [*kv-module*]]
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek])
@@ -70,7 +70,7 @@
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
       (apif/with-opts {:crux.node/topology :crux.kafka/topology
-                       :crux.kv/kv-backend *kv-backend*
+                       :crux.node/kv-backend *kv-module*
                        :crux.kafka/tx-topic *tx-topic*
                        :crux.kafka/doc-topic *doc-topic*
                        :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))

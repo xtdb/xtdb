@@ -1,13 +1,14 @@
 (ns crux.kv.memdb
   "In-memory KV backend for Crux."
-  (:require [clojure.spec.alpha :as s]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import java.io.Closeable
-           clojure.lang.Box))
+  (:import clojure.lang.Box
+           java.io.Closeable))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
@@ -63,16 +64,9 @@
   Closeable
   (close [_]))
 
-(s/def ::persist-on-close? boolean?)
-
-(s/def ::options (s/keys :opt [:crux.kv/db-dir
-                               :crux.kv/sync?
-                               ::persist-on-close?]))
-
 (defrecord MemKv [db db-dir persist-on-close?]
   kv/KvStore
   (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.memdb.kv/persist-on-close?] :as options}]
-    (s/assert ::options options)
     (when sync?
       (log/warn "Using sync? on MemKv has no effect."
                 (if (and db-dir persist-on-close?)
@@ -118,3 +112,14 @@
   (close [_]
     (when (and db-dir persist-on-close?)
       (persist-db db-dir db))))
+
+(s/def ::persist-on-close? boolean?)
+
+(def kv [(fn [_ {:keys [crux.kv/db-dir crux.kv.memdb/persist-on-close?] :as options}]
+           (lru/start-kv-store (map->MemKv {:db-dir db-dir :persist-on-close? persist-on-close?}) options))
+         []
+         (s/keys :opt [:crux.kv/db-dir
+                       :crux.kv/sync?
+                       ::persist-on-close?])
+         (merge lru/kv-options
+                {::persist-on-close? {:doc "Persist Mem Db on close"}})])

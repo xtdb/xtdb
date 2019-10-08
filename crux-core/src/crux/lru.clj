@@ -269,3 +269,26 @@
 
 (defn new-cached-index [idx cache-size]
   (->CachedIndex idx (new-cache cache-size)))
+
+(defn start-kv-store ^java.io.Closeable [kv-store {:keys [crux.index/check-and-store-index-version] :as options}]
+  (let [kv (-> kv-store
+               (new-cache-providing-kv-store)
+               (kv/open options))]
+    (try
+      (if check-and-store-index-version
+        (idx/check-and-store-index-version kv)
+        kv)
+      (catch Throwable t
+        (.close ^Closeable kv)
+        (throw t)))))
+
+(def kv-options
+  {:crux.kv/db-dir
+   {:doc "Directory to store K/V files"
+    :default "data"}
+   :crux.kv/sync?
+   {:doc "Sync the KV store to disk after every write."
+    :default false}
+   :crux.kv/check-and-store-index-version
+   {:doc "Check and store index version upon start"
+    :default true}})

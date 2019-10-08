@@ -5,16 +5,22 @@
   (:import java.io.Closeable))
 
 (def ^:dynamic *kv*)
-(def ^:dynamic *kv-backend* "crux.kv.rocksdb.RocksKv")
+(def ^:dynamic *kv-module* 'crux.kv.rocksdb/kv)
 (def ^:dynamic *check-and-store-index-version* true)
+(def ^:dynamic *sync* false)
+
+(defn ^Closeable start-kv-store [opts]
+  (let [kv-fn (first (n/resolve-topology-or-module *kv-module*))]
+    (assert (fn? kv-fn))
+    (kv-fn nil opts)))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
-      (binding [*kv* (n/start-kv-store {:crux.kv/db-dir (str db-dir)
-                                        :crux.kv/kv-backend *kv-backend*
-                                        :crux.index/check-and-store-index-version *check-and-store-index-version*})]
-        (with-open [*kv* ^Closeable *kv*]
+      (with-open [kv (start-kv-store {:crux.kv/db-dir (str db-dir)
+                                      :crux.kv/sync? *sync*
+                                      :crux.index/check-and-store-index-version *check-and-store-index-version*})]
+        (binding [*kv* kv]
           (f)))
       (finally
         (cio/delete-dir db-dir)))))
@@ -24,27 +30,27 @@
     (f)))
 
 (defn with-memdb [f]
-  (binding [*kv-backend* "crux.kv.memdb.MemKv"]
+  (binding [*kv-module* 'crux.kv.memdb/kv]
     (t/testing "MemDB"
       (f))))
 
 (defn with-rocksdb [f]
-  (binding [*kv-backend* "crux.kv.rocksdb.RocksKv"]
+  (binding [*kv-module* 'crux.kv.rocksdb/kv]
     (t/testing "RocksDB"
       (f))))
 
 (defn with-rocksdb-jnr [f]
-  (binding [*kv-backend* "crux.kv.rocksdb.jnr.RocksJNRKv"]
+  (binding [*kv-module* 'crux.kv.rocksdb.jnr/kv]
     (t/testing "RocksJNRDB"
       (f))))
 
 (defn with-lmdb [f]
-  (binding [*kv-backend* "crux.kv.lmdb.LMDBKv"]
+  (binding [*kv-module* 'crux.kv.lmdb/kv]
     (t/testing "LMDB"
       (f))))
 
 (defn with-lmdb-jnr [f]
-  (binding [*kv-backend* "crux.kv.lmdb.jnr.LMDBJNRKv"]
+  (binding [*kv-module* 'crux.kv.lmdb.jnr/kv]
     (t/testing "LMDBJNR"
       (f))))
 

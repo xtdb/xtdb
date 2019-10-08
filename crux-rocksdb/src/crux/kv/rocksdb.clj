@@ -3,6 +3,7 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             [crux.kv.rocksdb.loader]
             [crux.memory :as mem])
   (:import java.io.Closeable
@@ -52,14 +53,6 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
-(s/def ::db-options #(instance? Options %))
-(s/def ::disable-wal? boolean?)
-
-(s/def ::options (s/keys :req [:crux.kv/db-dir]
-                         :opt [:crux.kv/sync?
-                               ::db-options
-                               ::disable-wal?]))
-
 (def ^:private default-block-cache-size (* 128 1024 1024))
 (def ^:private default-block-size (* 16 1024))
 
@@ -76,7 +69,6 @@
 (defrecord RocksKv [db-dir]
   kv/KvStore
   (open [this {:keys [crux.kv/db-dir crux.kv/sync? ^Options crux.kv.rocksdb/db-options crux.kv.rocksdb/disable-wal?] :as options}]
-    (s/assert ::options options)
     (RocksDB/loadLibrary)
     (let [opts (doto (or db-options (Options.))
                  (.setCompressionType CompressionType/LZ4_COMPRESSION)
@@ -146,3 +138,17 @@
     (.close db)
     (.close options)
     (.close write-options)))
+
+(s/def ::db-options #(instance? Options %))
+(s/def ::disable-wal? boolean?)
+
+(def kv [(fn [_ {:keys [crux.kv/db-dir] :as options}]
+           (lru/start-kv-store (map->RocksKv {:db-dir db-dir}) options))
+         []
+         (s/keys :req [:crux.kv/db-dir]
+                 :opt [:crux.kv/sync?
+                       ::db-options
+                       ::disable-wal?])
+         (merge lru/kv-options
+                {::db-options {:doc "RocksDB Options"}
+                 ::disable-wal? {:doc "Disable Write Ahead Log"}})])

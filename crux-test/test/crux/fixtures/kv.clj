@@ -11,34 +11,34 @@
         (cio/delete-dir db-dir)))))
 
 (defn with-kv-backend [kv-backend f]
-  (apif/with-opts {:kv-backend kv-backend} f))
+  (apif/with-opts {:kv-store kv-backend} f))
 
 (defn with-memdb [f]
-  (with-kv-backend "crux.kv.memdb.MemKv"
+  (with-kv-backend 'crux.kv.memdb/kv
     (fn []
       (t/testing "MemDB"
         (f)))))
 
 (defn with-rocksdb [f]
-  (with-kv-backend "crux.kv.rocksdb.RocksKv"
+  (with-kv-backend 'crux.kv.rocksdb/kv
     (fn []
       (t/testing "RocksDB"
         (f)))))
 
 (defn with-rocksdb-jnr [f]
-  (with-kv-backend "crux.kv.rocksdb.jnr.RocksJNRKv"
+  (with-kv-backend 'crux.kv.rocksdb.jnr/kv
     (fn []
       (t/testing "RocksJNRDB"
         (f)))))
 
 (defn with-lmdb [f]
-  (with-kv-backend "crux.kv.lmdb.LMDBKv"
+  (with-kv-backend 'crux.kv.lmdb/kv
     (fn []
       (t/testing "LMDB"
         (f)))))
 
 (defn with-lmdb-jnr [f]
-  (with-kv-backend "crux.kv.lmdb.jnr.LMDBJNRKv"
+  (with-kv-backend 'crux.kv.lmdb.jnr/kv
     (fn []
       (t/testing "LMDBJNR"
         (f)))))

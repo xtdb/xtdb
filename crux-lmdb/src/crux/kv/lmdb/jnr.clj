@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             [crux.memory :as mem])
   (:import java.io.Closeable
            org.agrona.ExpandableDirectByteBuffer
@@ -39,9 +40,6 @@
   (close [_]
     (.close tx)))
 
-(s/def ::options (s/keys :req [:crux.kv/db-dir]
-                         :opt [:crux.kv/sync?]))
-
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
@@ -60,7 +58,6 @@
 (defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi]
   kv/KvStore
   (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.lmdb.java/env-flags] :as options}]
-    (s/assert ::options options)
     (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
                      (io/file db-dir)
                      (into-array EnvFlags (cond-> default-env-flags
@@ -130,3 +127,11 @@
   Closeable
   (close [_]
     (.close env)))
+
+(def kv [(fn [_ {:keys [crux.kv/db-dir] :as options}]
+           (lru/start-kv-store (map->LMDBJNRKv {:db-dir db-dir}) options))
+         []
+         (s/keys :req [:crux.kv/db-dir]
+                 :opt [:crux.kv/sync?])
+         (merge lru/kv-options
+                {::env-flags {:doc "LMDB Flags"}})])
