@@ -76,11 +76,3 @@
     (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q2-setup node)) nil)
     (t/is (= #{[:petr]}
              (ex/query-example-join-q2 node)))))
-
-(t/deftest test-bitemporal-examples
-  (let [node (ex/example-start-standalone)]
-    (crux/sync node (:crux.tx/tx-time (ex/bitemporal-example-setup node)) nil)
-    (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
-               [:p3 :LA #inst "2018-12-31" :na]
-               [:p4 :NY #inst "2019-01-02" :na]}
-             (ex/bitemporal-example-query node)))))
