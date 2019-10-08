@@ -31,5 +31,5 @@
                :producer k/producer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [[node-modules close-fn] (n/start-modules topology options)]
+  (let [[node-modules close-fn] (n/start-modules (assoc options :crux.node/topology topology))]
     (map->CruxKafkaIngestClient (assoc node-modules :close-fn close-fn :options options))))

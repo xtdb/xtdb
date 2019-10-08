@@ -158,8 +158,7 @@
       (var-get (find-var v)))
     s))
 
-(defn options->topology [{:keys [crux.node/topology]}]
-  (resolve-topology-or-module topology))
+
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
@@ -180,9 +179,6 @@
                                                  (s/keys :req-un [::doc]
                                                          :opt-un [::default])))))
 
-(defn- conform-topology [topology options]
-  (merge topology (select-keys options (keys topology))))
-
 (defn start-module [m started options]
   (let [m (resolve-topology-or-module m)
         _ (s/assert ::module m)
@@ -195,8 +191,9 @@
       (s/assert spec options))
     (start-fn deps options)))
 
-(defn start-modules [topology options]
-  (let [topology (conform-topology topology options)
+(defn start-modules [{:keys [crux.node/topology] :as options}]
+  (let [topology (resolve-topology-or-module topology)
+        topology (merge topology (select-keys options (keys topology)))
         started (atom {})
         start-order (start-order topology)
         started-modules (try
@@ -239,6 +236,6 @@
                     :object-store object-store
                     :indexer kv-indexer})
 
-(defn start ^ICruxAPI [topology options]
-  (let [[node-modules close-fn] (start-modules topology options)]
+(defn start ^ICruxAPI [options]
+  (let [[node-modules close-fn] (start-modules options)]
     (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))
