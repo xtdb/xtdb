@@ -71,7 +71,8 @@
 (def event-log-consumer [start-event-log-consumer [:event-log-kv :indexer]])
 (def tx-log [start-moberg-event-log [:event-log-kv]])
 
-(def topology {:event-log-kv event-log-kv
-               :event-log-sync event-log-sync
-               :event-log-consumer event-log-consumer
-               :tx-log tx-log})
+(def topology (merge b/base-topology
+                     {:event-log-kv event-log-kv
+                      :event-log-sync event-log-sync
+                      :event-log-consumer event-log-consumer
+                      :tx-log tx-log}))

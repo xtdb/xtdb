@@ -172,6 +172,7 @@
 (def tx-log [start-tx-log [:ds]])
 (def event-log-consumer [start-event-log-consumer [:indexer :ds]])
 
-(def topology {:ds ds
-               :tx-log tx-log
-               :event-log-consumer event-log-consumer})
+(def topology (merge b/base-topology
+                     {:ds ds
+                      :tx-log tx-log
+                      :event-log-consumer event-log-consumer}))

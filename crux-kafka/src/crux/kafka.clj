@@ -412,8 +412,9 @@
                            ::kafka-properties-map])
              default-options])
 
-(def topology {:tx-log tx-log
-               :admin-client admin-client
-               :admin-wrapper admin-wrapper
-               :producer producer
-               :indexing-consumer indexing-consumer})
+(def topology (merge b/base-topology
+                     {:tx-log tx-log
+                      :admin-client admin-client
+                      :admin-wrapper admin-wrapper
+                      :producer producer
+                      :indexing-consumer indexing-consumer}))

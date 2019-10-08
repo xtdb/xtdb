@@ -260,6 +260,5 @@
                     :indexer kv-indexer})
 
 (defn start-node ^ICruxAPI [topology options]
-  (let [topology (merge base-topology topology)
-        [node-modules close-fn] (start-modules topology options)]
+  (let [[node-modules close-fn] (start-modules topology options)]
     (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))
