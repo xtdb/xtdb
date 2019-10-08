@@ -5,7 +5,7 @@
 
 
 (def opts
-  {:crux.bootstrap/node-config :crux.standalone/node-config
+  {:crux.bootstrap/node-topology :crux.standalone/topology
    :kv-backend    "crux.kv.rocksdb.RocksKv"
    :event-log-dir "data/eventlog-1"
    :db-dir        "data/db-dir-1"})

@@ -172,10 +172,6 @@
 (def tx-log [start-tx-log [:ds]])
 (def event-log-consumer [start-event-log-consumer [:indexer :ds]])
 
-(def node-config {:ds ds
-                  :tx-log tx-log
-                  :event-log-consumer event-log-consumer})
-
-(comment
-  ;; Start a JDBC node:
-  (b/start-node node-config some-options))
+(def topology {:ds ds
+               :tx-log tx-log
+               :event-log-consumer event-log-consumer})

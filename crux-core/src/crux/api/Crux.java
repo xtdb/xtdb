@@ -28,8 +28,8 @@ public class Crux {
     @SuppressWarnings("unchecked")
     public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap"));
-        Object nodeConfig = Clojure.var("crux.bootstrap/options->node-config").invoke(options);
-        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
+        Object topology = Clojure.var("crux.bootstrap/options->topology").invoke(options);
+        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(topology, options);
     }
 
     /**

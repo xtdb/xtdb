@@ -21,11 +21,6 @@
                    (Boolean/parseBoolean check-asserts)
                    true))
 
-;; Todo:
-;; Use maps for module definitions
-;; Pull out topology merge into modules
-;; Create-topics -> create-topics?
-
 (defrecord CruxVersion [version revision]
   status/Status
   (status-map [this]
@@ -185,9 +180,9 @@
                        (into dep-order))]
     dep-order))
 
-(defn options->node-config [{:keys [crux.bootstrap/node-config]}]
-  (assert node-config)
-  (let [v (symbol node-config)]
+(defn options->topology [{:keys [crux.bootstrap/node-topology]}]
+  (assert node-topology)
+  (let [v (symbol node-topology)]
     (require (symbol (namespace v)))
     (var-get (find-var v))))
 
@@ -233,16 +228,19 @@
                        (s/keys :req [:crux.db/object-store])
                        {:crux.db/object-store {:doc "Node local store for documents/objects"
                                                :default "crux.index.KvObjectStore"}}])
+
 (def object-store [start-cached-object-store
                    [:raw-object-store]
                    (s/keys :req [:crux.lru/doc-cache-size])
                    {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
                                               :default lru/default-doc-cache-size}}])
+
 (def kv-indexer [start-kv-indexer
                  [:kv-store :tx-log :object-store]
                  {:crux.tx-log/await-tx-timeout
                   {:doc "Timeout waiting for tx-time to be reached by a Crux node"
                    :default crux.tx/default-await-tx-timeout}}])
+
 (def kv-store [start-kv-store
                []
                :crux.kv/options
@@ -256,13 +254,12 @@
                 {:doc "Sync the KV store to disk after every write."
                  :default false}}])
 
-(def base-node-config {:kv-store kv-store
-                       :raw-object-store raw-object-store
-                       :object-store object-store
-                       :indexer kv-indexer})
+(def base-topology {:kv-store kv-store
+                    :raw-object-store raw-object-store
+                    :object-store object-store
+                    :indexer kv-indexer})
 
-(defn start-node ^ICruxAPI [node-config options]
-  (let [options (merge default-options options)
-        node-config (merge base-node-config node-config)
-        [node-modules close-fn] (start-modules node-config options)]
+(defn start-node ^ICruxAPI [topology options]
+  (let [topology (merge base-topology topology)
+        [node-modules close-fn] (start-modules topology options)]
     (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))

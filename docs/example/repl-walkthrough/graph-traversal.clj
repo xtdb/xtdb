@@ -60,7 +60,7 @@
   (mapv (fn [n] [:crux.tx/put n]) nodes))
 ; this standalone configuration is the easiest way to try Crux, no Kafka needed
 (def crux-options
-  {:crux.bootstrap/node-config :crux.standalone/node-config
+  {:crux.bootstrap/node-topology :crux.standalone/topology
    :kv-backend "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage
    :event-log-dir     "data/event-log-dir-1" ; :event-log-dir is ignored when using MemKv
    :db-dir     "data/db-dir-1"}) ; :db-dir is ignored when using MemKv

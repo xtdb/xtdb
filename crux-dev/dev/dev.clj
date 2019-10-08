@@ -33,7 +33,7 @@
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
-   :dev/node-config k/node-config
+   :dev/node-topology k/topology
    :dev/node-start-fn b/start-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
@@ -43,13 +43,13 @@
 
 (def ^ICruxAPI node)
 
-(defn start-dev-node ^crux.api.ICruxAPI [{:dev/keys [embed-kafka? http-server? node-config node-start-fn] :as options}]
+(defn start-dev-node ^crux.api.ICruxAPI [{:dev/keys [embed-kafka? http-server? node-topology node-start-fn] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
-            cluster-node (doto (node-start-fn node-config options)
+            cluster-node (doto (node-start-fn node-topology options)
                            (->> (swap! started conj)))
             http-server (when http-server?
                           (srv/start-http-server cluster-node options))]
@@ -129,7 +129,7 @@
 ;; (ns dev)
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
-;;                         {:crux.bootstrap/node-config :crux.standalone/node-config
+;;                         {:crux.bootstrap/node-topology :crux.standalone/topology
 ;;                          :event-log-dir (str storage-dir "/event-log")
 ;;                          :crux.standalone/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false

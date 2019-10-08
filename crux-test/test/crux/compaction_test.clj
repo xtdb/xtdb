@@ -17,7 +17,7 @@
 
 (t/deftest test-compaction-leaves-replayable-log
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        opts {:crux.bootstrap/node-config :crux.jdbc/node-config
+        opts {:crux.bootstrap/node-topology :crux.jdbc/topology
               :dbtype "h2"
               :dbname "cruxtest"
               :crux.kv/db-dir db-dir

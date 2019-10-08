@@ -160,7 +160,8 @@
   (require 'crux.api)
 
   (def crux (crux.api/start-node
-             {:crux.bootstrap/node-config :crux.standalone/node-config
+             {:crux.bootstrap/node-topology :crux.standalone/topology
+              :crux.node/topology :crux.standalone/topology
               :kv-backend "crux.kv.rocksdb.RocksKv"
               :db-dir "data/db-dir"
               :event-log-dir "data/event-log-db"}))

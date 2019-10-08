@@ -25,12 +25,11 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(def ingest-client-config {:tx-log k/tx-log
-                           :admin-client k/admin-client
-                           :admin-wrapper k/admin-wrapper
-                           :producer k/producer})
+(def topology {:tx-log k/tx-log
+               :admin-client k/admin-client
+               :admin-wrapper k/admin-wrapper
+               :producer k/producer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [options (merge b/default-options options)
-        [node-modules close-fn] (b/start-modules ingest-client-config options)]
+  (let [[node-modules close-fn] (b/start-modules topology options)]
     (map->CruxKafkaIngestClient (assoc node-modules :close-fn close-fn :options options))))

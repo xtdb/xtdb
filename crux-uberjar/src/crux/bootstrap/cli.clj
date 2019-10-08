@@ -116,6 +116,6 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (with-open [node (b/start-node k/node-config options)
+          (with-open [node (b/start-node k/topology options)
                       http-server ^Closeable (srv/start-http-server node)]
             @(shutdown-hook-promise))))))

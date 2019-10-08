@@ -412,12 +412,8 @@
                            ::kafka-properties-map])
              default-options])
 
-(def node-config {:tx-log tx-log
-                  :admin-client admin-client
-                  :admin-wrapper admin-wrapper
-                  :producer producer
-                  :indexing-consumer indexing-consumer})
-
-(comment
-  ;; Start a Kafka node:
-  (b/start-node node-config some-options))
+(def topology {:tx-log tx-log
+               :admin-client admin-client
+               :admin-wrapper admin-wrapper
+               :producer producer
+               :indexing-consumer indexing-consumer})
