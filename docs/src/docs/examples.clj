@@ -102,7 +102,19 @@ node)
         '{:find [e]
           :where [[e :name "Pablo"]]})
 ;; end::query-valid-time[]
-  )
+)
+
+#_(comment
+;; tag::should-get[]
+#{[:dbpedia.resource/Pablo-Picasso]}
+;; end::should-get[]
+
+;; tag::should-get-entity[]
+{:crux.db/id :dbpedia.resource/Pablo-Picasso
+:name "Pablo"
+:last-name "Picasso"}
+;; end::should-get-entity[]
+)
 
 (defn query-example-setup [node]
   (let [maps
@@ -134,14 +146,13 @@ node)
            [p1 :last-name n]
            [p1 :name "Smith"]]}
  ;; end::basic-query[]
+))
 
- #_(comment
- ;; tag::basic-query-r[]
- #{[:smith]}
- ;; end::basic-query-r[]
- )
-
- ))
+#_(comment
+;; tag::basic-query-r[]
+#{[:smith]}
+;; end::basic-query-r[]
+)
 
 (defn query-example-with-arguments-1 [node]
  (crux/q
@@ -152,14 +163,13 @@ node)
   :args [{'e :ivan
           'n "Ivan"}]}
  ;; end::query-with-arguments1[]
+))
 
- #_(comment
- ;; tag::query-with-arguments1-r[]
- #{["Ivan"]}
- ;; end::query-with-arguments1-r[]
- )
-
- ))
+#_(comment
+;; tag::query-with-arguments1-r[]
+#{["Ivan"]}
+;; end::query-with-arguments1-r[]
+)
 
 (defn query-example-with-arguments-2 [node]
  (crux/q
@@ -170,14 +180,13 @@ node)
   :args [{'n "Ivan"}
          {'n "Petr"}]}
   ;; end::query-with-arguments2[]
+))
 
- #_(comment
- ;; tag::query-with-arguments2-r[]
- #{[:petr] [:ivan]}
- ;; end::query-with-arguments2-r[]
- )
-
- ))
+#_(comment
+;; tag::query-with-arguments2-r[]
+#{[:petr] [:ivan]}
+;; end::query-with-arguments2-r[]
+)
 
 (defn query-example-with-arguments-3 [node]
  (crux/q
@@ -190,13 +199,13 @@ node)
          {'n "Petr" 'l "Petrov"
           }]}
  ;; end::query-with-arguments3[]
+))
 
- #_(comment
- ;; tag::query-with-arguments3-r[]
- #{[:petr] [:ivan]}
- ;; end::query-with-arguments3-r[]
- )
-  ))
+#_(comment
+;; tag::query-with-arguments3-r[]
+#{[:petr] [:ivan]}
+;; end::query-with-arguments3-r[]
+)
 
 (defn query-example-with-arguments-4 [node]
  (crux/q
@@ -208,13 +217,13 @@ node)
   :args [{'n "Ivan" 'l "Ivanov"}
          {'n "Petr" 'l "Petrov"}]}
  ;; end::query-with-arguments4[]
+ ))
 
- #_(comment
+#_(comment
  ;; tag::query-with-arguments4-r[]
  #{["Ivan"]}
  ;; end::query-with-arguments4-r[]
  )
- ))
 
 (defn query-example-with-arguments-5 [node]
  (crux/q
@@ -224,22 +233,346 @@ node)
   :where '[[(>= age 21)]]
   :args [{'age 22}]}
  ;; end::query-with-arguments5[]
-
- #_(comment
- ;; tag::query-with-arguments5-r[]
- #{[22]}
- ;; end::query-with-arguments5-r[]
- )
  ))
 
 #_(comment
-  ;; tag::should-get[]
-  #{[:dbpedia.resource/Pablo-Picasso]}
-  ;; end::should-get[]
+;; tag::query-with-arguments5-r[]
+#{[22]}
+;; end::query-with-arguments5-r[]
+)
 
-  ;; tag::should-get-entity[]
-  {:crux.db/id :dbpedia.resource/Pablo-Picasso
-   :name "Pablo"
-   :last-name "Picasso"}
-  ;; end::should-get-entity[]
+(defn query-example-at-time-setup [node]
+ (crux/submit-tx
+  node
+  [[:crux.tx/put
+    ;; tag::query-at-t-d1[]
+    {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
+    #inst "1986-10-22"
+    ;; end::query-at-t-d1[]
+    ]])
+
+ (crux/submit-tx
+  node
+  [[:crux.tx/put
+    ;; tag::query-at-t-d2[]
+    {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
+    #inst "1986-10-24"
+    ;; end::query-at-t-d2[]
+    ]]))
+
+(defn query-example-at-time-q1 [node]
+ (crux/q
+  (crux/db
+   node #inst "1986-10-23")
+  ;; tag::query-at-t-q1[]
+  '{:find [e]
+    :where [[e :name "Malcolma"]
+            [e :last-name "Sparks"]]}
+  ;; end::query-at-t-q1[]
+))
+
+;; tag::query-at-t-q1-q[]
+; Using Clojure: `(api/q (api/db my-crux-system #inst "1986-10-23") q)`
+;; end::query-at-t-q1-q[]
+
+#_(comment
+;; tag::query-at-t-q1-r[]
+#{}
+;; end::query-at-t-q1-r[]
+)
+
+(defn query-example-at-time-q2 [node]
+  (crux/q
+   (crux/db node)
+   '{:find [e]
+     :where [[e :name "Malcolma"]
+             [e :last-name "Sparks"]]}))
+
+;; tag::query-at-t-q2-q[]
+; Using Clojure: `(api/q (api/db my-crux-system) q)`
+;; end::query-at-t-q2-q[]
+
+#_(comment
+;; tag::query-at-t-q2-r[]
+#{[:malcolm]}
+;; end::query-at-t-q2-r[]
+)
+
+#_(comment
+;; tag::history-full[]
+(api/submit-tx
+  system
+  [[:crux.tx/put
+    {:crux.db/id :ids.persons/Jeff
+     :person/name "Jeff"
+     :person/wealth 100}
+    #inst "2018-05-18T09:20:27.966"]
+   [:crux.tx/put
+    {:crux.db/id :ids.persons/Jeff
+     :person/name "Jeff"
+     :person/wealth 1000}
+    #inst "2015-05-18T09:20:27.966"]])
+
+;yields
+{:crux.tx/tx-id 1555314836178,
+ :crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00"}
+
+
+(api/history system :ids.persons/Jeff)
+
+; yields
+[{:crux.db/id ; sha1 hash of document id
+  "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613",
+  :crux.db/content-hash ; sha1 hash of document contents
+  "6ca48d3bf05a16cd8d30e6b466f76d5cc281b561",
+  :crux.db/valid-time #inst "2018-05-18T09:20:27.966-00:00",
+  :crux.tx/tx-time #inst "2019-04-15T07:53:55.817-00:00",
+  :crux.tx/tx-id 1555314835817}
+ {:crux.db/id "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613",
+  :crux.db/content-hash "a95f149636e0a10a78452298e2135791c0203529",
+  :crux.db/valid-time #inst "2015-05-18T09:20:27.966-00:00",
+  :crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00",
+  :crux.tx/tx-id 1555314836178}]
+;; end::history-full[]
+
+;; tag::history-range[]
+(api/history-range system :ids.persons/Jeff
+  #inst "2015-05-18T09:20:27.966"  ; valid-time start or nil
+  #inst "2015-05-18T09:20:27.966"  ; transaction-time start or nil
+  #inst "2020-05-18T09:20:27.966"  ; valid-time end or nil, inclusive
+  #inst "2020-05-18T09:20:27.966") ; transaction-time end or nil, inclusive.
+
+; yields
+({:crux.db/id ; sha1 hash of document id
+  "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613",
+  :crux.db/content-hash  ; sha1 hash of document contents
+  "a95f149636e0a10a78452298e2135791c0203529",
+  :crux.db/valid-time #inst "2015-05-18T09:20:27.966-00:00",
+  :crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00",
+  :crux.tx/tx-id 1555314836178}
+  {:crux.db/id "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613",
+   :crux.db/content-hash "6ca48d3bf05a16cd8d30e6b466f76d5cc281b561",
+   :crux.db/valid-time #inst "2018-05-18T09:20:27.966-00:00",
+   :crux.tx/tx-time #inst "2019-04-15T07:53:55.817-00:00",
+   :crux.tx/tx-id 1555314835817})
+
+
+(api/entity (api/db system) "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613")
+
+; yields
+{:crux.db/id :ids.persons/Jeff,
+ :d.person/name "Jeff",
+ :d.person/wealth 100}
+;; end::history-range[]
+)
+
+(defn query-example-join-q1-setup [node]
+  ;; Five people, two of which share the same name:
+  (let [maps
+        ;; tag::join-d[]
+        [{:crux.db/id :ivan :name "Ivan"}
+         {:crux.db/id :petr :name "Petr"}
+         {:crux.db/id :sergei :name "Sergei"}
+         {:crux.db/id :denis-a :name "Denis"}
+         {:crux.db/id :denis-b :name "Denis"}]
+        ;; end::join-d[]
+        ]
+    (crux/submit-tx node
+                   (vec (for [m maps]
+                          [:crux.tx/put m])))))
+
+(defn query-example-join-q1 [node]
+ (crux/q
+  (crux/db node)
+ ;; tag::join-q[]
+ '{:find [p1 p2]
+   :where [[p1 :name n]
+           [p2 :name n]]}
+ ;; end::join-q[]
+))
+
+#_(comment
+;; tag::join-r[]
+#{[:ivan :ivan]
+  [:petr :petr]
+  [:sergei :sergei]
+  [:denis-a :denis-a]
+  [:denis-b :denis-b]
+  [:denis-a :denis-b]
+  [:denis-b :denis-a]}
+;; end::join-r[]
+
+)
+
+(defn query-example-join-q2-setup [node]
+  (let [maps
+      ;; tag::join2-d[]
+      [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+       {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}]
+      ;; end::join2-d[]
+      ]
+  (crux/submit-tx node
+                  (vec (for [m maps]
+                         [:crux.tx/put m])))))
+
+
+(defn query-example-join-q2 [node]
+ (crux/q
+  (crux/db node)
+ ;; tag::join2-q[]
+ '{:find [e2]
+   :where [[e :last-name l]
+           [e2 :follows l]
+           [e :name "Ivan"]]}
+ ;; end::join2-q[]
+))
+
+#_(comment
+  ;; tag::bitemp0[]
+  {:crux.db/id :p2
+   :entry-pt :SFO
+   :arrival-time #inst "2018-12-31"
+   :departure-time :na}
+
+  {:crux.db/id :p3
+   :entry-pt :LA
+   :arrival-time #inst "2018-12-31"
+   :departure-time :na}
+  #inst "2018-12-31"
+  ;; end::bitemp0[]
+
+  ;; tag::bitemp2[]
+  {:crux.db/id :p4
+   :entry-pt :NY
+   :arrival-time #inst "2019-01-02"
+   :departure-time :na}
+  #inst "2019-01-02"
+  ;; end::bitemp2[]
+
+  ;; tag::bitemp3[]
+  {:crux.db/id :p4
+   :entry-pt :NY
+   :arrival-time #inst "2019-01-02"
+   :departure-time #inst "2019-01-03"}
+  #inst "2019-01-03"
+  ;; end::bitemp3[]
+
+  ;; tag::bitemp4[]
+  {:crux.db/id :p1
+   :entry-pt :NY
+   :arrival-time #inst "2018-12-31"
+   :departure-time :na}
+  #inst "2018-12-31"
+  ;; end::bitemp4[]
+
+  ;; tag::bitemp4b[]
+  {:crux.db/id :p1
+   :entry-pt :NY
+   :arrival-time #inst "2018-12-31"
+   :departure-time #inst "2019-01-03"}
+  #inst "2019-01-03"
+  ;; end::bitemp4b[]
+
+  ;; tag::bitemp4c[]
+  {:crux.db/id :p1
+   :entry-pt :LA
+   :arrival-time #inst "2019-01-04"
+   :departure-time :na}
+
+  {:crux.db/id :p3
+   :entry-pt :LA
+   :arrival-time #inst "2018-12-31"
+   :departure-time #inst "2019-01-04"}
+  #inst "2019-01-04"
+  ;; end::bitemp4c[]
+
+  ;; tag::bitemp5[]
+  {:crux.db/id :p2
+   :entry-pt :SFO
+   :arrival-time #inst "2018-12-31"
+   :departure-time #inst "2019-01-05"}
+  #inst "2019-01-05"
+  ;; end::bitemp5[]
+
+  ;; tag::bitemp7[]
+  {:crux.db/id :p3
+   :entry-pt :LA
+   :arrival-time #inst "2018-12-31"
+   :departure-time :na}
+  #inst "2019-01-04"
+
+  {:crux.db/id :p3
+   :entry-pt :LA
+   :arrival-time #inst "2018-12-31"
+   :departure-time #inst "2019-01-07"}
+  #inst "2019-01-07"
+  ;; end::bitemp7[]
+
+  ;; tag::bitemp8[]
+  {:crux.db/id :p3
+   :entry-pt :SFO
+   :arrival-time #inst "2019-01-08"
+   :departure-time :na}
+  #inst "2019-01-08"
+
+  {:crux.db/id :p4
+   :entry-pt :LA
+   :arrival-time #inst "2019-01-08"
+   :departure-time :na}
+  #inst "2019-01-08"
+  ;; end::bitemp8[]
+
+  ;; tag::bitemp9[]
+  {:crux.db/id :p3
+   :entry-pt :SFO
+   :arrival-time #inst "2019-01-08"
+   :departure-time #inst "2019-01-08"}
+  #inst "2019-01-09"
+  ;; end::bitemp9[]
+
+  ;; tag::bitemp10[]
+  {:crux.db/id :p5
+   :entry-pt :LA
+   :arrival-time #inst "2019-01-10"
+   :departure-time :na}
+  #inst "2019-01-10"
+  ;; end::bitemp10[]
+
+  ;; tag::bitemp11[]
+  {:crux.db/id :p7
+   :entry-pt :NY
+   :arrival-time #inst "2019-01-11"
+   :departure-time :na}
+  #inst "2019-01-11"
+  ;; end::bitemp11[]
+
+  ;; tag::bitemp12[]
+  {:crux.db/id :p6
+   :entry-pt :NY
+   :arrival-time #inst "2019-01-12"
+   :departure-time :na}
+  #inst "2019-01-12"
+  ;; end::bitemp12[]
+
+  ;; tag::bitempq[]
+  {:find [p entry-pt arrival-time departure-time]
+   :where [[p :entry-pt entry-pt]
+           [p :arrival-time arrival-time]
+           [p :departure-time departure-time]]}
+  #inst "2019-01-03"                    ; `as of` transaction time
+  #inst "2019-01-02"                    ; `as at` valid time
+  ;; end::bitempq[]
+
+  ;; tag::bitempr[]
+  #{[:p2 :SFO #inst "2018-12-31" :na]
+    [:p3 :LA #inst "2018-12-31" :na]
+    [:p4 :NY #inst "2019-01-02" :na]}
+  ;; end::bitempr[]
   )
+
+#_(comment
+;; tag::join2-r[]
+#{[:petr]}
+;; end::join2-r[]
+
+)
