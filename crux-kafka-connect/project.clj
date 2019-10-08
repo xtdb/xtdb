@@ -8,10 +8,12 @@
                  [juxt/crux-core "derived-from-git"]
                  [juxt/crux-http-client "derived-from-git"]
                  [cheshire "5.9.0"]
+                 [com.taoensso/nippy "2.14.0" :exclusions [org.tukaani/xz]]
+                 ^:source-dep [org.tukaani/xz "1.6"]
                  [com.cognitect/transit-clj "0.8.313" :exclusions [org.msgpack/msgpack]]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
   :middleware [leiningen.project-version/middleware]
-  :aliases {"package" ["do" ["uberjar"] ["archive"]]}
+  :aliases {"package" ["do" ["inline-deps"] ["with-profile" "+plugin.mranderson/config" "uberjar"] ["archive"]]}
   :confluent-hub-manifest {:component_types ["sink" "source"]
                            :description "A Kafka Connect plugin for transferring data between Crux nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
                            :documentation_url "https://github.com/juxt/crux/tree/master/crux-kafka-connect"
@@ -34,4 +36,6 @@
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
-  :plugins [[lein-licenses "0.2.2"]])
+  :plugins [[lein-licenses "0.2.2"]
+            [thomasa/mranderson "0.5.1"]]
+  :mranderson {:unresolved-tree true})
