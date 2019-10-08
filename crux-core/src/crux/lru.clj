@@ -270,7 +270,7 @@
 (defn new-cached-index [idx cache-size]
   (->CachedIndex idx (new-cache cache-size)))
 
-(defn start-kv-store ^java.io.Closeable [kv-store {:keys [crux.index/check-and-store-index-version] :as options}]
+(defn start-kv-store ^java.io.Closeable [kv-store {:keys [crux.kv/check-and-store-index-version] :as options}]
   (let [kv (-> kv-store
                (new-cache-providing-kv-store)
                (kv/open options))]

@@ -19,7 +19,7 @@
     (try
       (with-open [kv (start-kv-store {:crux.kv/db-dir (str db-dir)
                                       :crux.kv/sync? *sync*
-                                      :crux.index/check-and-store-index-version *check-and-store-index-version*})]
+                                      :crux.kv/check-and-store-index-version *check-and-store-index-version*})]
         (binding [*kv* kv]
           (f)))
       (finally

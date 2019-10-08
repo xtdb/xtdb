@@ -31,13 +31,12 @@
 ;; end::KvStore[]
 
 (s/def ::db-dir string?)
-(s/def ::kv-backend string?)
 (s/def ::sync? boolean?)
-(s/def :crux.index/check-and-store-index-version boolean?)
+(s/def ::check-and-store-index-version boolean?)
 
 (s/def ::options (s/keys :req [::db-dir]
                          :opt [::sync?
-                               :crux.index/check-and-store-index-version]))
+                               ::check-and-store-index-version]))
 
 (def options
   {:crux.kv/db-dir

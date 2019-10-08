@@ -158,8 +158,6 @@
       (var-get (find-var v)))
     s))
 
-
-
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
                        (let [m (resolve-topology-or-module m)]
