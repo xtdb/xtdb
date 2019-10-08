@@ -68,7 +68,7 @@
 
   (def node
     (crux.api/start-node
-     {:crux.bootstrap/node-topology :crux.standalone/topology
+     {:crux.node/node-topology :crux.standalone/topology
       :kv-backend "crux.kv.memdb.MemKv"
       :db-dir     "data/db-dir-1"
       :event-log-dir "data/eventlog-1"}))

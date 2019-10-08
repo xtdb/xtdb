@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [crux.io :as cio]
-            [crux.bootstrap :as b]
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.index :as idx]

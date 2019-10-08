@@ -306,7 +306,7 @@
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
   options
-  {:crux.bootstrap/node-topology e.g. \":crux.standalone/topology\"}
+  {:crux.node/node-topology e.g. \":crux.standalone/topology\"}
 
   returns a standalone node which implements ICruxAPI and
   java.io.Closeable. Latter allows the node to be stopped
@@ -337,7 +337,7 @@
   "Starts an ingest client for transacting into Kafka without running a
   full local node with index.
 
-  For valid options, see crux.bootstrap/cli-options. Options are
+  For valid options, see crux.bootstrap.cli/cli-options. Options are
   specified as keywords using their long format name, like
   :bootstrap-servers etc.
 

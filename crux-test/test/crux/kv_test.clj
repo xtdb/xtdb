@@ -3,7 +3,7 @@
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [crux.bootstrap :as b]
+            [crux.node :as n]
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-backend*]]
@@ -100,7 +100,7 @@
       (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (kv/backup *kv* backup-dir)
-      (with-open [restored-kv (b/start-kv-store {:crux.kv/db-dir (str backup-dir)
+      (with-open [restored-kv (n/start-kv-store {:crux.kv/db-dir (str backup-dir)
                                                  :crux.kv/kv-backend *kv-backend*})]
         (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
 
@@ -115,7 +115,7 @@
 (t/deftest test-sanity-check-can-start-with-sync-enabled
   (let [sync-dir (cio/create-tmpdir "kv-store-sync")]
     (try
-      (with-open [sync-kv (b/start-kv-store {:crux.kv/db-dir (str sync-dir)
+      (with-open [sync-kv (n/start-kv-store {:crux.kv/db-dir (str sync-dir)
                                              :sync? true
                                              :crux.kv/kv-backend *kv-backend*})]
         (kv/store sync-kv [[(long->bytes 1) (.getBytes "Crux")]])

@@ -69,7 +69,7 @@
   (let [test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
-      (apif/with-opts {:crux.bootstrap/node-topology :crux.kafka/topology
+      (apif/with-opts {:crux.node/node-topology :crux.kafka/topology
                        :crux.kv/kv-backend *kv-backend*
                        :crux.kafka/tx-topic *tx-topic*
                        :crux.kafka/doc-topic *doc-topic*

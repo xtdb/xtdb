@@ -1,4 +1,4 @@
-(ns crux.bootstrap
+(ns crux.node
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
@@ -180,9 +180,9 @@
                        (into dep-order))]
     dep-order))
 
-(defn options->topology [{:keys [crux.bootstrap/node-topology]}]
-  (assert node-topology)
-  (let [v (symbol node-topology)]
+(defn options->topology [{:keys [crux.node/topology]}]
+  (assert topology)
+  (let [v (symbol topology)]
     (require (symbol (namespace v)))
     (var-get (find-var v))))
 
@@ -259,6 +259,6 @@
                     :object-store object-store
                     :indexer kv-indexer})
 
-(defn start-node ^ICruxAPI [topology options]
+(defn start ^ICruxAPI [topology options]
   (let [[node-modules close-fn] (start-modules topology options)]
     (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))

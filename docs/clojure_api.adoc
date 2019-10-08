@@ -247,7 +247,7 @@ Represents the database as of a specific valid and transaction time.
 
 Starts a query node in local library mode.
 
-For valid options, see crux.bootstrap/cli-options. Options are
+For valid options, see crux.bootstrap.cli/cli-options. Options are
 specified as keywords using their long format name, like
 :bootstrap-servers etc.
 

@@ -27,9 +27,9 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap"));
-        Object topology = Clojure.var("crux.bootstrap/options->topology").invoke(options);
-        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(topology, options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.node"));
+        Object topology = Clojure.var("crux.node/options->topology").invoke(options);
+        return (ICruxAPI) Clojure.var("crux.node/start-node").invoke(topology, options);
     }
 
     /**
@@ -53,7 +53,7 @@ public class Crux {
      * Starts an ingest client for transacting into Kafka without
      * running a full local node with index.
      *
-     * For valid options, see crux.bootstrap/cli-options. Options are
+     * For valid options, see crux.bootstrap.cli/cli-options. Options are
      * specified as keywords using their long format name, like
      * :bootstrap-servers etc.
      *
@@ -61,7 +61,7 @@ public class Crux {
      * implements java.io.Closeable, which allows the client to be
      * stopped by calling close.
      *
-     * @param options see crux.bootstrap/cli-options.
+     * @param options see crux.bootstrap.cli/cli-options.
      * @return        the started ingest client node.
      */
     @SuppressWarnings("unchecked")

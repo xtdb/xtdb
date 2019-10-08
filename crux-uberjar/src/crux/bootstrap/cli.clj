@@ -4,7 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [crux.bootstrap :as b]
+            [crux.node :as n]
             [crux.db :as db]
             [crux.kafka :as k]
             [crux.http-server :as srv]
@@ -15,45 +15,45 @@
 (def cli-options
   [;; Kafka
    ["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
-    :default (:bootstrap-servers b/default-options)]
+    :default (:bootstrap-servers n/default-options)]
    [nil "--kafka-properties-file KAFKA_PROPERTIES_FILE" "Kafka properties file for shared connection properties"]
    ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
-    :default (:group-id b/default-options)]
+    :default (:group-id n/default-options)]
    ["-t" "--tx-topic TOPIC" "Kafka topic for the Crux transaction log"
-    :default (:tx-topic b/default-options)]
+    :default (:tx-topic n/default-options)]
    ["-o" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
-    :default (:doc-topic b/default-options)]
+    :default (:doc-topic n/default-options)]
    ["-c" "--[no-]create-topics" "Should Crux create Kafka topics"
-    :default (:create-topics b/default-options)]
+    :default (:create-topics n/default-options)]
    ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the Crux documents topic"
-    :default (:doc-partitions b/default-options)
+    :default (:doc-partitions n/default-options)
     :parse-fn #(Long/parseLong %)]
    ["-r" "--replication-factor FACTOR" "Kafka topic replication factor"
-    :default (:replication-factor b/default-options)
+    :default (:replication-factor n/default-options)
     :parse-fn #(Long/parseLong %)]
 
    ;; KV
    ["-d" "--db-dir DB_DIR" "KV storage directory"
-    :default (:db-dir b/default-options)]
+    :default (:db-dir n/default-options)]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
-    :default (:kv-backend b/default-options)
+    :default (:kv-backend n/default-options)
     :validate [#'kv/require-and-ensure-kv-record "Unknown storage backend"]]
 
    ;; HTTP
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
-    :default (:server-port b/default-options)
+    :default (:server-port n/default-options)
     :parse-fn #(Long/parseLong %)]
 
    ;; Query
    ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query"
-    :default (:await-tx-timeout b/default-options)
+    :default (:await-tx-timeout n/default-options)
     :parse-fn #(Long/parseLong %)]
    ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache"
-    :default (:doc-cache-size b/default-options)
+    :default (:doc-cache-size n/default-options)
     :parse-fn #(Long/parseLong %)]
    ["-j" "--object-store OBJECT_STORE" "Type of object store to use."
-    :default (:object-store b/default-options)
-    :validate [#'db/require-and-ensure-object-store-record "Unknown object store"]]
+    :default (:object-store n/default-options)
+    :validate [#'dn/require-and-ensure-object-store-record "Unknown object store"]]
 
    ;; Extra
    ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
@@ -83,7 +83,7 @@
 (def env-prefix "CRUX_")
 
 (defn- options-from-env []
-  (->> (for [id (keys b/default-options)
+  (->> (for [id (keys n/default-options)
              :let [env-var (str env-prefix (str/replace (str/upper-case (name id)) "-" "_"))
                    v (System/getenv env-var)]
              :when v]
@@ -96,13 +96,13 @@
                       {:key k :value v}))))
 
 (defn start-node-from-command-line [args]
-  (b/install-uncaught-exception-handler!)
+  (n/install-uncaught-exception-handler!)
   (let [{:keys [options
                 errors
                 summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
         options (merge (dissoc options :extra-edn-options) (:extra-edn-options options))
         {:keys [version
-                revision]} (b/crux-version)]
+                revision]} (n/crux-version)]
     (cond
       (:help options)
       (println summary)
@@ -116,6 +116,6 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (with-open [node (b/start-node k/topology options)
+          (with-open [node (n/start-node k/topology options)
                       http-server ^Closeable (srv/start-http-server node)]
             @(shutdown-hook-promise))))))

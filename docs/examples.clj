@@ -5,7 +5,7 @@
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.bootstrap/node-topology :crux.standalone/topology
+  (crux/start-node {:crux.node/node-topology :crux.standalone/topology
                     :kv-backend "crux.kv.memdb.MemKv"
                     :db-dir "data/db-dir-1"
                     :event-log-dir "data/eventlog-1"}))
@@ -17,14 +17,14 @@
 
 ;; tag::start-cluster-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.bootstrap/node-topology :crux.kafka/topology
+  (crux/start-node {:crux.node/node-topology :crux.kafka/topology
                     :kv-backend "crux.kv.memdb.MemKv"
                     :bootstrap-servers "localhost:29092"}))
 ;; end::start-cluster-node[]
 
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.bootstrap/node-topology :crux.standalone/topology
+  (crux/start-node {:crux.node/node-topology :crux.standalone/topology
                     :kv-backend "crux.kv.rocksdb.RocksKv"
                     :db-dir "data/db-dir-1"
                     :event-log-dir "data/eventlog-1"}))
@@ -32,7 +32,7 @@
 
 ;; tag::start-jdbc-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.bootstrap/node-topology :crux.jdbc/topology
+  (crux/start-node {:crux.node/node-topology :crux.jdbc/topology
                     :dbtype "postgresql"
                     :dbname "cruxdb"
                     :host "<host>"

@@ -3,7 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             crux.api
-            [crux.bootstrap :as b]
+            [crux.node :as n]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
@@ -172,7 +172,7 @@
 (def tx-log [start-tx-log [:ds]])
 (def event-log-consumer [start-event-log-consumer [:indexer :ds]])
 
-(def topology (merge b/base-topology
+(def topology (merge n/base-topology
                      {:ds ds
                       :tx-log tx-log
                       :event-log-consumer event-log-consumer}))

@@ -1,7 +1,7 @@
 (ns crux.fixtures.kv-only
   (:require [clojure.test :as t]
             [crux.io :as cio]
-            [crux.bootstrap :as b])
+            [crux.node :as n])
   (:import java.io.Closeable))
 
 (def ^:dynamic *kv*)
@@ -11,7 +11,7 @@
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
-      (binding [*kv* (b/start-kv-store {:crux.kv/db-dir (str db-dir)
+      (binding [*kv* (n/start-kv-store {:crux.kv/db-dir (str db-dir)
                                         :crux.kv/kv-backend *kv-backend*
                                         :crux.index/check-and-store-index-version *check-and-store-index-version*})]
         (with-open [*kv* ^Closeable *kv*]

@@ -1,5 +1,5 @@
 (ns crux.bootstrap.kafka-ingest-client
-  (:require [crux.bootstrap :as b]
+  (:require [crux.node :as n]
             [crux.db :as db]
             [crux.kafka :as k])
   (:import crux.api.ICruxAsyncIngestAPI
@@ -31,5 +31,5 @@
                :producer k/producer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [[node-modules close-fn] (b/start-modules topology options)]
+  (let [[node-modules close-fn] (n/start-modules topology options)]
     (map->CruxKafkaIngestClient (assoc node-modules :close-fn close-fn :options options))))

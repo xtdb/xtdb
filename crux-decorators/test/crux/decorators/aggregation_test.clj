@@ -29,7 +29,7 @@
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
-      (with-open [standalone-node (Crux/startNode {:crux.bootstrap/node-topology :crux.standalone/topology
+      (with-open [standalone-node (Crux/startNode {:crux.node/node-topology :crux.standalone/topology
                                                    :crux.kv/db-dir db-dir
                                                    :crux.kv/kv-backend "crux.kv.memdb.MemKv"
                                                    :crux.standalone/event-log-dir event-log-dir})]

@@ -5,7 +5,7 @@
             [clojure.tools.namespace.repl :as tn]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [crux.bootstrap :as b]
+            [crux.node :as n]
             [crux.standalone :as standalone]
             [crux.db :as db]
             [crux.api :as crux]
@@ -34,7 +34,7 @@
    :dev/embed-kafka? true
    :dev/http-server? true
    :dev/node-topology k/topology
-   :dev/node-start-fn b/start-node
+   :dev/node-start-fn n/start-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
    :server-port 3000})
@@ -109,7 +109,7 @@
        (finally
          (set-log-level! ~ns level#)))))
 
-(b/install-uncaught-exception-handler!)
+(n/install-uncaught-exception-handler!)
 
 ;; Usage, create a dev/$USER.clj file like this, and add it to
 ;; .gitignore:
@@ -129,7 +129,7 @@
 ;; (ns dev)
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
-;;                         {:crux.bootstrap/node-topology :crux.standalone/topology
+;;                         {:crux.node/node-topology :crux.standalone/topology
 ;;                          :event-log-dir (str storage-dir "/event-log")
 ;;                          :crux.standalone/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false

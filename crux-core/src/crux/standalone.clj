@@ -1,7 +1,7 @@
 (ns crux.standalone
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.bootstrap :as b]
+            [crux.node :as n]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.tx.polling :as p])
@@ -40,7 +40,7 @@
                                      crux.standalone/event-log-dir
                                      crux.standalone/event-log-sync?]}]
   (let [event-log-sync? (boolean (or event-log-sync? (not event-log-sync-interval-ms)))]
-    (b/start-kv-store
+    (n/start-kv-store
      {:crux.kv/db-dir event-log-dir
       :crux.kv/kv-backend event-log-kv-backend
       :crux.kv/sync? event-log-sync?
@@ -71,7 +71,7 @@
 (def event-log-consumer [start-event-log-consumer [:event-log-kv :indexer]])
 (def tx-log [start-moberg-event-log [:event-log-kv]])
 
-(def topology (merge b/base-topology
+(def topology (merge n/base-topology
                      {:event-log-kv event-log-kv
                       :event-log-sync event-log-sync
                       :event-log-consumer event-log-consumer

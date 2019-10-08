@@ -4,7 +4,7 @@
 
 (println "backup script")
 (def opts
-  {:crux.bootstrap/node-topology :crux.standalone/topology
+  {:crux.node/node-topology :crux.standalone/topology
    :event-log-dir  "data/eventlog-1"
    :kv-backend     "crux.kv.rocksdb.RocksKv"
    :db-dir         "data/db-dir-1"

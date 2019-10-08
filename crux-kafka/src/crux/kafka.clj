@@ -1,14 +1,14 @@
 (ns crux.kafka
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
+            [crux.node :as n]
             [crux.status :as status]
             [crux.tx :as tx]
-            [clojure.string :as str]
             [taoensso.nippy :as nippy])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
@@ -412,7 +412,7 @@
                            ::kafka-properties-map])
              default-options])
 
-(def topology (merge b/base-topology
+(def topology (merge n/base-topology
                      {:tx-log tx-log
                       :admin-client admin-client
                       :admin-wrapper admin-wrapper
