@@ -173,20 +173,20 @@
                        (into dep-order))]
     dep-order))
 
-(s/def ::module-def (s/cat :start-fn fn?
-                           :deps (s/? (s/every keyword?))
-                           :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
-                           :meta-args (s/? (s/map-of keyword?
-                                                     (s/keys :req-un [::doc]
-                                                             :opt-un [::default])))))
+(s/def ::module (s/cat :start-fn fn?
+                       :deps (s/? (s/every keyword?))
+                       :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
+                       :meta-args (s/? (s/map-of keyword?
+                                                 (s/keys :req-un [::doc]
+                                                         :opt-un [::default])))))
 
 (defn- conform-topology [topology options]
   (merge topology (select-keys options (keys topology))))
 
 (defn start-module [m started options]
   (let [m (resolve-topology-or-module m)
-        _ (s/assert ::module-def m)
-        {:keys [start-fn deps spec meta-args]} (s/conform ::module-def m)
+        _ (s/assert ::module m)
+        {:keys [start-fn deps spec meta-args]} (s/conform ::module m)
         deps (select-keys started deps)
         default-options (into {} (map (juxt key (comp :default val))
                                       (filter #(find (val %) :default) meta-args)))
