@@ -427,14 +427,13 @@ node)
  ;; end::join2-q[]
 ))
 
-#_(comment
+(comment
 ;; tag::join2-r[]
 #{[:petr]}
 ;; end::join2-r[]
-
 )
 
-#_(comment
+(comment
   ;; tag::bitemp0[]
   {:crux.db/id :p2
    :entry-pt :SFO
@@ -577,7 +576,7 @@ node)
   ;; end::bitempr[]
   )
 
-#_(comment ;; Used in decorators.adoc - will not work in this namespace
+(comment ;; Used in decorators.adoc - will not work in this namespace
 
   ;; tag::aggr1[]
   (t/deftest test-count-aggregation
@@ -602,7 +601,7 @@ node)
   ;; end::aggr1[]
   )
 
-#_(comment ;; Not currently used, but could be useful after some reworking.
+(comment ;; Not currently used, but could be useful after some reworking.
   ;; tag::blanks[]
   (t/deftest test-blanks
     (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
