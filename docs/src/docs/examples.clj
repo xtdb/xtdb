@@ -1,105 +1,197 @@
-(ns crux.query-examples
-  (:require [crux.api :as api]))
+(ns docs.examples)
 
-(comment ;; Used in decorators.adoc - will not work in this namespace
+;; tag::include-crux-api[]
+(require '[crux.api :as crux])
+(import (crux.api ICruxAPI))
+;; end::include-crux-api[]
 
-  ;; tag::aggr1[]
-  (t/deftest test-count-aggregation
-    (f/transact-entity-maps!
-     *kv*
-     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
-      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
-      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
-      {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}])
+;; tag::require-ek[]
+(require '[crux.kafka.embedded :as ek])
+;; end::require-ek[]
 
-    (t/testing "with vector syntax"
-      (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
-                {:user-name "patrik" :post-count 3 :cost-sum 70}]
-               (aggr/q
-                (api/db *api*)
-                '{:aggr {:partition-by [?user-name]
-                         :select
-                         {?cost-sum [0 (+ acc ?post-cost)]
-                          ?post-count [0 (inc acc) ?e]}}
-                  :where [[?e :user/name ?user-name]
-                          [?e :post/cost ?post-cost]]})))))
-  ;; end::aggr1[]
-  )
+(defn example-start-standalone []
+;; tag::start-standalone-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-standalone-node {:kv-backend "crux.kv.memdb.MemKv"
+                               :db-dir "data/db-dir-1"
+                               :event-log-dir "data/eventlog-1"}))
+;; end::start-standalone-node[]
+node)
 
-;; Set up system for examples
+(defn example-close-node [node]
+;; tag::close-node[]
+(.close node)
+;; end::close-node[]
+ )
 
-(def system
-  (api/start-standalone-system
-   {:kv-backend "crux.kv.memdb.MemKv"
-    :db-dir "data/db-dir-1"
-    :event-log-dir "data/eventlog-1"}))
+(defn example-start-embedded-kafka []
+;; tag::ek-example[]
+(def storage-dir "dev-storage")
+(def embedded-kafka-options
+  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
+   :crux.kafka.embedded/kafka-port 9092})
 
-(let [maps
-      ;; tag::query-input[]
-      [{:crux.db/id :ivan
-        :name "Ivan"
-        :last-name "Ivanov"}
+(def embedded-kafka (ek/start-embedded-kafka embedded-kafka-options))
+;; end::ek-example[]
+embedded-kafka)
 
-       {:crux.db/id :petr
-        :name "Petr"
-        :last-name "Petrov"}
+(defn example-stop-embedded-kafka [embedded-kafka]
+;; tag::ek-close[]
+(.close embedded-kafka)
+;; end::ek-close[]
+)
 
-       {:crux.db/id :smith
-        :name "Smith"
-        :last-name "Smith"}]
-      ;; end::query-input[]
-      ]
+(defn example-start-cluster []
+;; tag::start-cluster-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
+                            :bootstrap-servers "localhost:9092"}))
+;; end::start-cluster-node[]
+node)
 
-  (api/submit-tx system
-                  (vec (for [m maps]
-                         [:crux.tx/put m]))))
+(defn example-start-rocks []
+;; tag::start-standalone-with-rocks[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-standalone-node {:kv-backend "crux.kv.rocksdb.RocksKv"
+                               :db-dir "data/db-dir-1"
+                               :event-log-dir "data/eventlog-1"}))
+;; end::start-standalone-with-rocks[]
+node)
 
+(defn example-start-jdbc []
+;; tag::start-jdbc-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-jdbc-node {:dbtype "postgresql"
+                         :dbname "cruxdb"
+                         :host "<host>"
+                         :user "<user>"
+                         :password "<password>"})
+;; end::start-jdbc-node[]
+  ))
 
-(api/q
- (api/db system)
+(defn example-submit-tx [node]
+;; tag::submit-tx[]
+(crux/submit-tx
+ node
+ [[:crux.tx/put
+   {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
+    :name "Pablo"
+    :last-name "Picasso"}
+   #inst "2018-05-18T09:20:27.966-00:00"]]) ; valid time
+;; end::submit-tx[]
+)
+
+(defn example-query [node]
+;; tag::query[]
+(crux/q (crux/db node)
+        '{:find [e]
+          :where [[e :name "Pablo"]]})
+;; end::query[]
+)
+
+(defn example-query-entity [node]
+;; tag::query-entity[]
+(crux/entity (crux/db node) :dbpedia.resource/Pablo-Picasso)
+;; end::query-entity[]
+)
+
+(defn example-query-valid-time [node]
+;; tag::query-valid-time[]
+(crux/q (crux/db node #inst "2018-05-19T09:20:27.966-00:00")
+        '{:find [e]
+          :where [[e :name "Pablo"]]})
+;; end::query-valid-time[]
+)
+
+#_(comment
+;; tag::should-get[]
+#{[:dbpedia.resource/Pablo-Picasso]}
+;; end::should-get[]
+
+;; tag::should-get-entity[]
+{:crux.db/id :dbpedia.resource/Pablo-Picasso
+:name "Pablo"
+:last-name "Picasso"}
+;; end::should-get-entity[]
+)
+
+(defn query-example-setup [node]
+  (let [maps
+        ;; tag::query-input[]
+        [{:crux.db/id :ivan
+          :name "Ivan"
+          :last-name "Ivanov"}
+
+         {:crux.db/id :petr
+          :name "Petr"
+          :last-name "Petrov"}
+
+         {:crux.db/id :smith
+          :name "Smith"
+          :last-name "Smith"}]
+        ;; end::query-input[]
+        ]
+
+    (crux/submit-tx node
+                   (vec (for [m maps]
+                          [:crux.tx/put m])))))
+
+(defn query-example-basic-query [node]
+ (crux/q
+  (crux/db node)
  ;; tag::basic-query[]
  '{:find [p1]
    :where [[p1 :name n]
            [p1 :last-name n]
            [p1 :name "Smith"]]}
  ;; end::basic-query[]
- )
+))
 
+#_(comment
 ;; tag::basic-query-r[]
 #{[:smith]}
 ;; end::basic-query-r[]
+)
 
-(api/q
- (api/db system)
-  ;; tag::query-with-arguments1[]
+(defn query-example-with-arguments-1 [node]
+ (crux/q
+  (crux/db node)
+ ;; tag::query-with-arguments1[]
  {:find '[n]
   :where '[[e :name n]]
   :args [{'e :ivan
           'n "Ivan"}]}
-  ;; end::query-with-arguments1[]
-  )
+ ;; end::query-with-arguments1[]
+))
 
+#_(comment
 ;; tag::query-with-arguments1-r[]
 #{["Ivan"]}
 ;; end::query-with-arguments1-r[]
+)
 
-(api/q
- (api/db system)
+(defn query-example-with-arguments-2 [node]
+ (crux/q
+  (crux/db node)
   ;; tag::query-with-arguments2[]
  {:find '[e]
   :where '[[e :name n]]
   :args [{'n "Ivan"}
          {'n "Petr"}]}
   ;; end::query-with-arguments2[]
-  )
+))
 
+#_(comment
 ;; tag::query-with-arguments2-r[]
 #{[:petr] [:ivan]}
 ;; end::query-with-arguments2-r[]
+)
 
-(api/q
- (api/db system)
- ;; tag::query-with-arguments3[]
+(defn query-example-with-arguments-3 [node]
+ (crux/q
+  (crux/db node)
+  ;; tag::query-with-arguments3[]
  {:find '[e]
   :where '[[e :name n]
            [e :last-name l]]
@@ -107,14 +199,17 @@
          {'n "Petr" 'l "Petrov"
           }]}
  ;; end::query-with-arguments3[]
- )
+))
 
+#_(comment
 ;; tag::query-with-arguments3-r[]
 #{[:petr] [:ivan]}
 ;; end::query-with-arguments3-r[]
+)
 
-(api/q
- (api/db system)
+(defn query-example-with-arguments-4 [node]
+ (crux/q
+  (crux/db node)
  ;; tag::query-with-arguments4[]
  {:find '[n]
   :where '[[(re-find #"I" n)]
@@ -122,69 +217,88 @@
   :args [{'n "Ivan" 'l "Ivanov"}
          {'n "Petr" 'l "Petrov"}]}
  ;; end::query-with-arguments4[]
+ ))
+
+#_(comment
+ ;; tag::query-with-arguments4-r[]
+ #{["Ivan"]}
+ ;; end::query-with-arguments4-r[]
  )
 
-;; tag::query-with-arguments4-r[]
-#{["Ivan"]}
-;; end::query-with-arguments4-r[]
-
-(api/q
- (api/db system)
+(defn query-example-with-arguments-5 [node]
+ (crux/q
+  (crux/db node)
  ;; tag::query-with-arguments5[]
  {:find '[age]
   :where '[[(>= age 21)]]
   :args [{'age 22}]}
  ;; end::query-with-arguments5[]
- )
+ ))
 
+#_(comment
 ;; tag::query-with-arguments5-r[]
 #{[22]}
 ;; end::query-with-arguments5-r[]
+)
 
-(api/submit-tx
- system
- [[:crux.tx/put
-   ;; tag::query-at-t-d1[]
-   {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
-   #inst "1986-10-22"
-   ;; end::query-at-t-d1[]
-   ]])
+(defn query-example-at-time-setup [node]
+ (crux/submit-tx
+  node
+  [[:crux.tx/put
+    ;; tag::query-at-t-d1[]
+    {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
+    #inst "1986-10-22"
+    ;; end::query-at-t-d1[]
+    ]])
 
-(api/submit-tx
- system
- [[:crux.tx/put
-  ;; tag::query-at-t-d2[]
-   {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
-   #inst "1986-10-24"
-  ;; end::query-at-t-d2[]
-   ]])
+ (crux/submit-tx
+  node
+  [[:crux.tx/put
+    ;; tag::query-at-t-d2[]
+    {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
+    #inst "1986-10-24"
+    ;; end::query-at-t-d2[]
+    ]]))
 
-(api/q
- (api/db
-  system #inst "1986-10-23")
- ;; tag::query-at-t-q1[]
- '{:find [e]
-   :where [[e :name "Malcolma"]
-           [e :last-name "Sparks"]]}
- ;; end::query-at-t-q1[]
- )
+(defn query-example-at-time-q1 [node]
+ (crux/q
+  (crux/db
+   node #inst "1986-10-23")
+  ;; tag::query-at-t-q1[]
+  '{:find [e]
+    :where [[e :name "Malcolma"]
+            [e :last-name "Sparks"]]}
+  ;; end::query-at-t-q1[]
+))
 
 ;; tag::query-at-t-q1-q[]
 ; Using Clojure: `(api/q (api/db my-crux-system #inst "1986-10-23") q)`
 ;; end::query-at-t-q1-q[]
 
+#_(comment
 ;; tag::query-at-t-q1-r[]
 #{}
 ;; end::query-at-t-q1-r[]
+)
 
-;; tag::query-at-t-q2-r[]
-#{[:malcolm]}
-;; end::query-at-t-q2-r[]
+(defn query-example-at-time-q2 [node]
+  (crux/q
+   (crux/db node)
+   '{:find [e]
+     :where [[e :name "Malcolma"]
+             [e :last-name "Sparks"]]}))
 
 ;; tag::query-at-t-q2-q[]
 ; Using Clojure: `(api/q (api/db my-crux-system) q)`
 ;; end::query-at-t-q2-q[]
 
+#_(comment
+;; tag::query-at-t-q2-r[]
+#{[:malcolm]}
+;; end::query-at-t-q2-r[]
+)
+
+#_(comment
 ;; tag::history-full[]
 (api/submit-tx
   system
@@ -250,21 +364,34 @@
  :d.person/name "Jeff",
  :d.person/wealth 100}
 ;; end::history-range[]
+)
 
-;; Five people, two of which share the same name:
-(let [maps
-      ;; tag::join-d[]
-      [{:crux.db/id :ivan :name "Ivan"}
-       {:crux.db/id :petr :name "Petr"}
-       {:crux.db/id :sergei :name "Sergei"}
-       {:crux.db/id :denis-a :name "Denis"}
-       {:crux.db/id :denis-b :name "Denis"}]
-      ;; end::join-d[]
-      ]
-  (api/submit-tx system
-                  (vec (for [m maps]
-                         [:crux.tx/put m]))))
+(defn query-example-join-q1-setup [node]
+  ;; Five people, two of which share the same name:
+  (let [maps
+        ;; tag::join-d[]
+        [{:crux.db/id :ivan :name "Ivan"}
+         {:crux.db/id :petr :name "Petr"}
+         {:crux.db/id :sergei :name "Sergei"}
+         {:crux.db/id :denis-a :name "Denis"}
+         {:crux.db/id :denis-b :name "Denis"}]
+        ;; end::join-d[]
+        ]
+    (crux/submit-tx node
+                   (vec (for [m maps]
+                          [:crux.tx/put m])))))
 
+(defn query-example-join-q1 [node]
+ (crux/q
+  (crux/db node)
+ ;; tag::join-q[]
+ '{:find [p1 p2]
+   :where [[p1 :name n]
+           [p2 :name n]]}
+ ;; end::join-q[]
+))
+
+#_(comment
 ;; tag::join-r[]
 #{[:ivan :ivan]
   [:petr :petr]
@@ -275,41 +402,38 @@
   [:denis-b :denis-a]}
 ;; end::join-r[]
 
-(api/q
- (api/db system)
- ;; tag::join-q[]
- '{:find [p1 p2]
-   :where [[p1 :name n]
-           [p2 :name n]]}
- ;; end::join-q[]
- )
+)
 
-(let [maps
+(defn query-example-join-q2-setup [node]
+  (let [maps
       ;; tag::join2-d[]
       [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
        {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}]
       ;; end::join2-d[]
       ]
-  (api/submit-tx system
+  (crux/submit-tx node
                   (vec (for [m maps]
-                         [:crux.tx/put m]))))
+                         [:crux.tx/put m])))))
 
-;; tag::join2-r[]
-#{[:petr]}
-;; end::join2-r[]
 
-(api/q
- (api/db system)
+(defn query-example-join-q2 [node]
+ (crux/q
+  (crux/db node)
  ;; tag::join2-q[]
  '{:find [e2]
    :where [[e :last-name l]
            [e2 :follows l]
            [e :name "Ivan"]]}
  ;; end::join2-q[]
- )
+))
 
 (comment
+;; tag::join2-r[]
+#{[:petr]}
+;; end::join2-r[]
+)
 
+(comment
   ;; tag::bitemp0[]
   {:crux.db/id :p2
    :entry-pt :SFO
@@ -452,6 +576,30 @@
   ;; end::bitempr[]
   )
 
+(comment ;; Used in decorators.adoc - will not work in this namespace
+
+  ;; tag::aggr1[]
+  (t/deftest test-count-aggregation
+    (f/transact-entity-maps!
+     *kv*
+     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
+      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
+      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
+      {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}])
+
+    (t/testing "with vector syntax"
+      (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
+                {:user-name "patrik" :post-count 3 :cost-sum 70}]
+               (aggr/q
+                (api/db *api*)
+                '{:aggr {:partition-by [?user-name]
+                         :select
+                         {?cost-sum [0 (+ acc ?post-cost)]
+                          ?post-count [0 (inc acc) ?e]}}
+                  :where [[?e :user/name ?user-name]
+                          [?e :post/cost ?post-cost]]})))))
+  ;; end::aggr1[]
+  )
 
 (comment ;; Not currently used, but could be useful after some reworking.
   ;; tag::blanks[]

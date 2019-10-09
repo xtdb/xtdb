@@ -39,7 +39,9 @@ include::./deps.edn[tags=CruxDep]
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-node]
+include::./src/docs/examples.clj[tags=include-crux-api]
+
+include::./src/docs/examples.clj[tags=start-standalone-node]
 ----
 
 For the purposes of this Hello World, we are using the simplest configuration of Crux, where all of the pluggable components are in-memory. There is no Kafka or RocksDB to worry about.
@@ -48,33 +50,33 @@ For the purposes of this Hello World, we are using the simplest configuration of
 
 [source,clj]
 ----
-include::./examples.clj[tags=submit-tx]
+include::./src/docs/examples.clj[tags=submit-tx]
 ----
 
 === Querying
 
 [source,clj]
 ----
-include::./examples.clj[tags=query]
+include::./src/docs/examples.clj[tags=query]
 ----
 
 You should get:
 
 [source,clj]
 ----
-include::./examples.clj[tags=should-get]
+include::./src/docs/examples.clj[tags=should-get]
 ----
 
 An entity query would be:
 [source,clj]
 ----
-include::./examples.clj[tags=query-entity]
+include::./src/docs/examples.clj[tags=query-entity]
 ----
 You should get:
 
 [source,clj]
 ----
-include::./examples.clj[tags=should-get-entity]
+include::./src/docs/examples.clj[tags=should-get-entity]
 ----
 
 === Next Steps

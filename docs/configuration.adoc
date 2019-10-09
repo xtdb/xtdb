@@ -80,7 +80,7 @@ For example, when constructing the standalone node:
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-standalone-with-rocks]
+include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
 ----
 
 [#config-http]
@@ -163,14 +163,16 @@ include::./deps.edn[tags=CruxDep]
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-node]
+include::./src/docs/examples.clj[tags=include-crux-api]
+
+include::./src/docs/examples.clj[tags=start-standalone-node]
 ----
 
 You can later stop the node if you wish:
 
 [source,clj]
 ----
-include::./examples.clj[tags=close-node]
+include::./src/docs/examples.clj[tags=close-node]
 ----
 
 [#config-kafka]
@@ -212,7 +214,7 @@ Use the API to start a cluster node, configuring it with the
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-cluster-node]
+include::./src/docs/examples.clj[tags=start-cluster-node]
 ----
 
 NOTE: If you don't specify `kv-backend` then by default the
@@ -223,7 +225,7 @@ You can later stop the node if you wish:
 
 [source,clj]
 ----
-include::./examples.clj[tags=close-node]
+include::./src/docs/examples.clj[tags=close-node]
 ----
 
 [#kafka-embed]
@@ -246,14 +248,16 @@ include::./deps.edn[tags=KafkaEmbeddedDeps]
 
 [source,clj]
 ----
-include::./examples.clj[tags=ek-example]
+include::./src/docs/examples.clj[tags=require-ek]
+
+include::./src/docs/examples.clj[tags=ek-example]
 ----
 
 You can later stop the Embedded Kafka if you wish:
 
 [source,clj]
 ----
-include::./examples.clj[tags=ek-close]
+include::./src/docs/examples.clj[tags=ek-close]
 ----
 
 [#config-jdbc]
@@ -297,5 +301,5 @@ parameters:
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-jdbc-node]
+include::./src/docs/examples.clj[tags=start-jdbc-node]
 ----
