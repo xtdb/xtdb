@@ -162,13 +162,13 @@
     (setup-schema! dbtype ds)
     ds))
 
-(defn- start-tx-log [{:keys [ds]} {:keys [dbtype]}]
+(defn- start-tx-log [{::keys [ds]} {:keys [dbtype]}]
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
-(defn- start-event-log-consumer [{:keys [indexer ds]} {:keys [dbtype]}]
+(defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {:keys [dbtype]}]
   (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
 
 (def topology (merge n/base-topology
-                     {:ds [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])]
-                      :tx-log [start-tx-log [:ds]]
-                      :event-log-consumer [start-event-log-consumer [:indexer :ds]]}))
+                     {::ds [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])]
+                      ::event-log-consumer [start-event-log-consumer [:crux.node/indexer ::ds]]
+                      :crux.node/tx-log [start-tx-log [::ds]]}))

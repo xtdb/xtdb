@@ -1,12 +1,12 @@
 (ns crux.decorators.aggregation-test
   (:require [clojure.test :as t]
             [crux.api :as api]
-            [crux.io :as cio]
-            [crux.decorators.aggregation.alpha :as aggr])
-  (:import [crux.api Crux ICruxAPI]
-           java.util.UUID))
-
-(def ^:dynamic ^ICruxAPI *api*)
+            [crux.decorators.aggregation.alpha :as aggr]
+            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures.kv :as fkv]
+            [crux.fixtures.standalone :as fs]
+            [crux.io :as cio])
+  (:import crux.api.ICruxAPI))
 
 (defn maps->tx-ops
   ([maps]
@@ -25,21 +25,7 @@
      (api/sync api (:crux.tx/tx-time submitted-tx) nil))
    entities))
 
-(defn with-standalone-node [f]
-  (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
-    (try
-      (with-open [standalone-node (Crux/startNode {:crux.node/topology :crux.standalone/topology
-                                                   :crux.kv/db-dir db-dir
-                                                   :crux.kv/kv-backend "crux.kv.memdb.MemKv"
-                                                   :crux.standalone/event-log-dir event-log-dir})]
-        (binding [*api* standalone-node]
-          (f)))
-      (finally
-        (cio/delete-dir db-dir)
-        (cio/delete-dir event-log-dir)))))
-
-(t/use-fixtures :each with-standalone-node)
+(t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir apif/with-node)
 
 (t/deftest test-count-aggregation
   (transact!

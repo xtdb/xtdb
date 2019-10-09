@@ -11,7 +11,7 @@
         (cio/delete-dir db-dir)))))
 
 (defn with-kv-backend [kv-backend f]
-  (apif/with-opts {:kv-store kv-backend} f))
+  (apif/with-opts {:crux.node/kv-store kv-backend} f))
 
 (defn with-memdb [f]
   (with-kv-backend 'crux.kv.memdb/kv

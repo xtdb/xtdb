@@ -127,12 +127,6 @@
       (cio/new-record)
       (db/init partial-node options)))
 
-(defn start-raw-object-store [{:keys [kv-store]} options]
-  (start-object-store {:kv kv-store} options))
-
-(defn- start-cached-object-store [{:keys [raw-object-store]} {:keys [crux.lru/doc-cache-size]}]
-  (lru/->CachedObjectStore (lru/new-cache doc-cache-size) raw-object-store))
-
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
     (Thread/setDefaultUncaughtExceptionHandler
@@ -140,7 +134,7 @@
        (uncaughtException [_ thread throwable]
          (log/error throwable "Uncaught exception:"))))))
 
-(defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
+(defn- start-kv-indexer [{::keys [kv-store tx-log object-store]} _]
   (tx/->KvIndexer kv-store tx-log object-store
                   (Executors/newSingleThreadExecutor
                    (reify ThreadFactory
@@ -197,6 +191,7 @@
         started-modules (try
                           (for [k start-order]
                             (let [m (topology k)
+                                  _ (assert m (str "Could not find module " k))
                                   m (start-module m @started options)]
                               (swap! started assoc k m)
                               [k m]))
@@ -211,23 +206,30 @@
                                          :when (instance? Closeable m)]
                                    (cio/try-close m)))]))
 
-(def base-topology {:kv-store 'crux.kv.rocksdb/kv
-                    :raw-object-store [start-raw-object-store
-                                       [:kv-store]
-                                       (s/keys :req [:crux.db/object-store])
-                                       {:crux.db/object-store {:doc "Node local store for documents/objects"
-                                                               :default "crux.index.KvObjectStore"}}]
-                    :object-store [start-cached-object-store
-                                   [:raw-object-store]
-                                   (s/keys :req [:crux.lru/doc-cache-size])
-                                   {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
-                                                              :default lru/default-doc-cache-size}}]
-                    :indexer [start-kv-indexer
-                              [:kv-store :tx-log :object-store]
-                              {:crux.tx-log/await-tx-timeout
-                               {:doc "Timeout waiting for tx-time to be reached by a Crux node"
-                                :default crux.tx/default-await-tx-timeout}}]})
+(def base-topology {::kv-store 'crux.kv.rocksdb/kv
+                    ::raw-object-store [(fn [{::keys [kv-store]} options]
+                                          (start-object-store {:kv kv-store} options))
+                                        [::kv-store]
+                                        (s/keys :req [:crux.db/object-store])
+                                        {:crux.db/object-store {:doc "Node local store for documents/objects"
+                                                                :default "crux.index.KvObjectStore"}}]
+                    ::object-store [(fn [{::keys [raw-object-store]} {:keys [crux.lru/doc-cache-size]}]
+                                      (lru/->CachedObjectStore (lru/new-cache doc-cache-size) raw-object-store))
+                                    [::raw-object-store]
+                                    (s/keys :req [:crux.lru/doc-cache-size])
+                                    {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
+                                                               :default lru/default-doc-cache-size}}]
+                    ::indexer [start-kv-indexer
+                               [::kv-store ::tx-log ::object-store]
+                               {:crux.tx-log/await-tx-timeout
+                                {:doc "Timeout waiting for tx-time to be reached by a Crux node"
+                                 :default crux.tx/default-await-tx-timeout}}]})
 
 (defn start ^ICruxAPI [options]
-  (let [[node-modules close-fn] (start-modules options)]
-    (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))
+  (let [[{::keys [kv-store tx-log indexer object-store]} close-fn] (start-modules options)]
+    (map->CruxNode {:close-fn close-fn
+                    :options options
+                    :kv-store kv-store
+                    :tx-log tx-log
+                    :indexer indexer
+                    :object-store object-store})))

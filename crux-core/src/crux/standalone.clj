@@ -12,7 +12,7 @@
 ;; TODO - make work from Java:
 (s/def ::event-log-kv symbol?)
 
-(defn- start-event-log-fsync ^java.io.Closeable [{:keys [event-log-kv]}
+(defn- start-event-log-fsync ^java.io.Closeable [{::keys [event-log-kv]}
                                                  {:keys [crux.standalone/event-log-sync-interval-ms]}]
   (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
   (let [running? (atom true)
@@ -40,32 +40,32 @@
                  :crux.kv/check-and-store-index-version false}]
     (n/start-module event-log-kv nil options)))
 
-(defn- start-event-log-consumer [{:keys [event-log-kv indexer]} _]
+(defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
   (when event-log-kv
     (p/start-event-log-consumer indexer
                                 (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv
                                                                      :batch-size 100}))))
 
-(defn- start-moberg-event-log [{:keys [event-log-kv]} _]
+(defn- start-moberg-event-log [{::keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
 
 (def topology (merge n/base-topology
-                     {:event-log-kv [start-event-log-kv
-                                     []
-                                     (s/keys :req [::event-log-dir
-                                                   ::event-log-kv]
-                                             :opt [::event-log-sync?
-                                                   ::event-log-sync-interval-ms])
-                                     {::event-log-kv
-                                      {:doc "Key/Value store to use for standalone event-log persistence."
-                                       :default 'crux.kv.rocksdb/kv}
-                                      ::event-log-dir
-                                      {:doc "Directory used to store the event-log and used for backup/restore."}
-                                      ::event-log-sync?
-                                      {:doc "Sync the event-log backed KV store to disk after every write."
-                                       :default false}}]
-                      :event-log-sync [start-event-log-fsync
-                                       [:event-log-kv]
-                                       (s/keys :opt [::event-log-sync-interval-ms])]
-                      :event-log-consumer [start-event-log-consumer [:event-log-kv :indexer]]
-                      :tx-log [start-moberg-event-log [:event-log-kv]]}))
+                     {::event-log-kv [start-event-log-kv
+                                      []
+                                      (s/keys :req [::event-log-dir
+                                                    ::event-log-kv]
+                                              :opt [::event-log-sync?
+                                                    ::event-log-sync-interval-ms])
+                                      {::event-log-kv
+                                       {:doc "Key/Value store to use for standalone event-log persistence."
+                                        :default 'crux.kv.rocksdb/kv}
+                                       ::event-log-dir
+                                       {:doc "Directory used to store the event-log and used for backup/restore."}
+                                       ::event-log-sync?
+                                       {:doc "Sync the event-log backed KV store to disk after every write."
+                                        :default false}}]
+                      ::event-log-sync [start-event-log-fsync
+                                        [::event-log-kv]
+                                        (s/keys :opt [::event-log-sync-interval-ms])]
+                      ::event-log-consumer [start-event-log-consumer [::event-log-kv :crux.node/indexer]]
+                      :crux.node/tx-log [start-moberg-event-log [::event-log-kv]]}))

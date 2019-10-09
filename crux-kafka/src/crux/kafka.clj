@@ -354,11 +354,11 @@
                       ::kafka-properties-map
                       {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."}})
 
-(def indexing-consumer [(fn [{:keys [admin-client indexer]} options]
+(def indexing-consumer [(fn [{:keys [crux.kafka/admin-client crux.node/indexer]} options]
                           (let [kafka-config (derive-kafka-config options)
                                 consumer-config (merge {"group.id" (::group-id options)} kafka-config)]
                             (start-indexing-consumer admin-client consumer-config indexer options)))
-                        [:indexer :admin-client]
+                        [:crux.node/indexer ::admin-client]
                         (s/keys :req [::bootstrap-servers
                                       ::tx-topic
                                       ::doc-topic
@@ -376,10 +376,10 @@
                                  ::kafka-properties-map])
                    default-options])
 
-(def admin-wrapper [(fn [{:keys [admin-client]} _]
+(def admin-wrapper [(fn [{::keys [admin-client]} _]
                       (reify Closeable
                         (close [_])))
-                    [:admin-client]])
+                    [::admin-client]])
 
 (def producer [(fn [_ options]
                  (create-producer (derive-kafka-config options)))
@@ -389,9 +389,9 @@
                              ::kafka-properties-map])
                default-options])
 
-(def tx-log [(fn [{:keys [producer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
+(def tx-log [(fn [{::keys [producer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
                (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
-             [:producer]
+             [::producer]
              (s/keys :req [::bootstrap-servers
                            ::tx-topic
                            ::doc-topic]
@@ -400,8 +400,8 @@
              default-options])
 
 (def topology (merge n/base-topology
-                     {:tx-log tx-log
-                      :admin-client admin-client
-                      :admin-wrapper admin-wrapper
-                      :producer producer
-                      :indexing-consumer indexing-consumer}))
+                     {:crux.node/tx-log tx-log
+                      ::admin-client admin-client
+                      ::admin-wrapper admin-wrapper
+                      ::producer producer
+                      ::indexing-consumer indexing-consumer}))
