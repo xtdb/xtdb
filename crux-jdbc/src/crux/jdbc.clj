@@ -168,11 +168,7 @@
 (defn- start-event-log-consumer [{:keys [indexer ds]} {:keys [dbtype]}]
   (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
 
-(def ds [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])])
-(def tx-log [start-tx-log [:ds]])
-(def event-log-consumer [start-event-log-consumer [:indexer :ds]])
-
 (def topology (merge n/base-topology
-                     {:ds ds
-                      :tx-log tx-log
-                      :event-log-consumer event-log-consumer}))
+                     {:ds [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])]
+                      :tx-log [start-tx-log [:ds]]
+                      :event-log-consumer [start-event-log-consumer [:indexer :ds]]}))

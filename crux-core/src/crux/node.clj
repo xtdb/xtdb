@@ -211,28 +211,22 @@
                                          :when (instance? Closeable m)]
                                    (cio/try-close m)))]))
 
-(def raw-object-store [start-raw-object-store
-                       [:kv-store]
-                       (s/keys :req [:crux.db/object-store])
-                       {:crux.db/object-store {:doc "Node local store for documents/objects"
-                                               :default "crux.index.KvObjectStore"}}])
-
-(def object-store [start-cached-object-store
-                   [:raw-object-store]
-                   (s/keys :req [:crux.lru/doc-cache-size])
-                   {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
-                                              :default lru/default-doc-cache-size}}])
-
-(def kv-indexer [start-kv-indexer
-                 [:kv-store :tx-log :object-store]
-                 {:crux.tx-log/await-tx-timeout
-                  {:doc "Timeout waiting for tx-time to be reached by a Crux node"
-                   :default crux.tx/default-await-tx-timeout}}])
-
 (def base-topology {:kv-store 'crux.kv.rocksdb/kv
-                    :raw-object-store raw-object-store
-                    :object-store object-store
-                    :indexer kv-indexer})
+                    :raw-object-store [start-raw-object-store
+                                       [:kv-store]
+                                       (s/keys :req [:crux.db/object-store])
+                                       {:crux.db/object-store {:doc "Node local store for documents/objects"
+                                                               :default "crux.index.KvObjectStore"}}]
+                    :object-store [start-cached-object-store
+                                   [:raw-object-store]
+                                   (s/keys :req [:crux.lru/doc-cache-size])
+                                   {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
+                                                              :default lru/default-doc-cache-size}}]
+                    :indexer [start-kv-indexer
+                              [:kv-store :tx-log :object-store]
+                              {:crux.tx-log/await-tx-timeout
+                               {:doc "Timeout waiting for tx-time to be reached by a Crux node"
+                                :default crux.tx/default-await-tx-timeout}}]})
 
 (defn start ^ICruxAPI [options]
   (let [[node-modules close-fn] (start-modules options)]
