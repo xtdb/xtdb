@@ -36,7 +36,7 @@
                        revision]} (cio/load-properties in)]
            (->CruxVersion version revision)))))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn]
+(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn]
   ICruxAPI
   (db [this]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
@@ -68,7 +68,7 @@
            (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time)))))
 
   (status [this]
-    (apply merge (map status/status-map (cons (crux-version) (vals this)))))
+    (status-fn))
 
   (attributeStats [this]
     (idx/read-meta kv-store :crux.kv/stats))
@@ -226,8 +226,10 @@
                                  :default crux.tx/default-await-tx-timeout}}]})
 
 (defn start ^ICruxAPI [options]
-  (let [[{::keys [kv-store tx-log indexer object-store]} close-fn] (start-modules options)]
+  (let [[{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules options)
+        status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))]
     (map->CruxNode {:close-fn close-fn
+                    :status-fn status-fn
                     :options options
                     :kv-store kv-store
                     :tx-log tx-log
