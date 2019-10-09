@@ -142,20 +142,38 @@
                        (doto (Thread. r)
                          (.setName "crux.tx.update-stats-thread")))))))
 
-(defn resolve-topology-or-module [s]
-  (assert s)
-  (if (or (string? s) (keyword? s) (symbol? s))
-    (let [v (symbol s)
-          ns (namespace v)]
-      (assert ns)
-      (require (symbol ns))
-      (var-get (find-var v)))
-    s))
+(defn- resolve-topology-id [id]
+  (let [v (symbol id)
+        ns (namespace v)]
+    (assert ns)
+    (require (symbol ns))
+    (var-get (find-var v))))
+
+(s/def ::topology-id (fn [id] (or (string? id) (keyword? id) (symbol? id))))
+
+(s/def ::module (s/and (s/and (s/or :module-id ::topology-id :module vector?)
+                              (s/conformer
+                               (fn [[m-or-id s]]
+                                 (if (= :module-id m-or-id)
+                                   (resolve-topology-id s) s))))
+                       (s/cat :start-fn fn?
+                              :deps (s/? (s/every keyword?))
+                              :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
+                              :meta-args (s/? (s/map-of keyword?
+                                                        (s/keys :req-un [::doc]
+                                                                :opt-un [::default]))))))
+
+(s/def ::topology (s/and (s/and (s/or :topology-id ::topology-id :topology map?)
+                                (s/conformer
+                                 (fn [[m-or-id s]]
+                                   (if (= :topology-id m-or-id)
+                                     (resolve-topology-id s) s))))
+                         map?))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
-                       (let [m (resolve-topology-or-module m)]
-                         (reduce (fn [g d] (dep/depend g k d)) g (second m))))
+                       (let [m (s/conform ::module m)]
+                         (reduce (fn [g d] (dep/depend g k d)) g (:deps m))))
                      (dep/graph)
                      system)
         dep-order (dep/topo-sort g)
@@ -164,17 +182,9 @@
                        (into dep-order))]
     dep-order))
 
-(s/def ::module (s/cat :start-fn fn?
-                       :deps (s/? (s/every keyword?))
-                       :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
-                       :meta-args (s/? (s/map-of keyword?
-                                                 (s/keys :req-un [::doc]
-                                                         :opt-un [::default])))))
-
 (defn start-module [m started options]
-  (let [m (resolve-topology-or-module m)
-        _ (s/assert ::module m)
-        {:keys [start-fn deps spec meta-args]} (s/conform ::module m)
+  (s/assert ::module m)
+  (let [{:keys [start-fn deps spec meta-args]} (s/conform ::module m)
         deps (select-keys started deps)
         default-options (into {} (map (juxt key (comp :default val))
                                       (filter #(find (val %) :default) meta-args)))
@@ -184,7 +194,8 @@
     (start-fn deps options)))
 
 (defn start-modules [{:keys [crux.node/topology] :as options}]
-  (let [topology (resolve-topology-or-module topology)
+  (s/assert ::topology topology)
+  (let [topology (s/conform ::topology topology)
         topology (merge topology (select-keys options (keys topology)))
         started (atom {})
         start-order (start-order topology)

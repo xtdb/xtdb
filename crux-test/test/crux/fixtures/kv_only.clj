@@ -1,5 +1,6 @@
 (ns crux.fixtures.kv-only
-  (:require [clojure.test :as t]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :as t]
             [crux.io :as cio]
             [crux.node :as n])
   (:import java.io.Closeable))
@@ -10,8 +11,7 @@
 (def ^:dynamic *sync* false)
 
 (defn ^Closeable start-kv-store [opts]
-  (let [kv-fn (first (n/resolve-topology-or-module *kv-module*))]
-    (assert (fn? kv-fn))
+  (let [kv-fn (:start-fn (s/conform :crux.node/module *kv-module*))]
     (kv-fn nil opts)))
 
 (defn with-kv-store [f]
