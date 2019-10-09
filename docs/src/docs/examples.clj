@@ -428,6 +428,13 @@ node)
 ))
 
 #_(comment
+;; tag::join2-r[]
+#{[:petr]}
+;; end::join2-r[]
+
+)
+
+#_(comment
   ;; tag::bitemp0[]
   {:crux.db/id :p2
    :entry-pt :SFO
@@ -570,9 +577,123 @@ node)
   ;; end::bitempr[]
   )
 
-#_(comment
-;; tag::join2-r[]
-#{[:petr]}
-;; end::join2-r[]
+#_(comment ;; Used in decorators.adoc - will not work in this namespace
 
-)
+  ;; tag::aggr1[]
+  (t/deftest test-count-aggregation
+    (f/transact-entity-maps!
+     *kv*
+     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
+      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
+      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
+      {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}])
+
+    (t/testing "with vector syntax"
+      (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
+                {:user-name "patrik" :post-count 3 :cost-sum 70}]
+               (aggr/q
+                (api/db *api*)
+                '{:aggr {:partition-by [?user-name]
+                         :select
+                         {?cost-sum [0 (+ acc ?post-cost)]
+                          ?post-count [0 (inc acc) ?e]}}
+                  :where [[?e :user/name ?user-name]
+                          [?e :post/cost ?post-cost]]})))))
+  ;; end::aggr1[]
+  )
+
+#_(comment ;; Not currently used, but could be useful after some reworking.
+  ;; tag::blanks[]
+  (t/deftest test-blanks
+    (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
+
+    (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
+             (api/q (api/db *kv*) '{:find [name]
+                                    :where [[_ :name name]]}))))
+  ;; end::blanks[]
+
+  ;; tag::not[]
+  (t/deftest test-not-query
+    (f/transact-people! *kv* [{:crux.db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
+                              {:crux.db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
+                              {:crux.db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}])
+
+    (t/testing "literal v"
+      (t/is (= 2 (count (api/q (api/db *kv*) '{:find [e]
+                                               :where [[e :name name]
+                                                       [e :name "Ivan"]
+                                                       (not [e :last-name "Ivannotov"])]}))))
+
+      (t/testing "multiple clauses in not"
+        (t/is (= 2 (count (api/q (api/db *kv*) '{:find [e]
+                                                 :where [[e :name name]
+                                                         [e :name "Ivan"]
+                                                         (not [e :last-name "Ivannotov"]
+                                                              [(string? name)])]}))))))
+
+    (t/testing "variable v"
+      (t/is (= 2 (count (api/q (api/db *kv*) '{:find [e]
+                                               :where [[e :name name]
+                                                       [:ivan-ivanovtov-1 :last-name i-name]
+                                                       (not [e :last-name i-name])]}))))))
+  ;; end::not[]
+
+  ;; tag::or[]
+  (t/deftest test-or-query
+    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
+                              {:name "Ivan" :last-name "Ivanov"}
+                              {:name "Ivan" :last-name "Ivannotov"}
+                              {:name "Bob" :last-name "Controlguy"}])
+
+    (t/testing "Or works as expected"
+      (t/is (= 3 (count (api/q (api/db *kv*) '{:find [e]
+                                               :where [[e :name name]
+                                                       [e :name "Ivan"]
+                                                       (or [e :last-name "Ivanov"]
+                                                           [e :last-name "Ivannotov"])]}))))))
+  ;; end::or[]
+
+  ;; tag::or-and[]
+  (t/deftest test-or-query-can-use-and
+    (let [[ivan] (f/transact-people! *kv* [{:name "Ivan" :sex :male}
+                                           {:name "Bob" :sex :male}
+                                           {:name "Ivana" :sex :female}])]
+
+      (t/is (= #{["Ivan"]
+                 ["Ivana"]}
+               (api/q (api/db *kv*) '{:find [name]
+                                      :where [[e :name name]
+                                              (or [e :sex :female]
+                                                  (and [e :sex :male]
+                                                       [e :name "Ivan"]))]})))))
+  ;; end::or-and[]
+
+  ;; tag::or-and2[]
+  (t/deftest test-ors-can-introduce-new-bindings
+    (let [[petr ivan ivanova] (f/transact-people! *kv* [{:name "Petr" :last-name "Smith" :sex :male}
+                                                        {:name "Ivan" :last-name "Ivanov" :sex :male}
+                                                        {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
+
+      (t/testing "?p2 introduced only inside of an Or"
+        (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *kv*) '{:find [?p2]
+                                                                :where [(or (and [?p2 :name "Petr"]
+                                                                                 [?p2 :sex :female])
+                                                                            (and [?p2 :last-name "Ivanov"]
+                                                                                 [?p2 :sex :male]))]}))))))
+  ;; end::or-and2[]
+
+  ;; tag::not-join[]
+  (t/deftest test-not-join
+    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
+                              {:name "Malcolm" :last-name "Ofsparks"}
+                              {:name "Dominic" :last-name "Monroe"}])
+
+    (t/testing "Rudimentary not-join"
+      (t/is (= #{["Ivan"] ["Malcolm"]}
+               (api/q (api/db *kv*) '{:find [name]
+                                      :where [[e :name name]
+                                              (not-join [e]
+                                                        [e :last-name "Monroe"])]})))))
+  ;; end::not-join[]
+
+  )
