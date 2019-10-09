@@ -71,3 +71,14 @@ so search for different packages on npm if you need more fine-grained control.
 e.g.
 
 - All-in-one https://www.npmjs.com/package/plotly.js-dist
+
+## Potential extension points
+
+
+
+### Build
+Can be improved with skipping with uberjar build and just updating the jar with
+
+```
+jar uf jar-file input-file(s)
+```

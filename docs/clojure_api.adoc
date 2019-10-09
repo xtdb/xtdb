@@ -1,4 +1,4 @@
-= (ns crux.api)
+== (ns crux.api)
 :toc: macro
 
 `crux.api` exposes a union of methods from `ICruxNode` and `ICruxDatasource`,
@@ -6,9 +6,11 @@ with few lifecycle members added.
 
 toc::[]
 
-== ICruxNode
+[#clojure-api-icruxnode]
+=== ICruxNode
 
 ==== db
+
 
 ----
   (db
@@ -24,7 +26,6 @@ toc::[]
      as of the valid and transaction time. Will block until the transaction
      time is present in the index.")
 ----
-
 
 ==== document
 
@@ -150,7 +151,7 @@ toc::[]
 ----
 
 
-
+[#clojure-api-icruxdatasource]
 == ICruxDatasource
 Represents the database as of a specific valid and transaction time.
 
@@ -176,8 +177,8 @@ Represents the database as of a specific valid and transaction time.
 
 ----
   (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation specific snapshot allowing for lazy query results in a
-     try-with-resources block using (q db  snapshot  query)}.
+     "Returns a new implementation specific snapshot allowing for lazy query
+     results in a try-with-resources block using (q db  snapshot  query)}.
      Can also be used for
      (history-ascending db snapshot  eid) and
      (history-descending db snapshot  eid)

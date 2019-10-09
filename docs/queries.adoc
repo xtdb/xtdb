@@ -1,5 +1,7 @@
+[#queries]
 = Queries
 
+[#queries-intro]
 == Introduction
 
 Crux is a document database that provides you with a comprehensive means of
@@ -26,27 +28,29 @@ of query tests and how each test listed below runs in the wider context.
 
 Extensible Data Notation (edn) is used as the data format for the public Crux
 APIs. To gain an understanding of edn see
-<<resources.adoc#_essential_edn_for_using_crux>>.
+<<#tutorials-essential-edn, Essential EDN for Crux>>.
 
 Note that all Crux Datalog queries run using a point-in-time view of the
 database which means the query capabilities and patterns presented in this
 section are not aware of valid times or transaction times.
 
+[#queries-reference]
 == Reference
 
-* <<_basic_query>>
-* <<_arguments,`:args`>>
-* <<_valid_time_travel>>
-* <<_history_api>>
-  ** <<_full_document_history>>
-  ** <<_document_history_range>>
-* <<_joins,Joins>>
-* <<_ordering_and_pagination>>
-* <<_rules,`:rules`>>
-* <<_lazy_queries>>
-* <<_clojure_tips>>
-* <<_datascript_differences>>
+* <<#queries_basic_query>>
+* <<#queries_arguments,`:args`>>
+* <<#queries_valid_time_travel>>
+* <<#queries_history_api>>
+  ** <<#history_full_document_history>>
+  ** <<#history_document_history_range>>
+* <<#queries_joins,Joins>>
+* <<#queries_ordering_and_pagination>>
+* <<#queries_rules,`:rules`>>
+* <<#queries_lazy_queries>>
+* <<#queries_clojure_tips>>
+* <<#queries_datascript_differences>>
 
+[#queries_basic_query]
 == Basic Query
 
 A Datalog query consists of a set of variables and a set of clauses. The result
@@ -69,7 +73,7 @@ Our first query runs on a database that contains the following 3 documents
 which get broken apart and indexed as "entities":
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-input]
+include::./src/docs/examples.clj[tags=query-input]
 ----
 
 Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as
@@ -82,7 +86,7 @@ once:
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=basic-query]
+include::./src/docs/examples.clj[tags=basic-query]
 ----
 
 Let's try to work out what these 3 clauses do...
@@ -116,23 +120,24 @@ The edn result set only contains the value `:smith`
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=basic-query-r]
+include::./src/docs/examples.clj[tags=basic-query-r]
 ----
 
+[#queries_arguments]
 == Arguments
 
 For the next set of queries we will again use the same set of documents for our database as used in the previous section:
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-input]
+include::./src/docs/examples.clj[tags=query-input]
 ----
 
 === Query: "Match on entity ID and value"
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments1]
+include::./src/docs/examples.clj[tags=query-with-arguments1]
 ----
 
 Our first query supplies two arguments to the query via a map within the `:args` vector. The effect of this is to make sure that regardless of whether other `:name` values in the database also equal `"Ivan"`, that only the entity with an ID matching our specific `:ivan` ID is considered within the query. Use of arguments means we can avoid hard-coding values directly into the query clauses.
@@ -140,14 +145,14 @@ Our first query supplies two arguments to the query via a map within the `:args`
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments1-r]
+include::./src/docs/examples.clj[tags=query-with-arguments1-r]
 ----
 
 === Query: "Match entities with given values"
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments2]
+include::./src/docs/examples.clj[tags=query-with-arguments2]
 ----
 
 This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parameterise the input to a query such that we do not have to rerun a single query multiple times (which would be significantly less efficient!).
@@ -155,14 +160,14 @@ This next query shows how multiple argument values can be mapped to a single fie
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments2-r]
+include::./src/docs/examples.clj[tags=query-with-arguments2-r]
 ----
 
 === Query: "Match entities with given value tuples"
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments3]
+include::./src/docs/examples.clj[tags=query-with-arguments3]
 ----
 
 Here we see how we can extend the parameterisation to match using multiple fields at once.
@@ -170,28 +175,28 @@ Here we see how we can extend the parameterisation to match using multiple field
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments3-r]
+include::./src/docs/examples.clj[tags=query-with-arguments3-r]
 ----
 
 === Query: "Use predicates with arguments"
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments4]
+include::./src/docs/examples.clj[tags=query-with-arguments4]
 ----
 
 Something else we can do with arguments is apply predicates to them directly within the clauses. Predicates return either `true` or `false` but all predicates used in clauses must return `true` in order for the given combination of field values to be part of the valid result set. In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I").
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments4-r]
+include::./src/docs/examples.clj[tags=query-with-arguments4-r]
 ----
 
 === Query: "Use range constraints with arguments"
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments5]
+include::./src/docs/examples.clj[tags=query-with-arguments5]
 ----
 
 Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database.
@@ -199,9 +204,10 @@ Finally we can see how we can return an argument that passes all of the predicat
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-with-arguments5-r]
+include::./src/docs/examples.clj[tags=query-with-arguments5-r]
 ----
 
+[#queries_valid_time_travel]
 === Valid time travel
 
 Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
@@ -212,33 +218,33 @@ First, we transact a very old document into the database with the ID `:malcolm` 
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-d1]
+include::./src/docs/examples.clj[tags=query-at-t-d1]
 ----
 
 Next we transact a slightly more recent (though still very old!) revision of that same document where the `:name` has been corrected to `"Malcolma"`, again using a historical timestamp extracted from the legacy system.
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-d2]
+include::./src/docs/examples.clj[tags=query-at-t-d2]
 ----
 
 We are then able to query at different points in the valid time axis to check for the validity of the correction. We define a query `q`:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-q1]
+include::./src/docs/examples.clj[tags=query-at-t-q1]
 ----
 
 Firstly we can verify that `"Malcolma"` was unknown at `#inst "1986-10-23"`.
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-q1-q]
+include::./src/docs/examples.clj[tags=query-at-t-q1-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-q1-r]
+include::./src/docs/examples.clj[tags=query-at-t-q1-r]
 ----
 
 We can then verify that `"Malcolma"` is the currently known `:name` for the entity
@@ -248,25 +254,27 @@ of the document that affect the current valid time version.
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-q2-q]
+include::./src/docs/examples.clj[tags=query-at-t-q2-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=query-at-t-q2-r]
+include::./src/docs/examples.clj[tags=query-at-t-q2-r]
 ----
 
+[#queries_history_api]
 == History API
 
+[#history_full_document_history]
 === Full Document History
 Crux allows you to retrieve all versions of a document:
 [source,clj]
 ----
-include::./query_examples.clj[tags=history-full]
+include::./src/docs/examples.clj[tags=history-full]
 ----
 
-
+[#history_document_history_range]
 === Document History Range
 Retrievable document versions can be bounded by four time coordinates:
 
@@ -278,9 +286,10 @@ Retrievable document versions can be bounded by four time coordinates:
 All coordinates are inclusive. All coordinates can be null.
 [source,clj]
 ----
-include::./query_examples.clj[tags=history-range]
+include::./src/docs/examples.clj[tags=history-range]
 ----
 
+[#queries_joins]
 == Joins
 
 === Query: "Join across entities on a single attribute"
@@ -288,19 +297,19 @@ include::./query_examples.clj[tags=history-range]
 Given the following documents in the database
 [source,clj]
 ----
-include::./query_examples.clj[tags=join-d]
+include::./src/docs/examples.clj[tags=join-d]
 ----
 
 We can run a query to return a set of tuples that satisfy the join on the attribute `:name`
 [source,clj]
 ----
-include::./query_examples.clj[tags=join-q]
+include::./src/docs/examples.clj[tags=join-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=join-r]
+include::./src/docs/examples.clj[tags=join-r]
 ----
 
 Note that every person joins once, plus 2 more matches.
@@ -310,23 +319,24 @@ Note that every person joins once, plus 2 more matches.
 Given the following documents in the database
 [source,clj]
 ----
-include::./query_examples.clj[tags=join2-d]
+include::./src/docs/examples.clj[tags=join2-d]
 ----
 
 We can run a query to return a set of entities that `:follows` the set of entities with the `:name` value of `"Ivan"`
 [source,clj]
 ----
-include::./query_examples.clj[tags=join2-q]
+include::./src/docs/examples.clj[tags=join2-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::./query_examples.clj[tags=join2-r]
+include::./src/docs/examples.clj[tags=join2-r]
 ----
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
+[#queries_ordering_and_pagination]
 == Ordering and Pagination
 
 A Datalog query naturally returns a result set of tuples, however, the tuples
@@ -392,6 +402,7 @@ values, e.g. `{:crux.db/id :zoe :closest-friends [:amy :ben :chris]}`
 More powerful ordering and pagination features may be provided in the future.
 Feel free to open an issue or get in touch to discuss your requirements.
 
+[#queries_rules]
 == Rules
 
 This example of a rule demonstrates a recursive traversal of entities that are
@@ -409,6 +420,8 @@ connected to a given entity via the `:follow` attribute.
            (follow ?t ?e2)]]})
 ----
 
+
+[#queries_lazy_queries]
 == Lazy Queries
 
 The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
@@ -417,6 +430,7 @@ optionally a `snapshot` which is already opened and managed by the caller
 sequence of the results, while the other version provides a set. A snapshot can
 be retrieved from a `kv` instance via `crux.api/new-snapshot`.
 
+[#queries_clojure_tips]
 == Clojure Tips
 
 === Quoting
@@ -455,6 +469,7 @@ map:
      :args [{'?code my-code}]}))
 ----
 
+[#queries_datascript_differences]
 == DataScript Differences
 
 This list is not necessarily exhaustive and is based on the partial re-usage of

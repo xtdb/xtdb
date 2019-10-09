@@ -1,5 +1,7 @@
+[#what-is-crux]
 == What is Crux?
 
+=== Introduction
 Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
 database.
 
@@ -19,18 +21,20 @@ as semi-immutable logs.
 This decoupled design enables Crux to be maintained as a small and efficient
 core that can be scaled and evolved to support a large variety of use-cases.
 
-image::crux-node-1.svg[Crux Kafka Node Diagram,970,443]
+image::crux-node-1.svg?sanitize=true[Crux Kafka Node Diagram,970,443]
 
 Crux is an open source document database with bitemporal graph queries.
 
-image::crux-venn-1.svg[Document database with graph queries,width=450,align="center"]
+image::crux-venn-1.svg?sanitize=true[Document database with graph queries,width=450,align="center"]
 
-== Get Started
+[#what-is-crux-start]
+=== Get Started
 
 Reading the documentation is a good way to learn about Crux, so you are in
-the right place! <<get_started.adoc#,Let's continue the journey.>>
+the right place! <<#get-started,Let's continue the journey.>>
 
-== Bitemporal
+[#what-is-crux-bitemporal]
+=== Bitemporal
 
 Crux is a _bitemporal_ database that stores _transaction time_ and _valid time_
 histories. While a _[uni]temporal_ database enables "time travel" querying
@@ -47,10 +51,11 @@ critical requirement for systems in any industry with strong auditing regulation
 where you need to be able to answer the question "what did you know and when
 did you know it?".
 
-<<bitemp.adoc#,Read more about Bitemporality in Crux>> or specifically the
-<<bitemp.adoc#_known_uses,known uses>> for these capabilities.
+<<#bitemporality,Read more about Bitemporality in Crux>> or specifically the
+<<#bitemp-uses,known uses>> for these capabilities.
 
-== Query
+[#what-is-crux-query]
+=== Query
 
 Crux supports a Datalog query interface for reading data and traversing
 relationships across all documents. Queries are executed so that the results
@@ -60,9 +65,10 @@ Crux is ultimately a store of versioned EDN documents. The fields within these
 documents are automatically indexed as Entity-Attribute-Value triples to
 support efficient graph queries.
 
-<<queries.adoc#,Read more about how to query your data with Crux.>>
+<<#queries,Read more about how to query your data with Crux.>>
 
-== Schemaless
+[#what-is-crux-schemaless]
+=== Schemaless
 
 Crux does not enforce any schema for the documents it stores. One reason for
 this is that data might come from many different places, and may not ultimately
@@ -70,7 +76,8 @@ be owned by the service using Crux to query the data. This design enables
 schema-on-write and/or schema-on-read to be achieved outside of the core of
 Crux to meet the exact application requirements.
 
-== Distributed
+[#what-is-crux-distributed]
+=== Distributed
 
 Nodes can come and go, with local indexes stored in a Key/Value store such as
 RocksDB, whilst reading and writing master data to central log topics (only
@@ -82,7 +89,8 @@ and document logs exist only inside of a local Key/Value store such as RocksDB.
 This is appropriate for non-critical usage where availability and durability
 requirements do not justify the need for Kafka.
 
-== Eviction
+[#what-is-crux-eviction]
+=== Eviction
 
 Crux supports eviction of active and historical data to assist with technical
 compliance for information privacy regulations.

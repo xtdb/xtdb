@@ -1,3 +1,4 @@
+[#decorators]
 = Decorators
 
 == Introduction
@@ -18,7 +19,7 @@ transducer magic).
 
 [source,clj]
 ----
-include::./query_examples.clj[tags=aggr1]
+include::./src/docs/examples.clj[tags=aggr1]
 ----
 
 See the https://github.com/juxt/crux/blob/master/crux-decorators/test/crux/decorators/aggregation_test.clj[aggregation_test.clj] for more examples of usage.
