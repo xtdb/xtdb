@@ -1,6 +1,7 @@
 [#what-is-crux]
 == What is Crux?
 
+=== Introduction
 Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
 database.
 

@@ -151,7 +151,7 @@ toc::[]
 ----
 
 
-[#clojure-api-icruxnode]
+[#clojure-api-icruxdatasource]
 == ICruxDatasource
 Represents the database as of a specific valid and transaction time.
 
