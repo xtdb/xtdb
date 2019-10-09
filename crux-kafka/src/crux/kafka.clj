@@ -89,19 +89,6 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
-(defn zk-status [consumer-config]
-  {:crux.zk/zk-active?
-   (if consumer-config
-     (try
-       (with-open [^KafkaConsumer consumer
-                   (create-consumer
-                    (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
-         (boolean (.listTopics consumer)))
-       (catch Exception e
-         (log/debug e "Could not list Kafka topics:")
-         false))
-     false)})
-
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx.event/tx-events (.value record)
    :crux.tx/tx-id (.offset record)
