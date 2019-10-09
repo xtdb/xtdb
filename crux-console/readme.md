@@ -72,9 +72,33 @@ e.g.
 
 - All-in-one https://www.npmjs.com/package/plotly.js-dist
 
+### Datepickers
+There are a few things we can look at
+- Pikaday
+  - looking nice and simple
+  - no deps
+  - url https://github.com/timgilbert/cljs-pikaday
+  - no timepicker, but that's an easier fix
+
+- React datetime picker  
+  - demo url http://projects.wojtekmaj.pl/react-datetime-picker/
+  - gh url: https://github.com/wojtekmaj/react-datetime-picker
+  - good UX, has timepicker
+  - claimed test cov 92%
+  - seemingly lots of deps :(
+  
+- Hacker one datepicker
+  - demo link: https://reactdatepicker.com
+  - gh link: https://github.com/Hacker0x01/react-datepicker/
+  - Lots of options, arguable best datepicker-timepicker combination
+  - quite heavy :(
+
+Things to be aware of
+- YouCanBookMe/react-datetime
+  - drags moment.js as a dep
+  - UX is questionable
+
 ## Potential extension points
-
-
 
 ### Build
 Can be improved with skipping with uberjar build and just updating the jar with
