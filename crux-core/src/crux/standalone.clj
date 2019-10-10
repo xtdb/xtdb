@@ -9,7 +9,6 @@
 
 (s/def ::event-log-sync-interval-ms nat-int?)
 (s/def ::event-log-dir string?)
-(s/def ::event-log-kv :crux.node/module)
 
 (defn- start-event-log-fsync ^java.io.Closeable [{::keys [event-log-kv]}
                                                  {:keys [crux.standalone/event-log-sync-interval-ms]}]

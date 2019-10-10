@@ -10,7 +10,8 @@
   (let [^crux.api.ICruxAPI node (crux/start-node {:crux.node/topology :crux.standalone/topology
                                                   :crux.node/kv-store "crux.kv.memdb/kv"
                                                   :crux.standalone/db-dir "data/db-dir-1"
-                                                  :crux.standalone/event-log-dir event-log-name})]
+                                                  :crux.standalone/event-log-kv "crux.kv.memdb/kv"
+                                                  :crux.standalone/event-log-dir "data/event"})]
     node))
 
 
