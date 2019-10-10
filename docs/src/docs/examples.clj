@@ -14,16 +14,16 @@
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology :crux.standalone/topology
                     :crux.node/kv-store "crux.kv.memdb/kv"
-                    :crux.kv/db-dir "data/db-dir-1"
+                    :crux.standalone/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"}))
 ;; end::start-standalone-node[]
-node)
+  node)
 
 (defn example-close-node [node]
 ;; tag::close-node[]
 (.close node)
 ;; end::close-node[]
- )
+)
 
 (defn example-start-embedded-kafka []
 ;; tag::ek-example[]
@@ -42,6 +42,7 @@ embedded-kafka)
 (.close embedded-kafka)
 ;; end::ek-close[]
 )
+
 
 (defn example-start-cluster []
 ;; tag::start-cluster-node[]
