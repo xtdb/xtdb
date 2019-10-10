@@ -6,13 +6,14 @@
             [docs.examples :as ex]
             [crux.tx :as tx]))
 
-(defn start-node-for-queries [event-log-name]
-  (let [^crux.api.ICruxAPI node (crux/start-node {:crux.node/topology :crux.standalone/topology
-                                                  :crux.node/kv-store "crux.kv.memdb/kv"
-                                                  :crux.standalone/db-dir "data/db-dir-1"
-                                                  :crux.standalone/event-log-kv "crux.kv.memdb/kv"
-                                                  :crux.standalone/event-log-dir "data/event"})]
-    node))
+(import (crux.api ICruxAPI))
+
+(defn- ^crux.api.ICruxAPI start-node-for-queries []
+  (crux/start-node {:crux.node/topology :crux.standalone/topology
+                      :crux.node/kv-store "crux.kv.memdb/kv"
+                      :crux.standalone/db-dir "data/db-dir-1"
+                      :crux.standalone/event-log-kv "crux.kv.memdb/kv"
+                      :crux.standalone/event-log-dir "data/eventlog-1"}))
 
 
 (t/deftest test-example-standalone-node
@@ -55,7 +56,7 @@
     (t/is (nil? (ex/example-close-node node)))))
 
 (t/deftest test-example-basic-queries
-  (with-open [node (start-node-for-queries "data/event-log-basic")]
+  (with-open [node (start-node-for-queries)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-setup node)) nil)
     (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
@@ -65,13 +66,13 @@
     (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))))
 
 (t/deftest test-example-time-queries
-  (with-open [node (start-node-for-queries "data/event-log-queries")]
+  (with-open [node (start-node-for-queries)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-at-time-setup node)) nil)
     (t/is (= #{} (ex/query-example-at-time-q1 node)))
     (t/is (= #{[:malcolm]} (ex/query-example-at-time-q2 node)))))
 
 (t/deftest test-example-join-queries
-  (with-open [node (start-node-for-queries "data/event-log-join")]
+  (with-open [node (start-node-for-queries)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q1-setup node)) nil)
     (t/is (= #{[:ivan :ivan]
                [:petr :petr]
