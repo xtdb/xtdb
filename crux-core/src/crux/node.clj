@@ -150,25 +150,27 @@
     (var-get (find-var v))))
 
 (s/def ::topology-id (fn [id] (or (string? id) (keyword? id) (symbol? id))))
+(s/def ::start-fn fn?)
+(s/def ::deps (s/coll-of keyword?))
+(s/def ::spec (fn [s] (or (s/spec? s) (s/get-spec s))))
+(s/def ::meta-args (s/map-of keyword?
+                             (s/keys :req-un [::doc]
+                                     :opt-un [::default])))
 
-(s/def ::module (s/and (s/and (s/or :module-id ::topology-id :module vector?)
+(s/def ::module (s/and (s/and (s/or :module-id ::topology-id :module map?)
                               (s/conformer
                                (fn [[m-or-id s]]
                                  (if (= :module-id m-or-id)
                                    (resolve-topology-id s) s))))
-                       (s/cat :start-fn fn?
-                              :deps (s/? (s/every keyword?))
-                              :spec (s/? (fn [s] (or (s/spec? s) (s/get-spec s))))
-                              :meta-args (s/? (s/map-of keyword?
-                                                        (s/keys :req-un [::doc]
-                                                                :opt-un [::default]))))))
+                       (s/keys :req-un [::start-fn]
+                               :opt-un [::deps])))
 
 (s/def ::topology (s/and (s/and (s/or :topology-id ::topology-id :topology map?)
                                 (s/conformer
                                  (fn [[m-or-id s]]
                                    (if (= :topology-id m-or-id)
                                      (resolve-topology-id s) s))))
-                         map?))
+                         (s/map-of keyword? ::module)))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
@@ -218,23 +220,23 @@
                                    (cio/try-close m)))]))
 
 (def base-topology {::kv-store 'crux.kv.rocksdb/kv
-                    ::raw-object-store [(fn [{::keys [kv-store]} options]
-                                          (start-object-store {:kv kv-store} options))
-                                        [::kv-store]
-                                        (s/keys :req [:crux.db/object-store])
-                                        {:crux.db/object-store {:doc "Node local store for documents/objects"
-                                                                :default "crux.index.KvObjectStore"}}]
-                    ::object-store [(fn [{::keys [raw-object-store]} {:keys [crux.lru/doc-cache-size]}]
-                                      (lru/->CachedObjectStore (lru/new-cache doc-cache-size) raw-object-store))
-                                    [::raw-object-store]
-                                    (s/keys :req [:crux.lru/doc-cache-size])
-                                    {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
-                                                               :default lru/default-doc-cache-size}}]
-                    ::indexer [start-kv-indexer
-                               [::kv-store ::tx-log ::object-store]
-                               {:crux.tx-log/await-tx-timeout
-                                {:doc "Timeout waiting for tx-time to be reached by a Crux node"
-                                 :default crux.tx/default-await-tx-timeout}}]})
+                    ::raw-object-store {:start-fn (fn [{::keys [kv-store]} options]
+                                                    (start-object-store {:kv kv-store} options))
+                                        :deps [::kv-store]
+                                        :spec (s/keys :req [:crux.db/object-store])
+                                        :meta-args {:crux.db/object-store {:doc "Node local store for documents/objects"
+                                                                           :default "crux.index.KvObjectStore"}}}
+                    ::object-store {:start-fn (fn [{::keys [raw-object-store]} {:keys [crux.lru/doc-cache-size]}]
+                                                (lru/->CachedObjectStore (lru/new-cache doc-cache-size) raw-object-store))
+                                    :deps [::raw-object-store]
+                                    :spec (s/keys :req [:crux.lru/doc-cache-size])
+                                    :meta-args {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
+                                                                          :default lru/default-doc-cache-size}}}
+                    ::indexer {:start-fn start-kv-indexer
+                               :deps [::kv-store ::tx-log ::object-store]
+                               :meta-args {:crux.tx-log/await-tx-timeout
+                                           {:doc "Timeout waiting for tx-time to be reached by a Crux node"
+                                            :default crux.tx/default-await-tx-timeout}}}})
 
 (defn start ^ICruxAPI [options]
   (let [[{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules options)

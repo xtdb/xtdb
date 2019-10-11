@@ -9,7 +9,7 @@
 
 (defn with-http-server [f]
   (let [server-port (cio/free-port)]
-    (with-open [http-server (srv/start-http-server *api* {:server-port server-port})]
+    (with-open [http-server ^java.io.Closeable (srv/start-http-server *api* {:server-port server-port})]
       (binding [*api-url* (str "http://" *host* ":" server-port)]
         (with-open [api-client (Crux/newApiClient *api-url*)]
           (binding [*api* api-client]

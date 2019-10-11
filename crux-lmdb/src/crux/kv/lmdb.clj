@@ -272,10 +272,9 @@
 
 (s/def ::env-flags nat-int?)
 
-(def kv [(fn [_ {:keys [crux.kv/db-dir] :as options}]
-           (lru/start-kv-store (map->LMDBKv {:db-dir db-dir}) options))
-         []
-         (s/and :crux.kv/options
-                (s/keys :opt [::env-flags]))
-         (merge kv/options
-                {::env-flags {:doc "LMDB Flags"}})])
+(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
+                     (lru/start-kv-store (map->LMDBKv {:db-dir db-dir}) options))
+         :spec (s/and :crux.kv/options
+                      (s/keys :opt [::env-flags]))
+         :meta-args (merge kv/options
+                           {::env-flags {:doc "LMDB Flags"}})})

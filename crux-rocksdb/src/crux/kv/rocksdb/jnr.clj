@@ -316,12 +316,11 @@
 (s/def ::db-options string?)
 (s/def ::disable-wal? boolean?)
 
-(def kv [(fn [_ {:keys [crux.kv/db-dir] :as options}]
-           (lru/start-kv-store (map->RocksJNRKv {:db-dir db-dir}) options))
-         []
-         (s/and :crux.kv/options
-                (s/keys :opt [::db-options
-                              ::disable-wal?]))
-         (merge kv/options
-                {::db-options {:doc "RocksDB Options"}
-                 ::disable-wal? {:doc "Disable Write Ahead Log"}})])
+(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
+                     (lru/start-kv-store (map->RocksJNRKv {:db-dir db-dir}) options))
+         :spec (s/and :crux.kv/options
+                      (s/keys :opt [::db-options
+                                    ::disable-wal?]))
+         :meta-args (merge kv/options
+                           {::db-options {:doc "RocksDB Options"}
+                            ::disable-wal? {:doc "Disable Write Ahead Log"}})})
