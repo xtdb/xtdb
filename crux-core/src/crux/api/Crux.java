@@ -37,7 +37,7 @@ public class Crux {
      * calls to {@link ICruxAPI#db()}.
      *
      * NOTE: requires crux-http-client on the classpath,
-     * see crux.bootstrap.remove-api-client/*internal-http-request-fn*
+     * see crux.bootstrap.remote-api-client/*internal-http-request-fn*
      * for more information.
      *
      * @param url the URL to a Crux HTTP end-point.
