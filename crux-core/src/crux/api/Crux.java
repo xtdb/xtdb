@@ -37,22 +37,22 @@ public class Crux {
      * calls to {@link ICruxAPI#db()}.
      *
      * NOTE: requires crux-http-client on the classpath,
-     * see crux.bootstrap.remote-api-client/*internal-http-request-fn*
+     * see crux.remote-api-client/*internal-http-request-fn*
      * for more information.
      *
      * @param url the URL to a Crux HTTP end-point.
      * @return    a remote API client.
      */
     public static ICruxAPI newApiClient(String url) {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.remote-api-client"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.remote-api-client/new-api-client").invoke(url);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.remote-api-client"));
+        return (ICruxAPI) Clojure.var("crux.remote-api-client/new-api-client").invoke(url);
     }
 
     /**
      * Starts an ingest client for transacting into Kafka without
      * running a full local node with index.
      *
-     * For valid options, see crux.bootstrap.cli/cli-options. Options are
+     * For valid options, see crux.cli/cli-options. Options are
      * specified as keywords using their long format name, like
      * :bootstrap-servers etc.
      *
@@ -60,12 +60,12 @@ public class Crux {
      * implements java.io.Closeable, which allows the client to be
      * stopped by calling close.
      *
-     * @param options see crux.bootstrap.cli/cli-options.
+     * @param options see crux.cli/cli-options.
      * @return        the started ingest client node.
      */
     @SuppressWarnings("unchecked")
     public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.kafka-ingest-client"));
-        return (ICruxAsyncIngestAPI) Clojure.var("crux.bootstrap.kafka-ingest-client/new-ingest-client").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka-ingest-client"));
+        return (ICruxAsyncIngestAPI) Clojure.var("crux.kafka-ingest-client/new-ingest-client").invoke(options);
     }
 }

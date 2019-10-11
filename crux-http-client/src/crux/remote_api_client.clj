@@ -1,4 +1,4 @@
-(ns crux.bootstrap.remote-api-client
+(ns crux.remote-api-client
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [crux.io :as cio]

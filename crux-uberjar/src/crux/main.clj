@@ -2,5 +2,5 @@
   (:gen-class))
 
 (defn -main [& args]
-  (require 'crux.bootstrap.cli)
-  ((resolve 'crux.bootstrap.cli/start-node-from-command-line) args))
+  (require 'crux.cli)
+  ((resolve 'crux.cli/start-node-from-command-line) args))

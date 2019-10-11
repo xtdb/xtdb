@@ -324,7 +324,7 @@
   calls to `db`.
 
   NOTE: requires crux-http-client on the classpath, see
-  crux.bootstrap.remote-api-client/*internal-http-request-fn* for more
+  crux.remote-api-client/*internal-http-request-fn* for more
   information.
 
   url the URL to a Crux HTTP end-point.
@@ -337,7 +337,7 @@
   "Starts an ingest client for transacting into Kafka without running a
   full local node with index.
 
-  For valid options, see crux.bootstrap.cli/cli-options. Options are
+  For valid options, see crux.cli/cli-options. Options are
   specified as keywords using their long format name, like
   :bootstrap-servers etc.
 

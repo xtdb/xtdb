@@ -1,4 +1,4 @@
-(ns crux.bootstrap.cli
+(ns crux.cli
   (:require [clojure.edn :as edn]
             [clojure.pprint :as pp]
             [clojure.string :as str]
@@ -77,7 +77,7 @@
                                    (when (.isAlive main-thread)
                                      (log/warn "could not stop node cleanly after" shutdown-ms "ms, forcing exit")
                                      (.halt (Runtime/getRuntime) 1))))
-                               "crux.bootstrap.shutdown-hook-thread"))
+                               "crux.shutdown-hook-thread"))
     shutdown?))
 
 (def env-prefix "CRUX_")
