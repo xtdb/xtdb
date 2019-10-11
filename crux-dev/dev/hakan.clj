@@ -997,6 +997,128 @@
         ;; Should return 3 7 8 9
         (k2-tree-predecessors k2 6)])))
 
+;; Wavelet Matrix
+;; https://users.dcc.uchile.cl/~gnavarro/ps/is14.pdf
+;; https://diegocaro.cl/thesis/thesis.pdf
+
+(defn- log2-binary ^long [^long x]
+  (- Long/SIZE (Long/numberOfLeadingZeros x)))
+
+(defn- rank-zero ^long [^RoaringBitmap b ^long n]
+  (- (inc n) (.rankLong b n)))
+
+;; TODO: How to express properly and efficiently?
+(defn- select-zero ^long [^RoaringBitmap b ^long n]
+  (.select (RoaringBitmap/flip b 0 (long (.last b))) n))
+
+(defn build-wavelet-matrix [s]
+  (let [c (count s)
+        h (log2-binary (reduce max s))]
+    (last
+     (reduce
+      (fn [[s bs] ^long l]
+        (let [mask (bit-shift-left 1 (- h l))
+              one? (fn [^long x]
+                     (pos? (bit-and x mask)))
+              b (FastRankRoaringBitmap.)]
+          (dotimes [n c]
+            (when (one? (nth s n))
+              (.add b n)))
+          (let [z (- c (.getLongCardinality ^RoaringBitmap b))]
+            [(sort-by one? s)
+             (conj bs [b z c])])))
+      [s []]
+      (range 1 (inc h))))))
+
+(defn wavelet-matrix-access ^long [[[_ _ ^long c] :as wm] ^long i]
+  (if (or (neg? i) (>= i c))
+    -1
+    (loop [l 0
+           i i
+           acc 0]
+      (if-let [[^RoaringBitmap b ^long z] (nth wm l nil)]
+        (let [one? (.contains b i)]
+          (recur
+           (inc l)
+           (if one?
+             (+ z (dec (.rankLong b i)))
+             (dec (rank-zero b i)))
+           (cond-> (bit-shift-left acc 1)
+             one? (bit-or 1))))
+        acc))))
+
+(defn wavelet-matrix-rank ^long [[[_ _ ^long c] :as wm] ^long i ^long a]
+  (if (or (neg? i) (>= i c))
+    0
+    (loop [l 0
+           i (inc i)
+           p 0]
+      (if-let [[^RoaringBitmap b ^long z] (nth wm l nil)]
+        (if (pos? (bit-and a (bit-shift-left 1 (dec (- (count wm) l)))))
+          (let [rank-i (.rankLong b (dec i))
+                rank-p (if (zero? p)
+                         0
+                         (.rankLong b (dec p)))]
+            (if (or (zero? rank-i)
+                    (and (zero? rank-p)
+                         (not (zero? l))))
+              0
+              (recur (inc l) (+ z rank-i) (+ z rank-p))))
+          (let [rank-i (rank-zero b (dec i))
+                rank-p (if (zero? p)
+                         0
+                         (rank-zero b (dec p)))]
+            (if (or (zero? rank-i)
+                    (and (zero? rank-p)
+                         (not (zero? l))))
+              0
+              (recur (inc l) rank-i rank-p))))
+        (- i p)))))
+
+(defn wavelet-matrix-select ^long [[[_ _ ^long c] :as wm] ^long j ^long a]
+  (if (or (neg? j) (>= j c))
+    -1
+    (loop [l 0
+           p 0]
+      (if-let [[^RoaringBitmap b ^long z] (nth wm l nil)]
+        (if (pos? (bit-and a (bit-shift-left 1 (dec (- (count wm) l)))))
+          (let [rank-p (if (zero? p)
+                         0
+                         (.rankLong b (dec p)))]
+            (recur (inc l) (+ z rank-p)))
+          (let [rank-p (if (zero? p)
+                         0
+                         (rank-zero b (dec p)))]
+            (recur (inc l) rank-p)))
+        (try
+          (let [j (+ p j)]
+            (if (>= j c)
+              -1
+              (loop [l 0
+                     j j]
+                (if-let [[^RoaringBitmap b ^long z] (nth wm (dec (- (count wm) l)) nil)]
+                  (recur
+                   (inc l)
+                   (if (pos? (bit-and a (bit-shift-left 1 l)))
+                     (long (.select b (- j z)))
+                     (select-zero b j)))
+                  j))))
+          (catch IllegalArgumentException _
+            -1))))))
+
+(comment
+  (let [wm (build-wavelet-matrix [4 7 6 5 3 2 1 0 2 1 4 1 7])]
+    (= [4 -1 2 0 2 1 0 10 -1]
+       [(wavelet-matrix-access wm 0)
+        (wavelet-matrix-access wm 13)
+        (wavelet-matrix-rank wm 10 4)
+        (wavelet-matrix-rank wm 14 4)
+        (wavelet-matrix-rank wm 12 7)
+        (wavelet-matrix-rank wm 5 5)
+        (wavelet-matrix-select wm 0 4)
+        (wavelet-matrix-select wm 1 4)
+        (wavelet-matrix-select wm 2 4)])))
+
 ;; WatDiv analysis helpers:
 
 ;; 230 WatDiv queries:
