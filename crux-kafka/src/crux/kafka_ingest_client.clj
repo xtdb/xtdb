@@ -31,7 +31,5 @@
                :crux.kafka/producer k/producer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [[{:keys [crux.node/tx-log]} close-fn] (-> options
-                                                  (assoc :crux.node/topology topology)
-                                                  n/start-modules)]
+  (let [[{:keys [crux.node/tx-log]} close-fn] (n/start-modules topology options)]
     (map->CruxKafkaIngestClient {:tx-log tx-log :close-fn close-fn})))

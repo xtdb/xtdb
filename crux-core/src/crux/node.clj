@@ -137,13 +137,6 @@
                        (doto (Thread. r)
                          (.setName "crux.tx.update-stats-thread")))))))
 
-(defn- resolve-topology-id [id]
-  (let [v (symbol id)
-        ns (namespace v)]
-    (assert ns)
-    (require (symbol ns))
-    (var-get (find-var v))))
-
 (s/def ::topology-id (fn [id] (or (string? id) (keyword? id) (symbol? id))))
 (s/def ::start-fn fn?)
 (s/def ::deps (s/coll-of keyword?))
@@ -152,20 +145,21 @@
                              (s/keys :req-un [::doc]
                                      :opt-un [::default])))
 
+(defn- resolve-topology-id [id]
+  (s/assert ::topology-id id)
+  (let [v (symbol id)
+        ns (namespace v)]
+    (assert ns)
+    (require (symbol ns))
+    (var-get (find-var v))))
+
 (s/def ::module (s/and (s/and (s/or :module-id ::topology-id :module map?)
                               (s/conformer
                                (fn [[m-or-id s]]
                                  (if (= :module-id m-or-id)
                                    (resolve-topology-id s) s))))
                        (s/keys :req-un [::start-fn]
-                               :opt-un [::deps])))
-
-(s/def ::topology (s/and (s/and (s/or :topology-id ::topology-id :topology map?)
-                                (s/conformer
-                                 (fn [[m-or-id s]]
-                                   (if (= :topology-id m-or-id)
-                                     (resolve-topology-id s) s))))
-                         (s/map-of keyword? ::module)))
+                               :opt-un [::deps ::spec ::meta-args])))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
@@ -190,11 +184,11 @@
       (s/assert spec options))
     (start-fn deps options)))
 
-(defn start-modules [{:keys [crux.node/topology] :as options}]
-  (s/assert ::topology topology)
-  (let [topology (s/conform ::topology topology)
-        topology (merge topology (select-keys options (keys topology)))
-        started (atom {})
+(s/def ::topology-map (s/map-of keyword? ::module))
+
+(defn start-modules [topology options]
+  (s/assert ::topology-map topology)
+  (let [started (atom {})
         start-order (start-order topology)
         started-modules (try
                           (for [k start-order]
@@ -222,8 +216,16 @@
                                            {:doc "Timeout waiting for tx-time to be reached by a Crux node"
                                             :default crux.tx/default-await-tx-timeout}}}})
 
+(defn options->topology [{:keys [crux.node/topology] :as options}]
+  (let [topology (resolve-topology-id topology)
+        _  (s/assert ::topology-map topology)
+        topology-overrides (select-keys options (keys topology))]
+    (merge topology (zipmap (keys topology-overrides)
+                            (map resolve-topology-id (vals topology-overrides))))))
+
 (defn start ^ICruxAPI [options]
-  (let [[{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules options)
+  (let [topology (options->topology options)
+        [{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules topology options)
         status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))]
     (map->CruxNode {:close-fn close-fn
                     :status-fn status-fn

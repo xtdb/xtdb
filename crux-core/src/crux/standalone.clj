@@ -7,10 +7,6 @@
             [crux.tx.polling :as p])
   (:import java.io.Closeable))
 
-(s/def ::event-log-sync-interval-ms nat-int?)
-(s/def ::event-log-dir string?)
-(s/def ::event-log-kv-store :crux.node/module)
-
 (defn- start-event-log-fsync ^java.io.Closeable [{::keys [event-log-kv]}
                                                  {:keys [crux.standalone/event-log-sync-interval-ms]}]
   (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
@@ -47,6 +43,10 @@
 
 (defn- start-moberg-event-log [{::keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
+
+(s/def ::event-log-sync-interval-ms nat-int?)
+(s/def ::event-log-dir string?)
+(s/def ::event-log-kv-store :crux.node/module)
 
 (def topology (merge n/base-topology
                      {::event-log-kv {:start-fn start-event-log-kv
