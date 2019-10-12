@@ -19,7 +19,7 @@
 ;; end::start-standalone-node[]
   node)
 
-(defn example-close-node [node]
+(defn example-close-node [^java.io.Closeable node]
 ;; tag::close-node[]
 (.close node)
 ;; end::close-node[]
@@ -37,7 +37,7 @@
 ;; end::ek-example[]
 embedded-kafka)
 
-(defn example-stop-embedded-kafka [embedded-kafka]
+(defn example-stop-embedded-kafka [^java.io.Closeable embedded-kafka]
 ;; tag::ek-close[]
 (.close embedded-kafka)
 ;; end::ek-close[]
