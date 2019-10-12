@@ -4,8 +4,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang IPersistentMap IRecord]
-           [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
+  (:import [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
            [java.nio.file Files FileVisitResult SimpleFileVisitor]
@@ -132,30 +131,6 @@
 
 (defn native-image? []
   (boolean (System/getProperty "org.graalvm.nativeimage.kind")))
-
-;; NOTE: This used to use eval for a reason as the REPL easily got
-;; confused.
-(defmacro load-dynamic-class [fqn]
-  `(try
-     (let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
-       (Class/forName ~fqn))
-     (catch ClassNotFoundException e#
-       (when-not *compile-files*
-         (let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
-           (require (symbol ns#))
-           (resolve (symbol ~fqn)))))))
-
-(defn require-and-ensure-record ^Class [protocol record-class-name]
-  (let [record-class ^Class (load-dynamic-class record-class-name)]
-    (when (and (extends? protocol record-class)
-               (.isAssignableFrom ^Class IRecord record-class))
-      record-class)))
-
-(defn new-record ^clojure.lang.IRecord [^Class record-class]
-  (assert record-class)
-  (.invoke (.getMethod record-class "create"
-                       (into-array [IPersistentMap]))
-           nil (object-array [{}])))
 
 ;; External Merge Sort
 

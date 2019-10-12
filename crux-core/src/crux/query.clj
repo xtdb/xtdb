@@ -1,25 +1,25 @@
 (ns crux.query
-  (:require [clojure.edn :as edn]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.walk :as w]
             [clojure.tools.logging :as log]
+            [clojure.walk :as w]
             [com.stuartsierra.dependency :as dep]
             [crux.codec :as c]
-            [crux.io :as cio]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.lru :as lru]
+            [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem])
-  (:import java.util.Comparator
+            [crux.lru :as lru]
+            [crux.memory :as mem]
+            [crux.object-store :as os])
+  (:import clojure.lang.ExceptionInfo
+           crux.api.ICruxDatasource
+           crux.codec.EntityTx
+           crux.index.BinaryJoinLayeredVirtualIndex
+           java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
-           clojure.lang.ExceptionInfo
-           org.agrona.ExpandableDirectByteBuffer
-           crux.index.BinaryJoinLayeredVirtualIndex
-           crux.codec.EntityTx
-           crux.api.ICruxDatasource))
+           org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -1206,14 +1206,14 @@
   (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size
                                                                                doc-cache-size]
                                                                         :or {query-cache-size default-query-cache-size
-                                                                             doc-cache-size lru/default-doc-cache-size}
+                                                                             doc-cache-size os/default-doc-cache-size}
                                                                         :as options}]
    (s/assert ::db-options options)
    (let [now (cio/next-monotonic-date)]
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache query-cache-size)
                         (lru/get-named-cache kv ::conform-cache query-cache-size)
-                        (or object-store (lru/new-cached-object-store kv doc-cache-size))
+                        (or object-store (os/->CachedObjectStore (lru/new-cache doc-cache-size) (os/->KvObjectStore kv)))
                         (or valid-time now)
                         (or transact-time now)
                         nil))))

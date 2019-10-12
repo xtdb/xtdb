@@ -6,6 +6,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.fixtures.kafka :as fk]
+            [crux.object-store :as os]
             [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.kafka :as k]
             [crux.query :as q]
@@ -40,7 +41,7 @@
         doc-topic "test-can-transact-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -63,7 +64,7 @@
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -115,7 +116,7 @@
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
 
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -161,7 +162,7 @@
               (fn []
                 (fkv/with-kv-store
                   (fn []
-                    (let [object-store (idx/->KvObjectStore *kv*)
+                    (let [object-store (os/->KvObjectStore *kv*)
                           indexer (tx/->KvIndexer *kv* tx-log object-store nil)
                           consume-opts {:indexer indexer
                                         :consumer fk/*consumer*
@@ -189,7 +190,7 @@
                             (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
                     (rdf/->default-language))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -264,7 +265,7 @@
         n-transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
       (do (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -301,7 +302,7 @@
         doc-topic "test-can-transact-and-query-using-sparql-doc"
         tx-ops (->> (rdf/ntriples "crux/vc-db-1.nt") (rdf/->tx-ops) (rdf/->default-language))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)

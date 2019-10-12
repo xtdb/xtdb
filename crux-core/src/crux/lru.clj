@@ -1,17 +1,12 @@
 (ns crux.lru
-  (:require [clojure.spec.alpha :as s]
-            [crux.db :as db]
+  (:require [crux.db :as db]
             [crux.index :as idx]
-            [crux.kv :as kv]
-            [crux.codec :as c]
-            [crux.memory :as mem])
-  (:import java.io.Closeable
-           [java.util Collections LinkedHashMap]
+            [crux.kv :as kv])
+  (:import [clojure.lang Counted ILookup]
+           java.io.Closeable
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
-           [clojure.lang Counted ILookup]
-           org.agrona.concurrent.UnsafeBuffer
-           [org.agrona DirectBuffer MutableDirectBuffer]))
+           java.util.LinkedHashMap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -71,45 +66,6 @@
       Counted
       (count [_]
         (.size cache)))))
-
-(defrecord CachedObjectStore [cache object-store]
-  db/ObjectStore
-  (get-single-object [this snapshot k]
-    (compute-if-absent
-     cache
-     (c/->id-buffer k)
-     mem/copy-to-unpooled-buffer
-     #(db/get-single-object object-store snapshot %)))
-
-
-  (get-objects [this snapshot ks]
-    (->> (for [k ks
-               :let [v (db/get-single-object this snapshot k)]
-               :when v]
-           [k v])
-         (into {})))
-
-  (known-keys? [this snapshot ks]
-    (db/known-keys? object-store snapshot ks))
-
-  (put-objects [this kvs]
-    (db/put-objects
-      object-store
-      (for [[k v] kvs
-            :let [k (c/->id-buffer k)]]
-        (do
-          (evict cache k)
-          [k v]))))
-
-  (delete-objects [this ks]
-    (db/delete-objects
-      object-store
-      (for [k ks
-            :let [k (c/->id-buffer k)]]
-        (do (evict cache k) k))))
-
-  Closeable
-  (close [_]))
 
 (defn- ensure-iterator-open [closed-state]
   (when @closed-state
@@ -245,17 +201,6 @@
   (if (instance? CacheProvidingKvStore kv)
     kv
     (->CacheProvidingKvStore kv (atom {}))))
-
-(s/def ::doc-cache-size nat-int?)
-
-(def ^:const default-doc-cache-size (* 128 1024))
-
-(defn new-cached-object-store
-  ([kv]
-   (new-cached-object-store kv default-doc-cache-size))
-  ([kv cache-size]
-   (->CachedObjectStore (get-named-cache kv ::doc-cache (or cache-size default-doc-cache-size))
-                        (idx/->KvObjectStore kv))))
 
 (defrecord CachedIndex [idx index-cache]
   db/Index

@@ -51,9 +51,11 @@
    ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache"
     :default (:doc-cache-size n/default-options)
     :parse-fn #(Long/parseLong %)]
-   ["-j" "--object-store OBJECT_STORE" "Type of object store to use."
-    :default (:object-store n/default-options)
-    :validate [#'dn/require-and-ensure-object-store-record "Unknown object store"]]
+
+   ;; Todo, busted:
+   ;; ["-j" "--object-store OBJECT_STORE" "Type of object store to use."
+   ;;  :default (:object-store n/default-options)
+   ;;  :validate [#'dn/require-and-ensure-object-store-record "Unknown object store"]]
 
    ;; Extra
    ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."

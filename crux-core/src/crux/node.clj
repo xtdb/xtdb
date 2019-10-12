@@ -9,7 +9,7 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.lru :as lru]
+            crux.object-store
             [crux.query :as q]
             [crux.status :as status]
             [crux.tx :as tx])
@@ -122,11 +122,6 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(defn start-object-store ^java.io.Closeable [partial-node {:keys [crux.db/object-store] :as options}]
-  (-> (db/require-and-ensure-object-store-record object-store)
-      (cio/new-record)
-      (db/init partial-node options)))
-
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
     (Thread/setDefaultUncaughtExceptionHandler
@@ -220,18 +215,7 @@
                                    (cio/try-close m)))]))
 
 (def base-topology {::kv-store 'crux.kv.rocksdb/kv
-                    ::raw-object-store {:start-fn (fn [{::keys [kv-store]} options]
-                                                    (start-object-store {:kv kv-store} options))
-                                        :deps [::kv-store]
-                                        :spec (s/keys :req [:crux.db/object-store])
-                                        :meta-args {:crux.db/object-store {:doc "Node local store for documents/objects"
-                                                                           :default "crux.index.KvObjectStore"}}}
-                    ::object-store {:start-fn (fn [{::keys [raw-object-store]} {:keys [crux.lru/doc-cache-size]}]
-                                                (lru/->CachedObjectStore (lru/new-cache doc-cache-size) raw-object-store))
-                                    :deps [::raw-object-store]
-                                    :spec (s/keys :req [:crux.lru/doc-cache-size])
-                                    :meta-args {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
-                                                                          :default lru/default-doc-cache-size}}}
+                    ::object-store 'crux.object-store/kv-object-store
                     ::indexer {:start-fn start-kv-indexer
                                :deps [::kv-store ::tx-log ::object-store]
                                :meta-args {:crux.tx-log/await-tx-timeout
