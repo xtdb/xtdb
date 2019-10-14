@@ -42,7 +42,6 @@
                                             location (keyword location)
                                             environment (keyword environment)]]
                                   [:crux.tx/put
-                                   id
                                    {:crux.db/id id
                                     :location/location location
                                     :location/environment environment}]))]
@@ -62,7 +61,6 @@
                                  condition-id (keyword "condition" device-id)
                                  location-device-id (keyword "location" device-id)]]
                        [:crux.tx/put
-                        condition-id
                         {:crux.db/id condition-id
                          :condition/time time
                          :condition/device-id location-device-id
