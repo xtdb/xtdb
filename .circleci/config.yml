@@ -71,7 +71,6 @@ jobs:
           name: Install datasets for ts-weather-test and ts-devices-test
           command: |
             cd crux-test/
-            mkdir resources
             cd resources
             mkdir ts
             cd ts
