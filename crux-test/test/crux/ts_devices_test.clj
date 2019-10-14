@@ -84,7 +84,7 @@
 (defn with-ts-devices-data [f]
   (if run-ts-devices-tests?
     (let [submit-future (future (submit-ts-devices-data *api*))]
-      (api/sync *api* nil)
+      (api/sync *api* (java.time.Duration/ofMinutes 5))
       (t/is (= 1001000 @submit-future))
       (f))
     (f)))
