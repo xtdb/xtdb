@@ -91,7 +91,7 @@ workflows:
   version: 2
   commit:
     jobs:
-      - long-build:
+      - build:
           filters:
             branches:
               only: master
@@ -104,4 +104,4 @@ workflows:
               only:
                 - master
     jobs:
-      - long-build
+      - build
