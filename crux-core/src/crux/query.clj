@@ -1193,33 +1193,27 @@
 
 (s/def ::query-cache-size nat-int?)
 
-(s/def ::db-options (s/keys :opt [::query-cache-size]
-                            :opt-un [:crux.lru/doc-cache-size]))
+(s/def ::db-options (s/keys :opt [::query-cache-size]))
 
 (defn db
-  (^crux.api.ICruxDatasource [kv]
-   (db kv nil nil nil {}))
-  (^crux.api.ICruxDatasource [kv valid-time]
-   (db kv nil valid-time nil {}))
-  (^crux.api.ICruxDatasource [kv valid-time transact-time]
-   (db kv nil valid-time transact-time {}))
-  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size
-                                                                               doc-cache-size]
-                                                                        :or {query-cache-size default-query-cache-size
-                                                                             doc-cache-size os/default-doc-cache-size}
+  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
+   (db kv object-store valid-time transact-time {}))
+  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size]
+                                                                        :or {query-cache-size default-query-cache-size}
                                                                         :as options}]
+   (assert object-store)
    (s/assert ::db-options options)
    (let [now (cio/next-monotonic-date)]
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache query-cache-size)
                         (lru/get-named-cache kv ::conform-cache query-cache-size)
-                        (or object-store (os/->CachedObjectStore (lru/new-cache doc-cache-size) (os/->KvObjectStore kv)))
+                        object-store
                         (or valid-time now)
                         (or transact-time now)
                         nil))))
 
 (defn submitted-tx-updated-entity?
-  ([kv {:crux.tx/keys [tx-time] :as submitted-tx} eid]
-   (submitted-tx-updated-entity? kv submitted-tx tx-time eid))
-  ([kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} valid-time eid]
-   (= tx-id (:crux.tx/tx-id (entity-tx (db kv valid-time tx-time) eid)))))
+  ([kv object-store {:crux.tx/keys [tx-time] :as submitted-tx} eid]
+   (submitted-tx-updated-entity? kv object-store submitted-tx tx-time eid))
+  ([kv object-store {:crux.tx/keys [tx-id tx-time] :as submitted-tx} valid-time eid]
+   (= tx-id (:crux.tx/tx-id (entity-tx (db kv object-store valid-time tx-time) eid)))))
