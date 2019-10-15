@@ -1,9 +1,6 @@
 (ns crux.space-tutorial-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
-            [clojure.java.io :as io]
-            [docs.examples :as ex]
-            [crux.tx :as tx]
             [crux.io :as cio]))
 
 (t/deftest space-tutorial-test
