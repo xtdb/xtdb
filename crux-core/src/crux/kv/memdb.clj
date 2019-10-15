@@ -7,7 +7,8 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable
-           clojure.lang.Box))
+           clojure.lang.Box)
+  (:gen-class))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
@@ -72,7 +73,7 @@
 (defrecord MemKv [db db-dir persist-on-close?]
   kv/KvStore
   (open [this {:keys [db-dir sync? crux.memdb.kv/persist-on-close?] :as options}]
-    (s/assert ::options options)
+    ;(s/assert ::options options)
     (when sync?
       (log/warn "Using sync? on MemKv has no effect."
                 (if (and db-dir persist-on-close?)
