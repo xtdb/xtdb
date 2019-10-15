@@ -124,6 +124,10 @@
   ;; TODO write.
   (t/is false))
 
+(t/deftest test-conflicting-standalone-props
+  ;; TODO review if modules should access all props, or we seek to constrain (write test for the blow up in standalone)
+  (t/is false))
+
 (t/deftest test-start-up-2-nodes
   (let [kv-data-dir-1 (cio/create-tmpdir "kv-store1")
         kv-data-dir-2 (cio/create-tmpdir "kv-store2")]

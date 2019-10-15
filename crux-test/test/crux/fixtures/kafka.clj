@@ -4,8 +4,10 @@
             [crux.fixtures.kv-only :refer [*kv-module*]]
             [crux.io :as cio]
             [crux.kafka :as k]
-            [crux.kafka.embedded :as ek])
+            [crux.kafka.embedded :as ek]
+            [crux.api :as api])
   (:import [java.util Properties UUID]
+           crux.api.ICruxAsyncIngestAPI
            org.apache.kafka.clients.admin.AdminClient
            org.apache.kafka.clients.consumer.KafkaConsumer
            org.apache.kafka.clients.producer.KafkaProducer))
@@ -74,3 +76,14 @@
                        :crux.kafka/tx-topic *tx-topic*
                        :crux.kafka/doc-topic *doc-topic*
                        :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
+
+(def ^:dynamic ^ICruxAsyncIngestAPI *ingest-client*)
+
+(defn with-ingest-client [f]
+  (assert (bound? #'*kafka-bootstrap-servers*))
+  (let [test-id (UUID/randomUUID)]
+    (with-open [ingest-client (api/new-ingest-client {:crux.kafka/tx-topic *tx-topic*
+                                                      :crux.kafka/doc-topic *doc-topic*
+                                                      :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*})]
+      (binding [*ingest-client* ingest-client]
+        (f)))))

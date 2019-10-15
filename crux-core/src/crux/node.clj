@@ -191,7 +191,6 @@
   (s/assert ::module m)
   (let [{:keys [start-fn deps spec args]} (s/conform ::module m)
         deps (select-keys started deps)
-        ;; TODO review if modules should access all props, or we seek to constrain (write test for the blow up in standalone)
         options (merge options (parse-opts args options))]
     (start-fn deps options)))
 

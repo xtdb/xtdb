@@ -6,7 +6,7 @@
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*] :as apif]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kafka :as fk :refer [*ingest-client*]]
             crux.jdbc
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.http-server :as fh]
@@ -361,24 +361,25 @@
 
 (t/deftest test-ingest-client
   (if (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
-    (with-open [ingest-client (api/new-ingest-client (:options *api*))]
-      (let [submitted-tx @(.submitTxAsync ingest-client [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-        (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
-        (t/is (= #{[:ivan]} (.q (.db *api*)
-                                '{:find [e]
-                                  :where [[e :name "Ivan"]]})))
+    (kf/with-ingest-client
+      (fn []
+        (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
+          (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+          (t/is (= #{[:ivan]} (.q (.db *api*)
+                                  '{:find [e]
+                                    :where [[e :name "Ivan"]]})))
 
-        (with-open [ctx (.newTxLogContext ingest-client)]
-          (let [result (.txLog ingest-client ctx nil false)]
-            (t/is (instance? LazySeq result))
-            (t/is (not (realized? result)))
-            (t/is (= [(assoc submitted-tx
-                             :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
-                     result))
-            (t/is (realized? result))))
+          (with-open [ctx (.newTxLogContext *ingest-client*)]
+            (let [result (.txLog *ingest-client* ctx nil false)]
+              (t/is (instance? LazySeq result))
+              (t/is (not (realized? result)))
+              (t/is (= [(assoc submitted-tx
+                               :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
+                       result))
+              (t/is (realized? result))))
 
-        (with-open [ctx (.newTxLogContext ingest-client)]
-          (t/is (thrown? IllegalArgumentException (.txLog ingest-client ctx nil true))))))
+          (with-open [ctx (.newTxLogContext *ingest-client*)]
+            (t/is (thrown? IllegalArgumentException (.txLog *ingest-client* ctx nil true)))))))
     (t/is true)))
 
 (defn execute-sparql [^RepositoryConnection conn q]
