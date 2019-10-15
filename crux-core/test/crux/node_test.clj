@@ -32,6 +32,14 @@
       (finally
         (cio/delete-dir data-dir)))))
 
+(t/deftest test-option-parsing
+  (with-open [n (n/start {:foo 2
+                          :crux.node/topology {:a {:args {:foo {:crux.config/type :crux.config/int
+                                                                :doc "An argument"}}
+                                                   :start-fn (fn [_ {:keys [foo]}]
+                                                               (t/is (= 2 foo)))}}})]
+    (t/is true)))
+
 (t/deftest test-nodes-shutdown-in-order
   (let [started (atom [])
         stopped (atom [])]

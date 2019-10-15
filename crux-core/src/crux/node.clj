@@ -226,9 +226,7 @@
                                        :crux.config/type :crux.config/nat-int}}}})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
-  (let [topology (if (s/valid? ::topology-map topology)
-                   topology
-                   (resolve-topology-id topology))
+  (let [topology (if (map? topology) topology (resolve-topology-id topology))
         _  (s/assert ::topology-map topology)
         topology-overrides (select-keys options (keys topology))]
     (merge topology (zipmap (keys topology-overrides)
