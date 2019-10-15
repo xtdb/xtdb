@@ -1189,28 +1189,14 @@
   (transactionTime [_]
     transact-time))
 
-(def ^:const default-query-cache-size 10240)
-
-(s/def ::query-cache-size nat-int?)
-
-(s/def ::db-options (s/keys :opt [::query-cache-size]))
-
-(defn db
-  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
-   (db kv object-store valid-time transact-time {}))
-  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size]
-                                                                        :or {query-cache-size default-query-cache-size}
-                                                                        :as options}]
-   (assert object-store)
-   (s/assert ::db-options options)
-   (let [now (cio/next-monotonic-date)]
-     (->QueryDatasource kv
-                        (lru/get-named-cache kv ::query-cache query-cache-size)
-                        (lru/get-named-cache kv ::conform-cache query-cache-size)
-                        object-store
-                        (or valid-time now)
-                        (or transact-time now)
-                        nil))))
+(defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
+  (->QueryDatasource kv
+                     (lru/get-named-cache kv ::query-cache)
+                     (lru/get-named-cache kv ::conform-cache)
+                     object-store
+                     valid-time
+                     transact-time
+                     nil))
 
 (defn submitted-tx-updated-entity?
   ([kv object-store {:crux.tx/keys [tx-time] :as submitted-tx} eid]

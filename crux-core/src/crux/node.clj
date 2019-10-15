@@ -41,14 +41,14 @@
   ICruxAPI
   (db [this]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (q/db kv-store object-store tx-time tx-time options)))
+      (q/db kv-store object-store tx-time tx-time)))
 
   (db [this valid-time]
     (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (.db this valid-time transact-time)))
 
   (db [_ valid-time transact-time]
-    (q/db kv-store object-store valid-time transact-time options))
+    (q/db kv-store object-store valid-time transact-time))
 
   (document [_ content-hash]
     (with-open [snapshot (kv/new-snapshot kv-store)]

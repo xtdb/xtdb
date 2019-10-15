@@ -148,14 +148,14 @@
   (->CachedSnapshot snapshot close-snapshot? (StampedLock.) (atom #{})))
 
 (defprotocol CacheProvider
-  (get-named-cache [this cache-name cache-size]))
+  (get-named-cache [this cache-name]))
 
 ;; TODO: this should be changed to something more sensible, this is to
 ;; simplify API usage, and the kv instance is the main
 ;; object. Potentially these caches should simply just live in the
 ;; main node directly, but that requires passing more stuff around
 ;; to the lower levels.
-(defrecord CacheProvidingKvStore [kv cache-state]
+(defrecord CacheProvidingKvStore [kv cache-state cache-size]
   kv/KvStore
   (open [this options]
     (assoc this :kv (kv/open kv options)))
@@ -189,18 +189,13 @@
     (.close ^Closeable kv))
 
   CacheProvider
-  (get-named-cache [this cache-name cache-size]
+  (get-named-cache [this cache-name]
     (get (swap! cache-state
                 update
                 cache-name
                 (fn [cache]
                   (or cache (new-cache cache-size))))
          cache-name)))
-
-(defn new-cache-providing-kv-store [kv]
-  (if (instance? CacheProvidingKvStore kv)
-    kv
-    (->CacheProvidingKvStore kv (atom {}))))
 
 (defrecord CachedIndex [idx index-cache]
   db/Index
@@ -215,10 +210,21 @@
 (defn new-cached-index [idx cache-size]
   (->CachedIndex idx (new-cache cache-size)))
 
-(defn start-kv-store ^java.io.Closeable [kv-store {:keys [crux.kv/check-and-store-index-version] :as options}]
-  (let [kv (-> kv-store
-               (new-cache-providing-kv-store)
-               (kv/open options))]
+(def ^:const default-query-cache-size 10240)
+
+(def options
+  (merge kv/options
+         {::query-cache-size
+          {:doc "Query Cache Size"
+           :default default-query-cache-size
+           :crux.config/type :crux.config/nat-int}}))
+
+(defn start-kv-store ^java.io.Closeable [kv {:keys [crux.kv/check-and-store-index-version
+                                                          crux.lru/query-cache-size] :as options}]
+  (let [kv (if (instance? CacheProvidingKvStore kv)
+             kv
+             (->CacheProvidingKvStore kv (atom {}) query-cache-size))
+        kv (kv/open kv options)]
     (try
       (if check-and-store-index-version
         (idx/check-and-store-index-version kv)

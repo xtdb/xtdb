@@ -315,7 +315,7 @@
 
 (def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
                      (lru/start-kv-store (map->RocksJNRKv {:db-dir db-dir}) options))
-         :args (merge kv/options
+         :args (merge lru/options
                       {::db-options {:doc "RocksDB Options"
                                      :crux.config/type :crux.config/string}
                        ::disable-wal? {:doc "Disable Write Ahead Log"
