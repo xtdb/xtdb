@@ -195,23 +195,24 @@
 
 (defn start-modules [topology options]
   (s/assert ::topology-map topology)
-  (let [started (atom [])
-        start-order (start-order topology)
+  (let [started-order (atom [])
+        started (atom {})
         started-modules (try
                           (into {}
-                                (for [k start-order]
+                                (for [k (start-order topology)]
                                   (let [m (topology k)
                                         _ (assert m (str "Could not find module " k))
                                         m (start-module m @started options)]
-                                    (swap! started conj m)
+                                    (swap! started-order conj m)
+                                    (swap! started assoc k m)
                                     [k m])))
                           (catch Throwable t
-                            (doseq [c (reverse @started)]
+                            (doseq [c (reverse @started-order)]
                               (when (instance? Closeable c)
                                 (cio/try-close c)))
                             (throw t)))]
     [started-modules (fn []
-                       (doseq [m (reverse @started)
+                       (doseq [m (reverse @started-order)
                                :when (instance? Closeable m)]
                          (cio/try-close m)))]))
 

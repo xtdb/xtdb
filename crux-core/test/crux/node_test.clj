@@ -36,7 +36,8 @@
   (let [started (atom [])
         stopped (atom [])]
     (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
-                                                     :start-fn (fn [_ _]
+                                                     :start-fn (fn [{:keys [b]} _]
+                                                                 (assert b)
                                                                  (swap! started conj :a)
                                                                  (reify java.io.Closeable
                                                                    (close [_]
