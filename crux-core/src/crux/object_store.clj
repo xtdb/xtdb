@@ -1,6 +1,5 @@
 (ns crux.object-store
   (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as i]
@@ -142,26 +141,23 @@
   Closeable
   (close [_]))
 
-(s/def ::doc-cache-size nat-int?)
-
 (def ^:const default-doc-cache-size (* 128 1024))
+
+(def doc-cache-size-opt {:doc "Cache size to use for document store."
+                         :default default-doc-cache-size
+                         :crux.config/type :crux.config/nat-int})
 
 (def kv-object-store
   {:start-fn (fn [{:keys [crux.node/kv-store]} {::keys [doc-cache-size]}]
                (->CachedObjectStore (lru/new-cache doc-cache-size) (->KvObjectStore kv-store)))
    :deps [:crux.node/kv-store]
-   :spec (s/keys :req [::doc-cache-size])
-   :meta-args {::doc-cache-size {:doc "Cache size to use for document store"
-                                 :default default-doc-cache-size}}})
-
-(s/def ::file-object-store-dir string?)
+   :args {::doc-cache-size doc-cache-size-opt}})
 
 (def file-object-store
   {:start-fn (fn [{:keys [crux.node/kv-store]} {::keys [doc-cache-size]}]
                (->CachedObjectStore (lru/new-cache doc-cache-size) (->FileObjectStore)))
    :deps [:crux.node/kv-store]
-   :spec (s/keys :req [::file-object-store-dir
-                       ::doc-cache-size])
-   :meta-args {::file-object-store-dir {:doc "Directory to store objects"}
-               ::doc-cache-size {:doc "Cache size to use for document store"
-                                 :default default-doc-cache-size}}})
+   :args {::file-object-store-dir {:doc "Directory to store objects"
+                                   :required? true
+                                   :crux.config/type :crux.config/string}
+          ::doc-cache-size doc-cache-size-opt}})

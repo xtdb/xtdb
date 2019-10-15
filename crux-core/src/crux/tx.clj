@@ -310,8 +310,6 @@
 
 (def ^:const default-await-tx-timeout 10000)
 
-(s/def :crux.tx-log/await-tx-timeout nat-int?)
-
 (defn latest-completed-tx-time [consumer-state]
   (let [consumer-states (->> consumer-state
                              (vals)

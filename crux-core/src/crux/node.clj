@@ -5,6 +5,7 @@
             [com.stuartsierra.dependency :as dep]
             [crux.backup :as backup]
             [crux.codec :as c]
+            [crux.config :as cc]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
@@ -140,10 +141,11 @@
 (s/def ::topology-id (fn [id] (or (string? id) (keyword? id) (symbol? id))))
 (s/def ::start-fn fn?)
 (s/def ::deps (s/coll-of keyword?))
-(s/def ::spec (fn [s] (or (s/spec? s) (s/get-spec s))))
-(s/def ::meta-args (s/map-of keyword?
-                             (s/keys :req-un [::doc]
-                                     :opt-un [::default])))
+(s/def ::args (s/map-of keyword?
+                        (s/keys :req [:crux.config/type]
+                                :req-un [:crux.config/doc]
+                                :opt-un [:crux.config/default
+                                         :crux.config/required?])))
 
 (defn- resolve-topology-id [id]
   (s/assert ::topology-id id)
@@ -159,7 +161,7 @@
                                  (if (= :module-id m-or-id)
                                    (resolve-topology-id s) s))))
                        (s/keys :req-un [::start-fn]
-                               :opt-un [::deps ::spec ::meta-args])))
+                               :opt-un [::deps ::args])))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
@@ -175,49 +177,57 @@
 
 (defn start-module [m started options]
   (s/assert ::module m)
-  (let [{:keys [start-fn deps spec meta-args]} (s/conform ::module m)
+  (let [{:keys [start-fn deps spec args]} (s/conform ::module m)
         deps (select-keys started deps)
-        default-options (into {} (map (juxt key (comp :default val))
-                                      (filter #(find (val %) :default) meta-args)))
-        options (merge default-options options)]
-    (when spec
-      (s/assert spec options))
+        options (into options
+                      (for [[k {:keys [crux.config/type default required?]}] args
+                            :let [[validate-fn parse-fn] type
+                                  v (or (some-> (get options k) parse-fn) default)]]
+                        (do
+                          (when (and required? (not v))
+                            (throw (IllegalArgumentException. (format "Arg %s required by module %s" k (prn-str m)))))
+                          (when (and v (not (validate-fn v)))
+                            (throw (IllegalArgumentException. (format "Arg %s invalid" k))))
+                          [k v])))]
     (start-fn deps options)))
 
 (s/def ::topology-map (s/map-of keyword? ::module))
 
 (defn start-modules [topology options]
   (s/assert ::topology-map topology)
-  (let [started (atom {})
+  (let [started (atom [])
         start-order (start-order topology)
         started-modules (try
-                          (for [k start-order]
-                            (let [m (topology k)
-                                  _ (assert m (str "Could not find module " k))
-                                  m (start-module m @started options)]
-                              (swap! started assoc k m)
-                              [k m]))
+                          (into {}
+                                (for [k start-order]
+                                  (let [m (topology k)
+                                        _ (assert m (str "Could not find module " k))
+                                        m (start-module m @started options)]
+                                    (swap! started conj m)
+                                    [k m])))
                           (catch Throwable t
                             (doseq [c (reverse @started)]
                               (when (instance? Closeable c)
                                 (cio/try-close c)))
                             (throw t)))]
-    [(into {} started-modules) (fn []
-                                 (doseq [k (reverse start-order)
-                                         :let [m (get @started k)]
-                                         :when (instance? Closeable m)]
-                                   (cio/try-close m)))]))
+    [started-modules (fn []
+                       (doseq [m (reverse @started)
+                               :when (instance? Closeable m)]
+                         (cio/try-close m)))]))
 
 (def base-topology {::kv-store 'crux.kv.rocksdb/kv
                     ::object-store 'crux.object-store/kv-object-store
                     ::indexer {:start-fn start-kv-indexer
                                :deps [::kv-store ::tx-log ::object-store]
-                               :meta-args {:crux.tx-log/await-tx-timeout
-                                           {:doc "Timeout waiting for tx-time to be reached by a Crux node"
-                                            :default crux.tx/default-await-tx-timeout}}}})
+                               :args {:crux.tx-log/await-tx-timeout
+                                      {:doc "Timeout waiting for tx-time to be reached by a Crux node"
+                                       :default crux.tx/default-await-tx-timeout
+                                       :crux.config/type :crux.config/nat-int}}}})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
-  (let [topology (resolve-topology-id topology)
+  (let [topology (if (s/valid? ::topology-map topology)
+                   topology
+                   (resolve-topology-id topology))
         _  (s/assert ::topology-map topology)
         topology-overrides (select-keys options (keys topology))]
     (merge topology (zipmap (keys topology-overrides)

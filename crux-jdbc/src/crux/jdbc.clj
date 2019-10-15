@@ -170,7 +170,13 @@
 
 (def topology (merge n/base-topology
                      {::ds {:start-fn start-jdbc-ds
-                            :spec (s/keys :req-un [::dbtype ::dbname])}
+                            :spec (s/keys :req-un [::dbtype ::dbname])
+                            :args {:dbtype {:doc "Database type"
+                                            :required? true
+                                            :crux.config/type :crux.config/string}
+                                   :dbname {:doc "Database name"
+                                            :required? true
+                                            :crux.config/type :crux.config/string}}}
                       ::event-log-consumer {:start-fn start-event-log-consumer
                                             :deps [:crux.node/indexer ::ds]}
                       :crux.node/tx-log {:start-fn start-tx-log

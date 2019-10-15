@@ -10,21 +10,87 @@
            java.util.Date))
 
 (t/deftest test-properties-to-topology
-  (let [t (n/options->topology {:crux.node/topology :crux.jdbc/topology
-                                :crux.node/kv-store :crux.kv.rocksdb/kv})]
+  (let [t (n/options->topology {:crux.node/topology :crux.jdbc/topology})]
 
     (t/is (= (-> t :crux.node/tx-log) (-> crux.jdbc/topology :crux.node/tx-log)))
-    (t/is (= (-> t :crux.node/kv-store) crux.kv.rocksdb/kv))))
+    (t/is (= (-> t :crux.node/kv-store) 'crux.kv.rocksdb/kv)))
+
+  (t/testing "override module in topology"
+    (let [t (n/options->topology {:crux.node/topology :crux.jdbc/topology
+                                  :crux.node/kv-store :crux.kv.memdb/kv})]
+
+      (t/is (= (-> t :crux.node/tx-log) (-> crux.jdbc/topology :crux.node/tx-log)))
+      (t/is (= (-> t :crux.node/kv-store) crux.kv.memdb/kv)))))
+
+(t/deftest test-start-node-should-throw-missing-argument-exception
+  (let [data-dir (cio/create-tmpdir "kv-store")]
+    (try
+      (with-open [n (n/start {:crux.node/topology :crux.jdbc/topology})]
+        (t/is false))
+      (catch Throwable e
+        (t/is (re-find #"Arg :dbtype required by module" (.getMessage e))))
+      (finally
+        (cio/delete-dir data-dir)))))
+
+(t/deftest test-nodes-shutdown-in-order
+  (let [started (atom [])
+        stopped (atom [])]
+    (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
+                                                     :start-fn (fn [_ _]
+                                                                 (swap! started conj :a)
+                                                                 (reify java.io.Closeable
+                                                                   (close [_]
+                                                                     (swap! stopped conj :a))))}
+                                                 :b {:start-fn (fn [_ _]
+                                                                 (swap! started conj :b)
+                                                                 (reify java.io.Closeable
+                                                                   (close [_]
+                                                                     (swap! stopped conj :b))))}}})]
+      (t/is (= [:b :a] @started)))
+    (t/is (= [:a :b] @stopped)))
+
+  (t/testing "With Exception"
+    (let [started (atom [])
+          stopped (atom [])]
+      (try
+        (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
+                                                         :start-fn (fn [_ _]
+                                                                     (throw (Exception.)))}
+                                                     :b {:start-fn (fn [_ _]
+                                                                     (swap! started conj :b)
+                                                                     (reify java.io.Closeable
+                                                                       (close [_]
+                                                                         (swap! stopped conj :b))))}}})]
+          (t/is false))
+        (catch Exception e))
+      (t/is (= [:b] @started))
+      (t/is (= [:b] @stopped)))))
+
+(t/deftest test-can-start-JDBC-node
+  (let [data-dir (cio/create-tmpdir "kv-store")]
+    (try
+      (with-open [n (n/start {:crux.node/topology :crux.jdbc/topology
+                              :crux.kv/db-dir (str data-dir)
+                              :dbtype "h2"
+                              :dbname "cruxtest"})]
+        (t/is n))
+      (finally
+        (cio/delete-dir data-dir)))))
 
 (t/deftest test-can-set-standalone-kv-store
   (let [event-log-dir (cio/create-tmpdir "kv-store")]
     (try
       (with-open [n (n/start {:crux.node/topology :crux.standalone/topology
+                              :crux.kv/kv-store :crux.kv.memdb/kv
                               :crux.standalone/event-log-dir (str event-log-dir)
                               :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
         (t/is n))
       (finally
         (cio/delete-dir event-log-dir)))))
+
+;; todo test standalone blows up if you
+;; todo test can set rocks db options
+;; make the type mandatory
 
 (defn- load-props [f]
   (let [props (java.util.Properties.)]

@@ -1,7 +1,6 @@
 (ns crux.kv
   "Protocols for KV backend implementations."
-  (:require [clojure.spec.alpha :as s]
-            [crux.io :as cio]
+  (:require [crux.io :as cio]
             [crux.status :as status])
   (:refer-clojure :exclude [next])
   (:import java.io.Closeable
@@ -30,24 +29,19 @@
   (kv-name [this]))
 ;; end::KvStore[]
 
-(s/def ::db-dir string?)
-(s/def ::sync? boolean?)
-(s/def ::check-and-store-index-version boolean?)
-
-(s/def ::options (s/keys :req [::db-dir]
-                         :opt [::sync?
-                               ::check-and-store-index-version]))
-
 (def options
   {:crux.kv/db-dir
    {:doc "Directory to store K/V files"
-    :default "data"}
+    :default "data"
+    :crux.config/type :crux.config/string}
    :crux.kv/sync?
    {:doc "Sync the KV store to disk after every write."
-    :default false}
+    :default false
+    :crux.config/type :crux.config/boolean}
    :crux.kv/check-and-store-index-version
    {:doc "Check and store index version upon start"
-    :default true}})
+    :default true
+    :crux.config/type :crux.config/boolean}})
 
 (extend-protocol status/Status
   crux.kv.KvStore

@@ -1,7 +1,6 @@
 (ns crux.kv.memdb
   "In-memory KV backend for Crux."
   (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -113,11 +112,9 @@
     (when (and db-dir persist-on-close?)
       (persist-db db-dir db))))
 
-(s/def ::persist-on-close? boolean?)
-
 (def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir crux.kv.memdb/persist-on-close?] :as options}]
                      (lru/start-kv-store (map->MemKv {:db-dir db-dir :persist-on-close? persist-on-close?}) options))
-         :spec (s/and :crux.kv/options
-                      (s/keys :opt [::persist-on-close?]))
-         :meta-args (merge kv/options
-                           {::persist-on-close? {:doc "Persist Mem Db on close"}})})
+         :args (merge kv/options
+                      {::persist-on-close? {:doc "Persist Mem Db on close"
+                                            :default false
+                                            :crux.config/type :crux.config/boolean}})})
