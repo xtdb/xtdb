@@ -125,8 +125,19 @@
   (t/is false))
 
 (t/deftest test-conflicting-standalone-props
-  ;; TODO review if modules should access all props, or we seek to constrain (write test for the blow up in standalone)
-  (t/is false))
+  (let [event-log-dir (cio/create-tmpdir "kv-store")]
+    (try
+      (with-open [n (n/start {:crux.node/topology :crux.standalone/topology
+                              :crux.kv/kv-store :crux.kv.memdb/kv
+                              :crux.standalone/event-log-sync-interval-ms 1000
+                              :crux.standalone/event-log-sync? true
+                              :crux.standalone/event-log-dir (str event-log-dir)
+                              :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
+        (t/is false))
+      (catch java.lang.AssertionError e
+        (t/is true))
+      (finally
+        (cio/delete-dir event-log-dir)))))
 
 (t/deftest test-start-up-2-nodes
   (let [kv-data-dir-1 (cio/create-tmpdir "kv-store1")
