@@ -101,13 +101,12 @@
         tx-log-entry)))
 
   (sync [_ timeout]
-    (tx/await-no-consumer-lag
-     indexer
-     (cond-> options
-       timeout (assoc :crux.tx-log/await-tx-timeout (.toMillis timeout)))))
+    (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
+                                          (:crux.tx-log/await-tx-timeout options))))
 
   (sync [_ tx-time timeout]
-    (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout (.toMillis timeout)})))
+    (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
+                                          (:crux.tx-log/await-tx-timeout options))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [_ tx-ops]
@@ -175,21 +174,25 @@
                        (into dep-order))]
     dep-order))
 
+(defn- parse-opts [args options]
+  (into {}
+        (for [[k {:keys [crux.config/type default required?]}] args
+              :let [[validate-fn parse-fn] (s/conform :crux.config/type type)
+                    v (some-> (get options k) parse-fn)
+                    v (if (nil? v) default v)]]
+          (do
+            (when (and required? (not v))
+              (throw (IllegalArgumentException. (format "Arg %s required" k))))
+            (when (and v (not (validate-fn v)))
+              (throw (IllegalArgumentException. (format "Arg %s invalid" k))))
+            [k v]))))
+
 (defn start-module [m started options]
   (s/assert ::module m)
   (let [{:keys [start-fn deps spec args]} (s/conform ::module m)
         deps (select-keys started deps)
-        options (into options
-                      (for [[k {:keys [crux.config/type default required?]}] args
-                            :let [[validate-fn parse-fn] type
-                                  v (some-> (get options k) parse-fn)
-                                  v (if (nil? v) default v)]]
-                        (do
-                          (when (and required? (not v))
-                            (throw (IllegalArgumentException. (format "Arg %s required by module %s" k (prn-str m)))))
-                          (when (and v (not (validate-fn v)))
-                            (throw (IllegalArgumentException. (format "Arg %s invalid" k))))
-                          [k v])))]
+        ;; TODO review if modules should access all props, or we seek to constrain (write test for the blow up in standalone)
+        options (merge options (parse-opts args options))]
     (start-fn deps options)))
 
 (s/def ::topology-map (s/map-of keyword? ::module))
@@ -220,11 +223,7 @@
 (def base-topology {::kv-store 'crux.kv.rocksdb/kv
                     ::object-store 'crux.object-store/kv-object-store
                     ::indexer {:start-fn start-kv-indexer
-                               :deps [::kv-store ::tx-log ::object-store]
-                               :args {:crux.tx-log/await-tx-timeout
-                                      {:doc "Timeout waiting for tx-time to be reached by a Crux node"
-                                       :default crux.tx/default-await-tx-timeout
-                                       :crux.config/type :crux.config/nat-int}}}})
+                               :deps [::kv-store ::tx-log ::object-store]}})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
   (let [topology (if (map? topology) topology (resolve-topology-id topology))
@@ -233,13 +232,20 @@
     (merge topology (zipmap (keys topology-overrides)
                             (map resolve-topology-id (vals topology-overrides))))))
 
+(def node-args
+  {:crux.tx-log/await-tx-timeout
+   {:doc "Default timeout in milliseconds for waiting."
+    :default 10000
+    :crux.config/type :crux.config/nat-int}})
+
 (defn start ^ICruxAPI [options]
   (let [topology (options->topology options)
         [{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules topology options)
-        status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))]
+        status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))
+        node-opts (parse-opts node-args options)]
     (map->CruxNode {:close-fn close-fn
                     :status-fn status-fn
-                    :options options
+                    :options node-opts
                     :kv-store kv-store
                     :tx-log tx-log
                     :indexer indexer

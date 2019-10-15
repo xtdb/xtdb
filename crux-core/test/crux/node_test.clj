@@ -28,7 +28,7 @@
       (with-open [n (n/start {:crux.node/topology :crux.jdbc/topology})]
         (t/is false))
       (catch Throwable e
-        (t/is (re-find #"Arg :dbtype required by module" (.getMessage e))))
+        (t/is (re-find #"Arg :dbtype required" (.getMessage e))))
       (finally
         (cio/delete-dir data-dir)))))
 
