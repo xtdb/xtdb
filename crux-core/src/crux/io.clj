@@ -38,8 +38,9 @@
         (.setDaemon true))))
 
 (defn register-cleaner [object action]
-  (when-not (.isAlive cleaner-thread)
-    (.start cleaner-thread))
+  (locking cleaner-thread
+    (when-not (.isAlive cleaner-thread)
+      (.start cleaner-thread)))
   (.put ref->cleanup-action (PhantomReference. object reference-queue) action))
 
 (def ^:private last-monotonic-date (atom (Date.)))

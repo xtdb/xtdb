@@ -10,7 +10,14 @@ import clojure.lang.IFn;
  * Public API entry point for starting a {@link ICruxAPI}.
  */
 public class Crux {
+
+    private static IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
+
     private Crux() {
+    }
+
+    static {
+        requiringResolve.invoke(Clojure.read("crux.standalone/topology"));
     }
 
     /**
