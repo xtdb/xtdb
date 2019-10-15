@@ -21,6 +21,7 @@ public class Crux {
         require.invoke(Clojure.read("crux.lru"));
         require.invoke(Clojure.read("crux.memory"));
         require.invoke(Clojure.read("crux.io"));
+        require.invoke(Clojure.read("crux.tx"));
         require.invoke(Clojure.read("crux.codec"));
         require.invoke(Clojure.read("crux.kv.memdb"));
     }

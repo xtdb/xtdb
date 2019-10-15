@@ -12,11 +12,11 @@
                  [com.taoensso/encore "2.114.0"]
                  [org.agrona/agrona "1.0.7"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]]
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
+  :profiles
+  {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+   :uberjar {:aot :all}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
-  :omit-source false
-  :aot :all
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
