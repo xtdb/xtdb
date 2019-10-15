@@ -116,12 +116,12 @@
     (fkv/with-kv-store
       (fn []
         (kv/store fkv/*kv* [[(long->bytes 1) (.getBytes "Crux")]])
-        (t/is (= "Crux" (String. ^bytes (value fkv/*kv* (long->bytes 1))))))))
+        (t/is (= "Crux" (String. ^bytes (value fkv/*kv* (long->bytes 1)))))))))
 
-  (t/deftest test-sanity-check-can-fsync
-    (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
-    (kv/fsync *kv*)
-    (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))))
+(t/deftest test-sanity-check-can-fsync
+  (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
+  (kv/fsync *kv*)
+  (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1))))))
 
 (t/deftest test-can-get-from-snapshot
   (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])

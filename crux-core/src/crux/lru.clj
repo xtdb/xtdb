@@ -220,7 +220,7 @@
            :crux.config/type :crux.config/nat-int}}))
 
 (defn start-kv-store ^java.io.Closeable [kv {:keys [crux.kv/check-and-store-index-version
-                                                          crux.lru/query-cache-size] :as options}]
+                                                    crux.lru/query-cache-size] :as options}]
   (let [kv (if (instance? CacheProvidingKvStore kv)
              kv
              (->CacheProvidingKvStore kv (atom {}) query-cache-size))

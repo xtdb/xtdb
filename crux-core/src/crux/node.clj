@@ -182,7 +182,8 @@
         options (into options
                       (for [[k {:keys [crux.config/type default required?]}] args
                             :let [[validate-fn parse-fn] type
-                                  v (or (some-> (get options k) parse-fn) default)]]
+                                  v (some-> (get options k) parse-fn)
+                                  v (if (nil? v) default v)]]
                         (do
                           (when (and required? (not v))
                             (throw (IllegalArgumentException. (format "Arg %s required by module %s" k (prn-str m)))))

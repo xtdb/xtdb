@@ -34,10 +34,16 @@
 
 (t/deftest test-option-parsing
   (with-open [n (n/start {:foo 2
+                          :boo false
                           :crux.node/topology {:a {:args {:foo {:crux.config/type :crux.config/int
-                                                                :doc "An argument"}}
-                                                   :start-fn (fn [_ {:keys [foo]}]
-                                                               (t/is (= 2 foo)))}}})]
+                                                                :doc "An argument"
+                                                                :default 3}
+                                                          :boo {:crux.config/type :crux.config/boolean
+                                                                :doc "An argument"
+                                                                :default true}}
+                                                   :start-fn (fn [_ {:keys [foo boo]}]
+                                                               (t/is (= 2 foo))
+                                                               (t/is (= false boo)))}}})]
     (t/is true)))
 
 (t/deftest test-nodes-shutdown-in-order
