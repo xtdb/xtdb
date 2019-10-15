@@ -328,52 +328,51 @@
 
 (def default-options {::bootstrap-servers
                       {:doc "URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
-                       :default "localhost:9092"}
+                       :default "localhost:9092"
+                       :crux.config/type :crux.config/string}
                       ::tx-topic
                       {:doc "Kafka transaction topic"
-                       :default "crux-transaction-log"}
+                       :default "crux-transaction-log"
+                       :crux.config/type :crux.config/string}
                       ::doc-topic
                       {:doc "Kafka document topic"
-                       :default "crux-docs"}
+                       :default "crux-docs"
+                       :crux.config/type :crux.config/string}
                       ::doc-partitions
                       {:doc "Partitions for document topic"
-                       :default 1}
+                       :default 1
+                       :crux.config/type :crux.config/nat-int}
                       ::create-topics
                       {:doc "Create topics if they do not exist"
-                       :default true}
+                       :default true
+                       :crux.config/type :crux.config/boolean}
                       ::replication-factor
                       {:doc "Level of durability for Kakfa"
-                       :default 1}
+                       :default 1
+                       :crux.config/type :crux.config/nat-int}
                       ::group-id
                       {:doc "Kafka client group.id"
                        :default (str/trim (or (System/getenv "HOSTNAME")
                                               (System/getenv "COMPUTERNAME")
-                                              (.toString (java.util.UUID/randomUUID))))}
+                                              (.toString (java.util.UUID/randomUUID))))
+                       :crux.config/type :crux.config/string}
                       ::kafka-properties-file
-                      {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."}
+                      {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."
+                       :crux.config/type :crux.config/string}
                       ::kafka-properties-map
-                      {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."}})
+                      {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."
+                       :crux.config/type [map? identity]}})
 
 (def indexing-consumer {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]} options]
                                     (let [kafka-config (derive-kafka-config options)
                                           consumer-config (merge {"group.id" (::group-id options)} kafka-config)]
                                       (start-indexing-consumer admin-client consumer-config indexer options)))
                         :deps [:crux.node/indexer ::admin-client]
-                        :spec (s/keys :req [::bootstrap-servers
-                                            ::tx-topic
-                                            ::doc-topic
-                                            ::doc-partitions
-                                            ::create-topics
-                                            ::replication-factor
-                                            ::group-id])
-                        :meta-args default-options})
+                        :args default-options})
 
 (def admin-client {:start-fn (fn [_ options]
                                (create-admin-client (derive-kafka-config options)))
-                   :spec (s/keys :req [::bootstrap-servers]
-                                 :opt [::kafka-properties-file
-                                       ::kafka-properties-map])
-                   :meta-args default-options})
+                   :args default-options})
 
 (def admin-wrapper {:start-fn (fn [{::keys [admin-client]} _]
                                 (reify Closeable
@@ -382,20 +381,12 @@
 
 (def producer {:start-fn (fn [_ options]
                            (create-producer (derive-kafka-config options)))
-               :spec (s/keys :req [::bootstrap-servers]
-                       :opt [::kafka-properties-file
-                             ::kafka-properties-map])
-               :meta-args default-options})
+               :args default-options})
 
 (def tx-log {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
                          (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
              :deps [::producer]
-             :spec (s/keys :req [::bootstrap-servers
-                                 ::tx-topic
-                                 ::doc-topic]
-                           :opt [::kafka-properties-file
-                                 ::kafka-properties-map])
-             :meta-args default-options})
+             :args default-options})
 
 (def topology (merge n/base-topology
                      {:crux.node/tx-log tx-log
