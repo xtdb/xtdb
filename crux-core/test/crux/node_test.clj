@@ -97,10 +97,6 @@
       (finally
         (cio/delete-dir event-log-dir)))))
 
-;; todo test standalone blows up if you
-;; todo test can set rocks db options
-;; make the type mandatory
-
 (defn- load-props [f]
   (let [props (java.util.Properties.)]
     (.load props (clojure.java.io/reader f))
@@ -113,9 +109,14 @@
     (try
       (with-open [n (n/start (assoc (load-props (clojure.java.io/resource "sample.properties"))
                                     :crux.standalone/event-log-dir (str event-log-dir)))]
-        (t/is (instance? MobergTxLog (-> n :tx-log))))
+        (t/is (instance? MobergTxLog (-> n :tx-log)))
+        (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))
       (finally
         (cio/delete-dir event-log-dir)))))
+
+(t/deftest test-can-set-rocks-options
+  ;; TODO write.
+  (t/is false))
 
 (t/deftest test-start-up-2-nodes
   (let [kv-data-dir-1 (cio/create-tmpdir "kv-store1")
