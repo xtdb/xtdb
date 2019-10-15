@@ -20,7 +20,6 @@
   :middleware [leiningen.project-version/middleware]
   :plugins [[lein-sub "0.3.0"]]
   :sub ~modules
-  :aot :all
   :omit-source false
   :aliases {"check" ["sub" "-s" ~(clojure.string/join ":" (remove #{"crux-jdbc"} modules)) "check"]
             "build" ["do" ["sub" "install"] ["sub" "test"]]}
