@@ -39,6 +39,7 @@ jobs:
       - run: lein do version, sub test, check
 
       - run: ./.circleci/bin/deploy_clojars.sh
+
   long-build:
     docker:
       # CircleCI maintains a library of pre-built images
@@ -64,10 +65,21 @@ jobs:
           - v1-dependencies-{{ checksum "project.clj" }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
-
       - run: lein sub install
       - run: lein deps
-
+      - run:
+          name: Install datasets for ts-weather-test and ts-devices-test
+          command: |
+            cd crux-test/
+            cd resources
+            mkdir ts
+            cd ts
+            mkdir data
+            cd data
+            wget https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
+            tar -xzf weather_small.tar.gz
+            wget https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
+            tar -xzf devices_small.tar.gz
       - save_cache:
           paths:
             - ~/.m2
@@ -92,4 +104,4 @@ workflows:
               only:
                 - master
     jobs:
-      - long-build
+      - build

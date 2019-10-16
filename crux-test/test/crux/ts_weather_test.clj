@@ -41,7 +41,6 @@
                                             location (keyword location)
                                             environment (keyword environment)]]
                                   [:crux.tx/put
-                                   id
                                    {:crux.db/id id
                                     :location/location location
                                     :location/environment environment}]))]
@@ -61,7 +60,6 @@
                                  condition-id (keyword "condition" device-id)
                                  location-device-id (keyword "location" device-id)]]
                        [:crux.tx/put
-                        condition-id
                         {:crux.db/id condition-id
                          :condition/time time
                          :condition/device-id location-device-id
@@ -75,7 +73,7 @@
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
     (let [submit-future (future (submit-ts-weather-data *api*))]
-      (api/sync *api* nil)
+      (api/sync *api* (java.time.Duration/ofMinutes 20))
       (t/is (= 1001000 @submit-future))
       (f))
     (f)))
