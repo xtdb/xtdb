@@ -5,7 +5,8 @@
             crux.kv.memdb
             crux.kv.rocksdb
             crux.moberg
-            [crux.node :as n])
+            [crux.node :as n]
+            [crux.config :as cc])
   (:import crux.moberg.MobergTxLog
            java.util.Date))
 
@@ -103,26 +104,15 @@
       (finally
         (cio/delete-dir event-log-dir)))))
 
-(defn- load-props [f]
-  (let [props (java.util.Properties.)]
-    (.load props (clojure.java.io/reader f))
-    (into {}
-          (for [[k v] props]
-            [(keyword k) v]))))
-
 (t/deftest test-properties-file-to-node
   (let [event-log-dir (cio/create-tmpdir "kv-store")]
     (try
-      (with-open [n (n/start (assoc (load-props (clojure.java.io/resource "sample.properties"))
+      (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
                                     :crux.standalone/event-log-dir (str event-log-dir)))]
         (t/is (instance? MobergTxLog (-> n :tx-log)))
         (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))
       (finally
         (cio/delete-dir event-log-dir)))))
-
-(t/deftest test-can-set-rocks-options
-  ;; TODO write.
-  (t/is false))
 
 (t/deftest test-conflicting-standalone-props
   (let [event-log-dir (cio/create-tmpdir "kv-store")]

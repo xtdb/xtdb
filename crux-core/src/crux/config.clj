@@ -1,5 +1,7 @@
 (ns crux.config
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [clojure.java.io :as io])
+  (:import java.util.Properties))
 
 (def property-types
   {::boolean [boolean? (fn [x]
@@ -18,3 +20,10 @@
 (s/def ::doc string?)
 (s/def ::default any?)
 (s/def ::required? boolean?)
+
+(defn load-properties [f]
+  (let [props (Properties.)]
+    (.load props (io/reader f))
+    (into {}
+          (for [[k v] props]
+            [(keyword k) v]))))

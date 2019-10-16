@@ -317,9 +317,7 @@
        :headers {"Content-Type" "text/plain"}
        :body "Unsupported method on this address."})))
 
-(s/def ::server-port :crux.io/port)
-
-(s/def ::options (s/keys :req-un [::server-port]))
+(def ^:const default-server-port 3000)
 
 (defrecord HTTPServer [^Server server options]
   Closeable
@@ -334,7 +332,7 @@
   ([crux-node] (start-http-server crux-node {}))
   ([crux-node
     {:keys [server-port cors-access-control]
-     :or {server-port 3000 cors-access-control []}
+     :or {server-port default-server-port cors-access-control []}
      :as options}]
    (let [wrap-cors' #(apply wrap-cors (cons % cors-access-control))
          server (j/run-jetty (-> (partial handler crux-node)
