@@ -1,12 +1,11 @@
 (ns crux.node-test
   (:require [clojure.test :as t]
+            [crux.config :as cc]
             [crux.io :as cio]
             crux.jdbc
             crux.kv.memdb
             crux.kv.rocksdb
-            crux.moberg
-            [crux.node :as n]
-            [crux.config :as cc])
+            [crux.node :as n])
   (:import crux.moberg.MobergTxLog
            java.util.Date))
 
