@@ -20,7 +20,7 @@
         :event-log-dir "data/eventlog-1"
         :db-dir "data/db-dir-1"}))
 
-    (t/is system)
+  (t/is system)
 
   (crux/sync system (:crux.tx/tx-time
                      (crux/submit-tx
