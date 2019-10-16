@@ -24,22 +24,15 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 [source,clj]
 ----
 (require '[crux.api :as crux]
-	 '[crux.kafka :as k]
 	 '[crux.http-server :as srv])
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
-  (crux/start-cluster-node {:bootstrap-servers "localhost:9092"
-                            :server-port 3000}))
+  (crux/start-node {:crux.node/topology :crux.kafka/topology
+                    :crux.kafka/bootstrap-servers "localhost:9092"
+		    :server-port 3000}))
 
 (srv/start-http-server node)
-----
-
-Finally, we create the topic _'connect-test'_, (used within the *local-crux-sink* and *local-crux-source* property files by default) and associate _node_ with it.
-
-[source,clj]
-----
-(k/create-topic (:admin-client node) "connect-test" 1 1 nil)
 ----
 
 == Sink Connector
