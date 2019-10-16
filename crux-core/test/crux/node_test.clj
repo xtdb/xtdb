@@ -135,8 +135,8 @@
     (try
       (with-open [n (n/start {:crux.node/topology :crux.jdbc/topology
                               :crux.kv/db-dir (str kv-data-dir-1)
-                              :dbtype "h2"
-                              :dbname "cruxtest1"})]
+                              :crux.jdbc/dbtype "h2"
+                              :crux.jdbc/dbname "cruxtest1"})]
         (t/is n)
 
         (let [valid-time (Date.)

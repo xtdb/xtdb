@@ -8,8 +8,8 @@
   (:import crux.api.Crux))
 
 (defn- with-tear-down [f]
-  (let [ds (jdbc/get-datasource {:dbtype "h2"
-                                 :dbname "cruxtest"})]
+  (let [ds (jdbc/get-datasource {:crux.jdbc/dbtype "h2"
+                                 :crux.jdbc/dbname "cruxtest"})]
     (j/prep-for-tests! "h2" ds))
   (f))
 
@@ -18,8 +18,8 @@
 (t/deftest test-compaction-leaves-replayable-log
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         opts {:crux.node/topology :crux.jdbc/topology
-              :dbtype "h2"
-              :dbname "cruxtest"
+              :crux.jdbc/dbtype "h2"
+              :crux.jdbc/dbname "cruxtest"
               :crux.kv/db-dir db-dir
               :crux.kv/kv-backend "crux.kv.memdb.MemKv"}]
     (try
