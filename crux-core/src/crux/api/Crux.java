@@ -10,20 +10,7 @@ import clojure.lang.IFn;
  * Public API entry point for starting a {@link ICruxAPI}.
  */
 public class Crux {
-
-    private static IFn require = Clojure.var("clojure.core/require");
-
     private Crux() {
-    }
-
-    static {
-        require.invoke(Clojure.read("crux.api"));
-        require.invoke(Clojure.read("crux.lru"));
-        require.invoke(Clojure.read("crux.memory"));
-        require.invoke(Clojure.read("crux.io"));
-        require.invoke(Clojure.read("crux.tx"));
-        require.invoke(Clojure.read("crux.codec"));
-        require.invoke(Clojure.read("crux.kv.memdb"));
     }
 
     /**
@@ -57,7 +44,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startClusterNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        require.invoke(Clojure.read("crux.kafka"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka"));
         IFn deref = Clojure.var("clojure.core", "deref");
         Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.kafka/node-config"));
         return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
@@ -88,7 +75,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startStandaloneNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
-        require.invoke(Clojure.read("crux.standalone"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.standalone"));
         IFn deref = Clojure.var("clojure.core", "deref");
         Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.standalone/node-config"));
         return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
@@ -108,7 +95,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        require.invoke(Clojure.read("crux.jdbc"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.jdbc"));
         IFn deref = Clojure.var("clojure.core", "deref");
         Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.jdbc/node-config"));
         return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
@@ -127,7 +114,7 @@ public class Crux {
      * @return    a remote API client.
      */
     public static ICruxAPI newApiClient(String url) {
-        require.invoke(Clojure.read("crux.bootstrap.remote-api-client"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.remote-api-client"));
         return (ICruxAPI) Clojure.var("crux.bootstrap.remote-api-client/new-api-client").invoke(url);
     }
 
@@ -148,7 +135,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
-        require.invoke(Clojure.read("crux.bootstrap.kafka-ingest-client"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.kafka-ingest-client"));
         return (ICruxAsyncIngestAPI) Clojure.var("crux.bootstrap.kafka-ingest-client/new-ingest-client").invoke(options);
     }
 }
