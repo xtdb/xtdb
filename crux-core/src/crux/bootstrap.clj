@@ -238,8 +238,7 @@
                        :indexer kv-indexer})
 
 (defn start-node ^ICruxAPI [node-config options]
-  (locking map->CruxNode
-    (let [options (merge default-options options)
-          node-config (merge base-node-config node-config)
-          [node-modules close-fn] (start-modules node-config options)]
-      (map->CruxNode (assoc node-modules :close-fn close-fn :options options)))))
+  (let [options (merge default-options options)
+        node-config (merge base-node-config node-config)
+        [node-modules close-fn] (start-modules node-config options)]
+    (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))

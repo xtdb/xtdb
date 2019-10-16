@@ -18,7 +18,7 @@ public class Crux {
     }
 
     static {
-        requiringResolve.invoke(Clojure.read("taoensso.encore/encore-version"));
+        requiringResolve.invoke(Clojure.read("crux.standalone/node-config"));
     }
 
     /**
