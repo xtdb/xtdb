@@ -68,11 +68,11 @@ node)
 ;; tag::start-jdbc-node[]
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology :crux.jdbc/topology
-                    :dbtype "postgresql"
-                    :dbname "cruxdb"
-                    :host "<host>"
-                    :user "<user>"
-                    :password "<password>"})
+                    :crux.jdbc/dbtype "postgresql"
+                    :crux.jdbc/dbname "cruxdb"
+                    :crux.jdbc/host "<host>"
+                    :crux.jdbc/user "<user>"
+                    :crux.jdbc/password "<password>"})
 ;; end::start-jdbc-node[]
   ))
 
