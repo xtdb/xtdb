@@ -1,7 +1,7 @@
 (ns crux.main.graal
   (:require [clojure.tools.logging :as log]
             [crux.standalone :as sa]
-            [crux.n :as n]
+            [crux.node :as n]
             [crux.kv.memdb]
             [crux.kv.rocksdb])
   (:gen-class))
