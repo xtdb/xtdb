@@ -1,4 +1,4 @@
-(ns crux.decorators.aggregation-test
+(ns crux.aggregation-test
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.decorators.aggregation.alpha :as aggr]
