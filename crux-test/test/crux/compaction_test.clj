@@ -7,13 +7,13 @@
             [next.jdbc :as jdbc])
   (:import crux.api.Crux))
 
-(defn- with-tear-down [f]
-  (let [ds (jdbc/get-datasource {:crux.jdbc/dbtype "h2"
-                                 :crux.jdbc/dbname "cruxtest"})]
+(defn- with-prep-for-tests [f]
+  (let [ds (jdbc/get-datasource {:dbtype "h2"
+                                 :dbname "cruxtest"})]
     (j/prep-for-tests! "h2" ds))
   (f))
 
-(t/use-fixtures :each with-tear-down)
+(t/use-fixtures :each with-prep-for-tests)
 
 (t/deftest test-compaction-leaves-replayable-log
   (let [db-dir (str (cio/create-tmpdir "kv-store"))

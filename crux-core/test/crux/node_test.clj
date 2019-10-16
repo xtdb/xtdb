@@ -29,7 +29,7 @@
       (with-open [n (n/start {:crux.node/topology :crux.jdbc/topology})]
         (t/is false))
       (catch Throwable e
-        (t/is (re-find #"Arg :dbtype required" (.getMessage e))))
+        (t/is (re-find #"Arg :crux.jdbc/dbtype required" (.getMessage e))))
       (finally
         (cio/delete-dir data-dir)))))
 
@@ -87,8 +87,8 @@
     (try
       (with-open [n (n/start {:crux.node/topology :crux.jdbc/topology
                               :crux.kv/db-dir (str data-dir)
-                              :dbtype "h2"
-                              :dbname "cruxtest"})]
+                              :crux.jdbc/dbtype "h2"
+                              :crux.jdbc/dbname "cruxtest"})]
         (t/is n))
       (finally
         (cio/delete-dir data-dir)))))
@@ -154,8 +154,8 @@
 
         (with-open [n2 (n/start {:crux.node/topology :crux.jdbc/topology
                                  :crux.kv/db-dir (str kv-data-dir-2)
-                                 :dbtype "h2"
-                                 :dbname "cruxtest2"})]
+                                 :crux.jdbc/dbtype "h2"
+                                 :crux.jdbc/dbname "cruxtest2"})]
 
           (t/is (= #{} (.q (.db n2)
                            '{:find [e]
