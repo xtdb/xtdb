@@ -2,12 +2,16 @@
   (:require [clojure.test :as t]
             [crux.config :as cc]
             [crux.io :as cio]
+            [crux.moberg]
             crux.jdbc
             crux.kv.memdb
             crux.kv.rocksdb
             [crux.node :as n])
   (:import crux.moberg.MobergTxLog
-           java.util.Date))
+           java.util.Date
+           crux.api.Crux
+           (java.util HashMap)
+           (clojure.lang Keyword)))
 
 (t/deftest test-properties-to-topology
   (let [t (n/options->topology {:crux.node/topology :crux.jdbc/topology})]
@@ -127,6 +131,18 @@
         (t/is true))
       (finally
         (cio/delete-dir event-log-dir)))))
+
+(t/deftest topology-resolution-from-java
+  (let [mem-db-node-options
+        (doto (HashMap.)
+          (.put (Keyword/intern "crux.node/topology") (Keyword/intern "crux.standalone/topology"))
+          (.put (Keyword/intern "crux.node/kv-store") "crux.kv.memdb/kv")
+          (.put (Keyword/intern "crux.standalone/event-log-kv-store") "crux.kv.memdb/kv")
+          (.put (Keyword/intern "crux.standalone/event-log-dir") "data/eventlog")
+          (.put (Keyword/intern "db-dir") "data/db-dir"))
+        memdb-node (Crux/startNode mem-db-node-options)]
+    (t/is memdb-node)
+    (t/is (not (.close memdb-node)))))
 
 (t/deftest test-start-up-2-nodes
   (let [kv-data-dir-1 (cio/create-tmpdir "kv-store1")

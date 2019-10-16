@@ -226,10 +226,11 @@
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
   (let [topology (if (map? topology) topology (resolve-topology-id topology))
-        _  (s/assert ::topology-map topology)
-        topology-overrides (select-keys options (keys topology))]
-    (merge topology (zipmap (keys topology-overrides)
-                            (map resolve-topology-id (vals topology-overrides))))))
+        topology-overrides (select-keys options (keys topology))
+        topology (merge topology (zipmap (keys topology-overrides)
+                                         (map resolve-topology-id (vals topology-overrides))))]
+    (s/assert ::topology-map topology)
+    topology))
 
 (def node-args
   {:crux.tx-log/await-tx-timeout
@@ -238,7 +239,8 @@
     :crux.config/type :crux.config/nat-int}})
 
 (defn start ^ICruxAPI [options]
-  (let [topology (options->topology options)
+  (let [options (into {} options)
+        topology (options->topology options)
         [{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules topology options)
         status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))
         node-opts (parse-opts node-args options)]
