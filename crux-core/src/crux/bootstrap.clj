@@ -239,8 +239,6 @@
 
 (defn start-node ^ICruxAPI [node-config options]
   (locking map->CruxNode
-    ; context: Running 2+ nodes simultaneously from Kotlin produces an error
-    ; @link https://github.com/juxt/crux/issues/352
     (let [options (merge default-options options)
           node-config (merge base-node-config node-config)
           [node-modules close-fn] (start-modules node-config options)]
