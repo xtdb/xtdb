@@ -13,11 +13,11 @@ public class Crux {
 
     private static IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
 
-    private Crux() {
+    private static IFn resolve(String symbolName) {
+        return (IFn) requiringResolve.invoke(Clojure.read(symbolName));
     }
 
-    static {
-        requiringResolve.invoke(Clojure.read("crux.standalone/topology"));
+    private Crux() {
     }
 
     /**
@@ -34,8 +34,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.node"));
-        return (ICruxAPI) Clojure.var("crux.node/start").invoke(options);
+        return (ICruxAPI) resolve("crux.node/start").invoke(options);
     }
 
     /**
@@ -51,8 +50,7 @@ public class Crux {
      * @return    a remote API client.
      */
     public static ICruxAPI newApiClient(String url) {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.remote-api-client"));
-        return (ICruxAPI) Clojure.var("crux.remote-api-client/new-api-client").invoke(url);
+        return (ICruxAPI) resolve("crux.remote-api-client/new-api-client").invoke(url);
     }
 
     /**
@@ -72,7 +70,6 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka-ingest-client"));
-        return (ICruxAsyncIngestAPI) Clojure.var("crux.kafka-ingest-client/new-ingest-client").invoke(options);
+        return (ICruxAsyncIngestAPI) resolve("crux.kafka-ingest-client/new-ingest-client").invoke(options);
     }
 }
