@@ -28,15 +28,15 @@
 (def storage-dir "dev-storage")
 
 (defn dev-option-defaults [storage-dir]
-  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+  {:crux.node/topology k/topology
+   :crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
    :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
-   :dev/node-topology k/topology
    :dev/node-start-fn n/start
-   :db-dir (str storage-dir "/data")
-   :bootstrap-servers "localhost:9092"
+   :crux.node/db-dir (str storage-dir "/data")
+   :crux.kafka/bootstrap-servers "localhost:9092"
    :server-port 3000})
 
 (def dev-options (dev-option-defaults storage-dir))
@@ -49,10 +49,10 @@
       (let [embedded-kafka (when embed-kafka?
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
-            cluster-node (doto (node-start-fn node-topology options)
+            cluster-node (doto (node-start-fn options)
                            (->> (swap! started conj)))
             http-server (when http-server?
-                          (srv/start-http-server cluster-node options))]
+                          (srv/start-http-server (merge cluster-node options)))]
         (assoc cluster-node
                :http-server http-server
                :embedded-kafka embedded-kafka))
