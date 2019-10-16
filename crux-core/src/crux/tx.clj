@@ -130,7 +130,7 @@
   (if-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (pr-str tx-op))))
     (let [fn-id (c/new-id k)
-          db (q/db kv transact-time transact-time)
+          db (q/db kv object-store transact-time transact-time)
           {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
           {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
           args-id (:crux.db/id args-doc)
@@ -308,10 +308,6 @@
     (s/assert :crux.api/tx-ops tx-ops)
     tx-ops))
 
-(def ^:const default-await-tx-timeout 10000)
-
-(s/def :crux.tx-log/await-tx-timeout nat-int?)
-
 (defn latest-completed-tx-time [consumer-state]
   (let [consumer-states (->> consumer-state
                              (vals)
@@ -321,8 +317,7 @@
       (:time (last consumer-states))
       (:time (first consumer-states)))))
 
-(defn await-no-consumer-lag [indexer {:crux.tx-log/keys [await-tx-timeout]
-                                      :or {await-tx-timeout default-await-tx-timeout}}]
+(defn await-no-consumer-lag [indexer timeout-ms]
   (let [max-lag-fn #(some->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
                              (vals)
                              (seq)
@@ -331,14 +326,13 @@
     (if (cio/wait-while #(if-let [max-lag (max-lag-fn)]
                            (pos? (long max-lag))
                            true)
-                        await-tx-timeout)
+                        timeout-ms)
       (latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))
       (throw (TimeoutException.
                (str "Timed out waiting for index to catch up, lag is: " (or (max-lag-fn)
                                                                             "unknown")))))))
 
-(defn await-tx-time [indexer transact-time {:crux.tx-log/keys [await-tx-timeout]
-                                            :or {await-tx-timeout default-await-tx-timeout}}]
+(defn await-tx-time [indexer transact-time timeout-ms]
   (let [seen-tx-time (atom (Date. 0))]
     (if (cio/wait-while #(pos? (compare transact-time
                                         (let [completed-tx-time (or (latest-completed-tx-time
@@ -346,7 +340,7 @@
                                                                     (Date. 0))]
                                           (reset! seen-tx-time completed-tx-time)
                                           completed-tx-time)))
-                        await-tx-timeout)
+                        timeout-ms)
       @seen-tx-time
       (throw (TimeoutException.
               (str "Timed out waiting for: " (pr-str transact-time)

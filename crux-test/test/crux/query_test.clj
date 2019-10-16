@@ -3,12 +3,13 @@
             [clojure.test :as t]
             [crux.api :as api]
             [crux.db :as db]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.standalone :as fs]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures.kv :as kvf]
+            [crux.fixtures.standalone :as fs])
   (:import java.util.UUID))
 
-(t/use-fixtures :each fs/with-standalone-node)
+(t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
 
 (t/deftest test-sanity-check
   (f/transact! *api* (f/people [{:name "Ivan"}]))

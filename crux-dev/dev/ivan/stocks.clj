@@ -4,7 +4,6 @@
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.cluster-node :as cn]
             [crux.api :as api]
             [crux.codec :as c]))
 
@@ -62,16 +61,17 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                cn/with-cluster-node
+                fk/with-cluster-node
                 with-stocks-data)
 
 (comment
 
   (def node
-    (crux.api/start-standalone-node
-      {:kv-backend "crux.kv.memdb.MemKv"
-       :db-dir     "data/db-dir-1"
-       :event-log-dir "data/eventlog-1"}))
+    (crux.api/start-node
+     {:crux.node/topology :crux.standalone/topology
+      :kv-backend "crux.kv.memdb.MemKv"
+      :db-dir     "data/db-dir-1"
+      :event-log-dir "data/eventlog-1"}))
 
   (def s #crux/id :https://thing)
 

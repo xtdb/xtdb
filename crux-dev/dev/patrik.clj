@@ -159,31 +159,33 @@
 
   (require 'crux.api)
 
-  (def crux (crux.api/start-standalone-node
-              {:kv-backend "crux.kv.rocksdb.RocksKv"
-               :db-dir "data/db-dir"
-               :event-log-dir "data/event-log-db"}))
+  (def crux (crux.api/start-node
+             {:crux.node/topology :crux.standalone/topology
+              :crux.node/topology :crux.standalone/topology
+              :kv-backend "crux.kv.rocksdb.RocksKv"
+              :db-dir "data/db-dir"
+              :event-log-dir "data/event-log-db"}))
 
   (crux.api/submit-tx
-    crux
-    [[:crux.tx/put
-      {:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}]
-     [:crux.tx/put
-      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}]
-     [:crux.tx/put
-      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}]
-     [:crux.tx/put
-      {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}]])
+   crux
+   [[:crux.tx/put
+     {:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}]
+    [:crux.tx/put
+     {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}]
+    [:crux.tx/put
+     {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}]
+    [:crux.tx/put
+     {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}]])
 
   (clojure.pprint/pprint
-    (run-datalog-aggregation
-      (crux.api/db crux)
-      (aggregate-decorate-datalog
-        '{:aggrigation {:partition-by [[:name ?name]]
-                        :project [[:post-count patrik/aggr-count {:post-id ?post-id}]]}
+   (run-datalog-aggregation
+    (crux.api/db crux)
+    (aggregate-decorate-datalog
+     '{:aggrigation {:partition-by [[:name ?name]]
+                     :project [[:post-count patrik/aggr-count {:post-id ?post-id}]]}
 
-          :where [[?post :user/name ?name]
-                  [?post :user/post ?post-id]]})))
+       :where [[?post :user/name ?name]
+               [?post :user/post ?post-id]]})))
 
   (defn avr-cost
     ([] {:count 0 :total 0})
@@ -200,44 +202,44 @@
      (+ acc (:cost inputs))))
 
   (clojure.pprint/pprint
-    (run-datalog-aggregation
-      (crux.api/db crux)
-      (aggregate-decorate-datalog
-        '{:aggrigation {:windows {:user-costs {:partition-by [[:name ?name]]
-                                               :order-by [[:post-id ?post-id :asc]]}}
-
-                        :partition-by [[:name ?name]
-                                       [:post-id ?post-id]]
-
-                        :project [[:avr-cost patrik/avr-cost {:cost ?cost}]
-                                  [:running-cost patrik/sum-cost {:cost ?cost} :user-costs]]}
-
-          :where [[?post :user/name ?name]
-                  [?post :user/post ?post-id]
-                  [?post :post/cost ?cost]]})))
-
-  (clojure.pprint/pprint
+   (run-datalog-aggregation
+    (crux.api/db crux)
     (aggregate-decorate-datalog
-      '{:aggrigation {:partition-by [[:name ?name]]
-                      :project [[:avr-cost patrik/avr-cost {:cost ?cost}]
-                                [:running-cost patrik/sum-cost {:cost ?cost}]
-                                [:post-count patrik/aggr-count {:post-id ?post-id}]]}
+     '{:aggrigation {:windows {:user-costs {:partition-by [[:name ?name]]
+                                            :order-by [[:post-id ?post-id :asc]]}}
 
-        :where [[?post :user/name ?name]
-                [?post :user/post ?post-id]
-                [?post :post/cost ?cost]]}))
+                     :partition-by [[:name ?name]
+                                    [:post-id ?post-id]]
+
+                     :project [[:avr-cost patrik/avr-cost {:cost ?cost}]
+                               [:running-cost patrik/sum-cost {:cost ?cost} :user-costs]]}
+
+       :where [[?post :user/name ?name]
+               [?post :user/post ?post-id]
+               [?post :post/cost ?cost]]})))
+
+  (clojure.pprint/pprint
+   (aggregate-decorate-datalog
+    '{:aggrigation {:partition-by [[:name ?name]]
+                    :project [[:avr-cost patrik/avr-cost {:cost ?cost}]
+                              [:running-cost patrik/sum-cost {:cost ?cost}]
+                              [:post-count patrik/aggr-count {:post-id ?post-id}]]}
+
+      :where [[?post :user/name ?name]
+              [?post :user/post ?post-id]
+              [?post :post/cost ?cost]]}))
 
 
   (clojure.pprint/pprint
-    (run-datalog-aggregation
-      (crux.api/db crux)
-      (aggregate-decorate-datalog
-        '{:aggrigation
-          {:partition-by [?name ?post-id]
-           :order-by [[?name :asc]]}
+   (run-datalog-aggregation
+    (crux.api/db crux)
+    (aggregate-decorate-datalog
+     '{:aggrigation
+       {:partition-by [?name ?post-id]
+        :order-by [[?name :asc]]}
 
-          :where [[?post :user/name ?name]
-                  [?post :user/post ?post-id]]})))
+       :where [[?post :user/name ?name]
+               [?post :user/post ?post-id]]})))
 
 
 

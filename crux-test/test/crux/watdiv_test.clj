@@ -7,7 +7,6 @@
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.cluster-node :as cn]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.rdf :as rdf]
@@ -378,7 +377,7 @@
                 with-sail-repository
                 with-datomic
                 with-neo4j
-                cn/with-cluster-node
+                fk/with-cluster-node
                 with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all

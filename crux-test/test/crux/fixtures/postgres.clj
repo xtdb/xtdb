@@ -4,6 +4,6 @@
 
 (defn with-embedded-postgres [f]
   (with-open [pg (.start (EmbeddedPostgres/builder))]
-    (fj/with-jdbc-node "postgresql" f {:port (.getPort pg)
-                                       :dbname "postgres"
-                                       :user "postgres"})))
+    (fj/with-jdbc-node "postgresql" f {:crux.jdbc/port (.getPort pg)
+                                       :crux.jdbc/dbname "postgres"
+                                       :crux.jdbc/user "postgres"})))

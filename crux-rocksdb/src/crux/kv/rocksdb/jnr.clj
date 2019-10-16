@@ -6,7 +6,8 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.lru :as lru])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -201,21 +202,12 @@
     (.rocksdb_readoptions_destroy rocksdb read-options)
     (.rocksdb_release_snapshot rocksdb db snapshot)))
 
-(s/def ::db-options string?)
-(s/def ::disable-wal? boolean?)
-
-(s/def ::options (s/keys :req-un [:crux.kv/db-dir]
-                         :opt-un [:crux.kv/sync?]
-                         :opt [::db-options
-                               ::disable-wal?]))
-
 (def ^:private rocksdb_lz4_compression 4)
 
 (defrecord RocksJNRKv [db-dir]
   kv/KvStore
-  (open [this {:keys [db-dir sync? crux.kv.rocksdb.jnr/db-options crux.kv.rocksdb.jnr/disable-wal?] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.rocksdb.jnr/db-options crux.kv.rocksdb.jnr/disable-wal?] :as options}]
     (init-rocksdb-jnr!)
-    (s/assert ::options options)
     (let [opts (.rocksdb_options_create rocksdb)
           _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
           _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
@@ -320,3 +312,11 @@
     (.rocksdb_close rocksdb db)
     (.rocksdb_options_destroy rocksdb options)
     (.rocksdb_writeoptions_destroy rocksdb write-options)))
+
+(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
+                     (lru/start-kv-store (map->RocksJNRKv {:db-dir db-dir}) options))
+         :args (merge lru/options
+                      {::db-options {:doc "RocksDB Options"
+                                     :crux.config/type :crux.config/string}
+                       ::disable-wal? {:doc "Disable Write Ahead Log"
+                                       :crux.config/type :crux.config/boolean}})})

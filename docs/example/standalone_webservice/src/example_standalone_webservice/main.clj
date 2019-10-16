@@ -704,9 +704,7 @@
    ::backup/sh-restore-script "bin/restore.sh"})
 
 (defn run-node [{:keys [server-port http-port] :as options} with-node-fn]
-  (with-open [crux-node (case (System/getenv "CRUX_MODE")
-                            "CLUSTER_NODE" (api/start-cluster-node options)
-                            (api/start-standalone-node options))
+  (with-open [crux-node (api/start-node options)
               api-server (srv/start-http-server
                            crux-node
                            {:server-port http-port

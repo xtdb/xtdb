@@ -1,9 +1,17 @@
 # Changelog
 
+## 19.09-1.5.0-alpha
+
+### Changes
+
+* [PR #340](https://github.com/juxt/crux/pull/340): *Breaking* Remove api helpers for creating specific node types
+* Refactoring: Modularize configuration options defaults and documentation
+* Refactoring: Test fixtures more composable
+
 ## 19.09-1.4.0-alpha
 
 ### Changes
-* [#285](https://github.com/juxt/crux/issues/285): Various doc and tx spec enhancements 
+* [#285](https://github.com/juxt/crux/issues/285): Various doc and tx spec enhancements
 * [#287](https://github.com/juxt/crux/issues/287): Caching checking of specs for queries, 30% speed up for simple queries
 
 ### New features

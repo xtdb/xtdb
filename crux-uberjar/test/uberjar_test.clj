@@ -42,9 +42,7 @@
       (t/is (str/includes? results "options:")))
 
     (t/testing "Options presented"
-      (t/is (and (str/includes? results ":db-dir")
-                 (str/includes? results ":server-port")
-                 (str/includes? results ":kv-backend"))))
+      (t/is (str/includes? results ":server-port")))
 
     ;; Not sure how this will stand the test of time - joa
     (t/testing "Kafka attempted"

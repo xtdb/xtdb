@@ -5,10 +5,12 @@
 
 (t/deftest space-tutorial-test
   (def crux
-    (crux/start-standalone-node
-     {:kv-backend "crux.kv.memdb.MemKv"
-      :db-dir "data/db-dir"
-      :event-log-dir "data/eventlog-1"}))
+    (crux/start-node
+       {:crux.node/topology :crux.standalone/topology
+        :crux.node/kv-store "crux.kv.memdb/kv"
+        :crux.standalone/event-log-dir "data/eventlog-1"
+        :crux.kv/db-dir "data/db-dir"
+        :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
 
   (def manifest
     {:crux.db/id :manifest
@@ -578,10 +580,12 @@
   (t/deftest Oumuamua-test
     (.close crux)
     (def crux
-      (crux/start-standalone-node
-       {:kv-backend "crux.kv.memdb.MemKv"
-        :db-dir "data/db-dir"
-        :event-log-dir "data/eventlog-1"}))
+      (crux/start-node
+       {:crux.node/topology :crux.standalone/topology
+        :crux.node/kv-store "crux.kv.memdb/kv"
+        :crux.standalone/event-log-dir "data/eventlog-1"
+        :crux.kv/db-dir "data/db-dir"
+        :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
 
     (t/is crux)
 

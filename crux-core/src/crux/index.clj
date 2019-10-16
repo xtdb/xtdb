@@ -1,24 +1,19 @@
 (ns crux.index
-  (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
-            [crux.codec :as c]
+  (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.morton :as morton]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream File FileInputStream FileOutputStream]
-           [java.util Arrays Collections Comparator Date]
+  (:import [clojure.lang IReduceInit Seqable Sequential]
+           crux.api.IndexVersionOutOfSyncException
+           crux.codec.EntityTx
+           [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
+           [java.io Closeable DataInputStream]
+           [java.util Collections Comparator Date]
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer]
-           org.agrona.io.DirectBufferInputStream
-           [crux.api IndexVersionOutOfSyncException]
-           [crux.codec EntityTx Id]
-           [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState
-            EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState
-            RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState
-            UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
-           [clojure.lang IReduceInit Seqable Sequential]))
+           org.agrona.io.DirectBufferInputStream))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -51,7 +46,7 @@
 (defn new-prefix-kv-iterator ^java.io.Closeable [i prefix]
   (->PrefixKvIterator i prefix))
 
-(def ^:private ^ThreadLocal seek-buffer-tl
+(def ^ThreadLocal seek-buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
@@ -360,102 +355,6 @@
 (defn evicted-doc?
   [{:crux.db/keys [id evicted?] :as doc}]
   (or (= :crux.db/evicted id) evicted?))
-
-(defn keep-non-evicted-doc
-  [doc]
-  (when-not (evicted-doc? doc)
-    doc))
-
-(defrecord KvObjectStore [kv]
-  db/ObjectStore
-  (init [this {:keys [kv]} options]
-    (assoc this :kv kv))
-
-  (get-single-object [this snapshot k]
-    (let [doc-key (c/->id-buffer k)
-          seek-k (c/encode-doc-key-to (.get seek-buffer-tl) doc-key)]
-      (some->> (kv/get-value snapshot seek-k)
-               (DirectBufferInputStream.)
-               (DataInputStream.)
-               (nippy/thaw-from-in!)
-               (keep-non-evicted-doc))))
-
-  (get-objects [this snapshot ks]
-    (->> (for [k ks
-               :let [seek-k (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))
-                     v (kv/get-value snapshot seek-k)]
-               :when v
-               :let [doc (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))]
-               :when (keep-non-evicted-doc doc)]
-           [k doc])
-         (into {})))
-
-  (known-keys? [this snapshot ks]
-    (every?
-      (fn [k]
-        (kv/get-value snapshot (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))))
-      ks))
-
-  (put-objects [this kvs]
-    (kv/store kv (for [[k v] kvs]
-                   [(c/encode-doc-key-to nil (c/->id-buffer k))
-                    (mem/->off-heap (nippy/fast-freeze v))])))
-
-  (delete-objects [this ks]
-    (kv/delete kv (for [k ks]
-                    (c/encode-doc-key-to nil (c/->id-buffer k)))))
-
-  Closeable
-  (close [_]))
-
-(s/def ::file-object-store-dir string?)
-(s/def ::file-object-store-options (s/keys :req [::file-object-store-dir]))
-
-(defrecord FileObjectStore [dir]
-  db/ObjectStore
-  (init [this _ {:keys [crux.index/file-object-store-dir] :as options}]
-    (s/assert ::file-object-store-options options)
-    (.mkdirs (io/file file-object-store-dir))
-    (assoc this :dir file-object-store-dir))
-
-  (get-single-object [this _ k]
-    (let [doc-key (str (c/new-id k))
-          doc-file (io/file dir doc-key)]
-      (when (.exists doc-file)
-        (with-open [in (FileInputStream. doc-file)]
-          (some->> in
-                   (DataInputStream.)
-                   (nippy/thaw-from-in!)
-                   (keep-non-evicted-doc))))))
-
-  (get-objects [this _ ks]
-    (->> (for [k ks
-               :let [v (db/get-single-object this _ k)]
-               :when v]
-           [k v])
-         (into {})))
-
-  (put-objects [this kvs]
-    (doseq [[k v] kvs
-            :let [doc-key (str (c/new-id k))]]
-      (with-open [out (DataOutputStream. (FileOutputStream. (io/file dir doc-key)))]
-        (nippy/freeze-to-out! out v))))
-
-  (known-keys? [this snapshot ks]
-    (every?
-      (fn [k]
-        (let [doc-key (str (c/new-id k))
-              doc-file (io/file dir doc-key)]
-          (.exists doc-file)))
-      ks))
-
-  (delete-objects [this ks]
-    (doseq [k ks
-            :let [doc-key (str (c/new-id k))]]
-      (.delete (io/file dir doc-key))))
-
-  Closeable
-  (close [_]))
 
 ;; Utils
 

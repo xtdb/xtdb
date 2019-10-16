@@ -3,10 +3,10 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             crux.api
-            [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
+            [crux.node :as n]
             [crux.tx :as tx]
             crux.tx.consumer
             [crux.tx.polling :as p]
@@ -156,26 +156,33 @@
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
 
-(defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
-  (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype)))))
-  (let [ds (jdbcc/->pool HikariDataSource (->pool-options dbtype options))]
-    (setup-schema! dbtype ds)
-    ds))
+(defn conform-next-jdbc-properties [m]
+  (into {} (->> m
+                (filter (fn [[k]] (= "crux.jdbc" (namespace k))))
+                (map (fn [[k v]] [(keyword (name k)) v])))))
 
-(defn- start-tx-log [{:keys [ds]} {:keys [dbtype]}]
+(defn- start-jdbc-ds [_ options]
+  (let [{:keys [dbtype] :as options} (conform-next-jdbc-properties options)]
+    (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype)))))
+    (let [ds (jdbcc/->pool HikariDataSource (->pool-options dbtype options))]
+      (setup-schema! dbtype ds)
+      ds)))
+
+(defn- start-tx-log [{::keys [ds]} {::keys [dbtype]}]
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
-(defn- start-event-log-consumer [{:keys [indexer ds]} {:keys [dbtype]}]
+(defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {::keys [dbtype]}]
   (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
 
-(def ds [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])])
-(def tx-log [start-tx-log [:ds]])
-(def event-log-consumer [start-event-log-consumer [:indexer :ds]])
-
-(def node-config {:ds ds
-                  :tx-log tx-log
-                  :event-log-consumer event-log-consumer})
-
-(comment
-  ;; Start a JDBC node:
-  (b/start-node node-config some-options))
+(def topology (merge n/base-topology
+                     {::ds {:start-fn start-jdbc-ds
+                            :args {::dbtype {:doc "Database type"
+                                             :required? true
+                                             :crux.config/type :crux.config/string}
+                                   ::dbname {:doc "Database name"
+                                             :required? true
+                                             :crux.config/type :crux.config/string}}}
+                      ::event-log-consumer {:start-fn start-event-log-consumer
+                                            :deps [:crux.node/indexer ::ds]}
+                      :crux.node/tx-log {:start-fn start-tx-log
+                                         :deps [::ds]}}))

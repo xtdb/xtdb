@@ -3,13 +3,13 @@
             [crux.backup :as backup]))
 
 (def crux-options
-  {:kv-backend    "crux.kv.rocksdb.RocksKv"
+  {:crux.node/topology :crux.standalone/topology
+   :kv-backend    "crux.kv.rocksdb.RocksKv"
    :event-log-dir "data/eventlog-1"
    :db-dir        "data/db-dir-1"
    :backup-dir    "checkpoint"})
 
-
-(def syst (api/start-standalone-node crux-options))
+(def syst (api/start-node crux-options))
 
 
 (comment

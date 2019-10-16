@@ -1,19 +1,15 @@
 (ns crux.jdbc-test
   (:require [clojure.test :as t]
+            [crux.codec :as c]
             [crux.db :as db]
-            [crux.jdbc :as j]
-            [taoensso.nippy :as nippy]
-            [next.jdbc :as jdbc]
-            [crux.fixtures]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :as apif :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
+            [crux.fixtures.kv :as kvf]
             [crux.fixtures.lubm :as fl]
             [crux.fixtures.postgres :as fp]
-            [crux.codec :as c]
-            [crux.kafka :as k]
-            [next.jdbc.result-set :as jdbcr]
-            [crux.api :as api])
-  (:import crux.api.ICruxAPI))
+            [crux.jdbc :as j]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as jdbcr]))
 
 (defn- with-each-jdbc-node [f]
   (t/testing "H2 Database"
@@ -33,7 +29,7 @@
       (fj/with-jdbc-node "oracle" f
         (read-string (slurp ".testing-oracle.edn"))))))
 
-(t/use-fixtures :each with-each-jdbc-node)
+(t/use-fixtures :each with-each-jdbc-node kvf/with-kv-dir apif/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
@@ -55,7 +51,6 @@
     (doall (map (comp (partial j/->v dbtype) :v)
                 (jdbc/execute! t ["SELECT V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
                                {:builder-fn jdbcr/as-unqualified-lower-maps})))))
-
 (t/deftest test-docs-retention
   (let [tx-log (:tx-log *api*)
 

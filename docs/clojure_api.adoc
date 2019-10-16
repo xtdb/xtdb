@@ -248,7 +248,7 @@ Represents the database as of a specific valid and transaction time.
 
 Starts a query node in local library mode.
 
-For valid options, see crux.bootstrap/cli-options. Options are
+For valid options, see crux.cli/cli-options. Options are
 specified as keywords using their long format name, like
 :bootstrap-servers etc.
 
@@ -334,7 +334,7 @@ requires valid and transaction time to be specified for all
 calls to `db`.
 
 NOTE: requires either clj-http or http-kit on the classpath,
-see crux.bootstrap.remove-api-client/*internal-http-request-fn*
+see crux.remote-api-client/*internal-http-request-fn*
 for more information.
 
 Param `url` the URL to a Crux HTTP end-point.

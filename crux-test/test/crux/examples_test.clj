@@ -4,8 +4,15 @@
             [crux.api :as crux]
             [clojure.java.io :as io]
             [docs.examples :as ex]
-            [crux.tx :as tx]
             [crux.io :as cio]))
+
+(defn- clear-test-dirs [f]
+  (try
+    (f)
+    (finally
+      (cio/delete-dir "data"))))
+
+(t/use-fixtures :each clear-test-dirs)
 
 (t/deftest test-example-standalone-node
   (let [node (ex/example-start-standalone)
@@ -25,8 +32,7 @@
     (t/is (not (empty? (ex/example-query-valid-time node))))
 
     ;; Testing example standalone node is closed properly
-    (t/is (nil? (ex/example-close-node node)))
-    (cio/delete-dir "data")))
+    (t/is (nil? (ex/example-close-node node)))))
 
 (t/deftest test-example-kafka-node
   (let [embedded-kafka (ex/example-start-embedded-kafka)
@@ -38,19 +44,18 @@
     ;; Testing example cluster node is closed properly
     (t/is (nil? (ex/example-close-node node)))
     ;; Testing example embedded kafka node is closed properly
-    (t/is (nil? (ex/example-stop-embedded-kafka embedded-kafka)))
-    (cio/delete-dir "data")))
+    (t/is (nil? (ex/example-stop-embedded-kafka embedded-kafka)))))
 
 (t/deftest test-example-rocks-node
   (let [node (ex/example-start-rocks)]
+
     ;; Testing example node with RocksDB is created properly
     (t/is (not= nil node))
     ;; Testing example node with RocksDB is closed properly
-    (t/is (nil? (ex/example-close-node node)))
-    (cio/delete-dir "data")))
+    (t/is (nil? (ex/example-close-node node)))))
 
 (t/deftest test-example-basic-queries
-  (let [node (ex/example-start-standalone)]
+  (with-open [node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-setup node)) nil)
     (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
@@ -61,14 +66,13 @@
   (cio/delete-dir "data"))
 
 (t/deftest test-example-time-queries
-  (let [node (ex/example-start-standalone)]
+  (with-open [node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-at-time-setup node)) nil)
     (t/is (= #{} (ex/query-example-at-time-q1 node)))
-    (t/is (= #{[:malcolm]} (ex/query-example-at-time-q2 node))))
-  (cio/delete-dir "data"))
+    (t/is (= #{[:malcolm]} (ex/query-example-at-time-q2 node)))))
 
 (t/deftest test-example-join-queries
-  (let [node (ex/example-start-standalone)]
+  (with-open [node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q1-setup node)) nil)
     (t/is (= #{[:ivan :ivan]
                [:petr :petr]
@@ -80,5 +84,4 @@
              (ex/query-example-join-q1 node)))
     (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q2-setup node)) nil)
     (t/is (= #{[:petr]}
-             (ex/query-example-join-q2 node))))
-  (cio/delete-dir "data"))
+             (ex/query-example-join-q2 node)))))

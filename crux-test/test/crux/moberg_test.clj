@@ -5,7 +5,7 @@
             [clojure.test.check.properties :as prop]
             [crux.codec :as c]
             [crux.fixtures :as f]
-            [crux.fixtures.kv :as fkv :refer [*kv* *kv-backend*]]
+            [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-module*]]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.status :as status])
@@ -158,7 +158,7 @@
 (t/deftest test-micro-bench
   (if (Boolean/parseBoolean (System/getenv "CRUX_MOBERG_PERFORMANCE"))
     (let [n 1000000]
-      (println *kv-backend*)
+      (println *kv-module*)
       (time
        (dotimes [n n]
          (moberg/send-message *kv* :my-topic (str "Hello World-" n))))

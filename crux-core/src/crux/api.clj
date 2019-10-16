@@ -302,67 +302,11 @@
   (submit-tx-async [this tx-ops]
     (.submitTxAsync this tx-ops)))
 
-(defn start-cluster-node
-  "Starts a query node in local library mode.
-
-   For valid options, see crux.bootstrap/cli-options. Options are
-   specified as keywords using their long format name, like
-   :bootstrap-servers etc.
-
-   NOTE: requires any KV store dependencies and crux-kafka on
-   the classpath. The crux.kv.memdb.MemKv KV backend works without
-   additional dependencies.
-
-   The HTTP API can be started by passing the node to
-   crux.http-server/start-http-server. This will require further
-   dependencies on the classpath, see crux.http-server for
-   details.
+(defn start-node
+  "NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
   options
-  {:kv-backend         \"crux.kv.rocksdb.RocksKv\" ; requires RocksDB as dep
-                       \"crux.kv.memdb.MemKv\" ; will work without addional deps
-   :bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
-   :event-log-dir      \"data/eventlog-1\"
-   :db-dir             \"data/db-dir-1\"
-   :backup-dir         \"checkpoint\"
-   :group-id           \"group-id\"
-   :tx-topic           \"crux-transaction-log\"
-   :doc-topic          \"crux-docs\"
-   :create-topics      true
-   :doc-partitions     1
-   :replication-factor 1
-   :db-dir             \"data\"
-   :server-port        3000
-   :await-tx-timeout   10000
-   :doc-cache-size     131072
-   :object-store       \"crux.index.KvObjectStore\"}
-
-   returns the started cluster node that implements ICruxAPI and
-   java.io.Closeable. Latter allows the node to be stopped
-   by calling `(.close node)`.
-
-   throws IndexVersionOutOfSyncException if the index needs rebuilding."
-  ^ICruxAPI [options]
-  (Crux/startClusterNode options))
-
-(defn start-standalone-node
-  "Creates a minimal standalone node writing the transaction log
-  into its local KV store without relying on
-  Kafka. Alternatively, when the event-log-dir option is
-  provided, using two KV stores to enable rebuilding the index
-  from the event log, being more similar to the semantics of
-  Kafka but for a single process only.
-
-  NOTE: requires any KV store dependencies on the classpath. The
-  crux.kv.memdb.MemKv KV backend works without additional dependencies.
-
-  options
-  {:kv-backend         \"crux.kv.rocksdb.RocksKv\" (or crux.kv.memdb.MemKv)
-   :event-log-dir      \"data/eventlog-1\"
-   :db-dir             \"data/db-dir-1\"
-   :backup-dir         \"checkpoint\"}
-
-  see start-cluster-node doc for more options
+  {:crux.node/topology e.g. \"crux.standalone/topology\"}
 
   returns a standalone node which implements ICruxAPI and
   java.io.Closeable. Latter allows the node to be stopped
@@ -372,16 +316,7 @@
   throws NonMonotonicTimeException if the clock has moved backwards since
     last run. Only applicable when using the event log."
   ^ICruxAPI [options]
-  (Crux/startStandaloneNode options))
-
-(defn start-jdbc-node
-  "returns a JDBC node which implements ICruxAPI and
-  java.io.Closeable. Latter allows the node to be stopped
-   by calling `(.close node)`.
-
-  throws IndexVersionOutOfSyncException if the index needs rebuilding."
-  ^ICruxAPI [options]
-  (Crux/startJDBCNode options))
+  (Crux/startNode options))
 
 (defn new-api-client
   "Creates a new remote API client ICruxAPI. The remote client
@@ -389,7 +324,7 @@
   calls to `db`.
 
   NOTE: requires crux-http-client on the classpath, see
-  crux.bootstrap.remote-api-client/*internal-http-request-fn* for more
+  crux.remote-api-client/*internal-http-request-fn* for more
   information.
 
   url the URL to a Crux HTTP end-point.
@@ -402,7 +337,7 @@
   "Starts an ingest client for transacting into Kafka without running a
   full local node with index.
 
-  For valid options, see crux.bootstrap/cli-options. Options are
+  For valid options, see crux.cli/cli-options. Options are
   specified as keywords using their long format name, like
   :bootstrap-servers etc.
 

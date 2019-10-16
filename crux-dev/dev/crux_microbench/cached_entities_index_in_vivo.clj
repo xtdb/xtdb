@@ -10,7 +10,6 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.kafka :as fk])
   (:import (java.sql Date)))
 
@@ -85,7 +84,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                cn/with-cluster-node
+                fk/with-cluster-node
                 with-stocks-history-data)
 
 (defn not-really-benchmarking [query db n]
@@ -193,10 +192,11 @@
   (require '[crux.api :as api])
 
   (def node
-    (api/start-standalone-node
-      {:db-dir        "console-data"
-       :event-log-dir "console-data-log"
-       :kv-backend    "crux.kv.rocksdb.RocksKv"}))
+    (api/start-node
+     {:crux.node/topology :crux.standalone/topology
+      :db-dir        "console-data"
+      :event-log-dir "console-data-log"
+      :kv-backend    "crux.kv.rocksdb.RocksKv"}))
 
   (api/q (api/db node) '{:find [e] :where [[e :crux.db/id]]})
 

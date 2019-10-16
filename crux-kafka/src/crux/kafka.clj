@@ -1,11 +1,12 @@
 (ns crux.kafka
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
+            [crux.node :as n]
             [crux.status :as status]
             [crux.tx :as tx]
             [taoensso.nippy :as nippy])
@@ -59,7 +60,9 @@
     (with-open [in (io/reader (io/file f))]
       (cio/load-properties in))))
 
-(defn- derive-kafka-config [{:keys [bootstrap-servers kafka-properties-file kafka-properties-map]}]
+(defn- derive-kafka-config [{:keys [crux.kafka/bootstrap-servers
+                                    crux.kafka/kafka-properties-file
+                                    crux.kafka/kafka-properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
          (read-kafka-properties-file kafka-properties-file)
          kafka-properties-map))
@@ -85,19 +88,6 @@
         (let [cause (.getCause e)]
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
-
-(defn zk-status [consumer-config]
-  {:crux.zk/zk-active?
-   (if consumer-config
-     (try
-       (with-open [^KafkaConsumer consumer
-                   (create-consumer
-                    (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
-         (boolean (.listTopics consumer)))
-       (catch Exception e
-         (log/debug e "Could not list Kafka topics:")
-         false))
-     false)})
 
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx.event/tx-events (.value record)
@@ -293,7 +283,7 @@
   [{:keys [running? indexer consumer-config options]}]
   (with-open [consumer (create-consumer consumer-config)]
     (subscribe-from-stored-offsets
-     indexer consumer [(:tx-topic options) (:doc-topic options)])
+     indexer consumer [(::tx-topic options) (::doc-topic options)])
     (let [pending-txs-state (atom [])]
       (while @running?
         (try
@@ -302,8 +292,8 @@
             :consumer consumer
             :timeout 1000
             :pending-txs-state pending-txs-state
-            :tx-topic (:tx-topic options)
-            :doc-topic (:doc-topic options)})
+            :tx-topic (::tx-topic options)
+            :doc-topic (::doc-topic options)})
           (catch Exception e
             (log/error e "Error while consuming and indexing from Kafka:")
             (Thread/sleep 500)))))))
@@ -315,11 +305,11 @@
 (defn- start-indexing-consumer
   ^java.io.Closeable
   [admin-client consumer-config indexer
-   {:keys [tx-topic
-           replication-factor
-           doc-partitions
-           doc-topic
-           create-topics] :as options}]
+   {:keys [crux.kafka/tx-topic
+           crux.kafka/replication-factor
+           crux.kafka/doc-partitions
+           crux.kafka/doc-topic
+           crux.kafka/create-topics] :as options}]
   (when create-topics
     (create-topic admin-client tx-topic 1 replication-factor tx-topic-config)
     (create-topic admin-client doc-topic doc-partitions
@@ -336,45 +326,71 @@
                     "crux.kafka.indexing-consumer-thread")
        (.start)))))
 
-(def indexing-consumer [(fn [{:keys [admin-client indexer]} options]
-                          (let [kafka-config (derive-kafka-config options)
-                                consumer-config (merge {"group.id" (:group-id options)}
-                                                       kafka-config)]
-                            (start-indexing-consumer admin-client consumer-config indexer options)))
-                        [:indexer :admin-client]
-                        (s/keys :opt-un [::bootstrap-servers
-                                         ::tx-topic
-                                         ::doc-topic
-                                         ::doc-partitions
-                                         ::create-topics
-                                         ::replication-factor])])
+(def default-options {::bootstrap-servers
+                      {:doc "URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
+                       :default "localhost:9092"
+                       :crux.config/type :crux.config/string}
+                      ::tx-topic
+                      {:doc "Kafka transaction topic"
+                       :default "crux-transaction-log"
+                       :crux.config/type :crux.config/string}
+                      ::doc-topic
+                      {:doc "Kafka document topic"
+                       :default "crux-docs"
+                       :crux.config/type :crux.config/string}
+                      ::doc-partitions
+                      {:doc "Partitions for document topic"
+                       :default 1
+                       :crux.config/type :crux.config/nat-int}
+                      ::create-topics
+                      {:doc "Create topics if they do not exist"
+                       :default true
+                       :crux.config/type :crux.config/boolean}
+                      ::replication-factor
+                      {:doc "Level of durability for Kakfa"
+                       :default 1
+                       :crux.config/type :crux.config/nat-int}
+                      ::group-id
+                      {:doc "Kafka client group.id"
+                       :default (str/trim (or (System/getenv "HOSTNAME")
+                                              (System/getenv "COMPUTERNAME")
+                                              (.toString (java.util.UUID/randomUUID))))
+                       :crux.config/type :crux.config/string}
+                      ::kafka-properties-file
+                      {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."
+                       :crux.config/type :crux.config/string}
+                      ::kafka-properties-map
+                      {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."
+                       :crux.config/type [map? identity]}})
 
-(def admin-client [(fn [_ options]
-                     (create-admin-client (derive-kafka-config options)))])
+(def indexing-consumer {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]} options]
+                                    (let [kafka-config (derive-kafka-config options)
+                                          consumer-config (merge {"group.id" (::group-id options)} kafka-config)]
+                                      (start-indexing-consumer admin-client consumer-config indexer options)))
+                        :deps [:crux.node/indexer ::admin-client]
+                        :args default-options})
 
-(def admin-wrapper [(fn [{:keys [admin-client]} _]
-                      (reify Closeable
-                        (close [_])))
-                    [:admin-client]])
+(def admin-client {:start-fn (fn [_ options]
+                               (create-admin-client (derive-kafka-config options)))
+                   :args default-options})
 
-(def producer [(fn [_ options]
-                 (create-producer (derive-kafka-config options)))])
+(def admin-wrapper {:start-fn (fn [{::keys [admin-client]} _]
+                                (reify Closeable
+                                  (close [_])))
+                    :deps [::admin-client]})
 
-(def tx-log [(fn [{:keys [producer]} {:keys [tx-topic doc-topic] :as options}]
-               (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
-             [:producer]
-             (s/keys :opt-un [::tx-topic
-                              ::doc-topic
-                              ::bootstrap-servers
-                              ::kafka-properties-file
-                              ::kafka-properties-map])])
+(def producer {:start-fn (fn [_ options]
+                           (create-producer (derive-kafka-config options)))
+               :args default-options})
 
-(def node-config {:tx-log tx-log
-                  :admin-client admin-client
-                  :admin-wrapper admin-wrapper
-                  :producer producer
-                  :indexing-consumer indexing-consumer})
+(def tx-log {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
+                         (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
+             :deps [::producer]
+             :args default-options})
 
-(comment
-  ;; Start a Kafka node:
-  (b/start-node node-config some-options))
+(def topology (merge n/base-topology
+                     {:crux.node/tx-log tx-log
+                      ::admin-client admin-client
+                      ::admin-wrapper admin-wrapper
+                      ::producer producer
+                      ::indexing-consumer indexing-consumer}))

@@ -1,6 +1,6 @@
 = crux-http-client
 
-This project contains `crux.bootstrap.remote-api-client` which implements the
+This project contains `crux.remote-api-client` which implements the
 complete Crux API using a remote Crux instance over HTTP (via `crux-http-server`).
 
 For tests, see usage of `/crux-test/test/crux/fixtures/http_server.clj`.

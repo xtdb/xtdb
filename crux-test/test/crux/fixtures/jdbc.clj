@@ -1,27 +1,20 @@
 (ns crux.fixtures.jdbc
-  (:require [next.jdbc :as jdbc]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.kv :refer [*kv-backend*]]
+  (:require [crux.fixtures.api :as api]
             [crux.io :as cio]
-            [crux.jdbc :as j])
-  (:import [crux.api Crux ICruxAPI]))
+            [crux.jdbc :as j]
+            [next.jdbc :as jdbc]
+            [clojure.test :as t]
+            [crux.kafka :as k]))
 
 (def ^:dynamic *dbtype* nil)
 
 (defn with-jdbc-node [dbtype f & [opts]]
   (let [dbtype (name dbtype)
-        db-dir (str (cio/create-tmpdir "kv-store"))
-        options (merge {:dbtype (name dbtype)
-                        :dbname "cruxtest"
-                        :db-dir db-dir
-                        :kv-backend *kv-backend*}
+        options (merge {:crux.node/topology :crux.jdbc/topology
+                        :crux.jdbc/dbtype (name dbtype)
+                        :crux.jdbc/dbname "cruxtest"}
                        opts)
-        ds (jdbc/get-datasource options)]
+        ds (jdbc/get-datasource (j/conform-next-jdbc-properties options))]
     (binding [*dbtype* dbtype]
       (j/prep-for-tests! dbtype ds)
-      (try
-        (with-open [standalone-node (Crux/startJDBCNode options)]
-          (binding [*api* standalone-node]
-            (f)))
-        (finally
-          (cio/delete-dir db-dir))))))
+      (api/with-opts options f))))

@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.lru :as lru])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
@@ -195,19 +196,12 @@
   (close [_]
     (.close tx)))
 
-(s/def ::env-flags nat-int?)
-
-(s/def ::options (s/keys :req-un [:crux.kv/db-dir]
-                         :opt-un [:crux.kv/sync?]
-                         :opt [::env-flags]))
-
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
-  (open [this {:keys [db-dir sync? crux.kv.lmdb/env-flags] :as options}]
-    (s/assert ::options options)
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.lmdb/env-flags] :as options}]
     (let [env-flags (or env-flags
                         (bit-or default-env-flags
                                 (if sync?
@@ -275,3 +269,9 @@
   Closeable
   (close [_]
     (env-close env)))
+
+(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
+                     (lru/start-kv-store (map->LMDBKv {:db-dir db-dir}) options))
+         :args (merge lru/options
+                      {::env-flags {:doc "LMDB Flags"
+                                    :crux.config/type :crux.config/nat-int}})})

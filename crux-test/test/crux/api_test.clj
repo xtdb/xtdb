@@ -4,14 +4,16 @@
             [crux.fixtures.standalone :as fs]
             [crux.moberg]
             [crux.codec :as c]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.kafka :as fk]
+            [crux.fixtures.api :refer [*api*] :as apif]
+            [crux.fixtures.kv :as kvf]
+            [crux.fixtures.kafka :as fk :refer [*ingest-client*]]
             crux.jdbc
             [crux.fixtures.jdbc :as fj]
-            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
+            [crux.fixtures.kafka :as kf]
             [crux.rdf :as rdf]
-            [crux.api :as api])
+            [crux.api :as api]
+            [crux.fixtures.api :as apif])
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
@@ -22,7 +24,7 @@
 
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
-    (cn/with-cluster-node f))
+    (kf/with-cluster-node f))
   (t/testing "Local API StandaloneNode"
     (fs/with-standalone-node f))
   (t/testing "JDBC Node"
@@ -31,10 +33,10 @@
     (fn [f]
       (fh/with-http-server
         (fn [f]
-          (cn/with-cluster-node f))))))
+          (kf/with-cluster-node f))))))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each with-each-api-implementation)
+(t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir apif/with-node)
 
 (declare execute-sparql)
 
@@ -78,8 +80,10 @@
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
                      :crux.kv/estimate-num-keys
-                     :crux.tx-log/consumer-state :crux.kv/size
-                     :crux.version/version :crux.version/revision))))
+                     :crux.tx-log/consumer-state
+                     :crux.kv/size
+                     :crux.version/version
+                     :crux.version/revision))))
 
   (t/testing "empty db"
     (t/is (.db *api*)))
@@ -357,24 +361,25 @@
 
 (t/deftest test-ingest-client
   (if (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
-    (with-open [ingest-client (api/new-ingest-client (:options *api*))]
-      (let [submitted-tx @(.submitTxAsync ingest-client [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-        (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
-        (t/is (= #{[:ivan]} (.q (.db *api*)
-                                '{:find [e]
-                                  :where [[e :name "Ivan"]]})))
+    (kf/with-ingest-client
+      (fn []
+        (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
+          (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+          (t/is (= #{[:ivan]} (.q (.db *api*)
+                                  '{:find [e]
+                                    :where [[e :name "Ivan"]]})))
 
-        (with-open [ctx (.newTxLogContext ingest-client)]
-          (let [result (.txLog ingest-client ctx nil false)]
-            (t/is (instance? LazySeq result))
-            (t/is (not (realized? result)))
-            (t/is (= [(assoc submitted-tx
-                             :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
-                     result))
-            (t/is (realized? result))))
+          (with-open [ctx (.newTxLogContext *ingest-client*)]
+            (let [result (.txLog *ingest-client* ctx nil false)]
+              (t/is (instance? LazySeq result))
+              (t/is (not (realized? result)))
+              (t/is (= [(assoc submitted-tx
+                               :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
+                       result))
+              (t/is (realized? result))))
 
-        (with-open [ctx (.newTxLogContext ingest-client)]
-          (t/is (thrown? IllegalArgumentException (.txLog ingest-client ctx nil true))))))
+          (with-open [ctx (.newTxLogContext *ingest-client*)]
+            (t/is (thrown? IllegalArgumentException (.txLog *ingest-client* ctx nil true)))))))
     (t/is true)))
 
 (defn execute-sparql [^RepositoryConnection conn q]

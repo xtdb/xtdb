@@ -1,17 +1,12 @@
 (ns crux.lru
-  (:require [clojure.spec.alpha :as s]
-            [crux.db :as db]
+  (:require [crux.db :as db]
             [crux.index :as idx]
-            [crux.kv :as kv]
-            [crux.codec :as c]
-            [crux.memory :as mem])
-  (:import java.io.Closeable
-           [java.util Collections LinkedHashMap]
+            [crux.kv :as kv])
+  (:import [clojure.lang Counted ILookup]
+           java.io.Closeable
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
-           [clojure.lang Counted ILookup]
-           org.agrona.concurrent.UnsafeBuffer
-           [org.agrona DirectBuffer MutableDirectBuffer]))
+           java.util.LinkedHashMap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -71,45 +66,6 @@
       Counted
       (count [_]
         (.size cache)))))
-
-(defrecord CachedObjectStore [cache object-store]
-  db/ObjectStore
-  (get-single-object [this snapshot k]
-    (compute-if-absent
-     cache
-     (c/->id-buffer k)
-     mem/copy-to-unpooled-buffer
-     #(db/get-single-object object-store snapshot %)))
-
-
-  (get-objects [this snapshot ks]
-    (->> (for [k ks
-               :let [v (db/get-single-object this snapshot k)]
-               :when v]
-           [k v])
-         (into {})))
-
-  (known-keys? [this snapshot ks]
-    (db/known-keys? object-store snapshot ks))
-
-  (put-objects [this kvs]
-    (db/put-objects
-      object-store
-      (for [[k v] kvs
-            :let [k (c/->id-buffer k)]]
-        (do
-          (evict cache k)
-          [k v]))))
-
-  (delete-objects [this ks]
-    (db/delete-objects
-      object-store
-      (for [k ks
-            :let [k (c/->id-buffer k)]]
-        (do (evict cache k) k))))
-
-  Closeable
-  (close [_]))
 
 (defn- ensure-iterator-open [closed-state]
   (when @closed-state
@@ -192,14 +148,14 @@
   (->CachedSnapshot snapshot close-snapshot? (StampedLock.) (atom #{})))
 
 (defprotocol CacheProvider
-  (get-named-cache [this cache-name cache-size]))
+  (get-named-cache [this cache-name]))
 
 ;; TODO: this should be changed to something more sensible, this is to
 ;; simplify API usage, and the kv instance is the main
 ;; object. Potentially these caches should simply just live in the
 ;; main node directly, but that requires passing more stuff around
 ;; to the lower levels.
-(defrecord CacheProvidingKvStore [kv cache-state]
+(defrecord CacheProvidingKvStore [kv cache-state cache-size]
   kv/KvStore
   (open [this options]
     (assoc this :kv (kv/open kv options)))
@@ -233,29 +189,13 @@
     (.close ^Closeable kv))
 
   CacheProvider
-  (get-named-cache [this cache-name cache-size]
+  (get-named-cache [this cache-name]
     (get (swap! cache-state
                 update
                 cache-name
                 (fn [cache]
                   (or cache (new-cache cache-size))))
          cache-name)))
-
-(defn new-cache-providing-kv-store [kv]
-  (if (instance? CacheProvidingKvStore kv)
-    kv
-    (->CacheProvidingKvStore kv (atom {}))))
-
-(s/def ::doc-cache-size nat-int?)
-
-(def ^:const default-doc-cache-size (* 128 1024))
-
-(defn new-cached-object-store
-  ([kv]
-   (new-cached-object-store kv default-doc-cache-size))
-  ([kv cache-size]
-   (->CachedObjectStore (get-named-cache kv ::doc-cache (or cache-size default-doc-cache-size))
-                        (idx/->KvObjectStore kv))))
 
 (defrecord CachedIndex [idx index-cache]
   db/Index
@@ -269,3 +209,26 @@
 
 (defn new-cached-index [idx cache-size]
   (->CachedIndex idx (new-cache cache-size)))
+
+(def ^:const default-query-cache-size 10240)
+
+(def options
+  (merge kv/options
+         {::query-cache-size
+          {:doc "Query Cache Size"
+           :default default-query-cache-size
+           :crux.config/type :crux.config/nat-int}}))
+
+(defn start-kv-store ^java.io.Closeable [kv {:keys [crux.kv/check-and-store-index-version
+                                                    crux.lru/query-cache-size] :as options}]
+  (let [kv (if (instance? CacheProvidingKvStore kv)
+             kv
+             (->CacheProvidingKvStore kv (atom {}) query-cache-size))
+        kv (kv/open kv options)]
+    (try
+      (if check-and-store-index-version
+        (idx/check-and-store-index-version kv)
+        kv)
+      (catch Throwable t
+        (.close ^Closeable kv)
+        (throw t)))))

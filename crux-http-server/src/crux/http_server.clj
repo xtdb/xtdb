@@ -2,30 +2,26 @@
   "HTTP API for Crux.
 
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [clojure.edn :as edn]
-            [clojure.instant :as instant]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
+  (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.io :as cio]
-            [crux.bootstrap :as b]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
-            [ring.middleware.params :as p]
             [ring.middleware.cors :refer [wrap-cors]]
-            [ring.util.request :as req]
+            [ring.middleware.params :as p]
             [ring.util.io :as rio]
+            [ring.util.request :as req]
             [ring.util.time :as rt])
-  (:import [java.io Closeable IOException]
+  (:import [crux.api ICruxAPI ICruxDatasource]
+           [java.io Closeable IOException]
            java.time.Duration
            java.util.Date
-           java.util.UUID
-           org.eclipse.jetty.server.Server
-           [crux.api ICruxDatasource ICruxAPI]))
+           org.eclipse.jetty.server.Server))
 
 ;; ---------------------------------------------------
 ;; Utils
@@ -86,8 +82,7 @@
 (defn- status [^ICruxAPI crux-node]
   (let [status-map (.status crux-node)]
     (if (or (not (contains? status-map :crux.zk/zk-active?))
-            (:crux.zk/zk-active? status-map)
-            (not= (System/getenv "CRUX_MODE") "CLUSTER_NODE"))
+            (:crux.zk/zk-active? status-map))
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}
@@ -322,9 +317,7 @@
        :headers {"Content-Type" "text/plain"}
        :body "Unsupported method on this address."})))
 
-(s/def ::server-port :crux.io/port)
-
-(s/def ::options (s/keys :req-un [::server-port]))
+(def ^:const default-server-port 3000)
 
 (defrecord HTTPServer [^Server server options]
   Closeable
@@ -339,7 +332,7 @@
   ([crux-node] (start-http-server crux-node {}))
   ([crux-node
     {:keys [server-port cors-access-control]
-     :or {server-port 3000 cors-access-control []}
+     :or {server-port default-server-port cors-access-control []}
      :as options}]
    (let [wrap-cors' #(apply wrap-cors (cons % cors-access-control))
          server (j/run-jetty (-> (partial handler crux-node)

@@ -1,25 +1,25 @@
 (ns crux.query
-  (:require [clojure.edn :as edn]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.walk :as w]
             [clojure.tools.logging :as log]
+            [clojure.walk :as w]
             [com.stuartsierra.dependency :as dep]
             [crux.codec :as c]
-            [crux.io :as cio]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.lru :as lru]
+            [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem])
-  (:import java.util.Comparator
+            [crux.lru :as lru]
+            [crux.memory :as mem]
+            [crux.object-store :as os])
+  (:import clojure.lang.ExceptionInfo
+           crux.api.ICruxDatasource
+           crux.codec.EntityTx
+           crux.index.BinaryJoinLayeredVirtualIndex
+           java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
-           clojure.lang.ExceptionInfo
-           org.agrona.ExpandableDirectByteBuffer
-           crux.index.BinaryJoinLayeredVirtualIndex
-           crux.codec.EntityTx
-           crux.api.ICruxDatasource))
+           org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -1189,37 +1189,17 @@
   (transactionTime [_]
     transact-time))
 
-(def ^:const default-query-cache-size 10240)
-
-(s/def ::query-cache-size nat-int?)
-
-(s/def ::db-options (s/keys :opt [::query-cache-size]
-                            :opt-un [:crux.lru/doc-cache-size]))
-
-(defn db
-  (^crux.api.ICruxDatasource [kv]
-   (db kv nil nil nil {}))
-  (^crux.api.ICruxDatasource [kv valid-time]
-   (db kv nil valid-time nil {}))
-  (^crux.api.ICruxDatasource [kv valid-time transact-time]
-   (db kv nil valid-time transact-time {}))
-  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size
-                                                                               doc-cache-size]
-                                                                        :or {query-cache-size default-query-cache-size
-                                                                             doc-cache-size lru/default-doc-cache-size}
-                                                                        :as options}]
-   (s/assert ::db-options options)
-   (let [now (cio/next-monotonic-date)]
-     (->QueryDatasource kv
-                        (lru/get-named-cache kv ::query-cache query-cache-size)
-                        (lru/get-named-cache kv ::conform-cache query-cache-size)
-                        (or object-store (lru/new-cached-object-store kv doc-cache-size))
-                        (or valid-time now)
-                        (or transact-time now)
-                        nil))))
+(defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
+  (->QueryDatasource kv
+                     (lru/get-named-cache kv ::query-cache)
+                     (lru/get-named-cache kv ::conform-cache)
+                     object-store
+                     valid-time
+                     transact-time
+                     nil))
 
 (defn submitted-tx-updated-entity?
-  ([kv {:crux.tx/keys [tx-time] :as submitted-tx} eid]
-   (submitted-tx-updated-entity? kv submitted-tx tx-time eid))
-  ([kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} valid-time eid]
-   (= tx-id (:crux.tx/tx-id (entity-tx (db kv valid-time tx-time) eid)))))
+  ([kv object-store {:crux.tx/keys [tx-time] :as submitted-tx} eid]
+   (submitted-tx-updated-entity? kv object-store submitted-tx tx-time eid))
+  ([kv object-store {:crux.tx/keys [tx-id tx-time] :as submitted-tx} valid-time eid]
+   (= tx-id (:crux.tx/tx-id (entity-tx (db kv object-store valid-time tx-time) eid)))))

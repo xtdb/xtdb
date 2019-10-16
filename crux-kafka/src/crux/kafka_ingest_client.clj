@@ -1,5 +1,5 @@
-(ns crux.bootstrap.kafka-ingest-client
-  (:require [crux.bootstrap :as b]
+(ns crux.kafka-ingest-client
+  (:require [crux.node :as n]
             [crux.db :as db]
             [crux.kafka :as k])
   (:import crux.api.ICruxAsyncIngestAPI
@@ -25,12 +25,11 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(def ingest-client-config {:tx-log k/tx-log
-                           :admin-client k/admin-client
-                           :admin-wrapper k/admin-wrapper
-                           :producer k/producer})
+(def topology {:crux.node/tx-log k/tx-log
+               :crux.kafka/admin-client k/admin-client
+               :crux.kafka/admin-wrapper k/admin-wrapper
+               :crux.kafka/producer k/producer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [options (merge b/default-options options)
-        [node-modules close-fn] (b/start-modules ingest-client-config options)]
-    (map->CruxKafkaIngestClient (assoc node-modules :close-fn close-fn :options options))))
+  (let [[{:keys [crux.node/tx-log]} close-fn] (n/start-modules topology options)]
+    (map->CruxKafkaIngestClient {:tx-log tx-log :close-fn close-fn})))
