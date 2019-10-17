@@ -55,9 +55,6 @@
                                      :roleInGroup/name}
                                    (keys n))))))
 
-(crux/submit-tx
-  node
-  (mapv (fn [n] [:crux.tx/put n]) nodes))
 ; this standalone configuration is the easiest way to try Crux, no Kafka needed
 (def crux-options
   {:crux.node/topology :crux.standalone/topology
