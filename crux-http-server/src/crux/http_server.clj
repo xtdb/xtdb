@@ -254,8 +254,8 @@
 (defn- attribute-stats [^ICruxAPI crux-node]
   (success-response (.attributeStats crux-node)))
 
-(def ^:private sparql-available? (try
-                                   (require 'crux.sparql.protocol)
+(def ^:private sparql-available? (try ; you can change it back to require when clojure.core fixes it to be thread-safe
+                                   (requiring-resolve 'crux.sparql.protocol/sparql-query)
                                    true
                                    (catch IOException _
                                      false)))

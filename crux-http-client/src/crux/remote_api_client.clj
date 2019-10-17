@@ -46,14 +46,12 @@
      (constantly
       (binding [*warn-on-reflection* false]
         (or (try
-              (require 'clj-http.client)
-              (let [f (resolve 'clj-http.client/request)]
+              (let [f (requiring-resolve 'clj-http.client/request)]
                 (fn [opts]
                   (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
               (catch IOException not-found))
             (try
-              (require 'org.httpkit.client)
-              (let [f (resolve 'org.httpkit.client/request)]
+              (let [f (requiring-resolve 'org.httpkit.client/request)]
                 (fn [opts]
                   (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
                     (if error
