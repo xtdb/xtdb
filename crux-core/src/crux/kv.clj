@@ -46,6 +46,6 @@
 (extend-protocol status/Status
   crux.kv.KvStore
   (status-map [this]
-    {:crux.kv/kv-backend (kv-name this)
+    {:crux.kv/kv-store (kv-name this)
      :crux.kv/estimate-num-keys (count-keys this)
      :crux.kv/size (some-> (db-dir this) (cio/folder-size))}))

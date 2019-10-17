@@ -83,9 +83,9 @@
     (reset! closables nil)))
 
 (def node-opts
-  {:kv-backend "crux.kv.rocksdb.RocksKv"
-   :event-log-dir "data/eventlog-1"
-   :db-dir "data/db-dir-1"})
+  {:crux.node/kv-store "crux.kv.rocksdb.RocksKv"
+   :crux.standalone/event-log-dir "data/eventlog-1"
+   :crux.kv/db-dir "data/db-dir-1"})
 
 (def http-opts
   {:server-port 8080
@@ -104,7 +104,7 @@
   (let [runtime (Runtime/getRuntime)]
     (.addShutdownHook runtime (Thread. #'stop-servers)))
   (println "starting console server")
-  (let [node (crux.api/start-standalone-node node-opts)
+  (let [node (crux.api/start-node node-opts)
         crux-http-server (crux.http-server/start-http-server node http-opts)
         console-http-server (http/start-server handler {:port 5000})]
     (reset! closables [node crux-http-server console-http-server])))

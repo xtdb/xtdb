@@ -55,10 +55,11 @@
 (def log-dir "data/eventlog")
 
 (def crux-options
-  {:kv-backend "crux.kv.rocksdb.RocksKv"
-   :bootstrap-servers "localhost:9092"
-   :event-log-dir log-dir
-   :db-dir index-dir
+  {:crux.node/topology :crux.kafka/topology
+   :crux.node/kv-store "crux.kv.rocksdb.RocksKv"
+   :crux.kafka/bootstrap-servers "localhost:9092"
+   :crux.standalone/event-log-dir log-dir
+   :crux.kv/db-dir index-dir
    :server-port 8080})
 
 (def storage-dir "dev-storage")

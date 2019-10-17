@@ -44,7 +44,6 @@ embedded-kafka)
 ;; end::ek-close[]
 )
 
-
 (defn example-start-cluster []
 ;; tag::start-cluster-node[]
 (def ^crux.api.ICruxAPI node

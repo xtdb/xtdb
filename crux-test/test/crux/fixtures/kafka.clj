@@ -72,7 +72,7 @@
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
       (apif/with-opts {:crux.node/topology :crux.kafka/topology
-                       :crux.node/kv-backend *kv-module*
+                       :crux.node/kv-store *kv-module*
                        :crux.kafka/tx-topic *tx-topic*
                        :crux.kafka/doc-topic *doc-topic*
                        :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
