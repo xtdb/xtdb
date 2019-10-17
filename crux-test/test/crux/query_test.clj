@@ -1172,6 +1172,46 @@
                      (repeatedly n))]
     (t/is (>= (/ (reduce + factors) n) acceptable-limit-slowdown))))
 
+;; https://github.com/juxt/crux/issues/348
+
+(t/deftest test-range-join-order-bug-348
+  (f/transact! *api* (f/people
+                      (for [n (range 100)]
+                        {:crux.db/id (keyword (str "ivan-" n))
+                         :name "Ivan"
+                         :name1 "Ivan"
+                         :number-1 n})))
+
+  (f/transact! *api* (f/people
+                      (for [n (range 10000)]
+                        {:crux.db/id (keyword (str "oleg-" n))
+                         :name "Oleg"
+                         :name1 "Oleg"
+                         :number-2 n})))
+
+  (let [n 10
+        acceptable-limit-slowdown 0.1
+        factors (->> #(let [small-set-ns-start (System/nanoTime)]
+                        (t/is (= #{[:ivan-50]}
+                                 (api/q (api/db *api*) '{:find [e]
+                                                         :where [[e :number-1 a]
+                                                                 [e :name n]
+                                                                 [(<= a 50)]
+                                                                 [(>= a 50)]]})))
+                        (let [small-set-ns (- (System/nanoTime) small-set-ns-start)
+                              large-set-ns-start (System/nanoTime)]
+                          (t/is (= #{[:oleg-5000]}
+                                   (api/q (api/db *api*) '{:find [e]
+                                                           :where [[e :number-2 a]
+                                                                   [e :name n]
+                                                                   [(<= a 5000)]
+                                                                   [(>= a 5000)]]})))
+                          (let [large-set-ns (- (System/nanoTime) large-set-ns-start)]
+                            (double (/ (min small-set-ns large-set-ns)
+                                       (max small-set-ns large-set-ns))))))
+                     (repeatedly n))]
+    (t/is (>= (/ (reduce + factors) n) acceptable-limit-slowdown))))
+
 ;; https://github.com/juxt/crux/issues/71
 
 (t/deftest test-query-limits-bug-71
