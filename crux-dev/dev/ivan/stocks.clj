@@ -6,12 +6,10 @@
             [crux.api :as api]))
 
 (comment
-
   ; see crux-microbench neighbor for tickers data
-
   (def node
-    (api/start-node
+    (crux.api/start-node
      {:crux.node/topology :crux.standalone/topology
-      :kv-backend "crux.kv.memdb.MemKv"
-      :db-dir     "data/db-dir-1"
-      :event-log-dir "data/eventlog-1"})))
+      :crux.node/kv-store "crux.kv.memdb.MemKv"
+      :crux.kv/db-dir "data/db-dir-1"
+      :crux.standalone/event-log-dir "data/eventlog-1"})))

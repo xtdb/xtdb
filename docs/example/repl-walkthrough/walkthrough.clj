@@ -10,9 +10,9 @@
 
 (def crux-options
   {:crux.node/topology :crux.standalone/topology
-   :kv-backend "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage
-   :event-log-dir     "data/event-log-dir-1" ; :event-log-dir is ignored when using MemKv
-   :db-dir     "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
+   :crux.node/kv-store "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage
+   :crux.standalone/event-log-dir "data/event-log-dir-1" ; :event-log-dir is ignored when using MemKv
+   :crux.kv/db-dir "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
 
 
 (def node (crux/start-node crux-options))

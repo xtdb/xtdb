@@ -78,7 +78,7 @@
                     (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                       {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
-                     :crux.kv/kv-backend
+                     :crux.kv/kv-store
                      :crux.kv/estimate-num-keys
                      :crux.tx-log/consumer-state
                      :crux.kv/size

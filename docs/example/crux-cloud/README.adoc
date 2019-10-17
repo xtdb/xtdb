@@ -1,4 +1,4 @@
-= Use Crux with Confluent's cloud Kafka platform in <5m 
+= Use Crux with Confluent's cloud Kafka platform in <5m
 
 Confluent's latest Kafka-as-a-service offering is extremely compelling for
 small Crux deployments as there are no minimum fees and the pricing structure
@@ -10,7 +10,7 @@ The service is currently available in GCP and AWS.
 See Confluent's page for pricing details:
 https://www.confluent.io/confluent-cloud/
 
-== Setup a Confluent Cloud account 
+== Setup a Confluent Cloud account
 
 Follow the short sequence of sign-up steps to create an account:
 https://www.confluent.io/confluent-cloud/
@@ -36,7 +36,7 @@ in a safe location that is accessible from your Crux REPL.
 == Start a Clojure REPL
 
 `crux-kafka` must be provided. For instance, navigate to `crux-dev` and run
-`lein repl` 
+`lein repl`
 
 Update the various values based on your configuration and run the following
 code to connect to your cluster and make a transaction:
@@ -47,14 +47,15 @@ code to connect to your cluster and make a transaction:
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
-  (crux/start-cluster-node
-   {:kv-backend "crux.kv.memdb.MemKv"
-    :tx-topic "tx-1" ; choose your tx-topic name
-    :doc-topic "doc-1" ; choose your doc-topic name
-    :replication-factor 3 ; Confluent Cloud requires this to be `3`
-    :doc-partitions 6 ; Confluent Cloud default -- you are limited to 2048 partitions per topic for a non-Enterprise cluster
-    :bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
-    :kafka-properties-file "path/to/my-kafka.properties"})) ; the path of your properties file
+  (crux/start-node
+   {:crux.node/topology :crux.kafka/topology
+    :crux.node/kv-store "crux.kv.memdb.MemKv"
+    :crux.kafka/tx-topic "tx-1" ; choose your tx-topic name
+    :crux.kafka/doc-topic "doc-1" ; choose your doc-topic name
+    :crux.kafka/replication-factor 3 ; Confluent Cloud requires this to be `3`
+    :crux.kafka/doc-partitions 6 ; Confluent Cloud default -- you are limited to 2048 partitions per topic for a non-Enterprise cluster
+    :crux.kafka/bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
+    :crux.kafka/kafka-properties-file "path/to/my-kafka.properties"})) ; the path of your properties file
 
 ; you can also use `:kafka-properties-map` although this increases the risk of
 ; checking-in your SASL secrets!

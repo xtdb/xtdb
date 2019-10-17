@@ -161,10 +161,9 @@
 
   (def crux (crux.api/start-node
              {:crux.node/topology :crux.standalone/topology
-              :crux.node/topology :crux.standalone/topology
-              :kv-backend "crux.kv.rocksdb.RocksKv"
-              :db-dir "data/db-dir"
-              :event-log-dir "data/event-log-db"}))
+              :crux.node/kv-store "crux.kv.rocksdb.RocksKv"
+              :crux.kv/db-dir "data/db-dir"
+              :crux.standalone/event-log-dir "data/event-log-db"}))
 
   (crux.api/submit-tx
    crux

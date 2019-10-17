@@ -6,9 +6,9 @@
 
 (def opts
   {:crux.node/topology :crux.standalone/topology
-   :kv-backend    "crux.kv.rocksdb.RocksKv"
-   :event-log-dir "data/eventlog-1"
-   :db-dir        "data/db-dir-1"})
+   :crux.node/kv-store    "crux.kv.rocksdb.RocksKv"
+   :crux.standalone/event-log-dir "data/eventlog-1"
+   :crux.kv/db-dir        "data/db-dir-1"})
 
 (def simple-node
   (api/start-node opts))

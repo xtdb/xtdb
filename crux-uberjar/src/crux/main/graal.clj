@@ -7,7 +7,7 @@
   (:gen-class))
 
 (defn -main [& args]
-  (with-open [node (n/start sa/topology {:db-dir "graal-data"
-                                         :event-log-dir "graal-event-log"
-                                         :kv-backend "crux.kv.rocksdb.RocksKv"})]
+  (with-open [node (n/start sa/topology {:crux.kv/db-dir "graal-data"
+                                         :crux.standalone/event-log-dir "graal-event-log"
+                                         :crux.node/kv-store "crux.kv.rocksdb.RocksKv"})]
     (log/info "Starting Crux native image" (pr-str (.status node)))))

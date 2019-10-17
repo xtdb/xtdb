@@ -380,7 +380,7 @@
                                    :watdiv/ingest-time])
         (select-keys (crux/status crux) [:crux.version/version
                                          :crux.version/revision
-                                         :crux.kv/kv-backend]))))
+                                         :crux.kv/kv-store]))))
 
   (execute-with-timeout [this datalog]
     (let [db (crux/db crux)]
