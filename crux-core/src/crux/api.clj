@@ -305,12 +305,15 @@
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
-  options
-  {:crux.node/topology e.g. \"crux.standalone/topology\"}
+  options {:crux.node/topology e.g. \"crux.standalone/topology\"}
 
-  returns a standalone node which implements ICruxAPI and
-  java.io.Closeable. Latter allows the node to be stopped
-   by calling `(.close node)`.
+  Options are specified as keywords using their long format name, like
+  :crux.kafka/bootstrap-servers etc. See the individual modules used in the specified
+  topology for option descriptions.
+
+  returns a node which implements ICruxAPI and
+  java.io.Closeable. Latter allows the node to be stopped by
+  calling `(.close node)`.
 
   throws IndexVersionOutOfSyncException if the index needs rebuilding.
   throws NonMonotonicTimeException if the clock has moved backwards since
@@ -337,18 +340,18 @@
   "Starts an ingest client for transacting into Kafka without running a
   full local node with index.
 
-  For valid options, see crux.cli/cli-options. Options are
+  For valid options, see crux.kafka/default-options. Options are
   specified as keywords using their long format name, like
-  :bootstrap-servers etc.
+  :crux.kafka/bootstrap-servers etc.
 
   options
-  {:bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
-   :group-id           \"group-id\"
-   :tx-topic           \"crux-transaction-log\"
-   :doc-topic          \"crux-docs\"
-   :create-topics      true
-   :doc-partitions     1
-   :replication-factor 1}
+  {:crux.kafka/bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
+   :crux.kafka/group-id           \"group-id\"
+   :crux.kafka/tx-topic           \"crux-transaction-log\"
+   :crux.kafka/doc-topic          \"crux-docs\"
+   :crux.kafka/create-topics      true
+   :crux.kafka/doc-partitions     1
+   :crux.kafka/replication-factor 1}
 
   Returns a crux.api.ICruxIngestAPI component that implements
   java.io.Closeable, which allows the client to be stopped by calling

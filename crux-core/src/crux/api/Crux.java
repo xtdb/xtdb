@@ -23,11 +23,17 @@ public class Crux {
     /**
      * Starts a query node.
      *
+     * Options are specified as keywords using their long format name,
+     * i.e. :crux.kakfa/bootstrap-servers. A valid :crux.node/topology
+     * must be specified, i.e. :crux.kafka/topology. For valid option
+     * descriptions, consult the documentation for the individual
+     * modules used in the specified topology.
+     *
      * Returns a crux.api.ICruxAPI component that implements
      * java.io.Closeable, which allows the node to be stopped by
      * calling close.
      *
-     * @param options TODO, how to specify options?
+     * @param options node configuration options.
      * @return        the started cluster node.
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
@@ -57,15 +63,15 @@ public class Crux {
      * Starts an ingest client for transacting into Kafka without
      * running a full local node with index.
      *
-     * For valid options, see crux.cli/cli-options. Options are
+     * For valid options, see crux.kafka/default-options. Options are
      * specified as keywords using their long format name, like
-     * :bootstrap-servers etc.
+     * :crux.kafka/bootstrap-servers etc.
      *
      * Returns a crux.api.ICruxAsyncIngestAPI component that
      * implements java.io.Closeable, which allows the client to be
      * stopped by calling close.
      *
-     * @param options see crux.cli/cli-options.
+     * @param options node configuration options.
      * @return        the started ingest client node.
      */
     @SuppressWarnings("unchecked")
