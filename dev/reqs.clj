@@ -2,10 +2,10 @@
 
 (def n
   (crux/start-node
-   {:crux.bootstrap/node-config :crux.standalone/node-config
-    :kv-backend "crux.kv.rocksdb.RocksKv"
-    :event-log-dir "data/eventlog-2"
-    :db-dir "data/db-dir-2"}))
+   {:crux.node/topology :crux.standalone/topology
+    :crux.node/kv-store "crux.kv.rocksdb.RocksKv"
+    :crux.standalone/event-log-dir "data/eventlog-2"
+    :crux.kv/db-dir "data/db-dir-2"}))
 
 (crux/submit-tx n
   [[:crux.tx/put
