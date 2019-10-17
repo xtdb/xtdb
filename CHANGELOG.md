@@ -8,6 +8,7 @@
 * Refactoring: Modularize configuration options defaults and documentation
 * Refactoring: Test fixtures more composable
 * [#352](https://github.com/juxt/crux/issues/352): fix Kotlin multhreaded node-start issues
+* [#348](https://github.com/juxt/crux/issues/348); Increase range constraints var-frequency for join order
 
 ## 19.09-1.4.0-alpha
 

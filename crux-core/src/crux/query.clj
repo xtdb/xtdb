@@ -273,9 +273,10 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- triple-joins [triple-clauses var->joins arg-vars stats]
+(defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
   (let [var->frequency (->> (concat (map :e triple-clauses)
-                                    (map :v triple-clauses))
+                                    (map :v triple-clauses)
+                                    (map :sym range-clauses))
                             (filter logic-var?)
                             (frequencies))
         triple-clauses (sort-by (fn [{:keys [a]}]
@@ -867,6 +868,7 @@
         v-var->range-constraints (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constraints))
         [triple-join-deps var->joins] (triple-joins triple-clauses
+                                                    range-clauses
                                                     var->joins
                                                     arg-vars
                                                     stats)
