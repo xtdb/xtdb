@@ -7,29 +7,31 @@ To start a Crux node, use the
 https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/crux-core/src/crux/api.clj[`crux.api`].
 
-There are different configurations of a Crux node:
+Within Clojure, we call `start-node` from within `crux.api`, passing it a set of
+options for the node. There are a number of different configuration options a Crux node
+can have, grouped into *topologies*.
 
-.Crux Nodes
+.Crux Topologies
 [#table-conversion%header,cols="d,d,d"]
 |===
-|Name|Transaction Log|Java API
-|<<#config-standalone, Standalone>>|Uses local event log|`Crux.startStandaloneNode options;`
-|<<#config-kafka, Cluster>>|Uses Kafka|`Crux.startClusterNode options;`
-|<<#config-jdbc, JDBC>>|Uses JDBC event log|`Crux.startJDBCNode options;`
+|Name|Transaction Log|Topology
+|<<#config-standalone, Standalone>>|Uses local event log|`:crux.standalone/topology`
+|<<#config-kafka, Kafka>>|Uses Kafka|`:crux.kafka/topology`
+|<<#config-jdbc, JDBC>>|Uses JDBC event log|`:crux.jdbc/topology`
 |===
 
-Use a cluster node when horizontal scalability is required or when
+Use a Kafka node when horizontal scalability is required or when
 you want the guarantees that Kafka offers in terms of resiliency,
 availability, and retention of data.
 
-Multiple cluster nodes participate in a cluster using Kafka as the primary
+Multiple Kafka nodes participate in a cluster with Kafka as the primary
 store and as the central means of coordination.
 
-The JDBC node is for when you don't want the overhead of maintaining a
+The JDBC node is useful when you don't want the overhead of maintaining a
 Kafka cluster. Read more about the motivations of this setup
 https://juxt.pro/blog/posts/crux-jdbc.html[here].
 
-The Standalone node is where a single Crux instance has everything
+The Standalone node is a single Crux instance which has everything
 it needs locally. This is good for experimenting with Crux and
 for small to medium sized deployments, where running a single instance
 is permissible.
@@ -41,98 +43,28 @@ starting point for making use of Crux. Nodes also implement
 [#config-properties]
 == Properties
 
-The following properties are used by any kind of Crux node:
+The following properties are within the topology used as a base
+for the other topologies, `crux.node`:
 
-.Nodes Configuration
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Property|Description|Default
-|`kv-backend`|Sets the K/V Store to use|*crux.kv.rocksdb.RocksKv*
-|`db-dir`|Sets the data-directory to use|*data*
-|===
-
-[#config-rocksdb]
-== RocksDB
-
-[#rocksdep]
-*Project Dependency*
-
-Add RocksDB as a project dependency:
-
-[source,clj,subs="normal"]
-----
-include::./deps.edn[tags=RocksDeps]
-----
-[#rocksconfig]
-*Configuration*
-
-Set the following properties when configuring RocksDB in Crux:
-
-.Rocks Configuration
+.`crux.node` configuration
 [#table-conversion%header,cols="d,d"]
 |===
 |Property|Value
-|`kv-backend`|`"crux.kv.rocksdb.RocksKv"`
-|`db-dir`|i.e. `"data/db-dir-1"`
+|`:crux.node/kv-store`|`'crux.kv.rocksdb/kv`
+|`:crux.node/object-store`|`'crux.object-store/kv-object-store`
 |===
 
-For example, when constructing the standalone node:
+The following set of options are used by KV backend implementations,
+defined within `crux.kv`:
 
-[source,clj]
-----
-include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
-----
-
-[#config-http]
-== Http
-
-Crux can be used programmatically as a library, but Crux also ships
-with an embedded HTTP server, that allows clients to use the API
-remotely via REST.
-
-image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,width=70%,align="center"]
-
-Set the `server-port` configuration property on a Crux node to
-expose a HTTP port that will accept REST requests:
-
-.HTTP Nodes Configuration
+.`crux.kv` options
 [#table-conversion%header,cols="d,d,d"]
 |===
-|Component|Property|Description
-|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
+|Property|Description|Default Value
+|`:crux.kv/db-dir` | Directory to store K/V files | *data*
+|`:crux.kv/sync?`| Sync the KV store to disk after every write?| *false*
+|`:crux.kv/check-and-store-index-version` | Check and store index version upon start? | *true*
 |===
-
-Visit the guide on using the <<#rest,REST api>> for examples
-of how to interact with Crux over HTTP.
-
-[#config-docker]
-== Docker
-
-If you want to experiment with Crux using a demo Docker container from
-Docker Hub (no JVM/JDK/Clojure install required, only Docker!)  then
-please see the
-https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
-web service example]. You can also use this self-contained
-demonstration image to experiment with the <<rest.adoc#,REST API>>.
-
-[#config-backup]
-== Backup and Restore
-
-Crux provides utility APIs for local backup and restore when you are
-using the standalone mode. For an example of usage, see
-https://github.com/juxt/crux/blob/e5e21352b7a466d20a7b57518e129770191de352/example/standalone_webservice/src/example_standalone_webservice/main.clj#L744[the
-standalone web service example].
-
-An additional example of backup and restore is provided that only
-applies to a stopped standalone node
-https://github.com/juxt/crux/tree/master/docs/example/backup-restore[here].
-
-In a clustered deployment, only Kafka's
-https://docs.confluent.io/current/kafka/post-deployment.html#backup-and-restoration[official
-backup and restore] functionality should be relied on to provide safe
-durability. The standalone mode's backup and restore operations can
-instead be used for creating operational snapshots of a node's indexes
-for scaling purposes.
 
 
 [#config-standalone]
@@ -145,11 +77,13 @@ example>>.
 
 image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
 
-.Standalone Configuration
+.Standalone configuration
 [#table-conversion%header,cols="d,d,d"]
 |===
-|Component|Property|Description
-|tx-log|`event-log-dir`|where to store events locally, i.e. `"data/eventlog-1"`
+|Property|Description|Default Value
+|`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.rocksdb/kv*
+|`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/eventlog-1"`|
+|`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *false*
 |===
 [#standalone-dependency]
 *Project Dependency*
@@ -161,6 +95,7 @@ include::./deps.edn[tags=CruxDep]
 [#standalone-start]
 *Getting started*
 
+The following code creates a node which runs completely within memory (with both the event-log store and db store using `crux.kv.memdb/kv`):
 [source,clj]
 ----
 include::./src/docs/examples.clj[tags=include-crux-api]
@@ -175,6 +110,28 @@ You can later stop the node if you wish:
 include::./src/docs/examples.clj[tags=close-node]
 ----
 
+[#config-rocksdb]
+== RocksDB
+
+RocksDB is used, by default, as Crux's primary store (in place of the in memory kv store in the example above).
+In order to use RocksDB within crux, however, you must first add RocksDB as a project dependency:
+
+[#rocksdep]
+*Project Dependency*
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=RocksDeps]
+----
+
+[#rocks-start]
+*Starting a node using RocksDB*
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
+----
+
 [#config-kafka]
 == Kafka Nodes
 
@@ -183,18 +140,21 @@ via a Kafka cluster.
 
 image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
 
-Kafka Cluster Nodes have the following properties:
+Kafka nodes have the following properties:
 
-.Cluster Node Configuration
+.Kafka node configuration
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Property|Description|Default value
-|`bootstrap-servers`|List of Kafka Servers to connect to|*localhost:9092*
-|`tx-topic`|Name of Kafka topic to send transaction log|*crux-transaction-log*
-|`doc-topic`|Name of Kafka topic to send documents|*crux-docs*
-|`create-topics`|Option to automatically create Kafka topics if they do not already exist|*true*
-|`doc-partitions`|Number of partitions for the document topic|*1*
-|`replication-factor`|Number of times to replicate data on Kafka|*1*
+|`:crux.kafka/bootstrap-servers`|URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"|*localhost:9092*
+|`:crux.kafka/tx-topic`|Name of Kafka transaction log topic|*crux-transaction-log*
+|`:crux.kafka/doc-topic`|Name of Kafka documents topic|*crux-docs*
+|`:crux.kafka/create-topics`|Option to automatically create Kafka topics if they do not already exist|*true*
+|`:crux.kafka/doc-partitions`|Number of partitions for the document topic|*1*
+|`:crux.kafka/replication-factor`|Number of times to replicate data on Kafka|*1*
+|`:crux.kafka/group-id`|Kafka client group.id|*(Either environment variable "HOSTNAME"/"COMPUTERNAME", or a random UUID)*
+|`:crux.kafka/kafka-properties-file`|File to supply Kakfa connection properties to the underlying Kafka API|
+|`:crux.kafka/kafka-properties-map`|Map to supply Kakfa connection properties to the underlying Kafka API|
 |===
 
 [#kafka-dependency]
@@ -276,12 +236,12 @@ Below is the minimal configuration you will need:
 [#table-conversion%header,cols="d,d"]
 |===
 |Property|Description
-|`dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
-|`dbname`|Database Name
-|`host`|Database Host
-|`user`|Database Username
-|`password`|Database Password
-|`db-dir`|For h2 and sqlite
+|`:crux.jdbc/dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
+|`:crux.jdbc/dbname`|Database Name
+|`:crux.kv/db-dir`|For h2 and sqlite
+|`:crux.jdbc/host`|Database Host
+|`:crux.jdbc/user`|Database Username
+|`:crux.jdbc/password`|Database Password
 |===
 
 [#jdbc-dependency]
@@ -303,3 +263,55 @@ parameters:
 ----
 include::./src/docs/examples.clj[tags=start-jdbc-node]
 ----
+
+[#config-http]
+== Http
+
+Crux can be used programmatically as a library, but Crux also ships
+with an embedded HTTP server, that allows clients to use the API
+remotely via REST.
+
+image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,width=70%,align="center"]
+
+Set the `server-port` configuration property on a Crux node to
+expose a HTTP port that will accept REST requests:
+
+.HTTP Nodes Configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Component|Property|Description
+|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
+|===
+
+Visit the guide on using the <<#rest,REST api>> for examples
+of how to interact with Crux over HTTP.
+
+
+[#config-docker]
+== Docker
+
+If you want to experiment with Crux using a demo Docker container from
+Docker Hub (no JVM/JDK/Clojure install required, only Docker!)  then
+please see the
+https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
+web service example]. You can also use this self-contained
+demonstration image to experiment with the <<rest.adoc#,REST API>>.
+
+[#config-backup]
+== Backup and Restore
+
+Crux provides utility APIs for local backup and restore when you are
+using the standalone mode. For an example of usage, see
+https://github.com/juxt/crux/blob/e5e21352b7a466d20a7b57518e129770191de352/example/standalone_webservice/src/example_standalone_webservice/main.clj#L744[the
+standalone web service example].
+
+An additional example of backup and restore is provided that only
+applies to a stopped standalone node
+https://github.com/juxt/crux/tree/master/docs/example/backup-restore[here].
+
+In a clustered deployment, only Kafka's
+https://docs.confluent.io/current/kafka/post-deployment.html#backup-and-restoration[official
+backup and restore] functionality should be relied on to provide safe
+durability. The standalone mode's backup and restore operations can
+instead be used for creating operational snapshots of a node's indexes
+for scaling purposes.

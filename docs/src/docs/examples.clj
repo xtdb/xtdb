@@ -72,9 +72,9 @@ node)
                     :crux.jdbc/dbname "cruxdb"
                     :crux.jdbc/host "<host>"
                     :crux.jdbc/user "<user>"
-                    :crux.jdbc/password "<password>"})
-;; end::start-jdbc-node[]
-  ))
+                    :crux.jdbc/password "<password>"}))
+  ;; end::start-jdbc-node[]
+  )
 
 (defn example-submit-tx [node]
 ;; tag::submit-tx[]
