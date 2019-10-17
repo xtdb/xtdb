@@ -204,7 +204,7 @@ Start a standalone in-memory (i.e. not persisted anywhere) node:
 (import '[crux.api ICruxAPI])
 
 (def my-node
-  (crux/start-node
+  (crux/start-standalone-node
     {:crux.node/topology :crux.standalone/topology
      :kv-backend "crux.kv.memdb.MemKv" ; see docs for LMDB/RocksDB storage options
      :event-log-dir "data/event-log-dir-1"
