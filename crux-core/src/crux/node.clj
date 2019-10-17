@@ -225,6 +225,8 @@
                                :deps [::kv-store ::tx-log ::object-store]}})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
+  (when-not topology
+    (throw (IllegalArgumentException. "Please specify :crux.node/topology")))
   (let [topology (if (map? topology) topology (resolve-topology-id topology))
         topology-overrides (select-keys options (keys topology))
         topology (merge topology (zipmap (keys topology-overrides)

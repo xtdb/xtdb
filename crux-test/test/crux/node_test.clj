@@ -26,6 +26,13 @@
       (t/is (= (-> t :crux.node/tx-log) (-> crux.jdbc/topology :crux.node/tx-log)))
       (t/is (= (-> t :crux.node/kv-store) crux.kv.memdb/kv)))))
 
+(t/deftest test-start-node-complain-if-no-topology
+  (try
+    (with-open [n (n/start {})]
+      (t/is false))
+    (catch IllegalArgumentException e
+      (t/is (re-find #"Please specify :crux.node/topology" (.getMessage e))))))
+
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (let [data-dir (cio/create-tmpdir "kv-store")]
     (try
