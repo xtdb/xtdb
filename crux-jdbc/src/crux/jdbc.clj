@@ -161,9 +161,12 @@
                 (filter (fn [[k]] (= "crux.jdbc" (namespace k))))
                 (map (fn [[k v]] [(keyword (name k)) v])))))
 
+(def ^:private require-lock 'lock)
+
 (defn- start-jdbc-ds [_ options]
   (let [{:keys [dbtype] :as options} (conform-next-jdbc-properties options)]
-    (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype)))))
+    (locking require-lock
+      (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype))))))
     (let [ds (jdbcc/->pool HikariDataSource (->pool-options dbtype options))]
       (setup-schema! dbtype ds)
       ds)))
