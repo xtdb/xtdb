@@ -137,7 +137,11 @@
                        (doto (Thread. r)
                          (.setName "crux.tx.update-stats-thread")))))))
 
-(s/def ::topology-id (fn [id] (or (string? id) (keyword? id) (symbol? id))))
+(s/def ::topology-id
+  (fn [id]
+    (and (or (string? id) (keyword? id) (symbol? id))
+         (namespace (symbol id)))))
+
 (s/def ::start-fn fn?)
 (s/def ::deps (s/coll-of keyword?))
 (s/def ::args (s/map-of keyword?
@@ -148,11 +152,7 @@
 
 (defn- resolve-topology-id [id]
   (s/assert ::topology-id id)
-  (let [v (symbol id)
-        ns (namespace v)]
-    (assert ns)
-    (require (symbol ns))
-    (var-get (find-var v))))
+  (-> id symbol requiring-resolve var-get))
 
 (s/def ::module (s/and (s/and (s/or :module-id ::topology-id :module map?)
                               (s/conformer
