@@ -146,7 +146,7 @@
           (.put (Keyword/intern "crux.node/kv-store") "crux.kv.memdb/kv")
           (.put (Keyword/intern "crux.standalone/event-log-kv-store") "crux.kv.memdb/kv")
           (.put (Keyword/intern "crux.standalone/event-log-dir") "data/eventlog")
-          (.put (Keyword/intern "db-dir") "data/db-dir"))
+          (.put (Keyword/intern "crux.kv/db-dir") "data/db-dir"))
         memdb-node (Crux/startNode mem-db-node-options)]
     (t/is memdb-node)
     (t/is (not (.close memdb-node)))))

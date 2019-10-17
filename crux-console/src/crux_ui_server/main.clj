@@ -83,8 +83,9 @@
     (reset! closables nil)))
 
 (def node-opts
-  {:crux.node/kv-store "crux.kv.rocksdb.RocksKv"
+  {:crux.node/topology :crux.standalone/topology
    :crux.standalone/event-log-dir "data/eventlog-1"
+   :crux.kv/kv-backend :crux.kv.rocksdb/kv
    :crux.kv/db-dir "data/db-dir-1"})
 
 (def http-opts
