@@ -68,7 +68,7 @@ curl -X GET $nodeURL/
 ----
 [source,clj]
 ----
-{:crux.kv/kv-backend "crux.kv.rocksdb.RocksKv",
+{:crux.kv/kv-store "crux.kv.rocksdb.RocksKv",
  :crux.kv/estimate-num-keys 92,
  :crux.kv/size 72448,
  :crux.zk/zk-active? true,

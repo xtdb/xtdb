@@ -11,7 +11,7 @@ toc::[]
 
 ==== db
 
-
+[source,clj]
 ----
   (db
     [node]
@@ -29,6 +29,7 @@ toc::[]
 
 ==== document
 
+[source,clj]
 ----
   (document [node content-hash]
     "Reads a document from the document store based on its
@@ -38,6 +39,7 @@ toc::[]
 
 ==== history
 
+[source,clj]
 ----
   (history [node eid]
     "Returns the transaction history of an entity, in reverse
@@ -47,6 +49,7 @@ toc::[]
 
 === history-range
 
+[source,clj]
 ----
   (history-range [node eid
                   ^Date valid-time-start
@@ -64,6 +67,7 @@ toc::[]
 
 === status
 
+[source,clj]
 ----
   (status [node]
     "Returns the status of this node as a map.")
@@ -71,6 +75,7 @@ toc::[]
 
 === submit-tx
 
+[source,clj]
 ----
   (submit-tx [node tx-ops]
     "Writes transactions to the log for processing
@@ -81,6 +86,7 @@ toc::[]
 
 === submitted-tx-updated-entity?
 
+[source,clj]
 ----
   (submitted-tx-updated-entity? [node submitted-tx eid]
     "Checks if a submitted tx did update an entity.
@@ -91,6 +97,7 @@ toc::[]
 
 === submitted-tx-corrected-entity?
 
+[source,clj]
 ----
   (submitted-tx-corrected-entity? [node submitted-tx ^Date valid-time eid]
     "Checks if a submitted tx did correct an entity as of valid time.
@@ -102,6 +109,7 @@ toc::[]
 
 === sync
 
+[source,clj]
 ----
   (sync
     [node ^Duration timeout]
@@ -119,6 +127,7 @@ toc::[]
 
 === new-tx-log-context
 
+[source,clj]
 ----
   (new-tx-log-context ^java.io.Closeable [node]
     "Returns a new transaction log context allowing for lazy reading
@@ -130,6 +139,7 @@ toc::[]
 
 === tx-log
 
+[source,clj]
 ----
   (tx-log [node tx-log-context from-tx-id with-documents?]
     "Reads the transaction log lazily. Optionally includes
@@ -145,6 +155,7 @@ toc::[]
 
 === attribute-stats
 
+[source,clj]
 ----
   (attribute-stats [node]
     "Returns frequencies of indexed attributes")
@@ -157,6 +168,7 @@ Represents the database as of a specific valid and transaction time.
 
 === entity
 
+[source,clj]
 ----
   (entity [db eid]
     "queries a document map for an entity.
@@ -166,6 +178,7 @@ Represents the database as of a specific valid and transaction time.
 
 === entity-tx
 
+[source,clj]
 ----
   (entity-tx [db eid]
     "returns the transaction details for an entity. Details
@@ -175,6 +188,7 @@ Represents the database as of a specific valid and transaction time.
 
 === new-snapshot
 
+[source,clj]
 ----
   (new-snapshot ^java.io.Closeable [db]
      "Returns a new implementation specific snapshot allowing for lazy query
@@ -187,6 +201,7 @@ Represents the database as of a specific valid and transaction time.
 
 === q
 
+[source,clj]
 ----
   (q
     [db query]
@@ -201,6 +216,7 @@ Represents the database as of a specific valid and transaction time.
 
 === history-ascending
 
+[source,clj]
 ----
   (history-ascending
     [db snapshot eid]
@@ -211,6 +227,7 @@ Represents the database as of a specific valid and transaction time.
 
 === history-descending
 
+[source,clj]
 ----
   (history-descending
     [db snapshot eid]
@@ -221,6 +238,7 @@ Represents the database as of a specific valid and transaction time.
 
 === valid-time
 
+[source,clj]
 ----
   (valid-time [db]
     "returns the valid time of the db.
@@ -230,6 +248,7 @@ Represents the database as of a specific valid and transaction time.
 
 === transaction-time
 
+[source,clj]
 ----
   (transaction-time [db]
     "returns the time of the latest transaction applied to this db value.
@@ -240,91 +259,37 @@ Represents the database as of a specific valid and transaction time.
 
 == Lifecycle members
 
-=== start-cluster-node
+=== start-node
 
+[source,clj]
 ----
-(defn start-cluster-node ^ICruxAPI [options])
+(defn start-node ^ICruxAPI [options])
 ----
 
-Starts a query node in local library mode.
-
-For valid options, see crux.cli/cli-options. Options are
-specified as keywords using their long format name, like
-:bootstrap-servers etc.
-
-NOTE: requires any KV store dependencies and kafka-clients on
-the classpath. The crux.kv.memdb.MemKv KV backend works without
-additional dependencies.
-
-The HTTP API can be started by passing the node to
-crux.http-server/start-http-server. This will require further
-dependencies on the classpath, see crux.http-server for
-details.
+NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
 Options:
+
+[source,clj]
 ----
-{:kv-backend        "crux.kv.rocksdb.RocksKv" ; requires RocksDB as dep
-                    "crux.kv.memdb.MemKv" ; will work without additional deps
-:bootstrap-servers  "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
-:event-log-dir      "data/eventlog-1"
-:db-dir             "data/db-dir-1"
-:backup-dir         "checkpoint"
-:group-id           "group-id"
-:tx-topic           "crux-transaction-log"
-:doc-topic          "crux-docs"
-:create-topics      true
-:doc-partitions     1
-:replication-factor 1
-:db-dir             "data"
-:server-port        3000
-:await-tx-timeout   10000
-:doc-cache-size     131072
-:object-store       "crux.index.KvObjectStore"}
+{:crux.node/topology e.g. "crux.standalone/topology"}
 ----
 
-Returns the started local node that implements ICruxAPI and
-java.io.Closeable. Latter allows the node to be stopped
-by calling `(.close node)`.
+Options are specified as keywords using their long format name, like
+`:crux.kafka/bootstrap-servers` etc. See the individual modules used in the specified
+topology for option descriptions.
 
-Throws IndexVersionOutOfSyncException if the index needs rebuilding.
+returns a node which implements ICruxAPI and
+java.io.Closeable. Latter allows the node to be stopped by
+calling `(.close node)`.
 
-=== start-standalone-node
-
-----
-(defn start-standalone-node ^ICruxAPI [options])
-----
-
-Creates a minimal standalone node writing the transaction log
-into its local KV store without relying on
-Kafka. Alternatively, when the event-log-dir option is
-provided, using two KV stores to enable rebuilding the index
-from the event log, being more similar to the semantics of
-Kafka but for a single process only.
-
-NOTE: requires any KV store dependencies on the classpath. The
-crux.kv.memdb.MemKv KV backend works without additional dependencies.
-
-Options:
-----
-{:kv-backend    "crux.kv.rocksdb.RocksKv" ; or crux.kv.memdb.MemKv
- :event-log-dir "data/eventlog-1"
- :db-dir        "data/db-dir-1"
- :backup-dir    "checkpoint"}
-----
-
-See `start-cluster-node` doc for more options
-
-Returns a standalone node which implements ICruxAPI and
-java.io.Closeable. Latter allows the node to be stopped
-by calling `(.close node)`.
-
-Throws IndexVersionOutOfSyncException if the index needs rebuilding.
-
-Throws NonMonotonicTimeException if the clock has moved backwards since
+throws IndexVersionOutOfSyncException if the index needs rebuilding.
+throws NonMonotonicTimeException if the clock has moved backwards since
 last run. Only applicable when using the event log.
 
 === new-api-client
 
+[source,clj]
 ----
 (defn new-api-client ^ICruxAPI [url])
 ----
@@ -340,3 +305,34 @@ for more information.
 Param `url` the URL to a Crux HTTP end-point.
 
 Returns a remote API client.
+
+=== new-ingest-client
+
+[source,clj]
+----
+(defn new-ingest-client ^ICruxAsyncIngestAPI [options])
+----
+
+Starts an ingest client for transacting into Kafka without running a
+full local node with index.
+
+For valid options, see crux.kafka/default-options. Options are
+specified as keywords using their long format name, like
+:crux.kafka/bootstrap-servers etc.
+
+Options:
+
+[source,clj]
+----
+{:crux.kafka/bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
+:crux.kafka/group-id           "group-id"
+:crux.kafka/tx-topic           "crux-transaction-log"
+:crux.kafka/doc-topic          "crux-docs"
+:crux.kafka/create-topics      true
+:crux.kafka/doc-partitions     1
+:crux.kafka/replication-factor 1}
+----
+
+Returns a crux.api.ICruxIngestAPI component that implements
+java.io.Closeable, which allows the client to be stopped by calling
+close.
