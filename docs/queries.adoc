@@ -28,7 +28,7 @@ of query tests and how each test listed below runs in the wider context.
 
 Extensible Data Notation (edn) is used as the data format for the public Crux
 APIs. To gain an understanding of edn see
-<<#tutorials-essential-edn, Essential EDN for Crux>>.
+<<tutorials.adoc#tutorials-essential-edn, Essential EDN for Crux>>.
 
 Note that all Crux Datalog queries run using a point-in-time view of the
 database which means the query capabilities and patterns presented in this

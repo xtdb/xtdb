@@ -8,12 +8,12 @@ Here we document patterns and helpful functions that have been
 suggested by users. A broad understanding of these patterns will be
 useful to guide iterations on the next generation of API layers for
 Crux. Some of these patterns may be appropriate candidates for
-evolving into easily consumable <<#decorators,decorators>>.
+evolving into easily consumable <<decorators.adoc#,decorators>>.
 
 [#patterns-contribute]
 == Contributing
 
-PRs are welcome, see <<#contributing,Contributing>> for guidelines. If you would prefer
+PRs are welcome, see <<about.adoc#about-contributing,Contributing>> for guidelines. If you would prefer
 not to sign up to our CLA just point us towards your GitHub gist and we can
 link to it.
 

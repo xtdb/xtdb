@@ -42,6 +42,7 @@ Are you looking to implement Crux as part of a solution for your client(s)? JUXT
 
 Engage JUXT for Deployment Services Support if you need help with the initial process of installing and configuring Crux in your environment.
 
+[#about-contributing]
 == Contributing
 
 include::contributing.adoc[leveloffset=+1]

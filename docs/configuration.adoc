@@ -72,7 +72,7 @@ defined within `crux.kv`:
 
 Using a Crux standalone node is the best way to get started. Once
 you've started a standalone Crux instance as described below, you can
-then follow the <<#get-started,getting started
+then follow the <<get_started.adoc#,getting started
 example>>.
 
 image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
@@ -169,7 +169,7 @@ include::./deps.edn[tags=KafkaClientsDeps]
 [#kafka-start]
 *Getting started*
 
-Use the API to start a cluster node, configuring it with the
+Use the API to start a Kafka node, configuring it with the
 `bootstrap-servers` property in order to connect to Kafka:
 
 [source,clj]
@@ -178,7 +178,7 @@ include::./src/docs/examples.clj[tags=start-cluster-node]
 ----
 
 NOTE: If you don't specify `kv-store` then by default the
-cluster node will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
+Kafka node will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
 your list of project dependencies.
 
 You can later stop the node if you wish:
@@ -291,7 +291,7 @@ expose a HTTP port that will accept REST requests:
 |http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
-Visit the guide on using the <<#rest,REST api>> for examples
+Visit the guide on using the <<rest.adoc#,REST api>> for examples
 of how to interact with Crux over HTTP.
 
 

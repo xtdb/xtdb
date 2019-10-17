@@ -31,7 +31,7 @@ image::crux-venn-1.svg?sanitize=true[Document database with graph queries,width=
 === Get Started
 
 Reading the documentation is a good way to learn about Crux, so you are in
-the right place! <<#get-started,Let's continue the journey.>>
+the right place! <<get_started.adoc#get-started,Let's continue the journey.>>
 
 [#what-is-crux-bitemporal]
 === Bitemporal
@@ -51,8 +51,8 @@ critical requirement for systems in any industry with strong auditing regulation
 where you need to be able to answer the question "what did you know and when
 did you know it?".
 
-<<#bitemporality,Read more about Bitemporality in Crux>> or specifically the
-<<#bitemp-uses,known uses>> for these capabilities.
+<<bitemp.adoc#bitemporality,Read more about Bitemporality in Crux>> or specifically the
+<<bitemp.adoc#bitemp-uses,known uses>> for these capabilities.
 
 [#what-is-crux-query]
 === Query
@@ -65,7 +65,7 @@ Crux is ultimately a store of versioned EDN documents. The fields within these
 documents are automatically indexed as Entity-Attribute-Value triples to
 support efficient graph queries.
 
-<<#queries,Read more about how to query your data with Crux.>>
+<<queries.adoc#queries,Read more about how to query your data with Crux.>>
 
 [#what-is-crux-schemaless]
 === Schemaless
