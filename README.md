@@ -206,7 +206,7 @@ Start a standalone in-memory (i.e. not persisted anywhere) node:
 (def my-node
   (crux/start-node
     {:crux.node/topology :crux.standalone/topology
-     :crux.node/kv-store "crux.kv.memdb.MemKv" ; see docs for LMDB/RocksDB storage options
+     :crux.node/kv-store "crux.kv.memdb/kv" ; see docs for LMDB/RocksDB storage options
      :crux.standalone/event-log-dir "data/event-log-dir-1"
      :crux.kv/db-dir "data/db-dir-1"}))
 ```

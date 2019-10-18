@@ -196,7 +196,7 @@
      {:crux.node/topology :crux.standalone/topology
       :crux.kv/db-dir "console-data"
       :crux.standalone/event-log-dir "console-data-log"
-      :crux.node/kv-store "crux.kv.rocksdb.RocksKv"}))
+      :crux.node/kv-store "crux.kv.rocksdb/kv"}))
 
   (api/q (api/db node) '{:find [e] :where [[e :crux.db/id]]})
 

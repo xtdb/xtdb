@@ -21,7 +21,7 @@
               :crux.jdbc/dbtype "h2"
               :crux.jdbc/dbname "cruxtest"
               :crux.kv/db-dir db-dir
-              :crux.kv/kv-store "crux.kv.memdb.MemKv"}]
+              :crux.kv/kv-store "crux.kv.memdb/kv"}]
     (try
       (let [api (Crux/startNode opts)
             {:keys [crux.tx/tx-time]} (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]

@@ -1,13 +1,13 @@
 [
  {
-  "name": "crux.kv.rocksdb.RocksKv",
+  "name": "crux.kv.rocksdb/kv",
   "allDeclaredConstructors": true,
   "allPublicConstructors": true,
   "allDeclaredMethods": true,
   "allPublicMethods": true
   },
  {
-  "name": "crux.kv.memdb.MemKv",
+  "name": "crux.kv.memdb/kv",
   "allDeclaredConstructors": true,
   "allPublicConstructors": true,
   "allDeclaredMethods": true,
