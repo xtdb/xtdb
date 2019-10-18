@@ -4,11 +4,13 @@
 
 ### Changes
 
-* [PR #340](https://github.com/juxt/crux/pull/340): *Breaking* Remove api helpers for creating specific node types
-* Refactoring: Modularize configuration options defaults and documentation
-* Refactoring: Test fixtures more composable
-* [#352](https://github.com/juxt/crux/issues/352): fix Kotlin multhreaded node-start issues
-* [#348](https://github.com/juxt/crux/issues/348); Increase range constraints var-frequency for join order
+* [#340](https://github.com/juxt/crux/pull/340): Improve node configuration API, introduce topologies *Breaking*
+* [#341](https://github.com/juxt/crux/issues/341): Various documentation improvements
+
+### Bug fixes
+
+* [#352](https://github.com/juxt/crux/issues/352): Fix Kotlin multhreaded node-start issues
+* [#348](https://github.com/juxt/crux/issues/348): Increase range constraints var-frequency for join order
 
 ## 19.09-1.4.0-alpha
 
