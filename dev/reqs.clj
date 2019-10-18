@@ -3,7 +3,7 @@
 (def n
   (crux/start-node
    {:crux.node/topology :crux.standalone/topology
-    :crux.node/kv-store "crux.kv.rocksdb.RocksKv"
+    :crux.node/kv-store "crux.kv.rocksdb/kv"
     :crux.standalone/event-log-dir "data/eventlog-2"
     :crux.kv/db-dir "data/db-dir-2"}))
 
