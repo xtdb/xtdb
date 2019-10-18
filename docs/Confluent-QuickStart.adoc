@@ -13,10 +13,10 @@ To use our connector, you must first have a *Crux node* connected to Kafka. To d
 
 [source,clj]
 ----
-juxt/crux-core {:mvn/version "19.09-1.4.0-alpha"}
-juxt/crux-kafka {:mvn/version "19.09-1.4.0-alpha"}
-juxt/crux-http-server {:mvn/version "19.09-1.4.0-alpha"}
-juxt/crux-rocksdb {:mvn/version "19.09-1.4.0-alpha"}
+juxt/crux-core {:mvn/version "19.09-1.5.0-alpha"}
+juxt/crux-kafka {:mvn/version "19.09-1.5.0-alpha"}
+juxt/crux-http-server {:mvn/version "19.09-1.5.0-alpha"}
+juxt/crux-rocksdb {:mvn/version "19.09-1.5.0-alpha"}
 ----
 
 Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
