@@ -44,7 +44,6 @@
                                 {"bootstrap.servers" (get-in embedded-kafka [:options :bootstrap-servers])})]
         (binding [*admin-client* admin-client
                   *kafka-bootstrap-servers* (get-in embedded-kafka [:options :bootstrap-servers])]
-          (println :started-kafka)
           (f)))
       (finally
         (cio/delete-dir kafka-log-dir)
