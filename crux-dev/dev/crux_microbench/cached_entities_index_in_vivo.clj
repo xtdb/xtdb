@@ -1,5 +1,7 @@
 (ns crux-microbench.cached-entities-index-in-vivo
-  "Microbench for cached entities index in a more realistic usage scenario."
+  "Microbench for cached entities index in a more realistic usage scenario.
+  With some naive file persistence, as test can take a long time and sometimes crash.
+  `bench-with-data-plane` should just work"
   (:require [clojure.test :as t]
             [crux.fixtures :as f]
             [crux-microbench.ticker-data-gen :as data-gen]
@@ -8,28 +10,47 @@
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.standalone :as fs])
+            [crux.fixtures.standalone :as fs]
+            [crux.fixtures.api :as f-api]
+            [clojure.java.io :as io]
+            [clojure.pprint :as pp])
   (:import (java.sql Date)
            (java.time Duration)))
+
+
+; ----- Helpers -----
+(def ^:private sync-times (atom {}))
+(def ^:private query-perf-times (atom {}))
+
+(defn- slurp-edn [filename]
+  (if (.exists (io/as-file filename))
+    (read-string (slurp filename))))
+
+(defn- slurp-test-times! []
+  (reset! query-perf-times (or (slurp-edn "test-times.edn") {}))
+  (reset! sync-times (or (slurp-edn "sync-times.edn") {})))
+
+(defn- spit-test-times! []
+  (spit "sync-times.edn" (pr-str @sync-times))
+  (spit "test-times.edn" (pr-str @query-perf-times)))
 
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))
 
 
-(def query-size 100000)
+; ----- Bench settings and vars -----
+(def ^:private query-size 100000)
 (def ^:dynamic stocks-count 1000)
 (def ^:dynamic history-days 1)
-(def sample-size 20)
+(def ^:private sample-size 20)
 
-(def -stocks (atom nil))
-
-(def query-1
+(def ^:private query-1
   '[:find stock-id currency-id
     :where
     [currency-id :currency/name currency-name]
     [stock-id :stock/currency-id currency-id]])
 
-(def query-3
+(def ^:private query-2
   '[:find stock-id currency-name backup-currency-name
     :where
     [currency-id :currency/name currency-name]
@@ -37,28 +58,12 @@
     [stock-id :stock/currency-id currency-id]
     [stock-id :stock/backup-currency-id backup-currency-id]])
 
-(def sync-times (atom {}))
-(def test-times (atom {}))
 
-(defn with-stocks-data [f]
-  (api/submit-tx *api* (f/maps->tx-ops data-gen/currencies))
-  (println "stocks count" stocks-count)
-  (let [ctr (atom 0)
-        stocks (map data-gen/gen-ticker (range stocks-count))
-        partitions-total (/ stocks-count 1000)]
-    (reset! -stocks stocks)
-    (doseq [stocks-batch (partition-all 1000 stocks)]
-      (swap! ctr inc)
-      (println "partition " @ctr "/" partitions-total)
-      (api/submit-tx *api* (f/maps->tx-ops stocks-batch))))
-  (api/sync *api* (Duration/ofMinutes 20))
-  (f))
-
-(defn upload-stocks-with-history [crux-node]
+; ----- payload -----
+(defn- upload-stocks-with-history [crux-node]
   (let [base-stocks (map data-gen/gen-ticker (range stocks-count))
         base-date #inst "2019"
         partitions-total (/ stocks-count 1000)]
-    (reset! -stocks base-stocks)
     (doseq [i (range history-days)
             :let [date (Date. ^long (+ (.getTime base-date) (* 1000 60 60 24 i)))
                   ctr (atom 0)
@@ -76,47 +81,29 @@
       (swap! sync-times assoc [stocks-count history-days] sync-time)
       (println "Sync takes: " sync-time))))
 
-
-(defn not-really-benchmarking [query db n]
+(defn- naive-durations-measure [query db n]
+  ; naive warmup
+  (api/q db query)
+  (api/q db query)
+  (api/q db query)
   (for [_ (range n)]
     (crux.bench/duration-millis (api/q db query))))
 
-(defn- bench-query [test-id query query-id cache-on?]
+(defn- naively-bench-query [test-id query query-id cache-on?]
   (binding [crux.query/*with-entities-cache?* cache-on?]
-     (let [db (api/db *api*)
-           -dry (crux.bench/duration-millis (api/q db query))
-           durations (not-really-benchmarking query db sample-size)
-           res (api/q db query)
-           avg (avg durations)
-           res
-           {:durations durations
-            :avg avg}]
-       (println test-id :durations durations)
-       (println test-id :avg avg)
-       #_(println "res-size" (count res))
-       #_(println "rand-sample" (take 10 (random-sample 0.1 res)))
-       (swap! test-times assoc [stocks-count history-days query-id cache-on?] res))))
+    (let [db (api/db *api*)
+          durations (naive-durations-measure query db sample-size)
+          avg (avg durations)
+          res
+          {:durations durations
+           :avg avg}]
+      (println test-id :durations durations)
+      (println test-id :avg avg)
+      #_(println "res-size" (count res))
+      #_(println "rand-sample" (take 10 (random-sample 0.1 res)))
+      (swap! query-perf-times assoc [stocks-count history-days query-id cache-on?] res))))
 
-(defn do-plot-data []
-  (reset! test-times (read-string (slurp "test-times.edn")))
-  (reset! sync-times (read-string (slurp "sync-times.edn")))
-  (doseq [sc (range 1000 11000 1000)
-          hd (cons 1 (range 10 110 10))]
-    (if-not false ;(contains? @test-times [sc hd :q1 true])
-      (binding [stocks-count sc
-                history-days hd]
-        (println "starting a case for " sc hd)
-        (t/run-tests 'crux.entity-cache-test)
-        (spit "sync-times.edn" (pr-str @sync-times))
-        (spit "test-times.edn" (pr-str @test-times)))
-      (println :skipping-key [sc hd :q1 true]))))
-
-; (do-plot-data)
-
-; (reset! test-times (read-string (slurp "test-times.edn")))
-; (get @test-times [10000 1 :q3 false])
-
-(defn res->matrix [values]
+(defn- res->matrix [values]
   (let [hday-set   (->> (map :history-days values) set sort)
         scount-set (->> (map :stocks-count values) set sort)]
     {:x {:title "History size (10x)" ; hd
@@ -131,10 +118,10 @@
 
 ; (res->matrix t)
 
-(defn with-matrix [[k v]]
+(defn- with-matrix [[k v]]
   [k (res->matrix v)])
 
-(defn untangle-plot-data [plot-data]
+(defn- untangle-plot-data [plot-data]
   (let [entry->v
         (fn [[k v]]
           (let [[stocks-count history-days query-id cache-on?] k]
@@ -149,63 +136,52 @@
                  (keyword (str (name query-id) (if cache-on? "-with-cache"))))
         per-query-data (group-by key-fn mash)
         plots-data (into {} (map with-matrix per-query-data))]
-    (spit "plots-data.edn" (pr-str plots-data))))
+    plots-data))
 
 ; (untangle-plot-data (read-string (slurp "test-times.edn")))
 
-(defn ^:microbench microbench-queries-with-cached-index []
-  (let [f
+(defn- with-tickers-and-history [f]
+  (upload-stocks-with-history *api*)
+  (f))
+
+(defn- with-local-setup [f]
+  (let [f'
           (->>
-            #(upload-stocks-with-history *api*)
-            (partial fk/with-cluster-node)
+            (partial with-tickers-and-history f)
+            (partial f-api/with-node)
+            (partial fk/with-cluster-node-opts)
             (partial fk/with-kafka-client)
             (partial fk/with-embedded-kafka-cluster))]
-    (f)))
+    (f')))
+
+(defn ^:microbench bench-with-data-plane []
+  (slurp-test-times!)
+  (doseq [tickers-count (range 1000 2000 1000)
+          history-entries (cons 1 (range 10 20 10))
+          :let [q-key [tickers-count history-entries ::q1 true]]]
+    (if-not false ;(contains? @test-times [tickers-count history-entries ::q1 true])
+      (binding [stocks-count tickers-count
+                history-days history-entries]
+        (println "starting a case for " tickers-count history-entries)
+        (with-local-setup
+          (fn []
+            (naively-bench-query q-key query-2 ::q2 false)
+            (naively-bench-query q-key query-2 ::q2 true)))
+        (spit-test-times!))
+      (println :skipping-key q-key)))
+  (spit "plot-data-query.edn" (pp/pprint (untangle-plot-data @query-perf-times))))
+
 
 (comment
-  (microbench-queries-with-cached-index))
 
+  (bench-with-data-plane)
 
-(comment
+  (pp/pprint @sync-times)
 
+  (reset! query-perf-times (read-string (slurp "test-times.edn")))
+  (get @query-perf-times [10000 1 ::q2 false])
   (def s (read-string (slurp "plots-data.edn")))
+  (def q2 (::q2 s))
+  (def q2-data (:data q2))
+  (clojure.pprint/pprint q2-data))
 
-  (def q3 (:q3 s))
-
-  (def q3-data (:data q3))
-
-  (clojure.pprint/pprint q3-data)
-
-  (require '[crux.api :as api])
-
-  (def node
-    (api/start-node
-     {:crux.node/topology :crux.standalone/topology
-      :crux.kv/db-dir "console-data"
-      :crux.standalone/event-log-dir "console-data-log"
-      :crux.node/kv-store "crux.kv.rocksdb/kv"}))
-
-  (api/q (api/db node) '{:find [e] :where [[e :crux.db/id]]})
-
-  (defn upload-fiddle-data []
-    (binding [history-days 10
-              stocks-count 10]
-      (upload-stocks-with-history node)))
-
-  (api/history node :stock.id/company-8)
-
-  (api/history-range node :stock.id/company-8)
-
-  (def e-hist (api/history-range node :stock.id/company-8 nil nil nil nil))
-
-  (def e1 (first e-hist))
-
-  (api/document node (:crux.db/content-hash e1))
-
-  (api/entity (api/db node) (:crux.db/id e1))
-
-  (api/entity (api/db node) (:crux.db/id e1))
-
-  (mapv (comp (partial api/document node) :crux.db/content-hash) e-hist)
-
-  (upload-fiddle-data))

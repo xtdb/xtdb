@@ -91,7 +91,9 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fk/with-cluster-node
+                fk/with-cluster-node-opts
+                ; perhaps should use with-node as well. if this config fails try uncommenting the line below
+                ; f-api/with-node
                 with-ts-devices-data)
 
 ;; 10 most recent battery temperature readings for charging devices

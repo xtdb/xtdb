@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :as f-api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.index :as idx]
             [crux.io :as cio]
@@ -377,7 +377,9 @@
                 with-sail-repository
                 with-datomic
                 with-neo4j
-                fk/with-cluster-node
+                fk/with-cluster-node-opts
+                ; perhaps should use with-node as well. if this config fails try uncommenting the line below
+                ; f-api/with-node
                 with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all

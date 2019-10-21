@@ -81,7 +81,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fk/with-cluster-node
+                fk/with-cluster-node-opts
                 with-ts-weather-data)
 
 ;; NOTE: Does not work with range, takes latest values.

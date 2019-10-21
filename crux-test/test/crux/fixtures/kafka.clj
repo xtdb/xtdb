@@ -44,6 +44,7 @@
                                 {"bootstrap.servers" (get-in embedded-kafka [:options :bootstrap-servers])})]
         (binding [*admin-client* admin-client
                   *kafka-bootstrap-servers* (get-in embedded-kafka [:options :bootstrap-servers])]
+          (println :started-kafka)
           (f)))
       (finally
         (cio/delete-dir kafka-log-dir)
@@ -66,7 +67,7 @@
 
 (def ^:dynamic *cluster-node*)
 
-(defn with-cluster-node [f]
+(defn with-cluster-node-opts [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
   (let [test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)
