@@ -1021,7 +1021,8 @@
   (cond
     (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
                                             (partition-all 2))]
-                           [k (if (and (nat-int? (first v))
+                           [k (if (and (or (nat-int? (first v))
+                                           (boolean? (first v)))
                                        (= 1 (count v)))
                                 (first v)
                                 (vec v))]))

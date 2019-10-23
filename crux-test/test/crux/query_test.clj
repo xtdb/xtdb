@@ -73,6 +73,13 @@
                                       :where [[e :name first-name]]
                                       :full-results? true})))))
 
+  (t/testing "Can retrieve full for a vector-style query"
+    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+              "Ivan"] (first (api/q (api/db *api*)
+                                    '[:find e first-name
+                                      :where [e :name first-name]
+                                      :full-results? true])))))
+
   (t/testing "Can retrieve full results in or-join"
     (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
               "Ivan"] (first (api/q (api/db *api*)
@@ -1000,7 +1007,7 @@
                                                         [(>= 20 age)]]})))))
 
 (t/deftest test-mutiple-values
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" }
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan"}
                                 {:crux.db/id :oleg :name "Oleg"}
                                 {:crux.db/id :petr :name "Petr" :follows #{:ivan :oleg}}]))
 
@@ -1555,7 +1562,7 @@
                       {:crux.db/id :3 :name "Oleg" :age 10}
                       {:crux.db/id :4 :name "Oleg" :age 20}
                       {:crux.db/id :5 :name "Ivan" :age 10}
-                      {:crux.db/id :6 :name "Ivan" :age 20} ]))
+                      {:crux.db/id :6 :name "Ivan" :age 20}]))
 
 (t/deftest datascript-test-not
   (populate-datascript-test-db)
