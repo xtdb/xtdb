@@ -1,5 +1,11 @@
 # Changelog
 
+## 19.10-1.5.1-alpha
+
+### Bug fixes
+
+* [#PR363](https://github.com/juxt/crux/pull/363) Allow `full-results?` and other boolean flags in a vector-style query
+
 ## 19.09-1.5.0-alpha
 
 ### Changes
