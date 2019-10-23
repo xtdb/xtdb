@@ -1,9 +1,9 @@
 (ns crux.gen-topology-classes
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
-            [crux.parse-topology-file :as parse]))
+            [crux.topology-info :as ti]))
 
-(defn gen-topology-class [filename]
-  (parse/parse-topology-file filename))
+(defn gen-topology-class [topology]
+  (ti/get-topology-info topology))
 
-;(gen-topology-class "../crux-core/src/crux/standalone.clj")
+(gen-topology-class 'crux.kafka)
