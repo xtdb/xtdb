@@ -1,22 +1,22 @@
 {:deps
  {
   ;; tag::CruxDep[]
-  juxt/crux-core {:mvn/version "19.09-1.4.0-alpha"}
+  juxt/crux-core {:mvn/version "19.09-1.5.0-alpha"}
   ;; end::CruxDep[]
 
   ;; tag::KafkaClientsDeps[]
-  juxt/crux-kafka {:mvn/version "19.09-1.4.0-alpha"}
+  juxt/crux-kafka {:mvn/version "19.09-1.5.0-alpha"}
   ;; end::KafkaClientsDeps[]
 
   ;; tag::KafkaEmbeddedDeps[]
-  juxt/crux-kafka-embedded {:mvn/version "19.09-1.4.0-alpha"}
+  juxt/crux-kafka-embedded {:mvn/version "19.09-1.5.0-alpha"}
   ;; end::KafkaEmbeddedDeps[]
 
   ;; tag::RocksDeps[]
-  juxt/crux-rocksdb {:mvn/version "19.09-1.4.0-alpha"}
+  juxt/crux-rocksdb {:mvn/version "19.09-1.5.0-alpha"}
   ;; end::RocksDeps[]
 
   ;; tag::JDBCDeps[]
-  juxt/crux-jdbc {:mvn/version "19.09-1.4.0-alpha"}
+  juxt/crux-jdbc {:mvn/version "19.09-1.5.0-alpha"}
   ;; end::JDBCDeps[]
   }}
