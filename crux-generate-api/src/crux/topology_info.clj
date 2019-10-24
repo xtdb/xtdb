@@ -12,15 +12,9 @@
        (keep :args)
        (into {})))
 
-(defn format-topology-key [topology-key]
-  (-> (name topology-key)
-      (string/replace "-" "_")
-      (string/upper-case)))
-
-(defn generate-key-strings [topology-key]
-  (str "public string " (format-topology-key topology-key) " = \"" topology-key "\""))
-
 (defn get-topology-info [topology-name]
-  (let [topology-map (eval topology-name)
-        topology-opts (find-nested-args topology-map)]
-    topology-opts))
+  (if (= 'crux.node/base-topology topology-name)
+    (eval topology-name)
+    (let [topology-map (eval topology-name)
+          topology-opts (find-nested-args topology-map)]
+      topology-opts)))
