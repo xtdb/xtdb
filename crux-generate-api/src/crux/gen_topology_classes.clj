@@ -14,21 +14,21 @@
 
 
 (defn build-key-field[[key value]]
-  (let [class (FieldSpec/builder String (format-topology-key key) (into-array ^Modifier [Modifier/PUBLIC]))]
-    (.initializer class "$S" (into-array [(str key)]))
-    (.build class)))
+  (let [field (FieldSpec/builder String (format-topology-key key) (into-array ^Modifier [Modifier/PUBLIC]))]
+    (.initializer field "$S" (into-array [(str key)]))
+    (.build field)))
 
 (defn build-key-default-field[[key value]]
-  (let [class (FieldSpec/builder String (str (format-topology-key key) "_DEFAULT")
+  (let [field (FieldSpec/builder String (str (format-topology-key key) "_DEFAULT")
                                  (into-array ^Modifier [Modifier/PUBLIC]))]
-    (.initializer class "$S" (into-array [(str (:default value))]))
-    (.build class)))
+    (.initializer field "$S" (into-array [(str (:default value))]))
+    (.build field)))
 
 (defn add-topology-key-code [class [key value]]
-  (doto class
-    (.addField (build-key-field [key value]))
-    (if (:default value)
-      (.addField (build-key-default-field [key value])))))
+  (do
+    (.addField class (build-key-field [key value]))
+    (when (:default value)
+      (.addField class (build-key-default-field [key value])))))
 
 (defn build-java-class [class-name topology-info]
   (let [class (TypeSpec/classBuilder class-name)]
@@ -39,10 +39,12 @@
 (defn build-java-file [class-name topology-info]
   (let [javafile (build-java-class class-name topology-info)
         output (io/file class-name)]
-    (.writeTo (JavaFile/builder "crux.api" javafile) output)))
+    (-> (JavaFile/builder "crux.api" javafile)
+        (.build)
+        (.writeTo output))))
 
 (defn gen-topology-file [class-name topology]
   (let [topology-info (ti/get-topology-info topology)]
     (build-java-file class-name topology-info)))
 
-;(gen-topology-class "KafkaNode" 'crux.kafka/topology)
+(gen-topology-file "KafkaNode" 'crux.kafka/topology)
