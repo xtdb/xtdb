@@ -2,5 +2,8 @@
 
 A small module to generate Java files for the different types of topologies.
 
-Will pass a relative file path to the file containg the topology (ie. a path to standalone.clj),
-and will generate a .Java file within the target directory.
+Usage: 
+Call **gen-topology-file** with the desired classname, and a symbol representing one of the topologies. For example:
+```clojure
+(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+```
