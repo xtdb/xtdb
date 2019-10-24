@@ -10,7 +10,8 @@
               "crux-kafka"
               "crux-uberjar"
               "crux-decorators"
-              "crux-test"])
+              "crux-test"
+              "crux-generate-api"])
 
 (defproject juxt/crux "derived-from-git"
   :description "An open source document database with bitemporal graph queries"

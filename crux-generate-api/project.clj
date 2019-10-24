@@ -6,7 +6,8 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [juxt/crux-core "derived-from-git"]
                  [juxt/crux-kafka "derived-from-git"]
-                 [juxt/crux-jdbc "derived-from-git"]]
+                 [juxt/crux-jdbc "derived-from-git"]
+                 [com.squareup/javapoet "1.9.0"]]
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
