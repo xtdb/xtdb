@@ -6,9 +6,10 @@
             [crux.node :as node]
             [crux.kafka :as kafka]))
 
-(defn get-topology-info [topology-name]
+(defn get-topology-map [topology-name]
   (-> (str topology-name "/topology")
       (symbol)
       (eval)))
 
-(get-topology-info 'crux.kafka)
+(defn get-topology-info [topology-name]
+  (get-topology-info topology-name))

@@ -5,5 +5,3 @@
 
 (defn gen-topology-class [topology]
   (ti/get-topology-info topology))
-
-(gen-topology-class 'crux.kafka)
