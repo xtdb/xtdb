@@ -6,10 +6,16 @@
             [crux.node :as node]
             [crux.kafka :as kafka]))
 
-(defn get-topology-map [topology-name]
-  (-> (str topology-name "/topology")
-      (symbol)
-      (eval)))
+(defn find-nested-args
+  [topology-map]
+  (->> (tree-seq map? vals topology-map)
+       (filter map?)
+       (keep :args)
+       (into {})))
 
 (defn get-topology-info [topology-name]
-  (get-topology-info topology-name))
+  (let [topology-map (eval topology-name)
+        topology-opts (find-nested-args topology-map)]
+    topology-opts))
+
+;(clojure.pprint/pprint (get-topology-info 'crux.kafka/topology))
