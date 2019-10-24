@@ -14,13 +14,14 @@
 
 
 (defn build-key-field[[key value]]
-  (let [field (FieldSpec/builder String (format-topology-key key) (into-array ^Modifier [Modifier/PUBLIC]))]
+  (let [field (FieldSpec/builder String (format-topology-key key)
+                                 (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
     (.initializer field "$S" (into-array [(str key)]))
     (.build field)))
 
 (defn build-key-default-field[[key value]]
   (let [field (FieldSpec/builder String (str (format-topology-key key) "_DEFAULT")
-                                 (into-array ^Modifier [Modifier/PUBLIC]))]
+                                 (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
     (.initializer field "$S" (into-array [(str (:default value))]))
     (.build field)))
 
