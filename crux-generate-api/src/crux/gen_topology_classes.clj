@@ -36,10 +36,12 @@
     (.initializer field "$S" (into-array [(str key)]))
     (.build field)))
 
-(defn build-key-default-field[[key value]]
-  (let [field (FieldSpec/builder String (str (format-topology-key key) "_DEFAULT")
+(defn build-key-default-field[[key val]]
+  (let [field (FieldSpec/builder (type val) (str (format-topology-key key) "_DEFAULT")
                                  (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
-    (.initializer field "$S" (into-array [(str (:default value))]))
+    (if (string? val)
+      (.initializer field "$S" (into-array [val]))
+      (.initializer field "$L" (into-array [val])))
     (.build field)))
 
 (defn build-topology-key-setter [key properties-name]
@@ -55,7 +57,7 @@
   (do
     (.addField class (build-key-field [key value]))
     (when (:default value)
-      (.addField class (build-key-default-field [key value])))
+      (.addField class (build-key-default-field [key (:default value)])))
     (.addMethod class (build-topology-key-setter key properties-name))))
 
 (defn build-java-class [class-name topology-info]
@@ -79,6 +81,7 @@
     (build-java-file class-name topology-info)))
 
 ;;Currently fails, as keyword cannot be turned into valid variable
-(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
+;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
 
-(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+
+                                        ;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
