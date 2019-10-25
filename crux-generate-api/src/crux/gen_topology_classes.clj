@@ -36,29 +36,36 @@
     (.initializer field "$S" (into-array [(str key)]))
     (.build field)))
 
+(defn val-type [val]
+  (let [type (:crux.config/type val)]
+    (cond
+      (= type :crux.config/nat-int) Long
+      (= type :crux.config/boolean) Boolean
+      :else String)))
+
 (defn build-key-default-field[[key val]]
-  (let [field (FieldSpec/builder (type val) (str (format-topology-key key) "_DEFAULT")
+  (let [field (FieldSpec/builder (val-type val) (str (format-topology-key key) "_DEFAULT")
                                  (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
-    (if (string? val)
-      (.initializer field "$S" (into-array [val]))
-      (.initializer field "$L" (into-array [val])))
+    (if (= (val-type val) String)
+      (.initializer field "$S" (into-array [(:default val)]))
+      (.initializer field "$L" (into-array [(:default val)])))
     (.build field)))
 
-(defn build-topology-key-setter [key properties-name]
+(defn build-topology-key-setter [[key value] properties-name]
   (let [set-property (MethodSpec/methodBuilder (format-topology-key-method key))]
     (.addModifiers set-property (into-array ^Modifier [Modifier/PUBLIC]))
-    (.addParameter set-property String "val" (make-array Modifier 0))
+    (.addParameter set-property (val-type value) "val" (make-array Modifier 0))
     (.addStatement set-property (str properties-name ".put($L, val)")
                    (into-array [(format-topology-key key)]))
     (.build set-property)
     ))
 
-(defn add-topology-key-code [class properties-name [key value]]
+(defn add-topology-key-code [class properties-name [_ value :as topology-val]]
   (do
-    (.addField class (build-key-field [key value]))
+    (.addField class (build-key-field topology-val))
     (when (:default value)
-      (.addField class (build-key-default-field [key (:default value)])))
-    (.addMethod class (build-topology-key-setter key properties-name))))
+      (.addField class (build-key-default-field topology-val)))
+    (.addMethod class (build-topology-key-setter topology-val properties-name))))
 
 (defn build-java-class [class-name topology-info]
   (let [class (TypeSpec/classBuilder class-name)
@@ -82,6 +89,5 @@
 
 ;;Currently fails, as keyword cannot be turned into valid variable
 ;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
-
-
-                                        ;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+(gen-topology-file "KafkaNode" 'crux.kafka/topology)
