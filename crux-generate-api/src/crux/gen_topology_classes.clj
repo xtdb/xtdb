@@ -9,11 +9,13 @@
 
 (defn format-topology-key [key]
   (-> (name key)
+      (string/replace "?" "")
       (string/replace "-" "_")
       (string/upper-case)))
 
 (defn format-topology-key-method [key]
   (->> (name key)
+       (#(string/replace % "?" ""))
        (#(string/split % #"-"))
        (map string/capitalize )
        (string/join "")
@@ -88,6 +90,6 @@
     (build-java-file class-name topology-info)))
 
 ;;Currently fails, as keyword cannot be turned into valid variable
-;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
+(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
 ;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
-(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+;(gen-topology-file "JDBC" 'crux.jdbc/topology)
