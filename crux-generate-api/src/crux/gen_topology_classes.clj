@@ -3,15 +3,32 @@
             [clojure.string :as string]
             [crux.topology-info :as ti]))
 
-(import (com.squareup.javapoet MethodSpec TypeSpec TypeSpec$Builder
-                               FieldSpec FieldSpec$Builder JavaFile)
-        javax.lang.model.element.Modifier)
+(import (com.squareup.javapoet MethodSpec TypeSpec FieldSpec JavaFile)
+        javax.lang.model.element.Modifier
+        java.util.Properties)
 
 (defn format-topology-key [key]
   (-> (name key)
       (string/replace "-" "_")
       (string/upper-case)))
 
+(defn format-topology-key-method [key]
+  (->> (name key)
+       (#(string/split % #"-"))
+       (map string/capitalize )
+       (string/join "")
+       (str "With")))
+
+(defn add-properties-field [class properties-name]
+  (let [field (FieldSpec/builder Properties properties-name
+                                 (into-array ^Modifier [Modifier/PUBLIC]))]
+    (.addField class (.build field))))
+
+(defn add-constructor [class properties-name]
+  (let [constructor (MethodSpec/constructorBuilder)]
+    (.addModifiers constructor (into-array ^Modifier [Modifier/PUBLIC]))
+    (.addStatement constructor (str properties-name " = new $T()") (into-array [Properties]))
+    (.addMethod class (.build constructor))))
 
 (defn build-key-field[[key value]]
   (let [field (FieldSpec/builder String (format-topology-key key)
@@ -25,16 +42,29 @@
     (.initializer field "$S" (into-array [(str (:default value))]))
     (.build field)))
 
-(defn add-topology-key-code [class [key value]]
+(defn build-topology-key-setter [key properties-name]
+  (let [set-property (MethodSpec/methodBuilder (format-topology-key-method key))]
+    (.addModifiers set-property (into-array ^Modifier [Modifier/PUBLIC]))
+    (.addParameter set-property String "val" (make-array Modifier 0))
+    (.addStatement set-property (str properties-name ".put($L, val)")
+                   (into-array [(format-topology-key key)]))
+    (.build set-property)
+    ))
+
+(defn add-topology-key-code [class properties-name [key value]]
   (do
     (.addField class (build-key-field [key value]))
     (when (:default value)
-      (.addField class (build-key-default-field [key value])))))
+      (.addField class (build-key-default-field [key value])))
+    (.addMethod class (build-topology-key-setter key properties-name))))
 
 (defn build-java-class [class-name topology-info]
-  (let [class (TypeSpec/classBuilder class-name)]
+  (let [class (TypeSpec/classBuilder class-name)
+        properties-name (str class-name "Properties")]
     (.addModifiers class (into-array ^Modifier [Modifier/PUBLIC]))
-    (doall (map #(add-topology-key-code class %) (seq topology-info)))
+    (add-properties-field class properties-name)
+    (add-constructor class properties-name)
+    (doall (map #(add-topology-key-code class properties-name %) (seq topology-info)))
     (.build class)))
 
 (defn build-java-file [class-name topology-info]
@@ -47,5 +77,8 @@
 (defn gen-topology-file [class-name topology]
   (let [topology-info (ti/get-topology-info topology)]
     (build-java-file class-name topology-info)))
+
+;;Currently fails, as keyword cannot be turned into valid variable
+(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
 
 (gen-topology-file "KafkaNode" 'crux.kafka/topology)
