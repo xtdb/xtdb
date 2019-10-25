@@ -19,7 +19,7 @@
        (#(string/split % #"-"))
        (map string/capitalize )
        (string/join "")
-       (str "With")))
+       (str "with")))
 
 (defn add-properties-field [class properties-name]
   (let [field (FieldSpec/builder Properties properties-name
@@ -32,18 +32,18 @@
     (.addStatement constructor (str properties-name " = new $T()") (into-array [Properties]))
     (.addMethod class (.build constructor))))
 
-(defn build-key-field[[key value]]
-  (let [field (FieldSpec/builder String (format-topology-key key)
-                                 (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
-    (.initializer field "$S" (into-array [(str key)]))
-    (.build field)))
-
 (defn val-type [val]
   (let [type (:crux.config/type val)]
     (cond
       (= type :crux.config/nat-int) Long
       (= type :crux.config/boolean) Boolean
       :else String)))
+
+(defn build-key-field[[key value]]
+  (let [field (FieldSpec/builder String (format-topology-key key)
+                                 (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
+    (.initializer field "$S" (into-array [(string/replace key ":" "")]))
+    (.build field)))
 
 (defn build-key-default-field[[key val]]
   (let [field (FieldSpec/builder (val-type val) (str (format-topology-key key) "_DEFAULT")
