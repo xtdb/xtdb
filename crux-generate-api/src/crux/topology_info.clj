@@ -13,8 +13,6 @@
        (into {})))
 
 (defn get-topology-info [topology-name]
-  (if (= 'crux.node/base-topology topology-name)
-    (eval topology-name)
-    (let [topology-map (eval topology-name)
+  (let [topology-map (eval topology-name)
           topology-opts (find-nested-args topology-map)]
-      topology-opts)))
+      topology-opts))

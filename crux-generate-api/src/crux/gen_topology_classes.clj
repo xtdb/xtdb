@@ -86,10 +86,12 @@
         (.writeTo output))))
 
 (defn gen-topology-file [class-name topology]
-  (let [topology-info (ti/get-topology-info topology)]
-    (build-java-file class-name topology-info)))
+  (let [topology-info (ti/get-topology-info topology)
+        full-topology-info (merge topology-info crux.node/base-topology)]
+    (build-java-file class-name full-topology-info)))
 
-;;Currently fails, as keyword cannot be turned into valid variable
-(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
+;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
+
 ;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+
 ;(gen-topology-file "JDBC" 'crux.jdbc/topology)
