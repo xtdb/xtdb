@@ -23,29 +23,38 @@ public class CasOperation implements Operation {
 	newMap = new HashMap<Object, Object>();
     }
 
-    public void putId(Map query, String id) {
-	query.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
+    public void putOldMapId(String id) {
+	oldMap.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
     }
 
-    public void putId(Map query, UUID id) {
-	query.put(Keyword.intern("crux.db/id"), id);
+    public void putOldMapId(UUID id) {
+	oldMap.put(Keyword.intern("crux.db/id"), id);
     }
 
-    public void putId(Map query, URL id) {
-	query.put(Keyword.intern("crux.db/id"), id);
+    public void putOldMapId(URL id) {
+	oldMap.put(Keyword.intern("crux.db/id"), id);
     }
 
-    public void putId(Map query, URI id) {
-	query.put(Keyword.intern("crux.db/id"), id);
+    public void putOldMapId(URI id) {
+	oldMap.put(Keyword.intern("crux.db/id"), id);
     }
 
-    public void putOldMapId(Object id) {
-	putId(oldMap, id);
+     public void putNewMapId(String id) {
+	newMap.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
     }
 
-    public void putNewMapId(Object id) {
-	putId(newMap, id);
+    public void putNewMapId(UUID id) {
+	newMap.put(Keyword.intern("crux.db/id"), id);
     }
+
+    public void putNewMapId(URL id) {
+	newMap.put(Keyword.intern("crux.db/id"), id);
+    }
+
+    public void putNewMapId(URI id) {
+	newMap.put(Keyword.intern("crux.db/id"), id);
+    }
+
 
     public void putValidTime(Date validtime) {
 	validTime = validtime;
