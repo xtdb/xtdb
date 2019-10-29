@@ -48,20 +48,12 @@ public class CasOperation implements Operation {
 	validTimeSet = true;
     }
 
-    public void putInOldMap(Object key, Object val) {
-	oldMap.put(key, val);
-    }
-
-    public void putInOldMapAtId(String key, Object val) {
-	putInOldMap(Keyword.intern(key), val);
+    public void putInOldMap(String key, Object val) {
+	oldMap.put(keyKeyword.intern(key), val);
     }
 
     public void putInNewMap(Object key, Object val) {
-	newMap.put(key, val);
-    }
-
-    public void putInNewMapAtId(String key, Object val) {
-	putInNewMap(Keyword.intern(key), val);
+	newMap.put(Keyword.intern(key), val);
     }
 
     public PersistentVector getOperation() {

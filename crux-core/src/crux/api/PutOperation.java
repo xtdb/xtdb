@@ -42,11 +42,7 @@ public class PutOperation implements Operation {
 	validTimeSet = true;
     }
 
-    public void put(Object key, Object val) {
-	query.put(key, val);
-    }
-
-    public void putAtKey(String key, Object val) {
+    public void put(String key, Object val) {
 	put(Keyword.intern(key), val);
     }
 
