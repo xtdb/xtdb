@@ -1,6 +1,7 @@
 package crux.api;
 
 import clojure.java.api.Clojure;
+import clojure.lang.PersistentVector;
 
 public class Transaction {
     private PersistentVector transaction;

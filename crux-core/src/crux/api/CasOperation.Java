@@ -1,7 +1,8 @@
 package crux.api;
 
 import java.util.Map;
-import clojure.java.api.Clojure;
+import java.util.HashMap;
+import clojure.lang.PersistentVector;
 import clojure.lang.Keyword;
 import java.util.Date;
 import java.util.UUID;
@@ -10,15 +11,16 @@ import java.net.URL;
 
 public class CasOperation implements Operation {
     private PersistentVector operation;
-    private Map oldMap;
-    private Map newMap;
-    private Date validTime = null;
+    private Map<Object, Object> oldMap;
+    private Map<Object, Object> newMap;
+    private Date validTime;
+    private boolean validTimeSet = false;
 
     public CasOperation() {
 	operation = PersistentVector.create();
 	operation = operation.cons(Keyword.intern("crux.tx/cas"));
-	oldMap = new HashMap();
-	newMap = new HashMap();
+	oldMap = new HashMap<Object, Object>();
+	newMap = new HashMap<Object, Object>();
     }
 
     public void putId(Map query, String id) {
@@ -61,7 +63,7 @@ public class CasOperation implements Operation {
     public PersistentVector getOperation() {
 	operation = operation.cons(oldMap);
 	operation = operation.cons(newMap);
-	if (validTime)
+	if (validTimeSet)
 	    operation = operation.cons(validTime);
 	return operation;
     }

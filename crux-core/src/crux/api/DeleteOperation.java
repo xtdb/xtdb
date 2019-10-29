@@ -1,6 +1,6 @@
 package crux.api;
 
-import clojure.java.api.Clojure;
+import clojure.lang.PersistentVector;
 import clojure.lang.Keyword;
 import java.util.Date;
 import java.util.UUID;
@@ -10,7 +10,8 @@ import java.net.URL;
 public class DeleteOperation implements Operation {
     private PersistentVector operation;
     private Object deleteId;
-    private Date validTime = null;
+    private Date validTime;
+    private boolean validTimeSet = false;
 
     public DeleteOperation() {
 	operation = PersistentVector.create();
@@ -40,7 +41,7 @@ public class DeleteOperation implements Operation {
 
     public PersistentVector getOperation() {
 	operation = operation.cons(deleteId);
-	if (validTime)
+	if (validTimeSet)
 	    operation = operation.cons(validTime);
 	return operation;
     }

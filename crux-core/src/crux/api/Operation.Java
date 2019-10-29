@@ -1,6 +1,6 @@
 package crux.api;
 
-import clojure.java.api.Clojure;
+import clojure.lang.PersistentVector;
 import java.util.Date;
 import java.util.UUID;
 import java.net.URI;
