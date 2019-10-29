@@ -9,7 +9,7 @@ import java.util.UUID;
 import java.net.URI;
 import java.net.URL;
 
-public class PutOperation implements Operation{
+public class PutOperation implements Operation {
     private PersistentVector operation;
     private Map<Object, Object> query;
     private Date validTime;
