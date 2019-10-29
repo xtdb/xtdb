@@ -46,6 +46,10 @@ public class PutOperation implements Operation {
 	query.put(key, val);
     }
 
+    public void putAtKey(String key, Object val) {
+	put(Keyword.intern(key), val);
+    }
+
     public PersistentVector getOperation() {
 	operation = operation.cons(query);
 	if (validTimeSet)

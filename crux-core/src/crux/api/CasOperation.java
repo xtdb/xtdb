@@ -23,50 +23,45 @@ public class CasOperation implements Operation {
 	newMap = new HashMap<Object, Object>();
     }
 
-    public void putOldMapId(String id) {
+    public void putId(String id) {
 	oldMap.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
-    }
-
-    public void putOldMapId(UUID id) {
-	oldMap.put(Keyword.intern("crux.db/id"), id);
-    }
-
-    public void putOldMapId(URL id) {
-	oldMap.put(Keyword.intern("crux.db/id"), id);
-    }
-
-    public void putOldMapId(URI id) {
-	oldMap.put(Keyword.intern("crux.db/id"), id);
-    }
-
-     public void putNewMapId(String id) {
 	newMap.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
     }
 
-    public void putNewMapId(UUID id) {
+    public void putId(UUID id) {
+	oldMap.put(Keyword.intern("crux.db/id"), id);
 	newMap.put(Keyword.intern("crux.db/id"), id);
     }
 
-    public void putNewMapId(URL id) {
+    public void putId(URL id) {
+	oldMap.put(Keyword.intern("crux.db/id"), id);
 	newMap.put(Keyword.intern("crux.db/id"), id);
     }
 
-    public void putNewMapId(URI id) {
+    public void putId(URI id) {
+	oldMap.put(Keyword.intern("crux.db/id"), id);
 	newMap.put(Keyword.intern("crux.db/id"), id);
     }
-
 
     public void putValidTime(Date validtime) {
 	validTime = validtime;
 	validTimeSet = true;
     }
 
-    public void putOldMap(Object key, Object val) {
+    public void putInOldMap(Object key, Object val) {
 	oldMap.put(key, val);
     }
 
-    public void putNewMap(Object key, Object val) {
+    public void putInOldMapAtId(String key, Object val) {
+	putInOldMap(Keyword.intern(key), val);
+    }
+
+    public void putInNewMap(Object key, Object val) {
 	newMap.put(key, val);
+    }
+
+    public void putInNewMapAtId(String key, Object val) {
+	putInNewMap(Keyword.intern(key), val);
     }
 
     public PersistentVector getOperation() {
