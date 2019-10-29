@@ -1,4 +1,5 @@
 notes.md
+*.asc
 .cpcache
 .nrepl-port
 .lein-repl-history
