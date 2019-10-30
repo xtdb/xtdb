@@ -13,30 +13,51 @@ public class DeleteOperation implements Operation {
     private Date validTime;
     private boolean validTimeSet = false;
 
-    public DeleteOperation() {
-	operation = PersistentVector.create();
-	operation = operation.cons(Keyword.intern("crux.tx/delete"));
-    }
+    public static class Builder implements OperationBuilder {
+	private PersistentVector operation;
+	private Object deleteId;
+	private Date validTime;
+	private boolean validTimeSet = false;
 
-    public void putId(String id) {
-	deleteId = Keyword.intern(id);
-    }
+	public Builder() {
+	    operation = PersistentVector.create();
+	    operation = operation.cons(Keyword.intern("crux.tx/delete"));
+	}
 
-    public void putId(UUID id) {
-	deleteId = id;
-    }
+	public Builder putId(String id) {
+	    deleteId = Keyword.intern(id);
+	    return this;
+	}
 
-    public void putId(URL id) {
-	deleteId = id;
-    }
+	public Builder putId(UUID id) {
+	    deleteId = id;
+	    return this;
+	}
 
-    public void putId(URI id) {
-	deleteId = id;
-    }
+	public Builder putId(URL id) {
+	    deleteId = id;
+	    return this;
+	}
 
-    public void putValidTime(Date validtime) {
-	validTime = validtime;
-	validTimeSet = true;
+	public Builder putId(URI id) {
+	    deleteId = id;
+	    return this;
+	}
+
+	public Builder putValidTime(Date validtime) {
+	    validTime = validtime;
+	    validTimeSet = true;
+	    return this;
+	}
+
+	public DeleteOperation build() {
+	    DeleteOperation deleteOp = new DeleteOperation();
+	    deleteOp.operation = operation;
+	    deleteOp.deleteId = deleteId;
+	    deleteOp.validTime = validTime;
+	    deleteOp.validTimeSet = validTimeSet;
+	    return deleteOp;
+	}
     }
 
     public PersistentVector getOperation() {

@@ -19,45 +19,81 @@ public class EvictOperation implements Operation {
     private boolean keepEarliest;
     private boolean keepEarliestSet = false;
 
-    public EvictOperation() {
-	operation = PersistentVector.create();
-	operation = operation.cons(Keyword.intern("crux.tx/evict"));
-    }
+    public static class Builder implements OperationBuilder {
+	private PersistentVector operation;
+	private Object evictId;
+	private Date startValidTime;
+	private boolean startValidTimeSet = false;
+	private Date endValidTime;
+	private boolean endValidTimeSet = false;
+	private boolean keepLatest;
+	private boolean keepLatestSet = false;
+	private boolean keepEarliest;
+	private boolean keepEarliestSet = false;
 
-    public void putId(String id) {
-	evictId = Keyword.intern(id);
-    }
+	public Builder() {
+	    operation = PersistentVector.create();
+	    operation = operation.cons(Keyword.intern("crux.tx/evict"));
+	}
 
-    public void putId(UUID id) {
-	evictId = id;
-    }
+	public Builder putId(String id) {
+	    evictId = Keyword.intern(id);
+	    return this;
+	}
 
-    public void putId(URL id) {
-	evictId = id;
-    }
+	public Builder putId(UUID id) {
+	    evictId = id;
+	    return this;
+	}
 
-    public void putId(URI id) {
-	evictId = id;
-    }
+	public Builder putId(URL id) {
+	    evictId = id;
+	    return this;
+	}
 
-    public void putValidTime(Date validtime) {
-	startValidTime = validtime;
-	startValidTimeSet = true;
-    }
+	public Builder putId(URI id) {
+	    evictId = id;
+	    return this;
+	}
 
-    public void putEndValidTime(Date validtime) {
-	endValidTime = validtime;
-	endValidTimeSet = true;
-    }
+	public Builder putValidTime(Date validtime) {
+	    startValidTime = validtime;
+	    startValidTimeSet = true;
+	    return this;
+	}
 
-    public void keepLatest(boolean keep) {
-	keepLatest = keep;
-	keepLatestSet = true;
-    }
+	public Builder putEndValidTime(Date validtime) {
+	    endValidTime = validtime;
+	    endValidTimeSet = true;
+	    return this;
+	}
 
-    public void keepEarliest(boolean keep) {
-	keepEarliest = keep;
-	keepEarliestSet = true;
+	public Builder keepLatest(boolean keep) {
+	    keepLatest = keep;
+	    keepLatestSet = true;
+	    return this;
+	}
+
+	public Builder keepEarliest(boolean keep) {
+	    keepEarliest = keep;
+	    keepEarliestSet = true;
+	    return this;
+	}
+
+	public EvictOperation build() {
+	    EvictOperation evictOp = new EvictOperation();
+	    evictOp.operation = operation;
+	    evictOp.evictId = evictId;
+	    evictOp.startValidTime = startValidTime;
+	    evictOp.startValidTimeSet = startValidTimeSet;
+	    evictOp.endValidTime = endValidTime;
+	    evictOp.endValidTimeSet = endValidTimeSet;
+	    evictOp.keepLatest = keepLatest;
+	    evictOp.keepLatestSet = keepLatestSet;
+	    evictOp.keepEarliest = keepEarliest;
+	    evictOp.keepEarliestSet = keepEarliestSet;
+	    return evictOp;
+	}
     }
 
     public PersistentVector getOperation() {

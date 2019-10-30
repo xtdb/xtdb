@@ -7,7 +7,14 @@ import java.net.URI;
 import java.net.URL;
 
 public interface Operation {
-    public void putValidTime(Date validTime);
+    public interface OperationBuilder {
+	public OperationBuilder putValidTime(Date validTime);
+	public OperationBuilder putId(String id);
+	public OperationBuilder putId(UUID id);
+	public OperationBuilder putId(URL id);
+	public OperationBuilder putId(URI id);
+	public Operation build();
+    }
 
     public PersistentVector getOperation();
 }

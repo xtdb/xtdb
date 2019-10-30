@@ -15,37 +15,58 @@ public class PutOperation implements Operation {
     private Date validTime;
     private boolean validTimeSet = false;
 
-    public PutOperation() {
-	operation = PersistentVector.create();
-	operation = operation.cons(Keyword.intern("crux.tx/put"));
-	query = new HashMap<Object, Object>();
-    }
+    public static class Builder implements OperationBuilder {
+	private PersistentVector operation;
+	private Map<Object, Object> query;
+	private Date validTime;
+	private boolean validTimeSet = false;
 
-    public void putId(String id) {
-	query.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
-    }
+	public Builder() {
+	    operation = PersistentVector.create();
+	    operation = operation.cons(Keyword.intern("crux.tx/put"));
+	    query = new HashMap<Object, Object>();
+	}
 
-    public void putId(UUID id) {
-	query.put(Keyword.intern("crux.db/id"), id);
-    }
+	public OperationBuilder putId(String id) {
+	    query.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
+	    return this;
+	}
 
-    public void putId(URL id) {
-	query.put(Keyword.intern("crux.db/id"), id);
-    }
+	public OperationBuilder putId(UUID id) {
+	    query.put(Keyword.intern("crux.db/id"), id);
+	    return this;
+	}
 
-    public void putId(URI id) {
-	query.put(Keyword.intern("crux.db/id"), id);
-    }
+	public OperationBuilder putId(URL id) {
+	    query.put(Keyword.intern("crux.db/id"), id);
+	    return this;
+	}
 
-    public void putValidTime(Date validtime) {
-	validTime = validtime;
-	validTimeSet = true;
-    }
+	public OperationBuilder putId(URI id) {
+	    query.put(Keyword.intern("crux.db/id"), id);
+	    return this;
+	}
 
-    public void put(String key, Object val) {
-	query.put(Keyword.intern(key), val);
-    }
+	public OperationBuilder putValidTime(Date validtime) {
+	    validTime = validtime;
+	    validTimeSet = true;
+	    return this;
+	}
 
+	public OperationBuilder put(String key, Object val) {
+	    query.put(Keyword.intern(key), val);
+	    return this;
+	}
+
+	public PutOperation build() {
+	    PutOperation putOp = new PutOperation();
+	    putOp.operation = operation;
+	    putOp.query = query;
+	    putOp.validTime = validTime;
+	    putOp.validTimeSet = validTimeSet;
+	    return putOp;
+	}
+    }
     public PersistentVector getOperation() {
 	operation = operation.cons(query);
 	if (validTimeSet)
