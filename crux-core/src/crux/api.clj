@@ -197,7 +197,7 @@
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
   (submit-tx [this tx-ops]
-    (.submitTx this tx-ops))
+    (.submitTx this (into [] tx-ops)))
 
   (new-tx-log-context ^java.io.Closeable [this]
     (.newTxLogContext this))
