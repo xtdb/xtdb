@@ -65,8 +65,18 @@ public class CasOperation implements Operation {
 	    return this;
 	}
 
+	public Builder putInOldMap(Map<Object, Object> valueMap) {
+	    oldMap.putAll(valueMap);
+	    return this;
+	}
+
 	public Builder putInNewMap(String key, Object val) {
 	    newMap.put(Keyword.intern(key), val);
+	    return this;
+	}
+
+	public Builder putInNewMap(Map<Object,Object> valueMap) {
+	    newMap.putAll(valueMap);
 	    return this;
 	}
 

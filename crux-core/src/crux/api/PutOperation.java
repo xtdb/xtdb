@@ -58,6 +58,11 @@ public class PutOperation implements Operation {
 	    return this;
 	}
 
+	public OperationBuilder put(Map<Object,Object> valueMap) {
+	    query.putAll(valueMap);
+	    return this;
+	}
+
 	public PutOperation build() {
 	    PutOperation putOp = new PutOperation();
 	    putOp.operation = operation;
