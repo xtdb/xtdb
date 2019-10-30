@@ -4,7 +4,7 @@
             [crux.io :as cio]))
 
 (t/deftest space-tutorial-test
-  (def crux
+  (def ^crux.api.ICruxAPI crux
     (crux/start-node
        {:crux.node/topology :crux.standalone/topology
         :crux.node/kv-store "crux.kv.memdb/kv"

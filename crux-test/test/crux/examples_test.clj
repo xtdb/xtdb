@@ -55,7 +55,7 @@
     (t/is (nil? (ex/example-close-node node)))))
 
 (t/deftest test-example-basic-queries
-  (with-open [node (ex/example-start-standalone)]
+  (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-setup node)) nil)
     (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
@@ -66,13 +66,13 @@
   (cio/delete-dir "data"))
 
 (t/deftest test-example-time-queries
-  (with-open [node (ex/example-start-standalone)]
+  (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-at-time-setup node)) nil)
     (t/is (= #{} (ex/query-example-at-time-q1 node)))
     (t/is (= #{[:malcolm]} (ex/query-example-at-time-q2 node)))))
 
 (t/deftest test-example-join-queries
-  (with-open [node (ex/example-start-standalone)]
+  (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q1-setup node)) nil)
     (t/is (= #{[:ivan :ivan]
                [:petr :petr]
