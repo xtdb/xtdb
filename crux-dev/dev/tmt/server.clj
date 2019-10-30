@@ -1,29 +1,53 @@
 (ns tmt.server
   (:require [crux.api :as api]
-            [crux.http-server :as srv]))
+            [crux.http-server :as srv]
+            [crux.remote-api-client :as cli]))
 
-(def opts
-  {:crux.node/topology :crux.standalone/topology
-   :crux.node/kv-store "crux.kv.memdb/kv"
-   :crux.kv/db-dir "data/db-dir-1"
-   :crux.standalone/event-log-dir "data/eventlog-1"
-   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"})
+(def node-rocks
+  (api/start-node {:crux.node/topology :crux.standalone/topology
+                   :crux.kv/db-dir "data/db-dir-rocks"
+                   :crux.standalone/event-log-dir "data/eventlog-rocks"}))
 
-(def simple-node
-  (api/start-node opts))
+(def node-mem
+  (api/start-node {:crux.node/topology :crux.standalone/topology
+                   :crux.node/kv-store "crux.kv.memdb/kv"
+                   :crux.kv/db-dir "data/db-dir-mem"
+                   :crux.standalone/event-log-dir "data/eventlog-mem"
+                   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
 
-#_(def srv
-  (srv/start-http-server simple-node {:server-port 80008}))
+(def srv-rocks
+  (srv/start-http-server node-rocks {:server-port 17777}))
+(def srv-mem
+  (srv/start-http-server node-mem {:server-port 17778}))
+
+(def data [[:crux.tx/put
+            {:crux.db/id :me
+             :list ["carrots" "peas" "shampoo"]
+             :pockets/left ["lint" "change"]
+             :pockets/right ["phone"]}]
+           [:crux.tx/put
+            {:crux.db/id :you
+             :list ["carrots" "tomatoes" "wig"]
+             :pockets/left ["wallet" "watch"]
+             :pockets/right ["spectacles"]}]])
 
 (api/submit-tx
-    node
-    [[:crux.tx/put
-      {:crux.db/id :me
-       :list ["carrots" "peas" "shampoo"]
-       :pockets/left ["lint" "change"]
-       :pockets/right ["phone"]}]
-     [:crux.tx/put
-      {:crux.db/id :you
-       :list ["carrots" "tomatoes" "wig"]
-       :pockets/left ["wallet" "watch"]
-       :pockets/right ["spectacles"]}]])
+  node-mem data)
+(api/submit-tx
+  node-rocks data)
+
+(def http-rocks
+  (cli/new-api-client "http://localhost:17777"))
+(def http-mem
+  (cli/new-api-client "http://localhost:17778"))
+
+(defn testq [nd] (api/q (api/db nd) '{:find [e]
+                                      :where [[_ :crux.db/id e]]}))
+
+(print (= (testq http-mem) (testq node-mem))) ; => false??
+(print (= (testq http-rocks) (testq node-rocks))) ; => true
+
+(.close http-rocks)
+(.close node-rocks)
+(.close http-mem)
+(.close node-mem)

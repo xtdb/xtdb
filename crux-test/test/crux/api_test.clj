@@ -32,8 +32,7 @@
   (t/testing "Remote API"
     (fn [f]
       (fh/with-http-server
-        (fn [f]
-          (kf/with-cluster-node-opts f))))))
+        kf/with-standalone))))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir apif/with-node)
