@@ -26,6 +26,23 @@
       (t/is (= (-> t :crux.node/tx-log) (-> crux.jdbc/topology :crux.node/tx-log)))
       (t/is (= (-> t :crux.node/kv-store) crux.kv.memdb/kv)))))
 
+(t/deftest test-calling-shutdown-node-fails-gracefully
+  (let [data-dir (cio/create-tmpdir "kv-store")
+        event-log-dir (cio/create-tmpdir "kv-store")]
+    (try
+      (let [n (n/start {:crux.node/topology :crux.standalone/topology
+                        :crux.kv/db-dir (str data-dir)
+                        :crux.standalone/event-log-dir (str event-log-dir)})]
+        (t/is (.status n))
+        (.close n)
+        (.status n)
+        (t/is false))
+      (catch IllegalStateException e
+        (t/is (= "Crux node is closed" (.getMessage e))))
+      (finally
+        (cio/delete-dir data-dir)
+        (cio/delete-dir event-log-dir)))))
+
 (t/deftest test-start-node-complain-if-no-topology
   (try
     (with-open [n (n/start {})]

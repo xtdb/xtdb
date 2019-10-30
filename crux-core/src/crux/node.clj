@@ -37,57 +37,74 @@
                        revision]} (cio/load-properties in)]
            (->CruxVersion version revision)))))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn]
+(defn- assert-node-open [{:keys [closed?]}]
+  (when @closed?
+    (throw (IllegalStateException. "Crux node is closed"))))
+
+(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn closed?]
   ICruxAPI
   (db [this]
+    (assert-node-open this)
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (q/db kv-store object-store tx-time tx-time)))
 
   (db [this valid-time]
+    (assert-node-open this)
     (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (.db this valid-time transact-time)))
 
-  (db [_ valid-time transact-time]
+  (db [this valid-time transact-time]
+    (assert-node-open this)
     (q/db kv-store object-store valid-time transact-time))
 
-  (document [_ content-hash]
+  (document [this content-hash]
+    (assert-node-open this)
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (db/get-single-object object-store snapshot (c/new-id content-hash))))
 
-  (documents [_ content-hash-set]
+  (documents [this content-hash-set]
+    (assert-node-open this)
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (db/get-objects object-store snapshot (map c/new-id content-hash-set))))
 
-  (history [_ eid]
+  (history [this eid]
+    (assert-node-open this)
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
 
-  (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+  (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (assert-node-open this)
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (->> (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
            (mapv c/entity-tx->edn)
            (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time)))))
 
   (status [this]
+    (assert-node-open this)
     (status-fn))
 
   (attributeStats [this]
+    (assert-node-open this)
     (idx/read-meta kv-store :crux.kv/stats))
 
-  (submitTx [_ tx-ops]
+  (submitTx [this tx-ops]
+    (assert-node-open this)
     @(db/submit-tx tx-log tx-ops))
 
   (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
     (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
 
-  (hasSubmittedTxCorrectedEntity [_ submitted-tx valid-time eid]
+  (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
+    (assert-node-open this)
     (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
     (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid))
 
-  (newTxLogContext [_]
+  (newTxLogContext [this]
+    (assert-node-open this)
     (db/new-tx-log-context tx-log))
 
-  (txLog [_ tx-log-context from-tx-id with-ops?]
+  (txLog [this tx-log-context from-tx-id with-ops?]
+    (assert-node-open this)
     (for [{:keys [crux.tx/tx-id
                   crux.tx.event/tx-events] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
           :when (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -100,27 +117,32 @@
                      (tx/tx-events->tx-ops snapshot object-store tx-events))))
         tx-log-entry)))
 
-  (sync [_ timeout]
+  (sync [this timeout]
+    (assert-node-open this)
     (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
                                           (:crux.tx-log/await-tx-timeout options))))
 
-  (sync [_ tx-time timeout]
+  (sync [this tx-time timeout]
+    (assert-node-open this)
     (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
                                           (:crux.tx-log/await-tx-timeout options))))
 
   ICruxAsyncIngestAPI
-  (submitTxAsync [_ tx-ops]
+  (submitTxAsync [this tx-ops]
+    (assert-node-open this)
     (db/submit-tx tx-log tx-ops))
 
   backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]
+    (assert-node-open this)
     (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
     (when (satisfies? tx-log backup/INodeBackup)
       (backup/write-checkpoint tx-log opts)))
 
   Closeable
   (close [_]
-    (when close-fn (close-fn))))
+    (when (and (not @closed?) close-fn) (close-fn))
+    (reset! closed? true)))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
@@ -243,7 +265,8 @@
 (defn start ^ICruxAPI [options]
   (let [options (into {} options)
         topology (options->topology options)
-        [{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules topology options)
+        [modules close-fn] (start-modules topology options)
+        {::keys [kv-store tx-log indexer object-store]} modules
         status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))
         node-opts (parse-opts node-args options)]
     (map->CruxNode {:close-fn close-fn
@@ -252,4 +275,5 @@
                     :kv-store kv-store
                     :tx-log tx-log
                     :indexer indexer
-                    :object-store object-store})))
+                    :object-store object-store
+                    :closed? (atom false)})))
