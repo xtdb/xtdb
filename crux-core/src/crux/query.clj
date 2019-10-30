@@ -19,7 +19,8 @@
            java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
-           org.agrona.ExpandableDirectByteBuffer))
+           org.agrona.ExpandableDirectByteBuffer
+           java.io.Closeable))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -1192,14 +1193,46 @@
   (transactionTime [_]
     transact-time))
 
+(defrecord EmptyDatasource []
+  ICruxDatasource
+  (entity [this eid]
+    nil)
+
+  (entityTx [this eid]
+    nil)
+
+  (newSnapshot [this]
+    (reify Closeable
+      (close [_])))
+
+  (q [this q]
+    #{})
+
+  (q [this snapshot q]
+    #{})
+
+  (historyAscending [this snapshot eid]
+    [])
+
+  (historyDescending [this snapshot eid]
+    [])
+
+  (validTime [_]
+    nil)
+
+  (transactionTime [_]
+    nil))
+
 (defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
-  (->QueryDatasource kv
-                     (lru/get-named-cache kv ::query-cache)
-                     (lru/get-named-cache kv ::conform-cache)
-                     object-store
-                     valid-time
-                     transact-time
-                     nil))
+  (if transact-time
+    (->QueryDatasource kv
+                       (lru/get-named-cache kv ::query-cache)
+                       (lru/get-named-cache kv ::conform-cache)
+                       object-store
+                       valid-time
+                       transact-time
+                       nil)
+    (->EmptyDatasource)))
 
 (defn submitted-tx-updated-entity?
   ([kv object-store {:crux.tx/keys [tx-time] :as submitted-tx} eid]
