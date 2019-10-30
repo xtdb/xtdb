@@ -469,6 +469,56 @@ map:
      :args [{'?code my-code}]}))
 ----
 
+=== Maps and Vectors in data
+
+Say you have a document like so and you want to add it to a Crux db:
+[source,clj]
+----
+{:crux.db/id :me
+ :list ["carrots" "peas" "shampoo"]
+ :pockets {:left ["lint" "change"]
+           :right ["phone"]}}
+----
+
+Crux breaks down vectors into individual components so the query engine is able
+see all elements on the base level. As a result of this the query engine is not
+required to traverse any structures or any other types of search algorithm
+which would slow the query down. The same thing should apply for maps so
+instead of doing `:pocket {:left thing :right thing}` you should put them under
+a namespace, instead structuring the data as `:pocket/left thing :pocket/right
+thing` to put the data all on the base level. Like so:
+
+[source,clj]
+----
+(crux/submit-tx
+  node
+  [[:crux.tx/put
+    {:crux.db/id :me
+     :list ["carrots" "peas" "shampoo"]
+     :pockets/left ["lint" "change"]
+     :pockets/right ["phone"]}]
+   [:crux.tx/put
+    {:crux.db/id :you
+     :list ["carrots" "tomatoes" "wig"]
+     :pockets/left ["wallet" "watch"]
+     :pockets/right ["spectacles"]}]])
+----
+
+To query inside these vectors the code would be:
+
+[source,clj]
+----
+(crux/q (crux/db node) '{:find [e l]
+                         :where [[e :list l]]
+                         :args [{l "carrots"}]})
+;; => #{[:you "carrots"] [:me "carrots"]}
+
+(crux/q (crux/db node) '{:find [e p]
+                         :where [[e :pockets/left p]]
+                         :args [{p "watch"}]})
+;; => #{[:you "watch"]}
+----
+
 [#queries_datascript_differences]
 == DataScript Differences
 
