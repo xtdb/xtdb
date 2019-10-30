@@ -49,10 +49,10 @@ public class CasOperation implements Operation {
     }
 
     public void putInOldMap(String key, Object val) {
-	oldMap.put(keyKeyword.intern(key), val);
+	oldMap.put(Keyword.intern(key), val);
     }
 
-    public void putInNewMap(Object key, Object val) {
+    public void putInNewMap(String key, Object val) {
 	newMap.put(Keyword.intern(key), val);
     }
 

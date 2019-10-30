@@ -43,7 +43,7 @@ public class PutOperation implements Operation {
     }
 
     public void put(String key, Object val) {
-	put(Keyword.intern(key), val);
+	query.put(Keyword.intern(key), val);
     }
 
     public PersistentVector getOperation() {
