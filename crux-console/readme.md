@@ -44,7 +44,7 @@ To launch development REPL
 #### Preferred
 ```sh
 lein cljs-dev  # will install all the node modules, launch cljs compiling guard with code hotswapping
-dev/run.sh     # will launch edge rebel repl
+lein repl      # will launch edge rebel repl
 ```
 
 
@@ -57,7 +57,7 @@ dev/shadow-dev &
 # will launch shadow-cljs watch build
 # it runs a local version
 
-dev/run.sh 
+lein repl 
 # will launch the server
 ```
 

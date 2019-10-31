@@ -35,7 +35,7 @@ $ lein sub install
 $ cd crux/crux-console
 $ lein cljs-dev
 $ # In a different terminal
-$ ./dev/run.sh
+$ lein repl
 ----
 
 This will run `console` at http://localhost:8300.
@@ -51,7 +51,7 @@ can be given input to send to the crux node. The panel on the right displays
 the input received using various graphics. Initially the input panel will have
 a default query:
 
-[source, console]
+[source, clojure]
 ----
 {:find [e]
  :where
@@ -86,7 +86,7 @@ stock ticker prices and the locations of their associated exchanges.  Once we
 run this, we receive some output on the output panel it should looks something
 like this:
 
-[source, console]
+[source, clojure]
 ----
 {:crux.tx/tx-id	1606996128814081
  :crux.tx/tx-time	#inst "2019-09-24T13:35:57.045-00:00"}
@@ -110,7 +110,7 @@ The previous query gave us every thing currently stored in crux but lets filter
 out some stuff so we can get a better idea about what we have in here. Click on
 the simple query snippet. This will give you this query:
 
-[source, console]
+[source, clojure]
 ----
 {:find [e p]
  :where
