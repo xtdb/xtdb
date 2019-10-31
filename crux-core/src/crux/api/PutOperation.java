@@ -46,37 +46,37 @@ public class PutOperation implements Operation {
 	    putId(id);
 	}
 
-	public OperationBuilder putId(String id) {
+	public Builder putId(String id) {
 	    query.put(Keyword.intern("crux.db/id"), Keyword.intern(id));
 	    return this;
 	}
 
-	public OperationBuilder putId(UUID id) {
+	public Builder putId(UUID id) {
 	    query.put(Keyword.intern("crux.db/id"), id);
 	    return this;
 	}
 
-	public OperationBuilder putId(URL id) {
+	public Builder putId(URL id) {
 	    query.put(Keyword.intern("crux.db/id"), id);
 	    return this;
 	}
 
-	public OperationBuilder putId(URI id) {
+	public Builder putId(URI id) {
 	    query.put(Keyword.intern("crux.db/id"), id);
 	    return this;
 	}
 
-	public OperationBuilder putValidTime(Date validtime) {
+	public Builder putValidTime(Date validtime) {
 	    validTime = validtime;
 	    return this;
 	}
 
-	public OperationBuilder put(String key, Object val) {
+	public Builder put(String key, Object val) {
 	    query.put(Keyword.intern(key), val);
 	    return this;
 	}
 
-	public OperationBuilder put(Map<Object,Object> valueMap) {
+	public Builder put(Map<Object,Object> valueMap) {
 	    query.putAll(valueMap);
 	    return this;
 	}
