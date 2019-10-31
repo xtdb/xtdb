@@ -12,8 +12,8 @@
   (api/start-node {:crux.node/topology :crux.standalone/topology
                    :crux.node/kv-store "crux.kv.memdb/kv"
                    :crux.kv/db-dir "data/db-dir-mem"
-                   :crux.standalone/event-log-dir "data/eventlog-mem"
-                   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
+                   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"
+                   :crux.standalone/event-log-dir "data/eventlog-mem"}))
 
 (def srv-rocks
   (srv/start-http-server node-rocks {:server-port 17777}))
@@ -44,10 +44,12 @@
 (defn testq [nd] (api/q (api/db nd) '{:find [e]
                                       :where [[_ :crux.db/id e]]}))
 
-(print (= (testq http-mem) (testq node-mem))) ; => false??
-(print (= (testq http-rocks) (testq node-rocks))) ; => true
+(= (testq http-mem) (testq node-mem)) ; => false sometimes??
+(= (testq http-rocks) (testq node-rocks)) ; => true
 
+(.close srv-rocks)
 (.close http-rocks)
 (.close node-rocks)
+(.close srv-mem)
 (.close http-mem)
 (.close node-mem)
