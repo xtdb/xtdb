@@ -99,10 +99,5 @@
     (build-java-file class-name full-topology-info (str topology))))
 
 ;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
-
-(gen-topology-file "KafkaNode" 'crux.kafka/topology)
-
+;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
 ;(gen-topology-file "JDBC" 'crux.jdbc/topology)
-(type true)
-
-(clojure.reflect/reflect {:keyword "Hello"})
