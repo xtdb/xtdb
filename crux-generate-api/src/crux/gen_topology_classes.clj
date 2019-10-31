@@ -3,9 +3,11 @@
             [clojure.string :as string]
             [crux.topology-info :as ti]))
 
-(import (com.squareup.javapoet MethodSpec TypeSpec FieldSpec JavaFile)
+(import (com.squareup.javapoet MethodSpec TypeSpec FieldSpec JavaFile ParameterizedTypeName WildcardTypeName)
         javax.lang.model.element.Modifier
         java.util.Properties
+        java.util.Map
+        java.util.HashMap
         clojure.lang.Keyword)
 
 (defn format-topology-key [key]
@@ -22,15 +24,20 @@
        (string/join "")
        (str "with")))
 
+(defn make-generic [raw-type]
+  (ParameterizedTypeName/get raw-type (into-array [Keyword, Object])))
+
 (defn add-properties-field [class properties-name]
-  (let [field (FieldSpec/builder Properties properties-name
+  (let [field (FieldSpec/builder (make-generic Map) properties-name
                                  (into-array ^Modifier [Modifier/PUBLIC]))]
     (.addField class (.build field))))
 
-(defn add-constructor [class properties-name]
+(defn add-constructor [class properties-name topology-name]
   (let [constructor (MethodSpec/constructorBuilder)]
     (.addModifiers constructor (into-array ^Modifier [Modifier/PUBLIC]))
-    (.addStatement constructor (str properties-name " = new $T()") (into-array [Properties]))
+    (.addStatement constructor (str properties-name " = new $T()") (into-array [(make-generic HashMap)]))
+    (.addStatement constructor (str properties-name ".put(Keyword.intern($S),Keyword.intern($S))")
+                   (into-array ["crux.node/topology", topology-name]))
     (.addMethod class (.build constructor))))
 
 (defn val-type [val]
@@ -49,9 +56,10 @@
 (defn build-key-default-field[[key val]]
   (let [field (FieldSpec/builder (val-type val) (str (format-topology-key key) "_DEFAULT")
                                  (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
-    (if (= (val-type val) String)
-      (.initializer field "$S" (into-array [(:default val)]))
-      (.initializer field "$L" (into-array [(:default val)])))
+    (cond
+      (= (val-type val) String) (.initializer field "$S" (into-array [(:default val)]))
+      (= (val-type val) Long) (.initializer field "$Ll" (into-array [(:default val)]))
+      :else (.initializer field "$L" (into-array [(:default val)])))
     (.build field)))
 
 (defn build-topology-key-setter [[key value] properties-name]
@@ -60,8 +68,7 @@
     (.addParameter set-property (val-type value) "val" (make-array Modifier 0))
     (.addStatement set-property (str properties-name ".put($L, val)")
                    (into-array [(format-topology-key key)]))
-    (.build set-property)
-    ))
+    (.build set-property)))
 
 (defn add-topology-key-code [class properties-name [_ value :as topology-val]]
   (do
@@ -70,17 +77,17 @@
       (.addField class (build-key-default-field topology-val)))
     (.addMethod class (build-topology-key-setter topology-val properties-name))))
 
-(defn build-java-class [class-name topology-info]
+(defn build-java-class [class-name topology-info topology-name]
   (let [class (TypeSpec/classBuilder class-name)
         properties-name (str class-name "Properties")]
     (.addModifiers class (into-array ^Modifier [Modifier/PUBLIC]))
     (add-properties-field class properties-name)
-    (add-constructor class properties-name)
+    (add-constructor class properties-name topology-name)
     (doall (map #(add-topology-key-code class properties-name %) (seq topology-info)))
     (.build class)))
 
-(defn build-java-file [class-name topology-info]
-  (let [javafile (build-java-class class-name topology-info)
+(defn build-java-file [class-name topology-info topology-name]
+  (let [javafile (build-java-class class-name topology-info topology-name)
         output (io/file class-name)]
     (-> (JavaFile/builder "crux.api" javafile)
         (.build)
@@ -89,10 +96,13 @@
 (defn gen-topology-file [class-name topology]
   (let [topology-info (ti/get-topology-info topology)
         full-topology-info (merge topology-info crux.node/base-topology crux.kv/options)]
-    (build-java-file class-name full-topology-info)))
+    (build-java-file class-name full-topology-info (str topology))))
 
 ;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
 
 (gen-topology-file "KafkaNode" 'crux.kafka/topology)
 
 ;(gen-topology-file "JDBC" 'crux.jdbc/topology)
+(type true)
+
+(clojure.reflect/reflect {:keyword "Hello"})
