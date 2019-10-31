@@ -5,7 +5,8 @@
 
 (import (com.squareup.javapoet MethodSpec TypeSpec FieldSpec JavaFile)
         javax.lang.model.element.Modifier
-        java.util.Properties)
+        java.util.Properties
+        clojure.lang.Keyword)
 
 (defn format-topology-key [key]
   (-> (name key)
@@ -40,9 +41,9 @@
       :else String)))
 
 (defn build-key-field[[key value]]
-  (let [field (FieldSpec/builder String (format-topology-key key)
+  (let [field (FieldSpec/builder Keyword (format-topology-key key)
                                  (into-array ^Modifier [Modifier/PUBLIC Modifier/FINAL Modifier/STATIC]))]
-    (.initializer field "$S" (into-array [(string/replace key ":" "")]))
+    (.initializer field "Keyword.intern($S)" (into-array [(string/replace key ":" "")]))
     (.build field)))
 
 (defn build-key-default-field[[key val]]
@@ -65,7 +66,7 @@
 (defn add-topology-key-code [class properties-name [_ value :as topology-val]]
   (do
     (.addField class (build-key-field topology-val))
-    (when (:default value)
+    (when (some? (:default value))
       (.addField class (build-key-default-field topology-val)))
     (.addMethod class (build-topology-key-setter topology-val properties-name))))
 
@@ -87,11 +88,11 @@
 
 (defn gen-topology-file [class-name topology]
   (let [topology-info (ti/get-topology-info topology)
-        full-topology-info (merge topology-info crux.node/base-topology)]
+        full-topology-info (merge topology-info crux.node/base-topology crux.kv/options)]
     (build-java-file class-name full-topology-info)))
 
 ;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
 
-;(gen-topology-file "KafkaNode" 'crux.kafka/topology)
+(gen-topology-file "KafkaNode" 'crux.kafka/topology)
 
 ;(gen-topology-file "JDBC" 'crux.jdbc/topology)
