@@ -11,17 +11,35 @@ public class DeleteOperation implements Operation {
     private PersistentVector operation;
     private Object deleteId;
     private Date validTime;
-    private boolean validTimeSet = false;
 
     public static class Builder implements OperationBuilder {
 	private PersistentVector operation;
 	private Object deleteId;
 	private Date validTime;
-	private boolean validTimeSet = false;
 
-	public Builder() {
+	private void init() {
 	    operation = PersistentVector.create();
 	    operation = operation.cons(Keyword.intern("crux.tx/delete"));
+	}
+
+	public Builder(String id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(UUID id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(URL id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(URI id) {
+	    init();
+	    putId(id);
 	}
 
 	public Builder putId(String id) {
@@ -46,7 +64,6 @@ public class DeleteOperation implements Operation {
 
 	public Builder putValidTime(Date validtime) {
 	    validTime = validtime;
-	    validTimeSet = true;
 	    return this;
 	}
 
@@ -55,14 +72,13 @@ public class DeleteOperation implements Operation {
 	    deleteOp.operation = operation;
 	    deleteOp.deleteId = deleteId;
 	    deleteOp.validTime = validTime;
-	    deleteOp.validTimeSet = validTimeSet;
 	    return deleteOp;
 	}
     }
 
     public PersistentVector getOperation() {
 	operation = operation.cons(deleteId);
-	if (validTimeSet)
+	if (validTime != null)
 	    operation = operation.cons(validTime);
 	return operation;
     }

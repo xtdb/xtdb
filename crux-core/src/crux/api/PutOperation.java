@@ -13,18 +13,37 @@ public class PutOperation implements Operation {
     private PersistentVector operation;
     private Map<Object, Object> query;
     private Date validTime;
-    private boolean validTimeSet = false;
 
     public static class Builder implements OperationBuilder {
 	private PersistentVector operation;
 	private Map<Object, Object> query;
 	private Date validTime;
-	private boolean validTimeSet = false;
 
-	public Builder() {
+	private void init() {
 	    operation = PersistentVector.create();
 	    operation = operation.cons(Keyword.intern("crux.tx/put"));
 	    query = new HashMap<Object, Object>();
+	}
+
+	public Builder(String id) {
+	    init();
+	    putId(id);
+
+	}
+
+	public Builder(UUID id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(URL id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(URI id) {
+	    init();
+	    putId(id);
 	}
 
 	public OperationBuilder putId(String id) {
@@ -49,7 +68,6 @@ public class PutOperation implements Operation {
 
 	public OperationBuilder putValidTime(Date validtime) {
 	    validTime = validtime;
-	    validTimeSet = true;
 	    return this;
 	}
 
@@ -68,13 +86,12 @@ public class PutOperation implements Operation {
 	    putOp.operation = operation;
 	    putOp.query = query;
 	    putOp.validTime = validTime;
-	    putOp.validTimeSet = validTimeSet;
 	    return putOp;
 	}
     }
     public PersistentVector getOperation() {
 	operation = operation.cons(query);
-	if (validTimeSet)
+	if (validTime != null)
 	    operation = operation.cons(validTime);
 	return operation;
     }

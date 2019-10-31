@@ -14,20 +14,38 @@ public class CasOperation implements Operation {
     private Map<Object, Object> oldMap;
     private Map<Object, Object> newMap;
     private Date validTime;
-    private boolean validTimeSet = false;
 
     public static class Builder implements OperationBuilder {
 	private PersistentVector operation;
 	private Map<Object, Object> oldMap;
 	private Map<Object, Object> newMap;
 	private Date validTime;
-	private boolean validTimeSet = false;
 
-	public Builder() {
+	private void init() {
 	    operation = PersistentVector.create();
 	    operation = operation.cons(Keyword.intern("crux.tx/cas"));
 	    oldMap = new HashMap<Object, Object>();
 	    newMap = new HashMap<Object, Object>();
+	}
+
+	public Builder(String id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(UUID id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(URL id) {
+	    init();
+	    putId(id);
+	}
+
+	public Builder(URI id) {
+	    init();
+	    putId(id);
 	}
 
 	public Builder putId(String id) {
@@ -56,7 +74,6 @@ public class CasOperation implements Operation {
 
 	public Builder putValidTime(Date validtime) {
 	    validTime = validtime;
-	    validTimeSet = true;
 	    return this;
 	}
 
@@ -86,14 +103,13 @@ public class CasOperation implements Operation {
 	    casOp.oldMap = oldMap;
 	    casOp.newMap = newMap;
 	    casOp.validTime = validTime;
-	    casOp.validTimeSet = validTimeSet;
 	    return casOp;
 	}
     }
     public PersistentVector getOperation() {
 	operation = operation.cons(oldMap);
 	operation = operation.cons(newMap);
-	if (validTimeSet)
+	if (validTime != null)
 	    operation = operation.cons(validTime);
 	return operation;
     }
