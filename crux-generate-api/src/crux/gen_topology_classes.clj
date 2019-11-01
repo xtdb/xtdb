@@ -111,8 +111,3 @@
   (let [topology-info (ti/get-topology-info topology)
         full-topology-info (merge topology-info crux.node/base-topology crux.kv/options)]
     (build-java-file class-name full-topology-info (str topology))))
-
-                                        ;
-;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
-(gen-topology-file "KafkaNode" 'crux.kafka/topology)
-;(gen-topology-file "JDBC" 'crux.jdbc/topology)
