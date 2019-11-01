@@ -55,10 +55,10 @@
 
 (defn- conform-tx-ops [tx-ops]
   (->> tx-ops
-       (map
+       (mapv
         (fn [tx-op]
           (map
-           #(when (instance? java.util.Map %) (into {} %))
+           #(if (instance? java.util.Map %) (into {} %) %)
            tx-op)))
        (mapv vec)))
 
