@@ -197,7 +197,7 @@
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
   (submit-tx [this tx-ops]
-    (.submitTx this (into [] tx-ops)))
+    (.submitTx this (mapv vec tx-ops)))
 
   (new-tx-log-context ^java.io.Closeable [this]
     (.newTxLogContext this))
@@ -300,7 +300,7 @@
 (extend-protocol PCruxAsyncIngestClient
   ICruxAsyncIngestAPI
   (submit-tx-async [this tx-ops]
-    (.submitTxAsync this tx-ops)))
+    (.submitTxAsync this (mapv vec tx-ops))))
 
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
