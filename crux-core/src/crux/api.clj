@@ -53,6 +53,15 @@
 (s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
+(defn- conform-tx-ops [tx-ops]
+  (->> tx-ops
+       (map
+        (fn [tx-op]
+          (map
+           #(when (instance? java.util.Map %) (into {} %))
+           tx-op)))
+       (mapv vec)))
+
 (defprotocol PCruxNode
   "Provides API access to Crux."
   (db
@@ -197,7 +206,7 @@
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
   (submit-tx [this tx-ops]
-    (.submitTx this (mapv vec tx-ops)))
+    (.submitTx this (conform-tx-ops tx-ops)))
 
   (new-tx-log-context ^java.io.Closeable [this]
     (.newTxLogContext this))
@@ -300,7 +309,7 @@
 (extend-protocol PCruxAsyncIngestClient
   ICruxAsyncIngestAPI
   (submit-tx-async [this tx-ops]
-    (.submitTxAsync this (mapv vec tx-ops))))
+    (.submitTxAsync this (conform-tx-ops tx-ops))))
 
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
