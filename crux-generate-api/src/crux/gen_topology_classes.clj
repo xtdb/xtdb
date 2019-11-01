@@ -92,6 +92,7 @@
         builder-class (TypeSpec/classBuilder "Builder")
         properties-name (str class-name "Properties")]
     (.addModifiers class (into-array ^Modifier [Modifier/PUBLIC]))
+    (.addModifiers builder-class (into-array ^Modifier [Modifier/PUBLIC Modifier/STATIC]))
     (add-properties-field builder-class properties-name)
     (add-constructor builder-class properties-name topology-name)
     (doall (map #(add-topology-key-code class builder-class properties-name %) (seq topology-info)))
@@ -111,6 +112,7 @@
         full-topology-info (merge topology-info crux.node/base-topology crux.kv/options)]
     (build-java-file class-name full-topology-info (str topology))))
 
+                                        ;
 ;(gen-topology-file "StandaloneNode" 'crux.standalone/topology)
 (gen-topology-file "KafkaNode" 'crux.kafka/topology)
 ;(gen-topology-file "JDBC" 'crux.jdbc/topology)
