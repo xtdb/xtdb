@@ -5,6 +5,7 @@
 ### Bug fixes
 
 * [#PR363](https://github.com/juxt/crux/pull/363) Allow `full-results?` and other boolean flags in a vector-style query
+* [#367](https://github.com/juxt/crux/issues/367) Can query empty DB
 
 ## 19.09-1.5.0-alpha
 

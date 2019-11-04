@@ -2525,3 +2525,18 @@
                        :where '[(p x y)]
                        :rules rules}))))))
 
+(t/deftest test-query-against-empty-database-376
+  (let [db (api/db *api*)
+        _ (t/is (not (api/entity db :a)))
+        _ (f/transact! *api* [{:crux.db/id :a
+                               :arbitrary-key ["an untyped value" 123]
+                               :nested-map {"and values" :can-be-arbitrarily-nested}}])]
+    (t/is (not (api/entity db :a)))
+    (t/is (api/entity (api/db *api*) :a))
+
+    (with-open [snapshot (api/new-snapshot db)]
+      (t/is (empty? (api/q db snapshot '{:find [x] :where [[x :arbitrary-key _]]}))))
+
+    (let [db (api/db *api*)]
+      (with-open [snapshot (api/new-snapshot db)]
+        (t/is (first (api/q db snapshot '{:find [x] :where [[x :crux.db/id _]]})))))))
