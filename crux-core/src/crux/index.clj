@@ -470,6 +470,9 @@
         candidate))
     prev-candidate))
 
+(def ^:private min-date (Date. Long/MIN_VALUE))
+(def ^:private max-date (Date. Long/MAX_VALUE))
+
 (defrecord EntityAsOfIndex [i valid-time transact-time]
   db/Index
   (db/seek-values [this k]
@@ -500,7 +503,7 @@
     (throw (UnsupportedOperationException.))))
 
 (defn new-entity-as-of-index [snapshot valid-time transaction-time]
-  (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time))
+  (->EntityAsOfIndex (kv/new-iterator snapshot) (or valid-time min-date) (or transaction-time min-date)))
 
 (defn entity-at [entity-as-of-idx eid]
   (let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
@@ -548,7 +551,11 @@
     (entity-history-range-step i min max state (kv/next i))))
 
 (defn new-entity-history-range-index [snapshot vt-start tt-start vt-end tt-end]
-  (let [[min max] (sort (reify Comparator
+  (let [vt-start (or vt-start min-date)
+        tt-start (or tt-start min-date)
+        vt-end (or vt-end max-date)
+        tt-end (or tt-end max-date)
+        [min max] (sort (reify Comparator
                           (compare [_ a b]
                             (.compareTo ^Comparable a b)))
                         [(c/encode-entity-tx-z-number vt-start tt-start)
@@ -556,13 +563,8 @@
     (->EntityHistoryRangeIndex (kv/new-iterator snapshot) min max
                                (EntityHistoryRangeState. nil nil))))
 
-(def ^:private min-date (Date. Long/MIN_VALUE))
-(def ^:private max-date (Date. Long/MAX_VALUE))
-
 (defn entity-history-range [snapshot eid vt-start tt-start vt-end tt-end]
-  (let [idx (new-entity-history-range-index snapshot
-                                            (or vt-start min-date) (or tt-start min-date)
-                                            (or vt-end max-date) (or tt-end max-date))]
+  (let [idx (new-entity-history-range-index snapshot vt-start tt-start vt-end tt-end)]
     (when-let [result (db/seek-values idx (c/->id-buffer eid))]
       (->> (repeatedly #(db/next-values idx))
            (take-while identity)
