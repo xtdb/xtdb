@@ -10,8 +10,7 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
-            [crux.memory :as mem]
-            [crux.object-store :as os])
+            [crux.memory :as mem])
   (:import clojure.lang.ExceptionInfo
            crux.api.ICruxDatasource
            crux.codec.EntityTx
@@ -19,8 +18,7 @@
            java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
-           org.agrona.ExpandableDirectByteBuffer
-           java.io.Closeable))
+           org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
   (symbol? x))
