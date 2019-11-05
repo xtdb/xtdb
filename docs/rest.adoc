@@ -123,7 +123,7 @@ curl -X POST $nodeURL/documents \
 
 Takes a key and, optionally, a `:valid-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
 
-See <<bitemp.adoc#, Bitemporality>> for more information.
+See <<#bitemporality, Bitemporality>> for more information.
 
 [source,bash]
 ----
@@ -156,7 +156,7 @@ nil
 
 Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
 
-See <<bitemp.adoc#, Bitemporality>> for more information.
+See <<#bitemporality, Bitemporality>> for more information.
 
 [source,bash]
 ----

@@ -72,7 +72,7 @@ defined within `crux.kv`:
 
 Using a Crux standalone node is the best way to get started. Once
 you've started a standalone Crux instance as described below, you can
-then follow the <<get_started.adoc#,getting started
+then follow the <<#get_started,getting started
 example>>.
 
 image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
@@ -291,7 +291,7 @@ expose a HTTP port that will accept REST requests:
 |http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
-Visit the guide on using the <<rest.adoc#,REST api>> for examples
+Visit the guide on using the <<#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
 
 
@@ -303,7 +303,7 @@ Docker Hub (no JVM/JDK/Clojure install required, only Docker!)  then
 please see the
 https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
 web service example]. You can also use this self-contained
-demonstration image to experiment with the <<rest.adoc#,REST API>>.
+demonstration image to experiment with the <<#rest,REST API>>.
 
 [#config-backup]
 == Backup and Restore
