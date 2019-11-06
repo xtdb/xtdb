@@ -1,6 +1,7 @@
 package crux.api;
 
-import clojure.lang.PersistentVector;
+import java.util.List;
+import java.util.ArrayList;
 import clojure.lang.Keyword;
 import java.util.Date;
 import java.util.UUID;
@@ -8,15 +9,8 @@ import java.net.URI;
 import java.net.URL;
 
 public class EvictOperation implements Operation {
-    private PersistentVector operation;
-    private Object evictId;
-    private Date startValidTime;
-    private Date endValidTime;
-    private Boolean keepLatest;
-    private Boolean keepEarliest;
-
     public static class Builder implements OperationBuilder {
-	private PersistentVector operation;
+	private List<Object> operation;
 	private Object evictId;
 	private Date startValidTime;
 	private Date endValidTime;
@@ -24,8 +18,8 @@ public class EvictOperation implements Operation {
 	private Boolean keepEarliest;
 
 	private void init() {
-	    operation = PersistentVector.create();
-	    operation = operation.cons(Keyword.intern("crux.tx/evict"));
+	    operation = new ArrayList<Object>();
+	    operation.add(Keyword.intern("crux.tx/evict"));
 	}
 
 	public Builder putId(String id) {
@@ -88,28 +82,18 @@ public class EvictOperation implements Operation {
 	    return this;
 	}
 
-	public EvictOperation build() {
+	public List<Object> build() {
 	    EvictOperation evictOp = new EvictOperation();
-	    evictOp.operation = operation;
-	    evictOp.evictId = evictId;
-	    evictOp.startValidTime = startValidTime;
-	    evictOp.endValidTime = endValidTime;
-	    evictOp.keepLatest = keepLatest;
-	    evictOp.keepEarliest = keepEarliest;
-	    return evictOp;
+	    operation.add(evictId);
+	    if (startValidTime != null)
+		operation.add(startValidTime);
+	    if (endValidTime != null)
+	        operation.add(endValidTime);
+	    if (keepLatest != null)
+		operation.add(keepLatest);
+	    if (keepEarliest != null)
+		operation.add(keepEarliest);
+	    return operation;
 	}
-    }
-
-    public PersistentVector getOperation() {
-	operation = operation.cons(evictId);
-	if (startValidTime != null)
-	    operation = operation.cons(startValidTime);
-	if (endValidTime != null)
-	    operation = operation.cons(endValidTime);
-	if (keepLatest != null)
-	    operation = operation.cons(keepLatest);
-	if (keepEarliest != null)
-	    operation = operation.cons(keepEarliest);
-	return operation;
     }
 }

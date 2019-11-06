@@ -2,7 +2,8 @@ package crux.api;
 
 import java.util.Map;
 import java.util.HashMap;
-import clojure.lang.PersistentVector;
+import java.util.List;
+import java.util.ArrayList;
 import clojure.lang.Keyword;
 import java.util.Date;
 import java.util.UUID;
@@ -10,20 +11,15 @@ import java.net.URI;
 import java.net.URL;
 
 public class CasOperation implements Operation {
-    private PersistentVector operation;
-    private Map<Keyword, Object> oldMap;
-    private Map<Keyword, Object> newMap;
-    private Date validTime;
-
     public static class Builder implements OperationBuilder {
-	private PersistentVector operation;
+	private List<Object> operation;
 	private Map<Keyword, Object> oldMap;
 	private Map<Keyword, Object> newMap;
 	private Date validTime;
 
 	private void init() {
-	    operation = PersistentVector.create();
-	    operation = operation.cons(Keyword.intern("crux.tx/cas"));
+	    operation = new ArrayList<Object>();
+	    operation.add(Keyword.intern("crux.tx/cas"));
 	    oldMap = new HashMap<Keyword, Object>();
 	    newMap = new HashMap<Keyword, Object>();
 	}
@@ -101,20 +97,13 @@ public class CasOperation implements Operation {
 	    return this;
 	}
 
-	public CasOperation build() {
+	public List<Object> build() {
 	    CasOperation casOp = new CasOperation();
-	    casOp.operation = operation;
-	    casOp.oldMap = oldMap;
-	    casOp.newMap = newMap;
-	    casOp.validTime = validTime;
-	    return casOp;
+	    operation.add(oldMap);
+	    operation.add(newMap);
+	    if (validTime != null)
+		operation.add(validTime);
+	    return operation;
 	}
-    }
-    public PersistentVector getOperation() {
-	operation = operation.cons(oldMap);
-	operation = operation.cons(newMap);
-	if (validTime != null)
-	    operation = operation.cons(validTime);
-	return operation;
     }
 }

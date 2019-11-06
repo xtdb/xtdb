@@ -3,6 +3,7 @@ package crux.api;
 import clojure.lang.PersistentVector;
 import java.util.Date;
 import java.util.UUID;
+import java.util.List;
 import java.net.URI;
 import java.net.URL;
 
@@ -13,8 +14,6 @@ public interface Operation {
 	public OperationBuilder putId(UUID id);
 	public OperationBuilder putId(URL id);
 	public OperationBuilder putId(URI id);
-	public Operation build();
+	public List<Object> build();
     }
-
-    public PersistentVector getOperation();
 }

@@ -1,6 +1,7 @@
 package crux.api;
 
-import clojure.lang.PersistentVector;
+import java.util.List;
+import java.util.ArrayList;
 import clojure.lang.Keyword;
 import java.util.Date;
 import java.util.UUID;
@@ -8,18 +9,14 @@ import java.net.URI;
 import java.net.URL;
 
 public class DeleteOperation implements Operation {
-    private PersistentVector operation;
-    private Object deleteId;
-    private Date validTime;
-
     public static class Builder implements OperationBuilder {
-	private PersistentVector operation;
+	private List<Object> operation;
 	private Object deleteId;
 	private Date validTime;
 
 	private void init() {
-	    operation = PersistentVector.create();
-	    operation = operation.cons(Keyword.intern("crux.tx/delete"));
+	    operation = new ArrayList<Object>();
+	    operation.add(Keyword.intern("crux.tx/delete"));
 	}
 
 	public Builder(String id) {
@@ -67,19 +64,13 @@ public class DeleteOperation implements Operation {
 	    return this;
 	}
 
-	public DeleteOperation build() {
+	public List<Object> build() {
 	    DeleteOperation deleteOp = new DeleteOperation();
-	    deleteOp.operation = operation;
-	    deleteOp.deleteId = deleteId;
-	    deleteOp.validTime = validTime;
-	    return deleteOp;
+	    operation.add(deleteId);
+	    if (validTime != null)
+		operation.add(validTime);
+	    return operation;
 	}
     }
 
-    public PersistentVector getOperation() {
-	operation = operation.cons(deleteId);
-	if (validTime != null)
-	    operation = operation.cons(validTime);
-	return operation;
-    }
 }

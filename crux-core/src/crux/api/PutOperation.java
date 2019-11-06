@@ -2,7 +2,8 @@ package crux.api;
 
 import java.util.Map;
 import java.util.HashMap;
-import clojure.lang.PersistentVector;
+import java.util.List;
+import java.util.ArrayList;
 import clojure.lang.Keyword;
 import java.util.Date;
 import java.util.UUID;
@@ -10,18 +11,15 @@ import java.net.URI;
 import java.net.URL;
 
 public class PutOperation implements Operation {
-    private PersistentVector operation;
-    private Map<Keyword, Object> query;
-    private Date validTime;
 
     public static class Builder implements OperationBuilder {
-	private PersistentVector operation;
+	private List<Object> operation;
 	private Map<Keyword, Object> query;
 	private Date validTime;
 
 	private void init() {
-	    operation = PersistentVector.create();
-	    operation = operation.cons(Keyword.intern("crux.tx/put"));
+	    operation = new ArrayList<Object>();
+	    operation.add(Keyword.intern("crux.tx/put"));
 	    query = new HashMap<Keyword, Object>();
 	}
 
@@ -83,18 +81,12 @@ public class PutOperation implements Operation {
 	    return this;
 	}
 
-	public PutOperation build() {
+	public List<Object> build() {
 	    PutOperation putOp = new PutOperation();
-	    putOp.operation = operation;
-	    putOp.query = query;
-	    putOp.validTime = validTime;
-	    return putOp;
+	    operation.add(query);
+	    if (validTime != null)
+		operation.add(validTime);
+	    return operation;
 	}
-    }
-    public PersistentVector getOperation() {
-	operation = operation.cons(query);
-	if (validTime != null)
-	    operation = operation.cons(validTime);
-	return operation;
     }
 }
