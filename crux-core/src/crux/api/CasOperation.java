@@ -11,21 +11,21 @@ import java.net.URL;
 
 public class CasOperation implements Operation {
     private PersistentVector operation;
-    private Map<Object, Object> oldMap;
-    private Map<Object, Object> newMap;
+    private Map<Keyword, Object> oldMap;
+    private Map<Keyword, Object> newMap;
     private Date validTime;
 
     public static class Builder implements OperationBuilder {
 	private PersistentVector operation;
-	private Map<Object, Object> oldMap;
-	private Map<Object, Object> newMap;
+	private Map<Keyword, Object> oldMap;
+	private Map<Keyword, Object> newMap;
 	private Date validTime;
 
 	private void init() {
 	    operation = PersistentVector.create();
 	    operation = operation.cons(Keyword.intern("crux.tx/cas"));
-	    oldMap = new HashMap<Object, Object>();
-	    newMap = new HashMap<Object, Object>();
+	    oldMap = new HashMap<Keyword, Object>();
+	    newMap = new HashMap<Keyword, Object>();
 	}
 
 	public Builder(String id) {
@@ -82,8 +82,10 @@ public class CasOperation implements Operation {
 	    return this;
 	}
 
-	public Builder putInOldMap(Map<Object, Object> valueMap) {
-	    oldMap.putAll(valueMap);
+	public Builder putInOldMap(Map<String, Object> valueMap) {
+	    for (String key : valueMap.keySet()) {
+		oldMap.put(Keyword.intern(key), valueMap.get(key));
+	    }
 	    return this;
 	}
 
@@ -92,8 +94,10 @@ public class CasOperation implements Operation {
 	    return this;
 	}
 
-	public Builder putInNewMap(Map<Object,Object> valueMap) {
-	    newMap.putAll(valueMap);
+	public Builder putInNewMap(Map<String,Object> valueMap) {
+	    for (String key : valueMap.keySet()) {
+		newMap.put(Keyword.intern(key), valueMap.get(key));
+	    }
 	    return this;
 	}
 

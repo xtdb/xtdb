@@ -11,18 +11,18 @@ import java.net.URL;
 
 public class PutOperation implements Operation {
     private PersistentVector operation;
-    private Map<Object, Object> query;
+    private Map<Keyword, Object> query;
     private Date validTime;
 
     public static class Builder implements OperationBuilder {
 	private PersistentVector operation;
-	private Map<Object, Object> query;
+	private Map<Keyword, Object> query;
 	private Date validTime;
 
 	private void init() {
 	    operation = PersistentVector.create();
 	    operation = operation.cons(Keyword.intern("crux.tx/put"));
-	    query = new HashMap<Object, Object>();
+	    query = new HashMap<Keyword, Object>();
 	}
 
 	public Builder(String id) {
@@ -76,8 +76,10 @@ public class PutOperation implements Operation {
 	    return this;
 	}
 
-	public Builder put(Map<Object,Object> valueMap) {
-	    query.putAll(valueMap);
+	public Builder put(Map<String,Object> valueMap) {
+	    for (String key : valueMap.keySet()) {
+		query.put(Keyword.intern(key), valueMap.get(key));
+	    }
 	    return this;
 	}
 
