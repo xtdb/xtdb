@@ -37,6 +37,14 @@ sequence of transaction operations:
  #inst "2018-05-18T09:20:27.966-00:00"]]
 ----
 
+Alternatively, if using the Java API, one will construct an *operation* (the different kind of
+operations can be seen below), which are passed as a list to `submitTx`:
+
+[source,java]
+----
+node.submitTx(List.of(putOp, casOp, deleteOp, evictOp));
+----
+
 If the transaction contains CAS operations, all CAS operations must pass
 their pre-condition check or the entire transaction is aborted. This
 happens at the query node during indexing, and not when submitting the
@@ -85,6 +93,17 @@ document.
 Note that `valid time` is optional and defaults to transaction time,
 which is taken from the Kafka log.
 
+To construct using the Java API:
+
+[source,java]
+----
+List<Object> putOp = new PutOperation.Builder("dbpedia.resource/Pablo-Picasso")
+                                     .put("first-name", Keyword.intern("Pablo"))
+                                     .putValidTime(Instant)
+				     .build();
+----
+
+
 Crux currently writes into the past at a single point, so to overwrite
 several versions or a range in time, one is required to submit a
 transaction containing several operations.
@@ -98,14 +117,25 @@ newer one, if the existing document is as expected.
 [source,clojure]
 ----
 [:crux.tx/cas
- {..} <1>
- {..} <2>
+ {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <1>
+ {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :PabloNew} <2>
   #inst "2018-05-18T09:21:31.846-00:00"] <3>
 ----
 
 <1> Expected Document
 <2> New document
 <3> `valid time`
+
+Within Java:
+
+[source,java]
+----
+List<Object> casOp = new CasOperation.Builder("dbpedia.resource/Pablo-Picasso")
+                                     .putInOldMap("first-name", Keyword.intern("Pablo"))
+                                     .putInNewMap("first-name", Keyword.intern("PabloNew"))
+				     .putValidTime(Instant)
+				     .build();
+----
 
 [#transactions-delete]
 == Delete
@@ -117,6 +147,15 @@ document will still be available.
 ----
 [:crux.tx/delete :dbpedia.resource/Pablo-Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
+----
+
+Within Java:
+
+[source,java]
+----
+List<Object> deleteOp = new DeleteOperation.Builder("dbpedia.resource/Pablo-Picasso")
+                                           .putValidTime(Instant)
+				           .build();
 ----
 
 [#transactions-evict]
@@ -142,4 +181,16 @@ eviction across time periods.
   #inst "2018-05-19T09:21:52.151-00:00" ; end-valid-time
   true                                  ; keep-latest?
   false]                                ; keep-earliest?
+----
+
+Within Java:
+
+[source,java]
+----
+List<Object> evictOp = new EvictOperation.Builder("dbpedia.resource/Pablo-Picasso")
+                                         .putValidTime(Instant)
+					 .putEndValidTime(Instant)
+					 .keepLatest(true)
+					 .keepEarliest(false)
+					 .build();
 ----
