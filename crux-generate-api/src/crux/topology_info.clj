@@ -13,6 +13,6 @@
        (into {})))
 
 (defn get-topology-info [topology-name]
-  (let [topology-map (eval topology-name)
+  (let [topology-map (eval (read-string topology-name))
           topology-opts (find-nested-args topology-map)]
       topology-opts))

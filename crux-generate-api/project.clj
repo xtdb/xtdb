@@ -9,6 +9,11 @@
                  [juxt/crux-jdbc "derived-from-git"]
                  [com.squareup/javapoet "1.9.0"]]
   :middleware [leiningen.project-version/middleware]
+  :aliases {"generate"
+            ["do"
+             ["run" "-m" "crux.gen-topology-classes/gen-topology-file" "KafkaTopology" "crux.kafka/topology"]
+             ["run" "-m" "crux.gen-topology-classes/gen-topology-file" "JDBCTopology" "crux.jdbc/topology"]
+             ["run" "-m" "crux.gen-topology-classes/gen-topology-file" "StandaloneTopology" "crux.standalone/topology"]]}
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-Xlint:all,-options,-path"
