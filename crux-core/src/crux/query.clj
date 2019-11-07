@@ -32,9 +32,6 @@
          (s/conformer next)
          spec))
 
-(defn- list-or-cons? [x]
-  (or (list? x) (instance? clojure.lang.Cons x)))
-
 (def ^:private built-ins '#{and == !=})
 
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
@@ -49,7 +46,7 @@
                                                    (var-get))
                                           %))
                         (some-fn fn? logic-var?)))
-(s/def ::pred (s/and vector? (s/cat :pred (s/and list-or-cons?
+(s/def ::pred (s/and vector? (s/cat :pred (s/and seq?
                                                  (s/cat :pred-fn ::pred-fn
                                                         :args (s/* any?)))
                                     :return (s/? logic-var?))))
