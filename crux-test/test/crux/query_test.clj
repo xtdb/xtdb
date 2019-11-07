@@ -2540,3 +2540,11 @@
     (let [db (api/db *api*)]
       (with-open [snapshot (api/new-snapshot db)]
         (t/is (first (api/q db snapshot '{:find [x] :where [[x :crux.db/id _]]})))))))
+
+(t/deftest test-can-use-cons-in-query-377
+  (f/transact! *api* [{:crux.db/id :issue-377-test :name "TestName"}])
+  (t/is (= #{[:issue-377-test]}
+           (api/q (api/db *api*)
+                  {:find ['e]
+                   :where [['e :name 'n]
+                           [(cons '= '(n "TestName"))]]}))))
