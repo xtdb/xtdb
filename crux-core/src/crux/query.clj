@@ -947,7 +947,7 @@
             (assoc acc id (idx-fn))))
         {})))
 
-(defn- build-sub-query [snapshot {:keys [kv query-cache object-store valid-time transact-time] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [snapshot {:keys [query-cache] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
