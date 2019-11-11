@@ -7,53 +7,37 @@
 (defn- i-name [i]
   (-> i ^java.lang.Class type .getName (clojure.string/replace #"crux\.index\." "") symbol))
 
-(defn- trace-op [id depth i op & [extra]]
-  (println (format "%s%s %s%s %s" (name op) (apply str (take depth (repeat " ")))
-                   (if id (str id "-") "")
+(defn- trunc
+  [s n]
+  (subs s 0 (min (count s) n)))
+
+(defn- trace-op [op depth i extra]
+  (println (format "%s%s %s %s" (name op) (apply str (take depth (repeat " ")))
                    (i-name i)
                    (if extra extra ""))))
 
-(defmulti do-seek-values (fn [_ _ i k] (i-name i)))
-
-(defmethod do-seek-values :default [id depth i k]
-  (trace-op id depth i :seek)
-  (db/seek-values i k))
-
-;; AVE
-
-(defmethod do-seek-values 'DocAttributeValueEntityValueIndex [id depth i k]
-  (let [v (db/seek-values i k)]
-    (trace-op id depth i :seek (str " ->" (mem/buffer->hex (first v)) "-" (second v)))
-    v))
-
-(defmethod do-seek-values 'DocAttributeValueEntityEntityIndex [id depth i k]
-  (let [v (db/seek-values i k)]
-    (trace-op id depth i :seek (str " ->" (mem/buffer->hex (first v)) "-" (second v)))
-    v))
-
-;; AEV
-
-(defmethod do-seek-values 'DocAttributeEntityValueEntityIndex [id depth i k]
-  (let [v (db/seek-values i k)]
-    (trace-op id depth i :seek (str " ->" (mem/buffer->hex (first v)) "-" (second v)))
-    v))
+(defn- v->str [v]
+  (str (trunc (str (mem/buffer->hex (first v))) 10) " -> " (trunc (str (second v)) 40)))
 
 (defrecord InstrumentedLayeredIndex [i id depth]
   db/Index
   (seek-values [this k]
-    (do-seek-values id depth i k))
+    (trace-op :seek depth i id)
+    (let [v (db/seek-values i k)]
+      (trace-op :seek depth i (v->str v))
+      v))
 
   (next-values [this]
-    (trace-op id depth i :next)
+    (trace-op :next depth i id)
     (db/next-values i))
 
   db/LayeredIndex
   (open-level [this]
-    (trace-op id depth i :open)
+    (trace-op :open depth i id)
     (db/open-level i))
 
   (close-level [this]
-    (trace-op id depth i :close)
+    (trace-op :close depth i id)
     (db/close-level i))
 
   (max-depth [this]
@@ -84,7 +68,9 @@
   crux.index.BinaryJoinLayeredVirtualIndex
   (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this id depth]
     (let [state ^crux.index.BinaryJoinLayeredVirtualIndexState (.state this)
-          [lhs rhs] (map (partial inst (-> this meta :clause str) (inc depth)) (.indexes state))]
+          id (let [{:keys [e a v]} (-> this meta :clause)]
+               (format "[%s %s %s]" e a v))
+          [lhs rhs] (map (partial inst id (inc depth)) (.indexes state))]
       (set! (.indexes state) [lhs rhs])
       this))
 
