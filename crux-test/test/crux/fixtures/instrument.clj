@@ -11,34 +11,36 @@
   [s n]
   (subs s 0 (min (count s) n)))
 
-(defn- trace-op [op depth i extra]
-  (println (format "%s%s %s %s" (name op) (apply str (take depth (repeat " ")))
+(defn- trace-op [foo op depth i extra]
+  (println (format "%s %s%s %s %s" (name op) @foo (apply str (take depth (repeat " ")))
                    (i-name i)
                    (if extra extra ""))))
 
 (defn- v->str [v]
   (str (trunc (str (mem/buffer->hex (first v))) 10) " -> " (trunc (str (second v)) 40)))
 
-(defrecord InstrumentedLayeredIndex [i id depth]
+(defrecord InstrumentedLayeredIndex [i id depth foo]
   db/Index
   (seek-values [this k]
-    (trace-op :seek depth i id)
+    (trace-op foo :seek depth i id)
     (let [v (db/seek-values i k)]
-      (trace-op :seek depth i (v->str v))
+      (trace-op foo :seek depth i (v->str v))
       v))
 
   (next-values [this]
-    (trace-op :next depth i id)
+    (trace-op foo :next depth i id)
     (db/next-values i))
 
   db/LayeredIndex
   (open-level [this]
-    (trace-op :open depth i id)
-    (db/open-level i))
+    (trace-op foo :open depth i id)
+    (db/open-level i)
+    (swap! foo inc))
 
   (close-level [this]
-    (trace-op :close depth i id)
-    (db/close-level i))
+    (trace-op foo :close depth i id)
+    (db/close-level i)
+    (swap! foo dec))
 
   (max-depth [this]
     (db/max-depth i)))
@@ -53,17 +55,17 @@
   crux.index.NAryConstrainingLayeredVirtualIndex
   (instrument [this id depth]
     (let [this (update this :n-ary-index (partial inst nil (inc depth)))]
-      (InstrumentedLayeredIndex. this id depth)))
+      (InstrumentedLayeredIndex. this id depth (atom 0))))
 
   crux.index.NAryJoinLayeredVirtualIndex
   (instrument [this id depth]
     (let [this (update this :unary-join-indexes (fn [indexes] (map (partial inst nil (inc depth)) indexes)))]
-      (InstrumentedLayeredIndex. this id depth)))
+      (InstrumentedLayeredIndex. this id depth (atom 0))))
 
   crux.index.UnaryJoinVirtualIndex
   (instrument [this id depth]
     (let [this (update this :indexes (fn [indexes] (map (partial inst nil (inc depth)) indexes)))]
-      (InstrumentedLayeredIndex. this id depth)))
+      (InstrumentedLayeredIndex. this id depth (atom 0))))
 
   crux.index.BinaryJoinLayeredVirtualIndex
   (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this id depth]
@@ -84,7 +86,7 @@
   (instrument [this id depth]
     (if (instance? InstrumentedLayeredIndex this)
       this
-      (InstrumentedLayeredIndex. this id depth))))
+      (InstrumentedLayeredIndex. this id depth (atom 0)))))
 
 (def original-layered-idx->seq i/layered-idx->seq)
 (defn instrument-layered-idx->seq [idx]
