@@ -6,14 +6,26 @@
 (defn- i-name [i]
   (-> i ^java.lang.Class type .getName (clojure.string/replace #"crux\.index\." "") symbol))
 
-(defn- trace-op [depth i op]
-  (println (format "%s%s - %s" (apply str (take depth (repeat "             "))) (i-name i) (name op))))
+(defn- trace-op [depth i op & [extra]]
+  (println (format "%s%s %s %s" (name op) (apply str (take depth (repeat " "))) (i-name i)
+                   (if extra extra ""))))
+
+(defmulti do-seek-values (fn [_ i k] (i-name i)))
+
+(defmethod do-seek-values :default [depth i k]
+  (trace-op depth i :seek)
+  (db/seek-values i k))
+
+(defmethod do-seek-values 'DocAttributeValueEntityValueIndex [depth i k]
+  (let [v (db/seek-values i k)]
+    (trace-op depth i :seek ;;(str k)
+              )
+    v))
 
 (defrecord InstrumentedLayeredIndex [i depth]
   db/Index
   (seek-values [this k]
-    (trace-op depth i (str "seek-" k))
-    (db/seek-values i k))
+    (do-seek-values depth i k))
 
   (next-values [this]
     (trace-op depth i :next)
