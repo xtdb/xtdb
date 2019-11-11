@@ -11,10 +11,9 @@
   [s n]
   (subs s 0 (min (count s) n)))
 
-(defn- trace-op [foo op depth i extra]
-  (println (format "%s %s%s %s %s" (name op) @foo (apply str (take depth (repeat " ")))
-                   (i-name i)
-                   (if extra extra ""))))
+(defn- trace-op [foo op depth & extra]
+  (println (format "%s %s%s %s" (name op) @foo (apply str (take depth (repeat " ")))
+                   (clojure.string/join " " extra))))
 
 (defn- v->str [v]
   (str (trunc (str (mem/buffer->hex (first v))) 10) " -> " (trunc (str (second v)) 40)))
@@ -24,21 +23,21 @@
   (seek-values [this k]
     (trace-op foo :seek depth i id)
     (let [v (db/seek-values i k)]
-      (trace-op foo :seek depth i (v->str v))
+      (trace-op foo :seek depth "--->" (v->str v))
       v))
 
   (next-values [this]
-    (trace-op foo :next depth i id)
+    (trace-op foo :next depth (i-name i) id)
     (db/next-values i))
 
   db/LayeredIndex
   (open-level [this]
-    (trace-op foo :open depth i id)
-    (db/open-level i)
-    (swap! foo inc))
+    (swap! foo inc)
+    (trace-op foo :open depth (i-name i) id)
+    (db/open-level i))
 
   (close-level [this]
-    (trace-op foo :close depth i id)
+    (trace-op foo :close depth (i-name i) id)
     (db/close-level i)
     (swap! foo dec))
 
