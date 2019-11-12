@@ -79,7 +79,7 @@
   (instrument [^crux.index.RelationVirtualIndex this id depth]
     (let [state ^crux.index.RelationIteratorsState (.state this)]
       (set! (.indexes state) (mapv (partial inst nil (inc depth)) (.indexes state)))
-      this))
+      (InstrumentedLayeredIndex. this id depth (atom 0))))
 
   Object
   (instrument [this id depth]
