@@ -69,11 +69,12 @@
   crux.index.BinaryJoinLayeredVirtualIndex
   (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this id depth]
     (let [state ^crux.index.BinaryJoinLayeredVirtualIndexState (.state this)
-          id (let [{:keys [e a v]} (-> this meta :clause)]
-               (format "[%s %s %s]" e a v))
           [lhs rhs] (map (partial inst id (inc depth)) (.indexes state))]
       (set! (.indexes state) [lhs rhs])
-      this))
+      (let [id (let [{:keys [e a v]} (-> this meta :clause)]
+                 (format "[%s %s %s]" e a v))
+            id (:name this)]
+        (merge (InstrumentedLayeredIndex. this id depth (atom 0)) this))))
 
   crux.index.RelationVirtualIndex
   (instrument [^crux.index.RelationVirtualIndex this id depth]
