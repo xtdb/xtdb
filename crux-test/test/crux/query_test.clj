@@ -2550,31 +2550,19 @@
                   {:find ['e]
                    :where [['e :name 'n]
                            [(cons '= '(n "TestName"))]]}))))
-=======
+
 (t/deftest test-query-keyword-to-entity-tx-351
   (f/transact! *api* [{:crux.db/id :se.id/ASE,
                        :se/currency :currency/usd}
                       {:crux.db/id :ids/ticker-1000 ;;ids/ticker
                        :ticker/price 67
-                       :ticker/market :se.id/ASE}])
+                       :ticker/market :se.id/ASE
+                       :ticker/foo :bar}])
 
-  (crux.fixtures.instrument/with-instrumentation
-    (t/is (seq (api/q (api/db *api*) '{:find [p]
-                                       :where
-                                       [[e :crux.db/id someid]
-                                        [e :ticker/price p]
-                                        [(= p 67)]
-                                        [e :ticker/market m2]
-                                        [m2 :se/currency :currency/usd]]})))))
-
-(t/deftest test-hello-world
-  (f/transact! *api* [{:crux.db/id :jon
-                       :name "Jon"}
-                      {:crux.db/id :jon2
-                       :name "ASdasd"}])
-
-  (crux.fixtures.instrument/with-instrumentation
-    (t/is (= :A (seq (api/q (api/db *api*) '{:find [e]
-                                             :where
-                                             [[e :name "Jon"]]}))))))
->>>>>>> Stashed changes
+  (t/is (seq (api/q (api/db *api*) '{:find [p]
+                                     :where
+                                     [[e :crux.db/id someid]
+                                      [e :ticker/price p]
+                                      [(= p 67)]
+                                      [e :ticker/market m2]
+                                      [m2 :se/currency :currency/usd]]}))))

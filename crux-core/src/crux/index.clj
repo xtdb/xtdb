@@ -753,9 +753,13 @@
                     iterators-thunk))
                (set! (.thunk state)))
           (if match?
-            (when-let [result (->> (map (fn [x] (.results ^UnaryJoinIteratorState x)) iterators)
-                                   (apply merge))]
-              [max-k result])
+            (let [new-results (map (fn [x] (.results ^UnaryJoinIteratorState x)) iterators)]
+              (when-let [result (->> new-results
+                                     (apply merge-with
+                                            (fn [x y]
+                                              (if (= :crux.index.binary-placeholder/entity y)
+                                                x y))))]
+                [max-k result]))
             (recur))))))
 
   db/LayeredIndex
