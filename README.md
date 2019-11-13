@@ -236,8 +236,11 @@ Retrieve the current version of the document:
 
 ### Development "uber" REPL
 
-To run a REPL that includes depedencies for all components of Crux, `cd` into
-`crux-dev` and run `lein repl`
+* To run a REPL that includes depedencies for all components of Crux, first build the sub-modules using `lein sub install`.
+* Then, `cd crux-dev` and `lein repl`.
+* Once you've connected to the REPL, in the `user` namespace, run `(dev)` to load the dev namespace.
+* You can now `(start)`, `(stop)` and `(reset)` the Crux development system (amongst other things).
+* You should now have a running Crux node in the `dev/node` var - you can verify this by calling `(crux/status node)`.
 
 ### Testing
 

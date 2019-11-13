@@ -35,7 +35,7 @@
    :dev/embed-kafka? true
    :dev/http-server? true
    :dev/node-start-fn n/start
-   :crux.node/db-dir (str storage-dir "/data")
+   :crux.kv/db-dir (str storage-dir "/data")
    :crux.kafka/bootstrap-servers "localhost:9092"
    :server-port 3000})
 
