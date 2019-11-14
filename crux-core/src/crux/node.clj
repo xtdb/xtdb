@@ -16,7 +16,8 @@
             [crux.tx :as tx])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
            java.io.Closeable
-           [java.util.concurrent Executors ThreadFactory]))
+           [java.util.concurrent Executors ThreadFactory]
+           java.util.concurrent.locks.StampedLock))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
                    (Boolean/parseBoolean check-asserts)
@@ -37,90 +38,131 @@
                        revision]} (cio/load-properties in)]
            (->CruxVersion version revision)))))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn]
+(defn- ensure-node-open [{:keys [closed?]}]
+  (when @closed?
+    (throw (IllegalStateException. "Crux node is closed"))))
+
+(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
-    (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (q/db kv-store object-store tx-time tx-time)))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+        (q/db kv-store object-store tx-time tx-time))))
 
   (db [this valid-time]
-    (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (.db this valid-time transact-time)))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+        (.db this valid-time transact-time))))
 
-  (db [_ valid-time transact-time]
-    (q/db kv-store object-store valid-time transact-time))
+  (db [this valid-time transact-time]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (q/db kv-store object-store valid-time transact-time)))
 
-  (document [_ content-hash]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (db/get-single-object object-store snapshot (c/new-id content-hash))))
+  (document [this content-hash]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (with-open [snapshot (kv/new-snapshot kv-store)]
+        (db/get-single-object object-store snapshot (c/new-id content-hash)))))
 
-  (documents [_ content-hash-set]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (db/get-objects object-store snapshot (map c/new-id content-hash-set))))
+  (documents [this content-hash-set]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (with-open [snapshot (kv/new-snapshot kv-store)]
+        (db/get-objects object-store snapshot (map c/new-id content-hash-set)))))
 
-  (history [_ eid]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
+  (history [this eid]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (with-open [snapshot (kv/new-snapshot kv-store)]
+        (mapv c/entity-tx->edn (idx/entity-history snapshot eid)))))
 
-  (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (->> (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
-           (mapv c/entity-tx->edn)
-           (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time)))))
+  (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (with-open [snapshot (kv/new-snapshot kv-store)]
+        (->> (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
+             (mapv c/entity-tx->edn)
+             (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time))))))
 
   (status [this]
-    (status-fn))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (status-fn)))
 
   (attributeStats [this]
-    (idx/read-meta kv-store :crux.kv/stats))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (idx/read-meta kv-store :crux.kv/stats)))
 
-  (submitTx [_ tx-ops]
-    @(db/submit-tx tx-log tx-ops))
+  (submitTx [this tx-ops]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      @(db/submit-tx tx-log tx-ops)))
 
   (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
     (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
 
-  (hasSubmittedTxCorrectedEntity [_ submitted-tx valid-time eid]
-    (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
-    (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid))
+  (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
+      (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid)))
 
-  (newTxLogContext [_]
-    (db/new-tx-log-context tx-log))
+  (newTxLogContext [this]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (db/new-tx-log-context tx-log)))
 
-  (txLog [_ tx-log-context from-tx-id with-ops?]
-    (for [{:keys [crux.tx/tx-id
-                  crux.tx.event/tx-events] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
-          :when (with-open [snapshot (kv/new-snapshot kv-store)]
-                  (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
-      (if with-ops?
-        (-> tx-log-entry
-            (dissoc :crux.tx.event/tx-events)
-            (assoc :crux.api/tx-ops
-                   (with-open [snapshot (kv/new-snapshot kv-store)]
-                     (tx/tx-events->tx-ops snapshot object-store tx-events))))
-        tx-log-entry)))
+  (txLog [this tx-log-context from-tx-id with-ops?]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (for [{:keys [crux.tx/tx-id
+                    crux.tx.event/tx-events] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
+            :when (with-open [snapshot (kv/new-snapshot kv-store)]
+                    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
+        (if with-ops?
+          (-> tx-log-entry
+              (dissoc :crux.tx.event/tx-events)
+              (assoc :crux.api/tx-ops
+                     (with-open [snapshot (kv/new-snapshot kv-store)]
+                       (tx/tx-events->tx-ops snapshot object-store tx-events))))
+          tx-log-entry))))
 
-  (sync [_ timeout]
-    (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
-                                          (:crux.tx-log/await-tx-timeout options))))
+  (sync [this timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
+                                            (:crux.tx-log/await-tx-timeout options)))))
 
-  (sync [_ tx-time timeout]
-    (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
-                                          (:crux.tx-log/await-tx-timeout options))))
+  (sync [this tx-time timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
+                                            (:crux.tx-log/await-tx-timeout options)))))
 
   ICruxAsyncIngestAPI
-  (submitTxAsync [_ tx-ops]
-    (db/submit-tx tx-log tx-ops))
+  (submitTxAsync [this tx-ops]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (db/submit-tx tx-log tx-ops)))
 
   backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]
-    (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
-    (when (satisfies? tx-log backup/INodeBackup)
-      (backup/write-checkpoint tx-log opts)))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
+
+      (when (satisfies? tx-log backup/INodeBackup)
+        (backup/write-checkpoint tx-log opts))))
 
   Closeable
   (close [_]
-    (when close-fn (close-fn))))
+    (cio/with-write-lock lock
+      (when (and (not @closed?) close-fn) (close-fn))
+      (reset! closed? true))))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
@@ -243,7 +285,8 @@
 (defn start ^ICruxAPI [options]
   (let [options (into {} options)
         topology (options->topology options)
-        [{::keys [kv-store tx-log indexer object-store] :as modules} close-fn] (start-modules topology options)
+        [modules close-fn] (start-modules topology options)
+        {::keys [kv-store tx-log indexer object-store]} modules
         status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))
         node-opts (parse-opts node-args options)]
     (map->CruxNode {:close-fn close-fn
@@ -252,4 +295,6 @@
                     :kv-store kv-store
                     :tx-log tx-log
                     :indexer indexer
-                    :object-store object-store})))
+                    :object-store object-store
+                    :closed? (atom false)
+                    :lock (StampedLock.)})))

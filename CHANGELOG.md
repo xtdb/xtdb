@@ -8,6 +8,7 @@
 * [#367](https://github.com/juxt/crux/issues/367) Can query empty DB
 * [#377](https://github.com/juxt/crux/issues/377) Can use 'cons' within query predicates
 * [#351](https://github.com/juxt/crux/issues/351) Do not merge placeholders into unary results
+* [#368](https://github.com/juxt/crux/issues/368) Protect calls to modules when node is closed
 
 ## 19.09-1.5.0-alpha
 

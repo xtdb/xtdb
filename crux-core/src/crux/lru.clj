@@ -1,6 +1,7 @@
 (ns crux.lru
   (:require [crux.db :as db]
             [crux.index :as idx]
+            [crux.io :as cio]
             [crux.kv :as kv])
   (:import [clojure.lang Counted ILookup]
            java.io.Closeable
@@ -30,38 +31,26 @@
         (let [v (.valAt this k ::not-found)] ; use ::not-found as values can be falsy
           (if (= ::not-found v)
             (let [k (stored-key-fn k)
-                  v (f k)
-                  stamp (.writeLock lock)]
-              ; lock the cache only after potentially heavy value and key calculations are done
-              (try
+                  v (f k)]
+              (cio/with-write-lock lock
+                ;; lock the cache only after potentially heavy value and key calculations are done
                 (.computeIfAbsent cache k (reify Function
                                             (apply [_ k]
-                                              v)))
-                (finally
-                  (.unlock lock stamp))))
+                                              v)))))
             v)))
 
       (evict [_ k]
-        (let [stamp (.writeLock lock)]
-          (try
-            (.remove cache k)
-            (finally
-              (.unlock lock stamp)))))
+        (cio/with-write-lock lock
+          (.remove cache k)))
 
       ILookup
       (valAt [this k]
-        (let [stamp (.writeLock lock)]
-          (try
-            (.get cache k)
-            (finally
-              (.unlock lock stamp)))))
+        (cio/with-write-lock lock
+          (.get cache k)))
 
       (valAt [this k default]
-        (let [stamp (.writeLock lock)]
-          (try
-            (.getOrDefault cache k default)
-            (finally
-              (.unlock lock stamp)))))
+        (cio/with-write-lock lock
+          (.getOrDefault cache k default)))
 
       Counted
       (count [_]
@@ -74,45 +63,30 @@
 (defrecord CachedIterator [i ^StampedLock lock closed-state]
   kv/KvIterator
   (seek [_ k]
-    (let [stamp (.readLock lock)]
-      (try
-        (ensure-iterator-open closed-state)
-        (kv/seek i k)
-        (finally
-          (.unlock lock stamp)))))
+    (cio/with-read-lock lock
+      (ensure-iterator-open closed-state)
+      (kv/seek i k)))
 
   (next [_]
-    (let [stamp (.readLock lock)]
-      (try
-        (ensure-iterator-open closed-state)
-        (kv/next i)
-        (finally
-          (.unlock lock stamp)))))
+    (cio/with-read-lock lock
+      (ensure-iterator-open closed-state)
+      (kv/next i)))
 
   (prev [_]
-    (let [stamp (.readLock lock)]
-      (try
-        (ensure-iterator-open closed-state)
-        (kv/prev i)
-        (finally
-          (.unlock lock stamp)))))
+    (cio/with-read-lock lock
+      (ensure-iterator-open closed-state)
+      (kv/prev i)))
 
   (value [_]
-    (let [stamp (.readLock lock)]
-      (try
-        (ensure-iterator-open closed-state)
-        (kv/value i)
-        (finally
-          (.unlock lock stamp)))))
+    (cio/with-read-lock lock
+      (ensure-iterator-open closed-state)
+      (kv/value i)))
 
   Closeable
   (close [_]
-    (let [stamp (.writeLock lock)]
-      (try
-        (ensure-iterator-open closed-state)
-        (reset! closed-state true)
-        (finally
-          (.unlock lock stamp))))))
+    (cio/with-write-lock lock
+      (ensure-iterator-open closed-state)
+      (reset! closed-state true))))
 
 (defrecord CachedSnapshot [^Closeable snapshot close-snapshot? ^StampedLock lock iterators-state]
   kv/KvSnapshot
@@ -135,12 +109,10 @@
   Closeable
   (close [_]
     (doseq [^CachedIterator i @iterators-state]
-      (let [stamp (.writeLock lock)]
-        (try
-          (reset! (.closed-state i) true)
-          (.close ^Closeable (.i i))
-          (finally
-            (.unlock lock stamp)))))
+      (cio/with-write-lock lock
+        (reset! (.closed-state i) true)
+        (.close ^Closeable (.i i))))
+
     (when close-snapshot?
       (.close snapshot))))
 

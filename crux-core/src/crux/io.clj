@@ -11,7 +11,8 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]))
+           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
+           java.util.concurrent.locks.StampedLock))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -202,3 +203,19 @@
          (doseq [[_ cleaner-action] seq+cleaner-actions]
            (register-cleaner pq cleaner-action))
          (merge-sort-priority-queue->seq pq))))))
+
+(defmacro with-read-lock [lock & body]
+  `(let [^StampedLock lock# ~lock
+         stamp# (.readLock lock#)]
+     (try
+       ~@body
+       (finally
+         (.unlock lock# stamp#)))))
+
+(defmacro with-write-lock [lock & body]
+  `(let [^StampedLock lock# ~lock
+         stamp# (.writeLock lock#)]
+     (try
+       ~@body
+       (finally
+         (.unlock lock# stamp#)))))
