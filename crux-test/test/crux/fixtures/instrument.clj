@@ -19,40 +19,54 @@
   (str "Unary: " (clojure.string/join " " (map :name (:indexes i)))))
 
 (defmethod index-name 'crux.index.BinaryJoinLayeredVirtualIndex [i]
-  (str "Binary: " (:name i)))
+  (format "Binary: [%s %s %s]" (-> i meta :clause :e) (-> i meta :clause :a) (-> i meta :clause :v)))
 
 (defmethod index-name 'crux.index.DocAttributeValueEntityEntityIndex [i]
-  (str "AVE-E: " (:name i)))
+  "AVE-E:")
 
 (defmethod index-name 'crux.index.DocAttributeValueEntityValueIndex [i]
-  (str "AVE-V: " (:name i)))
+  "AVE-V:")
 
 (defmethod index-name 'crux.index.DocAttributeEntityValueEntityIndex [i]
-  (str "AVE-E: " (:name i)))
+  "AVE-E:")
 
 (defmethod index-name 'crux.index.DocAttributeEntityValueValueIndex [i]
-  (str "AEV-V: " (:name i)))
+  "AEV-V:")
 
 (defn- trunc
   [s n]
   (subs s 0 (min (count s) n)))
 
 (defn- trace-op [foo op depth & extra]
-  (println (format "%s %s%s %s" (name op) @foo (apply str (take (get @depth op) (repeat " ")))
+  (print (format "%s %s%s %s" (name op) @foo (apply str (take (get @depth op) (repeat " ")))
                    (clojure.string/join " " extra))))
 
 (defn- v->str [v]
-  (str (trunc (str (mem/buffer->hex (first v))) 10) " -> " (trunc (str (second v)) 40)))
+  (str "["(trunc (str (mem/buffer->hex (first v))) 10) " " (trunc (str (second v)) 40) "]"))
 
 (defmulti index-seek (fn [i id depth foo k] (-> i ^java.lang.Class type .getName symbol)))
 
 (defmethod index-seek :default [i id depth foo k]
   (trace-op foo :seek depth (index-name i) id)
-  (swap! depth update :seek inc)
-  (let [v (db/seek-values i k)]
-    (trace-op foo :seek depth "--->" (v->str v))
-    (swap! depth update :seek dec)
-    v))
+  (if (#{'crux.index.DocAttributeValueEntityEntityIndex
+         'crux.index.DocAttributeValueEntityValueIndex
+         'crux.index.DocAttributeEntityValueEntityIndex
+         'crux.index.DocAttributeEntityValueValueIndex}
+       (-> i ^java.lang.Class type .getName symbol))
+    (do
+      (swap! depth update :seek inc)
+      (let [v (db/seek-values i k)]
+        (println (v->str v))
+        (swap! depth update :seek dec)
+        v))
+    (do
+      (println)
+      (swap! depth update :seek inc)
+      (let [v (db/seek-values i k)]
+        (trace-op foo :seek depth "--->" (v->str v))
+        (println)
+        (swap! depth update :seek dec)
+        v))))
 
 (defrecord InstrumentedLayeredIndex [i id depth foo]
   db/Index
@@ -61,6 +75,7 @@
 
   (next-values [this]
     (trace-op foo :next depth (index-name i) id)
+    (println)
     (swap! depth update :next inc)
     (let [v (db/next-values i)]
       (swap! depth update :next dec)
