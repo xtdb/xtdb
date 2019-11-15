@@ -2566,3 +2566,31 @@
                                       [(= p 67)]
                                       [e :ticker/market m2]
                                       [m2 :se/currency :currency/usd]]}))))
+
+(t/deftest test-order-by-when-not-specified-in-return-418
+  (f/transact! *api* [{:crux.db/id :one
+                       :val 1}
+                      {:crux.db/id :two
+                       :val 2}
+                      {:crux.db/id :three
+                       :val 3}])
+
+  (t/is (= [:three :two :one]
+           (mapv first (api/q (api/db *api*) '{:find [e v]
+                                               :where [[x :crux.db/id e]
+                                                       [x :val v]]
+                                               :order-by [[v :desc]]}))
+           (mapv first (api/q (api/db *api*) '{:find [e]
+                                               :where [[x :crux.db/id e]
+                                                       [x :val v]]
+                                               :order-by [[v :desc]]}))))
+
+  (t/is (= [:one :two :three]
+           (mapv first (api/q (api/db *api*) '{:find [e v]
+                                               :where [[x :crux.db/id e]
+                                                       [x :val v]]
+                                               :order-by [[v :asc]]}))
+           (mapv first (api/q (api/db *api*) '{:find [e]
+                                               :where [[x :crux.db/id e]
+                                                       [x :val v]]
+                                               :order-by [[v :asc]]})))))
