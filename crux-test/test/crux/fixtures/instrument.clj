@@ -10,7 +10,8 @@
                   :blue    "[34m"
                   :yellow  "[33m"
                   :magenta "[35m"
-                  :cyan    "[36m"})
+;;                  :cyan    "[36m"
+                  })
 
 (defn- in-ansi [c s]
   (if c
@@ -55,8 +56,29 @@
                                 ({:seek "s" :next "n"} op) @foo (apply str (take (get @depth op) (repeat " ")))
                                 (clojure.string/join " " extra)))))
 
+
+(defprotocol PrintVal
+  (print-val [this]))
+
+(extend-protocol PrintVal
+  org.agrona.DirectBuffer
+  (print-val [this]
+    (trunc (str (mem/buffer->hex this)) 10))
+
+  clojure.lang.PersistentArrayMap
+  (print-val [this]
+    (format "{%s}"
+            (clojure.string/join ", "
+                                 (map (fn [[k v]]
+                                        (str k " " (print-val v))) this))))
+
+  Object
+  (print-val [this]
+    (trunc (str this) 40)))
+
+
 (defn- v->str [v]
-  (str "["(trunc (str (mem/buffer->hex (first v))) 10) " " (trunc (str (second v)) 40) "]"))
+  (str "[" (clojure.string/join " " (map print-val v)) "]"))
 
 (defmulti index-seek (fn [{:keys [i]} _] (-> i ^java.lang.Class type .getName symbol)))
 
@@ -113,6 +135,9 @@
 (defn inst [depth visited i]
   (instrument i depth visited))
 
+(defn- new-color [visited]
+  (first (shuffle (clojure.set/difference (set (keys ansi-colors)) (set (map :color (vals @visited)))))))
+
 (defn ->instrumented-index [i depth visited color]
   (or (and (instance? InstrumentedLayeredIndex i) i)
       (get @visited i)
@@ -133,15 +158,16 @@
 
   crux.index.UnaryJoinVirtualIndex
   (instrument [this depth visited]
-    (let [this (update this :indexes (fn [indexes] (map (partial inst depth visited) indexes)))]
-      (->instrumented-index this depth visited nil)))
+    (or (get @visited this)
+        (let [this (update this :indexes (fn [indexes] (map (partial inst depth visited) indexes)))]
+          (->instrumented-index this depth visited nil))))
 
   crux.index.BinaryJoinLayeredVirtualIndex
   (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this depth visited]
     (let [state ^crux.index.BinaryJoinLayeredVirtualIndexState (.state this)
-          [lhs rhs] (map (partial inst depth visited) (.indexes state))]
+          [lhs rhs] (doall (map (partial inst depth visited) (.indexes state)))]
       (set! (.indexes state) [lhs rhs])
-      (merge (->instrumented-index this depth visited (rand-nth (keys ansi-colors))) this)))
+      (assoc (->instrumented-index this depth visited (new-color visited)) :name (:name this))))
 
   crux.index.RelationVirtualIndex
   (instrument [^crux.index.RelationVirtualIndex this depth visited]
