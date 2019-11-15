@@ -4,13 +4,26 @@
             [crux.memory :as mem]
             [clojure.tools.logging :as log]))
 
+(def ansi-colors {:white   "[37m"
+                  :red     "[31m"
+                  :green   "[32m"
+                  :blue    "[34m"
+                  :yellow  "[33m"
+                  :magenta "[35m"
+                  :cyan    "[36m"})
+
+(defn- in-ansi [c s]
+  (if c
+    (str "\u001b" (get ansi-colors c) s "\u001b[0m")
+    s))
+
 (defmulti index-name (fn [i] (-> i ^java.lang.Class type .getName symbol)))
 
 (defmethod index-name :default [i]
   (-> i ^java.lang.Class type .getName (clojure.string/replace #"crux\.index\." "") symbol))
 
 (defmethod index-name 'crux.index.NAryConstrainingLayeredVirtualIndex [i]
-  (str "NAry (Constrained): " (clojure.string/join " " (map :name (:indexes i)))))
+  (str "NAry-Constrained: " (clojure.string/join " " (map :name (:indexes i)))))
 
 (defmethod index-name 'crux.index.NAryJoinLayeredVirtualIndex [i]
   (str "NAry: " (clojure.string/join " " (map :name (:indexes i)))))
@@ -37,17 +50,18 @@
   [s n]
   (subs s 0 (min (count s) n)))
 
-(defn- trace-op [foo op depth & extra]
-  (print (format "%s %s%s %s" (name op) @foo (apply str (take (get @depth op) (repeat " ")))
-                   (clojure.string/join " " extra))))
+(defn- trace-op [{:keys [foo depth color] :as this} op & extra]
+  (print (in-ansi color (format "%s%s   %s %s"
+                                ({:seek "s" :next "n"} op) @foo (apply str (take (get @depth op) (repeat " ")))
+                                (clojure.string/join " " extra)))))
 
 (defn- v->str [v]
   (str "["(trunc (str (mem/buffer->hex (first v))) 10) " " (trunc (str (second v)) 40) "]"))
 
-(defmulti index-seek (fn [i depth foo k] (-> i ^java.lang.Class type .getName symbol)))
+(defmulti index-seek (fn [{:keys [i]} _] (-> i ^java.lang.Class type .getName symbol)))
 
-(defmethod index-seek :default [i depth foo k]
-  (trace-op foo :seek depth (index-name i))
+(defmethod index-seek :default [{:keys [i depth] :as ii} k]
+  (trace-op ii :seek (index-name i))
   (if (#{'crux.index.DocAttributeValueEntityEntityIndex
          'crux.index.DocAttributeValueEntityValueIndex
          'crux.index.DocAttributeEntityValueEntityIndex
@@ -56,25 +70,25 @@
     (do
       (swap! depth update :seek inc)
       (let [v (db/seek-values i k)]
-        (println (v->str v))
+        (println "" (v->str v))
         (swap! depth update :seek dec)
         v))
     (do
       (println)
       (swap! depth update :seek inc)
       (let [v (db/seek-values i k)]
-        (trace-op foo :seek depth "--->" (v->str v))
+        (trace-op ii :seek "--->" (v->str v))
         (println)
         (swap! depth update :seek dec)
         v))))
 
-(defrecord InstrumentedLayeredIndex [i depth foo]
+(defrecord InstrumentedLayeredIndex [i depth foo color]
   db/Index
   (seek-values [this k]
-    (index-seek i depth foo k))
+    (index-seek this k))
 
   (next-values [this]
-    (trace-op foo :next depth (index-name i))
+    (trace-op this :next (index-name i))
     (println)
     (swap! depth update :next inc)
     (let [v (db/next-values i)]
@@ -99,10 +113,10 @@
 (defn inst [depth visited i]
   (instrument i depth visited))
 
-(defn ->instrumented-index [i depth visited]
+(defn ->instrumented-index [i depth visited color]
   (or (and (instance? InstrumentedLayeredIndex i) i)
       (get @visited i)
-      (let [ii (InstrumentedLayeredIndex. i depth (atom 0))]
+      (let [ii (InstrumentedLayeredIndex. i depth (atom 0) color)]
         (swap! visited assoc i ii)
         ii)))
 
@@ -110,34 +124,34 @@
   crux.index.NAryConstrainingLayeredVirtualIndex
   (instrument [this depth visited]
     (let [this (update this :n-ary-index (partial inst depth visited))]
-      (->instrumented-index this depth visited)))
+      (->instrumented-index this depth visited nil)))
 
   crux.index.NAryJoinLayeredVirtualIndex
   (instrument [this depth visited]
     (let [this (update this :unary-join-indexes (fn [indexes] (map (partial inst depth visited) indexes)))]
-      (->instrumented-index this depth visited)))
+      (->instrumented-index this depth visited nil)))
 
   crux.index.UnaryJoinVirtualIndex
   (instrument [this depth visited]
     (let [this (update this :indexes (fn [indexes] (map (partial inst depth visited) indexes)))]
-      (->instrumented-index this depth visited)))
+      (->instrumented-index this depth visited nil)))
 
   crux.index.BinaryJoinLayeredVirtualIndex
   (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this depth visited]
     (let [state ^crux.index.BinaryJoinLayeredVirtualIndexState (.state this)
           [lhs rhs] (map (partial inst depth visited) (.indexes state))]
       (set! (.indexes state) [lhs rhs])
-      (merge (->instrumented-index this depth visited) this)))
+      (merge (->instrumented-index this depth visited (rand-nth (keys ansi-colors))) this)))
 
   crux.index.RelationVirtualIndex
   (instrument [^crux.index.RelationVirtualIndex this depth visited]
     (let [state ^crux.index.RelationIteratorsState (.state this)]
       (set! (.indexes state) (mapv (partial inst depth visited) (.indexes state)))
-      (->instrumented-index this depth visited)))
+      (->instrumented-index this depth visited nil)))
 
   Object
   (instrument [this depth visited]
-    (->instrumented-index this depth visited)))
+    (->instrumented-index this depth visited nil)))
 
 (def original-layered-idx->seq i/layered-idx->seq)
 (defn instrument-layered-idx->seq [idx]
