@@ -9,9 +9,7 @@
                   :green   "[32m"
                   :blue    "[34m"
                   :yellow  "[33m"
-                  :magenta "[35m"
-;;                  :cyan    "[36m"
-                  })
+                  :magenta "[35m"})
 
 (defn- in-ansi [c s]
   (if c
@@ -56,7 +54,6 @@
                                 ({:seek "s" :next "n"} op) @foo (apply str (take (get @depth op) (repeat " ")))
                                 (clojure.string/join " " extra)))))
 
-
 (defprotocol PrintVal
   (print-val [this]))
 
@@ -75,7 +72,6 @@
   Object
   (print-val [this]
     (trunc (str this) 40)))
-
 
 (defn- v->str [v]
   (str "[" (clojure.string/join " " (map print-val v)) "]"))
