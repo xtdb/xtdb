@@ -10,6 +10,9 @@
 * [#351](https://github.com/juxt/crux/issues/351) Do not merge placeholders into unary results
 * [#368](https://github.com/juxt/crux/issues/368) Protect calls to modules when node is closed
 
+### New features
+* [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
+
 ## 19.09-1.5.0-alpha
 
 ### Changes
