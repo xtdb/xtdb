@@ -28,6 +28,7 @@ public class JdbcTopology extends Topology {
         return new JdbcTopology(newTopologyAttrs);
     }
 
+    @SuppressWarnings("unchecked")
     protected Map<Keyword, Object> toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
         for (Attribute key : topologyAttrs.keySet()) {

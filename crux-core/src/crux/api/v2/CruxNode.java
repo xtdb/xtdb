@@ -25,6 +25,7 @@ public class CruxNode {
         return new CruxNode(topology);
     }
 
+    @SuppressWarnings("unchecked")
     public TxResult submitTx(Iterable<Operation> ops) {
         PersistentVector txVector = PersistentVector.create();
         for(Operation op: ops) {

@@ -95,6 +95,7 @@ public class Query {
         return new Query(findClause, whereClause, args, rules, offset, limit, orderBy, timeout, fullResults);
     }
 
+    @SuppressWarnings("unchecked")
     public List<LogicVar> findLogicVars() {
         List<LogicVar> logicVarList =
             new ArrayList<Symbol>(findClause).stream()

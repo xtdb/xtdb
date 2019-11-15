@@ -26,6 +26,7 @@ public class KafkaTopology extends Topology {
         return new KafkaTopology(newTopologyAttrs);
     }
 
+    @SuppressWarnings("unchecked")
     protected Map<Keyword, Object> toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
         for (Attribute key : topologyAttrs.keySet()) {

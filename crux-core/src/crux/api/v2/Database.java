@@ -28,7 +28,7 @@ public class Database {
         Collection<List<?>> queryResult = db.q(query.toEdn());
         List<LogicVar> symbols = query.findLogicVars();
 
-        Set resultSet = new HashSet<>();
+        Set<ResultTuple> resultSet = new HashSet<>();
         for(List<?> result : queryResult){
             resultSet.add(ResultTuple.resultTuple(symbols, result));
         }
