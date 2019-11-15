@@ -4,9 +4,34 @@
             [crux.memory :as mem]
             [clojure.tools.logging :as log]))
 
-(defn- i-name [i]
-  ;;(-> i ^java.lang.Class type .getName (clojure.string/replace #"crux\.index\." "") symbol)
-  (-> i str (clojure.string/replace #"crux\.index\." "")))
+(defmulti index-name (fn [i] (-> i ^java.lang.Class type .getName symbol)))
+
+(defmethod index-name :default [i]
+  (-> i ^java.lang.Class type .getName (clojure.string/replace #"crux\.index\." "") symbol))
+
+(defmethod index-name 'crux.index.NAryConstrainingLayeredVirtualIndex [i]
+  (str "NAry (Constrained): " (clojure.string/join " " (map :name (:indexes i)))))
+
+(defmethod index-name 'crux.index.NAryJoinLayeredVirtualIndex [i]
+  (str "NAry: " (clojure.string/join " " (map :name (:indexes i)))))
+
+(defmethod index-name 'crux.index.UnaryJoinVirtualIndex [i]
+  (str "Unary: " (clojure.string/join " " (map :name (:indexes i)))))
+
+(defmethod index-name 'crux.index.BinaryJoinLayeredVirtualIndex [i]
+  (str "Binary: " (:name i)))
+
+(defmethod index-name 'crux.index.DocAttributeValueEntityEntityIndex [i]
+  (str "AVE-E: " (:name i)))
+
+(defmethod index-name 'crux.index.DocAttributeValueEntityValueIndex [i]
+  (str "AVE-V: " (:name i)))
+
+(defmethod index-name 'crux.index.DocAttributeEntityValueEntityIndex [i]
+  (str "AVE-E: " (:name i)))
+
+(defmethod index-name 'crux.index.DocAttributeEntityValueValueIndex [i]
+  (str "AEV-V: " (:name i)))
 
 (defn- trunc
   [s n]
@@ -22,23 +47,23 @@
 (defrecord InstrumentedLayeredIndex [i id depth foo]
   db/Index
   (seek-values [this k]
-    (trace-op foo :seek depth (i-name i) id)
+    (trace-op foo :seek depth (index-name i) id)
     (let [v (db/seek-values i k)]
       (trace-op foo :seek depth "--->" (v->str v))
       v))
 
   (next-values [this]
-    (trace-op foo :next depth (i-name i) id)
+    (trace-op foo :next depth (index-name i) id)
     (db/next-values i))
 
   db/LayeredIndex
   (open-level [this]
     (swap! foo inc)
-    (trace-op foo :open depth (i-name i) id)
+;;    (trace-op foo :open depth (index-name i) id)
     (db/open-level i))
 
   (close-level [this]
-    (trace-op foo :close depth (i-name i) id)
+;;    (trace-op foo :close depth (index-name i) id)
     (db/close-level i)
     (swap! foo dec))
 
