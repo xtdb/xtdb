@@ -44,10 +44,10 @@
 (defn- v->str [v]
   (str "["(trunc (str (mem/buffer->hex (first v))) 10) " " (trunc (str (second v)) 40) "]"))
 
-(defmulti index-seek (fn [i id depth foo k] (-> i ^java.lang.Class type .getName symbol)))
+(defmulti index-seek (fn [i depth foo k] (-> i ^java.lang.Class type .getName symbol)))
 
-(defmethod index-seek :default [i id depth foo k]
-  (trace-op foo :seek depth (index-name i) id)
+(defmethod index-seek :default [i depth foo k]
+  (trace-op foo :seek depth (index-name i))
   (if (#{'crux.index.DocAttributeValueEntityEntityIndex
          'crux.index.DocAttributeValueEntityValueIndex
          'crux.index.DocAttributeEntityValueEntityIndex
@@ -68,13 +68,13 @@
         (swap! depth update :seek dec)
         v))))
 
-(defrecord InstrumentedLayeredIndex [i id depth foo]
+(defrecord InstrumentedLayeredIndex [i depth foo]
   db/Index
   (seek-values [this k]
-    (index-seek i id depth foo k))
+    (index-seek i depth foo k))
 
   (next-values [this]
-    (trace-op foo :next depth (index-name i) id)
+    (trace-op foo :next depth (index-name i))
     (println)
     (swap! depth update :next inc)
     (let [v (db/next-values i)]
@@ -94,57 +94,54 @@
     (db/max-depth i)))
 
 (defprotocol Instrument
-  (instrument [i id depth visited]))
+  (instrument [i depth visited]))
 
-(defn inst [id depth visited i]
-  (instrument i id depth visited))
+(defn inst [depth visited i]
+  (instrument i depth visited))
 
-(defn ->instrumented-index [i id depth visited]
+(defn ->instrumented-index [i depth visited]
   (or (and (instance? InstrumentedLayeredIndex i) i)
       (get @visited i)
-      (let [ii (InstrumentedLayeredIndex. i id depth (atom 0))]
+      (let [ii (InstrumentedLayeredIndex. i depth (atom 0))]
         (swap! visited assoc i ii)
         ii)))
 
 (extend-protocol Instrument
   crux.index.NAryConstrainingLayeredVirtualIndex
-  (instrument [this id depth visited]
-    (let [this (update this :n-ary-index (partial inst nil depth visited))]
-      (->instrumented-index this id depth visited)))
+  (instrument [this depth visited]
+    (let [this (update this :n-ary-index (partial inst depth visited))]
+      (->instrumented-index this depth visited)))
 
   crux.index.NAryJoinLayeredVirtualIndex
-  (instrument [this id depth visited]
-    (let [this (update this :unary-join-indexes (fn [indexes] (map (partial inst nil depth visited) indexes)))]
-      (->instrumented-index this id depth visited)))
+  (instrument [this depth visited]
+    (let [this (update this :unary-join-indexes (fn [indexes] (map (partial inst depth visited) indexes)))]
+      (->instrumented-index this depth visited)))
 
   crux.index.UnaryJoinVirtualIndex
-  (instrument [this id depth visited]
-    (let [this (update this :indexes (fn [indexes] (map (partial inst nil depth visited) indexes)))]
-      (->instrumented-index this id depth visited)))
+  (instrument [this depth visited]
+    (let [this (update this :indexes (fn [indexes] (map (partial inst depth visited) indexes)))]
+      (->instrumented-index this depth visited)))
 
   crux.index.BinaryJoinLayeredVirtualIndex
-  (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this id depth visited]
+  (instrument [^crux.index.BinaryJoinLayeredVirtualIndex this depth visited]
     (let [state ^crux.index.BinaryJoinLayeredVirtualIndexState (.state this)
-          [lhs rhs] (map (partial inst id depth visited) (.indexes state))]
+          [lhs rhs] (map (partial inst depth visited) (.indexes state))]
       (set! (.indexes state) [lhs rhs])
-      (let [id (let [{:keys [e a v]} (-> this meta :clause)]
-                 (format "[%s %s %s]" e a v))
-            id (:name this)]
-        (merge (->instrumented-index this id depth visited) this))))
+      (merge (->instrumented-index this depth visited) this)))
 
   crux.index.RelationVirtualIndex
-  (instrument [^crux.index.RelationVirtualIndex this id depth visited]
+  (instrument [^crux.index.RelationVirtualIndex this depth visited]
     (let [state ^crux.index.RelationIteratorsState (.state this)]
-      (set! (.indexes state) (mapv (partial inst nil depth visited) (.indexes state)))
-      (->instrumented-index this id depth visited)))
+      (set! (.indexes state) (mapv (partial inst depth visited) (.indexes state)))
+      (->instrumented-index this depth visited)))
 
   Object
-  (instrument [this id depth visited]
-    (->instrumented-index this id depth visited)))
+  (instrument [this depth visited]
+    (->instrumented-index this depth visited)))
 
 (def original-layered-idx->seq i/layered-idx->seq)
 (defn instrument-layered-idx->seq [idx]
-  (original-layered-idx->seq (instrument idx nil (atom {:seek 0 :next 0}) (atom {}))))
+  (original-layered-idx->seq (instrument idx (atom {:seek 0 :next 0}) (atom {}))))
 
 (defmacro with-instrumentation [& form]
   `(with-redefs [i/layered-idx->seq instrument-layered-idx->seq]
