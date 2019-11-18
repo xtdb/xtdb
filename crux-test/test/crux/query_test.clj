@@ -2576,13 +2576,30 @@
                        :val 3}])
 
   (t/is (= [:three :two :one]
-           (mapv first (api/q (api/db *api*) '{:find [e]
+           (mapv first (api/q (api/db *api*) '{:find [e v]
                                                :where [[x :crux.db/id e]
                                                        [x :val v]]
                                                :order-by [[v :desc]]}))))
 
   (t/is (= [:one :two :three]
-           (mapv first (api/q (api/db *api*) '{:find [e]
+           (mapv first (api/q (api/db *api*) '{:find [e v]
                                                :where [[x :crux.db/id e]
                                                        [x :val v]]
-                                               :order-by [[v :asc]]})))))
+                                               :order-by [[v :asc]]}))))
+
+  (try (mapv first (api/q (api/db *api*) '{:find [e]
+                                           :where [[x :crux.db/id e]
+                                                   [x :val v]]
+                                           :order-by [[v :asc]]}))
+       (t/is false)
+       (catch IllegalArgumentException e
+         (t/is (re-find #"Order by requires a var from :find\. unreturned var:"
+                        (.getMessage e)))))
+  (try (mapv first (api/q (api/db *api*) '{:find [e]
+                                           :where [[x :crux.db/id e]
+                                                   [x :val v]]
+                                           :order-by [[v :desc]]}))
+       (t/is false)
+       (catch IllegalArgumentException e
+         (t/is (re-find #"Order by requires a var from :find\. unreturned var:"
+                        (.getMessage e))))))
