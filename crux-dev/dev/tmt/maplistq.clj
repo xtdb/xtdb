@@ -15,11 +15,13 @@
   node
   [[:crux.tx/put
     {:crux.db/id :me
+     :change 20
      :list ["carrots" "peas" "shampoo"]
      :pockets/left ["lint" "change"]
      :pockets/right ["phone"]}]
    [:crux.tx/put
     {:crux.db/id :you
+     :change 30
      :list ["carrots" "tomatoes" "wig"]
      :pockets/left ["wallet" "watch"]
      :pockets/right ["spectacles"]}]])
@@ -29,7 +31,14 @@
                        :args [{l "carrots"}]})
 ;; => #{[:you "carrots"] [:me "carrots"]}
 
-(api/q (api/db node) '{:find [e p]
-                       :where [[e :pockets/left p]]
-                       :args [{p "watch"}]})
+(try (mapv first (api/q (api/db node) '{:find [e p]
+                                        :where [[e :pockets/left p]
+                                                [e :change c]]
+                                        :args [{p "watch"}]
+                                        :order-by [[c :asc]]}))
+     (catch IllegalArgumentException e
+       (re-find #"Order by requires a var from :find\. unreturned var:"
+                (.getMessage e))))
+
+
 ;; => #{[:you "watch"]}
