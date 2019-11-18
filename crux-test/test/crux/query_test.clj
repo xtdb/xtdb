@@ -2586,20 +2586,15 @@
                                                :where [[x :crux.db/id e]
                                                        [x :val v]]
                                                :order-by [[v :asc]]}))))
-
-  (try (mapv first (api/q (api/db *api*) '{:find [e]
-                                           :where [[x :crux.db/id e]
-                                                   [x :val v]]
-                                           :order-by [[v :asc]]}))
-       (t/is false)
-       (catch IllegalArgumentException e
-         (t/is (re-find #"Order by requires a var from :find\. unreturned var:"
-                        (.getMessage e)))))
-  (try (mapv first (api/q (api/db *api*) '{:find [e]
-                                           :where [[x :crux.db/id e]
-                                                   [x :val v]]
-                                           :order-by [[v :desc]]}))
-       (t/is false)
-       (catch IllegalArgumentException e
-         (t/is (re-find #"Order by requires a var from :find\. unreturned var:"
-                        (.getMessage e))))))
+  (t/is (thrown-with-msg? IllegalArgumentException 
+                          #"Order by requires a var from :find\. unreturned var:"
+                          (api/q (api/db *api*) '{:find [e]
+                                                  :where [[x :crux.db/id e]
+                                                          [x :val v]]
+                                                  :order-by [[v :asc]]})))
+  (t/is (thrown-with-msg? IllegalArgumentException 
+                          #"Order by requires a var from :find\. unreturned var:"
+                          (api/q (api/db *api*) '{:find [e]
+                                                  :where [[x :crux.db/id e]
+                                                          [x :val v]]
+                                                  :order-by [[v :desc]]}))))
