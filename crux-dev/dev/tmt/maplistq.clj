@@ -31,9 +31,14 @@
                        :args [{l "carrots"}]})
 ;; => #{[:you "carrots"] [:me "carrots"]}
 
-(api/q (api/db node) '{:find [e p]
-                       :where [[e :pockets/left p]
-                               [e :change c]]
-                       :args [{p "watch"}]
-                       :order-by [[c :asc]]})
+(try (mapv first (api/q (api/db node) '{:find [e p]
+                                        :where [[e :pockets/left p]
+                                                [e :change c]]
+                                        :args [{p "watch"}]
+                                        :order-by [[c :asc]]}))
+     (catch IllegalArgumentException e
+       (re-find #"Order by requires a var from :find\. unreturned var:"
+                (.getMessage e))))
+
+
 ;; => #{[:you "watch"]}
