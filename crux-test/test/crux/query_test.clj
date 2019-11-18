@@ -2576,20 +2576,12 @@
                        :val 3}])
 
   (t/is (= [:three :two :one]
-           (mapv first (api/q (api/db *api*) '{:find [e v]
-                                               :where [[x :crux.db/id e]
-                                                       [x :val v]]
-                                               :order-by [[v :desc]]}))
            (mapv first (api/q (api/db *api*) '{:find [e]
                                                :where [[x :crux.db/id e]
                                                        [x :val v]]
                                                :order-by [[v :desc]]}))))
 
   (t/is (= [:one :two :three]
-           (mapv first (api/q (api/db *api*) '{:find [e v]
-                                               :where [[x :crux.db/id e]
-                                                       [x :val v]]
-                                               :order-by [[v :asc]]}))
            (mapv first (api/q (api/db *api*) '{:find [e]
                                                :where [[x :crux.db/id e]
                                                        [x :val v]]
