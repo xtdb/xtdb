@@ -34,22 +34,6 @@ Note that all Crux Datalog queries run using a point-in-time view of the
 database which means the query capabilities and patterns presented in this
 section are not aware of valid times or transaction times.
 
-[#queries-reference]
-== Reference
-
-* <<#queries_basic_query>>
-* <<#queries_arguments,`:args`>>
-* <<#queries_valid_time_travel>>
-* <<#queries_history_api>>
-  ** <<#history_full_document_history>>
-  ** <<#history_document_history_range>>
-* <<#queries_joins,Joins>>
-* <<#queries_ordering_and_pagination>>
-* <<#queries_rules,`:rules`>>
-* <<#queries_lazy_queries>>
-* <<#queries_clojure_tips>>
-* <<#queries_datascript_differences>>
-
 [#queries_basic_query]
 == Basic Query
 
