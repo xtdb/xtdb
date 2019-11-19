@@ -2,6 +2,7 @@ package crux.api.v2;
 
 import crux.api.ICruxAPI;
 import crux.api.ICruxDatasource;
+import clojure.lang.Keyword;
 
 import java.util.*;
 
@@ -40,7 +41,8 @@ public class Database {
         return db.q(query);
     }
 
-    public Document entity(Database db, CruxId id) {
-        throw new UnsupportedOperationException();
+    public Document entity(CruxId id) {
+        Map<Keyword, Object> entityDoc = db.entity(id.toEdn());
+        return Document.document(entityDoc);
     }
 }

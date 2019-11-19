@@ -22,6 +22,10 @@ public class Document {
         return document.get(attr);
     }
 
+    public Object get(String attr) {
+        return document.get(Attribute.attr(attr));
+    }
+
     public CruxId getId() {
         return cruxId(document.get(Attribute.attr("crux.db/id")));
     }

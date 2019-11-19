@@ -6,27 +6,33 @@ import crux.api.Crux;
 import crux.api.ICruxAPI;
 import crux.api.IndexVersionOutOfSyncException;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
 import static crux.api.v2.Database.database;
 import static crux.api.v2.TxResult.txResult;
-import static crux.api.v2.Document.document;
 
-//TODO: Wrap current Java API
 public class CruxNode {
     private final ICruxAPI node;
+    private boolean nodeClosed;
+
     private CruxNode(Topology topology) throws IndexVersionOutOfSyncException {
         this.node = Crux.startNode(topology.toEdn());
+        this.nodeClosed = false;
     }
 
-    public static CruxNode cruxNode(Topology topology) throws IndexVersionOutOfSyncException {
+    private void checkNodeClosed() throws IllegalStateException {
+        if(nodeClosed)
+            throw new IllegalStateException("Crux node is closed");
+    }
+    public static CruxNode cruxNode(Topology topology) throws IndexVersionOutOfSyncException, IllegalStateException {
         return new CruxNode(topology);
     }
 
-    @SuppressWarnings("unchecked")
-    public TxResult submitTx(Iterable<Operation> ops) {
+    public TxResult submitTx(Iterable<Operation> ops) throws IllegalStateException{
+        checkNodeClosed();
         PersistentVector txVector = PersistentVector.create();
         for(Operation op: ops) {
             txVector = txVector.cons(op.toEdn());
@@ -38,34 +44,45 @@ public class CruxNode {
         return txResult(txTime, txId);
     }
 
-    public TxResult submitTx(Operation... ops) { return submitTx(Arrays.asList(ops)); }
+    public TxResult submitTx(Operation... ops) throws IllegalStateException { return submitTx(Arrays.asList(ops)); }
 
-    public Database db() {
+    public Database db() throws IllegalStateException {
+        checkNodeClosed();
         return database(node);
     }
 
-    public Database db(Date validTime) {
+    public Database db(Date validTime) throws IllegalStateException {
+        checkNodeClosed();
         return database(node, validTime);
     }
 
-    public Database db(Date validTime, Date transactionTime) {
+    public Database db(Date validTime, Date transactionTime) throws IllegalStateException {
+        checkNodeClosed();
         return database(node, validTime, transactionTime);
     }
 
-    public Document document(Object contentHash) {
+    public Document document(Object contentHash) throws IllegalStateException {
+        checkNodeClosed();
         Map<Keyword,?> doc = node.document(contentHash);
         return Document.document(doc);
     }
 
-    // TODO: Could probably be CruxId rather than eid;
-    public List<Document> history(CruxId id) {
+    public List<Document> history(CruxId id) throws IllegalStateException {
+        checkNodeClosed();
         List<Map<Keyword,?>> history = node.history(id.toEdn());
         return history.stream()
             .map(historyMap -> Document.document(historyMap))
             .collect(Collectors.toList());
     }
 
-    public Date sync(Duration timeout) {
+    public Date sync(Duration timeout) throws IllegalStateException {
+        checkNodeClosed();
         return node.sync(timeout);
+    }
+
+    public void close() throws IOException {
+        checkNodeClosed();
+        node.close();
+        this.nodeClosed = true;
     }
 }
