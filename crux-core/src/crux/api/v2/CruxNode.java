@@ -16,24 +16,17 @@ import static crux.api.v2.TxResult.txResult;
 
 public class CruxNode {
     private final ICruxAPI node;
-    private boolean nodeClosed;
 
     private CruxNode(Topology topology) throws IndexVersionOutOfSyncException {
         this.node = Crux.startNode(topology.toEdn());
-        this.nodeClosed = false;
     }
 
-    private void checkNodeClosed() throws IllegalStateException {
-        if(nodeClosed)
-            throw new IllegalStateException("Crux node is closed");
-    }
-    public static CruxNode cruxNode(Topology topology) throws IndexVersionOutOfSyncException, IllegalStateException {
+    public static CruxNode cruxNode(Topology topology) throws IndexVersionOutOfSyncException {
         return new CruxNode(topology);
     }
 
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(Iterable<Operation> ops) throws IllegalStateException{
-        checkNodeClosed();
+    public TxResult submitTx(Iterable<Operation> ops) {
         PersistentVector txVector = PersistentVector.create();
         for(Operation op: ops) {
             txVector = txVector.cons(op.toEdn());
@@ -46,45 +39,37 @@ public class CruxNode {
     }
 
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(Operation... ops) throws IllegalStateException { return submitTx(Arrays.asList(ops)); }
+    public TxResult submitTx(Operation... ops) { return submitTx(Arrays.asList(ops)); }
 
-    public Database db() throws IllegalStateException {
-        checkNodeClosed();
+    public Database db() {
         return database(node);
     }
 
-    public Database db(Date validTime) throws IllegalStateException {
-        checkNodeClosed();
+    public Database db(Date validTime) {
         return database(node, validTime);
     }
 
-    public Database db(Date validTime, Date transactionTime) throws IllegalStateException {
-        checkNodeClosed();
+    public Database db(Date validTime, Date transactionTime) {
         return database(node, validTime, transactionTime);
     }
 
-    public Document document(Object contentHash) throws IllegalStateException {
-        checkNodeClosed();
+    public Document document(Object contentHash) {
         Map<Keyword,?> doc = node.document(contentHash);
         return Document.document(doc);
     }
 
-    public List<Document> history(CruxId id) throws IllegalStateException {
-        checkNodeClosed();
+    public List<Document> history(CruxId id) {
         List<Map<Keyword,?>> history = node.history(id.toEdn());
         return history.stream()
             .map(historyMap -> Document.document(historyMap))
             .collect(Collectors.toList());
     }
 
-    public Date sync(Duration timeout) throws IllegalStateException {
-        checkNodeClosed();
+    public Date sync(Duration timeout) {
         return node.sync(timeout);
     }
 
     public void close() throws IOException {
-        checkNodeClosed();
         node.close();
-        this.nodeClosed = true;
     }
 }
