@@ -31,6 +31,7 @@ public class CruxNode {
         return new CruxNode(topology);
     }
 
+    @SuppressWarnings("unchecked")
     public TxResult submitTx(Iterable<Operation> ops) throws IllegalStateException{
         checkNodeClosed();
         PersistentVector txVector = PersistentVector.create();
@@ -44,6 +45,7 @@ public class CruxNode {
         return txResult(txTime, txId);
     }
 
+    @SuppressWarnings("unchecked")
     public TxResult submitTx(Operation... ops) throws IllegalStateException { return submitTx(Arrays.asList(ops)); }
 
     public Database db() throws IllegalStateException {
