@@ -35,15 +35,15 @@ public class Query {
     }
 
     public static class FindQuery {
-        private final PersistentVector logicVars;
+        private final PersistentVector symbols;
 
-        private FindQuery(PersistentVector logicVars) {
-            this.logicVars = logicVars;
+        private FindQuery(PersistentVector symbols) {
+            this.symbols = symbols;
         }
 
         public Query where(String whereClause) {
             PersistentVector whereVector = (PersistentVector) RT.readString(whereClause);
-            return new Query(logicVars, whereVector, null, null, null, null, null, null ,null);
+            return new Query(symbols, whereVector, null, null, null, null, null, null ,null);
         }
     }
 
@@ -52,15 +52,15 @@ public class Query {
         return new FindQuery(findVector); }
 
 
-    public static FindQuery find(List<LogicVar> findVars) {
+    public static FindQuery find(List<Symbol> findVars) {
         PersistentVector findVector = PersistentVector.create();
-        for (LogicVar var : findVars) {
-            findVector = findVector.cons(var.toEdn());
+        for (Symbol var : findVars) {
+            findVector = findVector.cons(var);
         }
         return new FindQuery(findVector);
     }
 
-    public static FindQuery find(LogicVar... findVars) {
+    public static FindQuery find(Symbol... findVars) {
         return find(Arrays.asList(findVars));
     }
 
@@ -96,13 +96,8 @@ public class Query {
     }
 
     @SuppressWarnings("unchecked")
-    public List<LogicVar> findLogicVars() {
-        List<LogicVar> logicVarList =
-            new ArrayList<Symbol>(findClause).stream()
-            .map(sym -> LogicVar.logicVar(sym))
-            .collect(Collectors.toList());
-
-        return logicVarList;
+    List<Symbol> findSymbols() {
+        return findClause;
     }
 
     public IPersistentMap toEdn() {

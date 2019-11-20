@@ -1,5 +1,6 @@
 package crux.api.v2;
 
+import clojure.lang.Symbol;
 import crux.api.ICruxAPI;
 import crux.api.ICruxDatasource;
 import clojure.lang.Keyword;
@@ -27,7 +28,7 @@ public class Database {
 
     public Set<ResultTuple> query(Query query) {
         Collection<List<?>> queryResult = db.q(query.toEdn());
-        List<LogicVar> symbols = query.findLogicVars();
+        List<Symbol> symbols = query.findSymbols();
 
         Set<ResultTuple> resultSet = new HashSet<>();
         for(List<?> result : queryResult){
