@@ -54,15 +54,15 @@ public class CruxNode implements AutoCloseable {
         return database(node, validTime, transactionTime);
     }
 
-    public Document document(Object contentHash) {
-        Map<Keyword,?> doc = node.document(contentHash);
+    private Document document(Object contentHash) {
+        Map<Keyword, Object> doc = node.document(contentHash);
         return Document.document(doc);
     }
 
     public List<Document> history(CruxId id) {
-        List<Map<Keyword,?>> history = node.history(id.toEdn());
+        List<Map<Keyword,Object>> history = node.history(id.toEdn());
         return history.stream()
-            .map(Document::document)
+            .map(this::document)
             .collect(Collectors.toList());
     }
 

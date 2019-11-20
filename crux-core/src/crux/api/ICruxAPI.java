@@ -48,7 +48,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * hash.
      * @return            the document map.
      */
-    public Map<Keyword,?> document(Object contentHash);
+    public Map<Keyword, Object> document(Object contentHash);
 
     /**
      *  Reads a document from the document store based on its
@@ -68,7 +68,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the transaction history.
      */
-    public List<Map<Keyword,?>> history(Object eid);
+    public List<Map<Keyword,Object>> history(Object eid);
     // todo elaborate about corrections contents
 
     /**
