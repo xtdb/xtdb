@@ -49,9 +49,9 @@
   [s n]
   (subs s 0 (min (count s) n)))
 
-(defn- trace-op [{:keys [foo depth color] :as this} op & extra]
+(defn- trace-op [{:keys [level depth color] :as this} op & extra]
   (print (in-ansi color (format "%s%s   %s %s"
-                                ({:seek "s" :next "n"} op) @foo (apply str (take (get @depth op) (repeat " ")))
+                                ({:seek "s" :next "n"} op) @level (apply str (take (get @depth op) (repeat " ")))
                                 (clojure.string/join " " extra)))))
 
 (defprotocol PrintVal
@@ -100,7 +100,7 @@
         (swap! depth update :seek dec)
         v))))
 
-(defrecord InstrumentedLayeredIndex [i depth foo color]
+(defrecord InstrumentedLayeredIndex [i depth level color]
   db/Index
   (seek-values [this k]
     (index-seek this k))
@@ -115,12 +115,12 @@
 
   db/LayeredIndex
   (open-level [this]
-    (swap! foo inc)
+    (swap! level inc)
     (db/open-level i))
 
   (close-level [this]
     (db/close-level i)
-    (swap! foo dec))
+    (swap! level dec))
 
   (max-depth [this]
     (db/max-depth i)))
