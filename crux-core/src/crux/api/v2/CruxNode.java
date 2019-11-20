@@ -16,7 +16,7 @@ import static crux.api.v2.Database.database;
 import static crux.api.v2.TxResult.txResult;
 import static crux.api.v2.Util.kw;
 
-public class CruxNode {
+public class CruxNode implements AutoCloseable {
     private static final Keyword TX_TIME = kw("crux.tx/tx-time");
     private static final Keyword TX_ID = kw("crux.tx/tx-id");
 
@@ -70,6 +70,7 @@ public class CruxNode {
         return node.sync(timeout);
     }
 
+    @Override
     public void close() throws IOException {
         node.close();
     }
