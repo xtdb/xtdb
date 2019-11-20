@@ -7,8 +7,21 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
+import static crux.api.v2.Util.kw;
+
 public class StandaloneTopology extends EdnTopology {
-    protected final Map<Keyword, Object> topologyAttrs;
+    private static final Keyword STANDALONE_TOPOLOGY = kw("crux.standalone/topology");
+    private static final Keyword NODE_TOPOLOGY = kw("crux.node/topology");
+    private static final Keyword KV_STORE = kw("crux.node/kv-store");
+    private static final Keyword OBJECT_STORE = kw("crux.node/object-store");
+    private static final Keyword DB_DIR = kw("crux.kv/db-dir");
+    private static final Keyword SYNC = kw("crux.kv/sync");
+    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = kw("crux.kv/check-and-store-index-version");
+    private static final Keyword EVENT_LOG_KV_STORE = kw("crux.standalone/event-log-kv-store");
+    private static final Keyword EVENT_LOG_DIR = kw("crux.standalone/event-log-dir");
+    private static final Keyword EVENT_LOG_SYNC = kw("crux.standalone/event-log-sync?");
+
+    private final Map<Keyword, Object> topologyAttrs;
 
     private StandaloneTopology(Map<Keyword, Object> topologyAttrs) {
         this.topologyAttrs = topologyAttrs;
@@ -19,9 +32,7 @@ public class StandaloneTopology extends EdnTopology {
     }
 
     public static StandaloneTopology standaloneTopology() {
-        Map<Keyword, Object> newTopologyAttrs = new HashMap<>();
-        newTopologyAttrs.put(Util.kw("crux.node/topology"), Keyword.intern("crux.standalone/topology"));
-        return new StandaloneTopology(newTopologyAttrs);
+        return new StandaloneTopology(Map.of(NODE_TOPOLOGY, STANDALONE_TOPOLOGY));
     }
 
     @SuppressWarnings("unchecked")
@@ -33,47 +44,47 @@ public class StandaloneTopology extends EdnTopology {
         return (PersistentArrayMap) ednMap;
     }
 
-    public StandaloneTopology withTopologyMap(Map<Keyword, ?> topologyAttrs) {
+    public StandaloneTopology with(Map<Keyword, ?> topologyAttrs) {
         Map<Keyword, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
         newTopologyAttrs.putAll(topologyAttrs);
         return new StandaloneTopology(newTopologyAttrs);
     }
 
-    private StandaloneTopology with(String putAt, Object toPut) {
+    private StandaloneTopology with(Keyword k, Object v) {
         Map<Keyword, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
-        newTopologyAttrs.put(Util.kw(putAt), toPut);
+        newTopologyAttrs.put(k, v);
         return new StandaloneTopology(newTopologyAttrs);
     }
 
     public StandaloneTopology withKvStore(String kvStore) {
-        return with("crux.node/kv-store", kvStore);
+        return with(KV_STORE, kvStore);
     }
 
     public StandaloneTopology withObjectStore(String objectStore) {
-        return with("crux.node/object-store", objectStore);
+        return with(OBJECT_STORE, objectStore);
     }
 
     public StandaloneTopology withDbDir(String dbDir) {
-        return with("crux.kv/db-dir", dbDir);
+        return with(DB_DIR, dbDir);
     }
 
     public StandaloneTopology withSync(boolean sync) {
-        return with("crux.kv/sync", sync);
+        return with(SYNC, sync);
     }
 
     public StandaloneTopology withCheckAndStoreIndexVersion(boolean checkAndStoreIndexVersion) {
-        return with("crux.kv/check-and-store-index-version", checkAndStoreIndexVersion);
+        return with(CHECK_AND_STORE_INDEX_VERSION, checkAndStoreIndexVersion);
     }
 
     public StandaloneTopology withEventLogKvStore(String eventLogKvStore) {
-        return with("crux.standalone/event-log-kv-store", eventLogKvStore);
+        return with(EVENT_LOG_KV_STORE, eventLogKvStore);
     }
 
     public StandaloneTopology withEventLogDir(String eventLogDir) {
-        return with("crux.standalone/event-log-dir", eventLogDir);
+        return with(EVENT_LOG_DIR, eventLogDir);
     }
 
     public StandaloneTopology withEventLogSync(boolean eventLogSync) {
-        return with("crux.standalone/event-log-sync?", eventLogSync);
+        return with(EVENT_LOG_SYNC, eventLogSync);
     }
 }

@@ -2,19 +2,24 @@ package crux.api.v2;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
-import crux.api.Crux;
 import crux.api.ICruxAPI;
-import crux.api.IndexVersionOutOfSyncException;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static crux.api.v2.Database.database;
 import static crux.api.v2.TxResult.txResult;
+import static crux.api.v2.Util.kw;
 
 public class CruxNode {
+    private static final Keyword TX_TIME = kw("crux.tx/tx-time");
+    private static final Keyword TX_ID = kw("crux.tx/tx-id");
+
     private final ICruxAPI node;
 
     CruxNode(ICruxAPI node) {
@@ -29,8 +34,8 @@ public class CruxNode {
         }
 
         Map<Keyword,Object> result = node.submitTx(txVector);
-        Date txTime = (Date) result.get(Keyword.intern("crux.tx/tx-time"));
-        Long txId = (Long) result.get(Keyword.intern("crux.tx/tx-id"));
+        Date txTime = (Date) result.get(TX_TIME);
+        long txId = (Long) result.get(TX_ID);
         return txResult(txTime, txId);
     }
 
@@ -57,7 +62,7 @@ public class CruxNode {
     public List<Document> history(CruxId id) {
         List<Map<Keyword,?>> history = node.history(id.toEdn());
         return history.stream()
-            .map(historyMap -> Document.document(historyMap))
+            .map(Document::document)
             .collect(Collectors.toList());
     }
 

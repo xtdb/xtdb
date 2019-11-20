@@ -5,7 +5,11 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
+import static crux.api.v2.Util.kw;
+
 public class CasOperation extends Operation {
+    private static final Keyword TX_CAS = kw("crux.tx/cas");
+
     private final Date validTime;
     private final Document oldDoc;
     private final Document newDoc;
@@ -26,7 +30,7 @@ public class CasOperation extends Operation {
 
     @Override
     protected PersistentVector toEdn() {
-        PersistentVector outputVector = PersistentVector.create(Keyword.intern("crux.tx/cas"), oldDoc.toEdn(), newDoc.toEdn());
+        PersistentVector outputVector = PersistentVector.create(TX_CAS, oldDoc.toEdn(), newDoc.toEdn());
         if(validTime != null)
             outputVector = outputVector.cons(validTime);
         return outputVector;

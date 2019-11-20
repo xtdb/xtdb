@@ -4,14 +4,14 @@ import java.util.Date;
 
 public class TxResult {
     public final Date txTime;
-    public final Long txId;
+    public final long txId;
 
-    private TxResult(Date txTime, Long txId) {
+    private TxResult(Date txTime, long txId) {
         this.txTime = txTime;
         this.txId = txId;
     }
 
-    public static TxResult txResult(Date txTime, Long txId) {
+    public static TxResult txResult(Date txTime, long txId) {
         return new TxResult(txTime, txId);
     }
 

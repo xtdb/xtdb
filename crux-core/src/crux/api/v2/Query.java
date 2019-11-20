@@ -2,14 +2,24 @@ package crux.api.v2;
 
 import clojure.lang.*;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
+
+import static crux.api.v2.Util.kw;
 
 // Version of Query which reads strings.
 
 public class Query {
+    private static final Keyword FIND = kw("find");
+    private static final Keyword WHERE = kw("where");
+    private static final Keyword ARGS = kw("args");
+    private static final Keyword RULES = kw("rules");
+    private static final Keyword OFFSET = kw("offset");
+    private static final Keyword LIMIT = kw("limit");
+    private static final Keyword ORDER_BY = kw("order-by");
+    private static final Keyword TIMEOUT = kw("timeout");
+    private static final Keyword FULL_RESULTS = kw("full-results?");
+
     private final PersistentVector findClause;
     private final PersistentVector whereClause;
     private final PersistentVector args;
@@ -102,23 +112,23 @@ public class Query {
 
     public IPersistentMap toEdn() {
         IPersistentMap queryMap = PersistentArrayMap.EMPTY;
-        queryMap = queryMap.assoc(Keyword.intern("find"), findClause);
-        queryMap = queryMap.assoc(Keyword.intern("where"), whereClause);
+        queryMap = queryMap.assoc(FIND, findClause);
+        queryMap = queryMap.assoc(WHERE, whereClause);
 
         if(args!=null)
-            queryMap = queryMap.assoc(Keyword.intern("args"), args);
+            queryMap = queryMap.assoc(ARGS, args);
         if(rules!=null)
-            queryMap = queryMap.assoc(Keyword.intern("rules"), rules);
+            queryMap = queryMap.assoc(RULES, rules);
         if(offset!=null)
-            queryMap = queryMap.assoc(Keyword.intern("offset"), offset);
+            queryMap = queryMap.assoc(OFFSET, offset);
         if(limit!=null)
-            queryMap = queryMap.assoc(Keyword.intern("limit"), limit);
+            queryMap = queryMap.assoc(LIMIT, limit);
         if(orderBy!=null)
-            queryMap = queryMap.assoc(Keyword.intern("order-by"), orderBy);
+            queryMap = queryMap.assoc(ORDER_BY, orderBy);
         if(timeout!=null)
-            queryMap = queryMap.assoc(Keyword.intern("timeout"), timeout);
+            queryMap = queryMap.assoc(TIMEOUT, timeout);
         if(fullResults!=null)
-            queryMap = queryMap.assoc(Keyword.intern("full-results?"), fullResults);
+            queryMap = queryMap.assoc(FULL_RESULTS, fullResults);
 
         return queryMap;
     }

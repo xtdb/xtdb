@@ -5,7 +5,11 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
+import static crux.api.v2.Util.kw;
+
 public class DeleteOperation extends Operation {
+    private static final Keyword TX_DELETE = kw("crux.tx/delete");
+
     private final Date validTime;
     private final CruxId deleteId;
 
@@ -24,7 +28,7 @@ public class DeleteOperation extends Operation {
 
     @Override
     protected PersistentVector toEdn() {
-        PersistentVector outputVector = PersistentVector.create(Keyword.intern("crux.tx/delete"), deleteId.toEdn());
+        PersistentVector outputVector = PersistentVector.create(TX_DELETE, deleteId.toEdn());
         if(validTime != null)
             outputVector = outputVector.cons(validTime);
         return outputVector;

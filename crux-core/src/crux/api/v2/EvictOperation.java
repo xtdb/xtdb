@@ -5,9 +5,13 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
+import static crux.api.v2.Util.kw;
+
 // TODO: Only allow withEndValidTime, keepLatest and keepEarliest if previous is set
 
 public class EvictOperation extends Operation {
+    private static final Keyword TX_EVICT = kw("crux.tx/evict");
+
     private final Date validTime;
     private final Date endValidTime;
     private final Boolean keepLatest;
@@ -44,7 +48,7 @@ public class EvictOperation extends Operation {
 
     @Override
     protected PersistentVector toEdn() {
-        PersistentVector outputVector = PersistentVector.create(Keyword.intern("crux.tx/evict"), evictId.toEdn());
+        PersistentVector outputVector = PersistentVector.create(TX_EVICT, evictId.toEdn());
         if(validTime != null)
             outputVector = outputVector.cons(validTime);
         if(endValidTime != null)

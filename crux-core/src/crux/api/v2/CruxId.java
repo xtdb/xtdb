@@ -1,10 +1,10 @@
 package crux.api.v2;
 
-import clojure.lang.Keyword;
-
 import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
+
+import static crux.api.v2.Util.kw;
 
 public class CruxId {
     private final Object id;
@@ -14,7 +14,7 @@ public class CruxId {
     }
 
     public static CruxId cruxId(String name) {
-        return new CruxId(Keyword.intern(name));
+        return new CruxId(kw(name));
     }
 
     public static CruxId cruxId(UUID uuid) {
