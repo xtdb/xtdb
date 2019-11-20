@@ -2598,3 +2598,11 @@
                                                   :where [[x :crux.db/id e]
                                                           [x :val v]]
                                                   :order-by [[v :desc]]}))))
+
+(t/deftest test-query-with-timeout-419
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                      {:crux.db/id :petr :name "Petr" :last-name "Petrov"}])
+
+  (t/is (= #{[:ivan] [:petr]} (api/q (api/db *api*) '{:find [e]
+                                                  :where [[e :crux.db/id _]]
+                                                  :timeout 10}))))
