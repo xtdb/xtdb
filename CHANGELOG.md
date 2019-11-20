@@ -12,6 +12,9 @@
 * [#372](https://github.com/juxt/crux/issues/372) Add support for Java collection types with submitTx
 * [#418](https://github.com/juxt/crux/issues/418) Adds exception when query with order-by doesn't return variable ordered on
 
+### New features
+* [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
+
 ## 19.09-1.5.0-alpha
 
 ### Changes
