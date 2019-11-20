@@ -29,7 +29,7 @@ public class ResultTuple {
     }
 
     public Object get(String key) {
-        return get(Util.sym(key));
+        return get(Util.symbol(key));
     }
 
     public Object get(int idx) {

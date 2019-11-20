@@ -22,15 +22,15 @@ public class Document {
     }
 
     public Object get(String attr) {
-        return document.get(Util.kw(attr));
+        return document.get(Util.keyword(attr));
     }
 
     public CruxId getId() {
-        return cruxId(document.get(Util.kw("crux.db/id")));
+        return cruxId(document.get(Util.keyword("crux.db/id")));
     }
 
     public static Document document(CruxId id) {
-        Map<Keyword, Object> initialDoc = Collections.singletonMap(Util.kw("crux.db/id"), id.toEdn());
+        Map<Keyword, Object> initialDoc = Collections.singletonMap(Util.keyword("crux.db/id"), id.toEdn());
         return new Document(initialDoc);
     }
 
@@ -63,7 +63,7 @@ public class Document {
     }
 
     public Document with(String strKey, Object value) {
-        return with(Util.kw(strKey), value);
+        return with(Util.keyword(strKey), value);
     }
 
     @Override

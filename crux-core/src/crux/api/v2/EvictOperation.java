@@ -5,12 +5,12 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 // TODO: Only allow withEndValidTime, keepLatest and keepEarliest if previous is set
 
 public class EvictOperation extends Operation {
-    private static final Keyword TX_EVICT = kw("crux.tx/evict");
+    private static final Keyword TX_EVICT = keyword("crux.tx/evict");
 
     private final Date validTime;
     private final Date endValidTime;

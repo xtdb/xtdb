@@ -5,10 +5,10 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class DeleteOperation extends Operation {
-    private static final Keyword TX_DELETE = kw("crux.tx/delete");
+    private static final Keyword TX_DELETE = keyword("crux.tx/delete");
 
     private final Date validTime;
     private final CruxId deleteId;

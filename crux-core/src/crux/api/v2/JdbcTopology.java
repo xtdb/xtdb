@@ -7,21 +7,21 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class JdbcTopology extends EdnTopology {
-    private static final Keyword JDBC_TOPOLOGY = kw("crux.jdbc/topology");
-    private static final Keyword NODE_TOPOLOGY = kw("crux.node/topology");
-    private static final Keyword JDBC_DBTYPE = kw("crux.jdbc/dbtype");
-    private static final Keyword JDBC_DBNAME = kw("crux.jdbc/dbname");
-    private static final Keyword KV_STORE = kw("crux.node/kv-store");
-    private static final Keyword OBJECT_STORE = kw("crux.node/object-store");
-    private static final Keyword DB_DIR = kw("crux.kv/db-dir");
-    private static final Keyword SYNC = kw("crux.kv/sync");
-    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = kw("crux.kv/check-and-store-index-version");
-    private static final Keyword HOST = kw("crux.jdbc/host");
-    private static final Keyword USER = kw("crux.jdbc/user");
-    private static final Keyword PASSWORD = kw("crux.jdbc/password");
+    private static final Keyword JDBC_TOPOLOGY = keyword("crux.jdbc/topology");
+    private static final Keyword NODE_TOPOLOGY = keyword("crux.node/topology");
+    private static final Keyword JDBC_DBTYPE = keyword("crux.jdbc/dbtype");
+    private static final Keyword JDBC_DBNAME = keyword("crux.jdbc/dbname");
+    private static final Keyword KV_STORE = keyword("crux.node/kv-store");
+    private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
+    private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
+    private static final Keyword SYNC = keyword("crux.kv/sync");
+    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = keyword("crux.kv/check-and-store-index-version");
+    private static final Keyword HOST = keyword("crux.jdbc/host");
+    private static final Keyword USER = keyword("crux.jdbc/user");
+    private static final Keyword PASSWORD = keyword("crux.jdbc/password");
 
     private final Map<Keyword, Object> topologyAttrs;
 

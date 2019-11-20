@@ -7,24 +7,24 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class KafkaTopology extends EdnTopology {
-    private static final Keyword KAFKA_TOPOLOGY = kw("crux.kafka/topology");
-    private static final Keyword NODE_TOPOLOGY = kw("crux.node/topology");
-    private static final Keyword KV_STORE = kw("crux.node/kv-store");
-    private static final Keyword OBJECT_STORE = kw("crux.node/object-store");
-    private static final Keyword DB_DIR = kw("crux.kv/db-dir");
-    private static final Keyword KV_SYNC = kw("crux.kv/sync");
-    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = kw("crux.kv/check-and-store-index-version");
-    private static final Keyword BOOTSTRAP_SERVERS = kw("crux.kafka/bootstrap-servers");
-    private static final Keyword TX_TOPIC = kw("crux.kafka/tx-topic");
-    private static final Keyword DOC_TOPIC = kw("crux.kafka/doc-topic");
-    private static final Keyword CREATE_TOPICS = kw("crux.kafka/create-topics");
-    private static final Keyword DOC_PARTITIONS = kw("crux.kafka/doc-partitions");
-    private static final Keyword REPLICATION_FACTOR = kw("crux.kafka/replication-factor");
-    private static final Keyword GROUP_ID = kw("crux.kafka/group-id");
-    private static final Keyword KAFKA_PROPERTIES_FILE = kw("crux.kafka/kafka-properties-file");
+    private static final Keyword KAFKA_TOPOLOGY = keyword("crux.kafka/topology");
+    private static final Keyword NODE_TOPOLOGY = keyword("crux.node/topology");
+    private static final Keyword KV_STORE = keyword("crux.node/kv-store");
+    private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
+    private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
+    private static final Keyword KV_SYNC = keyword("crux.kv/sync");
+    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = keyword("crux.kv/check-and-store-index-version");
+    private static final Keyword BOOTSTRAP_SERVERS = keyword("crux.kafka/bootstrap-servers");
+    private static final Keyword TX_TOPIC = keyword("crux.kafka/tx-topic");
+    private static final Keyword DOC_TOPIC = keyword("crux.kafka/doc-topic");
+    private static final Keyword CREATE_TOPICS = keyword("crux.kafka/create-topics");
+    private static final Keyword DOC_PARTITIONS = keyword("crux.kafka/doc-partitions");
+    private static final Keyword REPLICATION_FACTOR = keyword("crux.kafka/replication-factor");
+    private static final Keyword GROUP_ID = keyword("crux.kafka/group-id");
+    private static final Keyword KAFKA_PROPERTIES_FILE = keyword("crux.kafka/kafka-properties-file");
 
     protected final Map<Keyword, Object> topologyAttrs;
 

@@ -5,10 +5,10 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class CasOperation extends Operation {
-    private static final Keyword TX_CAS = kw("crux.tx/cas");
+    private static final Keyword TX_CAS = keyword("crux.tx/cas");
 
     private final Date validTime;
     private final Document oldDoc;

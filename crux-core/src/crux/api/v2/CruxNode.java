@@ -14,11 +14,11 @@ import java.util.stream.Collectors;
 
 import static crux.api.v2.Database.database;
 import static crux.api.v2.TxResult.txResult;
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class CruxNode implements AutoCloseable {
-    private static final Keyword TX_TIME = kw("crux.tx/tx-time");
-    private static final Keyword TX_ID = kw("crux.tx/tx-id");
+    private static final Keyword TX_TIME = keyword("crux.tx/tx-time");
+    private static final Keyword TX_ID = keyword("crux.tx/tx-id");
 
     private final ICruxAPI node;
 

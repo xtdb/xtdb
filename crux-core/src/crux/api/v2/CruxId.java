@@ -4,7 +4,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class CruxId {
     private final Object id;
@@ -14,7 +14,7 @@ public class CruxId {
     }
 
     public static CruxId cruxId(String name) {
-        return new CruxId(kw(name));
+        return new CruxId(keyword(name));
     }
 
     public static CruxId cruxId(UUID uuid) {

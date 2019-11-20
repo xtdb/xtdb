@@ -7,19 +7,19 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 public class StandaloneTopology extends EdnTopology {
-    private static final Keyword STANDALONE_TOPOLOGY = kw("crux.standalone/topology");
-    private static final Keyword NODE_TOPOLOGY = kw("crux.node/topology");
-    private static final Keyword KV_STORE = kw("crux.node/kv-store");
-    private static final Keyword OBJECT_STORE = kw("crux.node/object-store");
-    private static final Keyword DB_DIR = kw("crux.kv/db-dir");
-    private static final Keyword SYNC = kw("crux.kv/sync");
-    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = kw("crux.kv/check-and-store-index-version");
-    private static final Keyword EVENT_LOG_KV_STORE = kw("crux.standalone/event-log-kv-store");
-    private static final Keyword EVENT_LOG_DIR = kw("crux.standalone/event-log-dir");
-    private static final Keyword EVENT_LOG_SYNC = kw("crux.standalone/event-log-sync?");
+    private static final Keyword STANDALONE_TOPOLOGY = keyword("crux.standalone/topology");
+    private static final Keyword NODE_TOPOLOGY = keyword("crux.node/topology");
+    private static final Keyword KV_STORE = keyword("crux.node/kv-store");
+    private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
+    private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
+    private static final Keyword SYNC = keyword("crux.kv/sync");
+    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = keyword("crux.kv/check-and-store-index-version");
+    private static final Keyword EVENT_LOG_KV_STORE = keyword("crux.standalone/event-log-kv-store");
+    private static final Keyword EVENT_LOG_DIR = keyword("crux.standalone/event-log-dir");
+    private static final Keyword EVENT_LOG_SYNC = keyword("crux.standalone/event-log-sync?");
 
     private final Map<Keyword, Object> topologyAttrs;
 

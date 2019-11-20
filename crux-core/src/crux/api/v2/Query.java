@@ -5,20 +5,20 @@ import clojure.lang.*;
 import java.util.Arrays;
 import java.util.List;
 
-import static crux.api.v2.Util.kw;
+import static crux.api.v2.Util.keyword;
 
 // Version of Query which reads strings.
 
 public class Query {
-    private static final Keyword FIND = kw("find");
-    private static final Keyword WHERE = kw("where");
-    private static final Keyword ARGS = kw("args");
-    private static final Keyword RULES = kw("rules");
-    private static final Keyword OFFSET = kw("offset");
-    private static final Keyword LIMIT = kw("limit");
-    private static final Keyword ORDER_BY = kw("order-by");
-    private static final Keyword TIMEOUT = kw("timeout");
-    private static final Keyword FULL_RESULTS = kw("full-results?");
+    private static final Keyword FIND = keyword("find");
+    private static final Keyword WHERE = keyword("where");
+    private static final Keyword ARGS = keyword("args");
+    private static final Keyword RULES = keyword("rules");
+    private static final Keyword OFFSET = keyword("offset");
+    private static final Keyword LIMIT = keyword("limit");
+    private static final Keyword ORDER_BY = keyword("order-by");
+    private static final Keyword TIMEOUT = keyword("timeout");
+    private static final Keyword FULL_RESULTS = keyword("full-results?");
 
     private final PersistentVector findClause;
     private final PersistentVector whereClause;
