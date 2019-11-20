@@ -96,26 +96,19 @@
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k] transact-time tx-id]
   (let [eid (c/new-id k)
-        history-descending (idx/entity-history snapshot eid)
-        start-valid-time (or start-valid-time (some-> ^EntityTx (last history-descending) (.vt)))
-        end-valid-time (or end-valid-time transact-time)]
-    {:post-commit-fn #(when (and tx-log start-valid-time)
-                        (let [range-pred (in-range-pred start-valid-time end-valid-time)]
-                          (doseq [^EntityTx entity-tx (cond->> (filter (fn [^EntityTx entity-tx]
-                                                                         (range-pred (.vt entity-tx)))
-                                                                       history-descending)
-                                                        keep-latest? (rest)
-                                                        keep-earliest? (butlast))]
-                            ;; TODO: Direct interface call to help
-                            ;; Graal, not sure why this is needed,
-                            ;; fails with get-proxy-class issue
-                            ;; otherwise.
-                            (.submit_doc
-                              ^crux.db.TxLog tx-log
-                              (.content-hash entity-tx)
-                              {:crux.db/id eid :crux.db/evicted? true}))))}))
+        history-descending (idx/entity-history snapshot eid)]
+    {:post-commit-fn #(when tx-log
+                        (doseq [^EntityTx entity-tx history-descending]
+                          ;; TODO: Direct interface call to help
+                          ;; Graal, not sure why this is needed,
+                          ;; fails with get-proxy-class issue
+                          ;; otherwise.
+                          (.submit_doc
+                           ^crux.db.TxLog tx-log
+                           (.content-hash entity-tx)
+                           {:crux.db/id eid, :crux.db/evicted? true})))}))
 
 (declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
 

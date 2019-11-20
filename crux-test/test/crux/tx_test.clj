@@ -218,23 +218,20 @@
               (t/is (kv/get-value snapshot version-k)))))))
 
     (t/testing "can evict entity"
-      (let [new-valid-time #inst "2018-05-23"
-
-                                        ; read documents before transaction to populate the cache
+      (let [;; read documents before transaction to populate the cache
             _ (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                 (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
                   (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))))
 
-            {new-tx-time :crux.tx/tx-time
-             new-tx-id   :crux.tx/tx-id}
-            (api/submit-tx *api* [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-valid-time]])
-            _ (api/sync *api* new-tx-time nil)]
+            {new-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso]])]
+
+        (api/sync *api* new-tx-time nil)
 
         ;; TODO some race condition going on here:
         (Thread/sleep 1000)
 
         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
+          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-tx-time new-tx-time)))
 
           (t/testing "eviction keeps tx history"
             (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]

@@ -38,11 +38,7 @@
                                          :at-valid-time (s/? date?)))
 
 (defmethod tx-op :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
-                                           :id :crux.db/id
-                                           :start-valid-time (s/? date?)
-                                           :end-valid-time (s/? date?)
-                                           :keep-latest? (s/? boolean?)
-                                           :keep-earliest? (s/? boolean?)))
+                                           :id :crux.db/id))
 
 (s/def ::args-doc (s/and ::doc (s/keys :req [:crux.db.fn/args])))
 
