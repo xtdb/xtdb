@@ -159,23 +159,6 @@
                       #inst "1973-04-08T09:20:27.966-00:00"]]))
              nil)
 
-  (crux/sync node (:crux.tx/tx-time
-                   (crux/submit-tx
-                    node
-                    [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso
-                      #inst "1973-04-07T09:20:27.966-00:00"
-                      #inst "1973-04-09T09:20:27.966-00:00"
-                      false
-                      true]]))
-             nil)
-
-  (t/is nil? (crux/q
-              (crux/db node)
-              '{:find [e]
-                :where [[e :name "Pablo"]]
-                :full-results? true}))
-
-
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
            (crux/q
             (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
@@ -183,6 +166,17 @@
               :where [[e :name "Pablo"]]
               :full-results? true})))
 
+  (crux/sync node (:crux.tx/tx-time
+                   (crux/submit-tx
+                    node
+                    [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]]))
+             nil)
+
+  (t/is (empty? (crux/q
+                 (crux/db node)
+                 '{:find [e]
+                   :where [[e :name "Pablo"]]
+                   :full-results? true})))
 
   (crux/sync node (:crux.tx/tx-time (crux/submit-tx
                                      node
@@ -202,10 +196,4 @@
               :where [[e :name "Pablo"]]
               :full-results? true})))
 
-  (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
-           (crux/q
-            (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
-            '{:find [e]
-              :where [[e :name "Pablo"]]
-              :full-results? true})))
   )
