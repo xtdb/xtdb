@@ -27,9 +27,9 @@ public class CruxNode implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(Iterable<Operation> ops) {
+    public TxResult submitTx(Iterable<TransactionOperation> ops) {
         PersistentVector txVector = PersistentVector.create();
-        for(Operation op: ops) {
+        for (TransactionOperation op : ops) {
             txVector = txVector.cons(op.toEdn());
         }
 
@@ -40,7 +40,9 @@ public class CruxNode implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(Operation... ops) { return submitTx(Arrays.asList(ops)); }
+    public TxResult submitTx(TransactionOperation... ops) {
+        return submitTx(Arrays.asList(ops));
+    }
 
     public Database db() {
         return database(node);

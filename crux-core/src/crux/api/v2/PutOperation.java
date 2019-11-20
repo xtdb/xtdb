@@ -7,23 +7,19 @@ import java.util.Date;
 
 import static crux.api.v2.Util.keyword;
 
-public class PutOperation extends Operation {
+public class PutOperation extends TransactionOperation {
     private static final Keyword TX_PUT = keyword("crux.tx/put");
 
     private final Document doc;
     private final Date validTime;
 
-    private PutOperation(Document doc, Date validTime) {
+    PutOperation(Document doc, Date validTime) {
         this.doc = doc;
         this.validTime = validTime;
     }
 
     public PutOperation withValidTime(Date validTime) {
         return new PutOperation(doc, validTime);
-    }
-
-    public static PutOperation putOp(Document doc) {
-        return new PutOperation(doc, null);
     }
 
     @Override

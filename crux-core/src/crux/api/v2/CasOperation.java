@@ -7,14 +7,14 @@ import java.util.Date;
 
 import static crux.api.v2.Util.keyword;
 
-public class CasOperation extends Operation {
+public class CasOperation extends TransactionOperation {
     private static final Keyword TX_CAS = keyword("crux.tx/cas");
 
     private final Date validTime;
     private final Document oldDoc;
     private final Document newDoc;
 
-    private CasOperation(Document oldDoc, Document newDoc, Date validTime) {
+    CasOperation(Document oldDoc, Document newDoc, Date validTime) {
         this.oldDoc = oldDoc;
         this.newDoc = newDoc;
         this.validTime = validTime;
@@ -22,10 +22,6 @@ public class CasOperation extends Operation {
 
     public CasOperation withValidTime(Date validTime) {
         return new CasOperation(oldDoc, newDoc, validTime);
-    }
-
-    public static CasOperation casOp(Document oldDoc, Document newDoc) {
-        return new CasOperation(oldDoc, newDoc, null);
     }
 
     @Override
