@@ -606,9 +606,7 @@
           (api/submit-tx
            crux
            [[:crux.tx/evict
-             id
-             (instant/read-instant-date created)
-             now]])
+             id]])
           "edit"
           (api/submit-tx
            crux

@@ -62,11 +62,7 @@
 ; transaction containing an `evict` operation, historical data is destroyed
 (crux/submit-tx
   node
-  [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso
-    #inst "1973-04-07T09:20:27.966-00:00" ; start-valid-time
-    #inst "1973-04-09T09:20:27.966-00:00" ; end-valid-time (optional)
-    false                                 ; keep-latest? (optional)
-    true]])                               ; keep-earliest? (optional)
+  [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
 
 
 ; query the node as-of now
@@ -75,14 +71,6 @@
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true}) ; using `:full-results?` is useful for manual queries
-
-
-; query the node as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
-(crux/q
-  (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
-  '{:find [e]
-    :where [[e :name "Pablo"]]
-    :full-results? true})
 
 
 ; `put` the new version of the document again
