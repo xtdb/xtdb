@@ -1,4 +1,4 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
@@ -12,9 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static crux.api.v2.Database.database;
-import static crux.api.v2.TxResult.txResult;
-import static crux.api.v2.Util.keyword;
+import static crux.api.alpha.Database.database;
+import static crux.api.alpha.TxResult.txResult;
+import static crux.api.alpha.Util.keyword;
 
 public class CruxNode implements AutoCloseable {
     private static final Keyword TX_TIME = keyword("crux.tx/tx-time");

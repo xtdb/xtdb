@@ -1,4 +1,4 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import clojure.lang.Symbol;
 import crux.api.ICruxAPI;
@@ -8,7 +8,7 @@ import clojure.lang.Keyword;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static crux.api.v2.ResultTuple.resultTuple;
+import static crux.api.alpha.ResultTuple.resultTuple;
 
 public class Database {
     private final ICruxDatasource db;

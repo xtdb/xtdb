@@ -1,4 +1,4 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
@@ -8,8 +8,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.CruxId.cruxId;
-import static crux.api.v2.Util.keyword;
+import static crux.api.alpha.CruxId.cruxId;
+import static crux.api.alpha.Util.keyword;
 
 public class Document {
     private final Map<Keyword, Object> document;

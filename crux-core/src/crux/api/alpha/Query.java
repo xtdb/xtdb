@@ -1,11 +1,11 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import clojure.lang.*;
 
 import java.util.Arrays;
 import java.util.List;
 
-import static crux.api.v2.Util.keyword;
+import static crux.api.alpha.Util.keyword;
 
 // Version of Query which reads strings.
 

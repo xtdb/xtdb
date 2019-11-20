@@ -1,7 +1,7 @@
 (ns crux.java-api-test
   (:require [clojure.test :as t]
             [crux.api :as crux])
-  (:import [crux.api.v2 CruxNode StandaloneTopology KafkaTopology
+  (:import [crux.api.alpha CruxNode StandaloneTopology KafkaTopology
             Document PutOperation CasOperation CruxId Database Query
             DeleteOperation EvictOperation]))
 

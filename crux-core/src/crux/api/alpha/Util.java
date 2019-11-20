@@ -1,4 +1,4 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import clojure.lang.Keyword;
 import clojure.lang.Symbol;

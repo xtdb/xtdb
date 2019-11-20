@@ -1,10 +1,10 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
 
-import static crux.api.v2.Util.keyword;
+import static crux.api.alpha.Util.keyword;
 
 public class CruxId {
     private final Object id;

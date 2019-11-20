@@ -1,4 +1,4 @@
-package crux.api.v2;
+package crux.api.alpha;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
@@ -7,7 +7,7 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Util.keyword;
+import static crux.api.alpha.Util.keyword;
 
 public class StandaloneTopology extends EdnTopology {
     private static final Keyword STANDALONE_TOPOLOGY = keyword("crux.standalone/topology");
