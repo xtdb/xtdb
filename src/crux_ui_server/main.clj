@@ -4,6 +4,7 @@
             [bidi.bidi :as bidi]
             [crux.http-server]
             [crux.api]
+            [clojure.tools.logging :as log]
             [crux-ui-server.pages :as pages]
             [clojure.java.io :as io]
             [clojure.string :as s])
@@ -58,11 +59,14 @@
 
 (defmethod handler ::static [{:keys [uri] :as req}]
   (let [relative-uri (s/replace uri #"^/" "")
-        resource (io/input-stream (io/resource relative-uri))
-        mime-type (uri->mime-type uri)]
-    {:status 200
-     :headers {"content-type" mime-type}
-     :body resource}))
+        resource (io/resource relative-uri)]
+    (if resource
+      (let [stream (io/input-stream resource)
+            mime-type (uri->mime-type uri)]
+        {:status 200
+         :headers {"content-type" mime-type}
+         :body stream})
+      (log/warn "No resouce for" uri))))
 
 (defmethod handler ::not-found [req]
   {:status 200

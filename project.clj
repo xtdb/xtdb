@@ -25,6 +25,7 @@
      [garden                       "1.3.9"]
      [medley                       "1.2.0"]
      [funcool/promesa              "2.0.1"]
+     [org.clojure/tools.logging    "0.5.0"]
      [com.andrewmcveigh/cljs-time  "0.5.2"]
      [binaryage/oops               "0.6.4"]
      [day8.re-frame/test           "0.1.5"]
