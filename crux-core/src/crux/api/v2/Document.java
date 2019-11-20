@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static crux.api.v2.CruxId.cruxId;
+import static crux.api.v2.Util.keyword;
 
 public class Document {
     private final Map<Keyword, Object> document;
@@ -22,15 +23,15 @@ public class Document {
     }
 
     public Object get(String attr) {
-        return document.get(Util.keyword(attr));
+        return document.get(keyword(attr));
     }
 
     public CruxId getId() {
-        return cruxId(document.get(Util.keyword("crux.db/id")));
+        return cruxId(document.get(keyword("crux.db/id")));
     }
 
     public static Document document(CruxId id) {
-        Map<Keyword, Object> initialDoc = Collections.singletonMap(Util.keyword("crux.db/id"), id.toEdn());
+        Map<Keyword, Object> initialDoc = Collections.singletonMap(keyword("crux.db/id"), id.toEdn());
         return new Document(initialDoc);
     }
 
@@ -58,8 +59,8 @@ public class Document {
         return new Document(newDoc);
     }
 
-    public Document with(String strKey, Object value) {
-        return with(Util.keyword(strKey), value);
+    public Document with(String attr, Object value) {
+        return with(keyword(attr), value);
     }
 
     @Override
