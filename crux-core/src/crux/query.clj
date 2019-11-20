@@ -112,7 +112,7 @@
                               (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
-(s/def ::timout nat-int?)
+(s/def ::timeout nat-int?)
 
 (declare normalize-query)
 
