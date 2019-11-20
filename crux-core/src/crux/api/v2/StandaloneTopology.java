@@ -7,7 +7,7 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-public class StandaloneTopology extends Topology {
+public class StandaloneTopology extends EdnTopology {
     protected final Map<Keyword, Object> topologyAttrs;
 
     private StandaloneTopology(Map<Keyword, Object> topologyAttrs) {
@@ -25,7 +25,7 @@ public class StandaloneTopology extends Topology {
     }
 
     @SuppressWarnings("unchecked")
-    protected Map<Keyword, Object> toEdn() {
+    Map<Keyword, Object> toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
         for (Keyword key : topologyAttrs.keySet()) {
             ednMap = ednMap.assoc(key, topologyAttrs.get(key));

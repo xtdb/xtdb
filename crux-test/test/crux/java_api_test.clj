@@ -7,10 +7,10 @@
 
 (t/deftest test-java-api
   (t/testing "Can create node, transact to node, and query node"
-    (let [standalone (-> (StandaloneTopology/standaloneTopology)
-                         (.withDbDir "data/db-dir-1")
-                         (.withEventLogDir "data/eventlog-1"))
-          node (CruxNode/cruxNode standalone)]
+    (let [node (-> (StandaloneTopology/standaloneTopology)
+                   (.withDbDir "data/db-dir-1")
+                   (.withEventLogDir "data/eventlog-1")
+                   (.startNode))]
 
       (t/testing "Can create node"
         (t/is node))

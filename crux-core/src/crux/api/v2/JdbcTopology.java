@@ -7,7 +7,7 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-public class JdbcTopology extends Topology {
+public class JdbcTopology extends EdnTopology {
     protected final Map<Keyword, Object> topologyAttrs;
 
     private JdbcTopology(Map<Keyword, Object> topologyAttrs) {
@@ -26,8 +26,9 @@ public class JdbcTopology extends Topology {
         return new JdbcTopology(newTopologyAttrs);
     }
 
+    @Override
     @SuppressWarnings("unchecked")
-    protected Map<Keyword, Object> toEdn() {
+    Map<Keyword, Object> toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
         for (Keyword key : topologyAttrs.keySet()) {
             ednMap = ednMap.assoc(key, topologyAttrs.get(key));

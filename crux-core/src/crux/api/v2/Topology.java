@@ -1,11 +1,10 @@
 package crux.api.v2;
 
 import clojure.lang.Keyword;
+import crux.api.IndexVersionOutOfSyncException;
 
 import java.util.Map;
 
-public abstract class Topology {
-    protected abstract Map<Keyword, Object> toEdn();
-
-    public abstract Topology withTopologyMap(Map<Keyword, ?> topologyAttrs);
+public interface Topology {
+    CruxNode startNode() throws IndexVersionOutOfSyncException;
 }

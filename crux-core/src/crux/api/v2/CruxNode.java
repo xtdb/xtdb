@@ -17,12 +17,8 @@ import static crux.api.v2.TxResult.txResult;
 public class CruxNode {
     private final ICruxAPI node;
 
-    private CruxNode(Topology topology) throws IndexVersionOutOfSyncException {
-        this.node = Crux.startNode(topology.toEdn());
-    }
-
-    public static CruxNode cruxNode(Topology topology) throws IndexVersionOutOfSyncException {
-        return new CruxNode(topology);
+    CruxNode(ICruxAPI node) {
+        this.node = node;
     }
 
     @SuppressWarnings("unchecked")
