@@ -60,7 +60,7 @@
           (t/testing "Can get a database out of node"
             (t/is db))
           (t/testing "Can query database"
-            (t/is (= #{} (.query db query))))))
+            (t/is (= [] (.query db query))))))
 
       (t/testing "Can close node"
         (t/is (nil? (.close node))))

@@ -6,6 +6,9 @@ import crux.api.ICruxDatasource;
 import clojure.lang.Keyword;
 
 import java.util.*;
+import java.util.stream.Collectors;
+
+import static crux.api.v2.ResultTuple.resultTuple;
 
 public class Database {
     private final ICruxDatasource db;
@@ -26,16 +29,11 @@ public class Database {
         return new Database(node.db(validTime, transactionTime));
     }
 
-    public Set<ResultTuple> query(Query query) {
+    public List<ResultTuple> query(Query query) {
         Collection<List<?>> queryResult = db.q(query.toEdn());
         List<Symbol> symbols = query.findSymbols();
 
-        Set<ResultTuple> resultSet = new HashSet<>();
-        for(List<?> result : queryResult){
-            resultSet.add(ResultTuple.resultTuple(symbols, result));
-        }
-
-        return resultSet;
+        return queryResult.stream().map(tuple -> resultTuple(symbols, tuple)).collect(Collectors.toList());
     }
 
     public Collection<List<?>> query(String query) {
