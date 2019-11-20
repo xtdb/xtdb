@@ -6,5 +6,6 @@ import java.util.Map;
 
 public abstract class Topology {
     protected abstract Map<Keyword, Object> toEdn();
-    public abstract Topology withTopologyMap(Map<Attribute, ?> topologyAttrs);
+
+    public abstract Topology withTopologyMap(Map<Keyword, ?> topologyAttrs);
 }

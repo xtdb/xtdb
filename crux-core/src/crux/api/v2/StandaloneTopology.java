@@ -7,43 +7,41 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Attribute.attr;
-
 public class StandaloneTopology extends Topology {
-    protected final Map<Attribute, Object> topologyAttrs;
+    protected final Map<Keyword, Object> topologyAttrs;
 
-    private StandaloneTopology(Map<Attribute, Object> topologyAttrs) {
+    private StandaloneTopology(Map<Keyword, Object> topologyAttrs) {
         this.topologyAttrs = topologyAttrs;
     }
 
-    public Object getObject(Attribute attr) {
+    public Object getObject(Keyword attr) {
         return topologyAttrs.get(attr);
     }
 
     public static StandaloneTopology standaloneTopology() {
-        Map<Attribute, Object> newTopologyAttrs = new HashMap<>();
-        newTopologyAttrs.put(attr("crux.node/topology"), Keyword.intern("crux.standalone/topology"));
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>();
+        newTopologyAttrs.put(Util.kw("crux.node/topology"), Keyword.intern("crux.standalone/topology"));
         return new StandaloneTopology(newTopologyAttrs);
     }
 
     @SuppressWarnings("unchecked")
     protected Map<Keyword, Object> toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
-        for (Attribute key : topologyAttrs.keySet()) {
-            ednMap = ednMap.assoc(key.toEdn(), topologyAttrs.get(key));
+        for (Keyword key : topologyAttrs.keySet()) {
+            ednMap = ednMap.assoc(key, topologyAttrs.get(key));
         }
         return (PersistentArrayMap) ednMap;
     }
 
-    public StandaloneTopology withTopologyMap(Map<Attribute, ?> topologyAttrs) {
-        Map<Attribute, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
+    public StandaloneTopology withTopologyMap(Map<Keyword, ?> topologyAttrs) {
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
         newTopologyAttrs.putAll(topologyAttrs);
         return new StandaloneTopology(newTopologyAttrs);
     }
 
     private StandaloneTopology with(String putAt, Object toPut) {
-        Map<Attribute, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
-        newTopologyAttrs.put(attr(putAt), toPut);
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
+        newTopologyAttrs.put(Util.kw(putAt), toPut);
         return new StandaloneTopology(newTopologyAttrs);
     }
 

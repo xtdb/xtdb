@@ -8,63 +8,62 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Attribute.attr;
-import static crux.api.v2.CruxId.*;
+import static crux.api.v2.CruxId.cruxId;
 
 public class Document {
-    private final Map<Attribute, Object> document;
+    private final Map<Keyword, Object> document;
 
-    private Document(Map<Attribute, Object> attrs) {
+    private Document(Map<Keyword, Object> attrs) {
         this.document = attrs;
     }
 
-    public Object get(Attribute attr) {
+    public Object get(Keyword attr) {
         return document.get(attr);
     }
 
     public Object get(String attr) {
-        return document.get(Attribute.attr(attr));
+        return document.get(Util.kw(attr));
     }
 
     public CruxId getId() {
-        return cruxId(document.get(Attribute.attr("crux.db/id")));
+        return cruxId(document.get(Util.kw("crux.db/id")));
     }
 
     public static Document document(CruxId id) {
-        Map<Attribute, Object> initialDoc = Collections.singletonMap(Attribute.attr("crux.db/id"), id.toEdn());
+        Map<Keyword, Object> initialDoc = Collections.singletonMap(Util.kw("crux.db/id"), id.toEdn());
         return new Document(initialDoc);
     }
 
     static Document document(Map<Keyword, ?> map) {
-        Map<Attribute, Object> newDoc = new HashMap<>();
+        Map<Keyword, Object> newDoc = new HashMap<>();
         for(Keyword key : map.keySet()) {
-            newDoc.put(Attribute.attr(key), map.get(key));
+            newDoc.put(key, map.get(key));
         }
         return new Document(newDoc);
     }
 
     protected IPersistentMap toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
-        for (Attribute key : document.keySet()) {
-            ednMap = ednMap.assoc(key.toEdn(), document.get(key));
+        for (Keyword key : document.keySet()) {
+            ednMap = ednMap.assoc(key, document.get(key));
         }
         return ednMap;
     }
 
-    public Document with(Map<Attribute, ?> attrs) {
-        Map<Attribute, Object> newDoc = new HashMap<>(this.document);
+    public Document with(Map<Keyword, ?> attrs) {
+        Map<Keyword, Object> newDoc = new HashMap<>(this.document);
         newDoc.putAll(attrs);
         return new Document(newDoc);
     }
 
-    public Document with(Attribute attr, Object value) {
-        Map<Attribute, Object> newDoc = new HashMap<>(this.document);
+    public Document with(Keyword attr, Object value) {
+        Map<Keyword, Object> newDoc = new HashMap<>(this.document);
         newDoc.put(attr, value);
         return new Document(newDoc);
     }
 
     public Document with(String strKey, Object value) {
-        return with(Attribute.attr(strKey), value);
+        return with(Util.kw(strKey), value);
     }
 
     @Override

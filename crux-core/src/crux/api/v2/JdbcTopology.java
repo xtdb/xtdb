@@ -7,45 +7,43 @@ import clojure.lang.PersistentArrayMap;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.v2.Attribute.attr;
-
 public class JdbcTopology extends Topology {
-    protected final Map<Attribute, Object> topologyAttrs;
+    protected final Map<Keyword, Object> topologyAttrs;
 
-    private JdbcTopology(Map<Attribute, Object> topologyAttrs) {
+    private JdbcTopology(Map<Keyword, Object> topologyAttrs) {
         this.topologyAttrs = topologyAttrs;
     }
 
-    public Object getObject(Attribute attr) {
+    public Object getObject(Keyword attr) {
         return topologyAttrs.get(attr);
     }
 
     public static JdbcTopology jdbcTopology(String dbType, String dbName) {
-        Map<Attribute, Object> newTopologyAttrs = new HashMap<>();
-        newTopologyAttrs.put(Attribute.attr("crux.node/topology"), Keyword.intern("crux.jdbc/topology"));
-        newTopologyAttrs.put(Attribute.attr("crux.jdbc/dbtype"), dbType);
-        newTopologyAttrs.put(Attribute.attr("crux.jdbc/dbname"), dbName);
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>();
+        newTopologyAttrs.put(Util.kw("crux.node/topology"), Keyword.intern("crux.jdbc/topology"));
+        newTopologyAttrs.put(Util.kw("crux.jdbc/dbtype"), dbType);
+        newTopologyAttrs.put(Util.kw("crux.jdbc/dbname"), dbName);
         return new JdbcTopology(newTopologyAttrs);
     }
 
     @SuppressWarnings("unchecked")
     protected Map<Keyword, Object> toEdn() {
         IPersistentMap ednMap = PersistentArrayMap.EMPTY;
-        for (Attribute key : topologyAttrs.keySet()) {
-            ednMap = ednMap.assoc(key.toEdn(), topologyAttrs.get(key));
+        for (Keyword key : topologyAttrs.keySet()) {
+            ednMap = ednMap.assoc(key, topologyAttrs.get(key));
         }
         return (PersistentArrayMap) ednMap;
     }
 
-    public JdbcTopology withTopologyMap(Map<Attribute, ?> topologyAttrs) {
-        Map<Attribute, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
+    public JdbcTopology withTopologyMap(Map<Keyword, ?> topologyAttrs) {
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
         newTopologyAttrs.putAll(topologyAttrs);
         return new JdbcTopology(newTopologyAttrs);
     }
 
     private JdbcTopology with(String putAt, Object toPut) {
-        Map<Attribute, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
-        newTopologyAttrs.put(attr(putAt), toPut);
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>(this.topologyAttrs);
+        newTopologyAttrs.put(Util.kw(putAt), toPut);
         return new JdbcTopology(newTopologyAttrs);
     }
 
