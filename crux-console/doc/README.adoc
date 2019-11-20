@@ -1,7 +1,0 @@
-= Crux Console docs
-
-This directory represents the Crux Console documentation module.
-
-It is explicitly referenced by `app`.
-
-Asciidoc sources can be found in link:resources/doc/sources[].
