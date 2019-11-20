@@ -34,12 +34,8 @@ public class Document {
         return new Document(initialDoc);
     }
 
-    static Document document(Map<Keyword, ?> map) {
-        Map<Keyword, Object> newDoc = new HashMap<>();
-        for(Keyword key : map.keySet()) {
-            newDoc.put(key, map.get(key));
-        }
-        return new Document(newDoc);
+    static Document document(Map<Keyword, Object> document) {
+        return new Document(document);
     }
 
     protected IPersistentMap toEdn() {
