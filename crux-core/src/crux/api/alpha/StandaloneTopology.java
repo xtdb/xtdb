@@ -32,7 +32,9 @@ public class StandaloneTopology extends EdnTopology {
     }
 
     public static StandaloneTopology standaloneTopology() {
-        return new StandaloneTopology(Map.of(NODE_TOPOLOGY, STANDALONE_TOPOLOGY));
+        Map<Keyword, Object> newTopologyAttrs = new HashMap<>();
+        newTopologyAttrs.put(NODE_TOPOLOGY, STANDALONE_TOPOLOGY);
+        return new StandaloneTopology(newTopologyAttrs);
     }
 
     @SuppressWarnings("unchecked")
