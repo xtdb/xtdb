@@ -55,7 +55,9 @@ public class Document {
     }
 
     static Document document(Map<Keyword, Object> document) {
-        return new Document(document);
+	if(document != null)
+	    return new Document(document);
+	return new Document(new HashMap<Keyword, Object>());
     }
 
     protected IPersistentMap toEdn() {
