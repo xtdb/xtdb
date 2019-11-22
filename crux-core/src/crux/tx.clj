@@ -36,33 +36,40 @@
 
 (defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
-        start-valid-time (or start-valid-time transact-time)
+        start-valid-time (or start-valid-time transact-time)]
 
-        ;; each one is an entitytx, contains (:eid :vt :tt :tx-id :content-hash)
-        entities-to-correct (when end-valid-time
-                              (->> (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time)
+    (when-not (= start-valid-time end-valid-time)
+      (let [[entity-to-restore :as entities-to-correct] (when end-valid-time
+                                                          (->> (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time)
 
-                                   (take-while #(nat-int? (compare (.vt ^EntityTx %) start-valid-time)))))
+                                                               (take-while #(nat-int? (compare (.vt ^EntityTx %) start-valid-time)))))
 
-        dates-to-correct (->> (cons start-valid-time (map :vt entities-to-correct))
-                              (remove #{end-valid-time})
-                              (into (sorted-set)))]
+            dates-to-correct (->> (cons start-valid-time (map :vt entities-to-correct))
+                                  (remove #{end-valid-time})
+                                  (into (sorted-set)))]
 
-    {:kvs (->> (for [valid-time dates-to-correct]
-                 [[(c/encode-entity+vt+tt+tx-id-key-to
-                    nil
-                    (c/->id-buffer eid)
-                    valid-time
-                    transact-time
-                    tx-id)
-                   content-hash]
-                  [(c/encode-entity+z+tx-id-key-to
-                    nil
-                    (c/->id-buffer eid)
-                    (c/encode-entity-tx-z-number valid-time transact-time)
-                    tx-id)
-                   content-hash]])
-               (reduce into []))}))
+        {:kvs (->> (concat (when end-valid-time
+                             [[end-valid-time (if entity-to-restore
+                                                (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))
+                                                (c/nil-id-buffer))]])
+                           (map vector dates-to-correct (repeat content-hash)))
+
+                   (mapcat (fn [[valid-time content-hash]]
+                             [[(c/encode-entity+vt+tt+tx-id-key-to
+                                nil
+                                (c/->id-buffer eid)
+                                valid-time
+                                transact-time
+                                tx-id)
+                               content-hash]
+                              [(c/encode-entity+z+tx-id-key-to
+                                nil
+                                (c/->id-buffer eid)
+                                (c/encode-entity-tx-z-number valid-time transact-time)
+                                tx-id)
+                               content-hash]]))
+
+                   (into []))}))))
 
 (defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
