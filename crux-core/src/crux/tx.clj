@@ -37,11 +37,17 @@
 (defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
         start-valid-time (or start-valid-time transact-time)
-        dates-in-history (when end-valid-time
-                           (map :vt (idx/entity-history snapshot eid)))
-        dates-to-correct (->> (cons start-valid-time dates-in-history)
-                              (filter (in-range-pred start-valid-time end-valid-time))
+
+        ;; each one is an entitytx, contains (:eid :vt :tt :tx-id :content-hash)
+        entities-to-correct (when end-valid-time
+                              (->> (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time)
+
+                                   (take-while #(nat-int? (compare (.vt ^EntityTx %) start-valid-time)))))
+
+        dates-to-correct (->> (cons start-valid-time (map :vt entities-to-correct))
+                              (remove #{end-valid-time})
                               (into (sorted-set)))]
+
     {:kvs (->> (for [valid-time dates-to-correct]
                  [[(c/encode-entity+vt+tt+tx-id-key-to
                     nil
