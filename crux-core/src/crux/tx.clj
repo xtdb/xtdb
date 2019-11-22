@@ -66,6 +66,9 @@
 
 (defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
+
+         ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
+         ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
          :pre-commit-fn #(let [content-hash (c/new-id v)
                                correct-state? (db/known-keys? object-store snapshot [content-hash])]
                            (when-not correct-state?
