@@ -285,17 +285,15 @@
     (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]] t 2)
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-      ;; TODO (JH) iterator goes when we merge the put/delete branch
-      (let [i (kv/new-iterator snapshot)]
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
-                  (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
-                 (idx/entity-history snapshot (c/new-id :ivan))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
+                (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
+               (idx/entity-history snapshot (c/new-id :ivan))))
 
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-                 (idx/entity-history-seq-descending i (c/new-id :ivan) t t)))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+               (idx/entity-history-seq-descending snapshot (c/new-id :ivan) t t)))
 
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-                 (idx/entity-history-seq-ascending i (c/new-id :ivan) t t)))))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+               (idx/entity-history-seq-ascending snapshot (c/new-id :ivan) t t))))))
 
 (t/deftest test-can-store-doc
   (let [content-hash (c/new-id picasso)]
