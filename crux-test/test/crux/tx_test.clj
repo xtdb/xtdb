@@ -356,7 +356,7 @@
                               (first)
                               :tx-id)))))
 
-    (let [v4-valid-time #inst "2018-11-30"
+    (let [valid-time-after #inst "2018-11-30"
           corrected-ivan (assoc ivan :version 4)
           corrected-start-valid-time #inst "2018-11-27"
           corrected-end-valid-time #inst "2018-11-29"
@@ -385,10 +385,10 @@
                        (first)
                        (select-keys [:tx-id :content-hash])))))
 
-        (t/testing "fourth version of entity is still valid"
-          (t/is (= {:content-hash (c/new-id corrected-ivan)
+        (t/testing "fourth version of entity reverts to the third value"
+          (t/is (= {:content-hash (c/new-id v3-ivan)
                     :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v4-valid-time corrected-tx-time)
+                   (-> (idx/entities-at snapshot [:ivan] valid-time-after corrected-tx-time)
                        (first)
                        (select-keys [:tx-id :content-hash]))))))
 
@@ -406,25 +406,25 @@
           (t/testing "second version of entity was deleted"
             (t/is (empty? (idx/entities-at snapshot [:ivan] v2-valid-time deleted-tx-time))))
 
-          (t/testing "third version of entity is still there"
+          (t/testing "entity at v3-valid-time should be the corrected v4 entity"
             (t/is (= {:content-hash (c/new-id corrected-ivan)
-                      :tx-id corrected-tx-id}
+                      :tx-id deleted-tx-id}
                      (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
                          (first)
-                         (select-keys [:tx-id :content-hash])))))))
+                         (select-keys [:tx-id :content-hash]))))))
 
-      (t/testing "end range is exclusive"
-        (let [{deleted-tx-time :crux.tx/tx-time
-               deleted-tx-id :crux.tx/tx-id}
-              (api/submit-tx *api* [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
+        (t/testing "when (= svt evt), no-op"
+          (let [{noop-tx-time :crux.tx/tx-time
+                 noop-tx-id :crux.tx/tx-id}
+                (api/submit-tx *api* [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
 
-          (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-            (t/testing "third version of entity is still there"
-              (t/is (= {:content-hash (c/new-id corrected-ivan)
-                        :tx-id corrected-tx-id}
-                       (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
-                           (first)
-                           (select-keys [:tx-id :content-hash])))))))))))
+            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+              (t/testing "third version of entity is still there"
+                (t/is (= {:content-hash (c/new-id corrected-ivan)
+                          :tx-id deleted-tx-id}
+                         (-> (idx/entities-at snapshot [:ivan] v3-valid-time noop-tx-time)
+                             (first)
+                             (select-keys [:tx-id :content-hash]))))))))))))
 
 ;; TODO: This test just shows that this is an issue, if we fix the
 ;; underlying issue this test should start failing. We can then change
