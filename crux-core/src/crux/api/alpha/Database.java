@@ -53,6 +53,21 @@ public class Database {
      */
     public Document entity(CruxId id) {
         Map<Keyword, Object> entityDoc = db.entity(id.toEdn());
-        return Document.document(entityDoc);
+        if(entityDoc != null) {
+            return Document.document(entityDoc);
+        } else {
+            return null;
+        }
+
+    }
+
+    public EntityTx entityTx(CruxId id) {
+        Map<Keyword, ?> entityTx = db.entityTx(id.toEdn());
+        if(entityTx != null) {
+            return EntityTx.entityTx(entityTx);
+        } else {
+            return null;
+        }
+
     }
 }

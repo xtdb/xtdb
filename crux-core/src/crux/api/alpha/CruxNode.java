@@ -97,10 +97,10 @@ public class CruxNode implements AutoCloseable {
      * @param id Id of the entity to get the history for
      * @return Iterable set of Documents containing transaction information
      */
-    public Iterable<Document> history(CruxId id) {
+    public Iterable<EntityTx> history(CruxId id) {
         List<Map<Keyword,Object>> history = node.history(id.toEdn());
         return history.stream()
-            .map(this::document)
+            .map(entity -> EntityTx.entityTx(entity))
             .collect(Collectors.toList());
     }
 

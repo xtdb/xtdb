@@ -84,7 +84,22 @@
             (t/is (.entity db (CruxId/cruxId "test-id"))))
 
           (t/testing "Can use .entity to query an non-existing entity"
-            (t/is (.entity db (CruxId/cruxId "test-id1"))))
+            (t/is (nil? (.entity db (CruxId/cruxId "test-id1")))))
+
+          (t/testing "Can use .entityTx to query an entity, and extract fields from the EntityTx object"
+            (let [entityTx (.entityTx db (CruxId/cruxId "test-id"))]
+              (t/is entityTx)
+              (t/is (.id entityTx))
+              (t/is (.contentHash entityTx))
+              (t/is (.validTime entityTx))
+              (t/is (.txTime entityTx))
+              (t/is (.txId entityTx))))
+
+          (t/testing "Can use .entityTx to query an non-existing entity"
+            (t/is (nil? (.entity db (CruxId/cruxId "test-id1")))))
+
+
+
 
           (t/testing "Queries"
             (t/testing "Can create query"
