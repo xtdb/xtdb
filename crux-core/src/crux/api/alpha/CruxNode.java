@@ -113,6 +113,11 @@ public class CruxNode implements AutoCloseable {
         return node.sync(timeout);
     }
 
+    public NodeStatus status() {
+        Map<Keyword,?> status = node.status();
+        return NodeStatus.nodeStatus(status);
+    }
+
     @Override
     public void close() throws IOException {
         node.close();

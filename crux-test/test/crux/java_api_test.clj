@@ -66,6 +66,16 @@
       (t/testing "Can Sync node"
         (.sync node (Duration/ofMillis 100)))
 
+      (t/testing "Can get status & status information of the node"
+        (let [status (.status node)]
+          (t/is status)
+          (t/is (.version status))
+          (t/is (nil? (.revision status)))
+          (t/is (.kvStore status))
+          (t/is (.estimatedNumberOfKeys status))
+          (t/is (.size status))
+          (t/is (.indexVersion status))))
+
       (t/testing "Database"
         (let [query (-> (Query/find "[e]")
                         (.where "[[e :crux.db/id _]]"))
