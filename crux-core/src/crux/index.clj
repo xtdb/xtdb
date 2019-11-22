@@ -594,8 +594,9 @@
             (enrich-entity-tx (kv/value i)))
         (entity-history-step i seek-k f-next f-next))))))
 
-(defn entity-history-seq-ascending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-valid-time))))]
+(defn entity-history-seq-ascending [snapshot eid ^Date from-valid-time ^Date transaction-time]
+  (let [i (kv/new-iterator snapshot)
+        seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-valid-time))))]
     (->> (entity-history-step i seek-k #(when-let [k (kv/seek i seek-k)]
                                           (kv/prev i)) #(kv/prev i))
          (drop-while (fn [^EntityTx entity-tx]
@@ -609,8 +610,9 @@
                      (first))))
          (remove nil?))))
 
-(defn entity-history-seq-descending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
+(defn entity-history-seq-descending [snapshot eid ^Date from-valid-time ^Date transaction-time]
+  (let [i (kv/new-iterator snapshot)
+        seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
     (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/next i))
          (partition-by :vt)
          (map (fn [group]
@@ -623,7 +625,7 @@
 ;; TODO: This would need to change to simply walk the entire Z curve
 ;; from a point in the right order.
 
-(defn entity-history-seq [i eid]
+(defn- entity-history-seq [i eid]
   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid))]
     (for [[k v] (all-keys-in-prefix i seek-k true)]
       (-> (c/decode-entity+vt+tt+tx-id-key-from k)
