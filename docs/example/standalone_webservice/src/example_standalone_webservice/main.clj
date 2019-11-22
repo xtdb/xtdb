@@ -737,9 +737,6 @@
         (while (not (.isInterrupted (Thread/currentThread)))
           (Thread/sleep (* 1000 60 60 1)) ;; every hour
           (backup/backup-current-version crux-options crux-node))))
-    (catch IndexVersionOutOfSyncException e
-      (crux-io/delete-dir index-dir)
-      (-main))
     (catch Exception e
       (log/error e "what happened" (ex-data e)))))
 

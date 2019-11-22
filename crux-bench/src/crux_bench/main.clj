@@ -258,10 +258,7 @@
                           :free-memory (.freeMemory (Runtime/getRuntime))})))
           (log/info
             (with-out-str
-              (pp/pprint (some-> node :benchmark-runner :status deref)))))))
-    (catch IndexVersionOutOfSyncException e
-      (crux-io/delete-dir index-dir)
-      (-main)))
+              (pp/pprint (some-> node :benchmark-runner :status deref))))))))
   (log/info "bench runner exiting"))
 
 (comment
