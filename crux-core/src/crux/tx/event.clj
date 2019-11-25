@@ -25,9 +25,15 @@
                                             :new-doc id?
                                             :at-valid-time (s/? date?)))
 
-;;; TODO (JH) can we remove the previous valid-time range params from here, if there are still events with these params in Kafka?
+;;; We can't remove the previous valid-time range params from here,
+;;; if there are still events with these params in Kafka.
+;;; This is checked in the KvIndexer.
 (defmethod tx-event :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
-                                              :id id?))
+                                              :id id?
+                                              :start-valid-time (s/? date?)
+                                              :end-valid-time (s/? date?)
+                                              :keep-latest? (s/? boolean?)
+                                              :keep-earliest? (s/? boolean?)))
 
 (defmethod tx-event :crux.tx/fn [_] (s/cat :op #{:crux.tx/fn}
                                            :fn-id id?

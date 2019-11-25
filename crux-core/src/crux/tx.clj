@@ -96,10 +96,27 @@
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k] transact-time tx-id]
+(def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
+(def ^:dynamic evict-all-on-legacy-time-ranges? (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
+
+(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k & legacy-args] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)]
-    {:post-commit-fn #(when tx-log
+    {:pre-commit-fn #(cond
+                       (empty? legacy-args) true
+
+                       ;; we throw here rather than return falsy because we want the indexer to stop,
+                       ;; and the user to explicitly do something about it
+                       (not evict-all-on-legacy-time-ranges?)
+                       (throw (IllegalArgumentException. (str "Evict no longer supports time-range parameters. "
+                                                              "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")))
+
+                       :else (do
+                               (log/warnf "Evicting '%s' for all valid-times, '%s' set"
+                                          k evict-time-ranges-env-var)
+                               true))
+
+     :post-commit-fn #(when tx-log
                         (doseq [^EntityTx entity-tx history-descending]
                           ;; TODO: Direct interface call to help
                           ;; Graal, not sure why this is needed,
@@ -175,7 +192,7 @@
                                     :when post-commit-fn]
                               (post-commit-fn))})))))
 
-(defn tx-command-unknown [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+(defn tx-command-unknown [indexer kv object-store snapshot tx-log [op & _] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
 
 (def ^:private tx-op->command
@@ -198,24 +215,30 @@
   db/Indexer
   (index-doc [_ content-hash doc]
     (log/debug "Indexing doc:" content-hash)
+
     (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
+
     (let [content-hash (c/new-id content-hash)
           evicted? (idx/evicted-doc? doc)]
       (when-let [normalized-doc (if evicted?
                                   (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                                                             (db/get-single-object object-store snapshot content-hash))]
                                     (idx/delete-doc-from-index kv content-hash existing-doc))
+
                                   (idx/index-doc kv content-hash doc))]
+
         (let [stats-fn #(idx/update-predicate-stats kv evicted? normalized-doc)]
           (if stats-executor
             (.submit stats-executor ^Runnable stats-fn)
             (stats-fn))))
+
       (db/put-objects object-store [[content-hash doc]])))
 
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
+
     (with-open [snapshot (kv/new-snapshot kv)]
       (binding [*current-tx* {:crux.tx/tx-id tx-id
                               :crux.tx/tx-time tx-time

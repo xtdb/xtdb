@@ -235,6 +235,44 @@
         (t/testing "eviction removes docs"
           (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history)))))))))
 
+(t/deftest test-handles-legacy-evict-events
+  (let [{put-tx-time ::tx/tx-time, put-tx-id ::tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
+
+        _ (api/sync *api* put-tx-time nil)
+
+        evict-tx-time #inst "2018-05-22"
+        evict-tx-id (inc put-tx-id)
+
+        index-evict! #(db/index-tx (:indexer *api*)
+                                   [[:crux.tx/evict picasso-id #inst "2018-05-23"]]
+                                   evict-tx-time
+                                   evict-tx-id)]
+
+    ;; we have to index these manually because the new evict API won't allow docs
+    ;; with the legacy valid-time range
+    (t/testing "eviction throws if legacy params and no explicit override"
+      (t/is (thrown-with-msg? IllegalArgumentException
+                              #"^Evict no longer supports time-range parameters."
+                              (index-evict!))))
+
+    (t/testing "no docs evicted yet"
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (t/is (seq (db/get-objects (:object-store *api*) snapshot
+                                   (->> (idx/entity-history snapshot picasso-id)
+                                        (keep :content-hash)))))))
+
+    (binding [tx/evict-all-on-legacy-time-ranges? true]
+      (index-evict!))
+
+    ;; give the evict loopback time to evict the doc
+    (Thread/sleep 500)
+
+    (t/testing "eviction removes docs"
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (t/is (empty? (db/get-objects (:object-store *api*) snapshot
+                                      (->> (idx/entity-history snapshot picasso-id)
+                                           (keep :content-hash)))))))))
+
 (t/deftest test-can-store-doc
   (let [content-hash (c/new-id picasso)]
     (t/is (= 48 (count picasso)))
