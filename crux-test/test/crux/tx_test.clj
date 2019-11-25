@@ -215,29 +215,25 @@
                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
                                      (c/->id-buffer content-hash)
                                      (c/->value-buffer "Pablo"))]]
-              (t/is (kv/get-value snapshot version-k)))))))
+              (t/is (kv/get-value snapshot version-k)))))))))
 
-    (t/testing "can evict entity"
-      (let [;; read documents before transaction to populate the cache
-            _ (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-                  (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))))
+(t/deftest test-can-evict-entity
+  (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
+                                                                 (rdf/ntriples)
+                                                                 (rdf/->default-language)
+                                                                 (rdf/->maps-by-id)))
 
-            {new-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso]])]
+        {put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
+        {evict-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso]])]
 
-        (api/sync *api* new-tx-time nil)
+    (api/sync *api* evict-tx-time nil)
 
-        ;; TODO some race condition going on here:
-        (Thread/sleep 1000)
-
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-tx-time new-tx-time)))
-
-          (t/testing "eviction keeps tx history"
-            (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-              (t/is (= 6 (count (map :content-hash picasso-history))))
-              (t/testing "eviction removes docs"
-                (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))))))))))))
+    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+      (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
+        (t/testing "eviction keeps tx history"
+          (t/is (= 1 (count (map :content-hash picasso-history)))))
+        (t/testing "eviction removes docs"
+          (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history)))))))))
 
 (t/deftest test-can-store-doc
   (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
