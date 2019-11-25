@@ -105,8 +105,6 @@
     {:pre-commit-fn #(cond
                        (empty? legacy-args) true
 
-                       ;; we throw here rather than return falsy because we want the indexer to stop,
-                       ;; and the user to explicitly do something about it
                        (not evict-all-on-legacy-time-ranges?)
                        (throw (IllegalArgumentException. (str "Evict no longer supports time-range parameters. "
                                                               "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")))
