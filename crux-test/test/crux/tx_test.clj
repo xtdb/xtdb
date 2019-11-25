@@ -17,20 +17,25 @@
 
 (t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir apif/with-node f/with-silent-test-check)
 
+(def picasso-id :http://dbpedia.org/resource/Pablo_Picasso)
+(def picasso-eid (c/new-id picasso-id))
+
+(def picasso
+  (-> "crux/Pablo_Picasso.ntriples"
+      (rdf/ntriples)
+      (rdf/->default-language)
+      (rdf/->maps-by-id)
+      (get picasso-id)))
+
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
-  (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
-                                                                 (rdf/ntriples)
-                                                                 (rdf/->default-language)
-                                                                 (rdf/->maps-by-id)))
-        content-hash (c/new-id picasso)
+  (let [content-hash (c/new-id picasso)
         valid-time #inst "2018-05-21"
-        eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:crux.tx/keys [tx-time tx-id]}
         (api/submit-tx *api* [[:crux.tx/put picasso valid-time]])
         _ (api/sync *api* tx-time nil)
-        expected-entities [(c/map->EntityTx {:eid          eid
+        expected-entities [(c/map->EntityTx {:eid          picasso-eid
                                              :content-hash content-hash
                                              :vt           valid-time
                                              :tt           tx-time
@@ -55,7 +60,7 @@
         (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
 
       (t/testing "can see entity history"
-        (t/is (= [(c/map->EntityTx {:eid          eid
+        (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                     :content-hash content-hash
                                     :vt           valid-time
                                     :tt           tx-time
@@ -72,13 +77,13 @@
             _ (api/sync *api* new-tx-time nil)]
 
         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= [(c/map->EntityTx {:eid          eid
+          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
                                       :tt           new-tx-time
                                       :tx-id        new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid          eid
+          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
                                       :tt           new-tx-time
@@ -96,19 +101,19 @@
             _ (api/sync *api* new-tx-time nil)]
 
         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= [(c/map->EntityTx {:eid          eid
+          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
                                       :tt           new-tx-time
                                       :tx-id        new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid          eid
+          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash content-hash
                                       :vt           valid-time
                                       :tt           tx-time
                                       :tx-id        tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid          eid
+          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
                                       :tt           new-tx-time
@@ -126,13 +131,13 @@
                 _ (api/sync *api* new-tx-time nil)]
 
             (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-              (t/is (= [(c/map->EntityTx {:eid          eid
+              (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                           :content-hash new-content-hash
                                           :vt           new-valid-time
                                           :tt           new-tx-time
                                           :tx-id        new-tx-id})]
                        (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-              (t/is (= [(c/map->EntityTx {:eid          eid
+              (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                           :content-hash new-content-hash
                                           :vt           new-valid-time
                                           :tt           new-tx-time
@@ -149,7 +154,7 @@
                     _ (api/sync *api* cas-failure-tx-time nil)]
                 (t/is (= cas-failure-tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000)))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          eid
+                  (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                               :content-hash new-content-hash
                                               :vt           new-valid-time
                                               :tt           new-tx-time
@@ -165,7 +170,7 @@
                     (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000)))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          eid
+                  (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                               :content-hash new-content-hash
                                               :vt           new-valid-time
                                               :tt           new-tx-time
@@ -218,30 +223,20 @@
               (t/is (kv/get-value snapshot version-k)))))))))
 
 (t/deftest test-can-evict-entity
-  (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
-                                                                 (rdf/ntriples)
-                                                                 (rdf/->default-language)
-                                                                 (rdf/->maps-by-id)))
-
-        {put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
-        {evict-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso]])]
+  (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
+        {evict-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/evict picasso-id]])]
 
     (api/sync *api* evict-tx-time nil)
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-      (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
+      (let [picasso-history (idx/entity-history snapshot picasso-id)]
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
           (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history)))))))))
 
 (t/deftest test-can-store-doc
-  (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
-                                                                 (rdf/ntriples)
-                                                                 (rdf/->default-language)
-                                                                 (rdf/->maps-by-id)))
-
-        content-hash (c/new-id picasso)]
+  (let [content-hash (c/new-id picasso)]
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
