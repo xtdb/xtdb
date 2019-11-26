@@ -97,7 +97,7 @@
             (c/->id-buffer new-v)]]}))
 
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
-(def ^:dynamic evict-all-on-legacy-time-ranges? (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
+(def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
 (defn tx-command-evict [indexer kv object-store snapshot tx-log [op k & legacy-args] transact-time tx-id]
   (let [eid (c/new-id k)
@@ -105,7 +105,7 @@
     {:pre-commit-fn #(cond
                        (empty? legacy-args) true
 
-                       (not evict-all-on-legacy-time-ranges?)
+                       (not *evict-all-on-legacy-time-ranges?*)
                        (throw (IllegalArgumentException. (str "Evict no longer supports time-range parameters. "
                                                               "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")))
 
