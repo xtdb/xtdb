@@ -646,20 +646,7 @@
                       (crux/submit-tx crux
                                       [[:crux.tx/evict
                                         :person/kaarlang] ;; <1>
-                                       [:crux.tx/evict
-                                        :person/ilex
-                                        #inst "2000-01-01"] ;; <2>
-                                       [:crux.tx/evict
-                                        :person/thadd
-                                        #inst "2000-01-01"
-                                        #inst "2500-01-01"] ;; <3>
-                                       [:crux.tx/evict
-                                        :person/johanna
-                                        #inst "2000-01-01"
-                                        #inst "2500-01-01"
-                                        false
-                                        false ;; <4>
-                                        ]]))
+                                       ]))
                nil)
     (t/is empty? (full-query crux))
 
