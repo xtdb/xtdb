@@ -8,8 +8,6 @@ import java.util.Date;
 import static crux.api.alpha.Util.keyword;
 
 public class CasOperation extends TransactionOperation {
-    private static final Keyword TX_CAS = keyword("crux.tx/cas");
-
     private final Date validTime;
     private final Document oldDoc;
     private final Document newDoc;

@@ -51,7 +51,7 @@
               (t/is (.submitTx node [putOp]))
               (Thread/sleep 300)
 
-              (t/is (.submitTx node [casOp]))
+              ;(t/is (.submitTx node [casOp]))
               (Thread/sleep 300)
 
               (t/is (.submitTx node [delOp]))
@@ -108,8 +108,16 @@
           (t/testing "Can use .entityTx to query an non-existing entity"
             (t/is (nil? (.entity db (CruxId/cruxId "test-id1")))))
 
+          (t/testing "Can use txLog function and TxLog objects"
+            (let [txLogIterator (.txLog node (.txLogContext node) 10000 true)]
+              (t/is txLogIterator)
 
-
+              (let [txLog (.next txLogIterator)]
+                (t/is txLog)
+                (t/is (.txId txLog))
+                (t/is (.txTime txLog))
+                (t/is (instance? PutOperation
+                                 (first (.txOps txLog)))))))
 
           (t/testing "Queries"
             (t/testing "Can create query"

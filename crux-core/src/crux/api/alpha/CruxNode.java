@@ -1,16 +1,16 @@
 package crux.api.alpha;
 
 import clojure.lang.Keyword;
+import clojure.lang.LazySeq;
 import clojure.lang.PersistentVector;
 import crux.api.ICruxAPI;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
@@ -93,9 +93,10 @@ public class CruxNode implements AutoCloseable {
     }
 
     /**
-     * Returns the transaction history of an entity, in reverse chronological order. Includes corrections, but does not include the actual documents
+     * Returns the transaction history of an entity, in reverse chronological order. Includes corrections, but does not include the actual documents.
      * @param id Id of the entity to get the history for
-     * @return Iterable set of Documents containing transaction information
+     * @return Iterable set of EntityTx's containing transaction information
+     * @see EntityTx
      */
     public Iterable<EntityTx> history(CruxId id) {
         List<Map<Keyword,Object>> history = node.history(id.toEdn());
@@ -113,9 +114,26 @@ public class CruxNode implements AutoCloseable {
         return node.sync(timeout);
     }
 
+    /**
+     * Returns status information for the node
+     * @return A NodeStatus object containing status information for the node
+     * @see NodeStatus
+     */
     public NodeStatus status() {
         Map<Keyword,?> status = node.status();
         return NodeStatus.nodeStatus(status);
+    }
+
+    public Closeable txLogContext() {
+        return node.newTxLogContext();
+    }
+
+    @SuppressWarnings("unchecked")
+    public Iterator<TxLog> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments) {
+        LazySeq txLog = (LazySeq) node.txLog(txLogContext, fromTxId, withDocuments);
+        return StreamSupport.stream(txLog.spliterator(), false)
+            .map(log -> TxLog.txLog((Map<Keyword, Object>) log, withDocuments))
+            .iterator();
     }
 
     @Override

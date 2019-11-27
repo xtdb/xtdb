@@ -4,12 +4,11 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 
 import java.util.Date;
+import java.util.List;
 
 import static crux.api.alpha.Util.keyword;
 
 public class PutOperation extends TransactionOperation {
-    private static final Keyword TX_PUT = keyword("crux.tx/put");
-
     private final Document doc;
     private final Date validTime;
 

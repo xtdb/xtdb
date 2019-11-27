@@ -8,8 +8,6 @@ import java.util.Date;
 import static crux.api.alpha.Util.keyword;
 
 public class DeleteOperation extends TransactionOperation {
-    private static final Keyword TX_DELETE = keyword("crux.tx/delete");
-
     private final Date validTime;
     private final CruxId deleteId;
 
