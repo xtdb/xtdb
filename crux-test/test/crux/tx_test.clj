@@ -261,7 +261,7 @@
                                    (->> (idx/entity-history snapshot picasso-id)
                                         (keep :content-hash)))))))
 
-    (binding [tx/evict-all-on-legacy-time-ranges? true]
+    (binding [tx/*evict-all-on-legacy-time-ranges?* true]
       (index-evict!))
 
     ;; give the evict loopback time to evict the doc
