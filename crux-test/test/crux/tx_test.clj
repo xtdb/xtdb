@@ -316,115 +316,35 @@
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
         (t/is (empty? (db/get-objects (:object-store *api*) snapshot [])))))))
 
-(t/deftest test-can-correct-ranges-in-the-past
-  (let [ivan {:crux.db/id :ivan :name "Ivan"}
+(t/deftest test-put-delete-range-semantics
+  (t/are [txs history] (let [eid (keyword (gensym "ivan"))
+                             ivan {:crux.db/id eid, :name "Ivan"}
+                             res (mapv (fn [[value & vts]]
+                                         (api/submit-tx *api* [(into (if value
+                                                                       [:crux.tx/put (assoc ivan :value value)]
+                                                                       [:crux.tx/delete eid])
+                                                                     vts)]))
+                                       txs)
+                             first-vt (ffirst history)
+                             last-tx-time (:crux.tx/tx-time (last res))]
 
-        v1-ivan (assoc ivan :version 1)
-        v1-valid-time #inst "2018-11-26"
-        {v1-tx-time :crux.tx/tx-time
-         v1-tx-id :crux.tx/tx-id}
-        (api/submit-tx *api* [[:crux.tx/put v1-ivan v1-valid-time]])
-        _ (api/sync *api* v1-tx-time nil)
+                         (api/sync *api* last-tx-time nil)
 
-        v2-ivan (assoc ivan :version 2)
-        v2-valid-time #inst "2018-11-27"
-        {v2-tx-time :crux.tx/tx-time
-         v2-tx-id :crux.tx/tx-id}
-        (api/submit-tx *api* [[:crux.tx/put v2-ivan v2-valid-time]])
-        _ (api/sync *api* v2-tx-time nil)
+                         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+                           (t/is (= (for [[vt tx-idx value] history]
+                                      [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
+                                                                                           (assoc ivan :value value)))])
 
-        v3-ivan (assoc ivan :version 3)
-        v3-valid-time #inst "2018-11-28"
-        {v3-tx-time :crux.tx/tx-time
-         v3-tx-id :crux.tx/tx-id}
-        (api/submit-tx *api* [[:crux.tx/put v3-ivan v3-valid-time]])
-        _ (api/sync *api* v3-tx-time nil)]
+                                    (->> (idx/entity-history-seq-ascending snapshot eid first-vt last-tx-time)
+                                         (map (juxt :vt :tx-id :content-hash)))))))
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-      (t/testing "first version of entity is visible"
-        (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time v3-tx-time)
-                              (first)
-                              :tx-id))))
-
-      (t/testing "second version of entity is visible"
-        (t/is (= v2-tx-id (-> (idx/entities-at snapshot [:ivan] v2-valid-time v3-tx-time)
-                              (first)
-                              :tx-id))))
-
-      (t/testing "third version of entity is visible"
-        (t/is (= v3-tx-id (-> (idx/entities-at snapshot [:ivan] v3-valid-time v3-tx-time)
-                              (first)
-                              :tx-id)))))
-
-    (let [valid-time-after #inst "2018-11-30"
-          corrected-ivan (assoc ivan :version 4)
-          corrected-start-valid-time #inst "2018-11-27"
-          corrected-end-valid-time #inst "2018-11-29"
-          {corrected-tx-time :crux.tx/tx-time
-           corrected-tx-id :crux.tx/tx-id}
-          (api/submit-tx *api* [[:crux.tx/put corrected-ivan corrected-start-valid-time corrected-end-valid-time]])
-          _ (api/sync *api* corrected-tx-time nil)]
-
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/testing "first version of entity is still there"
-          (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time corrected-tx-time)
-                                (first)
-                                :tx-id))))
-
-        (t/testing "second version of entity was corrected"
-          (t/is (= {:content-hash (c/new-id corrected-ivan)
-                    :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v2-valid-time corrected-tx-time)
-                       (first)
-                       (select-keys [:tx-id :content-hash])))))
-
-        (t/testing "third version of entity was corrected"
-          (t/is (= {:content-hash (c/new-id corrected-ivan)
-                    :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v3-valid-time corrected-tx-time)
-                       (first)
-                       (select-keys [:tx-id :content-hash])))))
-
-        (t/testing "fourth version of entity reverts to the third value"
-          (t/is (= {:content-hash (c/new-id v3-ivan)
-                    :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] valid-time-after corrected-tx-time)
-                       (first)
-                       (select-keys [:tx-id :content-hash]))))))
-
-      (let [deleted-start-valid-time #inst "2018-11-25"
-            deleted-end-valid-time #inst "2018-11-28"
-            {deleted-tx-time :crux.tx/tx-time
-             deleted-tx-id :crux.tx/tx-id}
-            (api/submit-tx *api* [[:crux.tx/delete :ivan deleted-start-valid-time deleted-end-valid-time]])
-            _ (api/sync *api* deleted-tx-time nil)]
-
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/testing "first version of entity was deleted"
-            (t/is (empty? (idx/entities-at snapshot [:ivan] v1-valid-time deleted-tx-time))))
-
-          (t/testing "second version of entity was deleted"
-            (t/is (empty? (idx/entities-at snapshot [:ivan] v2-valid-time deleted-tx-time))))
-
-          (t/testing "entity at v3-valid-time should be the corrected v4 entity"
-            (t/is (= {:content-hash (c/new-id corrected-ivan)
-                      :tx-id deleted-tx-id}
-                     (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
-                         (first)
-                         (select-keys [:tx-id :content-hash]))))))
-
-        (t/testing "when (= svt evt), no-op"
-          (let [{noop-tx-time :crux.tx/tx-time
-                 noop-tx-id :crux.tx/tx-id}
-                (api/submit-tx *api* [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
-
-            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-              (t/testing "third version of entity is still there"
-                (t/is (= {:content-hash (c/new-id corrected-ivan)
-                          :tx-id deleted-tx-id}
-                         (-> (idx/entities-at snapshot [:ivan] v3-valid-time noop-tx-time)
-                             (first)
-                             (select-keys [:tx-id :content-hash]))))))))))))
+    [[10 #inst "2019-11-25"]
+     [20 #inst "2019-11-30"]
+     [12 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 10]
+     [#inst "2019-11-26" 2 12]
+     [#inst "2019-11-29" 2 10]
+     [#inst "2019-11-30" 1 20]]))
 
 ;; TODO: This test just shows that this is an issue, if we fix the
 ;; underlying issue this test should start failing. We can then change
