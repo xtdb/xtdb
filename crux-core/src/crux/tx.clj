@@ -39,17 +39,17 @@
         start-valid-time (or start-valid-time transact-time)]
 
     (when-not (= start-valid-time end-valid-time)
-      (let [[entity-to-restore :as entities-to-correct] (when end-valid-time
-                                                          (->> (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time)
+      (let [entity-history (when end-valid-time
+                             (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time))
 
-                                                               (take-while #(nat-int? (compare (.vt ^EntityTx %) start-valid-time)))))
-
-            dates-to-correct (->> (cons start-valid-time (map :vt entities-to-correct))
+            dates-to-correct (->> (cons start-valid-time
+                                        (->> (map #(.vt ^EntityTx %) entity-history)
+                                             (take-while #(nat-int? (compare % start-valid-time)))))
                                   (remove #{end-valid-time})
                                   (into (sorted-set)))]
 
         {:kvs (->> (concat (when end-valid-time
-                             [[end-valid-time (if entity-to-restore
+                             [[end-valid-time (if-let [entity-to-restore (first entity-history)]
                                                 (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))
                                                 (c/nil-id-buffer))]])
                            (map vector dates-to-correct (repeat content-hash)))
