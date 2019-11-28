@@ -13,9 +13,10 @@ public class TxResult {
 
     public final Date txTime;
     public final long txId;
-    public Map<Keyword, ?> txResultMap;
+    private Map<Keyword, ?> txResultMap;
 
     private TxResult(Map<Keyword, ?> txResultMap, Date txTime, long txId) {
+        this.txResultMap = txResultMap;
         this.txTime = txTime;
         this.txId = txId;
     }

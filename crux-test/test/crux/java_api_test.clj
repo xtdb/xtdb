@@ -48,20 +48,25 @@
               (t/is evictOp))
 
             (t/testing "Can submit Transactions"
-              (t/is (.submitTx node [putOp]))
-              (Thread/sleep 300)
 
-              ;(t/is (.submitTx node [casOp]))
-              (Thread/sleep 300)
+              (let [submittedPutOp (.submitTx node [putOp])]
+                (t/testing "Can extract information from TxResult"
+                  (t/is (.txTime submittedPutOp))
+                  (t/is (.txId submittedPutOp)))
 
-              (t/is (.submitTx node [delOp]))
-              (Thread/sleep 300)
+                (t/testing "Can Sync node against transaction time of operation"
+                  (t/is (.sync node (.txTime submittedPutOp) nil)))
 
-              (t/is (.submitTx node [evictOp]))
-              (Thread/sleep 300)
+                (t/testing "Testing putOp hasSubmittedTxUpdatedEntity & hasSubmittedTxCorrectedEntity"
+                  (t/is (.hasSubmittedTxUpdatedEntity node submittedPutOp id))
+                  (t/is (.hasSubmittedTxCorrectedEntity node submittedPutOp
+                                                        (.txTime submittedPutOp) id))))
 
-              (t/is (.submitTx node [putOp]))
-              (Thread/sleep 300)))))
+              ;; TODO: Submitting CasOp currently breaks tests when .TxLog is returned
+              ;(t/is (.sync node (.txTime (.submitTx node [casOp])) nil))
+              (t/is (.sync node (.txTime (.submitTx node [delOp])) nil))
+              (t/is (.sync node (.txTime (.submitTx node [evictOp])) nil))
+              (t/is (.sync node (.txTime (.submitTx node [putOp])) nil))))))
 
       (t/testing "Can Sync node"
         (.sync node (Duration/ofMillis 100)))
