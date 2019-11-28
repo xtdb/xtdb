@@ -49,9 +49,12 @@
                                   (into (sorted-set)))]
 
         {:kvs (->> (concat (when end-valid-time
-                             [[end-valid-time (if-let [entity-to-restore (first entity-history)]
-                                                (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))
-                                                (c/nil-id-buffer))]])
+                             (let [entity-to-restore ^EntityTx (first entity-history)]
+                               (cond
+                                 (nil? entity-to-restore) [[end-valid-time (c/nil-id-buffer)]]
+                                 (= end-valid-time (.vt entity-to-restore)) nil
+                                 :else [[end-valid-time (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))]])))
+
                            (map vector dates-to-correct (repeat content-hash)))
 
                    (mapcat (fn [[valid-time content-hash]]
