@@ -350,6 +350,13 @@
      [#inst "2019-11-26" 1 12]
      [#inst "2019-11-29" 0 10]]
 
+    ;; delete a range
+    [[10 #inst "2019-11-25"]
+     [nil #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 10]
+     [#inst "2019-11-26" 1 nil]
+     [#inst "2019-11-29" 0 10]]
+
     ;; shouldn't override the value at end-vt if there's one there
     [[10 #inst "2019-11-25"]
      [20 #inst "2019-11-29"]
