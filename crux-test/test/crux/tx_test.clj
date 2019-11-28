@@ -348,7 +348,7 @@
      [12 #inst "2019-11-26" #inst "2019-11-29"]]
     [[#inst "2019-11-25" 0 10]
      [#inst "2019-11-26" 1 12]
-     [#inst "2019-11-29" 1 10]]
+     [#inst "2019-11-29" 0 10]]
 
     ;; shouldn't override the value at end-vt if there's one there
     [[10 #inst "2019-11-25"]
@@ -356,7 +356,16 @@
      [12 #inst "2019-11-26" #inst "2019-11-29"]]
     [[#inst "2019-11-25" 0 10]
      [#inst "2019-11-26" 2 12]
-     [#inst "2019-11-29" 1 20]]))
+     [#inst "2019-11-29" 1 20]]
+
+    ;; should re-instate 15 at the end of the range
+    [[10 #inst "2019-11-25"]
+     [15 #inst "2019-11-28"]
+     [12 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 10]
+     [#inst "2019-11-26" 2 12]
+     [#inst "2019-11-28" 2 12]
+     [#inst "2019-11-29" 1 15]]))
 
 ;; TODO: This test just shows that this is an issue, if we fix the
 ;; underlying issue this test should start failing. We can then change

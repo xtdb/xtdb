@@ -42,35 +42,36 @@
       (let [entity-history (when end-valid-time
                              (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time))]
 
-        {:kvs (->> (concat (map vector
-                                (->> (cons start-valid-time
-                                           (->> (map #(.vt ^EntityTx %) entity-history)
-                                                (take-while #(nat-int? (compare % start-valid-time)))))
-                                     (remove #{end-valid-time})
-                                     (into (sorted-set)))
-                                (repeat content-hash))
+        {:kvs (->> (concat (->> (cons start-valid-time
+                                      (->> (map #(.vt ^EntityTx %) entity-history)
+                                           (take-while #(nat-int? (compare % start-valid-time)))))
+                                (remove #{end-valid-time})
+                                (into (sorted-set))
+                                (map (fn [vt]
+                                       (c/->EntityTx eid vt transact-time tx-id content-hash))))
 
                            (when end-valid-time
-                             (let [entity-to-restore ^EntityTx (first entity-history)]
-                               (cond
-                                 (nil? entity-to-restore) [[end-valid-time (c/nil-id-buffer)]]
-                                 (= end-valid-time (.vt entity-to-restore)) nil
-                                 :else [[end-valid-time (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))]]))))
+                             [(if-let [entity-to-restore ^EntityTx (first entity-history)]
+                                (-> entity-to-restore
+                                    (assoc :vt end-valid-time)
+                                    (update :content-hash c/->id-buffer))
 
-                   (mapcat (fn [[valid-time content-hash]]
+                                (c/->EntityTx eid end-valid-time transact-time tx-id (c/nil-id-buffer)))]))
+
+                   (mapcat (fn [^EntityTx etx]
                              [[(c/encode-entity+vt+tt+tx-id-key-to
                                 nil
-                                (c/->id-buffer eid)
-                                valid-time
-                                transact-time
-                                tx-id)
-                               content-hash]
+                                (c/->id-buffer (.eid etx))
+                                (.vt etx)
+                                (.tt etx)
+                                (.tx-id etx))
+                               (.content-hash etx)]
                               [(c/encode-entity+z+tx-id-key-to
                                 nil
-                                (c/->id-buffer eid)
-                                (c/encode-entity-tx-z-number valid-time transact-time)
-                                tx-id)
-                               content-hash]]))
+                                (c/->id-buffer (.eid etx))
+                                (c/encode-entity-tx-z-number (.vt etx) (.tt etx))
+                                (.tx-id etx))
+                               (.content-hash etx)]]))
 
                    (into []))}))))
 
