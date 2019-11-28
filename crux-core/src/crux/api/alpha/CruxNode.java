@@ -3,6 +3,7 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.LazySeq;
 import clojure.lang.PersistentVector;
+import crux.api.Crux;
 import crux.api.ICruxAPI;
 
 import java.io.Closeable;
@@ -14,12 +15,8 @@ import java.util.stream.StreamSupport;
 
 import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
-import static crux.api.alpha.Util.keyword;
 
 public class CruxNode implements AutoCloseable {
-    private static final Keyword TX_TIME = keyword("crux.tx/tx-time");
-    private static final Keyword TX_ID = keyword("crux.tx/tx-id");
-
     private final ICruxAPI node;
 
     CruxNode(ICruxAPI node) {
@@ -40,9 +37,7 @@ public class CruxNode implements AutoCloseable {
         }
 
         Map<Keyword,Object> result = node.submitTx(txVector);
-        Date txTime = (Date) result.get(TX_TIME);
-        long txId = (Long) result.get(TX_ID);
-        return txResult(txTime, txId);
+        return txResult(result);
     }
 
     /**
@@ -106,6 +101,30 @@ public class CruxNode implements AutoCloseable {
     }
 
     /**
+     * Checks if a submitted tx did update an entity.
+     *
+     * @param submittedTx TxResult from a submitTx operation.
+     * @param eid         CruxId of entity to check.
+     * @return            True if the entity was updated in this transaction.
+     */
+    public boolean hasSubmittedTxUpdatedEntity(TxResult submittedTx, CruxId eid) {
+        return node.hasSubmittedTxUpdatedEntity(submittedTx.toEdn(), eid.toEdn());
+    }
+
+    /**
+     * Checks if a submitted tx did correct an entity as of valid
+     * time.
+     *
+     * @param submittedTx  TxResult from a submitTx operation.
+     * @param validTime    Valid time of correction to check.
+     * @param eid          CruxId of entity to check.
+     * @return             true if the entity was updated in this transaction.
+     */
+    public boolean hasSubmittedTxCorrectedEntity(TxResult submittedTx, Date validTime, CruxId eid) {
+        return node.hasSubmittedTxCorrectedEntity(submittedTx.toEdn(), validTime, eid.toEdn());
+    }
+
+    /**
      * Blocks until the node has caught up indexing. Will throw an exception on timeout
      * @param timeout Max time to wait, can be null for the default
      * @return Date representing the latest index time when this node has caught up as of this call
@@ -113,6 +132,18 @@ public class CruxNode implements AutoCloseable {
     public Date sync(Duration timeout) {
         return node.sync(timeout);
     }
+
+    /**
+     * Blocks until the node has indexed a transaction that is past
+     * the supplied transactionTime. Will throw a timeout. The
+     * returned date is the latest index time when this node has
+     * caught up as of this call.
+     *
+     * @param transactionTime Transaction time to sync past.
+     * @param timeout Max time to wait, can be null for the default.
+     * @return Date of the latest known transaction time.
+     */
+    public Date sync(Date transactionTime, Duration timeout) { return node.sync(transactionTime, timeout);}
 
     /**
      * Returns status information for the node
@@ -135,6 +166,7 @@ public class CruxNode implements AutoCloseable {
             .map(log -> TxLog.txLog((Map<Keyword, Object>) log, withDocuments))
             .iterator();
     }
+
 
     @Override
     public void close() throws IOException {
