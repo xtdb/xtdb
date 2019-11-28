@@ -338,41 +338,72 @@
                                     (->> (idx/entity-history-seq-ascending snapshot eid first-vt last-tx-time)
                                          (map (juxt :vt :tx-id :content-hash)))))))
 
+    ;; pairs
+    ;; [[value vt ?end-vt] ...]
+    ;; [[vt tx-idx value] ...]
 
-    [[12 #inst "2019-11-26" #inst "2019-11-29"]]
-    [[#inst "2019-11-26" 0 12]
+    [[26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-26" 0 26]
      [#inst "2019-11-29" 0 nil]]
 
     ;; re-instates the previous value at the end of the range
-    [[10 #inst "2019-11-25"]
-     [12 #inst "2019-11-26" #inst "2019-11-29"]]
-    [[#inst "2019-11-25" 0 10]
-     [#inst "2019-11-26" 1 12]
-     [#inst "2019-11-29" 0 10]]
+    [[25 #inst "2019-11-25"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 1 26]
+     [#inst "2019-11-29" 0 25]]
 
     ;; delete a range
-    [[10 #inst "2019-11-25"]
+    [[25 #inst "2019-11-25"]
      [nil #inst "2019-11-26" #inst "2019-11-29"]]
-    [[#inst "2019-11-25" 0 10]
+    [[#inst "2019-11-25" 0 25]
      [#inst "2019-11-26" 1 nil]
-     [#inst "2019-11-29" 0 10]]
+     [#inst "2019-11-29" 0 25]]
 
     ;; shouldn't override the value at end-vt if there's one there
-    [[10 #inst "2019-11-25"]
-     [20 #inst "2019-11-29"]
-     [12 #inst "2019-11-26" #inst "2019-11-29"]]
-    [[#inst "2019-11-25" 0 10]
-     [#inst "2019-11-26" 2 12]
-     [#inst "2019-11-29" 1 20]]
+    [[25 #inst "2019-11-25"]
+     [29 #inst "2019-11-29"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-29" 1 29]]
 
-    ;; should re-instate 15 at the end of the range
-    [[10 #inst "2019-11-25"]
-     [15 #inst "2019-11-28"]
-     [12 #inst "2019-11-26" #inst "2019-11-29"]]
-    [[#inst "2019-11-25" 0 10]
-     [#inst "2019-11-26" 2 12]
-     [#inst "2019-11-28" 2 12]
-     [#inst "2019-11-29" 1 15]]))
+    ;; should re-instate 28 at the end of the range
+    [[25 #inst "2019-11-25"]
+     [28 #inst "2019-11-28"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-28" 2 26]
+     [#inst "2019-11-29" 1 28]]
+
+    ;; 26.1 should overwrite the full range
+    [[28 #inst "2019-11-28"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]
+     [26.1 #inst "2019-11-26"]]
+    [[#inst "2019-11-26" 2 26.1]
+     [#inst "2019-11-28" 2 26.1]
+     [#inst "2019-11-29" 0 28]]
+
+    ;; 27 should override the latter half of the range
+    [[25 #inst "2019-11-25"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]
+     [27 #inst "2019-11-27"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 1 26]
+     [#inst "2019-11-27" 2 27]
+     [#inst "2019-11-29" 0 25]]
+
+    ;; 27 should still override the latter half of the range
+    [[25 #inst "2019-11-25"]
+     [28 #inst "2019-11-28"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]
+     [27 #inst "2019-11-27"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-27" 3 27]
+     [#inst "2019-11-28" 3 27]
+     [#inst "2019-11-29" 1 28]]))
 
 ;; TODO: This test just shows that this is an issue, if we fix the
 ;; underlying issue this test should start failing. We can then change
