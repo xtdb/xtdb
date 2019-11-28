@@ -338,13 +338,25 @@
                                     (->> (idx/entity-history-seq-ascending snapshot eid first-vt last-tx-time)
                                          (map (juxt :vt :tx-id :content-hash)))))))
 
+
+    [[12 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-26" 0 12]
+     [#inst "2019-11-29" 0 nil]]
+
+    ;; re-instates the previous value at the end of the range
     [[10 #inst "2019-11-25"]
-     [20 #inst "2019-11-30"]
+     [12 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 10]
+     [#inst "2019-11-26" 1 12]
+     [#inst "2019-11-29" 1 10]]
+
+    ;; shouldn't override the value at end-vt if there's one there
+    [[10 #inst "2019-11-25"]
+     [20 #inst "2019-11-29"]
      [12 #inst "2019-11-26" #inst "2019-11-29"]]
     [[#inst "2019-11-25" 0 10]
      [#inst "2019-11-26" 2 12]
-     [#inst "2019-11-29" 2 10]
-     [#inst "2019-11-30" 1 20]]))
+     [#inst "2019-11-29" 1 20]]))
 
 ;; TODO: This test just shows that this is an issue, if we fix the
 ;; underlying issue this test should start failing. We can then change
