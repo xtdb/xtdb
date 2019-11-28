@@ -40,22 +40,22 @@
 
     (when-not (= start-valid-time end-valid-time)
       (let [entity-history (when end-valid-time
-                             (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time))
+                             (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time))]
 
-            dates-to-correct (->> (cons start-valid-time
-                                        (->> (map #(.vt ^EntityTx %) entity-history)
-                                             (take-while #(nat-int? (compare % start-valid-time)))))
-                                  (remove #{end-valid-time})
-                                  (into (sorted-set)))]
+        {:kvs (->> (concat (map vector
+                                (->> (cons start-valid-time
+                                           (->> (map #(.vt ^EntityTx %) entity-history)
+                                                (take-while #(nat-int? (compare % start-valid-time)))))
+                                     (remove #{end-valid-time})
+                                     (into (sorted-set)))
+                                (repeat content-hash))
 
-        {:kvs (->> (concat (when end-valid-time
+                           (when end-valid-time
                              (let [entity-to-restore ^EntityTx (first entity-history)]
                                (cond
                                  (nil? entity-to-restore) [[end-valid-time (c/nil-id-buffer)]]
                                  (= end-valid-time (.vt entity-to-restore)) nil
-                                 :else [[end-valid-time (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))]])))
-
-                           (map vector dates-to-correct (repeat content-hash)))
+                                 :else [[end-valid-time (c/->id-buffer (.content-hash ^EntityTx entity-to-restore))]]))))
 
                    (mapcat (fn [[valid-time content-hash]]
                              [[(c/encode-entity+vt+tt+tx-id-key-to
