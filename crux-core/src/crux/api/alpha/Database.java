@@ -61,6 +61,12 @@ public class Database {
 
     }
 
+    /**
+     * Retrieves an EntityTx for an entity in the Database
+     * @param id Id of entity to retrieve
+     * @return EntityTx information for the entity
+     * @see EntityTx
+     */
     public EntityTx entityTx(CruxId id) {
         Map<Keyword, ?> entityTx = db.entityTx(id.toEdn());
         if(entityTx != null) {
