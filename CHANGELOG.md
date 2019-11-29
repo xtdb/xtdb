@@ -2,29 +2,30 @@
 
 ## 19.11-1.6.0-alpha
 
-### Changes
+### Breaking changes
 
-* [#428](https://github.com/juxt/crux/issues/428) Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
-* [#430](https://github.com/juxt/crux/issues/430) Add LMDB configuration example to docs + tests
+* [#428](https://github.com/juxt/crux/issues/428): Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
+* [#441](https://github.com/juxt/crux/issues/441): Fix two transactions updating the same entity in the same millisecond always returning the earlier of the two values - requires index rebuild.
 
 ### Bug fixes
 
-* [#PR363](https://github.com/juxt/crux/pull/363) Allow `full-results?` and other boolean flags in a vector-style query
-* [#365](https://github.com/juxt/crux/issues/365) Replace usages of 'pr-str' with 'pr-edn-str' under crux.io
-* [#367](https://github.com/juxt/crux/issues/367) Can query empty DB
-* [#377](https://github.com/juxt/crux/issues/377) Can use 'cons' within query predicates
-* [#351](https://github.com/juxt/crux/issues/351) Do not merge placeholders into unary results
-* [#368](https://github.com/juxt/crux/issues/368) Protect calls to modules when node is closed
-* [#372](https://github.com/juxt/crux/issues/372) Add support for Java collection types with submitTx
-* [#418](https://github.com/juxt/crux/issues/418) Adds exception when query with order-by doesn't return variable ordered on
-* [#419](https://github.com/juxt/crux/issues/419) Fix specification for ':timeout' within queries.
-* [#440](https://github.com/juxt/crux/issues/440) Fix return type of 'documents' in the API.
-* [#453](https://github.com/juxt/crux/issues/453) Add nil check for queries in spec.
-* [#454](https://github.com/juxt/crux/issues/454) Add fix for tx-log breaking in spec after an eviction
-* [#457](https://github.com/juxt/crux/issues/457) Allowing nil to be returned from tx-fns
+* [#PR363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
+* [#365](https://github.com/juxt/crux/issues/365): Replace usages of 'pr-str' with 'pr-edn-str' under crux.io
+* [#367](https://github.com/juxt/crux/issues/367): Can query empty DB
+* [#377](https://github.com/juxt/crux/issues/377): Can use 'cons' within query predicates
+* [#351](https://github.com/juxt/crux/issues/351): Do not merge placeholders into unary results
+* [#368](https://github.com/juxt/crux/issues/368): Protect calls to modules when node is closed
+* [#372](https://github.com/juxt/crux/issues/372): Add support for Java collection types with submitTx
+* [#418](https://github.com/juxt/crux/issues/418): Adds exception when query with order-by doesn't return variable ordered on
+* [#419](https://github.com/juxt/crux/issues/419): Fix specification for ':timeout' within queries.
+* [#440](https://github.com/juxt/crux/issues/440): Fix return type of 'documents' in the API.
+* [#453](https://github.com/juxt/crux/issues/453): Add nil check for queries in spec.
+* [#454](https://github.com/juxt/crux/issues/454): Add fix for tx-log breaking in spec after an eviction
+* [#457](https://github.com/juxt/crux/issues/457): Allowing nil to be returned from tx-fns
 
 ### New features
 * [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
+* [#430](https://github.com/juxt/crux/issues/430): Add LMDB configuration example to docs + tests
 
 ## 19.09-1.5.0-alpha
 
