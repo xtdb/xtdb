@@ -52,8 +52,7 @@
 
                                      [(if-let [entity-to-restore ^EntityTx (first entity-history)]
                                         (-> entity-to-restore
-                                            (assoc :vt end-valid-time)
-                                            (update :content-hash c/->id-buffer))
+                                            (assoc :vt end-valid-time))
 
                                         (c/->EntityTx eid end-valid-time transact-time tx-id (c/nil-id-buffer)))])))
 
@@ -75,17 +74,17 @@
                             (.vt etx)
                             (.tt etx)
                             (.tx-id etx))
-                           (.content-hash etx)]
+                           (c/->id-buffer (.content-hash etx))]
                           [(c/encode-entity+z+tx-id-key-to
                             nil
                             (c/->id-buffer (.eid etx))
                             (c/encode-entity-tx-z-number (.vt etx) (.tt etx))
                             (.tx-id etx))
-                           (.content-hash etx)]]))
+                           (c/->id-buffer (.content-hash etx))]]))
                (into []))}))
 
 (defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
-  (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
+  (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/new-id v))
 
          ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
          ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
@@ -96,13 +95,13 @@
                            correct-state?)))
 
 (defn tx-command-delete [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
-  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/nil-id-buffer)))
+  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id nil))
 
 (defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time transact-time)]
 
-    (assoc (put-delete-kvs object-store snapshot eid valid-time nil transact-time tx-id (c/->id-buffer (c/new-id new-v)))
+    (assoc (put-delete-kvs object-store snapshot eid valid-time nil transact-time tx-id (c/new-id new-v))
 
            :pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
                              ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
