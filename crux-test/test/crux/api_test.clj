@@ -73,7 +73,7 @@
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
-    (t/is (= (merge {:crux.index/index-version 4}
+    (t/is (= (merge {:crux.index/index-version 5}
                     (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                       {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
