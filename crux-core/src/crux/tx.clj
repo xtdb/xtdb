@@ -100,30 +100,19 @@
 
 (defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
-        valid-time (or at-valid-time transact-time)
-        {:keys [content-hash]
-         :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
-    {:pre-commit-fn #(if (= (c/new-id content-hash)
-                            (c/new-id old-v))
-                       (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
-                         (when-not correct-state?
-                           (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                         correct-state?)
-                       (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
-                           false))
-     :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
-             nil
-             (c/->id-buffer eid)
-             valid-time
-             transact-time
-             tx-id)
-            (c/->id-buffer new-v)]
-           [(c/encode-entity+z+tx-id-key-to
-             nil
-             (c/->id-buffer eid)
-             (c/encode-entity-tx-z-number valid-time transact-time)
-             tx-id)
-            (c/->id-buffer new-v)]]}))
+        valid-time (or at-valid-time transact-time)]
+
+    (assoc (put-delete-kvs object-store snapshot eid valid-time nil transact-time tx-id (c/->id-buffer (c/new-id new-v)))
+
+           :pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
+                             (if (= (c/new-id content-hash)
+                                    (c/new-id old-v))
+                               (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
+                                 (when-not correct-state?
+                                   (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
+                                 correct-state?)
+                               (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
+                                   false))))))
 
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
