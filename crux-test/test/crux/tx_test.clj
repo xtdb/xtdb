@@ -13,7 +13,8 @@
             [crux.api :as api]
             [crux.rdf :as rdf]
             [crux.query :as q])
-  (:import java.util.Date))
+  (:import [java.util Date]
+           [java.time Duration]))
 
 (t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir apif/with-node f/with-silent-test-check)
 
@@ -145,54 +146,7 @@
 
               (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
-                                      :tx-id))))
-
-            (t/testing "compare and set does nothing with wrong content hash"
-              (let [old-picasso (assoc picasso :baz :boz)
-                    {cas-failure-tx-time :crux.tx/tx-time}
-                    (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])
-                    _ (api/sync *api* cas-failure-tx-time nil)]
-                (t/is (= cas-failure-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000))))
-                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                              :content-hash new-content-hash
-                                              :vt           new-valid-time
-                                              :tt           new-tx-time
-                                              :tx-id        new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time cas-failure-tx-time))))))
-
-            (t/testing "compare and set updates with correct content hash"
-              (let [old-picasso new-picasso
-                    new-picasso (assoc old-picasso :baz :boz)
-                    new-content-hash (c/new-id new-picasso)
-                    {new-tx-time :crux.tx/tx-time
-                     new-tx-id   :crux.tx/tx-id}
-                    (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
-                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
-                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                              :content-hash new-content-hash
-                                              :vt           new-valid-time
-                                              :tt           new-tx-time
-                                              :tx-id        new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time))))))
-
-            (t/testing "compare and set can update non existing nil entity"
-              (let [new-eid (c/new-id :http://dbpedia.org/resource/Pablo2)
-                    new-picasso (assoc new-picasso :crux.db/id :http://dbpedia.org/resource/Pablo2)
-                    new-content-hash (c/new-id new-picasso)
-                    {new-tx-time :crux.tx/tx-time
-                     new-tx-id   :crux.tx/tx-id}
-                    (api/submit-tx *api* [[:crux.tx/cas nil new-picasso new-valid-time]])
-                    _ (api/sync *api* new-tx-time nil)]
-                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
-                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          new-eid
-                                              :content-hash new-content-hash
-                                              :vt           new-valid-time
-                                              :tt           new-tx-time
-                                              :tx-id        new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-valid-time new-tx-time))))))))
+                                      :tx-id))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
@@ -210,7 +164,7 @@
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
         (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-          (t/is (= 6 (count (map :content-hash picasso-history))))
+          (t/is (= 5 (count (map :content-hash picasso-history))))
           (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
@@ -221,6 +175,55 @@
                                      (c/->id-buffer content-hash)
                                      (c/->value-buffer "Pablo"))]]
               (t/is (kv/get-value snapshot version-k)))))))))
+
+(t/deftest test-can-cas-entity
+  (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
+
+    (t/testing "compare and set does nothing with wrong content hash"
+      (let [wrong-picasso (assoc picasso :baz :boz)
+            {cas-failure-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/cas wrong-picasso (assoc picasso :foo :bar)]])]
+
+        (api/sync *api* cas-failure-tx-time (Duration/ofMillis 1000))
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id picasso)
+                                      :vt picasso-tx-time
+                                      :tt picasso-tx-time
+                                      :tx-id picasso-tx-id})]
+                   (idx/entity-history snapshot picasso-id))))))
+
+    (t/testing "compare and set updates with correct content hash"
+      (let [new-picasso (assoc picasso :new? true)
+            {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/cas picasso new-picasso]])]
+
+        (api/sync *api* new-tx-time (Duration/ofMillis 1000))
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id new-picasso)
+                                      :vt new-tx-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})
+                    (c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id picasso)
+                                      :vt picasso-tx-time
+                                      :tt picasso-tx-time
+                                      :tx-id picasso-tx-id})]
+                   (idx/entity-history snapshot picasso-id)))))))
+
+  (t/testing "compare and set can update non existing nil entity"
+    (let [ivan {:crux.db/id :ivan, :value 12}
+          {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/cas nil ivan]])]
+      (api/sync *api* ivan-tx-time nil)
+
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
+                                    :content-hash (c/new-id ivan)
+                                    :vt ivan-tx-time
+                                    :tt ivan-tx-time
+                                    :tx-id ivan-tx-id})]
+                 (idx/entity-history snapshot :ivan)))))))
 
 (t/deftest test-can-evict-entity
   (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
