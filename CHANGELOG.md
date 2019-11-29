@@ -1,6 +1,9 @@
 # Changelog
 
-## 19.10-1.5.1-alpha
+## 19.11-1.6.0-alpha
+
+### Changes
+* [#428](https://github.com/juxt/crux/issues/428) Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
 
 ### Bug fixes
 
