@@ -152,7 +152,7 @@
                     {cas-failure-tx-time :crux.tx/tx-time}
                     (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])
                     _ (api/sync *api* cas-failure-tx-time nil)]
-                (t/is (= cas-failure-tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000)))
+                (t/is (= cas-failure-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000))))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                               :content-hash new-content-hash
@@ -168,7 +168,7 @@
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id   :crux.tx/tx-id}
                     (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
-                (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000)))
+                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                               :content-hash new-content-hash
@@ -185,7 +185,7 @@
                      new-tx-id   :crux.tx/tx-id}
                     (api/submit-tx *api* [[:crux.tx/cas nil new-picasso new-valid-time]])
                     _ (api/sync *api* new-tx-time nil)]
-                (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000)))
+                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          new-eid
                                               :content-hash new-content-hash
