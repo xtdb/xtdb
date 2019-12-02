@@ -12,6 +12,7 @@ These changes bump the index version to version 5 - a re-index of Crux nodes is 
 
 ### Bug fixes
 
+* [#362](https://github.com/juxt/crux/issues/362): Fixes 362 where hashes of small maps were dependent on order
 * [#PR363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
 * [#365](https://github.com/juxt/crux/issues/365): Replace usages of 'pr-str' with 'pr-edn-str' under crux.io
 * [#367](https://github.com/juxt/crux/issues/367): Can query empty DB
@@ -35,7 +36,7 @@ These changes bump the index version to version 5 - a re-index of Crux nodes is 
 
 ### Changes
 
-* [#340](https://github.com/juxt/crux/pull/340): Improve node configuration API, introduce topologies *Breaking*
+* [#340](https://github.com/juxt/crux/pull/340): *Breaking* Improve node configuration API, introduce topologies
 * [#341](https://github.com/juxt/crux/issues/341): Various documentation improvements
 
 ### Bug fixes
