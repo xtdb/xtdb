@@ -57,9 +57,9 @@
 (t/deftest test-example-lmdb-node
   (let [node (ex/example-start-lmdb)]
 
-    ;; Testing example node with RocksDB is created properly
+    ;; Testing example node with LMDB is created properly
     (t/is (not= nil node))
-    ;; Testing example node with RocksDB is closed properly
+    ;; Testing example node with LMDB is closed properly
     (t/is (nil? (ex/example-close-node node)))))
 
 (t/deftest test-example-basic-queries
