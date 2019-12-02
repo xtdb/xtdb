@@ -39,3 +39,4 @@ crux-bench/datomic-data/**/*
 /crux-dev/data/
 
 .prepl-port
+tags

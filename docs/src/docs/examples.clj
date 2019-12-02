@@ -63,6 +63,17 @@ node)
 ;; end::start-standalone-with-rocks[]
 node)
 
+(defn example-start-lmdb []
+;; tag::start-standalone-with-lmdb[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-node {:crux.node/topology :crux.standalone/topology
+                    :crux.node/kv-store "crux.kv.lmdb/kv"
+                    :crux.kv/db-dir "data/db-dir-1"
+                    :crux.standalone/event-log-dir "data/eventlog-1"
+                    :crux.standalone/event-log-kv-store "crux.kv.lmdb/kv"}))
+;; end::start-standalone-with-lmdb[]
+node)
+
 (defn example-start-jdbc []
 ;; tag::start-jdbc-node[]
 (def ^crux.api.ICruxAPI node

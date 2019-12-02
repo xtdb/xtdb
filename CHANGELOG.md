@@ -3,7 +3,9 @@
 ## 19.11-1.6.0-alpha
 
 ### Changes
+
 * [#428](https://github.com/juxt/crux/issues/428) Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
+* [#430](https://github.com/juxt/crux/issues/430) Add LMDB configuration example to docs + tests
 
 ### Bug fixes
 

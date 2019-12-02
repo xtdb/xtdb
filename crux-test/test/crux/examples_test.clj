@@ -54,6 +54,14 @@
     ;; Testing example node with RocksDB is closed properly
     (t/is (nil? (ex/example-close-node node)))))
 
+(t/deftest test-example-lmdb-node
+  (let [node (ex/example-start-lmdb)]
+
+    ;; Testing example node with RocksDB is created properly
+    (t/is (not= nil node))
+    ;; Testing example node with RocksDB is closed properly
+    (t/is (nil? (ex/example-close-node node)))))
+
 (t/deftest test-example-basic-queries
   (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
     (crux/sync node (:crux.tx/tx-time (ex/query-example-setup node)) nil)

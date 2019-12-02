@@ -132,6 +132,26 @@ include::./deps.edn[tags=RocksDeps]
 include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
 ----
 
+== LMDB
+
+An alternative to RocksDB, LMDB provides faster queries in exchange for a slower ingest rate.
+
+[#lmdbdep]
+*Project Dependency*
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=LMDBDeps]
+----
+
+[#rocks-start]
+*Starting a node using LMDB*
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=start-standalone-with-lmdb]
+----
+
 [#config-kafka]
 == Kafka Nodes
 

@@ -19,4 +19,8 @@
   ;; tag::JDBCDeps[]
   juxt/crux-jdbc {:mvn/version "19.09-1.5.0-alpha"}
   ;; end::JDBCDeps[]
+
+  ;; tag::LMDBDeps[]
+  juxt/crux-lmdb {:mvn/version "19.09-1.5.0-alpha"}
+  ;; end::LMDBDeps[]
   }}
