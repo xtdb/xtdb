@@ -58,7 +58,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * hashes.
      * @return            a map from hashable objects to the corresponding documents.
      */
-    public Map<String,Map<String,?>> documents(Set<?> contentHashSet);
+    public Map<String,Map<Keyword,?>> documents(Set<?> contentHashSet);
 
     /**
      * Returns the transaction history of an entity, in reverse
