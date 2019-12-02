@@ -15,6 +15,7 @@
 * [#372](https://github.com/juxt/crux/issues/372) Add support for Java collection types with submitTx
 * [#418](https://github.com/juxt/crux/issues/418) Adds exception when query with order-by doesn't return variable ordered on
 * [#419](https://github.com/juxt/crux/issues/419) Fix specification for ':timeout' within queries.
+* [#440](https://github.com/juxt/crux/issues/440) Fix return type of 'documents' in the API.
 
 ### New features
 * [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
