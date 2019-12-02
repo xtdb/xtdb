@@ -4,7 +4,7 @@
             [crux.memory :as mem]
             [crux.morton :as morton]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang IHashEq IPersistentMap Keyword]
+  (:import [clojure.lang IHashEq IPersistentMap PersistentArrayMap Keyword]
            [java.io Closeable Writer]
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
@@ -273,6 +273,10 @@
                       (maybe-url-str this))]
         (id->buffer id to)
         (throw (IllegalArgumentException. (format "Not a %s hex, keyword, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
+
+  PersistentArrayMap
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze (into {} (sort this)))))
 
   IPersistentMap
   (id->buffer [this to]
