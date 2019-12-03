@@ -221,10 +221,7 @@
          (.unlock lock# stamp#)))))
 
 (defn prn-edn [xs]
-  (binding [*print-length* *print-length*
-            *print-level* *print-level*
-            *print-namespace-maps* *print-namespace-maps*]
-    (set! *print-length* nil)
-    (set! *print-level* nil)
-    (set! *print-namespace-maps* false)
+  (binding [*print-length* nil
+            *print-level* nil
+            *print-namespace-maps* false]
     (pr-str xs)))
