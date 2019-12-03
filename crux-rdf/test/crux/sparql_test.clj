@@ -1,6 +1,7 @@
 (ns crux.sparql-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
+            [crux.io :as cio]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]))
 
@@ -26,11 +27,11 @@ WHERE
     ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Given>  ?givenName .
   }")))
 
-    (t/is (= (pr-str (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
+    (t/is (= (cio/prn-edn (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                        '{:find [?g]
                          :where [[?y :vcard/Given ?g]
                                  [(re-find #"(?i)r" ?g)]]}))
-             (pr-str (sparql/sparql->datalog
+             (cio/prn-edn (sparql/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -171,11 +172,11 @@ SELECT ( CONCAT(?G, \" \", ?S) AS ?name )
 WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
 ")))
 
-    (t/is (= (pr-str '{:find [?title],
+    (t/is (= (cio/prn-edn '{:find [?title],
                        :where
                        [[?x :http://purl.org/dc/elements/1.1/title ?title]
                         [(re-find #"^SPARQL" ?title)]]})
-             (pr-str (sparql/sparql->datalog
+             (cio/prn-edn (sparql/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title
@@ -183,11 +184,11 @@ WHERE   { ?x dc:title ?title
           FILTER regex(?title, \"^SPARQL\")
         }"))))
 
-    (t/is (= (pr-str '{:find [?title],
+    (t/is (= (cio/prn-edn '{:find [?title],
                        :where
                        [[?x :http://purl.org/dc/elements/1.1/title ?title]
                         [(re-find #"(?i)web" ?title)]]})
-             (pr-str (sparql/sparql->datalog
+             (cio/prn-edn (sparql/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title

@@ -505,7 +505,7 @@
               [:table
                [:thead
                 (for [v (:find conformed-query)]
-                  [:th (pr-str v)])]
+                  [:th (crux-io/prn-edn v)])]
                [:tbody
                 (for [tuple result]
                   [:tr

@@ -3,6 +3,7 @@
             [cheshire.generate]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
+            [crux.io :as cio]
             [cognitect.transit :as transit])
   (:import [org.apache.kafka.connect.data Schema Schema$Type Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
@@ -200,7 +201,7 @@
           batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
           source-partition {"url" url}
           formatter (case format
-                      "edn" pr-str
+                      "edn" cio/prn-edn
                       "json" json/generate-string
                       "transit" write-transit)
           tx-log-entry->source-records (case mode

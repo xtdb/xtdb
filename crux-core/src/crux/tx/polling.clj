@@ -1,5 +1,6 @@
 (ns crux.tx.polling
   (:require [crux.db :as db]
+            [crux.io :as cio]
             [clojure.tools.logging :as log]
             [crux.tx.consumer :as consumer])
   (:import java.util.Date
@@ -38,7 +39,7 @@
                                             {:lag lag
                                              :next-offset next-offset
                                              :time (.message-time last-message)}}]
-                        (log/debug "Event log consumer state:" (pr-str consumer-state))
+                        (log/debug "Event log consumer state:" (cio/prn-edn consumer-state))
                         (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)
                         false)
                       true)))]

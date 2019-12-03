@@ -13,7 +13,8 @@
             [crux.fixtures.standalone :as fs]
             [crux.fixtures.api :as f-api]
             [clojure.java.io :as io]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [crux.io :as cio])
   (:import (java.sql Date)
            (java.time Duration)))
 
@@ -31,8 +32,8 @@
   (reset! sync-times (or (slurp-edn "sync-times.edn") {})))
 
 (defn- spit-test-times! []
-  (spit "sync-times.edn" (pr-str @sync-times))
-  (spit "test-times.edn" (pr-str @query-perf-times)))
+  (spit "sync-times.edn" (cio/prn-edn @sync-times))
+  (spit "test-times.edn" (cio/prn-edn @query-perf-times)))
 
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))
@@ -184,4 +185,3 @@
   (def q2 (::q2 s))
   (def q2-data (:data q2))
   (clojure.pprint/pprint q2-data))
-

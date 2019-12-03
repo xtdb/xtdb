@@ -3,7 +3,8 @@
             [crux.hash :as hash]
             [crux.memory :as mem]
             [crux.morton :as morton]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.io :as cio])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
            [java.io Closeable Writer]
            [java.net MalformedURLException URI URL]
@@ -313,11 +314,11 @@
 
 (defmethod print-method Id [id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (pr-str (str id))))
+  (.write w (cio/prn-edn (str id))))
 
 (defmethod print-dup Id [id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (pr-str (str id))))
+  (.write w (cio/prn-edn (str id))))
 
 (extend-protocol IdOrBuffer
   Id
@@ -396,11 +397,11 @@
 
 (defmethod print-method EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (pr-str (edn-id->original-id id))))
+  (.write w (cio/prn-edn (edn-id->original-id id))))
 
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (pr-str (edn-id->original-id id))))
+  (.write w (cio/prn-edn (edn-id->original-id id))))
 
 (nippy/extend-freeze
  EDNId

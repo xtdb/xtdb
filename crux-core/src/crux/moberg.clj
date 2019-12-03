@@ -12,7 +12,8 @@
             [crux.tx.polling :as p]
             [clojure.tools.logging :as log]
             [crux.moberg.types]
-            [crux.tx.consumer])
+            [crux.tx.consumer]
+            [crux.io :as cio])
   (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.io.DirectBufferInputStream
            crux.api.NonMonotonicTimeException
@@ -118,9 +119,9 @@
       (and detect-clock-drift? (< message-id (long end-message-id)))
       (throw (NonMonotonicTimeException.
               (str "Clock has moved backwards in time, message id: " message-id
-                   " was generated using " (pr-str message-time)
+                   " was generated using " (cio/prn-edn message-time)
                    " lowest valid next id: " end-message-id
-                   " was generated using " (pr-str (message-id->message-time end-message-id)))))
+                   " was generated using " (cio/prn-edn (message-id->message-time end-message-id)))))
 
       (> seq max-seq-id)
       (recur kv topic)
@@ -256,7 +257,7 @@
         (reduce [_ f init]
           (if-let [m (seek-message i ::event-log next-offset)]
             (do
-              (log/debug "Consuming message:" (pr-str (message->edn m)))
+              (log/debug "Consuming message:" (cio/prn-edn (message->edn m)))
               (loop [init' init m m n 1]
                 (let [result (f init' m)]
                   (if (reduced? result)

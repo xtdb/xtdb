@@ -5,7 +5,8 @@
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
             [ring.util.request :as req]
-            [ring.util.time :as rt])
+            [ring.util.time :as rt]
+            [crux.io :as cio])
   (:import [org.eclipse.rdf4j.model BNode IRI Literal]
            crux.api.ICruxAPI))
 
@@ -52,7 +53,7 @@
        "</sparql>"))
 
 (defn- sparql-json-response [vars results]
-  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp pr-str strip-qmark str) vars)) "]}, "
+  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp cio/prn-edn strip-qmark str) vars)) "]}, "
        "\"results\": { \"bindings\": ["
        (->> (for [result results]
               (str "{"

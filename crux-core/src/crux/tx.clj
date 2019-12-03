@@ -80,7 +80,7 @@
                          (when-not correct-state?
                            (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
                          correct-state?)
-                       (do (log/warn "CAS failure:" (pr-str cas-op) "was:" (c/new-id content-hash))
+                       (do (log/warn "CAS failure:" (cio/prn-edn cas-op) "was:" (c/new-id content-hash))
                            false))
      :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
              nil
@@ -130,13 +130,13 @@
 (def ^:private tx-fn-eval-cache (memoize eval))
 
 (defn log-tx-fn-error [fn-result fn-id body args-id args]
-  (log/warn fn-result "Transaction function failure:" fn-id (pr-str body) args-id (pr-str args)))
+  (log/warn fn-result "Transaction function failure:" fn-id (cio/prn-edn body) args-id (cio/prn-edn args)))
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
 (defn tx-command-fn [indexer kv object-store snapshot tx-log [op k args-v :as tx-op] transact-time tx-id]
   (if-not tx-fns-enabled?
-    (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (pr-str tx-op))))
+    (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/prn-edn tx-op))))
     (let [fn-id (c/new-id k)
           db (q/db kv object-store transact-time transact-time)
           {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
@@ -216,7 +216,7 @@
 
     (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
-              (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
+              (str "Missing required attribute :crux.db/id: " (cio/prn-edn doc)))))
 
     (let [content-hash (c/new-id content-hash)
           evicted? (idx/evicted-doc? doc)]
@@ -256,7 +256,7 @@
                 (doseq [{:keys [post-commit-fn]} tx-command-results
                         :when post-commit-fn]
                   (post-commit-fn)))
-            (do (log/warn "Transaction aborted:" (pr-str tx-events) (pr-str tx-time) tx-id)
+            (do (log/warn "Transaction aborted:" (cio/prn-edn tx-events) (cio/prn-edn tx-time) tx-id)
                 (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
 
   (docs-exist? [_ content-hashes]
@@ -357,5 +357,5 @@
                         timeout-ms)
       @seen-tx-time
       (throw (TimeoutException.
-              (str "Timed out waiting for: " (pr-str transact-time)
-                   " index has: " (pr-str @seen-tx-time)))))))
+              (str "Timed out waiting for: " (cio/prn-edn transact-time)
+                   " index has: " (cio/prn-edn @seen-tx-time)))))))

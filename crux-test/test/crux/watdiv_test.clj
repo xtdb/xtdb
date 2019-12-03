@@ -402,8 +402,8 @@
                :when (or (nil? watdiv-indexes)
                          (contains? watdiv-indexes idx))]
          (.write out "{")
-         (.write out (str ":idx " (pr-str idx) "\n"))
-         (.write out (str ":query " (pr-str q) "\n"))
+         (.write out (str ":idx " (cio/prn-edn idx) "\n"))
+         (.write out (str ":query " (cio/prn-edn q) "\n"))
          (when crux-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
@@ -411,48 +411,48 @@
                                       "\n"))
                      true
                      (catch Throwable t
-                       (.write out (str ":crux-error " (pr-str (str t)) "\n"))
+                       (.write out (str ":crux-error " (cio/prn-edn (str t)) "\n"))
                        (throw t)))
                    idx)
-             (.write out (str ":crux-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+             (.write out (str ":crux-time " (cio/prn-edn (-  (System/currentTimeMillis) start-time))))))
 
          (when sail-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":sail-results " (pr-str (count (execute-sparql *sail-conn* q)))
+                     (.write out (str ":sail-results " (cio/prn-edn (count (execute-sparql *sail-conn* q)))
                                       "\n"))
                      true
                      (catch Throwable t
-                       (.write out (str ":sail-error " (pr-str (str t)) "\n"))
+                       (.write out (str ":sail-error " (cio/prn-edn (str t)) "\n"))
                        (throw t)))
                    idx)
-             (.write out (str ":sail-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+             (.write out (str ":sail-time " (cio/prn-edn (-  (System/currentTimeMillis) start-time))))))
 
          (when neo4j-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":neo4j-results " (pr-str (count (execute-cypher *neo4j-db* (sparql->cypher *neo4j-db* q))))
+                     (.write out (str ":neo4j-results " (cio/prn-edn (count (execute-cypher *neo4j-db* (sparql->cypher *neo4j-db* q))))
                                       "\n"))
                      true
                      (catch Throwable t
-                       (.write out (str ":neo4j-error " (pr-str (str t)) "\n"))
+                       (.write out (str ":neo4j-error " (cio/prn-edn (str t)) "\n"))
                        (throw t)))
                    idx)
-             (.write out (str ":neo4j-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+             (.write out (str ":neo4j-time " (cio/prn-edn (-  (System/currentTimeMillis) start-time))))))
 
          (when datomic-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":datomic-results " (pr-str (count (d/query {:query (sparql/sparql->datalog q)
+                     (.write out (str ":datomic-results " (cio/prn-edn (count (d/query {:query (sparql/sparql->datalog q)
                                                                                    :timeout query-timeout-ms
                                                                                    :args [(d/db *datomic-conn*)]})))
                                       "\n"))
                      true
                      (catch Throwable t
-                       (.write out (str ":datomic-error " (pr-str (str t)) "\n"))
+                       (.write out (str ":datomic-error " (cio/prn-edn (str t)) "\n"))
                        (throw t)))
                    idx)
-             (.write out (str ":datomic-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+             (.write out (str ":datomic-time " (cio/prn-edn (-  (System/currentTimeMillis) start-time))))))
 
          (.write out "}\n")
          (.flush out))
