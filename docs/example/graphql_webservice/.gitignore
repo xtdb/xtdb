@@ -1,0 +1,8 @@
+.nrepl-port
+target/
+.prepl-port
+.lein-repl-history
+/crux-node
+/test-data/
+/.cpcache
+/crux-node

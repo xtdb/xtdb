@@ -1,0 +1,32 @@
+{:objects
+ {:crew {:fields {:id {:type ID}
+                  :name {:type String
+                         :description "Full name"
+                         :cruxmapping :crux.db/id}
+                  :rank {:type String
+                         :description "Assigned rank"}
+                  :species {:type String
+                            :description "Species type"}
+                  :homeplanet {:type String
+                               :description "Home planet"}}}
+  :planet {:fields {:id {:type ID}
+                    :name {:type String
+                           :description "Full planet name"}
+                    :color {:type String
+                            :description "Appearance"}
+                    :status {:type String
+                             :description "Status"}
+                    :quadrant {:type String
+                               :description "Location in galaxy"}}}}
+ :queries {:crew_by_id {:type (list :crew)
+                        :description "Get crew from crux.db/id"
+                        :args {:id {:type ID}}
+                        :resolve :query/crew}
+           :crew_by_homeplanet {:type (list :crew)
+                                :description "Get crew from their home planet"
+                                :args {:homeplanet {:type String}}
+                                :resolve :query/crew}
+           :planet_by_quadrant {:type (list :planet)
+                                :description "Get planets by quadrant"
+                                :args {:quadrant {:type String}}
+                                :resolve :query/planet}}}

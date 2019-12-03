@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>GraphiQL Webservice</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/graphiql/0.15.1/graphiql.css"/>
+    <script crossorigin src="https://unpkg.com/react@16/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/graphiql/0.15.1/graphiql.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.48.4/theme/nord.css"/>
+    <style>
+      body {
+	  height: 100%;
+	  margin: 0;
+	  width: 100%;
+	  overflow: hidden;
+      }
+
+      #graphiql {
+	  height: 100vh;
+      }
+
+      .graphiql-container .title {
+	  font-size: 18px;
+	  color:#d5d5d5;
+      }
+
+      .graphiql-container .topBar {
+	  background: #1d202b;
+	  border-bottom: 1px solid #1d202b;
+      }
+
+      .graphiql-container .docExplorerShow,
+      .graphiql-container .historyShow {
+	  background: #1d202b;
+	  border-bottom: 1px solid #1d202b;
+	  border-left: 1px solid #1d202b;
+      }
+
+      .graphiql-container .variable-editor-title {
+	  background: #1d202b;
+	  border-bottom: 1px solid #1d202b;
+	  border-top: 1px solid #1d202b;
+	  color: #d5d5d5;
+      }
+
+
+      .graphiql-container .CodeMirror-gutters {
+	  background: #2e3440;
+      }
+
+
+      .graphiql-container .CodeMirror-guttermarker { color: #4c566a; }
+
+      .graphiql-container .CodeMirror {
+	  background: #2e3440;
+	  color: #d8dee9;
+      }
+    </style>
+ </head>
+  <body>
+    <div id="graphiql"></div>
+    <script>
+      var search = window.location.search;
+      var parameters = {};
+      search
+    .substr(1)
+    .split('&')
+    .forEach(function(entry) {
+	var eq = entry.indexOf('=');
+	if (eq >= 0) {
+	    parameters[decodeURIComponent(entry.slice(0, eq))] = decodeURIComponent(
+		entry.slice(eq + 1)
+	    );
+	}
+    });
+
+      // If variables was provided, try to format it.
+      if (parameters.variables) {
+	  try {
+	      parameters.variables = JSON.stringify(
+		  JSON.parse(parameters.variables),
+		  null,
+		  2
+	      );
+	  } catch (e) {
+	      // Do nothing, we want to display the invalid JSON as a string, rather
+	      // than present an error.
+	  }
+      }
+
+      // When the query and variables string is edited, update the URL bar so
+      // that it can be easily shared.
+      function onEditQuery(newQuery) {
+	  parameters.query = newQuery;
+	  updateURL();
+      }
+
+      function onEditVariables(newVariables) {
+	  parameters.variables = newVariables;
+	  updateURL();
+      }
+
+      function onEditOperationName(newOperationName) {
+	  parameters.operationName = newOperationName;
+	  updateURL();
+      }
+
+      function updateURL() {
+	  var newSearch =
+	      '?' +
+	      Object.keys(parameters)
+	      .filter(function(key) {
+		  return Boolean(parameters[key]);
+	      })
+	      .map(function(key) {
+		  return (
+		      encodeURIComponent(key) + '=' + encodeURIComponent(parameters[key])
+		  );
+	      })
+	      .join('&');
+	  history.replaceState(null, null, newSearch);
+      }
+
+      function graphQLFetcher(graphQLParams) {
+	  const api = '/graphql';
+	  return fetch(api, {
+	      method: 'post',
+	      headers: {
+		  Accept: 'application/json',
+		  'Content-Type': 'application/json',
+	      },
+	      body: JSON.stringify(graphQLParams),
+	      credentials: 'include',
+	  })
+	      .then(function(response) {
+		  return response.text();
+	      })
+	      .then(function(responseBody) {
+		  try {
+		      return JSON.parse(responseBody);
+		  } catch (error) {
+		      return responseBody;
+		  }
+	      });
+      }
+
+      ReactDOM.render(
+	  React.createElement(GraphiQL, {
+	      fetcher: graphQLFetcher,
+	      query: parameters.query,
+	      variables: parameters.variables,
+	      operationName: parameters.operationName,
+	      onEditQuery: onEditQuery,
+	      onEditVariables: onEditVariables,
+	      defaultVariableEditorOpen: true,
+	      onEditOperationName: onEditOperationName,
+	      editorTheme: "nord"
+	  }),
+	  document.getElementById('graphiql')
+      );
+
+    </script>
+  </body>
+</html>

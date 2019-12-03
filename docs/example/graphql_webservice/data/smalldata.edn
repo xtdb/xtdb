@@ -1,0 +1,29 @@
+{:data [{:crux.db/id :crew/ben
+         :crew/name "Benjamin Sisko"
+         :crew/rank "Commanding Officer"
+         :crew/species "Human"
+         :crew/home-planet "Earth"}
+        {:crux.db/id :crew/kir
+         :crew/name "Kira Nerys"
+         :crew/rank "First Officer"
+         :crew/species "Bajoran"
+         :crew/home-planet "Bajor"}
+        {:crux.db/id :crew/odo
+         :crew/name "Odo"
+         :crew/rank "Chief of Security"
+         :crew/species "Changeling"
+         :crew/home-planet "Founders Homeworld"}
+        {:crux.db/id :planet/earth
+         :planet/name "Earth"
+         :planet/color "Blue"
+         :planet/status "Alive and well"
+         :planet/quadrant "alpha"}
+        {:crux.db/id :planet/bajor
+         :planet/name "Bajor"
+         :planet/status "Under stress"
+         :planet/quadrant "alpha"}
+        {:crux.db/id :planet/fdhmwld
+         :planet/name "Founders Homeworld"
+         :planet/color "Purple"
+         :planet/status "Donezo'd"
+         :planet/quadrant "delta"}]}

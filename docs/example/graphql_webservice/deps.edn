@@ -1,0 +1,21 @@
+{:paths ["src" "data" "resources"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.10.1"}
+
+        integrant {:mvn/version "0.7.0"}
+
+        ring/ring-core {:mvn/version "1.8.0"}
+        aleph {:mvn/version "0.4.6"}
+        metosin/reitit-ring {:mvn/version "0.3.10"}
+        metosin/reitit-middleware {:mvn/version "0.3.10"}
+        hiccup {:mvn/version "1.0.5"}
+        metosin/muuntaja {:mvn/version "0.6.6"}
+        cheshire/cheshire {:mvn/version "5.9.0"}
+        com.walmartlabs/lacinia {:mvn/version "0.36.0-alpha-2"}
+
+        juxt/crux-core {:mvn/version "19.09-1.5.0-alpha"}
+        juxt/crux-kafka {:mvn/version "19.09-1.5.0-alpha"}
+        juxt/crux-rocksdb {:mvn/version "19.09-1.5.0-alpha"}}
+
+ :aliases {:run {:main-opts ["-m" "webservice.main"]}
+           :dev {:extra-paths ["dev"]}}}
