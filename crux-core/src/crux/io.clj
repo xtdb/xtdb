@@ -219,3 +219,9 @@
        ~@body
        (finally
          (.unlock lock# stamp#)))))
+
+(defn pr-edn-str [xs]
+  (binding [*print-length* nil
+            *print-level* nil
+            *print-namespace-maps* false]
+    (pr-str xs)))

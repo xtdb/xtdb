@@ -8,7 +8,8 @@
             [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-module*]]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
-            [crux.status :as status])
+            [crux.status :as status]
+            [crux.io :as cio])
   (:import crux.api.NonMonotonicTimeException))
 
 (t/use-fixtures :each fkv/with-each-kv-store-implementation fkv/without-kv-index-version fkv/with-kv-store f/with-silent-test-check)
@@ -39,10 +40,10 @@
              NonMonotonicTimeException
              (re-pattern (str "Clock has moved backwards in time, message id: "
                               1583412019200001
-                              " was generated using " (pr-str #inst "2019")
+                              " was generated using " (cio/pr-edn-str #inst "2019")
                               " lowest valid next id: "
                               (inc message-id)
-                              " was generated using " (pr-str message-time)))
+                              " was generated using " (cio/pr-edn-str message-time)))
              (moberg/sent-message->edn (moberg/send-message *kv* :my-topic "Hello World")))))))
 
 (t/deftest test-can-send-and-receive-message-on-two-topics
