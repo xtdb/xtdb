@@ -3,7 +3,7 @@
 
 == Installing the connector
 
-Use `confluent-hub install zip-file-name` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+Use `confluent-hub install juxt/kafka-connect-crux:19.09-1.5.0-alpha` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
 
 The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
