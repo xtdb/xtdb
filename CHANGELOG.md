@@ -10,6 +10,7 @@
 ### Bug fixes
 
 * [#PR363](https://github.com/juxt/crux/pull/363) Allow `full-results?` and other boolean flags in a vector-style query
+* [#365](https://github.com/juxt/crux/issues/365) Replace usages of 'pr-str' with 'pr-edn-str' under crux.io
 * [#367](https://github.com/juxt/crux/issues/367) Can query empty DB
 * [#377](https://github.com/juxt/crux/issues/377) Can use 'cons' within query predicates
 * [#351](https://github.com/juxt/crux/issues/351) Do not merge placeholders into unary results
