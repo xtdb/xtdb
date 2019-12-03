@@ -71,7 +71,7 @@
                                              :method :post
                                              :headers (when body
                                                         {"Content-Type" "application/edn"})
-                                             :body (some-> body cio/prn-edn)}
+                                             :body (some-> body cio/pr-edn-str)}
                                             opts))]
      (cond
        (= 404 status)

@@ -15,7 +15,7 @@ public class EdnSerializer implements Serializer<Object> {
     }
 
     static {
-        prStr = resolve("crux.io/prn-edn");
+        prStr = resolve("crux.io/pr-edn-str");
     }
 
     public void close() {

@@ -40,10 +40,10 @@
              NonMonotonicTimeException
              (re-pattern (str "Clock has moved backwards in time, message id: "
                               1583412019200001
-                              " was generated using " (cio/prn-edn #inst "2019")
+                              " was generated using " (cio/pr-edn-str #inst "2019")
                               " lowest valid next id: "
                               (inc message-id)
-                              " was generated using " (cio/prn-edn message-time)))
+                              " was generated using " (cio/pr-edn-str message-time)))
              (moberg/sent-message->edn (moberg/send-message *kv* :my-topic "Hello World")))))))
 
 (t/deftest test-can-send-and-receive-message-on-two-topics

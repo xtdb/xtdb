@@ -119,9 +119,9 @@
       (and detect-clock-drift? (< message-id (long end-message-id)))
       (throw (NonMonotonicTimeException.
               (str "Clock has moved backwards in time, message id: " message-id
-                   " was generated using " (cio/prn-edn message-time)
+                   " was generated using " (cio/pr-edn-str message-time)
                    " lowest valid next id: " end-message-id
-                   " was generated using " (cio/prn-edn (message-id->message-time end-message-id)))))
+                   " was generated using " (cio/pr-edn-str (message-id->message-time end-message-id)))))
 
       (> seq max-seq-id)
       (recur kv topic)
@@ -257,7 +257,7 @@
         (reduce [_ f init]
           (if-let [m (seek-message i ::event-log next-offset)]
             (do
-              (log/debug "Consuming message:" (cio/prn-edn (message->edn m)))
+              (log/debug "Consuming message:" (cio/pr-edn-str (message->edn m)))
               (loop [init' init m m n 1]
                 (let [result (f init' m)]
                   (if (reduced? result)

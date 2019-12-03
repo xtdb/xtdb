@@ -234,7 +234,7 @@
                                     (if (contains? e-vars sym)
                                       (throw (IllegalArgumentException.
                                               (str "Cannot add range constraints on entity variable: "
-                                                   (cio/prn-edn clause))))
+                                                   (cio/pr-edn-str clause))))
                                       clause))
                                   (group-by :sym))]
     (->> (for [[v-var clauses] v-var->range-clauses]
@@ -264,12 +264,12 @@
     (if (= (:v names) (first order))
       (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
             e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)]
-        (log/debug :join-order :ave (cio/prn-edn v) e (cio/prn-edn clause))
+        (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
       (let [e-doc-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
             v-idx (-> (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
                       (idx/wrap-with-range-constraints v-range-constraints))]
-        (log/debug :join-order :aev e (cio/prn-edn v) (cio/prn-edn clause))
+        (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
 (defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
@@ -397,7 +397,7 @@
 ;; TODO: This is a naive, but not totally irrelevant measure. Aims to
 ;; bind variables as early and cheaply as possible.
 (defn- clause-complexity [clause]
-  (count (cio/prn-edn clause)))
+  (count (cio/pr-edn-str clause)))
 
 (defn- single-e-var-triple? [vars where]
   (and (= 1 (count where))
@@ -430,7 +430,7 @@
                                     (doseq [var or-vars
                                             :when (not (contains? body-vars var))]
                                       (throw (IllegalArgumentException.
-                                              (str "Or join variable never used: " var " " (cio/prn-edn clause))))))
+                                              (str "Or join variable never used: " var " " (cio/pr-edn-str clause))))))
                                   {:or-vars or-vars
                                    :free-vars free-vars
                                    :bound-vars bound-vars
@@ -445,7 +445,7 @@
                                                                  (count free-vars))})]
             (when (not (apply = (map :or-vars or-branches)))
               (throw (IllegalArgumentException.
-                      (str "Or requires same logic variables: " (cio/prn-edn clause)))))
+                      (str "Or requires same logic variables: " (cio/pr-edn-str clause)))))
             [(conj or-clause+idx-id+or-branches [clause idx-id or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
@@ -552,7 +552,7 @@
           :when (not (contains? var->bindings var))]
     (throw (IllegalArgumentException.
             (str "Clause refers to unknown variable: "
-                 var " " (cio/prn-edn clause))))))
+                 var " " (cio/pr-edn-str clause))))))
 
 (defn- build-pred-constraints [pred-clause+idx-ids var->bindings]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
@@ -775,7 +775,7 @@
                  rules (get rule-name->rules rule-name)]
              (when-not rules
                (throw (IllegalArgumentException.
-                       (str "Unknown rule: " (cio/prn-edn sub-clause)))))
+                       (str "Unknown rule: " (cio/pr-edn-str sub-clause)))))
              (let [rule-args+body (for [{:keys [head body]} rules]
                                     [(vec (concat (:bound-args head)
                                                   (:args head)))
@@ -784,10 +784,10 @@
                                             (map (comp count first))
                                             (distinct))]
                (when-not (= 1 (count arities))
-                 (throw (IllegalArgumentException. (str "Rule definitions require same arity: " (cio/prn-edn rules)))))
+                 (throw (IllegalArgumentException. (str "Rule definitions require same arity: " (cio/pr-edn-str rules)))))
                (when-not (= arity (count (:args clause)))
                  (throw (IllegalArgumentException.
-                         (str "Rule invocation has wrong arity, expected: " arity " " (cio/prn-edn sub-clause)))))
+                         (str "Rule invocation has wrong arity, expected: " arity " " (cio/pr-edn-str sub-clause)))))
                ;; TODO: the caches and expansion here needs
                ;; revisiting.
                (let [expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
@@ -979,10 +979,10 @@
        (vec (for [arg (distinct args)]
               (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
        (mapv v-var->range-constraints arg-vars-in-join-order)))
-    (log/debug :where (cio/prn-edn where))
+    (log/debug :where (cio/pr-edn-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
-    (log/debug :attr-stats (cio/prn-edn attr-stats))
-    (log/debug :var->bindings (cio/prn-edn var->bindings))
+    (log/debug :attr-stats (cio/pr-edn-str attr-stats))
+    (log/debug :var->bindings (cio/pr-edn-str var->bindings))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv idx/new-unary-join-virtual-index unary-join-index-groups)
                      (idx/new-n-ary-join-layered-virtual-index)
@@ -1119,7 +1119,7 @@
          q-conformed (.q-conformed conformed-query)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
          stats (idx/read-meta kv :crux.kv/stats)]
-     (log/debug :query (cio/prn-edn q))
+     (log/debug :query (cio/pr-edn-str q))
      (validate-args args)
      (let [rule-name->rules (rule-name->rules rules)
            entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)

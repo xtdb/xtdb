@@ -233,11 +233,11 @@
                                  {:crux.tx/keys [tx-time
                                                  tx-id]} (tx-record->tx-log-entry tx-record)]
                              (if ready?
-                               (log/info "Ready for indexing of tx" tx-id (cio/prn-edn tx-time))
+                               (log/info "Ready for indexing of tx" tx-id (cio/pr-edn-str tx-time))
                                (do (when-not (.contains (.paused consumer) tx-topic-partition)
                                      (log/debug "Pausing" tx-topic)
                                      (.pause consumer [tx-topic-partition]))
-                                   (log/info "Delaying indexing of tx" tx-id (cio/prn-edn tx-time) "pending:" (count pending-tx-records))))
+                                   (log/info "Delaying indexing of tx" tx-id (cio/pr-edn-str tx-time) "pending:" (count pending-tx-records))))
                              ready?)))
                         (vec))]
     (doseq [record tx-records]

@@ -32,8 +32,8 @@
   (reset! sync-times (or (slurp-edn "sync-times.edn") {})))
 
 (defn- spit-test-times! []
-  (spit "sync-times.edn" (cio/prn-edn @sync-times))
-  (spit "test-times.edn" (cio/prn-edn @query-perf-times)))
+  (spit "sync-times.edn" (cio/pr-edn-str @sync-times))
+  (spit "test-times.edn" (cio/pr-edn-str @query-perf-times)))
 
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))

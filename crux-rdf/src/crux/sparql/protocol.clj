@@ -53,7 +53,7 @@
        "</sparql>"))
 
 (defn- sparql-json-response [vars results]
-  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp cio/prn-edn strip-qmark str) vars)) "]}, "
+  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp cio/pr-edn-str strip-qmark str) vars)) "]}, "
        "\"results\": { \"bindings\": ["
        (->> (for [result results]
               (str "{"

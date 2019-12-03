@@ -460,10 +460,10 @@
                         (fn write-result-thread []
                           (with-open [out (io/writer out-file)]
                             (.write out "{\n")
-                            (.write out (str ":test-time " (cio/prn-edn (System/currentTimeMillis)) "\n"))
-                            (.write out (str ":backend-info " (cio/prn-edn (backend-info backend)) "\n"))
-                            (.write out (str ":num-tests " (cio/prn-edn num-tests) "\n"))
-                            (.write out (str ":num-threads " (cio/prn-edn num-threads) "\n"))
+                            (.write out (str ":test-time " (cio/pr-edn-str (System/currentTimeMillis)) "\n"))
+                            (.write out (str ":backend-info " (cio/pr-edn-str (backend-info backend)) "\n"))
+                            (.write out (str ":num-tests " (cio/pr-edn-str num-tests) "\n"))
+                            (.write out (str ":num-threads " (cio/pr-edn-str num-threads) "\n"))
                             (.write out (str ":tests " "\n"))
                             (.write out "[\n")
                             (loop []
@@ -471,12 +471,12 @@
                                                                               (.poll completed-queue)
                                                                               (.take completed-queue))]
                                 (.write out "{")
-                                (.write out (str ":idx " (cio/prn-edn idx) "\n"))
-                                (.write out (str ":query " (cio/prn-edn q) "\n"))
+                                (.write out (str ":idx " (cio/pr-edn-str idx) "\n"))
+                                (.write out (str ":query " (cio/pr-edn-str q) "\n"))
                                 (if error
-                                  (.write out (str ":error " (cio/prn-edn (str error)) "\n"))
+                                  (.write out (str ":error " (cio/pr-edn-str (str error)) "\n"))
                                   (.write out (str ":backend-results " results "\n")))
-                                (.write out (str ":time " (cio/prn-edn time)))
+                                (.write out (str ":time " (cio/pr-edn-str time)))
                                 (.write out "}\n")
                                 (.flush out)
                                 (recur)))

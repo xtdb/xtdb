@@ -201,7 +201,7 @@
           batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
           source-partition {"url" url}
           formatter (case format
-                      "edn" cio/prn-edn
+                      "edn" cio/pr-edn-str
                       "json" json/generate-string
                       "transit" write-transit)
           tx-log-entry->source-records (case mode
