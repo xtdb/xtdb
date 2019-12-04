@@ -4,7 +4,6 @@
 
 ### Changes
 
-* [#428](https://github.com/juxt/crux/issues/428) Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
 * [#430](https://github.com/juxt/crux/issues/430) Add LMDB configuration example to docs + tests
 
 ### Bug fixes
@@ -19,6 +18,7 @@
 * [#372](https://github.com/juxt/crux/issues/372) Add support for Java collection types with submitTx
 * [#418](https://github.com/juxt/crux/issues/418) Adds exception when query with order-by doesn't return variable ordered on
 * [#419](https://github.com/juxt/crux/issues/419) Fix specification for ':timeout' within queries.
+* [#428](https://github.com/juxt/crux/issues/428) Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
 * [#440](https://github.com/juxt/crux/issues/440) Fix return type of 'documents' in the API.
 
 ### New features
@@ -28,7 +28,7 @@
 
 ### Changes
 
-* [#340](https://github.com/juxt/crux/pull/340): Improve node configuration API, introduce topologies *Breaking*
+* [#340](https://github.com/juxt/crux/pull/340): *Breaking* Improve node configuration API, introduce topologies
 * [#341](https://github.com/juxt/crux/issues/341): Various documentation improvements
 
 ### Bug fixes
