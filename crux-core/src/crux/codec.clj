@@ -274,13 +274,9 @@
         (id->buffer id to)
         (throw (IllegalArgumentException. (format "Not a %s hex, keyword, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
 
-  PersistentArrayMap
+  java.util.Map
   (id->buffer [this to]
-    (id-function to (nippy/fast-freeze (into (hash-map) this))))
-
-  IPersistentMap
-  (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
+    (id-function to (nippy/fast-freeze (into (sorted-map) this))))
 
   nil
   (id->buffer [this to]
