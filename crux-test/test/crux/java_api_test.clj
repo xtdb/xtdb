@@ -3,7 +3,7 @@
             [crux.api :as crux])
   (:import [crux.api.alpha CruxNode StandaloneTopology KafkaTopology
             Document PutOperation CasOperation CruxId Database Query
-            DeleteOperation EvictOperation Util]
+            DeleteOperation EvictOperation Util EntityTx]
            java.time.Duration))
 
 (t/deftest test-java-api
@@ -81,6 +81,12 @@
           (t/is (.size status))
           (t/is (.indexVersion status))))
 
+      (t/testing "Can get history of an existing entity"
+        (t/is (instance? EntityTx (first (.history node (CruxId/cruxId "test-id"))))))
+
+      (t/testing "Can get history of a non-existing entity"
+        (t/is (empty? (.history node (CruxId/cruxId "test-id1")))))
+
       (t/testing "Database"
         (let [query (-> (Query/find "[e]")
                         (.where "[[e :crux.db/id _]]"))
@@ -123,6 +129,28 @@
                 (t/is (.txTime txLog))
                 (t/is (instance? PutOperation
                                  (first (.txOps txLog)))))))
+
+          (t/testing "Can get Valid Time and Transaction Time"
+            (t/is (.validTime db))
+            (t/is (.transactionTime db)))
+
+          (t/testing "Snapshots and lazy queries/history functions"
+            (let [snapshot (.newSnapshot db)]
+              (t/testing "Can get a snapshot of a database"
+                (t/is snapshot))
+
+              (t/testing "Can query the database lazily with a snapshot"
+                (t/is (.next (.query db snapshot query))))
+
+              (t/testing "Can lazily get ascending/descending history of an entity"
+                (let [historyAscending (.historyAscending db snapshot (CruxId/cruxId "test-id"))]
+                  (t/is historyAscending)
+                  (t/is (.historyDescending db snapshot (CruxId/cruxId "test-id")))
+
+                  (t/testing "Testing EntityTxWithDocuments"
+                    (let [entityTxWithDocs (.next historyAscending)]
+                      (t/is (.document entityTxWithDocs))
+                      (t/is (.entityTx entityTxWithDocs))))))))
 
           (t/testing "Queries"
             (t/testing "Can create query"

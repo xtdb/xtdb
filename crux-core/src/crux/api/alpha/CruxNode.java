@@ -162,7 +162,7 @@ public class CruxNode implements AutoCloseable {
     @SuppressWarnings("unchecked")
     public Iterator<TxLog> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments) {
         LazySeq txLog = (LazySeq) node.txLog(txLogContext, fromTxId, withDocuments);
-        return StreamSupport.stream(txLog.spliterator(), false)
+        return txLog.stream()
             .map(log -> TxLog.txLog((Map<Keyword, Object>) log, withDocuments))
             .iterator();
     }
