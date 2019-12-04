@@ -37,6 +37,3 @@ crux-bench/datomic-data/**/*
 /crux-dev/.testing-oracle.edn
 /crux-dev/.testing-mysql.edn
 /crux-dev/data/
-
-.prepl-port
-tags
