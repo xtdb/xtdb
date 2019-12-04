@@ -276,7 +276,7 @@
 
   PersistentArrayMap
   (id->buffer [this to]
-    (id-function to (nippy/fast-freeze (into {} (sort this)))))
+    (id-function to (nippy/fast-freeze (into (hash-map) this))))
 
   IPersistentMap
   (id->buffer [this to]
