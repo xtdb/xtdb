@@ -2614,4 +2614,4 @@
 (t/deftest test-map-id-362
   (let [doc {:crux.db/id {:a :aa :b :bb} :val "val"}]
     (f/transact! *api* [doc])
-    (t/is (= doc (api/entity (api/db *api*) {:b :bb :a :aa}))))
+    (t/is (= doc (api/entity (api/db *api*) {:b :bb :a :aa})))))
