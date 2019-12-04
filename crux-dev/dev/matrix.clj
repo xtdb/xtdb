@@ -815,7 +815,7 @@
                         (try
                           (let [result (count (matrix/query wg (crux.sparql/sparql->datalog query)))]
                             (assert (= crux-results result)
-                                    (pr-str [idx crux-results result])))
+                                    (cio/pr-edn-str [idx crux-results result])))
                           (catch Throwable t
                             (prn idx t)))
                         (- (System/currentTimeMillis) start)))

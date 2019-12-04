@@ -8,9 +8,14 @@ import org.apache.kafka.common.serialization.Serializer;
 
 public class EdnSerializer implements Serializer<Object> {
     private static final IFn prStr;
+     private static IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
+
+    private static IFn resolve(String symbolName) {
+        return (IFn) requiringResolve.invoke(Clojure.read(symbolName));
+    }
 
     static {
-        prStr = Clojure.var("clojure.core/pr-str");
+        prStr = resolve("crux.io/pr-edn-str");
     }
 
     public void close() {

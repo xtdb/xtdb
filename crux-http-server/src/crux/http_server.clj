@@ -48,7 +48,7 @@
               200
               404)
             {"Content-Type" "application/edn"}
-            (pr-str m)))
+            (cio/pr-edn-str m)))
 
 (defn- exception-response [status ^Exception e]
   (response status
@@ -65,7 +65,7 @@
           (if (and (.getMessage e)
                    (str/starts-with? (.getMessage e) "Spec assertion failed"))
             (exception-response 400 e) ;; Valid edn, invalid content
-            (do (log/error e "Exception while handling request:" (pr-str request))
+            (do (log/error e "Exception while handling request:" (cio/pr-edn-str request))
                 (exception-response 500 e))))) ;; Valid content; something internal failed, or content validity is not properly checked
       (catch Exception e
         (exception-response 400 e))))) ;;Invalid edn
@@ -86,7 +86,7 @@
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}
-                (pr-str status-map)))))
+                (cio/pr-edn-str status-map)))))
 
 (defn- document [^ICruxAPI crux-node request]
   (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
@@ -152,7 +152,7 @@
                         out (io/writer out)]
               (.write out "(")
               (doseq [x edn]
-                (.write out (pr-str x)))
+                (.write out (cio/pr-edn-str x)))
               (.write out ")"))))
          (response 200 {"Content-Type" "application/edn"}))
     (catch Throwable t
