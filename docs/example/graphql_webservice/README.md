@@ -1,12 +1,13 @@
 ## GraphQL Webservice
 
-A prototype to show an end-to-end Crux deployment. Aims:
+An example webservice showing an end-to-end Crux deployment, with the following properties:
 
 * deployed using Docker, using a Confluent on-prem Kafka broker (also in Docker)
 * a GraphQL API over a sample dataset stored in Crux
 * a GraphIQL UI to introspect the schema and run queries
 
-### Development
+## Starting the service
+### Using the REPL
 
 1. Starting a REPL
 
@@ -45,10 +46,10 @@ This also serves as your 'reload server' form (`stop-system` is a no-op if there
 * A server reload (using that form) is required if you change the routes, or the Crux configuration
 * A JVM reload is required if you add/upgrade dependencies (in deps.edn)
 
-3. In the browser
+### Using Docker
+
+Run `docker-compose up -d` in the root of this folder.
+
+### In the browser
 
 Head to <http://localhost:3000>.
-
-### Deployment
-
-Clone the git repo on your deployment machine, and run `docker-compose up -d`

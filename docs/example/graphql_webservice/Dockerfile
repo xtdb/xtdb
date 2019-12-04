@@ -6,5 +6,4 @@ WORKDIR /opt/webservice/
 
 ADD src/ ./src/
 ADD data/ ./data/
-ADD resources/ ./resources/
 ADD deps.edn .

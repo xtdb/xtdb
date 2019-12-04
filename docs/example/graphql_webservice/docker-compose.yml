@@ -28,10 +28,8 @@ services:
     build:
       context: .
     image: juxt/crux-webservice
-    deploy:
-      mode: global
-      restart_policy:
-        condition: on-failure
+    ports:
+      - "3000:3000"
     environment:
       WEBSERVICE_ENV: "DOCKER"
       CRUX_ENABLE_TX_FNS: "TRUE"

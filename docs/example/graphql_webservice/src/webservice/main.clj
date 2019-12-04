@@ -31,7 +31,6 @@
 
   (r.ring/ring-handler (r.ring/router [["/" {:name ::root,
                                              :get {:handler #'handle-graphiql}}]
-                                       ["/resources/*" (r.ring/create-resource-handler)]
                                        ["/graphql" {:post {:handler (gql/->graphql-handler crux-node)}}]]
                                       {:data {:middleware [#(with-crux-node % crux-node)
                                                            params/parameters-middleware
