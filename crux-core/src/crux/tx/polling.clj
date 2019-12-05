@@ -31,15 +31,18 @@
                                                            nil
                                                            (consumer/next-events event-log-consumer context next-offset))]
                       (let [end-offset (consumer/end-offset event-log-consumer)
-                            next-offset (inc (long (.message-id last-message)))
+                            tx-id (long (.message-id last-message))
+                            tx-time (.message-time last-message)
+                            next-offset (inc tx-id)
                             lag (- end-offset next-offset)
                             _ (when (pos? lag)
                                 (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
                             consumer-state {:crux.tx/event-log
                                             {:lag lag
                                              :next-offset next-offset
-                                             :time (.message-time last-message)}}]
+                                             :time tx-time}}]
                         (log/debug "Event log consumer state:" (cio/pr-edn-str consumer-state))
+                        (db/store-index-meta indexer :crux.tx/latest-completed-tx {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id})
                         (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)
                         false)
                       true)))]
