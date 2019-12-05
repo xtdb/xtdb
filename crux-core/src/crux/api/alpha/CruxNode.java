@@ -16,39 +16,12 @@ import java.util.stream.StreamSupport;
 import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
 
-public class CruxNode implements AutoCloseable {
-    private final ICruxAPI node;
+public class CruxNode extends CruxIngest implements AutoCloseable  {
+    private ICruxAPI node;
 
     CruxNode(ICruxAPI node) {
+        super(node);
         this.node = node;
-    }
-
-    /**
-     * Submits a set of operations to a Crux node
-     * @param ops The set of operations to transact
-     * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TxResult
-     */
-    @SuppressWarnings("unchecked")
-    public TxResult submitTx(Iterable<TransactionOperation> ops) {
-        PersistentVector txVector = PersistentVector.create();
-        for (TransactionOperation op : ops) {
-            txVector = txVector.cons(op.toEdn());
-        }
-
-        Map<Keyword,Object> result = node.submitTx(txVector);
-        return txResult(result);
-    }
-
-    /**
-     * Submits a set of operations to a Crux node
-     * @param ops The set of operations to transact
-     * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TxResult
-     */
-    @SuppressWarnings("unchecked")
-    public TxResult submitTx(TransactionOperation... ops) {
-        return submitTx(Arrays.asList(ops));
     }
 
     /**
@@ -153,18 +126,6 @@ public class CruxNode implements AutoCloseable {
     public NodeStatus status() {
         Map<Keyword,?> status = node.status();
         return NodeStatus.nodeStatus(status);
-    }
-
-    public Closeable txLogContext() {
-        return node.newTxLogContext();
-    }
-
-    @SuppressWarnings("unchecked")
-    public Iterator<TxLog> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments) {
-        LazySeq txLog = (LazySeq) node.txLog(txLogContext, fromTxId, withDocuments);
-        return txLog.stream()
-            .map(log -> TxLog.txLog((Map<Keyword, Object>) log, withDocuments))
-            .iterator();
     }
 
 

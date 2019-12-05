@@ -13,4 +13,9 @@ abstract class EdnTopology implements Topology {
     public final CruxNode startNode() throws IndexVersionOutOfSyncException {
         return new CruxNode(Crux.startNode(toEdn()));
     }
+
+    @Override
+    public final CruxIngestClient newIngestClient() {
+        return new CruxIngestClient(Crux.newIngestClient(toEdn()));
+    }
 }

@@ -20,6 +20,7 @@ public abstract class TransactionOperation {
     TransactionOperation() {
     }
 
+    // May want to move these - are inherited by the classes
     public static DeleteOperation deleteOp(CruxId deleteId) {
         return new DeleteOperation(deleteId, null);
     }
@@ -35,7 +36,6 @@ public abstract class TransactionOperation {
     public static PutOperation putOp(Document doc) {
         return new PutOperation(doc, null);
     }
-
     @SuppressWarnings("unchecked")
     static TransactionOperation fromEdn(PersistentVector operation) {
         Keyword opType = (Keyword) operation.nth(0);

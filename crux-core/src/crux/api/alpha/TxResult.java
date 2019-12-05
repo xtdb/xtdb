@@ -21,13 +21,13 @@ public class TxResult {
         this.txId = txId;
     }
 
-    public static TxResult txResult(Map<Keyword, ?> txResultMap) {
+    static TxResult txResult(Map<Keyword, ?> txResultMap) {
         Date txTime = (Date) txResultMap.get(TX_TIME);
         long txId = (Long) txResultMap.get(TX_ID);
         return new TxResult(txResultMap, txTime, txId);
     }
 
-    public Map<Keyword,?> toEdn() {
+    Map<Keyword,?> toEdn() {
         return txResultMap;
     }
 }

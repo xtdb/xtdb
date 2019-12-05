@@ -10,4 +10,5 @@ public interface Topology {
      * @see CruxNode
      */
     CruxNode startNode() throws IndexVersionOutOfSyncException;
+    CruxIngestClient newIngestClient();
 }
