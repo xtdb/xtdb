@@ -152,7 +152,7 @@
                     {cas-failure-tx-time :crux.tx/tx-time}
                     (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])
                     _ (api/sync *api* cas-failure-tx-time nil)]
-                (t/is (= cas-failure-tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000)))
+                (t/is (= cas-failure-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000))))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                               :content-hash new-content-hash
@@ -168,7 +168,7 @@
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id   :crux.tx/tx-id}
                     (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
-                (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000)))
+                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                               :content-hash new-content-hash
@@ -185,7 +185,7 @@
                      new-tx-id   :crux.tx/tx-id}
                     (api/submit-tx *api* [[:crux.tx/cas nil new-picasso new-valid-time]])
                     _ (api/sync *api* new-tx-time nil)]
-                (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000)))
+                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
                 (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          new-eid
                                               :content-hash new-content-hash
@@ -272,6 +272,30 @@
         (t/is (empty? (db/get-objects (:object-store *api*) snapshot
                                       (->> (idx/entity-history snapshot picasso-id)
                                            (keep :content-hash)))))))))
+
+(t/deftest test-multiple-txs-in-same-ms-441
+  (let [ivan {:crux.db/id :ivan}
+        ivan1 (assoc ivan :value 1)
+        ivan2 (assoc ivan :value 2)
+        t #inst "2019-11-29"]
+    (db/index-doc (:indexer *api*) (c/new-id ivan1) ivan1)
+    (db/index-doc (:indexer *api*) (c/new-id ivan2) ivan2)
+
+    (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]] t 1)
+    (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]] t 2)
+
+    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+      ;; TODO (JH) iterator goes when we merge the put/delete branch
+      (let [i (kv/new-iterator snapshot)]
+        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
+                  (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
+                 (idx/entity-history snapshot (c/new-id :ivan))))
+
+        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+                 (idx/entity-history-seq-descending i (c/new-id :ivan) t t)))
+
+        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+                 (idx/entity-history-seq-ascending i (c/new-id :ivan) t t)))))))
 
 (t/deftest test-can-store-doc
   (let [content-hash (c/new-id picasso)]

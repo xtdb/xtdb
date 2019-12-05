@@ -274,6 +274,7 @@
   status/Status
   (status-map [this]
     {:crux.index/index-version (idx/current-index-version kv)
+     :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (defmulti conform-tx-op first)
@@ -325,16 +326,8 @@
     (s/assert :crux.api/tx-ops tx-ops)
     tx-ops))
 
-(defn latest-completed-tx-time [consumer-state]
-  (let [consumer-states (->> consumer-state
-                             (vals)
-                             (sort-by :time))
-        consumer-states-without-lag (filter (comp zero? :lag) consumer-states)]
-    (if (= consumer-states consumer-states-without-lag)
-      (:time (last consumer-states))
-      (:time (first consumer-states)))))
-
-(defn await-no-consumer-lag [indexer timeout-ms]
+(defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
+  ;; this will likely be going away as part of #442
   (let [max-lag-fn #(some->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
                              (vals)
                              (seq)
@@ -344,21 +337,19 @@
                            (pos? (long max-lag))
                            true)
                         timeout-ms)
-      (latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))
+      (db/read-index-meta indexer :crux.tx/latest-completed-tx)
       (throw (TimeoutException.
                (str "Timed out waiting for index to catch up, lag is: " (or (max-lag-fn)
                                                                             "unknown")))))))
 
 (defn await-tx-time [indexer transact-time timeout-ms]
-  (let [seen-tx-time (atom (Date. 0))]
-    (if (cio/wait-while #(pos? (compare transact-time
-                                        (let [completed-tx-time (or (latest-completed-tx-time
-                                                                     (db/read-index-meta indexer :crux.tx-log/consumer-state))
-                                                                    (Date. 0))]
-                                          (reset! seen-tx-time completed-tx-time)
-                                          completed-tx-time)))
+  (let [seen-tx (atom nil)]
+    (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+                           (reset! seen-tx latest-completed-tx)
+                           (or (nil? latest-completed-tx)
+                               (pos? (compare transact-time (:crux.tx/tx-time latest-completed-tx)))))
                         timeout-ms)
-      @seen-tx-time
+      @seen-tx
       (throw (TimeoutException.
               (str "Timed out waiting for: " (cio/pr-edn-str transact-time)
-                   " index has: " (cio/pr-edn-str @seen-tx-time)))))))
+                   " index has: " (cio/pr-edn-str @seen-tx)))))))
