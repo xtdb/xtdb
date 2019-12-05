@@ -17,7 +17,7 @@ import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
 
 public class CruxNode extends CruxIngest implements AutoCloseable  {
-    private ICruxAPI node;
+    protected ICruxAPI node;
 
     CruxNode(ICruxAPI node) {
         super(node);
