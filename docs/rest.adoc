@@ -71,14 +71,17 @@ curl -X GET $nodeURL/
 {:crux.kv/kv-store "crux.kv.rocksdb/kv",
  :crux.kv/estimate-num-keys 92,
  :crux.kv/size 72448,
+ :crux.tx/last-completed-tx
+   {:crux.tx/tx-id 19,
+    :crux.tx/tx-time #inst "2019-01-08T11:06:41.869-00:00"}
  :crux.zk/zk-active? true,
  :crux.tx-log/consumer-state
    {:crux.kafka.topic-partition/crux-docs-0
-      {:offset 25,
+      {:next-offset 25,
        :time #inst "2019-01-08T11:06:41.867-00:00",
        :lag 0},
     :crux.kafka.topic-partition/crux-transaction-log-0
-      {:offset 19,
+      {:next-offset 19,
        :time #inst "2019-01-08T11:06:41.869-00:00",
        :lag 0}}}
 ----

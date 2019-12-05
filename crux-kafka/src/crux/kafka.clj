@@ -179,10 +179,9 @@
     (->> (for [^TopicPartition partition partitions
                :let [partition-key (topic-partition-meta-key partition)
                      next-offset (or (get-in consumer-state [partition-key :next-offset]) 0)]]
-           (do
-             [partition-key {:next-offset next-offset
-                             :lag (- (dec (get end-offsets partition)) next-offset)
-                             :time (get-in consumer-state [partition-key :time])}]))
+           [partition-key {:next-offset next-offset
+                           :lag (- (dec (get end-offsets partition)) next-offset)
+                           :time (get-in consumer-state [partition-key :time])}])
          (into {})
          (db/store-index-meta indexer :crux.tx-log/consumer-state))))
 
@@ -208,9 +207,9 @@
     tx-events))
 
 (defn consume-and-index-entities
-  [{:keys [indexer ^KafkaConsumer consumer pending-txs-state
-           follower timeout tx-topic doc-topic]
-    :or   {timeout 5000}}]
+  [{:keys [indexer ^KafkaConsumer consumer pending-txs-state follower timeout tx-topic doc-topic]
+    :or {timeout 5000}}]
+
   (let [tx-topic-partition (TopicPartition. tx-topic 0)
         _ (when (and (.contains (.paused consumer) tx-topic-partition)
                      (empty? @pending-txs-state))
@@ -222,6 +221,7 @@
             (index-doc-record indexer record))
         tx-records (vec (.records records (str tx-topic)))
         pending-tx-records (swap! pending-txs-state into tx-records)
+
         tx-records (->> pending-tx-records
                         (take-while
                          (fn [^ConsumerRecord tx-record]
@@ -240,11 +240,17 @@
                                    (log/info "Delaying indexing of tx" tx-id (cio/pr-edn-str tx-time) "pending:" (count pending-tx-records))))
                              ready?)))
                         (vec))]
+
     (doseq [record tx-records]
-      (index-tx-record indexer record))
+      (index-tx-record indexer record)
+      (db/store-index-meta indexer :crux.tx/latest-completed-tx (-> record
+                                                                    tx-record->tx-log-entry
+                                                                    (select-keys [:crux.tx/tx-id :crux.tx/tx-time]))))
+
     (when-let [records (seq (concat doc-records tx-records))]
       (update-stored-consumer-state indexer consumer records)
       (swap! pending-txs-state (comp vec (partial drop (count tx-records)))))
+
     {:txs (count tx-records)
      :docs (count doc-records)}))
 
