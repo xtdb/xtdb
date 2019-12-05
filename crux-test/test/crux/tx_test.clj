@@ -13,7 +13,8 @@
             [crux.api :as api]
             [crux.rdf :as rdf]
             [crux.query :as q])
-  (:import java.util.Date))
+  (:import [java.util Date]
+           [java.time Duration]))
 
 (t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir apif/with-node f/with-silent-test-check)
 
@@ -145,54 +146,7 @@
 
               (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
-                                      :tx-id))))
-
-            (t/testing "compare and set does nothing with wrong content hash"
-              (let [old-picasso (assoc picasso :baz :boz)
-                    {cas-failure-tx-time :crux.tx/tx-time}
-                    (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])
-                    _ (api/sync *api* cas-failure-tx-time nil)]
-                (t/is (= cas-failure-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time 1000))))
-                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                              :content-hash new-content-hash
-                                              :vt           new-valid-time
-                                              :tt           new-tx-time
-                                              :tx-id        new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time cas-failure-tx-time))))))
-
-            (t/testing "compare and set updates with correct content hash"
-              (let [old-picasso new-picasso
-                    new-picasso (assoc old-picasso :baz :boz)
-                    new-content-hash (c/new-id new-picasso)
-                    {new-tx-time :crux.tx/tx-time
-                     new-tx-id   :crux.tx/tx-id}
-                    (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
-                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
-                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                              :content-hash new-content-hash
-                                              :vt           new-valid-time
-                                              :tt           new-tx-time
-                                              :tx-id        new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time))))))
-
-            (t/testing "compare and set can update non existing nil entity"
-              (let [new-eid (c/new-id :http://dbpedia.org/resource/Pablo2)
-                    new-picasso (assoc new-picasso :crux.db/id :http://dbpedia.org/resource/Pablo2)
-                    new-content-hash (c/new-id new-picasso)
-                    {new-tx-time :crux.tx/tx-time
-                     new-tx-id   :crux.tx/tx-id}
-                    (api/submit-tx *api* [[:crux.tx/cas nil new-picasso new-valid-time]])
-                    _ (api/sync *api* new-tx-time nil)]
-                (t/is (= new-tx-time (:crux.tx/tx-time (tx/await-tx-time (:indexer *api*) new-tx-time 1000))))
-                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-                  (t/is (= [(c/map->EntityTx {:eid          new-eid
-                                              :content-hash new-content-hash
-                                              :vt           new-valid-time
-                                              :tt           new-tx-time
-                                              :tx-id        new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-valid-time new-tx-time))))))))
+                                      :tx-id))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
@@ -210,7 +164,7 @@
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
         (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-          (t/is (= 6 (count (map :content-hash picasso-history))))
+          (t/is (= 5 (count (map :content-hash picasso-history))))
           (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
@@ -221,6 +175,55 @@
                                      (c/->id-buffer content-hash)
                                      (c/->value-buffer "Pablo"))]]
               (t/is (kv/get-value snapshot version-k)))))))))
+
+(t/deftest test-can-cas-entity
+  (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
+
+    (t/testing "compare and set does nothing with wrong content hash"
+      (let [wrong-picasso (assoc picasso :baz :boz)
+            {cas-failure-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/cas wrong-picasso (assoc picasso :foo :bar)]])]
+
+        (api/sync *api* cas-failure-tx-time (Duration/ofMillis 1000))
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id picasso)
+                                      :vt picasso-tx-time
+                                      :tt picasso-tx-time
+                                      :tx-id picasso-tx-id})]
+                   (idx/entity-history snapshot picasso-id))))))
+
+    (t/testing "compare and set updates with correct content hash"
+      (let [new-picasso (assoc picasso :new? true)
+            {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/cas picasso new-picasso]])]
+
+        (api/sync *api* new-tx-time (Duration/ofMillis 1000))
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id new-picasso)
+                                      :vt new-tx-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})
+                    (c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id picasso)
+                                      :vt picasso-tx-time
+                                      :tt picasso-tx-time
+                                      :tx-id picasso-tx-id})]
+                   (idx/entity-history snapshot picasso-id)))))))
+
+  (t/testing "compare and set can update non existing nil entity"
+    (let [ivan {:crux.db/id :ivan, :value 12}
+          {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/cas nil ivan]])]
+      (api/sync *api* ivan-tx-time nil)
+
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
+                                    :content-hash (c/new-id ivan)
+                                    :vt ivan-tx-time
+                                    :tt ivan-tx-time
+                                    :tx-id ivan-tx-id})]
+                 (idx/entity-history snapshot :ivan)))))))
 
 (t/deftest test-can-evict-entity
   (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
@@ -285,17 +288,15 @@
     (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]] t 2)
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-      ;; TODO (JH) iterator goes when we merge the put/delete branch
-      (let [i (kv/new-iterator snapshot)]
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
-                  (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
-                 (idx/entity-history snapshot (c/new-id :ivan))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
+                (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
+               (idx/entity-history snapshot (c/new-id :ivan))))
 
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-                 (idx/entity-history-seq-descending i (c/new-id :ivan) t t)))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+               (idx/entity-history-seq-descending snapshot (c/new-id :ivan) t t)))
 
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-                 (idx/entity-history-seq-ascending i (c/new-id :ivan) t t)))))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+               (idx/entity-history-seq-ascending snapshot (c/new-id :ivan) t t))))))
 
 (t/deftest test-can-store-doc
   (let [content-hash (c/new-id picasso)]
@@ -318,115 +319,94 @@
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
         (t/is (empty? (db/get-objects (:object-store *api*) snapshot [])))))))
 
-(t/deftest test-can-correct-ranges-in-the-past
-  (let [ivan {:crux.db/id :ivan :name "Ivan"}
+(t/deftest test-put-delete-range-semantics
+  (t/are [txs history] (let [eid (keyword (gensym "ivan"))
+                             ivan {:crux.db/id eid, :name "Ivan"}
+                             res (mapv (fn [[value & vts]]
+                                         (api/submit-tx *api* [(into (if value
+                                                                       [:crux.tx/put (assoc ivan :value value)]
+                                                                       [:crux.tx/delete eid])
+                                                                     vts)]))
+                                       txs)
+                             first-vt (ffirst history)
+                             last-tx-time (:crux.tx/tx-time (last res))]
 
-        v1-ivan (assoc ivan :version 1)
-        v1-valid-time #inst "2018-11-26"
-        {v1-tx-time :crux.tx/tx-time
-         v1-tx-id :crux.tx/tx-id}
-        (api/submit-tx *api* [[:crux.tx/put v1-ivan v1-valid-time]])
-        _ (api/sync *api* v1-tx-time nil)
+                         (api/sync *api* last-tx-time nil)
 
-        v2-ivan (assoc ivan :version 2)
-        v2-valid-time #inst "2018-11-27"
-        {v2-tx-time :crux.tx/tx-time
-         v2-tx-id :crux.tx/tx-id}
-        (api/submit-tx *api* [[:crux.tx/put v2-ivan v2-valid-time]])
-        _ (api/sync *api* v2-tx-time nil)
+                         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+                           (t/is (= (for [[vt tx-idx value] history]
+                                      [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
+                                                                                           (assoc ivan :value value)))])
 
-        v3-ivan (assoc ivan :version 3)
-        v3-valid-time #inst "2018-11-28"
-        {v3-tx-time :crux.tx/tx-time
-         v3-tx-id :crux.tx/tx-id}
-        (api/submit-tx *api* [[:crux.tx/put v3-ivan v3-valid-time]])
-        _ (api/sync *api* v3-tx-time nil)]
+                                    (->> (idx/entity-history-seq-ascending snapshot eid first-vt last-tx-time)
+                                         (map (juxt :vt :tx-id :content-hash)))))))
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-      (t/testing "first version of entity is visible"
-        (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time v3-tx-time)
-                              (first)
-                              :tx-id))))
+    ;; pairs
+    ;; [[value vt ?end-vt] ...]
+    ;; [[vt tx-idx value] ...]
 
-      (t/testing "second version of entity is visible"
-        (t/is (= v2-tx-id (-> (idx/entities-at snapshot [:ivan] v2-valid-time v3-tx-time)
-                              (first)
-                              :tx-id))))
+    [[26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-26" 0 26]
+     [#inst "2019-11-29" 0 nil]]
 
-      (t/testing "third version of entity is visible"
-        (t/is (= v3-tx-id (-> (idx/entities-at snapshot [:ivan] v3-valid-time v3-tx-time)
-                              (first)
-                              :tx-id)))))
+    ;; re-instates the previous value at the end of the range
+    [[25 #inst "2019-11-25"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 1 26]
+     [#inst "2019-11-29" 0 25]]
 
-    (let [v4-valid-time #inst "2018-11-30"
-          corrected-ivan (assoc ivan :version 4)
-          corrected-start-valid-time #inst "2018-11-27"
-          corrected-end-valid-time #inst "2018-11-29"
-          {corrected-tx-time :crux.tx/tx-time
-           corrected-tx-id :crux.tx/tx-id}
-          (api/submit-tx *api* [[:crux.tx/put corrected-ivan corrected-start-valid-time corrected-end-valid-time]])
-          _ (api/sync *api* corrected-tx-time nil)]
+    ;; delete a range
+    [[25 #inst "2019-11-25"]
+     [nil #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 1 nil]
+     [#inst "2019-11-29" 0 25]]
 
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/testing "first version of entity is still there"
-          (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time corrected-tx-time)
-                                (first)
-                                :tx-id))))
+    ;; shouldn't override the value at end-vt if there's one there
+    [[25 #inst "2019-11-25"]
+     [29 #inst "2019-11-29"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-29" 1 29]]
 
-        (t/testing "second version of entity was corrected"
-          (t/is (= {:content-hash (c/new-id corrected-ivan)
-                    :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v2-valid-time corrected-tx-time)
-                       (first)
-                       (select-keys [:tx-id :content-hash])))))
+    ;; should re-instate 28 at the end of the range
+    [[25 #inst "2019-11-25"]
+     [28 #inst "2019-11-28"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-28" 2 26]
+     [#inst "2019-11-29" 1 28]]
 
-        (t/testing "third version of entity was corrected"
-          (t/is (= {:content-hash (c/new-id corrected-ivan)
-                    :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v3-valid-time corrected-tx-time)
-                       (first)
-                       (select-keys [:tx-id :content-hash])))))
+    ;; 26.1 should overwrite the full range
+    [[28 #inst "2019-11-28"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]
+     [26.1 #inst "2019-11-26"]]
+    [[#inst "2019-11-26" 2 26.1]
+     [#inst "2019-11-28" 2 26.1]
+     [#inst "2019-11-29" 0 28]]
 
-        (t/testing "fourth version of entity is still valid"
-          (t/is (= {:content-hash (c/new-id corrected-ivan)
-                    :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v4-valid-time corrected-tx-time)
-                       (first)
-                       (select-keys [:tx-id :content-hash]))))))
+    ;; 27 should override the latter half of the range
+    [[25 #inst "2019-11-25"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]
+     [27 #inst "2019-11-27"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 1 26]
+     [#inst "2019-11-27" 2 27]
+     [#inst "2019-11-29" 0 25]]
 
-      (let [deleted-start-valid-time #inst "2018-11-25"
-            deleted-end-valid-time #inst "2018-11-28"
-            {deleted-tx-time :crux.tx/tx-time
-             deleted-tx-id :crux.tx/tx-id}
-            (api/submit-tx *api* [[:crux.tx/delete :ivan deleted-start-valid-time deleted-end-valid-time]])
-            _ (api/sync *api* deleted-tx-time nil)]
-
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/testing "first version of entity was deleted"
-            (t/is (empty? (idx/entities-at snapshot [:ivan] v1-valid-time deleted-tx-time))))
-
-          (t/testing "second version of entity was deleted"
-            (t/is (empty? (idx/entities-at snapshot [:ivan] v2-valid-time deleted-tx-time))))
-
-          (t/testing "third version of entity is still there"
-            (t/is (= {:content-hash (c/new-id corrected-ivan)
-                      :tx-id corrected-tx-id}
-                     (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
-                         (first)
-                         (select-keys [:tx-id :content-hash])))))))
-
-      (t/testing "end range is exclusive"
-        (let [{deleted-tx-time :crux.tx/tx-time
-               deleted-tx-id :crux.tx/tx-id}
-              (api/submit-tx *api* [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
-
-          (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-            (t/testing "third version of entity is still there"
-              (t/is (= {:content-hash (c/new-id corrected-ivan)
-                        :tx-id corrected-tx-id}
-                       (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
-                           (first)
-                           (select-keys [:tx-id :content-hash])))))))))))
+    ;; 27 should still override the latter half of the range
+    [[25 #inst "2019-11-25"]
+     [28 #inst "2019-11-28"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]
+     [27 #inst "2019-11-27"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-27" 3 27]
+     [#inst "2019-11-28" 3 27]
+     [#inst "2019-11-29" 1 28]]))
 
 ;; TODO: This test just shows that this is an issue, if we fix the
 ;; underlying issue this test should start failing. We can then change
