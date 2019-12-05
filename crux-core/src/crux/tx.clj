@@ -66,54 +66,53 @@
 
                               (map ->new-entity-tx)))]
 
-    {:kvs (->> new-entity-txs
-               (mapcat (fn [^EntityTx etx]
-                         [[(c/encode-entity+vt+tt+tx-id-key-to
-                            nil
-                            (c/->id-buffer (.eid etx))
-                            (.vt etx)
-                            (.tt etx)
-                            (.tx-id etx))
-                           (c/->id-buffer (.content-hash etx))]
-                          [(c/encode-entity+z+tx-id-key-to
-                            nil
-                            (c/->id-buffer (.eid etx))
-                            (c/encode-entity-tx-z-number (.vt etx) (.tt etx))
-                            (.tx-id etx))
-                           (c/->id-buffer (.content-hash etx))]]))
-               (into []))}))
+    (->> new-entity-txs
+         (mapcat (fn [^EntityTx etx]
+                   [[(c/encode-entity+vt+tt+tx-id-key-to
+                      nil
+                      (c/->id-buffer (.eid etx))
+                      (.vt etx)
+                      (.tt etx)
+                      (.tx-id etx))
+                     (c/->id-buffer (.content-hash etx))]
+                    [(c/encode-entity+z+tx-id-key-to
+                      nil
+                      (c/->id-buffer (.eid etx))
+                      (c/encode-entity-tx-z-number (.vt etx) (.tt etx))
+                      (.tx-id etx))
+                     (c/->id-buffer (.content-hash etx))]]))
+         (into []))))
 
 (defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
-  (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/new-id v))
-
-         ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
-         ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
-         :pre-commit-fn #(let [content-hash (c/new-id v)
-                               correct-state? (db/known-keys? object-store snapshot [content-hash])]
-                           (when-not correct-state?
-                             (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
-                           correct-state?)))
+  ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
+  ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
+  {:pre-commit-fn #(let [content-hash (c/new-id v)
+                         correct-state? (db/known-keys? object-store snapshot [content-hash])]
+                     (when-not correct-state?
+                       (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
+                     correct-state?)
+   :kvs (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/new-id v))})
 
 (defn tx-command-delete [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
-  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id nil))
+  {:kvs (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id nil)})
 
 (defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time transact-time)]
 
-    (assoc (put-delete-kvs object-store snapshot eid valid-time nil transact-time tx-id (c/new-id new-v))
+    {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
+                       ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
+                       ;; once the content-hashes are consistent
+                       (if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
+                              (db/get-single-object object-store snapshot (c/new-id old-v)))
+                         (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
+                           (when-not correct-state?
+                             (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
+                           correct-state?)
+                         (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
+                             false)))
 
-           :pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
-                             ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
-                             ;; once the content-hashes are consistent
-                             (if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
-                                    (db/get-single-object object-store snapshot (c/new-id old-v)))
-                               (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
-                                 (when-not correct-state?
-                                   (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                                 correct-state?)
-                               (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
-                                   false))))))
+     :kvs (put-delete-kvs object-store snapshot eid valid-time nil transact-time tx-id (c/new-id new-v))}))
 
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
