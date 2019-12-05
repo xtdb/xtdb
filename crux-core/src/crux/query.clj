@@ -35,7 +35,8 @@
 (def ^:private built-ins '#{and == !=})
 
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
-                                      :a db-ident?
+                                      :a (s/and db-ident?
+                                                (complement nil?))
                                       :v (s/? (complement nil?)))))
 
 (s/def ::pred-fn (s/and symbol?
