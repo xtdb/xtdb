@@ -47,13 +47,13 @@
   (db [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (let [tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
         (q/db kv-store object-store tx-time tx-time))))
 
   (db [this valid-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (let [transact-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
         (.db this valid-time transact-time))))
 
   (db [this valid-time transact-time]
@@ -134,14 +134,16 @@
   (sync [this timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
-                                            (:crux.tx-log/await-tx-timeout options)))))
+      (-> (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
+                                                (:crux.tx-log/await-tx-timeout options)))
+          :crux.tx/tx-time)))
 
   (sync [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
-                                            (:crux.tx-log/await-tx-timeout options)))))
+      (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
+                                                (:crux.tx-log/await-tx-timeout options)))
+          :crux.tx/tx-time)))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
