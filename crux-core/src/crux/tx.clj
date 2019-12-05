@@ -36,67 +36,83 @@
 
 (defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
+        ->new-entity-tx (fn [vt]
+                          (c/->EntityTx eid vt transact-time tx-id content-hash))
+
         start-valid-time (or start-valid-time transact-time)
-        dates-in-history (when end-valid-time
-                           (map :vt (idx/entity-history snapshot eid)))
-        dates-to-correct (->> (cons start-valid-time dates-in-history)
-                              (filter (in-range-pred start-valid-time end-valid-time))
-                              (into (sorted-set)))]
-    {:kvs (->> (for [valid-time dates-to-correct]
-                 [[(c/encode-entity+vt+tt+tx-id-key-to
-                    nil
-                    (c/->id-buffer eid)
-                    valid-time
-                    transact-time
-                    tx-id)
-                   content-hash]
-                  [(c/encode-entity+z+tx-id-key-to
-                    nil
-                    (c/->id-buffer eid)
-                    (c/encode-entity-tx-z-number valid-time transact-time)
-                    tx-id)
-                   content-hash]])
-               (reduce into []))}))
+
+        new-entity-txs (if end-valid-time
+                         (when-not (= start-valid-time end-valid-time)
+                           (let [entity-history (idx/entity-history-seq-descending snapshot eid end-valid-time transact-time)]
+                             (concat (->> (cons start-valid-time
+                                                (->> (map #(.vt ^EntityTx %) entity-history)
+                                                     (take-while #(neg? (compare start-valid-time %)))))
+                                          (remove #{end-valid-time})
+                                          (map ->new-entity-tx))
+
+                                     [(if-let [entity-to-restore ^EntityTx (first entity-history)]
+                                        (-> entity-to-restore
+                                            (assoc :vt end-valid-time))
+
+                                        (c/->EntityTx eid end-valid-time transact-time tx-id (c/nil-id-buffer)))])))
+
+                         (->> (cons start-valid-time
+                                    (when-let [visible-entity (some-> (first (idx/entity-history-seq-descending snapshot eid start-valid-time transact-time))
+                                                                      (select-keys [:tx-time :tx-id :content-hash]))]
+                                      (->> (idx/entity-history-seq-ascending snapshot eid start-valid-time transact-time)
+                                           (remove #{start-valid-time})
+                                           (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
+                                           (map #(.vt ^EntityTx %)))))
+
+                              (map ->new-entity-tx)))]
+
+    (->> new-entity-txs
+         (mapcat (fn [^EntityTx etx]
+                   [[(c/encode-entity+vt+tt+tx-id-key-to
+                      nil
+                      (c/->id-buffer (.eid etx))
+                      (.vt etx)
+                      (.tt etx)
+                      (.tx-id etx))
+                     (c/->id-buffer (.content-hash etx))]
+                    [(c/encode-entity+z+tx-id-key-to
+                      nil
+                      (c/->id-buffer (.eid etx))
+                      (c/encode-entity-tx-z-number (.vt etx) (.tt etx))
+                      (.tx-id etx))
+                     (c/->id-buffer (.content-hash etx))]]))
+         (into []))))
 
 (defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
-  (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
-         :pre-commit-fn #(let [content-hash (c/new-id v)
-                               correct-state? (db/known-keys? object-store snapshot [content-hash])]
-                           (when-not correct-state?
-                             (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
-                           correct-state?)))
+  ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
+  ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
+  {:pre-commit-fn #(let [content-hash (c/new-id v)
+                         correct-state? (db/known-keys? object-store snapshot [content-hash])]
+                     (when-not correct-state?
+                       (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
+                     correct-state?)
+   :kvs (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/new-id v))})
 
 (defn tx-command-delete [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
-  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/nil-id-buffer)))
+  {:kvs (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id nil)})
 
 (defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
-        valid-time (or at-valid-time transact-time)
-        {:keys [content-hash]
-         :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
-    ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
-    ;; once the content-hashes are consistent
-    {:pre-commit-fn #(if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
-                            (db/get-single-object object-store snapshot (c/new-id old-v)))
-                       (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
-                         (when-not correct-state?
-                           (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                         correct-state?)
-                       (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
-                           false))
-     :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
-             nil
-             (c/->id-buffer eid)
-             valid-time
-             transact-time
-             tx-id)
-            (c/->id-buffer new-v)]
-           [(c/encode-entity+z+tx-id-key-to
-             nil
-             (c/->id-buffer eid)
-             (c/encode-entity-tx-z-number valid-time transact-time)
-             tx-id)
-            (c/->id-buffer new-v)]]}))
+        valid-time (or at-valid-time transact-time)]
+
+    {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
+                       ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
+                       ;; once the content-hashes are consistent
+                       (if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
+                              (db/get-single-object object-store snapshot (c/new-id old-v)))
+                         (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
+                           (when-not correct-state?
+                             (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
+                           correct-state?)
+                         (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
+                             false)))
+
+     :kvs (put-delete-kvs object-store snapshot eid valid-time nil transact-time tx-id (c/new-id new-v))}))
 
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
