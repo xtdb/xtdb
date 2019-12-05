@@ -36,8 +36,8 @@
 
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
                                       :a (s/and db-ident?
-                                                (complement nil?))
-                                      :v (s/? (complement nil?)))))
+                                                some?)
+                                      :v (s/? some?))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
@@ -66,7 +66,7 @@
 
 (s/def ::unify (s/tuple (s/and list?
                                (s/cat :op '#{== !=}
-                                      :args (s/+ (complement nil?))))))
+                                      :args (s/+ some?)))))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
 
