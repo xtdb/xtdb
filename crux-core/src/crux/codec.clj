@@ -18,7 +18,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 4)
+(def ^:const index-version 5)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -533,11 +533,14 @@
        (.putBytes index-id-size k 0 (.capacity k)))
      (+ index-id-size id-size))))
 
+(defn- descending-long ^long [^long l]
+  (bit-xor (bit-not l) Long/MIN_VALUE))
+
 (defn date->reverse-time-ms ^long [^Date date]
-  (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
+  (descending-long (.getTime date)))
 
 (defn reverse-time-ms->date ^java.util.Date [^long reverse-time-ms]
-  (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
+  (Date. (descending-long reverse-time-ms)))
 
 (defn- maybe-long-size ^long [x]
   (if x
@@ -565,7 +568,7 @@
      (when transact-time
        (.putLong b (+ index-id-size id-size Long/BYTES) (date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN))
      (when tx-id
-       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
+       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) (descending-long tx-id) ByteOrder/BIG_ENDIAN))
      (->> (+ index-id-size (.capacity entity)
              (maybe-long-size valid-time) (maybe-long-size transact-time) (maybe-long-size tx-id))
           (mem/limit-buffer b)))))
@@ -595,7 +598,7 @@
     (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
           valid-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
           transact-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
-          tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
+          tx-id (descending-long (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
       (->EntityTx entity valid-time transact-time tx-id nil))))
 
 (defn encode-entity-tx-z-number [valid-time transaction-time]
@@ -623,7 +626,7 @@
        (.putLong b (+ index-id-size id-size) upper-morton ByteOrder/BIG_ENDIAN)
        (.putLong b (+ index-id-size id-size Long/BYTES) lower-morton ByteOrder/BIG_ENDIAN))
      (when tx-id
-       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
+       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) (descending-long tx-id) ByteOrder/BIG_ENDIAN))
      (->> (+ index-id-size (.capacity entity) (if z (* 2 Long/BYTES) 0) (maybe-long-size tx-id))
           (mem/limit-buffer b)))))
 
@@ -641,7 +644,7 @@
     (assert (= entity+z+tx-id->content-hash-index-id index-id))
     (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
           [valid-time transaction-time] (morton/morton-number->longs (decode-entity+z+tx-id-key-as-z-number-from k))
-          tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
+          tx-id (descending-long (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
       (->EntityTx entity (reverse-time-ms->date valid-time) (reverse-time-ms->date transaction-time) tx-id nil))))
 
 (defn entity-tx->edn [^EntityTx entity-tx]
@@ -659,14 +662,14 @@
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size (maybe-long-size tx-id))))]
      (.putByte b 0 failed-tx-id-index-id)
      (when tx-id
-       (.putLong b index-id-size tx-id ByteOrder/BIG_ENDIAN))
+       (.putLong b index-id-size (descending-long tx-id) ByteOrder/BIG_ENDIAN))
      (mem/limit-buffer b (+ index-id-size (maybe-long-size tx-id))))))
 
 (defn decode-failed-tx-id-key-from [^DirectBuffer k]
   (assert (= (+ index-id-size Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (let [index-id (.getByte k 0)]
     (assert (= failed-tx-id-index-id index-id))
-    (.getLong k index-id-size ByteOrder/BIG_ENDIAN)))
+    (descending-long (.getLong k index-id-size ByteOrder/BIG_ENDIAN))))
 
 (defn encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-id-size))]
