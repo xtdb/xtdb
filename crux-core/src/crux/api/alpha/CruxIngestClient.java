@@ -20,14 +20,15 @@ public class CruxIngestClient extends CruxIngest implements AutoCloseable {
     }
 
     /**
-     * Submits a set of operations to a Crux node
+     * Writes transactions to the log for processing. Non-blocking.
+     *
      * @param ops The set of operations to transact
-     * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TxResult
+     * @return Returns an AsyncTxResult object, containing transaction Id and transaction time
+     * @see AsyncTxResult
      */
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(TransactionOperation... ops) {
-        return submitTx(Arrays.asList(ops));
+    public AsyncTxResult submitTxAsync(TransactionOperation... ops) {
+        return submitTxAsync(Arrays.asList(ops));
     }
 
     /**
@@ -37,6 +38,7 @@ public class CruxIngestClient extends CruxIngest implements AutoCloseable {
      * @return Returns an AsyncTxResult object, containing transaction Id and transaction time
      * @see AsyncTxResult
      */
+    @SuppressWarnings("unchecked")
     public AsyncTxResult submitTxAsync(Iterable<TransactionOperation> ops) {
         PersistentVector txVector = PersistentVector.create();
         for (TransactionOperation op : ops) {
