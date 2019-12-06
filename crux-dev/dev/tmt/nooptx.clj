@@ -1,4 +1,4 @@
-(ns tmt.tx-log
+(ns tmt.nooptx
   (:require [crux.api :as api]))
 
 (def node (api/start-node {:crux.node/topology :crux.standalone/topology
@@ -7,9 +7,13 @@
                            :crux.standalone/event-log-dir "data/eventlog-1"
                            :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
 
-(api/submit-tx node [[:crux.tx/put {:crux.db/id :test :val :doc}]])
-(api/submit-tx node [[:crux.tx/evict :test]])
-(api/q (api/db node) {:find ['e] :where [['e nil 'e]] :full-results? true})
-(api/tx-log node (api/new-tx-log-context node) nil true)
+(def old-doc {:crux.db/id :old-doc
+              :val "old"})
+(def new-doc {:crux.db/id :old-doc
+              :val "new"})
 
-(.close node)
+(api/submit-tx node [[:crux.tx/put old-doc]])
+
+(api/submit-tx node [[:crux.tx/cas new-doc new-doc]])
+
+(api/q (api/db node) {:find ['e] :where [['e :crux.db/id 'e]] :full-results? true})

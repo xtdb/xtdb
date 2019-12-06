@@ -7,11 +7,14 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
-    <root level="DEBUG">
+    <root level="trace">
         <appender-ref ref="FILE" />
     </root>
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
@@ -20,16 +23,16 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-    <logger name="crux" level="INFO" />
-    <logger name="crux.node" level="WARN" />
-    <logger name="crux.standalone" level="ERROR" />
-    <logger name="crux.hash" level="WARN" />
-    <logger name="crux.http-server" level="WARN" />
-    <logger name="crux.kafka" level="WARN" />
-    <logger name="crux.jdbc" level="WARN" />
-    <logger name="crux.kv.memdb" level="ERROR" />
-    <logger name="crux.rdf" level="ERROR" />
-    <logger name="crux.tx" level="WARN" />
-    <logger name="org.apache.kafka" level="ERROR" />
-    <logger name="org.apache.zookeeper" level="ERROR" />
+    <logger name="crux" level="trace" />
+    <logger name="crux.node" level="trace" />
+    <logger name="crux.standalone" level="trace" />
+    <logger name="crux.hash" level="trace" />
+    <logger name="crux.http-server" level="trace" />
+    <logger name="crux.kafka" level="trace" />
+    <logger name="crux.jdbc" level="trace" />
+    <logger name="crux.kv.memdb" level="trace" />
+    <logger name="crux.rdf" level="trace" />
+    <logger name="crux.tx" level="trace" />
+    <logger name="org.apache.kafka" level="trace" />
+    <logger name="org.apache.zookeeper" level="trace" />
 </configuration>

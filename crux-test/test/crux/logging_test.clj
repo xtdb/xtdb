@@ -1,4 +1,4 @@
-(ns crux.logging-test
+#_((ns crux.logging-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
@@ -15,8 +15,8 @@
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
 
-#_(t/test-var 'test-submit-tx-log)
 (t/deftest test-submit-tx-log
   (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :secure-document
                                        :secret 33489857205}]]))
 
+)
