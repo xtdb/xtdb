@@ -1,14 +1,12 @@
 (ns tmt.noopnil
-  (:require [crux.api]))
+  (:require [crux.api :as api]))
 
-(def node (crux.api/start-node {:crux.node/topology :crux.standalone/topology
-                                :crux.node/kv-store "crux.kv.memdb/kv"
-                                :crux.kv/db-dir "data/db-dir-1"
-                                :crux.standalone/event-log-dir "data/eventlog-1"
-                                :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
+(def node (api/start-node {:crux.node/topology :crux.standalone/topology
+                           :crux.kv/db-dir "data/db-dir-1"
+                           :crux.standalone/event-log-dir "data/eventlog-1" }))
 
 ;; atm, I have to write
-(def merge-fn-hack  {:crux.db/id :spoc/merge
+(def merge-fn-hack  {:crux.db/id :spoc/merge-hack
                      :crux.db.fn/body '(fn [db entity-id valid-time new-doc]
                                          (let [current-doc (crux.api/entity db entity-id)
                                                merged-doc (merge current-doc new-doc)]
@@ -26,22 +24,18 @@
                                         [(cond-> [:crux.tx/put merged-doc]
                                            valid-time (conj valid-time))])))})
 
-(defn merge-hack [db entity-id valid-time new-doc]
-  (let [current-doc (crux.api/entity db entity-id)
-        merged-doc (merge current-doc new-doc)]
-    (if (not= current-doc merged-doc)
-      [(cond-> [:crux.tx/put merged-doc]
-         valid-time (conj valid-time))]
-      [])))
+(api/submit-tx node [[:crux.tx/put {:crux.db/id :id :this :that}]])
 
-(defn merge-desired [db entity-id valid-time new-doc]
-  (let [current-doc (crux.api/entity db entity-id)
-        merged-doc (merge current-doc new-doc)]
-    (when (not= current-doc merged-doc)
-      [(cond-> [:crux.tx/put merged-doc]
-         valid-time (conj valid-time))])))
+(api/q (api/db node) {:find ['e] :where [['e :crux.db/id :id]] :full-results? true})
 
-(crux.api/submit-tx node [[:crux.tx/put {:crux.db/id :id :this :that}]])
+(api/submit-tx node [[:crux.tx/put merge-fn]])
+(api/submit-tx node [[:crux.tx/put merge-fn-hack]])
+;; id valid-time doc
+(api/submit-tx node [[:crux.tx/fn
+                      :spoc/merge
+                      {:crux.db/id
+                       (java.util.UUID/randomUUID)
+                       :crux.db.fn/args [:id (java.util.Date.) {:crux.db/id :id :this :that}]}]])
 
-(crux.api/submit-tx node (merge-hack (crux.api/db node) :id (java.util.Date.) {}))
-(crux.api/submit-tx node (merge-desired (crux.api/db node) :id (java.util.Date.) {}))
+(api/q (api/db node) {:find ['e] :where [['e :crux.db/id :id]] :full-results? true})
+

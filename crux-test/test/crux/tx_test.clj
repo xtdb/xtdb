@@ -615,5 +615,32 @@
                 #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                           :evicted? true}]]
               [[:crux.tx/evict
-                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]])))
-  )
+                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]))))
+
+(t/deftest nil-transaction-fn-457
+  (when (tx/tx-fns-enabled?)
+    (let [merge-fn  {:crux.db/id :spoc/merge
+                     :crux.db.fn/body '(fn [db entity-id valid-time new-doc]
+                                         (let [current-doc (crux.api/entity db entity-id)
+                                               merged-doc (merge current-doc new-doc)]
+                                           (when (not= current-doc merged-doc)
+                                             [(cond-> [:crux.tx/put merged-doc]
+                                                valid-time (conj valid-time))])))}
+          fn-doc {:crux.db/id :id :this :that}]
+      (sync-submit-tx *api* [[:crux.tx/put merge-fn]
+                             [:crux.tx/put fn-doc]])
+      (t/is #{[fn-doc]}
+            (api/q (api/db *api*) {:find ['e]
+                                   :where [['e :crux.db/id :id]]
+                                   :full-results?}))
+      (sync-submit-tx *api* [:crux.tx/fn
+                             :spoc/merge
+                             {:crux.db/id
+                              (java.util.UUID/randomUUID)
+                              :crux.db.fn/args [:id
+                                                (java.util.Date.)
+                                                {:crux.db/id :id :this :that}]}])
+      (t/is #{[(merge fn-doc {:this :that})]}
+            (api/q (api/db *api*) {:find ['e]
+                                   :where [['e :crux.db/id :id]]
+                                   :full-results?})))))
