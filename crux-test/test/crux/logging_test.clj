@@ -17,6 +17,4 @@
 
 (t/deftest test-submit-tx-log
   (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :secure-document
-                                       :secret 33489857205}]]))
-
-)
+                                       :secret 33489857205}]])))
