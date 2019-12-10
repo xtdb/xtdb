@@ -33,6 +33,7 @@
     <logger name="crux.kv.memdb" level="trace" />
     <logger name="crux.rdf" level="trace" />
     <logger name="crux.tx" level="trace" />
+    <logger name="crux.logging-test" level="trace" />
     <logger name="org.apache.kafka" level="trace" />
     <logger name="org.apache.zookeeper" level="trace" />
 </configuration>
