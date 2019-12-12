@@ -20,6 +20,7 @@
 * [#419](https://github.com/juxt/crux/issues/419) Fix specification for ':timeout' within queries.
 * [#440](https://github.com/juxt/crux/issues/440) Fix return type of 'documents' in the API.
 * [#453](https://github.com/juxt/crux/issues/453) Add nil check for queries in spec.
+* [#454](https://github.com/juxt/crux/issues/454) Add fix for tx-log breaking in spec after an eviction
 
 ### New features
 * [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
