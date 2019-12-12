@@ -619,39 +619,13 @@
 
 (t/deftest nil-transaction-fn-457
   (when tx/tx-fns-enabled?
-    (let [merge-fn  {:crux.db/id :spoc/merge
-                     :crux.db.fn/body '(fn [db entity-id valid-time new-doc]
-                                         (let [current-doc (crux.api/entity db entity-id)
-                                               merged-doc (merge current-doc new-doc)]
-                                           (when (not= current-doc merged-doc)
-                                             [(cond-> [:crux.tx/put merged-doc]
-                                                valid-time (conj valid-time))])))}
-          fn-doc {:crux.db/id :id :this :that}]
-      (sync-submit-tx *api* [[:crux.tx/put merge-fn]
-                             [:crux.tx/put fn-doc]])
-      (t/is #{[fn-doc]}
-            (api/q (api/db *api*) {:find ['e]
-                                   :where [['e :crux.db/id :id]]
-                                   :full-results? true}))
+    (let [merge-fn {:crux.db/id :my-fn
+                    :crux.db.fn/body '(fn [db] nil)}]
+
+      (sync-submit-tx *api* [[:crux.tx/put merge-fn]])
       (sync-submit-tx *api* [[:crux.tx/fn
-                             :spoc/merge
-                             {:crux.db/id
-                              (java.util.UUID/randomUUID)
-                              :crux.db.fn/args [:id
-                                                (java.util.Date.)
-                                                {:crux.db/id :id :this :that}]}]])
-      (t/is #{[fn-doc]}
-            (api/q (api/db *api*) {:find ['e]
-                                   :where [['e :crux.db/id :id]]
-                                   :full-results? true}))
-      (sync-submit-tx *api* [[:crux.tx/fn
-                              :spoc/merge
-                              {:crux.db/id
-                               (java.util.UUID/randomUUID)
-                               :crux.db.fn/args [:id
-                                                 (java.util.Date.)
-                                                 {:these :those}]}]])
-      (t/is #{[(merge fn-doc {:these :those})]}
-            (api/q (api/db *api*) {:find ['e]
-                                   :where [['e :crux.db/id :id]]
-                                   :full-results? true})))))
+                              :my-fn
+                              {:crux.db/id (java.util.UUID/randomUUID)
+                               :crux.db.fn/args []}]])
+
+      (t/is true))))
