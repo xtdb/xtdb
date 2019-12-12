@@ -2610,3 +2610,10 @@
   (t/is (= #{[:ivan] [:petr]} (api/q (api/db *api*) '{:find [e]
                                                   :where [[e :crux.db/id _]]
                                                   :timeout 10}))))
+
+(t/deftest test-nil-query-attribute-453
+  (f/transact! *api* [{:crux.db/id :id :this :that :these :those}])
+  (t/is (thrown-with-msg?
+          RuntimeException
+          #"Spec assertion failed"
+          (= #{[:id]} (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]})))))

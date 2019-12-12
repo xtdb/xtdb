@@ -597,3 +597,23 @@
                 (t/is (= {:crux.db/id :tx-metadata
                           :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
                          (api/entity (api/db *api*) :tx-metadata)))))))))))
+
+(t/deftest tx-log-evict-454 []
+  (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :to-evict}]])
+  (sync-submit-tx *api* [[:crux.tx/cas {:crux.db/id :to-evict} {:crux.db/id :to-evict :test "test"}]])
+  (sync-submit-tx *api* [[:crux.tx/evict :to-evict]])
+
+  (with-open [tx-log-context (api/new-tx-log-context *api*)]
+    (t/is (= (->> (api/tx-log *api* tx-log-context nil true)
+                  (map :crux.api/tx-ops))
+             [[[:crux.tx/put
+                #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
+                          :evicted? true}]]
+              [[:crux.tx/cas
+                #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
+                          :evicted? true}
+                #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
+                          :evicted? true}]]
+              [[:crux.tx/evict
+                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]])))
+  )
