@@ -2,7 +2,7 @@
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <!-- use the previously created timestamp to create a uniquely
         named log file -->
-        <file>/homt/tmt/tmp/logtester.log</file>
+        <file>logtester.log</file>
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
