@@ -14,7 +14,7 @@ public class CruxApiClient extends CruxNode {
 
     /**
      * Gets a Database instance as of now.
-     * @return Database instance with the valid & transaction time set to the current time
+     * @return Database instance with the valid and transaction time set to the current time
      * @see Database
      */
     public Database db() {

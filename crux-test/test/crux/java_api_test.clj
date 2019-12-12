@@ -55,15 +55,10 @@
                   (t/is (.txId submittedPutOp)))
 
                 (t/testing "Can Sync node against transaction time of operation"
-                  (t/is (.sync node (.txTime submittedPutOp) nil)))
+                  (t/is (.sync node (.txTime submittedPutOp) nil))))
 
-                (t/testing "Testing putOp hasSubmittedTxUpdatedEntity & hasSubmittedTxCorrectedEntity"
-                  (t/is (.hasSubmittedTxUpdatedEntity node submittedPutOp id))
-                  (t/is (.hasSubmittedTxCorrectedEntity node submittedPutOp
-                                                        (.txTime submittedPutOp) id))))
 
-              ;; TODO: Submitting CasOp currently breaks tests when .TxLog is returned
-              ;(t/is (.sync node (.txTime (.submitTx node [casOp])) nil))
+              (t/is (.sync node (.txTime (.submitTx node [casOp])) nil))
               (t/is (.sync node (.txTime (.submitTx node [delOp])) nil))
               (t/is (.sync node (.txTime (.submitTx node [evictOp])) nil))
               (t/is (.sync node (.txTime (.submitTx node [putOp])) nil))))))

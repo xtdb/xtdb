@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Map;
 
 public class ResultTuple {
-    private Map<Symbol, Object> results;
-    private List<?> resultArray;
+    private final Map<Symbol, Object> results;
+    private final List<?> resultArray;
 
     private ResultTuple(List<Symbol> symbols, List<?> queryResult) {
         resultArray = queryResult;

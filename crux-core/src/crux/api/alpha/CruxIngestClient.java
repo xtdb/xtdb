@@ -1,18 +1,15 @@
 package crux.api.alpha;
 
 import clojure.lang.IDeref;
-import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.ICruxAsyncIngestAPI;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Map;
 
-import static crux.api.alpha.TxResult.txResult;
 
 public class CruxIngestClient extends CruxIngest implements AutoCloseable {
-    private ICruxAsyncIngestAPI ingestAPI;
+    private final ICruxAsyncIngestAPI ingestAPI;
 
     CruxIngestClient(ICruxAsyncIngestAPI iCruxAsyncIngestAPI) {
         super(iCruxAsyncIngestAPI);

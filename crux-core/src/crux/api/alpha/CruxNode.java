@@ -17,7 +17,7 @@ import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
 
 public class CruxNode extends CruxIngest implements AutoCloseable  {
-    protected ICruxAPI node;
+    protected final ICruxAPI node;
 
     CruxNode(ICruxAPI node) {
         super(node);
@@ -71,30 +71,6 @@ public class CruxNode extends CruxIngest implements AutoCloseable  {
         return history.stream()
             .map(entity -> EntityTx.entityTx(entity))
             .collect(Collectors.toList());
-    }
-
-    /**
-     * Checks if a submitted tx did update an entity.
-     *
-     * @param submittedTx TxResult from a submitTx operation.
-     * @param eid         CruxId of entity to check.
-     * @return            True if the entity was updated in this transaction.
-     */
-    public boolean hasSubmittedTxUpdatedEntity(TxResult submittedTx, CruxId eid) {
-        return node.hasSubmittedTxUpdatedEntity(submittedTx.toEdn(), eid.toEdn());
-    }
-
-    /**
-     * Checks if a submitted tx did correct an entity as of valid
-     * time.
-     *
-     * @param submittedTx  TxResult from a submitTx operation.
-     * @param validTime    Valid time of correction to check.
-     * @param eid          CruxId of entity to check.
-     * @return             true if the entity was updated in this transaction.
-     */
-    public boolean hasSubmittedTxCorrectedEntity(TxResult submittedTx, Date validTime, CruxId eid) {
-        return node.hasSubmittedTxCorrectedEntity(submittedTx.toEdn(), validTime, eid.toEdn());
     }
 
     /**

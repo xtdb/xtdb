@@ -1,12 +1,8 @@
 package crux.api.alpha;
 
-import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 
 import java.util.Date;
-import java.util.List;
-
-import static crux.api.alpha.Util.keyword;
 
 public class PutOperation extends TransactionOperation {
     private final Document doc;

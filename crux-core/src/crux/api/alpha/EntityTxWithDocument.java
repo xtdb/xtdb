@@ -6,7 +6,7 @@ import java.util.Map;
 
 public class EntityTxWithDocument {
     public final EntityTx entityTx;
-    public Document document;
+    public final Document document;
 
     @Override
     public String toString() {

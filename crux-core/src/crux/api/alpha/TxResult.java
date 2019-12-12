@@ -13,7 +13,7 @@ public class TxResult {
 
     public final Date txTime;
     public final long txId;
-    private Map<Keyword, ?> txResultMap;
+    private final Map<Keyword, ?> txResultMap;
 
     private TxResult(Map<Keyword, ?> txResultMap, Date txTime, long txId) {
         this.txResultMap = txResultMap;
