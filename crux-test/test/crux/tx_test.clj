@@ -633,7 +633,7 @@
             (api/q (api/db *api*) {:find ['e]
                                    :where [['e :crux.db/id :id]]
                                    :full-results? true}))
-      (sync-submit-tx node [[:crux.tx/fn
+      (sync-submit-tx *api* [[:crux.tx/fn
                              :spoc/merge
                              {:crux.db/id
                               (java.util.UUID/randomUUID)
@@ -641,17 +641,17 @@
                                                 (java.util.Date.)
                                                 {:crux.db/id :id :this :that}]}]])
       (t/is #{[fn-doc]}
-            (api/q (api/db node) {:find ['e]
+            (api/q (api/db *api*) {:find ['e]
                                    :where [['e :crux.db/id :id]]
                                    :full-results? true}))
-      (sync-submit-tx node [[:crux.tx/fn
-                             :spoc/merge
-                             {:crux.db/id
-                              (java.util.UUID/randomUUID)
-                              :crux.db.fn/args [:id
-                                                (java.util.Date.)
-                                                {:these :those}]}]])
+      (sync-submit-tx *api* [[:crux.tx/fn
+                              :spoc/merge
+                              {:crux.db/id
+                               (java.util.UUID/randomUUID)
+                               :crux.db.fn/args [:id
+                                                 (java.util.Date.)
+                                                 {:these :those}]}]])
       (t/is #{[(merge fn-doc {:these :those})]}
-            (api/q (api/db node) {:find ['e]
+            (api/q (api/db *api*) {:find ['e]
                                    :where [['e :crux.db/id :id]]
                                    :full-results? true})))))
