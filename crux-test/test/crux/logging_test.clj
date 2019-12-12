@@ -9,9 +9,9 @@
             [crux.fixtures.standalone :as fs]))
 
 (defn remove-log-file [f]
-  (let [ret (f)]
+  (do
     (io/delete-file "logtester.log")
-    ret))
+    (f)))
 
 (t/use-fixtures :once kvf/with-kv-dir fs/with-standalone-node apif/with-node)
 
@@ -52,5 +52,7 @@
     (sync-submit-tx *api* [[:crux.tx/delete :secure-document]])
     (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
     ;; Evict
-    (sync-submit-tx *api* [[:crux.tx/evict :secure-document]])))
+    (sync-submit-tx *api* [[:crux.tx/evict :secure-document]])
+    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
+    (t/is (slurp "logtester.log"))))
 
