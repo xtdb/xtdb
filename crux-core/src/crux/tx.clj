@@ -308,6 +308,13 @@
     (s/assert :crux.tx.event/tx-events tx-events)
     tx-events))
 
+(defn create-tx-op-docs [id docs]
+  (concat '() (map
+               #(if (string? %)
+                  {:crux.db/id (c/new-id id)}
+                  %)
+               docs)))
+
 (defn tx-events->tx-ops [snapshot object-store tx-events]
   (let [tx-ops (vec (for [[op id & args] tx-events]
                       (cond->> (for [arg args]
@@ -317,6 +324,8 @@
                         (contains? #{:crux.tx/delete
                                      :crux.tx/evict
                                      :crux.tx/fn} op) (cons (c/new-id id))
+                        (contains? #{:crux.tx/put
+                                     :crux.tx/cas} op) (create-tx-op-docs id)
                         true (cons op)
                         true (vec))))]
     (s/assert :crux.api/tx-ops tx-ops)
