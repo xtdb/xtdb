@@ -144,7 +144,7 @@
           args-id (:crux.db/id args-doc)
           fn-result (try
                       (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
-                            _ (s/assert :crux.api/tx-ops tx-ops)
+                            _ (when tx-ops (s/assert :crux.api/tx-ops tx-ops))
                             docs (tx-ops->docs tx-ops)
                             {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
                         ;; TODO: might lead to orphaned and unevictable

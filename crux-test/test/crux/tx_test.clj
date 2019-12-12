@@ -626,6 +626,9 @@
       (sync-submit-tx *api* [[:crux.tx/fn
                               :my-fn
                               {:crux.db/id (java.util.UUID/randomUUID)
-                               :crux.db.fn/args []}]])
+                               :crux.db.fn/args []}]
+                             [:crux.tx/put {:crux.db/id :foo
+                                            :bar :baz}]])
 
-      (t/is true))))
+      (t/is (= {:crux.db/id :foo, :bar :baz}
+               (api/entity (api/db *api*) :foo))))))
