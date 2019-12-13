@@ -615,5 +615,20 @@
                 #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                           :evicted? true}]]
               [[:crux.tx/evict
-                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]])))
-  )
+                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]))))
+
+(t/deftest nil-transaction-fn-457
+  (when tx/tx-fns-enabled?
+    (let [merge-fn {:crux.db/id :my-fn
+                    :crux.db.fn/body '(fn [db] nil)}]
+
+      (sync-submit-tx *api* [[:crux.tx/put merge-fn]])
+      (sync-submit-tx *api* [[:crux.tx/fn
+                              :my-fn
+                              {:crux.db/id (java.util.UUID/randomUUID)
+                               :crux.db.fn/args []}]
+                             [:crux.tx/put {:crux.db/id :foo
+                                            :bar :baz}]])
+
+      (t/is (= {:crux.db/id :foo, :bar :baz}
+               (api/entity (api/db *api*) :foo))))))
