@@ -637,9 +637,29 @@
       (t/is (= {:crux.db/id :foo, :bar :baz}
                (api/entity (api/db *api*) :foo))))))
 
-(t/deftest cas-map-ordering-362
-  (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :foo, :foo :bar}]])
-  (sync-submit-tx *api* [[:crux.tx/cas {:foo :bar, :crux.db/id :foo} {:crux.db/id :foo, :foo :baz}]])
+(t/deftest map-ordering-362
+  (t/testing "cas is independent of map ordering"
+    (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :foo, :foo :bar}]])
+    (sync-submit-tx *api* [[:crux.tx/cas {:foo :bar, :crux.db/id :foo} {:crux.db/id :foo, :foo :baz}]])
 
-  (t/is (= {:crux.db/id :foo, :foo :baz}
-           (api/entity (api/db *api*) :foo))))
+    (t/is (= {:crux.db/id :foo, :foo :baz}
+             (api/entity (api/db *api*) :foo))))
+
+  (t/testing "entities with map keys can be retrieved regardless of ordering"
+    (let [doc {:crux.db/id {:foo 1, :bar 2}}]
+      (sync-submit-tx *api* [[:crux.tx/put doc]])
+
+      (t/is (= doc (api/entity (api/db *api*) {:foo 1, :bar 2})))
+      (t/is (= doc (api/entity (api/db *api*) {:bar 2, :foo 1})))))
+
+  (t/testing "entities with map values can be joined regardless of ordering"
+    (let [doc {:crux.db/id {:foo 2, :bar 4}}]
+      (sync-submit-tx *api* [[:crux.tx/put doc]
+                             [:crux.tx/put {:crux.db/id :baz, :joins {:bar 4, :foo 2}}]
+                             [:crux.tx/put {:crux.db/id :quux, :joins {:foo 2, :bar 4}}]])
+
+      (t/is (= #{[{:foo 2, :bar 4} :baz]
+                 [{:foo 2, :bar 4} :quux]}
+               (api/q (api/db *api*) '{:find [parent child]
+                                       :where [[parent :crux.db/id _]
+                                               [child :joins parent]]}))))))
