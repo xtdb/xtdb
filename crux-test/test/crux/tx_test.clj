@@ -632,3 +632,10 @@
 
       (t/is (= {:crux.db/id :foo, :bar :baz}
                (api/entity (api/db *api*) :foo))))))
+
+(t/deftest cas-map-ordering-362
+  (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :foo, :foo :bar}]])
+  (sync-submit-tx *api* [[:crux.tx/cas {:foo :bar, :crux.db/id :foo} {:crux.db/id :foo, :foo :baz}]])
+
+  (t/is (= {:crux.db/id :foo, :foo :baz}
+           (api/entity (api/db *api*) :foo))))

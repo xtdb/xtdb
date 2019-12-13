@@ -74,8 +74,10 @@
         valid-time (or at-valid-time transact-time)
         {:keys [content-hash]
          :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
-    {:pre-commit-fn #(if (= (c/new-id content-hash)
-                            (c/new-id old-v))
+    ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
+    ;; once the content-hashes are consistent
+    {:pre-commit-fn #(if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
+                            (db/get-single-object object-store snapshot (c/new-id old-v)))
                        (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
                          (when-not correct-state?
                            (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
