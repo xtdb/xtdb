@@ -27,12 +27,6 @@ Crux is an open source document database with bitemporal graph queries.
 
 image::crux-venn-1.svg?sanitize=true[Document database with graph queries,width=450,align="center"]
 
-[#what-is-crux-start]
-=== Get Started
-
-Reading the documentation is a good way to learn about Crux, so you are in
-the right place! <<#get-started,Let's continue the journey.>>
-
 [#what-is-crux-bitemporal]
 === Bitemporal
 
