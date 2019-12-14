@@ -10,27 +10,27 @@ These changes bump the index version to version 5 - a re-index of Crux nodes is 
 * [#441](https://github.com/juxt/crux/issues/441): Fix two transactions updating the same entity in the same millisecond always returning the earlier of the two values - requires index rebuild.
 * [#326](https://github.com/juxt/crux/issues/326): Put/delete with start/end valid-time semantics made consistent
 
+### New features
+* [#PR363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
+* [#372](https://github.com/juxt/crux/issues/372): Add support for Java collection types with submitTx
+* [#377](https://github.com/juxt/crux/issues/377): Can use 'cons' within query predicates
+* [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
+* [#430](https://github.com/juxt/crux/issues/430): Add LMDB configuration example to docs + tests
+* [#457](https://github.com/juxt/crux/issues/457): Allowing nil to be returned from tx-fns
+
 ### Bug fixes
 
 * [#362](https://github.com/juxt/crux/issues/362): Fixes 362 where hashes of small maps were dependent on order
-* [#PR363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
 * [#365](https://github.com/juxt/crux/issues/365): Replace usages of 'pr-str' with 'pr-edn-str' under crux.io
 * [#367](https://github.com/juxt/crux/issues/367): Can query empty DB
-* [#377](https://github.com/juxt/crux/issues/377): Can use 'cons' within query predicates
 * [#351](https://github.com/juxt/crux/issues/351): Do not merge placeholders into unary results
 * [#368](https://github.com/juxt/crux/issues/368): Protect calls to modules when node is closed
-* [#372](https://github.com/juxt/crux/issues/372): Add support for Java collection types with submitTx
 * [#418](https://github.com/juxt/crux/issues/418): Adds exception when query with order-by doesn't return variable ordered on
 * [#419](https://github.com/juxt/crux/issues/419): Fix specification for ':timeout' within queries.
 * [#440](https://github.com/juxt/crux/issues/440): Fix return type of 'documents' in the API.
 * [#453](https://github.com/juxt/crux/issues/453): Add nil check for queries in spec.
 * [#454](https://github.com/juxt/crux/issues/454): Add fix for tx-log breaking in spec after an eviction
-* [#457](https://github.com/juxt/crux/issues/457): Allowing nil to be returned from tx-fns
 * [#482](https://github.com/juxt/crux/issues/482): Bringing README up to date.
-
-### New features
-* [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
-* [#430](https://github.com/juxt/crux/issues/430): Add LMDB configuration example to docs + tests
 
 ## 19.09-1.5.0-alpha
 
