@@ -102,8 +102,8 @@
         valid-time (or at-valid-time transact-time)]
 
     {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
-                       ;; see juxt/crux#473 - we shouldn't need to compare the underlying documents
-                       ;; once the content-hashes are consistent
+                       ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
+                       ;; can't rely on the old content-hashing returning the same hash for the same document
                        (if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
                               (db/get-single-object object-store snapshot (c/new-id old-v)))
                          (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
