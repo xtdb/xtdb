@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+These changes bump the index version to version 5 - a re-index of Crux nodes is required.
+
 * [#428](https://github.com/juxt/crux/issues/428): Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
 * [#441](https://github.com/juxt/crux/issues/441): Fix two transactions updating the same entity in the same millisecond always returning the earlier of the two values - requires index rebuild.
 * [#326](https://github.com/juxt/crux/issues/326): Put/delete with start/end valid-time semantics made consistent
