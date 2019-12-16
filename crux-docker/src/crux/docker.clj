@@ -1,11 +1,9 @@
 (ns crux.docker
   (:require [crux.api :as crux]
-            [crux.http-server :as srv]))
+            [crux.http-server :as srv]
+            [clojure.java.io :as io]))
 
 (defn -main []
-  (let [node (crux/start-node {:crux.node/topology :crux.standalone/topology
-                               :crux.node/kv-store "crux.kv.memdb/kv"
-                               :crux.kv/db-dir "/var/lib/crux/db"
-                               :crux.standalone/event-log-dir "/var/lib/crux/events"
-                               :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"})]
-    (srv/start-http-server node)))
+  (let [{:keys [crux/node-opts crux/server-opts]} (read-string (slurp (io/file "/etc/crux.edn")))
+        node (crux/start-node node-opts)]
+    (srv/start-http-server node server-opts)))

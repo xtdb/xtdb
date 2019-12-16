@@ -10,4 +10,5 @@ WORKDIR /usr/lib/crux
 CMD ["clojure", "-m", "crux.docker"]
 
 ADD deps.edn .
+ADD crux.edn /etc/crux.edn
 ADD src/ ./src/
