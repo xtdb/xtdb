@@ -1,0 +1,13 @@
+version: "3.6"
+services:
+  crux-http:
+    build:
+      context: .
+    image: juxt/crux-http
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - "m2:/root/.m2"
+
+volumes:
+  m2:
