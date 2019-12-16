@@ -66,25 +66,25 @@
     [node ^Date valid-time ^Date transaction-time]
     "Will return the latest value of the db currently known. Non-blocking.
 
-     When a valid time is specified then returned db value contains only those
-     documents whose valid time is not after the specified. Non-blocking.
+  When a valid time is specified then returned db value contains only those
+  documents whose valid time is not after the specified. Non-blocking.
 
-     When both valid and transaction time are specified returns a db value
-     as of the valid and transaction time. Will block until the transaction
-     time is present in the index.")
+  When both valid and transaction time are specified returns a db value
+  as of the valid and transaction time. Will block until the transaction
+  time is present in the index.")
 
   (document [node content-hash]
     "Reads a document from the document store based on its
-    content hash.")
+  content hash.")
 
   (documents [node content-hashes-set]
     "Reads the set of documents from the document store based on their
-    respective content hashes. Returns a map content-hash->document")
+  respective content hashes. Returns a map content-hash->document")
 
   (history [node eid]
     "Returns the transaction history of an entity, in reverse
-    chronological order. Includes corrections, but does not include
-    the actual documents.")
+  chronological order. Includes corrections, but does not include
+  the actual documents.")
 
   (history-range [node eid
                   ^Date valid-time-start
@@ -92,42 +92,42 @@
                   ^Date valid-time-end
                   ^Date transaction-time-end]
     "Returns the transaction history of an entity, ordered by valid
-    time / transaction time in chronological order, earliest
-    first. Includes corrections, but does not include the actual
-    documents.
+  time / transaction time in chronological order, earliest
+  first. Includes corrections, but does not include the actual
+  documents.
 
-    Giving nil as any of the date arguments makes the range open
-    ended for that value.")
+  Giving nil as any of the date arguments makes the range open
+  ended for that value.")
 
   (status [node]
     "Returns the status of this node as a map.")
 
   (submitted-tx-updated-entity? [node submitted-tx eid]
     "Checks if a submitted tx did update an entity.
-    submitted-tx must be a map returned from `submit-tx`
-    eid is an object that can be coerced into an entity id.
-    Returns true if the entity was updated in this transaction.")
+  submitted-tx must be a map returned from `submit-tx`
+  eid is an object that can be coerced into an entity id.
+  Returns true if the entity was updated in this transaction.")
 
   (submitted-tx-corrected-entity? [node submitted-tx ^Date valid-time eid]
     "Checks if a submitted tx did correct an entity as of valid time.
-    submitted-tx must be a map returned from `submit-tx`
-    valid-time valid time of the correction to check.
-    eid is an object that can be coerced into an entity id.
-    Returns true if the entity was updated in this transaction.")
+  submitted-tx must be a map returned from `submit-tx`
+  valid-time valid time of the correction to check.
+  eid is an object that can be coerced into an entity id.
+  Returns true if the entity was updated in this transaction.")
 
   (sync
     [node ^Duration timeout]
     [node ^Date transaction-time ^Duration timeout]
     "If the transaction-time is supplied, blocks until indexing has
-    processed a tx with a greater-than transaction-time, otherwise
-    blocks until the node has caught up indexing the tx-log
-    backlog. Will throw an exception on timeout. The returned date is
-    the latest index time when this node has caught up as of this
-    call. This can be used as the second parameter in (db valid-time,
-    transaction-time) for consistent reads.
+  processed a tx with a greater-than transaction-time, otherwise
+  blocks until the node has caught up indexing the tx-log
+  backlog. Will throw an exception on timeout. The returned date is
+  the latest index time when this node has caught up as of this
+  call. This can be used as the second parameter in (db valid-time,
+  transaction-time) for consistent reads.
 
-    timeout – max time to wait, can be nil for the default.
-    Returns the latest known transaction time.")
+  timeout – max time to wait, can be nil for the default.
+  Returns the latest known transaction time.")
 
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes"))
@@ -136,28 +136,28 @@
   "Provides API access to Crux ingestion."
   (submit-tx [node tx-ops]
     "Writes transactions to the log for processing
-     tx-ops datalog style transactions.
-     Returns a map with details about the submitted transaction,
-     including tx-time and tx-id.")
+  tx-ops datalog style transactions.
+  Returns a map with details about the submitted transaction,
+  including tx-time and tx-id.")
 
   (new-tx-log-context ^java.io.Closeable [node]
     "Returns a new transaction log context allowing for lazy reading
-    of the transaction log in a try-with-resources block using
-    (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-ops?).
+  of the transaction log in a try-with-resources block using
+  (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-ops?).
 
-    Returns an implementation specific context.")
+  Returns an implementation specific context.")
 
   (tx-log [node tx-log-context from-tx-id with-ops?]
     "Reads the transaction log lazily. Optionally includes
-    operations, which allow the contents under the :crux.api/tx-ops
-    key to be piped into (submit-tx tx-ops) of another
-    Crux instance.
+  operations, which allow the contents under the :crux.api/tx-ops
+  key to be piped into (submit-tx tx-ops) of another
+  Crux instance.
 
-    tx-log-context  a context from (new-tx-log-context node)
-    from-tx-id      optional transaction id to start from.
-    with-ops?       should the operations with documents be included?
+  tx-log-context  a context from (new-tx-log-context node)
+  from-tx-id      optional transaction id to start from.
+  with-ops?       should the operations with documents be included?
 
-    Returns a lazy sequence of the transaction log."))
+  Returns a lazy sequence of the transaction log."))
 
 (extend-protocol PCruxNode
   ICruxAPI
@@ -216,53 +216,53 @@
 
   (entity [db eid]
     "queries a document map for an entity.
-    eid is an object which can be coerced into an entity id.
-    returns the entity document map.")
+  eid is an object which can be coerced into an entity id.
+  returns the entity document map.")
 
   (entity-tx [db eid]
     "returns the transaction details for an entity. Details
-    include tx-id and tx-time.
-    eid is an object that can be coerced into an entity id.")
+  include tx-id and tx-time.
+  eid is an object that can be coerced into an entity id.")
 
   (new-snapshot ^java.io.Closeable [db]
      "Returns a new implementation specific snapshot allowing for lazy query results in a
-     try-with-resources block using (q db  snapshot  query)}.
-     Can also be used for
-     (history-ascending db snapshot  eid) and
-     (history-descending db snapshot  eid)
-     returns an implementation specific snapshot")
+  try-with-resources block using (q db  snapshot  query)}.
+  Can also be used for
+  (history-ascending db snapshot  eid) and
+  (history-descending db snapshot  eid)
+  returns an implementation specific snapshot")
 
   (q
     [db query]
     [db snapshot query]
     "q[uery] a Crux db.
-    query param is a datalog query in map, vector or string form.
-    First signature will evaluate eagerly and will return a set or vector
-    of result tuples.
-    Second signature accepts a db snapshot, see `new-snapshot`.
-    Evaluates *lazily* consequently returns lazy sequence of result tuples.")
+  query param is a datalog query in map, vector or string form.
+  First signature will evaluate eagerly and will return a set or vector
+  of result tuples.
+  Second signature accepts a db snapshot, see `new-snapshot`.
+  Evaluates *lazily* consequently returns lazy sequence of result tuples.")
 
   (history-ascending
     [db snapshot eid]
     "Retrieves entity history lazily in chronological order
-    from and including the valid time of the db while respecting
-    transaction time. Includes the documents.")
+  from and including the valid time of the db while respecting
+  transaction time. Includes the documents.")
 
   (history-descending
     [db snapshot eid]
     "Retrieves entity history lazily in reverse chronological order
-    from and including the valid time of the db while respecting
-    transaction time. Includes the documents.")
+  from and including the valid time of the db while respecting
+  transaction time. Includes the documents.")
 
   (valid-time [db]
     "returns the valid time of the db.
-    If valid time wasn't specified at the moment of the db value retrieval
-    then valid time will be time of the latest transaction.")
+  If valid time wasn't specified at the moment of the db value retrieval
+  then valid time will be time of the latest transaction.")
 
   (transaction-time [db]
     "returns the time of the latest transaction applied to this db value.
-    If a tx time was specified when db value was acquired then returns
-    the specified time."))
+  If a tx time was specified when db value was acquired then returns
+  the specified time."))
 
 (extend-protocol PCruxDatasource
   ICruxDatasource
@@ -298,9 +298,9 @@
   "Provides API access to Crux async ingestion."
   (submit-tx-async [node tx-ops]
     "Writes transactions to the log for processing tx-ops datalog
-     style transactions. Non-blocking.  Returns a deref with map with
-     details about the submitted transaction, including tx-time and
-     tx-id."))
+  style transactions. Non-blocking.  Returns a deref with map with
+  details about the submitted transaction, including tx-time and
+  tx-id."))
 
 (extend-protocol PCruxAsyncIngestClient
   ICruxAsyncIngestAPI
