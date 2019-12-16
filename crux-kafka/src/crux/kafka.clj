@@ -108,7 +108,7 @@
   (submit-tx [this tx-ops]
     (try
       (s/assert :crux.api/tx-ops tx-ops)
-      (let [tx-events (tx/tx-ops->tx-events tx-ops)
+      (let [tx-events (map tx/tx-op->tx-event tx-ops)
             content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
                                      [(c/new-id doc) doc])
                                    (into {}))]
