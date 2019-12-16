@@ -144,7 +144,7 @@
                            (.content-hash entity-tx)
                            {:crux.db/id eid, :crux.db/evicted? true})))}))
 
-(declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
+(declare tx-op->command tx-command-unknown tx-ops->docs tx-op->tx-event)
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
@@ -174,9 +174,9 @@
                         (doseq [arg-doc arg-docs]
                           (db/index-doc indexer (c/new-id arg-doc) arg-doc))
                         {:docs (vec docs)
-                         :ops-result (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops)]
+                         :ops-result (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
                                             ((get tx-op->command op tx-command-unknown)
-                                             indexer kv object-store snapshot tx-log tx-op transact-time tx-id)))})
+                                             indexer kv object-store snapshot tx-log tx-event transact-time tx-id)))})
                       (catch Throwable t
                         t))]
       (if (instance? Throwable fn-result)
@@ -294,52 +294,48 @@
 
 (defmulti conform-tx-op first)
 
-(defmethod conform-tx-op ::put [tx-op] (let [[op doc & args] tx-op
-                                            id (:crux.db/id doc)]
-                                        (into [::put id doc] args)))
+(defmethod conform-tx-op ::put [tx-op]
+  (let [[op doc & args] tx-op
+        id (:crux.db/id doc)]
+    (into [::put id doc] args)))
 
-(defmethod conform-tx-op ::cas [tx-op] (let [[op old-doc new-doc & args] tx-op
-                                            new-id (:crux.db/id new-doc)
-                                            old-id (:crux.db/id old-doc)]
-                                        (if (or (= nil old-id) (= new-id old-id))
-                                          (into [::cas new-id old-doc new-doc] args)
-                                          (throw (IllegalArgumentException.
-                                                  (str "CAS, document id's do not match: " old-id " " new-id))))))
+(defmethod conform-tx-op ::cas [tx-op]
+  (let [[op old-doc new-doc & args] tx-op
+        new-id (:crux.db/id new-doc)
+        old-id (:crux.db/id old-doc)]
+    (if (or (= nil old-id) (= new-id old-id))
+      (into [::cas new-id old-doc new-doc] args)
+      (throw (IllegalArgumentException.
+              (str "CAS, document id's do not match: " old-id " " new-id))))))
 
 (defmethod conform-tx-op :default [tx-op] tx-op)
 
 (defn tx-ops->docs [tx-ops]
-  (let [conformed-tx-ops (into [] (for [tx-op tx-ops] (conform-tx-op tx-op)))]
-    (vec (for [[op id & args] conformed-tx-ops
-               doc (filter map? args)]
-           doc))))
+  (vec (for [[op id & args] (map conform-tx-op tx-ops)
+             doc (filter map? args)]
+         doc)))
 
-(defn tx-ops->tx-events [tx-ops]
-  (let [conformed-tx-ops (into [] (for [tx-op tx-ops] (conform-tx-op tx-op)))
-        tx-events (mapv (fn [[op id & args]]
-                          (into [op (str (c/new-id id))]
-                                (for [arg args]
-                                  (if (map? arg)
-                                    (-> arg c/new-id str)
-                                    arg))))
-                        conformed-tx-ops)]
-    (s/assert :crux.tx.event/tx-events tx-events)
-    tx-events))
+(defn tx-op->tx-event [tx-op]
+  (let [[op id & args] (conform-tx-op tx-op)]
+    (doto (into [op (str (c/new-id id))]
+                (for [arg args]
+                  (if (map? arg)
+                    (-> arg c/new-id str)
+                    arg)))
+      (->> (s/assert :crux.tx.event/tx-event)))))
 
-(defn tx-events->tx-ops [snapshot object-store tx-events]
-  (let [tx-ops (vec (for [[op id & args] tx-events]
-                      (vec (concat [op]
-                                   (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
-                                     [(c/new-id id)])
+(defn tx-event->tx-op [[op id & args] snapshot object-store]
+  (doto (into [op]
+              (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
+                        [(c/new-id id)])
 
-                                   (for [arg args]
-                                     (or (when (satisfies? c/IdToBuffer arg)
-                                           (or (db/get-single-object object-store snapshot arg)
-                                               {:crux.db/id (c/new-id id)
-                                                :crux.db/evicted? true}))
-                                         arg))))))]
-    (s/assert :crux.api/tx-ops tx-ops)
-    tx-ops))
+                      (for [arg args]
+                        (or (when (satisfies? c/IdToBuffer arg)
+                              (or (db/get-single-object object-store snapshot arg)
+                                  {:crux.db/id (c/new-id id)
+                                   :crux.db/evicted? true}))
+                            arg))))
+    (->> (s/assert :crux.api/tx-op))))
 
 (defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
   ;; this will likely be going away as part of #442

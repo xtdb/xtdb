@@ -128,7 +128,8 @@
               (dissoc :crux.tx.event/tx-events)
               (assoc :crux.api/tx-ops
                      (with-open [snapshot (kv/new-snapshot kv-store)]
-                       (tx/tx-events->tx-ops snapshot object-store tx-events))))
+                       (->> tx-events
+                            (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
           tx-log-entry))))
 
   (sync [this timeout]
