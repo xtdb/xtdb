@@ -28,6 +28,55 @@
 (s/def ::tx-id nat-int?)
 (s/def ::tx-time date?)
 
+(defmulti conform-tx-op first)
+
+(defmethod conform-tx-op ::put [tx-op]
+  (let [[op doc & args] tx-op
+        id (:crux.db/id doc)]
+    (into [::put id doc] args)))
+
+(defmethod conform-tx-op ::cas [tx-op]
+  (let [[op old-doc new-doc & args] tx-op
+        new-id (:crux.db/id new-doc)
+        old-id (:crux.db/id old-doc)]
+    (if (or (= nil old-id) (= new-id old-id))
+      (into [::cas new-id old-doc new-doc] args)
+      (throw (IllegalArgumentException.
+              (str "CAS, document ids do not match: " old-id " " new-id))))))
+
+(defmethod conform-tx-op :default [tx-op] tx-op)
+
+(defn tx-ops->docs [tx-ops]
+  (vec (for [[op id & args] (map conform-tx-op tx-ops)
+             doc (filter map? args)]
+         doc)))
+
+(defn tx-op->tx-event [tx-op]
+  (let [[op id & args] (conform-tx-op tx-op)]
+    (doto (into [op (str (c/new-id id))]
+                (for [arg args]
+                  (if (map? arg)
+                    (-> arg c/new-id str)
+                    arg)))
+      (->> (s/assert :crux.tx.event/tx-event)))))
+
+(defn tx-event->tx-op [[op id & args] snapshot object-store]
+  (doto (into [op]
+              (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
+                        [(c/new-id id)])
+
+                      (for [arg args]
+                        (or (when (satisfies? c/IdToBuffer arg)
+                              (or (db/get-single-object object-store snapshot arg)
+                                  {:crux.db/id (c/new-id id)
+                                   :crux.db/evicted? true}))
+                            arg))))
+    (->> (s/assert :crux.api/tx-op))))
+
+(defmulti index-tx-event
+  (fn [[op :as tx-event] indexer kv object-store snapshot tx-log transact-time tx-id]
+    op))
+
 (defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
@@ -78,7 +127,7 @@
                      (c/->id-buffer (.content-hash etx))]]))
          (into []))))
 
-(defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] indexer kv object-store snapshot tx-log transact-time tx-id]
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
@@ -88,10 +137,10 @@
                      correct-state?)
    :kvs (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/new-id v))})
 
-(defn tx-command-delete [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
+(defmethod index-tx-event :crux.tx/delete [[op k start-valid-time end-valid-time] indexer kv object-store snapshot tx-log transact-time tx-id]
   {:kvs (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id nil)})
 
-(defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
+(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op] indexer kv object-store snapshot tx-log transact-time tx-id]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time transact-time)]
 
@@ -112,7 +161,7 @@
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
-(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k & legacy-args] transact-time tx-id]
+(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] indexer kv object-store snapshot tx-log transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)]
     {:pre-commit-fn #(cond
@@ -138,8 +187,6 @@
                            (.content-hash entity-tx)
                            {:crux.db/id eid, :crux.db/evicted? true})))}))
 
-(declare tx-op->command tx-command-unknown tx-ops->docs tx-op->tx-event)
-
 (def ^:private tx-fn-eval-cache (memoize eval))
 
 (defn log-tx-fn-error [fn-result fn-id body args-id args]
@@ -147,7 +194,7 @@
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
-(defn tx-command-fn [indexer kv object-store snapshot tx-log [op k args-v :as tx-op] transact-time tx-id]
+(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op] indexer kv object-store snapshot tx-log transact-time tx-id]
   (if-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op))))
     (let [fn-id (c/new-id k)
@@ -169,8 +216,7 @@
                           (db/index-doc indexer (c/new-id arg-doc) arg-doc))
                         {:docs (vec docs)
                          :ops-result (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
-                                            ((get tx-op->command op tx-command-unknown)
-                                             indexer kv object-store snapshot tx-log tx-event transact-time tx-id)))})
+                                            (index-tx-event tx-event indexer kv object-store snapshot tx-log transact-time tx-id)))})
                       (catch Throwable t
                         t))]
       (if (instance? Throwable fn-result)
@@ -203,15 +249,8 @@
                                     :when post-commit-fn]
                               (post-commit-fn))})))))
 
-(defn tx-command-unknown [indexer kv object-store snapshot tx-log [op & _] transact-time tx-id]
+(defmethod index-tx-event :default [[op & _] indexer kv object-store snapshot tx-log transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
-
-(def ^:private tx-op->command
-  {:crux.tx/put tx-command-put
-   :crux.tx/delete tx-command-delete
-   :crux.tx/cas tx-command-cas
-   :crux.tx/evict tx-command-evict
-   :crux.tx/fn tx-command-fn})
 
 (def ^:dynamic *current-tx*)
 
@@ -255,8 +294,7 @@
                               :crux.tx/tx-time tx-time
                               :crux.tx.event/tx-events tx-events}]
         (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
-                                        ((get tx-op->command op tx-command-unknown)
-                                         this kv object-store snapshot tx-log tx-event tx-time tx-id)))]
+                                        (index-tx-event tx-event this kv object-store snapshot tx-log tx-time tx-id)))]
           (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
           (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                          :when pre-commit-fn]
@@ -285,51 +323,6 @@
     {:crux.index/index-version (idx/current-index-version kv)
      :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
-
-(defmulti conform-tx-op first)
-
-(defmethod conform-tx-op ::put [tx-op]
-  (let [[op doc & args] tx-op
-        id (:crux.db/id doc)]
-    (into [::put id doc] args)))
-
-(defmethod conform-tx-op ::cas [tx-op]
-  (let [[op old-doc new-doc & args] tx-op
-        new-id (:crux.db/id new-doc)
-        old-id (:crux.db/id old-doc)]
-    (if (or (= nil old-id) (= new-id old-id))
-      (into [::cas new-id old-doc new-doc] args)
-      (throw (IllegalArgumentException.
-              (str "CAS, document id's do not match: " old-id " " new-id))))))
-
-(defmethod conform-tx-op :default [tx-op] tx-op)
-
-(defn tx-ops->docs [tx-ops]
-  (vec (for [[op id & args] (map conform-tx-op tx-ops)
-             doc (filter map? args)]
-         doc)))
-
-(defn tx-op->tx-event [tx-op]
-  (let [[op id & args] (conform-tx-op tx-op)]
-    (doto (into [op (str (c/new-id id))]
-                (for [arg args]
-                  (if (map? arg)
-                    (-> arg c/new-id str)
-                    arg)))
-      (->> (s/assert :crux.tx.event/tx-event)))))
-
-(defn tx-event->tx-op [[op id & args] snapshot object-store]
-  (doto (into [op]
-              (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
-                        [(c/new-id id)])
-
-                      (for [arg args]
-                        (or (when (satisfies? c/IdToBuffer arg)
-                              (or (db/get-single-object object-store snapshot arg)
-                                  {:crux.db/id (c/new-id id)
-                                   :crux.db/evicted? true}))
-                            arg))))
-    (->> (s/assert :crux.api/tx-op))))
 
 (defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
   ;; this will likely be going away as part of #442
