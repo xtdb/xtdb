@@ -5,7 +5,7 @@
 (defn -main []
   (let [node (crux/start-node {:crux.node/topology :crux.standalone/topology
                                :crux.node/kv-store "crux.kv.memdb/kv"
-                               :crux.kv/db-dir "crux-node/db"
-                               :crux.standalone/event-log-dir "crux-node/events"
+                               :crux.kv/db-dir "/var/lib/crux/db"
+                               :crux.standalone/event-log-dir "/var/lib/crux/events"
                                :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"})]
     (srv/start-http-server node)))
