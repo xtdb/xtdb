@@ -1,7 +1,12 @@
 FROM clojure:openjdk-11-tools-deps
+
+VOLUME /root/.m2
+
 EXPOSE 3000
-CMD ["clojure", "-m", "crux.docker"]
 
 WORKDIR /usr/lib/crux
+
+CMD ["clojure", "-m", "crux.docker"]
+
 ADD deps.edn .
 ADD src/ ./src/
