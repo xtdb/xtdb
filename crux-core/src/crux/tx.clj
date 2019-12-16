@@ -28,12 +28,6 @@
 (s/def ::tx-id nat-int?)
 (s/def ::tx-time date?)
 
-(defn- in-range-pred [start end]
-  #(and (or (nil? start)
-            (not (pos? (compare start %))))
-        (or (nil? end)
-            (neg? (compare % end)))))
-
 (defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
