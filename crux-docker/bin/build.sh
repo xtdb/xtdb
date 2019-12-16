@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t juxt/crux-http .
+docker-compose -f docker-compose.dev.yml build
