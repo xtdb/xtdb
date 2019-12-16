@@ -34,6 +34,14 @@
         (or (nil? end)
             (neg? (compare % end)))))
 
+
+(defn tx-event->content-hashes [[op id & args]]
+  (->> args
+       (take (case op
+               :crux.tx/put 1
+               (:crux.tx/delete :crux.tx/fn :crux.tx/evict) 0
+               :crux.tx/cas 2))))
+
 (defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
@@ -117,6 +125,9 @@
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
+(defn submit-evicted-doc [eid content-hash ^crux.db.TxLog tx-log]
+  (db/submit-doc tx-log content-hash {:crux.db/id eid, :crux.db/evicted? true}))
+
 (defn tx-command-evict [indexer kv object-store snapshot tx-log [op k & legacy-args] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)]
@@ -133,15 +144,9 @@
                                true))
 
      :post-commit-fn #(when tx-log
-                        (doseq [^EntityTx entity-tx history-descending]
-                          ;; TODO: Direct interface call to help
-                          ;; Graal, not sure why this is needed,
-                          ;; fails with get-proxy-class issue
-                          ;; otherwise.
-                          (.submit_doc
-                           ^crux.db.TxLog tx-log
-                           (.content-hash entity-tx)
-                           {:crux.db/id eid, :crux.db/evicted? true})))}))
+                        (->> history-descending
+                             (run! (fn [^EntityTx etx]
+                                     (submit-evicted-doc (.eid etx) (.content-hash etx) tx-log)))))}))
 
 (declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
 
@@ -275,7 +280,10 @@
                         :when post-commit-fn]
                   (post-commit-fn)))
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
+                (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])
+                (doseq [[op id & args :as tx-event] tx-events
+                        content-hash (tx-event->content-hashes tx-event)]
+                  (submit-evicted-doc id content-hash tx-log))))))))
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv)]
