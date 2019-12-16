@@ -643,3 +643,20 @@
 
   (t/is (= {:crux.db/id :foo, :foo :baz}
            (api/entity (api/db *api*) :foo))))
+
+(t/deftest cas-docs-not-evicting-371
+  (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :foo, :foo :bar}]
+                         [:crux.tx/put {:crux.db/id :frob :foo :bar}]])
+
+  (sync-submit-tx *api* [[:crux.tx/cas {:crux.db/id :foo, :foo :baz} {:crux.db/id :foo, :foo :quux}]
+                         [:crux.tx/put {:crux.db/id :frob :foo :baz}]])
+  (sync-submit-tx *api* [[:crux.tx/evict :foo]])
+
+  (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :foo, :foo :bar}))))
+  (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :foo, :foo :baz}))))
+  (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :foo, :foo :quux}))))
+
+  (t/testing "even though the CaS was unrelated, the whole transaction fails - we should still evict those docs"
+    (sync-submit-tx *api* [[:crux.tx/evict :frob]])
+    (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :frob, :foo :bar}))))
+    (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :frob, :foo :baz}))))))
