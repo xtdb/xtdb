@@ -46,10 +46,9 @@
 
 (defmethod conform-tx-op :default [tx-op] tx-op)
 
-(defn tx-ops->docs [tx-ops]
-  (vec (for [[op id & args] (map conform-tx-op tx-ops)
-             doc (filter map? args)]
-         doc)))
+(defn tx-op->docs [tx-op]
+  (let [[op id & args] (conform-tx-op tx-op)]
+    (filter map? args)))
 
 (defn tx-op->tx-event [tx-op]
   (let [[op id & args] (conform-tx-op tx-op)]
@@ -205,7 +204,7 @@
           fn-result (try
                       (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
                             _ (when tx-ops (s/assert :crux.api/tx-ops tx-ops))
-                            docs (tx-ops->docs tx-ops)
+                            docs (mapcat tx-op->docs tx-ops)
                             {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
                         ;; TODO: might lead to orphaned and unevictable
                         ;; argument docs if the transaction fails. As
