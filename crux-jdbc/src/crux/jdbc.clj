@@ -96,7 +96,7 @@
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
-    (doseq [doc (tx/tx-ops->docs tx-ops)]
+    (doseq [doc (mapcat tx/tx-op->docs tx-ops)]
       (db/submit-doc this (str (c/new-id doc)) doc))
     (let [tx-events (map tx/tx-op->tx-event tx-ops)
           ^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "txs"))]
