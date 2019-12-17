@@ -269,9 +269,7 @@
                      (pre-commit-fn))
                    (doall)
                    (every? true?))
-            (do (->> (map :kvs tx-command-results)
-                     (reduce into (sorted-map-by mem/buffer-comparator))
-                     (kv/store kv))
+            (do (kv/store kv (into (sorted-map-by mem/buffer-comparator) (mapcat :kvs) tx-command-results))
                 (doseq [{:keys [post-commit-fn]} tx-command-results
                         :when post-commit-fn]
                   (post-commit-fn)))
