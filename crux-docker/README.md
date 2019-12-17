@@ -62,3 +62,9 @@ For example, to add CORS access permissions to the server, add the following und
    {:access-control-allow-origin [#".*"]
     :access-control-allow-methods [:get :options :head :post]}}}
 ```
+
+---
+
+### Updating / Redeploying the docker image
+
+To rebuild / redeploy the docker image, ensure you are logged into docker and have access to the **juxt** docker account, and run the `./bin/build_and_deploy.sh` script. Updating Crux to a new version requires updating the versions within `deps.edn`, and changing the tag version within `build_and_deploy`.
