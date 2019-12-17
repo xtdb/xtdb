@@ -1,0 +1,3 @@
+{:deps
+ {juxt/crux-http-server {:mvn/version "19.09-1.5.0-alpha"}
+  juxt/crux-core {:mvn/version "19.09-1.5.0-alpha"}}}
