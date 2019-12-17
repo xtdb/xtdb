@@ -4,6 +4,7 @@ VOLUME /root/.m2
 VOLUME /var/lib/crux
 
 EXPOSE 3000
+EXPOSE 7888
 
 WORKDIR /usr/lib/crux
 

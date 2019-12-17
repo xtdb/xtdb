@@ -29,6 +29,8 @@
      :crux/http-server {:crux/node (ig/ref :crux/node)
                         :crux/server-config server-opts}}))
 
+(defonce nrepl-server (nrepl/start-server :port 7888))
+
 (defn -main []
   (ir/set-prep! (constantly ig-config))
   (ir/go))
