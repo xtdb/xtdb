@@ -1,7 +1,8 @@
-See basic (non-configured) setup instructions on [docker hub](https://hub.docker.com/r/juxt/crux-http). 
+If you wish to use Crux in Docker, you have two options:
+- Crux can be embedded within your JVM application - you don't need our Docker images for this, you can include Crux as a library and deploy it as you would any other JVM Docker application (see the [docs](https://opencrux.com/docs))
+- If you want to access Crux via HTTP, you want this Docker image, instructions below.
 
-To create a custom configured node, download the
-contents of this folder and read the instructions below.
+The following assumes that you are copying the contents of this folder and intend to create your own node configuration. If you wish to see how to **interact** with a basic, non-configured setup, check out the overview on [docker hub](https://hub.docker.com/r/juxt/crux-http). 
 
 --- 
 ## Getting Started
@@ -43,7 +44,7 @@ Doing so introduces a dependency to `crux-rocksdb`, which can be added to the do
 
 Now, running the script under `./bin/dev.sh` will create a HTTP node using RocksDB.
 
-For further node configuration options, see the [related section](https://opencrux.com/docs#configuration) within the Crux docs.
+**For further node configuration options, see the [related section](https://opencrux.com/docs#configuration) within the Crux docs.**
 
 ## Customizing the HTTP Server
 
@@ -58,13 +59,6 @@ For example, to add CORS access permissions to the server, add the following und
                   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}
  :crux/server-opts 
  {:cors-access-control
-   [:access-control-allow-origin [#".*"]
-    :access-control-allow-headers ["X-Requested-With"
-                                   "Content-Type"
-                                   "Cache-Control"
-                                   "Origin"
-                                   "Accept"
-                                   "Authorization"
-                                   "X-Custom-Header"]
-    :access-control-allow-methods [:get :options :head :post]]}}
+   {:access-control-allow-origin [#".*"]
+    :access-control-allow-methods [:get :options :head :post]}}}
 ```
