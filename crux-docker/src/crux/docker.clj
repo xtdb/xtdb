@@ -7,7 +7,6 @@
   (let [{:keys [crux/node-opts crux/server-opts]} (read-string (slurp (io/file "/etc/crux.edn")))
         node (crux/start-node node-opts)
         cors-opts (:cors-access-control server-opts)
-        srv-opts (if (map? cors-opts)
-                   (assoc server-opts :cors-access-control (reduce into [] cors-opts))
-                   server-opts)]
+        srv-opts (cond-> server-opts
+                   (map? cors-opts) (assoc :cors-access-control (reduce into [] cors-opts)))]
     (srv/start-http-server node srv-opts)))
