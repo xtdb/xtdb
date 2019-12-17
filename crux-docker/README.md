@@ -18,6 +18,11 @@ To run the basic instance of the node (which runs using the **memdb**), run the 
 some default Crux node / Crux HTTP Server options defined within the file **crux.edn**, and the dependencies within **deps.edn** to
 start a HTTP node running on **localhost:3000**.
 
+### Starting an NRepl/PRepl Server
+
+Optionally, you can start an NRepl/PRepl server on **localhost:7888** alongside your HTTP node by adding either "--nrepl" or "--prepl" within **docker-compose.dev.yml** under `command:`.
+
+
 ## Customizing the node
 
 To customize the node, you can change the configuration options under **crux.edn** and add any further required dependecies
