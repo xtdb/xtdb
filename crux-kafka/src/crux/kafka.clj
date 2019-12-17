@@ -67,16 +67,13 @@
          (read-kafka-properties-file kafka-properties-file)
          kafka-properties-map))
 
-(defn create-producer
-  ^org.apache.kafka.clients.producer.KafkaProducer [config]
+(defn create-producer ^KafkaProducer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
 
-(defn create-consumer
-  ^org.apache.kafka.clients.consumer.KafkaConsumer [config]
+(defn create-consumer ^KafkaConsumer [config]
   (KafkaConsumer. ^Map (merge default-consumer-config config)))
 
-(defn create-admin-client
-  ^org.apache.kafka.clients.admin.AdminClient [config]
+(defn create-admin-client ^AdminClient [config]
   (AdminClient/create ^Map config))
 
 (defn create-topic [^AdminClient admin-client topic num-partitions replication-factor config]
@@ -88,6 +85,18 @@
         (let [cause (.getCause e)]
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
+
+(defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
+  (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
+    (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
+
+(defn ensure-topics [{::keys [tx-topic replication-factor doc-partitions doc-topic create-topics] :as config}]
+  (with-open [admin-client (create-admin-client config)]
+    (when create-topics
+      (create-topic admin-client tx-topic 1 replication-factor tx-topic-config)
+      (create-topic admin-client doc-topic doc-partitions replication-factor doc-topic-config))
+
+    (ensure-tx-topic-has-single-partition admin-client tx-topic)))
 
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx.event/tx-events (.value record)
@@ -282,52 +291,32 @@
     (reset! running? false)
     (.join worker-thread)))
 
-(defn- indexing-consumer-thread-main-loop
-  [{:keys [running? indexer consumer-config options]}]
+(defn- indexing-consumer-thread-main-loop [{:keys [running? indexer consumer-config options]}]
   (with-open [consumer (create-consumer consumer-config)]
-    (subscribe-from-stored-offsets
-     indexer consumer [(::tx-topic options) (::doc-topic options)])
+    (subscribe-from-stored-offsets indexer consumer [(::tx-topic options) (::doc-topic options)])
     (let [pending-txs-state (atom [])]
       (while @running?
         (try
-          (consume-and-index-entities
-           {:indexer indexer
-            :consumer consumer
-            :timeout 1000
-            :pending-txs-state pending-txs-state
-            :tx-topic (::tx-topic options)
-            :doc-topic (::doc-topic options)})
+          (consume-and-index-entities {:indexer indexer
+                                       :consumer consumer
+                                       :timeout 1000
+                                       :pending-txs-state pending-txs-state
+                                       :tx-topic (::tx-topic options)
+                                       :doc-topic (::doc-topic options)})
           (catch Exception e
             (log/error e "Error while consuming and indexing from Kafka:")
             (Thread/sleep 500)))))))
 
-(defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
-  (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
-    (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
-
-(defn- start-indexing-consumer
-  ^java.io.Closeable
-  [admin-client consumer-config indexer
-   {:keys [crux.kafka/tx-topic
-           crux.kafka/replication-factor
-           crux.kafka/doc-partitions
-           crux.kafka/doc-topic
-           crux.kafka/create-topics] :as options}]
-  (when create-topics
-    (create-topic admin-client tx-topic 1 replication-factor tx-topic-config)
-    (create-topic admin-client doc-topic doc-partitions
-                  replication-factor doc-topic-config))
-  (ensure-tx-topic-has-single-partition admin-client tx-topic)
+(defn- start-indexing-consumer ^java.io.Closeable [admin-client consumer-config indexer options]
   (let [indexing-consumer (map->IndexingConsumer {:running? (atom true)
                                                   :indexer indexer
                                                   :consumer-config consumer-config
                                                   :options options})]
-    (assoc
-     indexing-consumer
-     :worker-thread
-     (doto (Thread. ^Runnable (partial indexing-consumer-thread-main-loop indexing-consumer)
-                    "crux.kafka.indexing-consumer-thread")
-       (.start)))))
+    (assoc indexing-consumer
+           :worker-thread
+           (doto (Thread. ^Runnable (partial indexing-consumer-thread-main-loop indexing-consumer)
+                          "crux.kafka.indexing-consumer-thread")
+             (.start)))))
 
 (def default-options
   {::bootstrap-servers {:doc "URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
@@ -362,6 +351,7 @@
   {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]} options]
                (let [kafka-config (derive-kafka-config options)
                      consumer-config (merge {"group.id" (::group-id options)} kafka-config)]
+                 (ensure-topics consumer-config)
                  (start-indexing-consumer admin-client consumer-config indexer options)))
    :deps [:crux.node/indexer ::admin-client]
    :args (merge default-options
