@@ -12,6 +12,8 @@ services:
       - "crux-dev-data:/var/lib/crux"
       - "./crux.edn:/etc/crux.edn"
       - "./deps.edn:/usr/lib/crux/deps.edn"
+    command: ""
+
 
 volumes:
   m2:

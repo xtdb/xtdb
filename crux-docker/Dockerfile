@@ -9,7 +9,6 @@ EXPOSE 7888
 WORKDIR /usr/lib/crux
 
 ENTRYPOINT ["clojure", "-m", "crux.docker"]
-CMD [""]
 
 ADD deps.edn .
 ADD crux.edn /etc/crux.edn

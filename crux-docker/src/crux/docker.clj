@@ -36,9 +36,7 @@
    [nil "--prepl" "Starts an prepl for the container"]])
 
 (defn parse-args [args]
-  (prn args)
   (let [{:keys [options]} (cli/parse-opts args cli-opts)]
-    (prn options)
     (cond
       (:nrepl options) (nrepl/start-server :bind "0.0.0.0", :port 7888)
       (:prepl options) (prepl/start-server {:accept 'clojure.core.server/io-prepl
