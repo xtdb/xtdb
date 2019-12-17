@@ -131,7 +131,7 @@
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
-                         correct-state? (db/known-keys? object-store snapshot [content-hash])]
+                         correct-state? (empty? (db/missing-keys object-store snapshot [content-hash]))]
                      (when-not correct-state?
                        (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                      correct-state?)
@@ -308,9 +308,9 @@
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
                 (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
 
-  (docs-exist? [_ content-hashes]
+  (missing-hashes [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv)]
-      (db/known-keys? object-store snapshot content-hashes)))
+      (db/missing-keys object-store snapshot content-hashes)))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv k v))

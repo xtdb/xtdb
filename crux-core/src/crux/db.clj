@@ -18,7 +18,7 @@
 (defprotocol Indexer
   (index-doc [this content-hash doc])
   (index-tx [this tx-events tx-time tx-id])
-  (docs-exist? [this content-hashes])
+  (missing-hashes [this content-hashes])
   (store-index-meta [this k v])
   (read-index-meta [this k]))
 ;; end::Indexer[]
@@ -40,7 +40,7 @@
   (init [this partial-node options])
   (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
-  (known-keys? [this snapshot ks])
+  (missing-keys [this snapshot ks])
   (put-objects [this kvs])
   (delete-objects [this kvs]))
 ;; end::ObjectStore[]

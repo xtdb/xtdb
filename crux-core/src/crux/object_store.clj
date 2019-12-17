@@ -39,11 +39,10 @@
            [k doc])
          (into {})))
 
-  (known-keys? [this snapshot ks]
-    (every?
-      (fn [k]
-        (kv/get-value snapshot (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))))
-      ks))
+  (missing-keys [this snapshot ks]
+    (->> ks
+         (into #{} (remove (fn [k]
+                         (kv/get-value snapshot (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))))))))
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
@@ -86,13 +85,12 @@
       (with-open [out (DataOutputStream. (FileOutputStream. (io/file dir doc-key)))]
         (nippy/freeze-to-out! out v))))
 
-  (known-keys? [this snapshot ks]
-    (every?
-      (fn [k]
-        (let [doc-key (str (c/new-id k))
-              doc-file (io/file dir doc-key)]
-          (.exists doc-file)))
-      ks))
+  (missing-keys [this snapshot ks]
+    (->> ks
+         (into #{} (remove (fn [k]
+                             (let [doc-key (str (c/new-id k))
+                                   doc-file (io/file dir doc-key)]
+                               (.exists doc-file)))))))
 
   (delete-objects [this ks]
     (doseq [k ks
@@ -119,8 +117,8 @@
            [k v])
          (into {})))
 
-  (known-keys? [this snapshot ks]
-    (db/known-keys? object-store snapshot ks))
+  (missing-keys [this snapshot ks]
+    (db/missing-keys object-store snapshot ks))
 
   (put-objects [this kvs]
     (db/put-objects
