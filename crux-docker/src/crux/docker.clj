@@ -4,7 +4,9 @@
             [clojure.java.io :as io]
             [integrant.core :as ig]
             [integrant.repl :as ir]
-            [nrepl.server :as nrepl])
+            [nrepl.server :as nrepl]
+            [clojure.core.server :as prepl]
+            [clojure.tools.cli :as cli])
   (:import java.io.Closeable))
 
 (defmethod ig/init-key :crux/node [_ config]
@@ -14,11 +16,11 @@
   (.close node))
 
 
-(defmethod ig/init-key :crux/http-server [_ {:keys [crux/crux-node crux/server-config]}]
+(defmethod ig/init-key :crux/http-server [_ {:keys [crux/node crux/server-config]}]
   (let [cors-opts (:cors-access-control server-config)
         server-opts (cond-> server-config
                       (map? cors-opts) (assoc :cors-access-control (reduce into [] cors-opts)))]
-    (srv/start-http-server crux-node server-opts)))
+    (srv/start-http-server node server-opts)))
 
 (defmethod ig/halt-key! :crux/http-server [_ ^Closeable server]
   (.close server))
@@ -29,8 +31,22 @@
      :crux/http-server {:crux/node (ig/ref :crux/node)
                         :crux/server-config server-opts}}))
 
-(defonce nrepl-server (nrepl/start-server :port 7888))
+(def cli-opts
+  [[nil "--nrepl" "Starts an nrepl for the container"]
+   [nil "--prepl" "Starts an prepl for the container"]])
 
-(defn -main []
+(defn parse-args [args]
+  (prn args)
+  (let [{:keys [options]} (cli/parse-opts args cli-opts)]
+    (prn options)
+    (cond
+      (:nrepl options) (nrepl/start-server :bind "0.0.0.0", :port 7888)
+      (:prepl options) (prepl/start-server {:accept 'clojure.core.server/io-prepl
+                                            :address "0.0.0.0"
+                                            :port 7888
+                                            :name "Crux HTTP Prepl"}))))
+
+(defn -main [& args]
+  (parse-args args)
   (ir/set-prep! (constantly ig-config))
   (ir/go))
