@@ -207,7 +207,7 @@
     tx-events))
 
 (defn consume-and-index-entities
-  [{:keys [indexer ^KafkaConsumer consumer pending-txs-state follower timeout tx-topic doc-topic]
+  [{:keys [indexer ^KafkaConsumer consumer pending-txs-state timeout tx-topic doc-topic]
     :or {timeout 5000}}]
 
   (let [tx-topic-partition (TopicPartition. tx-topic 0)
