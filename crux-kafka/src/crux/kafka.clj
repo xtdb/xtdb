@@ -348,7 +348,7 @@
    ::create-topics {:doc "Create topics if they do not exist"
                     :default true
                     :crux.config/type :crux.config/boolean}
-   ::replication-factor {:doc "Level of durability for Kakfa"
+   ::replication-factor {:doc "Level of durability for Kafka"
                          :default 1
                          :crux.config/type :crux.config/nat-int}
    ::group-id {:doc "Kafka client group.id"
@@ -356,9 +356,9 @@
                                       (System/getenv "COMPUTERNAME")
                                       (.toString (java.util.UUID/randomUUID))))
                :crux.config/type :crux.config/string}
-   ::kafka-properties-file {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."
+   ::kafka-properties-file {:doc "Used for supplying Kafka connection properties to the underlying Kafka API."
                             :crux.config/type :crux.config/string}
-   ::kafka-properties-map {:doc "Used for supplying Kakfa connection properties to the underlying Kafka API."
+   ::kafka-properties-map {:doc "Used for supplying Kafka connection properties to the underlying Kafka API."
                            :crux.config/type [map? identity]}})
 
 (def indexing-consumer
