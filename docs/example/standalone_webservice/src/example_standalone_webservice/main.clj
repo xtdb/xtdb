@@ -669,8 +669,7 @@
                :response #(post-comment-handler % node)}}})]
 
     [["comment/" :id]
-     (resourcedocker pull juxt/crux-standalone-webservice:latest
-mkdir -p my-crux-data && docker run -p 8090:8080 -p 8091:8081 -v $(pwd)/my-crux-data:/usr/src/app/data -i -t juxt/crux-standalone-webservice:latest
+     (resource
       {:methods
        {:post {:consumes "application/x-www-form-urlencoded"
                :parameters {:form {:created String
