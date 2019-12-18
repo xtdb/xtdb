@@ -500,9 +500,13 @@
                 (recur (kv/next i)))))))))
 
   (db/next-values [this]
-    (throw (UnsupportedOperationException.))))
+    (throw (UnsupportedOperationException.)))
 
-(defn new-entity-as-of-index [snapshot valid-time transaction-time]
+  Closeable
+  (close [this]
+    (.close ^Closeable i)))
+
+(defn new-entity-as-of-index ^crux.index.EntityAsOfIndex [snapshot valid-time transaction-time]
   (->EntityAsOfIndex (kv/new-iterator snapshot) (or valid-time min-date) (or transaction-time min-date)))
 
 (defn entity-at [entity-as-of-idx eid]
