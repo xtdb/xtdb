@@ -689,8 +689,7 @@ mkdir -p my-crux-data && docker run -p 8090:8080 -p 8091:8081 -v $(pwd)/my-crux-
 (def log-dir "data/eventlog-1")
 
 (def crux-options
-  {:crux.node/topology :crux.kafka/topology
-   :crux.node/kv-store "crux.kv.rocksdb/kv"
+  {:crux.node/kv-store "crux.kv.rocksdb/kv"
    :crux.kafka/bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
    :crux.standalone/event-log-dir log-dir
    :crux.kv/db-dir index-dir
@@ -704,7 +703,11 @@ mkdir -p my-crux-data && docker run -p 8090:8080 -p 8091:8081 -v $(pwd)/my-crux-
    ::backup/sh-restore-script "bin/restore.sh"})
 
 (defn run-node [{:keys [server-port http-port] :as options} with-node-fn]
-  (with-open [crux-node (api/start-node options)
+  (with-open [crux-node (case (System/getenv "CRUX_MODE")
+                          "CLUSTER_NODE" (api/start-node (assoc options
+                                                                :crux.node/topology :crux.kafka/topology))
+                          (api/start-node (assoc options
+                                                 :crux.node/topology :crux.standalone/topology)))
               api-server (srv/start-http-server
                            crux-node
                            {:server-port http-port
