@@ -6,6 +6,7 @@
 
 * [#428](https://github.com/juxt/crux/issues/428) Time ranges removed from 'evict' command, see [#PR438](https://github.com/juxt/crux/pull/438) for more details.
 * [#430](https://github.com/juxt/crux/issues/430) Add LMDB configuration example to docs + tests
+* [#482](https://github.com/juxt/crux/issues/482) Bringing README up to date.
 
 ### Bug fixes
 
