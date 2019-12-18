@@ -4,12 +4,13 @@
             [crux.memory :as mem]
             [crux.morton :as morton]
             [taoensso.nippy :as nippy]
-            [crux.io :as cio])
-  (:import [clojure.lang IHashEq IPersistentMap Keyword]
+            [crux.io :as cio]
+            [clojure.walk :as walk])
+  (:import [clojure.lang IHashEq Keyword]
            [java.io Closeable Writer]
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
-           [java.util Arrays Date UUID]
+           [java.util Arrays Date Map UUID]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -98,6 +99,9 @@
   (memoize
    (fn []
      (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))))
+
+(defn- sort-maps [o]
+  (->> o (walk/postwalk (fn [o] (cond->> o (instance? Map o) (into (sorted-map)))))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
@@ -196,7 +200,7 @@
   (value->buffer [this ^MutableDirectBuffer to]
     (if (satisfies? IdToBuffer this)
       (id->buffer this to)
-      (doto (id-function to (nippy/fast-freeze this))
+      (doto (id-function to (-> this sort-maps nippy/fast-freeze))
         (.putByte 0 (byte object-value-type-id))))))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
@@ -275,9 +279,9 @@
         (id->buffer id to)
         (throw (IllegalArgumentException. (format "Not a %s hex, keyword, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
 
-  IPersistentMap
+  Map
   (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
+    (id-function to (-> this sort-maps nippy/fast-freeze)))
 
   nil
   (id->buffer [this to]
