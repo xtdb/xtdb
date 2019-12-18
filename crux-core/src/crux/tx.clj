@@ -57,7 +57,7 @@
                                         (c/->EntityTx eid end-valid-time transact-time tx-id (c/nil-id-buffer)))])))
 
                          (->> (cons start-valid-time
-                                    (when-let [visible-entity (some-> (first (idx/entity-history-seq-descending snapshot eid start-valid-time transact-time))
+                                    (when-let [visible-entity (some-> (first (idx/entities-at snapshot [eid] start-valid-time transact-time))
                                                                       (select-keys [:tx-time :tx-id :content-hash]))]
                                       (->> (idx/entity-history-seq-ascending snapshot eid start-valid-time transact-time)
                                            (remove #{start-valid-time})
