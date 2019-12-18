@@ -108,7 +108,7 @@
   (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
+      (tx/await-tx indexer submitted-tx (:crux.tx-log/await-tx-timeout options))
       (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid)))
 
   (newTxLogContext [this]
