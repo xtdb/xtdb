@@ -6,11 +6,13 @@ services:
     image: juxt/crux-http
     ports:
       - "127.0.0.1:3000:3000"
+      - "127.0.0.1:7888:7888"
     volumes:
       - "m2:/root/.m2"
       - "crux-dev-data:/var/lib/crux"
       - "./crux.edn:/etc/crux.edn"
       - "./deps.edn:/usr/lib/crux/deps.edn"
+
 
 volumes:
   m2:

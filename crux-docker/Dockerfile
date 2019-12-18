@@ -4,10 +4,11 @@ VOLUME /root/.m2
 VOLUME /var/lib/crux
 
 EXPOSE 3000
+EXPOSE 7888
 
 WORKDIR /usr/lib/crux
 
-CMD ["clojure", "-m", "crux.docker"]
+ENTRYPOINT ["clojure", "-m", "crux.docker"]
 
 ADD deps.edn .
 ADD crux.edn /etc/crux.edn
