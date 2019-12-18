@@ -505,7 +505,7 @@
               [:table
                [:thead
                 (for [v (:find conformed-query)]
-                  [:th (crux-io/pr-edn-str v)])]
+                  [:th (pr-str v)])]
                [:tbody
                 (for [tuple result]
                   [:tr
@@ -669,7 +669,8 @@
                :response #(post-comment-handler % node)}}})]
 
     [["comment/" :id]
-     (resource
+     (resourcedocker pull juxt/crux-standalone-webservice:latest
+mkdir -p my-crux-data && docker run -p 8090:8080 -p 8091:8081 -v $(pwd)/my-crux-data:/usr/src/app/data -i -t juxt/crux-standalone-webservice:latest
       {:methods
        {:post {:consumes "application/x-www-form-urlencoded"
                :parameters {:form {:created String
