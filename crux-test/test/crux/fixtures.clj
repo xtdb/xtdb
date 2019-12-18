@@ -24,7 +24,8 @@
    (transact! api entities (cio/next-monotonic-date)))
   ([^ICruxAPI api entities ts]
    (let [submitted-tx (api/submit-tx api (maps->tx-ops entities ts))]
-     (api/sync api (:crux.tx/tx-time submitted-tx) nil))
+     ;; TODO when 'sync' gets replaced by 'await-tx', this should use the higher-level protocol again
+     (tx/await-tx (:indexer api) submitted-tx 10000))
    entities))
 
 (defn entities->delete-tx-ops [entities ts]
