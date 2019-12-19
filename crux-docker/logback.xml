@@ -7,5 +7,5 @@
   <root level="WARN">
     <appender-ref ref="STDOUT" />
   </root>
-  <logger name="crux" level="INFO" />
+  <logger name="crux" level="WARN" />
 </configuration>
