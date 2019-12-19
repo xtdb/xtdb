@@ -18,11 +18,15 @@
   (:import java.time.Duration
            java.util.List
            org.apache.kafka.clients.producer.ProducerRecord
+           org.apache.kafka.clients.consumer.ConsumerRecord
            org.apache.kafka.common.TopicPartition
            java.io.Closeable))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each fk/with-kafka-client fkv/with-memdb fkv/with-kv-store)
+
+(defn- consumer-record->value [^ConsumerRecord record]
+  (.value record))
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
@@ -36,7 +40,7 @@
     (.assign fk/*consumer* partitions)
     (let [records (.poll fk/*consumer* (Duration/ofMillis 10000))]
       (t/is (= 1 (count (seq records))))
-      (t/is (= person (first (map k/consumer-record->value records)))))))
+      (t/is (= person (first (map consumer-record->value records)))))))
 
 (t/deftest test-can-transact-entities
   (let [tx-topic "test-can-transact-entities-tx"
@@ -51,7 +55,7 @@
 
     (db/submit-tx tx-log tx-ops)
 
-    (let [docs (map k/consumer-record->value (.poll fk/*consumer* (Duration/ofMillis 10000)))]
+    (let [docs (map consumer-record->value (.poll fk/*consumer* (Duration/ofMillis 10000)))]
       (t/is (= 7 (count docs)))
       (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                  {:foaf/firstName "Pablo"

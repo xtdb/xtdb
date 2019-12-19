@@ -144,9 +144,6 @@
 
 ;;; Indexing Consumer
 
-(defn consumer-record->value [^ConsumerRecord record]
-  (.value record))
-
 (defn- topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
 
