@@ -1114,6 +1114,7 @@
      (if (instance? Throwable result)
        (throw result)
        result)))
+
   ([{:keys [object-store conform-cache kv valid-time transact-time] :as db} snapshot q]
    (let [conformed-query (normalize-and-conform-query conform-cache q)
          q (.q-normalized conformed-query)
@@ -1122,11 +1123,11 @@
          stats (idx/read-meta kv :crux.kv/stats)]
      (log/debug :query (cio/pr-edn-str q))
      (validate-args args)
-     (let [rule-name->rules (rule-name->rules rules)
-           entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)
-           entity-as-of-idx (if *with-entities-cache?*
-                              (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
-                              entity-as-of-idx)
+     (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time)
+                              *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
+
+           rule-name->rules (rule-name->rules rules)
+
            db (assoc db :entity-as-of-idx entity-as-of-idx)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
@@ -1141,7 +1142,7 @@
        (doseq [{:keys [var]} order-by
                :when (not (some #{var} find))]
          (throw (IllegalArgumentException.
-                  (str "Order by requires a var from :find. unreturned var: " var))))
+                 (str "Order by requires a var from :find. unreturned var: " var))))
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]

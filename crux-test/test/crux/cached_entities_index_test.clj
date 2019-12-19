@@ -7,6 +7,7 @@
             [crux.lru :as lru]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.kv :as kv]
             [crux.fixtures :as f]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.api :refer [*api*]]
@@ -21,8 +22,9 @@
     (let [db (api/db *api*)
           d (java.util.Date.)]
       (t/is (api/entity db :currency.id/eur))
-      (with-open [snapshot (api/new-snapshot db)]
-        (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
+      (with-open [snapshot (api/new-snapshot db)
+                  i (kv/new-iterator snapshot)]
+        (let [idx-raw (idx/new-entity-as-of-index i d d)
               idx-in-cache (lru/new-cached-index idx-raw 100)
               id-buf (c/->id-buffer :currency.id/eur)
               seeked (db/seek-values idx-raw id-buf)

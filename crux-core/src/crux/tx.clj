@@ -99,13 +99,14 @@
                                         (c/->EntityTx eid end-valid-time transact-time tx-id (c/nil-id-buffer)))])))
 
                          (->> (cons start-valid-time
-                                    (with-open [entity-as-of-idx (idx/new-entity-as-of-index snapshot start-valid-time transact-time)]
-                                      (when-let [visible-entity (some-> (idx/entity-at entity-as-of-idx eid)
-                                                                        (select-keys [:tx-time :tx-id :content-hash]))]
-                                        (->> (idx/entity-history-seq-ascending snapshot eid start-valid-time transact-time)
-                                             (remove #{start-valid-time})
-                                             (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
-                                             (map #(.vt ^EntityTx %))))))
+                                    (with-open [i (kv/new-iterator snapshot)]
+                                      (let [entity-as-of-idx (idx/new-entity-as-of-index i start-valid-time transact-time)]
+                                        (when-let [visible-entity (some-> (idx/entity-at entity-as-of-idx eid)
+                                                                          (select-keys [:tx-time :tx-id :content-hash]))]
+                                          (->> (idx/entity-history-seq-ascending snapshot eid start-valid-time transact-time)
+                                               (remove #{start-valid-time})
+                                               (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
+                                               (mapv #(.vt ^EntityTx %)))))))
 
                               (map ->new-entity-tx)))]
 

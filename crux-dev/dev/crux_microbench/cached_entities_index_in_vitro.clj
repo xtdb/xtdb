@@ -1,16 +1,17 @@
 (ns crux-microbench.cached-entities-index-in-vitro
   "Microbench for cached entities index in vacuum"
   (:require [clojure.test :as t]
-          [crux.fixtures :as f]
-          [crux.api :as api]
-          [crux.index :as idx]
-          [crux.lru :as lru]
-          [crux.codec :as c]
-          [crux.db :as db]
-          [crux.fixtures :as f]
-          [crux-microbench.ticker-data-gen :as data-gen]
-          [crux.fixtures.api :refer [*api*]]
-          [crux.fixtures.standalone :as fs])
+            [crux.fixtures :as f]
+            [crux.api :as api]
+            [crux.index :as idx]
+            [crux.lru :as lru]
+            [crux.codec :as c]
+            [crux.db :as db]
+            [crux.fixtures :as f]
+            [crux-microbench.ticker-data-gen :as data-gen]
+            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.standalone :as fs]
+            [crux.kv :as kv])
   (:import (java.util Date)))
 
 (defn- -microbench-cached-index []
@@ -18,8 +19,9 @@
   (let [db (api/db *api*)
         d (Date.)]
     (println "cache hit gains")
-    (with-open [snapshot (api/new-snapshot db)]
-      (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
+    (with-open [snapshot (api/new-snapshot db)
+                i (kv/new-iterator snapshot)]
+      (let [idx-raw (idx/new-entity-as-of-index i d d)
             idx-in-cache (lru/new-cached-index idx-raw 100)
             id-buf (c/->id-buffer :currency.id/eur)
 
@@ -47,8 +49,9 @@
         _ (f/transact! *api* tickers)
         d (Date.)]
     (println "cache miss overhead")
-    (with-open [snapshot (api/new-snapshot db)]
-      (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
+    (with-open [snapshot (api/new-snapshot db)
+                i (kv/new-iterator snapshot)]
+      (let [idx-raw (idx/new-entity-as-of-index i d d)
             idx-in-cache (lru/new-cached-index idx-raw 100)
             stock-id-buffs (mapv (comp c/->id-buffer :crux.db/id) tickers)
             id-buf (c/->id-buffer :currency.id/eur)

@@ -500,27 +500,24 @@
                 (recur (kv/next i)))))))))
 
   (db/next-values [this]
-    (throw (UnsupportedOperationException.)))
+    (throw (UnsupportedOperationException.))))
 
-  Closeable
-  (close [this]
-    (.close ^Closeable i)))
-
-(defn new-entity-as-of-index ^crux.index.EntityAsOfIndex [snapshot valid-time transaction-time]
-  (->EntityAsOfIndex (kv/new-iterator snapshot) (or valid-time min-date) (or transaction-time min-date)))
+(defn new-entity-as-of-index ^crux.index.EntityAsOfIndex [iterator valid-time transaction-time]
+  (->EntityAsOfIndex iterator (or valid-time min-date) (or transaction-time min-date)))
 
 (defn entity-at [entity-as-of-idx eid]
   (let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
     entity-tx))
 
 (defn entities-at [snapshot eids valid-time transact-time]
-  (let [entity-as-of-idx (new-entity-as-of-index snapshot valid-time transact-time)]
-    (some->> (for [eid eids
-                   :let [entity-tx (entity-at entity-as-of-idx eid)]
-                   :when entity-tx]
-               entity-tx)
-             (not-empty)
-             (vec))))
+  (with-open [i (kv/new-iterator snapshot)]
+    (let [entity-as-of-idx (new-entity-as-of-index i valid-time transact-time)]
+      (some->> (for [eid eids
+                     :let [entity-tx (entity-at entity-as-of-idx eid)]
+                     :when entity-tx]
+                 entity-tx)
+               (not-empty)
+               (vec)))))
 
 (defn- entity-history-range-step [i min max ^EntityHistoryRangeState state k]
   (loop [k k]
