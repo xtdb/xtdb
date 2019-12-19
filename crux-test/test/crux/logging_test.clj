@@ -13,7 +13,7 @@
     (io/delete-file "logtester.log")
     (f)))
 
-(t/use-fixtures :once kvf/with-kv-dir fs/with-standalone-node apif/with-node)
+(t/use-fixtures :once remove-log-file kvf/with-kv-dir fs/with-standalone-node apif/with-node)
 
 (defn- sync-submit-tx [node tx-ops]
   (let [submitted-tx (api/submit-tx node tx-ops)]
