@@ -42,9 +42,9 @@ Doing so introduces a dependency to `crux-rocksdb`, which can be added to the do
 
 ```clojure
 {:deps
- {juxt/crux-http-server {:mvn/version "19.09-1.5.0-alpha"}
-  juxt/crux-core {:mvn/version "19.09-1.5.0-alpha"
-  juxt/crux-rocksdb {:mvn/version "19.09-1.5.0-alpha"}}}}
+ {juxt/crux-http-server {:mvn/version "19.12-1.6.0-alpha"}
+  juxt/crux-core {:mvn/version "19.12-1.6.0-alpha"
+  juxt/crux-rocksdb {:mvn/version "19.12-1.6.0-alpha"}}}}
 ```
 
 Now, running the script under `./bin/dev.sh` will create a HTTP node using RocksDB.
