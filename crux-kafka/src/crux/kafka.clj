@@ -303,25 +303,27 @@
     .start))
 
 (defn- start-indexing-consumer ^IndexingConsumer [{:keys [crux.node/indexer]} {::keys [doc-topic max-doc-threads] :as config}]
-  (let [consumer-config (merge (->kafka-config config)
-                               {"group.id" (str (UUID/randomUUID))})]
-
+  (let [consumer-config (->kafka-config config)]
     (with-open [admin-client (create-admin-client consumer-config)]
       (ensure-topics config admin-client)
 
       (let [indexing-config (merge config
                                    {:consumer-config consumer-config
                                     :indexer indexer
-                                    :!agent (agent nil)})]
+                                    :!agent (agent nil)})
+            tx-consumer-thread (->started-thread (tx-consumer-loop (-> indexing-config
+                                                                       (assoc-in [:consumer-config "group.id"] (str (UUID/randomUUID)))))
+                                                 "tx-consumer")
+            doc-consumer-threads (let [indexing-config (-> indexing-config
+                                                           (assoc-in [:consumer-config "group.id"] (str (UUID/randomUUID))))]
+                                   (set (for [i (range (min (topic-partition-counts doc-topic admin-client)
+                                                            max-doc-threads))]
+                                          (->started-thread (doc-consumer-loop indexing-config)
+                                                            (str "doc-consumer-" i)))))]
 
         (map->IndexingConsumer (assoc indexing-config
-                                      :tx-consumer-thread (->started-thread (tx-consumer-loop indexing-config)
-                                                                            "tx-consumer")
-
-                                      :doc-consumer-threads (set (for [i (range (min (topic-partition-counts doc-topic admin-client)
-                                                                                     max-doc-threads))]
-                                                                   (->started-thread (doc-consumer-loop indexing-config)
-                                                                                     (str "doc-consumer-" i))))))))))
+                                      :tx-consumer-thread tx-consumer-thread
+                                      :doc-consumer-threads doc-consumer-threads))))))
 
 (def default-config
   {::bootstrap-servers {:doc "URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
