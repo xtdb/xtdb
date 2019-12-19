@@ -216,7 +216,6 @@
   (let [!latch (promise)]
     (if (not-empty (db/missing-hashes indexer content-hashes))
       (send-off !agent (fn [_]
-                         (log/debug "waiting for hashes")
                          (if-let [awaited-hashes (not-empty (db/missing-hashes indexer content-hashes))]
                            {:awaited-hashes awaited-hashes, :!latch !latch}
                            (do
@@ -231,7 +230,6 @@
                         :crux.tx/keys [tx-time tx-id]
                         :as tx-log-entry}
                        {:keys [indexer !agent] :as config}]
-  (log/debug tx-events tx-time tx-id)
   @(doc-latch content-hashes config)
   (db/index-tx indexer tx-events tx-time tx-id)
 
@@ -242,12 +240,11 @@
                                    :or {timeout (Duration/ofMillis 5000)}
                                    :as config}]
   (fn []
-    (log/info "tx-consumer starting...")
-
     (with-open [consumer (create-consumer consumer-config)]
       (subscribe-topic consumer tx-topic
                        (constantly (-> (db/read-index-meta indexer :crux.tx/latest-completed-tx)
                                        :crux.tx/tx-id)))
+      (log/info "tx-consumer subscribed...")
 
       (while (not (Thread/interrupted))
         (try
@@ -277,12 +274,11 @@
        (with-open [^KafkaConsumer consumer (create-consumer (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
          (boolean (.listTopics consumer)))
        (catch Exception e
-         (log/debug e "Could not list Kafka topics:")
+         (log/warn e "Could not list Kafka topics:")
          false))})
 
   Closeable
   (close [_]
-    (log/info "closing!")
     (run! #(.interrupt ^Thread %) doc-consumer-threads)
     (.interrupt tx-consumer-thread)
 
@@ -290,7 +286,7 @@
     (.join tx-consumer-thread)
 
     (await !agent)
-    (log/info "closed!")))
+    ))
 
 (defn topic-partition-counts [topic ^AdminClient admin-client]
   (-> (.describeTopics admin-client [topic]) .all .get ^TopicDescription (get topic) .partitions count))
