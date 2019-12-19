@@ -6,4 +6,6 @@
   integrant/repl {:mvn/version "0.3.1"}
 
   nrepl/nrepl {:mvn/version "0.6.0"}
-  org.clojure/tools.cli {:mvn/version "0.4.2"}}}
+  org.clojure/tools.cli {:mvn/version "0.4.2"}}
+ :jvm-opts
+ ["-Dlogback.configurationFile=logback.xml"]}
