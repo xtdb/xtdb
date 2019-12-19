@@ -15,4 +15,4 @@
  :aliases
  {:opts
   {:jvm-opts
-   ["-Dlogback.configurationFile=logback.xml"]}}}
+   ["-Dlogback.configurationFile=/usr/lib/crux/logback.xml"]}}}
