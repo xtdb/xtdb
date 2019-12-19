@@ -192,8 +192,8 @@
     (log/debugf "Indexed %d documents" (count (:indexed-hashes doc-results)))
     (send-off !agent docs-indexed doc-results {:indexer indexer})))
 
-(defn doc-consumer-loop ^Runnable [{:keys [consumer-config ::doc-topic indexer ^long timeout-ms]
-                                    :or {timeout-ms 5000}
+(defn doc-consumer-loop ^Runnable [{:keys [consumer-config ::doc-topic indexer ^Duration timeout]
+                                    :or {timeout (Duration/ofMillis 5000)}
                                     :as config}]
   (fn []
     (let [thread-name (.getName (Thread/currentThread))]
@@ -204,7 +204,7 @@
 
         (while (not (Thread/interrupted))
           (try
-            (when-let [doc-records (seq (.poll consumer timeout-ms))]
+            (when-let [doc-records (seq (.poll consumer timeout))]
               (index-docs doc-records config))
 
             (catch InterruptedException _)
@@ -238,8 +238,8 @@
   (db/store-index-meta indexer :crux.tx/latest-completed-tx (-> tx-log-entry
                                                                 (select-keys [:crux.tx/tx-id :crux.tx/tx-time]))))
 
-(defn tx-consumer-loop ^Runnable [{:keys [consumer-config ::tx-topic indexer !agent ^long timeout-ms]
-                                   :or {timeout-ms 5000}
+(defn tx-consumer-loop ^Runnable [{:keys [consumer-config ::tx-topic indexer !agent ^Duration timeout]
+                                   :or {timeout (Duration/ofMillis 5000)}
                                    :as config}]
   (fn []
     (log/info "tx-consumer starting...")
@@ -251,7 +251,7 @@
 
       (while (not (Thread/interrupted))
         (try
-          (doseq [^ConsumerRecord tx-record (.poll consumer timeout-ms)]
+          (doseq [^ConsumerRecord tx-record (.poll consumer timeout)]
             (when (Thread/interrupted)
               (throw (InterruptedException.)))
 
