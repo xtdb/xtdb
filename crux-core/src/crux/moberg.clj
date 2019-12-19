@@ -213,9 +213,9 @@
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
-    (doseq [doc (tx/tx-ops->docs tx-ops)]
+    (doseq [doc (mapcat tx/tx-op->docs tx-ops)]
       (db/submit-doc this (str (c/new-id doc)) doc))
-    (let [tx-events (tx/tx-ops->tx-events tx-ops)
+    (let [tx-events (map tx/tx-op->tx-event tx-ops)
           m (send-message event-log-kv ::event-log nil tx-events {:crux.tx/sub-topic :txs})]
       (delay {:crux.tx/tx-id (.id m)
               :crux.tx/tx-time (.time m)})))

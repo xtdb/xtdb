@@ -73,16 +73,10 @@
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
-    (t/is (= (merge {:crux.index/index-version 4}
+    (t/is (= (merge {:crux.index/index-version 5}
                     (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                       {:crux.zk/zk-active? true}))
-             (dissoc (.status *api*)
-                     :crux.kv/kv-store
-                     :crux.kv/estimate-num-keys
-                     :crux.tx-log/consumer-state
-                     :crux.kv/size
-                     :crux.version/version
-                     :crux.version/revision))))
+             (select-keys (.status *api*) [:crux.index/index-version :crux.zk/zk-active?]))))
 
   (t/testing "empty db"
     (t/is (.db *api*)))
@@ -95,32 +89,12 @@
           {:keys [crux.tx/tx-time
                   crux.tx/tx-id]
            :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-      (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
       (t/is (= tx-time (.sync *api* (:crux.tx/tx-time submitted-tx) nil)))
+      (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
 
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
-        (cond
-          (instance? crux.moberg.MobergTxLog (:tx-log *api*))
-          (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
-                   (:crux.tx-log/consumer-state status-map)))
-
-          (instance? crux.jdbc.JdbcTxLog (:tx-log *api*))
-          (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
-                   (:crux.tx-log/consumer-state status-map)))
-
-          :else
-          (let [tx-topic-key (keyword "crux.kafka.topic-partition" (str fk/*tx-topic* "-0"))
-                doc-topic-key (keyword "crux.kafka.topic-partition" (str fk/*doc-topic* "-0"))]
-            (t/is (= {:lag 0
-                      :next-offset 1
-                      :time tx-time}
-                     (get-in status-map [:crux.tx-log/consumer-state tx-topic-key])))
-            (t/is (= {:lag 0
-                      :next-offset 1}
-                     (-> status-map
-                         (get-in [:crux.tx-log/consumer-state doc-topic-key])
-                         (dissoc :time)))))))
+        (t/is (= submitted-tx (:crux.tx/latest-completed-tx status-map))))
 
       (t/testing "query"
         (t/is (= #{[:ivan]} (.q (.db *api*)

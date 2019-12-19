@@ -47,13 +47,13 @@
   (db [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (let [tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
         (q/db kv-store object-store tx-time tx-time))))
 
   (db [this valid-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (let [transact-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
         (.db this valid-time transact-time))))
 
   (db [this valid-time transact-time]
@@ -108,7 +108,7 @@
   (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
+      (tx/await-tx indexer submitted-tx (:crux.tx-log/await-tx-timeout options))
       (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid)))
 
   (newTxLogContext [this]
@@ -128,20 +128,23 @@
               (dissoc :crux.tx.event/tx-events)
               (assoc :crux.api/tx-ops
                      (with-open [snapshot (kv/new-snapshot kv-store)]
-                       (tx/tx-events->tx-ops snapshot object-store tx-events))))
+                       (->> tx-events
+                            (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
           tx-log-entry))))
 
   (sync [this timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
-                                            (:crux.tx-log/await-tx-timeout options)))))
+      (-> (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
+                                                (:crux.tx-log/await-tx-timeout options)))
+          :crux.tx/tx-time)))
 
   (sync [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
-                                            (:crux.tx-log/await-tx-timeout options)))))
+      (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
+                                                (:crux.tx-log/await-tx-timeout options)))
+          :crux.tx/tx-time)))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
