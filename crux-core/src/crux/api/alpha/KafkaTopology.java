@@ -37,7 +37,9 @@ public class KafkaTopology extends EdnTopology {
     }
 
     public static KafkaTopology kafkaTopology() {
-        return new KafkaTopology(Map.of(NODE_TOPOLOGY, KAFKA_TOPOLOGY));
+        Map<Keyword, Object> attrs = new HashMap<>();
+        attrs.put(NODE_TOPOLOGY, KAFKA_TOPOLOGY);
+        return new KafkaTopology(attrs);
     }
 
     @SuppressWarnings("unchecked")
