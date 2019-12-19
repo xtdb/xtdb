@@ -416,10 +416,10 @@
   (let [ivan {:crux.db/id :ivan :name "Ivan"}
         start-valid-time #inst "2019"
         number-of-versions 1000
-        {tx-time :crux.tx/tx-time}
-        (api/submit-tx *api* (vec (for [n (range number-of-versions)]
-                                    [:crux.tx/put (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
-        _ (api/sync *api* tx-time nil)]
+        tx (api/submit-tx *api* (vec (for [n (range number-of-versions)]
+                                       [:crux.tx/put (assoc ivan :version n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
+        ;; HACK using internal tx/await-tx til we properly deprecate 'sync'
+        _ (tx/await-tx (:indexer *api*) tx 10000)]
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (let [baseline-time (let [start-time (System/nanoTime)

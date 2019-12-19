@@ -9,7 +9,8 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.query :as q]
-            [crux.index :as i])
+            [crux.index :as i]
+            [crux.tx :as tx])
   (:import java.util.UUID))
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
@@ -1295,10 +1296,10 @@
         number-of-docs 500
         id-slowdown-factor 2
         entity-slowdown-factor 5
-        {tx-time :crux.tx/tx-time}
-        (api/submit-tx *api* (vec (for [n (range number-of-docs)]
-                                    [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
-        _ (api/sync *api* tx-time nil)
+        tx (api/submit-tx *api* (vec (for [n (range number-of-docs)]
+                                       [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
+        ;; HACK temporarily using low-level tx/await-tx til we properly deprecate 'sync'
+        _ (tx/await-tx (:indexer *api*) tx 10000)
         db (api/db *api*)
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
