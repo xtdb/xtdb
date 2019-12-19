@@ -23,6 +23,11 @@
   (read-index-meta [this k]))
 ;; end::Indexer[]
 
+(defn swap-index-meta [indexer k f & args]
+  (let [v (apply f (read-index-meta indexer k) args)]
+    (store-index-meta indexer k v)
+    v))
+
 ;; tag::TxLog[]
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
