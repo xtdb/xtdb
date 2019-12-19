@@ -44,7 +44,8 @@ Doing so introduces a dependency to `crux-rocksdb`, which can be added to the do
 {:deps
  {juxt/crux-http-server {:mvn/version "19.12-1.6.0-alpha"}
   juxt/crux-core {:mvn/version "19.12-1.6.0-alpha"
-  juxt/crux-rocksdb {:mvn/version "19.12-1.6.0-alpha"}}}}
+  juxt/crux-rocksdb {:mvn/version "19.12-1.6.0-alpha"}}
+ ...}}
 ```
 
 Now, running the script under `./bin/dev.sh` will create a HTTP node using RocksDB.
@@ -57,11 +58,7 @@ In a similar manner to customizing the node, custom options can be set on the Cr
 For example, to add CORS access permissions to the server, add the following under `:crux/server-opts` before running `./bin/dev.sh`:
 
 ```clojure
-{:crux/node-opts {:crux.node/topology :crux.standalone/topology
-                  :crux.node/kv-store "crux.kv.memdb/kv"
-                  :crux.kv/db-dir "/var/lib/crux/db"
-                  :crux.standalone/event-log-dir "/var/lib/crux/events"
-                  :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}
+{:crux/node-opts {...}
  :crux/server-opts
  {:cors-access-control
    {:access-control-allow-origin [#".*"]
@@ -69,6 +66,10 @@ For example, to add CORS access permissions to the server, add the following und
 ```
 
 ---
+
+## Customizing Logging Configuration
+
+Within the main directory, a logging configuration file `logback.xml`, is included. You can edit the contents of the file and run `./bin/dev.sh` to change logging options.
 
 ### Updating / Redeploying the docker image
 
