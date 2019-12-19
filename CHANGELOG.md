@@ -23,6 +23,7 @@
 * [#453](https://github.com/juxt/crux/issues/453) Add nil check for queries in spec.
 * [#454](https://github.com/juxt/crux/issues/454) Add fix for tx-log breaking in spec after an eviction
 * [#457](https://github.com/juxt/crux/issues/457) Allowing nil to be returned from tx-fns
+* [#486](https://github.com/juxt/crux/issues/486) Race condition initialising hash implementation
 
 ### New features
 * [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
