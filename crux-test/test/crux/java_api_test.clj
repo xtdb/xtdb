@@ -1,6 +1,7 @@
 (ns crux.java-api-test
   (:require [clojure.test :as t]
-            [crux.api :as crux])
+            [crux.api :as crux]
+            [crux.fixtures.api :as apif])
   (:import [crux.api.alpha CruxNode StandaloneTopology KafkaTopology
             Document PutOperation CasOperation CruxId Database Query
             DeleteOperation EvictOperation]))
@@ -39,16 +40,16 @@
               (t/is evictOp))
 
             (t/testing "Can submit Transactions"
-              (t/is (.submitTx node [putOp]))
+              (t/is (.submitTx node (apif/vec->array-list [putOp])))
               (Thread/sleep 300)
 
-              (t/is (.submitTx node [casOp]))
+              (t/is (.submitTx node (apif/vec->array-list [casOp])))
               (Thread/sleep 300)
 
-              (t/is (.submitTx node [delOp]))
+              (t/is (.submitTx node (apif/vec->array-list [delOp])))
               (Thread/sleep 300)
 
-              (t/is (.submitTx node [evictOp]))
+              (t/is (.submitTx node (apif/vec->array-list [evictOp])))
               (Thread/sleep 300)))))
 
       (t/testing "Queries"

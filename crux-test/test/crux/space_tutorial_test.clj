@@ -1,7 +1,8 @@
 (ns crux.space-tutorial-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
-            [crux.io :as cio]))
+            [crux.io :as cio])
+  (:import java.io.Closeable))
 
 (t/deftest space-tutorial-test
   (def ^crux.api.ICruxAPI crux
@@ -578,7 +579,7 @@
     )
 
   (t/deftest Oumuamua-test
-    (.close crux)
+    (.close ^Closeable crux)
     (def crux
       (crux/start-node
        {:crux.node/topology :crux.standalone/topology

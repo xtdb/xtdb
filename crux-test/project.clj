@@ -56,4 +56,5 @@
   :jvm-opts
   ["-server" "-Xmx8g"
    "-Dlogback.configurationFile=logback.xml"]
-  :middleware [leiningen.project-version/middleware])
+  :middleware [leiningen.project-version/middleware]
+  :global-vars {*warn-on-reflection* true})

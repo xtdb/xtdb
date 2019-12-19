@@ -282,7 +282,7 @@
     :default 10000
     :crux.config/type :crux.config/nat-int}})
 
-(defn start ^ICruxAPI [options]
+(defn start ^crux.api.ICruxAPI [options]
   (let [options (into {} options)
         topology (options->topology options)
         [modules close-fn] (start-modules topology options)

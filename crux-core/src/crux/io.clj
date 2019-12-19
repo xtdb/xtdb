@@ -220,7 +220,7 @@
        (finally
          (.unlock lock# stamp#)))))
 
-(defn ^String pr-edn-str [xs]
+(defn pr-edn-str ^String [xs]
   (binding [*print-length* nil
             *print-level* nil
             *print-namespace-maps* false]
