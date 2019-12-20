@@ -1,5 +1,12 @@
 # Changelog
 
+## 19.12-1.6.1-alpha
+
+### Bug fixes
+
+* [#506](https://github.com/juxt/crux/issues/506): Fix lifetime of EntityAsOfIdx within put/delete, was being closed too soon.
+* [#512](https://github.com/juxt/crux/issues/512): Fix race condition initialising id-hashing
+
 ## 19.12-1.6.0-alpha
 
 ### Breaking changes
