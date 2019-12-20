@@ -1,2 +1,2 @@
-#!/bin/bash
-docker push juxt/crux-http
+#!/bin/bash -xe
+docker push juxt/crux-http:19.12-1.6.1-alpha

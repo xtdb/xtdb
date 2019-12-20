@@ -73,4 +73,4 @@ Within the main directory, a logging configuration file `logback.xml`, is includ
 
 ### Updating / Redeploying the docker image
 
-To rebuild / redeploy the docker image, ensure you are logged into docker and have access to the **juxt** docker account, and run the `./bin/build.sh`/`./bin/push.sh` scripts. Updating Crux to a new version requires updating the versions within `deps.edn`, and changing the tag version within `build.sh`.
+To rebuild / redeploy the docker image, ensure you are logged into docker and have access to the **juxt** docker account, and run the `./bin/build.sh`/`./bin/tag.sh`/`./bin/push.sh` scripts. Updating Crux to a new version requires updating the versions within `deps.edn`, and changing the tag version within `tag.sh`/`push.sh`.
