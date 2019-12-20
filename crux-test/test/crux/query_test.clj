@@ -1,6 +1,7 @@
 (ns crux.query-test
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [clojure.walk :as w]
             [clojure.test :as t]
             [crux.api :as api]
             [crux.db :as db]
@@ -1288,6 +1289,51 @@
                         :where
                         [[e :crux.db/id _]]
                         :args [{}]}))))
+
+;; NOTE: Range constraints only apply when one of the arguments to the
+;; constraint is a literal value. So when using :args to supply it, it
+;; will always be a predicate which hence cannot jump directly to the
+;; expected place in the index.
+(t/deftest test-optimise-range-constraints-bug-505
+  (let [tx (vec (for [i (range 5000)]
+                  [:crux.tx/put
+                   {:crux.db/id (keyword (str i))
+                    :offer i}]))
+        submitted-tx (api/submit-tx *api* tx)]
+    (api/sync *api* (:crux.tx/tx-time submitted-tx) nil))
+
+  (let [db (api/db *api*)
+        ;; Much higher than needed, but catches the bug without flakiness.
+        range-slowdown-factor 100
+        entity-time (let [start-time (System/nanoTime)]
+                      (t/testing "entity id lookup"
+                        (t/is (= :0 (:crux.db/id (api/entity db :0)))))
+                      (- (System/nanoTime) start-time))
+        base-query '{:find [i]
+                     :where [[_ :offer i]
+                             [(test-pred i test-val)]]
+                     :limit 1}
+        inputs '[[#{[2]} = 2]
+                 [#{[0]} < 10]
+                 [#{[0]} < 9223372036854775807]
+                 [#{} < -100]
+                 [#{[50]} >= 50]
+                 [#{[0]} <= 5]
+                 [#{[0]} > -100]
+                 [#{[0]} >= -100]]]
+    (doseq [[expected p v :as input] inputs]
+      (dotimes [_ 5]
+        (let [q (w/postwalk
+                 #(case %
+                    test-pred p
+                    test-val v
+                    %)
+                 base-query)
+              start-time (System/nanoTime)
+              actual (api/q db q)
+              query-time (- (System/nanoTime) start-time)]
+          (t/is (= expected actual) (str input))
+          (t/is (< query-time (* entity-time range-slowdown-factor)) (str input)))))))
 
 ;; NOTE: Micro-benchmark that shows relative bounds, acceptable
 ;; slowdown factors can be tweaked to force it to fail.
