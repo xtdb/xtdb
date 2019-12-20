@@ -49,30 +49,9 @@
         (cio/delete-dir kafka-log-dir)
         (cio/delete-dir zookeeper-data-dir)))))
 
-(def ^:dynamic ^KafkaProducer *producer*)
-(def ^:dynamic ^KafkaConsumer *tx-consumer*)
-(def ^:dynamic ^KafkaConsumer *doc-consumer*)
-
-(def ^:dynamic *consumer-options* {})
-
-(defn with-kafka-client [f & {:keys [consumer-options]}]
-  (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              tx-consumer (k/create-consumer
-                           (merge {"bootstrap.servers" *kafka-bootstrap-servers*
-                                   "group.id" (str (UUID/randomUUID))}
-                                  *consumer-options*))
-
-              doc-consumer (k/create-consumer
-                            (merge {"bootstrap.servers" *kafka-bootstrap-servers*
-                                    "group.id" (str (UUID/randomUUID))}
-                                   *consumer-options*))]
-    (binding [*producer* producer
-              *tx-consumer* tx-consumer
-              *doc-consumer* doc-consumer]
-      (f))))
-
 (defn with-cluster-node-opts [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
+
   (let [test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
@@ -80,7 +59,8 @@
                        :crux.node/kv-store *kv-module*
                        :crux.kafka/tx-topic *tx-topic*
                        :crux.kafka/doc-topic *doc-topic*
-                       :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
+                       :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*}
+        f))))
 
 (def ^:dynamic ^ICruxAsyncIngestAPI *ingest-client*)
 

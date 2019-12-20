@@ -148,12 +148,10 @@
   (f))
 
 (defn- with-local-setup [f]
-  (let [f'
-          (->>
+  (let [f' (->>
             (partial with-tickers-and-history f)
             (partial f-api/with-node)
             (partial fk/with-cluster-node-opts)
-            (partial fk/with-kafka-client)
             (partial fk/with-embedded-kafka-cluster))]
     (f')))
 
