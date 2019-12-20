@@ -1,52 +1,37 @@
 (ns crux.dbpedia-test
-  (:require [clojure.test :as t]))
+  (:require [clojure.test :as t]
+            [crux.fixtures.kafka :as fk]
+            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.api :as crux]
+            [crux.fixtures.kv :as fkv]
+            [crux.fixtures.api :as apif]
+            [crux.rdf :as rdf]
+            [clojure.java.io :as io]
+            [crux.sparql :as sparql]))
 
-#_(t/use-fixtures :once fk/with-embedded-kafka-cluster)
-#_(t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir apif/with-node)
+(t/use-fixtures :once fk/with-embedded-kafka-cluster)
+(t/use-fixtures :each fk/with-cluster-node-opts fkv/with-kv-dir apif/with-node)
 
-#_(t/deftest test-can-transact-and-query-dbpedia-entities
-  (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
-        doc-topic "test-can-transact-and-query-dbpedia-entities-doc"
-        tx-ops (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
-                            (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
-                    (rdf/->default-language))
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)
-        object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        node (reify crux.api.ICruxAPI
-               (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+(t/deftest test-can-transact-and-query-dbpedia-entities
+  (let [tx (crux/submit-tx *api* (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
+                                              (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
+                                      (rdf/->default-language)))]
 
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
+    (crux/sync *api* (:crux.tx/tx-time tx) nil))
 
-    (t/testing "transacting and indexing"
-      (db/submit-tx tx-log tx-ops)
-      (let [consume-opts {:indexer indexer :consumer fk/*consumer*
-                          :pending-txs-state (atom [])
-                          :tx-topic tx-topic
-                          :doc-topic doc-topic}]
-        (t/is (= {:txs 1 :docs 2}
-                 (select-keys
-                  (k/consume-and-index-entities
-                   consume-opts)
-                  [:txs :docs])))))
+  (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
+           (crux/q (crux/db *api*)
+                   (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                     '{:find [e]
+                       :where [[e :foaf/givenName "Pablo"]]}))))
 
-    (t/testing "querying transacted data"
-      (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
-               (q/q (api/db node)
-                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                      '{:find [e]
-                        :where [[e :foaf/givenName "Pablo"]]}))))
-
-      (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
-               (q/q (api/db node)
-                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
-                                      :dbo "http://dbpedia.org/ontology/"}
-                      '{:find [g]
-                        :where [[p :foaf/givenName "Pablo"]
-                                [g :dbo/author p]]})))))))
+  (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
+           (crux/q (crux/db *api*)
+                   (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
+                                     :dbo "http://dbpedia.org/ontology/"}
+                     '{:find [g]
+                       :where [[p :foaf/givenName "Pablo"]
+                               [g :dbo/author p]]})))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 ;; mappingbased_properties_en.nt is the main data.
@@ -54,8 +39,8 @@
 ;; specific_mappingbased_properties_en.nt contains extra literals.
 ;; dbpedia_2014.owl is the OWL schema, not dealt with.
 
-;; Test assumes these files are living under ../dbpedia related to the
-;; crux project (to change).
+;; Test assumes these files are living somewhere on the classpath
+;; (probably crux-test/resources related to the crux project).
 
 ;; There are 5053979 entities across 33449633 triplets in
 ;; mappingbased_properties_en.nt.
@@ -75,52 +60,30 @@
 ;; Could use test selectors.
 (def run-dbpedia-tests? false)
 
-#_(t/deftest test-can-transact-all-dbpedia-entities
-  (let [tx-topic "test-can-transact-all-dbpedia-entities-tx"
-        doc-topic "test-can-transact-all-dbpedia-entities-doc"
-        tx-size 1000
-        max-limit Long/MAX_VALUE
-        print-size 100000
-        add-and-print-progress (fn [n step message]
-                                 (let [next-n (+ n step)]
-                                   (when-not (= (quot n print-size)
-                                                (quot next-n print-size))
-                                     (log/warn message next-n))
-                                   next-n))
-        n-transacted (atom -1)
-        mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)
-        object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        node (reify crux.api.ICruxAPI
-               (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+(t/deftest test-can-transact-all-dbpedia-entities
+  (let [mappingbased-properties-file (io/resource "dbpedia/mappingbased_properties_en.nt")]
+    (if (and run-dbpedia-tests? mappingbased-properties-file)
+      (let [max-limit Long/MAX_VALUE]
+        (t/testing "ingesting data"
+          (time
+           (rdf/with-ntriples mappingbased-properties-file
+             (fn [ntriples]
+               (let [last-tx (->> ntriples
+                                  (map rdf/->tx-op)
+                                  (take max-limit)
+                                  (partition-all 1000)
+                                  (reduce (fn [_ ops]
+                                            (crux/submit-tx *api* ops))))]
+                 (crux/sync *api* (:crux.tx/tx-time last-tx) nil))))))
 
-    (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
-      (do (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-          (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-          (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
+        (t/testing "querying transacted data"
+          (t/is (= (rdf/with-prefix {:dbr "http://dbpedia.org/resource/"}
+                     #{[:dbr/Aristotle]
+                       [(keyword "dbr/Aristotle_(painting)")]
+                       [(keyword "dbr/Aristotle_(book)")]})
+                   (crux/q (crux/db *api*)
+                           (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"}
+                             '{:find [e]
+                               :where [[e :foaf/name "Aristotle"]]}))))))
 
-          (t/testing "transacting and indexing"
-            (future
-              (time
-               (with-open [in (io/input-stream mappingbased-properties-file)]
-                 (reset! n-transacted (:entity-count (rdf/submit-ntriples tx-log in tx-size))))))
-            (time
-             (loop [{:keys [docs]} (k/consume-and-index-entities indexer fk/*consumer* 100)
-                    n 0]
-               (let [n (add-and-print-progress n docs "indexed")]
-                 (when-not (= n @n-transacted)
-                   (recur (k/consume-and-index-entities indexer fk/*consumer* 100)
-                          (long n)))))))
-
-          (t/testing "querying transacted data"
-            (t/is (= (rdf/with-prefix {:dbr "http://dbpedia.org/resource/"}
-                       #{[:dbr/Aristotle]
-                         [(keyword "dbr/Aristotle_(painting)")]
-                         [(keyword "dbr/Aristotle_(book)")]})
-                     (q/q (api/db node)
-                          (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"})
-                          '{:find [e]
-                            :where [[e :foaf/name "Aristotle"]]})))))
       (t/is true "skipping"))))

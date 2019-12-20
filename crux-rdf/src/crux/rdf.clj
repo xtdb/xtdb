@@ -271,6 +271,13 @@
      (->> (ntriples-seq in)
           (statements->maps)))))
 
+(defn with-ntriples [res f]
+  (with-open [in (io/input-stream res)]
+    (f (statements->maps (ntriples-seq in)))))
+
+(defn ->tx-op [entity]
+  [:crux.tx/put entity])
+
 (defn ->tx-ops [ntriples]
   (vec (for [entity ntriples]
          [:crux.tx/put entity])))
