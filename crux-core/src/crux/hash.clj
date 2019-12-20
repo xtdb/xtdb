@@ -16,8 +16,6 @@
 (def ^:private ^MessageDigest id-digest-prototype (MessageDigest/getInstance id-hash-algorithm))
 (def ^:const id-hash-size (.getDigestLength id-digest-prototype))
 
-(declare id-hash)
-
 ;; NOTE: Allowing on-heap buffer here for now.
 (defn message-digest-id-hash-buffer ^org.agrona.DirectBuffer [^MutableDirectBuffer to ^DirectBuffer buffer]
   (let [^MessageDigest md (try
@@ -38,7 +36,7 @@
   (if (and (= "SHA1" id-hash-algorithm)
            byte-utils-sha1-enabled?)
     (do (log/info "Using ByteUtils/sha1 for ID hashing.")
-        (fn [to from]
+        (fn byte-utils-id-hash-buffer [to from]
           (ByteUtils/sha1 to from)))
     (if-let [openssl-id-hash-buffer (and openssl-enabled?
                                          (jnr-available?)
