@@ -318,12 +318,10 @@ of how to interact with Crux over HTTP.
 [#config-docker]
 == Docker
 
-If you want to experiment with Crux using a demo Docker container from
-Docker Hub (no JVM/JDK/Clojure install required, only Docker!)  then
-please see the
-https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
-web service example]. You can also use this self-contained
-demonstration image to experiment with the <<#rest,REST API>>.
+If you wish to user Crux with Docker (no JVM/JDK/Clojure install required!) we have a few separate images:
+- https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[Standalone
+web service example]: This example web application has an embedded Crux node & HTTP server, showcasing some of the features of Bitemporality, backup/restore functionality within Crux and allowing experimentation with the <<#rest,REST API>>.
+- https://github.com/juxt/crux/tree/master/crux-docker[Crux HTTP Node]: An image of a Crux HTTP node, useful if you wish to a freestanding Crux node accessible over HTTP, only having to use Docker. Allows you to customize the configuration of the node & logging, and optionally opens an nREPL/pREPL port.
 
 [#config-backup]
 == Backup and Restore

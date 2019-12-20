@@ -65,11 +65,11 @@ For example, to add CORS access permissions to the server, add the following und
     :access-control-allow-methods [:get :options :head :post]}}}
 ```
 
----
-
 ## Customizing Logging Configuration
 
 Within the main directory, a logging configuration file `logback.xml`, is included. You can edit the contents of the file and run `./bin/dev.sh` to change logging options.
+
+---
 
 ### Updating / Redeploying the docker image
 
