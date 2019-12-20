@@ -2459,7 +2459,6 @@
                              (path x z)
                              [z :edge y]]]}))))
 
-
 (t/deftest test-racket-datalog-sym
   ;; sym(a).
   ;; sym(b).
@@ -2497,6 +2496,39 @@
                     '{:find [f]
                       :where [[(identity false)]
                               [(identity 4) f]]})))))
+
+;; Test from Racket Datalog documentation:
+;; https://docs.racket-lang.org/datalog/datalog.html
+(t/deftest test-racket-datalog-fib
+  ;; fib(0, 0).
+  ;; fib(1, 1).
+
+  ;;  fib(N, F) :- N != 1,
+  ;;               N != 0,
+  ;;               N1 :- -(N, 1),
+  ;;               N2 :- -(N, 2),
+  ;;               fib(N1, F1),
+  ;;               fib(N2, F2),
+  ;;               F :- +(F1, F2).
+
+  ;;  fib(30, F)?
+  (t/is (= #{[610]}
+           (api/q (api/db *api*)
+                  '{:find [f]
+                    ;; replacing n with 15 here returns 15 as well as
+                    ;; 610.
+                    :where [(fib n f)]
+                    :args [{n 15}] ;; 30 is too slow.
+                    :rules [[(fib n f)
+                             [(<= n 1)]
+                             [(identity n) f]]
+                            [(fib n f)
+                             [(> n 1)]
+                             [(- n 1) n1]
+                             [(- n 2) n2]
+                             (fib n1 f1)
+                             (fib n2 f2)
+                             [(+ f1 f2) f]]]}))))
 
 ;; Tests from
 ;; https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf
