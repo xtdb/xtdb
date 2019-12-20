@@ -5,8 +5,9 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as f-api :refer [*api*]]
+            [crux.fixtures.api :as apif :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kv :as fkv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.rdf :as rdf]
@@ -371,15 +372,14 @@
             (throw (IllegalStateException. "Query timed out."))))))
 
 (t/use-fixtures :once
-                fk/with-embedded-kafka-cluster
-                fk/with-kafka-client
-                with-sail-repository
-                with-datomic
-                with-neo4j
-                fk/with-cluster-node-opts
-                ; perhaps should use with-node as well. if this config fails try uncommenting the line below
-                ; f-api/with-node
-                with-watdiv-data)
+  fk/with-embedded-kafka-cluster
+  with-sail-repository
+  with-datomic
+  with-neo4j
+  fk/with-cluster-node-opts
+  fkv/with-kv-dir
+  apif/with-node
+  with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query
