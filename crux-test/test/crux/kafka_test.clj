@@ -1,37 +1,21 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
-            [clojure.java.io :as io]
-            [crux.io :as cio]
-            [clojure.tools.logging :as log]
-            [crux.db :as db]
-            [crux.index :as idx]
+            [crux.node :as n]
+            [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.indexer :as fi]
-            [crux.object-store :as os]
-            [crux.lru :as lru]
-            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.kafka :as k]
-            [crux.query :as q]
             [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
-            [crux.api :as api]
-            [crux.tx :as tx]
+            [crux.api :as crux]
             [crux.node :as n]
-            [clojure.set :as set]
-            [crux.codec :as c]
-            [crux.fixtures.kafka :as kf])
-  (:import java.time.Duration
-           [java.util List UUID]
-           org.apache.kafka.clients.producer.ProducerRecord
-           org.apache.kafka.clients.consumer.ConsumerRecord
-           org.apache.kafka.common.TopicPartition
-           java.io.Closeable))
+            [crux.tx :as tx])
+  (:import [java.util UUID]
+           [java.time Duration]
+           java.io.Closeable
+           java.util.concurrent.locks.StampedLock))
 
-(def ^:dynamic ^{:arglists '([tx-ops])} *submit-tx*)
-(def ^:dynamic ^{:arglists '([tx timeout-ms])} *await-tx*)
-
-(defn with-topology [topology f]
-  (let [[modules close-fn] (n/start-modules (merge topology
+(defn with-fake-indexer [f]
+  (let [[modules close-fn] (n/start-modules (merge fi/topology
                                                    (select-keys k/topology [::n/tx-log
                                                                             ::k/producer
                                                                             ::k/indexing-consumer]))
@@ -40,22 +24,23 @@
                                                ::k/doc-topic (str "test-doc-topic-" test-id)
                                                ::k/tx-topic (str "test-tx-topic-" test-id)}))]
 
-    (binding [*submit-tx* (fn [tx-ops]
-                            @(db/submit-tx (::n/tx-log modules) tx-ops))
-
-              *await-tx* (fn [tx timeout-ms]
-                           (tx/await-tx (::n/indexer modules) tx timeout-ms))]
-      (try
-        (f)
-        (finally
-          (close-fn))))))
+    (with-open [api ^crux.node.CruxNode (n/map->CruxNode {:close-fn close-fn
+                                                          :tx-log (::n/tx-log modules)
+                                                          :indexer (::n/indexer modules)
+                                                          :closed? (atom false)
+                                                          :lock (StampedLock.)})]
+      (binding [*api* api]
+        (try
+          (f)
+          (finally
+            (close-fn)))))))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fi/with-indexer)
+(t/use-fixtures :each fi/with-indexer #'with-fake-indexer)
 
 (t/deftest test-coordination
   (let [!agent (agent nil)
-        config {:indexer fi/*indexer*, :!agent !agent}]
+        config {:indexer (:indexer *api*), :!agent !agent}]
 
     (t/testing "tx-consumer getting ahead"
       (let [!latch (k/doc-latch #{:hash1 :hash2} config)]
@@ -109,98 +94,58 @@
             (t/is (nil? @!agent))))))))
 
 (t/deftest test-can-transact-entities
-  (with-topology fi/topology
-    (fn []
-      (-> (*submit-tx* (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt")))
-          (*await-tx* 10000))
+  (let [tx (crux/submit-tx *api* (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt")))]
+    (tx/await-tx (:indexer *api*) tx 10000)
 
-      (let [docs @fi/*!docs*]
-        (t/is (= 7 (count docs)))
-        (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                   {:foaf/firstName "Pablo"
-                    :foaf/surname "Picasso"})
-                 (-> (vals docs)
-                     (->> (filter (comp #{:http://example.org/Picasso} :crux.db/id))
-                          first)
-                     (select-keys (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                                    [:foaf/firstName :foaf/surname])))))))))
-
-(def with-full-node
-  (t/join-fixtures [kf/with-cluster-node-opts fkv/with-memdb apif/with-node]))
+    (let [docs @fi/*!docs*]
+      (t/is (= 7 (count docs)))
+      (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                 {:foaf/firstName "Pablo"
+                  :foaf/surname "Picasso"})
+               (-> (vals docs)
+                   (->> (filter (comp #{:http://example.org/Picasso} :crux.db/id))
+                        first)
+                   (select-keys (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                  [:foaf/firstName :foaf/surname]))))))))
 
 #_(t/deftest test-can-transact-and-query-entities
-  (let [tx-topic "test-can-transact-and-query-entities-tx"
-        doc-topic "test-can-transact-and-query-entities-doc"
-        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)
-        object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        node (reify crux.api.ICruxAPI
-               (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+  (t/testing "transacting and indexing"
+    (let [tx (-> (*submit-tx* (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt")))
+                 (*await-tx* 10000))]
 
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-topic fk/*tx-consumer* tx-topic (constantly nil))
-    (k/subscribe-topic fk/*doc-consumer* doc-topic (constantly nil))
+      (t/is (= 1 (count @fi/*!txs*)))
+      (t/is (= 3 (count @fi/*!docs*)))
 
-    (t/testing "transacting and indexing"
-      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)
-            consume-opts {:indexer indexer :consumer fk/*consumer*
-                          :pending-txs-state (atom [])
-                          :tx-topic tx-topic
-                          :doc-topic doc-topic}]
+      (t/testing "restoring to stored offsets"
+        (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
+        (k/seek-to-stored-offsets indexer fk/*consumer* (.assignment fk/*consumer*))
+        (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
 
-        (t/is (= {:txs 1 :docs 3}
-                 (k/consume-and-index-entities consume-opts)))
-        (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
+      (t/testing "querying transacted data"
+        (t/is (= #{[:http://example.org/Picasso]}
+                 (q/q (api/db node)
+                      (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                        '{:find [e]
+                          :where [[e :foaf/firstName "Pablo"]]})))))
 
-        (t/testing "restoring to stored offsets"
-          (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
-          (k/seek-to-stored-offsets indexer fk/*consumer* (.assignment fk/*consumer*))
-          (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
-
-        (t/testing "querying transacted data"
-          (t/is (= #{[:http://example.org/Picasso]}
-                   (q/q (api/db node)
-                        (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                          '{:find [e]
-                            :where [[e :foaf/firstName "Pablo"]]})))))
-
-        (t/testing "can read tx log"
-          (with-open [consumer (db/new-tx-log-context tx-log)]
-            (let [log (db/tx-log tx-log consumer nil)]
-              (t/is (not (realized? log)))
-              ;; Cannot compare the tx-ops as they contain blank nodes
-              ;; with random ids.
-              (t/is (= {:crux.tx/tx-time tx-time
-                        :crux.tx/tx-id tx-id}
-                       (dissoc (first log) :crux.tx.event/tx-events)))
-              (t/is (= 1 (count log)))
-              (t/is (= 3 (count (:crux.tx.event/tx-events (first log))))))))))))
+      (t/testing "can read tx log"
+        (with-open [consumer (db/new-tx-log-context tx-log)]
+          (let [log (db/tx-log tx-log consumer nil)]
+            (t/is (not (realized? log)))
+            ;; Cannot compare the tx-ops as they contain blank nodes
+            ;; with random ids.
+            (t/is (= {:crux.tx/tx-time tx-time
+                      :crux.tx/tx-id tx-id}
+                     (dissoc (first log) :crux.tx.event/tx-events)))
+            (t/is (= 1 (count log)))
+            (t/is (= 3 (count (:crux.tx.event/tx-events (first log)))))))))))
 
 #_(t/deftest test-can-process-compacted-documents
   ;; when doing a evict a tombstone document will be written to
   ;; replace the original document. The original document will be then
   ;; removed once kafka compacts it away.
 
-  (let [tx-topic "test-can-process-compacted-documents-tx"
-        doc-topic "test-can-process-compacted-documents-doc"
-
-        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-
-        object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)
-
-        node (reify crux.api.ICruxAPI
-               (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
-
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
+  (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))]
 
     (t/testing "transacting and indexing"
       (let [consume-opts {:indexer indexer
@@ -209,7 +154,7 @@
                           :tx-topic tx-topic
                           :doc-topic doc-topic}
 
-            evicted-doc {:crux.db/id :to-be-eviceted :personal "private"}
+            evicted-doc {:crux.db/id :to-be-evicted :personal "private"}
             non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
             evicted-doc-hash
             (do @(db/submit-tx
