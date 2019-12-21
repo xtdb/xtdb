@@ -1,7 +1,7 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
             [crux.node :as n]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :as apif :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.indexer :as fi]
             [crux.kafka :as k]
@@ -15,15 +15,20 @@
            java.io.Closeable
            java.util.concurrent.locks.StampedLock))
 
-(defn with-fake-indexer [f]
+(def ^:dynamic *topics*)
+
+(defn with-fresh-topics [f]
+  (apif/with-opts (let [test-id (UUID/randomUUID)]
+                    {::k/doc-topic (str "test-doc-topic-" test-id)
+                     ::k/tx-topic (str "test-tx-topic-" test-id)})
+    f))
+
+(defn with-consumer* [f]
   (let [[modules close-fn] (n/start-modules (merge fi/topology
                                                    (select-keys k/topology [::n/tx-log
                                                                             ::k/producer
                                                                             ::k/indexing-consumer]))
-                                            (let [test-id (UUID/randomUUID)]
-                                              {::k/bootstrap-servers fk/*kafka-bootstrap-servers*
-                                               ::k/doc-topic (str "test-doc-topic-" test-id)
-                                               ::k/tx-topic (str "test-tx-topic-" test-id)}))]
+                                            {::k/bootstrap-servers fk/*kafka-bootstrap-servers*})]
 
     (with-open [api ^crux.node.CruxNode (n/map->CruxNode {:close-fn close-fn
                                                           :tx-log (::n/tx-log modules)
@@ -36,88 +41,108 @@
           (finally
             (close-fn)))))))
 
+(defmacro with-consumer [& body] `(with-consumer* (fn [] ~@body)))
+
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fi/with-indexer #'with-fake-indexer)
+(t/use-fixtures :each fi/with-indexer with-fresh-topics)
 
 (t/deftest test-coordination
-  (let [!agent (agent nil)
-        config {:indexer (:indexer *api*), :!agent !agent}]
+  (with-consumer
+    (let [!agent (agent nil)
+          config {:indexer (:indexer *api*), :!agent !agent}]
 
-    (t/testing "tx-consumer getting ahead"
-      (let [!latch (k/doc-latch #{:hash1 :hash2} config)]
+      (t/testing "tx-consumer getting ahead"
+        (let [!latch (k/doc-latch #{:hash1 :hash2} config)]
 
-        ;; the tx-consumer is now ahead of the doc-consumers,
-        ;; we want it to wait
-        (await !agent)
-        (t/is (= {:awaited-hashes #{:hash1 :hash2}, :!latch !latch} @!agent))
-        (t/is (= ::not-yet (deref !latch 50 ::not-yet)))
+          ;; the tx-consumer is now ahead of the doc-consumers,
+          ;; we want it to wait
+          (await !agent)
+          (t/is (= {:awaited-hashes #{:hash1 :hash2}, :!latch !latch} @!agent))
+          (t/is (= ::not-yet (deref !latch 50 ::not-yet)))
 
-        ;; doc-consumers done the first doc, tx-consumer still waits
-        (send-off !agent k/docs-indexed {:indexed-hashes #{:hash1}, :doc-partition-offsets {1 1}} config)
-        (await !agent)
-        (t/is (= {:awaited-hashes #{:hash2}, :!latch !latch} @!agent))
-        (t/is (= ::still-no (deref !latch 50 ::still-no)))
-        (t/is (= {1 1} (get @fi/*!index-meta* ::k/doc-partition-offsets)))
+          ;; doc-consumers done the first doc, tx-consumer still waits
+          (send-off !agent k/docs-indexed {:indexed-hashes #{:hash1}, :doc-partition-offsets {1 1}} config)
+          (await !agent)
+          (t/is (= {:awaited-hashes #{:hash2}, :!latch !latch} @!agent))
+          (t/is (= ::still-no (deref !latch 50 ::still-no)))
+          (t/is (= {1 1} (get @fi/*!index-meta* ::k/doc-partition-offsets)))
 
-        ;; now the doc-consumer's slightly ahead, the tx-consumer can continue
-        (send-off !agent k/docs-indexed {:indexed-hashes #{:hash2 :hash3}, :doc-partition-offsets {1 2}} config)
-        (await !agent)
-        (t/is (not= ::still-waiting (deref !latch 50 ::still-waiting)))
-        (t/is (nil? @!agent))
-        (t/is (= {1 2} (get @fi/*!index-meta* ::k/doc-partition-offsets)))))
+          ;; now the doc-consumer's slightly ahead, the tx-consumer can continue
+          (send-off !agent k/docs-indexed {:indexed-hashes #{:hash2 :hash3}, :doc-partition-offsets {1 2}} config)
+          (await !agent)
+          (t/is (not= ::still-waiting (deref !latch 50 ::still-waiting)))
+          (t/is (nil? @!agent))
+          (t/is (= {1 2} (get @fi/*!index-meta* ::k/doc-partition-offsets)))))
 
-    (t/testing "doc-consumer getting ahead"
-      (reset! fi/*!docs* {:hash3 :doc3})
+      (t/testing "doc-consumer getting ahead"
+        (reset! fi/*!docs* {:hash3 :doc3})
 
-      (let [!latch (k/doc-latch #{:hash3} config)]
-        ;; tx-consumer can continue, doc-consumer's already got :hash3
-        (t/is (not= ::blocked (deref !latch 50 ::blocked)))
+        (let [!latch (k/doc-latch #{:hash3} config)]
+          ;; tx-consumer can continue, doc-consumer's already got :hash3
+          (t/is (not= ::blocked (deref !latch 50 ::blocked)))
 
-        ;; won't be anything submitted, but we check regardless
-        (await !agent)
-        (t/is (nil? @!agent))))
+          ;; won't be anything submitted, but we check regardless
+          (await !agent)
+          (t/is (nil? @!agent))))
 
-    (t/testing "tx-consumer continues if the docs are not initially in but are by the time its send-off runs"
-      (let [!continue (promise)]
-        (with-redefs [send-off (let [send-off send-off] ; otherwise we see the redef'd version
-                                 (fn [!a f & args]
-                                   (apply send-off !a
-                                          (fn [& inner-args]
-                                            @!continue
-                                            (reset! fi/*!docs* {:hash1 :doc1})
-                                            (apply f inner-args))
-                                          args)))]
-          (let [!latch (k/doc-latch #{:hash1} config)]
-            (t/is (= ::not-yet (deref !latch 50 ::not-yet)))
-            (deliver !continue nil)
-            (await !agent)
-            (t/is (not= ::not-yet (deref !latch 50 ::not-yet)))
-            (t/is (nil? @!agent))))))))
+      (t/testing "tx-consumer continues if the docs are not initially in but are by the time its send-off runs"
+        (let [!continue (promise)]
+          (with-redefs [send-off (let [send-off send-off] ; otherwise we see the redef'd version
+                                   (fn [!a f & args]
+                                     (apply send-off !a
+                                            (fn [& inner-args]
+                                              @!continue
+                                              (reset! fi/*!docs* {:hash1 :doc1})
+                                              (apply f inner-args))
+                                            args)))]
+            (let [!latch (k/doc-latch #{:hash1} config)]
+              (t/is (= ::not-yet (deref !latch 50 ::not-yet)))
+              (deliver !continue nil)
+              (await !agent)
+              (t/is (not= ::not-yet (deref !latch 50 ::not-yet)))
+              (t/is (nil? @!agent)))))))))
 
 (t/deftest test-can-transact-entities
-  (let [tx (crux/submit-tx *api* (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt")))]
-    (tx/await-tx (:indexer *api*) tx 10000)
+  (with-consumer
+    (let [tx (crux/submit-tx *api* (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt")))]
+      (tx/await-tx (:indexer *api*) tx 10000)
 
-    (let [docs @fi/*!docs*]
-      (t/is (= 7 (count docs)))
-      (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                 {:foaf/firstName "Pablo"
-                  :foaf/surname "Picasso"})
-               (-> (vals docs)
-                   (->> (filter (comp #{:http://example.org/Picasso} :crux.db/id))
-                        first)
-                   (select-keys (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                                  [:foaf/firstName :foaf/surname]))))))
+      (let [docs @fi/*!docs*]
+        (t/is (= 7 (count docs)))
+        (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                   {:foaf/firstName "Pablo"
+                    :foaf/surname "Picasso"})
+                 (-> (vals docs)
+                     (->> (filter (comp #{:http://example.org/Picasso} :crux.db/id))
+                          first)
+                     (select-keys (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                    [:foaf/firstName :foaf/surname]))))))
 
-    (t/testing "can read tx log"
-      (with-open [ctx (crux/new-tx-log-context *api*)]
-        (let [log (db/tx-log (:tx-log *api*) ctx nil)]
-          (t/is (not (realized? log)))
-          ;; Cannot compare the tx-ops as they contain blank nodes
-          ;; with random ids.
-          (t/is (= tx (dissoc (first log) :crux.tx.event/tx-events)))
-          (t/is (= 1 (count log)))
-          (t/is (= 7 (count (:crux.tx.event/tx-events (first log))))))))))
+      (t/testing "can read tx log"
+        (with-open [ctx (crux/new-tx-log-context *api*)]
+          (let [log (db/tx-log (:tx-log *api*) ctx nil)]
+            (t/is (not (realized? log)))
+            ;; Cannot compare the tx-ops as they contain blank nodes
+            ;; with random ids.
+            (t/is (= tx (dissoc (first log) :crux.tx.event/tx-events)))
+            (t/is (= 1 (count log)))
+            (t/is (= 7 (count (:crux.tx.event/tx-events (first log)))))))))))
+
+(t/deftest test-can-resubscribe
+  (with-consumer
+    (let [tx (crux/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+      (tx/await-tx (:indexer *api*) tx 10000)
+
+      (t/is (= #{{:crux.db/id :foo}} (set (vals @fi/*!docs*))))))
+
+  (reset! fi/*!docs* {})
+
+  (with-consumer
+    (let [tx (crux/submit-tx *api* [[:crux.tx/put {:crux.db/id :bar}]])]
+      (tx/await-tx (:indexer *api*) tx 10000)
+
+      ;; no :foo here.
+      (t/is (= #{{:crux.db/id :bar}} (set (vals @fi/*!docs*)))))))
 
 #_(t/deftest test-can-process-compacted-documents
   ;; when doing a evict a tombstone document will be written to

@@ -242,8 +242,9 @@
   (fn []
     (with-open [consumer (create-consumer consumer-config)]
       (subscribe-topic consumer tx-topic
-                       (constantly (-> (db/read-index-meta indexer :crux.tx/latest-completed-tx)
-                                       :crux.tx/tx-id)))
+                       (constantly (some-> (db/read-index-meta indexer :crux.tx/latest-completed-tx)
+                                           :crux.tx/tx-id
+                                           inc)))
       (log/info "tx-consumer subscribed...")
 
       (while (not (Thread/interrupted))
