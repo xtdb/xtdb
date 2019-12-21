@@ -8,7 +8,8 @@
             [crux.rdf :as rdf]
             [crux.api :as crux]
             [crux.node :as n]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.db :as db])
   (:import [java.util UUID]
            [java.time Duration]
            java.io.Closeable
@@ -106,39 +107,17 @@
                    (->> (filter (comp #{:http://example.org/Picasso} :crux.db/id))
                         first)
                    (select-keys (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                                  [:foaf/firstName :foaf/surname]))))))))
+                                  [:foaf/firstName :foaf/surname]))))))
 
-#_(t/deftest test-can-transact-and-query-entities
-  (t/testing "transacting and indexing"
-    (let [tx (-> (*submit-tx* (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt")))
-                 (*await-tx* 10000))]
-
-      (t/is (= 1 (count @fi/*!txs*)))
-      (t/is (= 3 (count @fi/*!docs*)))
-
-      (t/testing "restoring to stored offsets"
-        (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
-        (k/seek-to-stored-offsets indexer fk/*consumer* (.assignment fk/*consumer*))
-        (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
-
-      (t/testing "querying transacted data"
-        (t/is (= #{[:http://example.org/Picasso]}
-                 (q/q (api/db node)
-                      (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                        '{:find [e]
-                          :where [[e :foaf/firstName "Pablo"]]})))))
-
-      (t/testing "can read tx log"
-        (with-open [consumer (db/new-tx-log-context tx-log)]
-          (let [log (db/tx-log tx-log consumer nil)]
-            (t/is (not (realized? log)))
-            ;; Cannot compare the tx-ops as they contain blank nodes
-            ;; with random ids.
-            (t/is (= {:crux.tx/tx-time tx-time
-                      :crux.tx/tx-id tx-id}
-                     (dissoc (first log) :crux.tx.event/tx-events)))
-            (t/is (= 1 (count log)))
-            (t/is (= 3 (count (:crux.tx.event/tx-events (first log)))))))))))
+    (t/testing "can read tx log"
+      (with-open [ctx (crux/new-tx-log-context *api*)]
+        (let [log (db/tx-log (:tx-log *api*) ctx nil)]
+          (t/is (not (realized? log)))
+          ;; Cannot compare the tx-ops as they contain blank nodes
+          ;; with random ids.
+          (t/is (= tx (dissoc (first log) :crux.tx.event/tx-events)))
+          (t/is (= 1 (count log)))
+          (t/is (= 7 (count (:crux.tx.event/tx-events (first log))))))))))
 
 #_(t/deftest test-can-process-compacted-documents
   ;; when doing a evict a tombstone document will be written to
