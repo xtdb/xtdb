@@ -187,15 +187,12 @@
         nil))))
 
 (defn index-docs [doc-records end-offsets {:keys [indexer !agent] :as config}]
-  (let [doc-results (reduce (fn [{:keys [indexed-hashes partition-states]} ^ConsumerRecord doc-record]
-                              (let [tp (TopicPartition. (.topic doc-record) (.partition doc-record))
-                                    content-hash (c/new-id (.key doc-record))
-                                    doc (.value doc-record)]
-                                (db/index-doc indexer content-hash doc)
+  (let [doc-results (reduce (fn [{:keys [indexed-hashes partition-states]} {:keys [offset content-hash doc topic-partition]}]
+                              (db/index-doc indexer content-hash doc)
 
-                                {:indexed-hashes (conj indexed-hashes content-hash)
-                                 :partition-states (assoc partition-states tp {:next-offset (inc (.offset doc-record))
-                                                                               :end-offset (get end-offsets tp)})}))
+                              {:indexed-hashes (conj indexed-hashes content-hash)
+                               :partition-states (assoc partition-states topic-partition {:next-offset (inc offset)
+                                                                                          :end-offset (get end-offsets topic-partition)})})
                             {:indexed-hashes #{}
                              :partition-states {}}
                             doc-records)]
@@ -215,7 +212,13 @@
       (while (not (Thread/interrupted))
         (try
           (when-let [doc-records (seq (.poll consumer timeout))]
-            (index-docs doc-records (into {} (.endOffsets consumer (.assignment consumer))) config))
+            (index-docs (for [^ConsumerRecord doc-record doc-records]
+                          {:topic-partition (TopicPartition. (.topic doc-record) (.partition doc-record))
+                           :content-hash (c/new-id (.key doc-record))
+                           :doc (.value doc-record)
+                           :offset (.offset doc-record)})
+                        (into {} (.endOffsets consumer (.assignment consumer)))
+                        config))
 
           (catch InterruptedException _)
           (catch InterruptException _)))
