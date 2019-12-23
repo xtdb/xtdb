@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-
-if [[ $(lein project-version) =~ "-SNAPSHOT$" ]]; then
-    lein deploy
+if [[ -z "$CIRCLE_PR_NUMBER" && $(lein project-version) =~ -SNAPSHOT$ ]]
+then
+    lein sub deploy clojars
+else
+    echo "Either we're building a PR, or a tagged version - not deploying to Clojars."
 fi

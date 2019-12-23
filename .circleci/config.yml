@@ -91,10 +91,7 @@ workflows:
   version: 2
   commit:
     jobs:
-      - build:
-          filters:
-            branches:
-              only: master
+      - build
   nightly:
     triggers:
       - schedule:
