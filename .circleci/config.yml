@@ -38,7 +38,8 @@ jobs:
 
       - run: lein do version, sub test, check
 
-      - run: ./.circleci/bin/deploy_clojars.sh
+      # one for when we can get CircleCI Clojars deploys working again
+      # - run: ./.circleci/bin/deploy_clojars.sh
 
   long-build:
     docker:
