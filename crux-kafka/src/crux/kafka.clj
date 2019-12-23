@@ -333,7 +333,7 @@
                 :default "crux-docs"
                 :crux.config/type :crux.config/string}
    ::doc-partitions {:doc "Partitions for document topic"
-                     :default 10
+                     :default 1
                      :crux.config/type :crux.config/nat-int}
    ::create-topics {:doc "Create topics if they do not exist"
                     :default true
