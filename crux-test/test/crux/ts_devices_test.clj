@@ -4,9 +4,9 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
+            [crux.fixtures.kv :as fkv]
             [crux.io :as cio])
   (:import java.time.temporal.ChronoUnit
            java.util.Date))
@@ -17,9 +17,10 @@
 (def ^:const devices-device-info-csv-resource "ts/data/devices_small_device_info.csv")
 (def ^:const devices-readings-csv-resource "ts/data/devices_small_readings.csv")
 
-(def run-ts-devices-tests? (boolean (and (io/resource devices-device-info-csv-resource)
-                                         (io/resource devices-readings-csv-resource)
-                                         (Boolean/parseBoolean (System/getenv "CRUX_TS_DEVICES")))))
+(def run-ts-devices-tests?
+  (boolean (and (io/resource devices-device-info-csv-resource)
+                (io/resource devices-readings-csv-resource)
+                (Boolean/parseBoolean (System/getenv "CRUX_TS_DEVICES")))))
 
 (def ^:const readings-chunk-size 1000)
 
@@ -27,9 +28,9 @@
 (defn submit-ts-devices-data
   ([node]
    (submit-ts-devices-data
-     node
-     (io/resource devices-device-info-csv-resource)
-     (io/resource devices-readings-csv-resource)))
+    node
+    (io/resource devices-device-info-csv-resource)
+    (io/resource devices-readings-csv-resource)))
   ([node info-resource readings-resource]
    (with-open [info-in (io/reader info-resource)
                readings-in (io/reader readings-resource)]
@@ -47,54 +48,54 @@
        (->> (line-seq readings-in)
             (partition readings-chunk-size)
             (reduce
-             (fn [n chunk]
-               (api/submit-tx
-                node
-                (vec (for [reading chunk
-                           :let [[time device-id battery-level battery-status
-                                  battery-temperature bssid
-                                  cpu-avg-1min cpu-avg-5min cpu-avg-15min
-                                  mem-free mem-used rssi ssid] (str/split reading #",")
-                                 time (inst/read-instant-date
-                                       (-> time
-                                           (str/replace " " "T")
-                                           (str/replace #"-(\d\d)$" ".000-$1:00")))
-                                 reading-id (keyword "reading" device-id)
-                                 device-id (keyword "device-info" device-id)]]
-                       [:crux.tx/put
-                        {:crux.db/id reading-id
-                         :reading/time time
-                         :reading/device-id device-id
-                         :reading/battery-level (Double/parseDouble battery-level)
-                         :reading/battery-status (keyword battery-status)
-                         :reading/battery-temperature (Double/parseDouble battery-temperature)
-                         :reading/bssid bssid
-                         :reading/cpu-avg-1min (Double/parseDouble cpu-avg-1min)
-                         :reading/cpu-avg-5min (Double/parseDouble cpu-avg-5min)
-                         :reading/cpu-avg-15min (Double/parseDouble cpu-avg-15min)
-                         :reading/mem-free (Double/parseDouble mem-free)
-                         :reading/mem-used (Double/parseDouble mem-used)
-                         :reading/rssi (Double/parseDouble rssi)
-                         :reading/ssid ssid}
-                        time])))
-               (+ n (count chunk)))
-             (count info-tx-ops)))))))
+             (fn [{:keys [op-count last-tx]} chunk]
+               {:op-count (+ op-count (count chunk))
+                :last-tx (api/submit-tx
+                          node
+                          (vec (for [reading chunk
+                                     :let [[time device-id battery-level battery-status
+                                            battery-temperature bssid
+                                            cpu-avg-1min cpu-avg-5min cpu-avg-15min
+                                            mem-free mem-used rssi ssid] (str/split reading #",")
+                                           time (inst/read-instant-date
+                                                 (-> time
+                                                     (str/replace " " "T")
+                                                     (str/replace #"-(\d\d)$" ".000-$1:00")))
+                                           reading-id (keyword "reading" device-id)
+                                           device-id (keyword "device-info" device-id)]]
+                                 [:crux.tx/put
+                                  {:crux.db/id reading-id
+                                   :reading/time time
+                                   :reading/device-id device-id
+                                   :reading/battery-level (Double/parseDouble battery-level)
+                                   :reading/battery-status (keyword battery-status)
+                                   :reading/battery-temperature (Double/parseDouble battery-temperature)
+                                   :reading/bssid bssid
+                                   :reading/cpu-avg-1min (Double/parseDouble cpu-avg-1min)
+                                   :reading/cpu-avg-5min (Double/parseDouble cpu-avg-5min)
+                                   :reading/cpu-avg-15min (Double/parseDouble cpu-avg-15min)
+                                   :reading/mem-free (Double/parseDouble mem-free)
+                                   :reading/mem-used (Double/parseDouble mem-used)
+                                   :reading/rssi (Double/parseDouble rssi)
+                                   :reading/ssid ssid}
+                                  time])))})
+             {:op-count (count info-tx-ops)}))))))
 
 (defn with-ts-devices-data [f]
   (if run-ts-devices-tests?
-    (let [submit-future (future (submit-ts-devices-data *api*))]
-      (api/sync *api* (java.time.Duration/ofMinutes 20))
-      (t/is (= 1001000 @submit-future))
+    (let [{:keys [op-count last-tx]} (submit-ts-devices-data *api*)]
+      (assert (= op-count 1001000) (str "actual op-count: " op-count))
+      (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
       (f))
+
     (f)))
 
 (t/use-fixtures :once
-                fk/with-embedded-kafka-cluster
-                fk/with-kafka-client
-                fk/with-cluster-node-opts
-                ; perhaps should use with-node as well. if this config fails try uncommenting the line below
-                ; f-api/with-node
-                with-ts-devices-data)
+  fk/with-embedded-kafka-cluster
+  fk/with-cluster-node-opts
+  fkv/with-kv-dir
+  fapi/with-node
+  with-ts-devices-data)
 
 ;; 10 most recent battery temperature readings for charging devices
 ;; SELECT time, device_id, battery_temperature
@@ -116,7 +117,7 @@
 ;; 2016-11-15 23:39:30-05 | demo004729 |                99.6
 ;; (10 rows)
 
-(t/deftest test-10-most-recent-battery-readeings-for-charging-devices
+(t/deftest test-10-most-recent-battery-readings-for-charging-devices
   (if run-ts-devices-tests?
     (t/is (= [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000998 93.1]
@@ -157,7 +158,7 @@
 
 ;; TODO: This test doesn't only does current time slice, which isn't
 ;; valid for this example.
-(t/deftest test-busiest-devices-1-min-avg-whoste-battery-evel-is-below-33-percent-and-is-not-charging
+(t/deftest test-busiest-devices-1-min-avg-whose-battery-level-is-below-33-percent-and-is-not-charging
   (if run-ts-devices-tests?
     (t/is (= [[#inst "2016-11-15T20:19:30.000-00:00"
                :device-info/demo000818
@@ -239,8 +240,7 @@
               [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
-             (let [kv *kv*
-                   reading-ids (->> (api/q (api/db *api*)
+             (let [reading-ids (->> (api/q (api/db *api*)
                                         '{:find [r]
                                           :where [[r :reading/device-id device-id]
                                                   (or [device-id :device-info/model "pinto"]
