@@ -15,7 +15,7 @@
            java.io.Closeable
            java.time.Duration
            [java.util Date List Map UUID]
-           java.util.concurrent.ExecutionException
+           [java.util.concurrent ExecutionException ExecutorService Executors TimeUnit]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
@@ -267,7 +267,7 @@
 
       (log/info "tx-consumer stopped."))))
 
-(defrecord IndexingConsumer [!agent ^Thread tx-consumer-thread doc-consumer-threads consumer-config]
+(defrecord IndexingConsumer [!agent ^ExecutorService thread-pool consumer-config]
   status/Status
   (status-map [_]
     {:crux.zk/zk-active?
@@ -280,19 +280,15 @@
 
   Closeable
   (close [_]
-    (run! #(.interrupt ^Thread %) doc-consumer-threads)
-    (.interrupt tx-consumer-thread)
+    (.shutdownNow thread-pool)
+    (.awaitTermination thread-pool 10 TimeUnit/SECONDS)
 
-    (run! #(.join ^Thread %) doc-consumer-threads)
-    (.join tx-consumer-thread)
-
-    (await !agent)
-    ))
+    (await !agent)))
 
 (defn topic-partition-counts [topic ^AdminClient admin-client]
   (-> (.describeTopics admin-client [topic]) .all .get ^TopicDescription (get topic) .partitions count))
 
-(defn ->started-thread [^Runnable f ^String name]
+(defn ->started-pool [^Runnable f thread-count]
   (doto (Thread. f name)
     (.setUncaughtExceptionHandler (reify Thread$UncaughtExceptionHandler
                                     (uncaughtException [_ _ t]
@@ -304,23 +300,28 @@
     (with-open [admin-client (create-admin-client consumer-config)]
       (ensure-topics config admin-client)
 
-      (let [indexing-config (merge config
+      (let [doc-group-id (str (UUID/randomUUID))
+            doc-threads (min (topic-partition-counts doc-topic admin-client)
+                             max-doc-threads)
+
+            thread-pool (Executors/newFixedThreadPool (inc doc-threads))
+
+            indexing-config (merge config
                                    {:consumer-config consumer-config
                                     :indexer indexer
-                                    :!agent (agent nil)})
-            tx-consumer-thread (->started-thread (tx-consumer-loop (-> indexing-config
-                                                                       (assoc-in [:consumer-config "group.id"] (str (UUID/randomUUID)))))
-                                                 "tx-consumer")
-            doc-consumer-threads (let [indexing-config (-> indexing-config
-                                                           (assoc-in [:consumer-config "group.id"] (str (UUID/randomUUID))))]
-                                   (set (for [i (range (min (topic-partition-counts doc-topic admin-client)
-                                                            max-doc-threads))]
-                                          (->started-thread (doc-consumer-loop indexing-config)
-                                                            (str "doc-consumer-" i)))))]
+                                    :!agent (agent nil)})]
 
-        (map->IndexingConsumer (assoc indexing-config
-                                      :tx-consumer-thread tx-consumer-thread
-                                      :doc-consumer-threads doc-consumer-threads))))))
+        (.submit thread-pool
+                 (tx-consumer-loop (-> indexing-config
+                                       (assoc-in [:consumer-config "group.id"] (str (UUID/randomUUID))))))
+
+
+        (dotimes [n doc-threads]
+          (.submit thread-pool
+                   (doc-consumer-loop (-> indexing-config
+                                          (assoc-in [:consumer-config "group.id"] doc-group-id)))))
+
+        (map->IndexingConsumer (assoc indexing-config :thread-pool thread-pool))))))
 
 (def default-config
   {::bootstrap-servers {:doc "URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
