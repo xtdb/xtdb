@@ -1,7 +1,7 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
             [crux.node :as n]
-            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.indexer :as fi]
             [crux.kafka :as k]
@@ -15,10 +15,8 @@
            java.io.Closeable
            java.util.concurrent.locks.StampedLock))
 
-(def ^:dynamic *topics*)
-
 (defn with-fresh-topics [f]
-  (apif/with-opts (let [test-id (UUID/randomUUID)]
+  (fapi/with-opts (let [test-id (UUID/randomUUID)]
                     {::k/doc-topic (str "test-doc-topic-" test-id)
                      ::k/tx-topic (str "test-tx-topic-" test-id)})
     f))
@@ -28,7 +26,8 @@
                                                    (select-keys k/topology [::n/tx-log
                                                                             ::k/producer
                                                                             ::k/indexing-consumer]))
-                                            {::k/bootstrap-servers fk/*kafka-bootstrap-servers*})]
+                                            (merge fapi/*opts*
+                                                   {::k/bootstrap-servers fk/*kafka-bootstrap-servers*}))]
 
     (with-open [api ^crux.node.CruxNode (n/map->CruxNode {:close-fn close-fn
                                                           :tx-log (::n/tx-log modules)
