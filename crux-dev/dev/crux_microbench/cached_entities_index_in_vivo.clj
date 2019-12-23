@@ -64,21 +64,23 @@
 (defn- upload-stocks-with-history [crux-node]
   (let [base-stocks (map data-gen/gen-ticker (range stocks-count))
         base-date #inst "2019"
-        partitions-total (/ stocks-count 1000)]
-    (doseq [i (range history-days)
-            :let [date (Date. ^long (+ (.getTime base-date) (* 1000 60 60 24 i)))
-                  ctr (atom 0)
-                  stocks-batch (data-gen/alter-tickers base-stocks)
-                  t-currencies (map data-gen/alter-currency data-gen/currencies)]]
-      (doseq [stocks-batch (partition-all 1000 stocks-batch)]
-        (swap! ctr inc)
-        (println "day " (inc i) "\t" "partition " @ctr "/" partitions-total)
-        (api/submit-tx crux-node (f/maps->tx-ops stocks-batch)))
-      (api/submit-tx crux-node (f/maps->tx-ops t-currencies date)))
+        partitions-total (/ stocks-count 1000)
+        last-tx (reduce (fn [_ i]
+                          (let [date (Date. ^long (+ (.getTime base-date) (* 1000 60 60 24 i)))
+                                ctr (atom 0)
+                                stocks-batch (data-gen/alter-tickers base-stocks)
+                                t-currencies (map data-gen/alter-currency data-gen/currencies)]
+                            (doseq [stocks-batch (partition-all 1000 stocks-batch)]
+                              (swap! ctr inc)
+                              (println "day " (inc i) "\t" "partition " @ctr "/" partitions-total)
+                              (api/submit-tx crux-node (f/maps->tx-ops stocks-batch)))
+
+                            (api/submit-tx crux-node (f/maps->tx-ops t-currencies date))))
+                        nil
+                        (range history-days))]
     (println "Txes submitted, synchronizing...")
-    (let [sync-time
-          (crux.bench/duration-millis
-            (api/sync crux-node (Duration/ofMinutes 20)))]
+    (let [sync-time (crux.bench/duration-millis
+                     (api/sync crux-node (:crux.tx/tx-time last-tx) (Duration/ofMinutes 20)))]
       (swap! sync-times assoc [stocks-count history-days] sync-time)
       (println "Sync takes: " sync-time))))
 
