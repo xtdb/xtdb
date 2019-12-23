@@ -160,7 +160,9 @@
     (.subscribe consumer topics
                 (reify ConsumerRebalanceListener
                   (onPartitionsRevoked [_ partitions]
-                    (log/debug "Partitions revoked:" (str partitions)))
+                    (when (seq partitions)
+                      (log/debug "Partitions revoked:" (str partitions))))
+
                   (onPartitionsAssigned [_ partitions]
                     (log/debug "Partitions assigned:" (str partitions))
 
@@ -205,21 +207,20 @@
                                     :or {timeout (Duration/ofMillis 5000)}
                                     :as config}]
   (fn []
-    (let [thread-name (.getName (Thread/currentThread))]
-      (with-open [consumer (create-consumer consumer-config)]
-        (subscribe-topic consumer doc-topic config)
+    (with-open [consumer (create-consumer consumer-config)]
+      (subscribe-topic consumer doc-topic config)
 
-        (log/info (str thread-name " subscribed."))
+      (log/info "doc-consumer subscribed.")
 
-        (while (not (Thread/interrupted))
-          (try
-            (when-let [doc-records (seq (.poll consumer timeout))]
-              (index-docs doc-records (into {} (.endOffsets consumer (.assignment consumer))) config))
+      (while (not (Thread/interrupted))
+        (try
+          (when-let [doc-records (seq (.poll consumer timeout))]
+            (index-docs doc-records (into {} (.endOffsets consumer (.assignment consumer))) config))
 
-            (catch InterruptedException _)
-            (catch InterruptException _)))
+          (catch InterruptedException _)
+          (catch InterruptException _)))
 
-        (log/info (str thread-name " stopped."))))))
+      (log/info "doc-consumer stopped."))))
 
 (defn doc-latch [content-hashes {:keys [indexer !agent]}]
   (let [!latch (promise)]
