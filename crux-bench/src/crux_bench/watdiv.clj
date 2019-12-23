@@ -394,10 +394,9 @@
   (ingest-watdiv-data [this resource]
     (when-not (:done? (crux/entity (crux/db crux) ::watdiv-ingestion-status))
       (let [time-before (Date.)
-            submit-future (future
-                            (with-open [in (io/input-stream (io/resource resource))]
-                              (rdf/submit-ntriples (:tx-log crux) in 1000)))]
-        (assert (= 521585 @submit-future))
+            {:keys [entity-count]} (with-open [in (io/input-stream (io/resource resource))]
+                                     (rdf/submit-ntriples (:tx-log crux) in 1000))]
+        (assert (= 521585 entity-count))
         (let [kafka-ingest-done (Date.)
               {:keys [crux.tx/tx-time]}
               (crux/submit-tx

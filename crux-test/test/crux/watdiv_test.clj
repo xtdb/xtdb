@@ -325,12 +325,11 @@
 ;; Crux
 
 (defn load-rdf-into-crux [resource]
-  (let [submit-future (future
-                        (with-open [in (io/input-stream (io/resource resource))]
-                          (rdf/submit-ntriples (:tx-log *api*) in 1000)))]
+  (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream (io/resource resource))]
+                                         (rdf/submit-ntriples (:tx-log *api*) in 1000))]
     (println "Loaded into kafka awaiting Crux to catch up indexing...")
-    (api/sync *api* (java.time.Duration/ofMinutes 20))
-    (t/is (= 521585 @submit-future))))
+    (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
+    (t/is (= 521585 entity-count))))
 
 (defn with-watdiv-data [f]
   (if run-watdiv-tests?
