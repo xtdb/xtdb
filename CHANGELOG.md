@@ -1,5 +1,10 @@
 # Changelog
 
+## 20.01-1.7.0-alpha
+
+### Breaking changes
+* [#466](https://github.com/juxt/crux/issues/466): Remove `sync` without a supplied transaction time.
+
 ## 19.12-1.6.1-alpha
 
 ### Bug fixes
