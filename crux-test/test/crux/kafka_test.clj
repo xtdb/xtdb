@@ -296,7 +296,7 @@
             (future
               (time
                (with-open [in (io/input-stream mappingbased-properties-file)]
-                 (reset! n-transacted (rdf/submit-ntriples tx-log in tx-size)))))
+                 (reset! n-transacted (:entity-count (rdf/submit-ntriples tx-log in tx-size))))))
             (time
              (loop [{:keys [docs]} (k/consume-and-index-entities indexer fk/*consumer* 100)
                     n 0]

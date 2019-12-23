@@ -208,14 +208,15 @@
        (statements->maps)
        (map #(use-default-language % *default-language*))
        (partition-all tx-size)
-       (reduce (fn [^long n entities]
-                 (when (zero? (long (mod n *ntriples-log-size*)))
-                   (log/debug "submitted" n))
+       (reduce (fn [{:keys [^long entity-count last-tx]} entities]
+                 (when (zero? (long (mod entity-count *ntriples-log-size*)))
+                   (log/debug "submitted" entity-count))
                  (let [tx-ops (vec (for [entity entities]
                                      [:crux.tx/put entity]))]
-                   (db/submit-tx tx-log tx-ops))
-                 (+ n (count entities)))
-               0)))
+                   {:entity-count (+ entity-count (count entities))
+                    :last-tx (db/submit-tx tx-log tx-ops)}))
+
+               {:entity-count 0})))
 
 (def ^:dynamic *default-prefixes* {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
                                    :rdfs "http://www.w3.org/2000/01/rdf-schema#"
