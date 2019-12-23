@@ -67,11 +67,12 @@
     "Will return the latest value of the db currently known. Non-blocking.
 
   When a valid time is specified then returned db value contains only those
-  documents whose valid time is not after the specified. Non-blocking.
+  documents whose valid time is before the specified time. Non-blocking.
 
   When both valid and transaction time are specified returns a db value
-  as of the valid and transaction time. Will block until the transaction
-  time is present in the index.")
+  as of the valid time and the latest transaction time indexed at or before
+  the specified transaction time. Non-blocking. The index may not yet
+  contain a transaction with the specified transaction time.")
 
   (document [node content-hash]
     "Reads a document from the document store based on its

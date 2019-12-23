@@ -22,7 +22,7 @@ can have, grouped into *topologies*.
 
 Use a Kafka node when horizontal scalability is required or when
 you want the guarantees that Kafka offers in terms of resiliency,
-availability, and retention of data.
+availability and retention of data.
 
 Multiple Kafka nodes participate in a cluster with Kafka as the primary
 store and as the central means of coordination.
@@ -211,7 +211,7 @@ include::./src/docs/examples.clj[tags=close-node]
 [#kafka-embed]
 === Embedded Kafka
 
-Crux is ready to work with an embedded Kafka for when you don't have a independently
+Crux is ready to work with an embedded Kafka for when you don't have an independently
 running Kafka available to connect to (such as during development).
 
 [#embedded-kafka-dependency]
