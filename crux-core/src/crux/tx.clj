@@ -324,22 +324,6 @@
      :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
-  ;; this will likely be going away as part of #442
-  (let [max-lag-fn #(some->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
-                             (vals)
-                             (seq)
-                             (map :lag)
-                             (reduce max 0))]
-    (if (cio/wait-while #(if-let [max-lag (max-lag-fn)]
-                           (pos? (long max-lag))
-                           true)
-                        timeout-ms)
-      (db/read-index-meta indexer :crux.tx/latest-completed-tx)
-      (throw (TimeoutException.
-               (str "Timed out waiting for index to catch up, lag is: " (or (max-lag-fn)
-                                                                            "unknown")))))))
-
 ;;; TODO need to expose this as node/await-tx when 'sync' goes
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout-ms]
   (let [seen-tx (atom nil)]

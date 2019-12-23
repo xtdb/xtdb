@@ -121,19 +121,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public boolean hasSubmittedTxCorrectedEntity(Map<Keyword,?> submittedTx, Date validTime, Object eid);
 
     /**
-     * Blocks until the node has caught up indexing. Will throw an
-     * exception on timeout. The returned date is the latest index
-     * time when this node has caught up as of this call. This can be
-     * used as the second parameter in {@link #db(Date validTime,
-     * Date transactionTime)} for consistent reads.
-     *
-     * @param timeout max time to wait, can be null for the default.
-     * @return        the latest known transaction time.
-     */
-    public Date sync(Duration timeout);
-
-    /**
-     * Blocks until the node has indexed a transaction that is past
+     * Blocks until the node has indexed a transaction at or after
      * the supplied transactionTime. Will throw a timeout. The
      * returned date is the latest index time when this node has
      * caught up as of this call.

@@ -132,13 +132,6 @@
                             (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
           tx-log-entry))))
 
-  (sync [this timeout]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (-> (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
-                                                (:crux.tx-log/await-tx-timeout options)))
-          :crux.tx/tx-time)))
-
   (sync [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)

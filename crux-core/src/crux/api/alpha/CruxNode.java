@@ -104,15 +104,6 @@ public class CruxNode implements AutoCloseable {
             .collect(Collectors.toList());
     }
 
-    /**
-     * Blocks until the node has caught up indexing. Will throw an exception on timeout
-     * @param timeout Max time to wait, can be null for the default
-     * @return Date representing the latest index time when this node has caught up as of this call
-     */
-    public Date sync(Duration timeout) {
-        return node.sync(timeout);
-    }
-
     @Override
     public void close() throws IOException {
         node.close();

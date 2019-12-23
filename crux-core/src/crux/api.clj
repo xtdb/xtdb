@@ -115,16 +115,12 @@
   eid is an object that can be coerced into an entity id.
   Returns true if the entity was updated in this transaction.")
 
-  (sync
-    [node ^Duration timeout]
-    [node ^Date transaction-time ^Duration timeout]
-    "If the transaction-time is supplied, blocks until indexing has
-  processed a tx with a greater-than transaction-time, otherwise
-  blocks until the node has caught up indexing the tx-log
-  backlog. Will throw an exception on timeout. The returned date is
-  the latest index time when this node has caught up as of this
-  call. This can be used as the second parameter in (db valid-time,
-  transaction-time) for consistent reads.
+  (sync [node ^Date transaction-time ^Duration timeout]
+    "Blocks until indexing has processed a tx at or after the provided
+  transaction-time. Will throw an exception on timeout. The returned date is the
+  latest index time when this node has caught up as of this call. This can be
+  used as the second parameter in (db valid-time, transaction-time) for
+  consistent reads.
 
   timeout – max time to wait, can be nil for the default.
   Returns the latest known transaction time.")
@@ -190,11 +186,8 @@
   (submitted-tx-corrected-entity? [this submitted-tx ^Date valid-time eid]
     (.hasSubmittedTxCorrectedEntity this submitted-tx valid-time eid))
 
-  (sync
-    ([this timeout]
-     (.sync this timeout))
-    ([this transaction-time timeout]
-     (.sync this transaction-time timeout)))
+  (sync [this transaction-time timeout]
+    (.sync this transaction-time timeout))
 
   (attribute-stats [this]
     (.attributeStats this)))
