@@ -15,7 +15,7 @@
            java.io.Closeable
            java.time.Duration
            [java.util Date List Map UUID]
-           [java.util.concurrent ExecutionException ExecutorService Executors TimeUnit]
+           [java.util.concurrent ExecutionException ExecutorService Executors ThreadFactory TimeUnit]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
@@ -152,7 +152,10 @@
 
 ;;; Indexing Consumer
 
-(defn subscribe-topic [^KafkaConsumer consumer topic partition->offset]
+(defn tp->meta-key [^TopicPartition tp]
+  (keyword "crux.kafka.topic-partition" (str tp)))
+
+(defn subscribe-topic [^KafkaConsumer consumer topic {:keys [indexer]}]
   (let [^List topics [topic]]
     (.subscribe consumer topics
                 (reify ConsumerRebalanceListener
@@ -162,12 +165,16 @@
                     (log/debug "Partitions assigned:" (str partitions))
 
                     (doseq [^TopicPartition topic-partition partitions]
-                      (if-let [^long offset (partition->offset (.partition topic-partition))]
+                      (if-let [^long offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
+                                                    [(tp->meta-key topic-partition) :next-offset])]
                         (.seek consumer topic-partition offset)
                         (.seekToBeginning consumer [topic-partition]))))))))
 
-(defn docs-indexed [ag-state {:keys [indexed-hashes doc-partition-offsets]} {:keys [indexer]}]
-  (db/swap-index-meta indexer ::doc-partition-offsets merge doc-partition-offsets)
+(defn update-consumer-state [partition-states {:keys [indexer]}]
+  (db/swap-index-meta indexer :crux.tx-log/consumer-state merge (into {} (map (juxt (comp tp->meta-key key) val)) partition-states)))
+
+(defn docs-indexed [ag-state {:keys [indexed-hashes partition-states]} config]
+  (update-consumer-state partition-states config)
 
   (when-let [{:keys [awaited-hashes !latch]} ag-state]
     (if-let [awaited-hashes (not-empty (set/difference awaited-hashes indexed-hashes))]
@@ -177,20 +184,22 @@
         (deliver !latch nil)
         nil))))
 
-(defn index-docs [doc-records {:keys [indexer !agent]}]
-  (let [doc-results (reduce (fn [{:keys [indexed-hashes doc-partition-offsets]} ^ConsumerRecord doc-record]
-                              (let [content-hash (c/new-id (.key doc-record))
+(defn index-docs [doc-records end-offsets {:keys [indexer !agent] :as config}]
+  (let [doc-results (reduce (fn [{:keys [indexed-hashes partition-states]} ^ConsumerRecord doc-record]
+                              (let [tp (TopicPartition. (.topic doc-record) (.partition doc-record))
+                                    content-hash (c/new-id (.key doc-record))
                                     doc (.value doc-record)]
                                 (db/index-doc indexer content-hash doc)
 
                                 {:indexed-hashes (conj indexed-hashes content-hash)
-                                 :doc-partition-offsets (assoc doc-partition-offsets (.partition doc-record) (inc (.offset doc-record)))}))
+                                 :partition-states (assoc partition-states tp {:next-offset (inc (.offset doc-record))
+                                                                               :end-offset (get end-offsets tp)})}))
                             {:indexed-hashes #{}
-                             :doc-partition-offsets {}}
+                             :partition-states {}}
                             doc-records)]
 
     (log/debugf "Indexed %d documents" (count (:indexed-hashes doc-results)))
-    (send-off !agent docs-indexed doc-results {:indexer indexer})))
+    (send-off !agent docs-indexed doc-results config)))
 
 (defn doc-consumer-loop ^Runnable [{:keys [consumer-config ::doc-topic indexer ^Duration timeout]
                                     :or {timeout (Duration/ofMillis 5000)}
@@ -198,14 +207,14 @@
   (fn []
     (let [thread-name (.getName (Thread/currentThread))]
       (with-open [consumer (create-consumer consumer-config)]
-        (subscribe-topic consumer doc-topic (into {} (db/read-index-meta indexer ::doc-partition-offsets)))
+        (subscribe-topic consumer doc-topic config)
 
         (log/info (str thread-name " subscribed."))
 
         (while (not (Thread/interrupted))
           (try
             (when-let [doc-records (seq (.poll consumer timeout))]
-              (index-docs doc-records config))
+              (index-docs doc-records (into {} (.endOffsets consumer (.assignment consumer))) config))
 
             (catch InterruptedException _)
             (catch InterruptException _)))
@@ -241,24 +250,30 @@
                                    :as config}]
   (fn []
     (with-open [consumer (create-consumer consumer-config)]
-      (subscribe-topic consumer tx-topic
-                       (constantly (some-> (db/read-index-meta indexer :crux.tx/latest-completed-tx)
-                                           :crux.tx/tx-id
-                                           inc)))
+      (subscribe-topic consumer tx-topic config)
       (log/info "tx-consumer subscribed...")
 
       (while (not (Thread/interrupted))
         (try
-          (doseq [^ConsumerRecord tx-record (.poll consumer timeout)]
-            (when (Thread/interrupted)
-              (throw (InterruptedException.)))
+          (when-let [tx-records (seq (.poll consumer timeout))]
+            (let [tp (first (.assignment consumer))
+                  end-offsets (.endOffsets consumer (.assignment consumer))]
+              (doseq [^ConsumerRecord tx-record tx-records]
+                (when (Thread/interrupted)
+                  (throw (InterruptedException.)))
 
-            (index-tx-record (merge (tx-record->tx-log-entry tx-record)
-                                    {:content-hashes (-> (.headers tx-record)
-                                                         (.lastHeader (str :crux.tx/docs))
-                                                         .value
-                                                         nippy/fast-thaw)})
-                             config))
+                (index-tx-record (merge (tx-record->tx-log-entry tx-record)
+                                        {:content-hashes (-> (.headers tx-record)
+                                                             (.lastHeader (str :crux.tx/docs))
+                                                             .value
+                                                             nippy/fast-thaw)})
+                                 config)
+
+                (send-off !agent (fn [ag-state]
+                                   (update-consumer-state {tp {:next-offset (inc (.offset tx-record))
+                                                               :end-offset (get end-offsets tp)}}
+                                                          config)
+                                   ag-state)))))
 
           (catch InterruptedException _
             (.interrupt (Thread/currentThread)))
@@ -295,6 +310,15 @@
                                       (log/error t (or (.getMessage t) (-> t .getClass .getName))))))
     .start))
 
+(defn thread-factory []
+  (let [!idx (atom 0)]
+    (reify ThreadFactory
+      (^Thread newThread [_ ^Runnable r]
+        (doto (Thread. r (str "crux-kafka-pool-" (swap! !idx inc)))
+          (.setUncaughtExceptionHandler (reify Thread$UncaughtExceptionHandler
+                                          (uncaughtException [_ _ t]
+                                            (log/error t "error in Kafka consumer")))))))))
+
 (defn start-indexing-consumer ^IndexingConsumer [{:keys [crux.node/indexer]} {::keys [doc-topic max-doc-threads] :as config}]
   (let [consumer-config (->kafka-config config)]
     (with-open [admin-client (create-admin-client consumer-config)]
@@ -304,7 +328,7 @@
             doc-threads (min (topic-partition-counts doc-topic admin-client)
                              max-doc-threads)
 
-            thread-pool (Executors/newFixedThreadPool (inc doc-threads))
+            thread-pool (Executors/newFixedThreadPool (inc doc-threads) (thread-factory))
 
             indexing-config (merge config
                                    {:consumer-config consumer-config

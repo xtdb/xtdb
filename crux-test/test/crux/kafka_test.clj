@@ -13,7 +13,8 @@
   (:import [java.util UUID]
            [java.time Duration]
            java.io.Closeable
-           java.util.concurrent.locks.StampedLock))
+           java.util.concurrent.locks.StampedLock
+           org.apache.kafka.common.TopicPartition))
 
 (defn with-fresh-topics [f]
   (fapi/with-opts (let [test-id (UUID/randomUUID)]
@@ -48,7 +49,8 @@
 (t/deftest test-coordination
   (with-consumer
     (let [!agent (agent nil)
-          config {:indexer (:indexer *api*), :!agent !agent}]
+          config {:indexer (:indexer *api*), :!agent !agent}
+          tp (TopicPartition. "doc-topic" 1)]
 
       (t/testing "tx-consumer getting ahead"
         (let [!latch (k/doc-latch #{:hash1 :hash2} config)]
@@ -60,18 +62,24 @@
           (t/is (= ::not-yet (deref !latch 50 ::not-yet)))
 
           ;; doc-consumers done the first doc, tx-consumer still waits
-          (send-off !agent k/docs-indexed {:indexed-hashes #{:hash1}, :doc-partition-offsets {1 1}} config)
+          (send-off !agent k/docs-indexed {:indexed-hashes #{:hash1},
+                                           :partition-states {tp 1}}
+                    config)
           (await !agent)
           (t/is (= {:awaited-hashes #{:hash2}, :!latch !latch} @!agent))
           (t/is (= ::still-no (deref !latch 50 ::still-no)))
-          (t/is (= {1 1} (get @fi/*!index-meta* ::k/doc-partition-offsets)))
+          (t/is (= {:crux.kafka.topic-partition/doc-topic-1 1}
+                   (get @fi/*!index-meta* :crux.tx-log/consumer-state)))
 
           ;; now the doc-consumer's slightly ahead, the tx-consumer can continue
-          (send-off !agent k/docs-indexed {:indexed-hashes #{:hash2 :hash3}, :doc-partition-offsets {1 2}} config)
+          (send-off !agent k/docs-indexed {:indexed-hashes #{:hash2 :hash3},
+                                           :partition-states {tp 2}}
+                    config)
           (await !agent)
           (t/is (not= ::still-waiting (deref !latch 50 ::still-waiting)))
           (t/is (nil? @!agent))
-          (t/is (= {1 2} (get @fi/*!index-meta* ::k/doc-partition-offsets)))))
+          (t/is (= {:crux.kafka.topic-partition/doc-topic-1 2}
+                   (get @fi/*!index-meta* :crux.tx-log/consumer-state)))))
 
       (t/testing "doc-consumer getting ahead"
         (reset! fi/*!docs* {:hash3 :doc3})
