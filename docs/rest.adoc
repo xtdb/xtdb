@@ -52,7 +52,7 @@ otherwise restrict the execution of queries.
 |<<#rest-history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
 |<<#rest-query, `/query`>>|POST|Takes a datalog query and returns its results
 |<<#rest-query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
-|<<#rest-sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
+|<<#rest-sync, `/sync`>>|GET| Wait until the indexer's indexed a transaction at or after the given transaction time
 |<<#rest-tx-log, `/tx-log`>>|GET| Returns a list of all transactions
 |<<#rest-tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
 |===
@@ -234,11 +234,11 @@ Same as `/query` but the results are streamed.
 [#rest-sync]
 === GET `/sync`
 
-Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in milliseconds. Returns the transaction time of the most recent transaction.
+Wait until the indexer's indexed a transaction at or after the given transaction time. Timeout is 10 seconds by default, but can be specified as a parameter in milliseconds. Returns the transaction time of the most recent transaction.
 
 [source,bash]
 ----
-curl -X GET $nodeURL/sync?timeout=500
+curl -X GET $nodeURL/sync?transactionTime=2019-12-23T12:01:10.053Z&timeout=500
 ----
 
 [source,clj]

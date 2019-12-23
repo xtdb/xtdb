@@ -210,14 +210,11 @@
       (register-stream-with-remote-stream! tx-log-context in)
       (edn-list->lazy-seq in)))
 
-  (sync [_ timeout]
-    (api-request-sync (cond-> (str url "/sync")
-                        timeout (str "?timeout=" (.toMillis timeout))) nil {:method :get}))
-
   (sync [_ transaction-time timeout]
-    (api-request-sync (cond-> (str url "/sync")
-                        transaction-time (str "?transactionTime=" (cio/format-rfc3339-date transaction-time))
-                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+    (api-request-sync (cond-> (str url "/sync?transactionTime=" (cio/format-rfc3339-date transaction-time))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout)))
+                      nil
+                      {:method :get}))
 
   Closeable
   (close [_]))

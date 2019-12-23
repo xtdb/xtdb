@@ -242,14 +242,13 @@
 (defn- sync-handler [^ICruxAPI crux-node request]
   (let [timeout (some->> (get-in request [:query-params "timeout"])
                          (Long/parseLong)
-                         (Duration/ofMillis))
-        transaction-time (some->> (get-in request [:query-params "transactionTime"])
-                                  (cio/parse-rfc3339-or-millis-date))]
-    (let [last-modified (if transaction-time
-                          (.sync crux-node transaction-time timeout)
-                          (.sync crux-node timeout))]
-      (-> (success-response last-modified)
-          (add-last-modified last-modified)))))
+                         (Duration/ofMillis))]
+    (if-let [transaction-time (some->> (get-in request [:query-params "transactionTime"])
+                                       (cio/parse-rfc3339-or-millis-date))]
+      (let [last-modified (.sync crux-node transaction-time timeout)]
+        (-> (success-response last-modified)
+            (add-last-modified last-modified)))
+      {:status 400, :body "missing transactionTime", :content-type "text/plain"})))
 
 (defn- attribute-stats [^ICruxAPI crux-node]
   (success-response (.attributeStats crux-node)))
