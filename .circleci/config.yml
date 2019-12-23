@@ -71,12 +71,8 @@ jobs:
       - run:
           name: Install datasets for ts-weather-test and ts-devices-test
           command: |
-            cd crux-test/
-            cd resources
-            mkdir ts
-            cd ts
-            mkdir data
-            cd data
+            mkdir -p crux-test/resources/ts/data
+            cd crux-test/resource/ts/data/
             wget https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
             tar -xzf weather_small.tar.gz
             wget https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
