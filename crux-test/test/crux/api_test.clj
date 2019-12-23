@@ -81,9 +81,6 @@
   (t/testing "empty db"
     (t/is (.db *api*)))
 
-  (t/testing "syncing empty db"
-    (t/is (nil? (.sync *api* (Duration/ofSeconds 10)))))
-
   (t/testing "transaction"
     (let [valid-time (Date.)
           {:keys [crux.tx/tx-time
@@ -206,8 +203,7 @@
                         crux.tx/tx-id]
                  :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
             (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
-            (t/is (= tx-time (.sync *api* (:crux.tx/tx-time submitted-tx) nil)))
-            (t/is (= tx-time (.sync *api* nil))))
+            (t/is (= tx-time (.sync *api* (:crux.tx/tx-time submitted-tx) nil))))
 
           (let [stats (.attributeStats *api*)]
             (t/is (= 2 (:name stats)))))

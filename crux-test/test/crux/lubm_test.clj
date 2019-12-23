@@ -33,7 +33,6 @@
 ;; individual tests.
 (t/use-fixtures :once
   fk/with-embedded-kafka-cluster
-  fk/with-kafka-client
   fk/with-cluster-node-opts
   kvf/with-kv-dir
   apif/with-node
