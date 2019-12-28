@@ -215,7 +215,9 @@
   "Represents the database as of a specific valid and
   transaction time."
 
-  (entity [db eid]
+  (entity
+    [db eid]
+    [db snapshot eid]
     "queries a document map for an entity.
   eid is an object which can be coerced into an entity id.
   returns the entity document map.")
@@ -267,8 +269,11 @@
 
 (extend-protocol PCruxDatasource
   ICruxDatasource
-  (entity [this eid]
-    (.entity this eid))
+  (entity
+    ([this eid]
+     (.entity this eid))
+    ([this snapshot eid]
+     (.entity this snapshot eid)))
 
   (entity-tx [this eid]
     (.entityTx this eid))

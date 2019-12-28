@@ -1167,15 +1167,21 @@
   ([snapshot {:keys [valid-time transact-time] :as db} eid]
    (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time)))))
 
-(defn entity [{:keys [kv object-store] :as db} eid]
-  (with-open [snapshot (kv/new-snapshot kv)]
-    (let [entity-tx (entity-tx snapshot db eid)]
-      (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
+(defn entity
+  ([{:keys [kv object-store] :as db} eid]
+   (with-open [snapshot (kv/new-snapshot kv)]
+     (entity db snapshot eid)))
+  ([{:keys [kv object-store] :as db} snapshot eid]
+   (let [entity-tx (entity-tx snapshot db eid)]
+     (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
 (defrecord QueryDatasource [kv query-cache conform-cache object-store valid-time transact-time entity-as-of-idx]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
+
+  (entity [this snapshot eid]
+    (entity this snapshot eid))
 
   (entityTx [this eid]
     (entity-tx this eid))

@@ -22,6 +22,15 @@ public interface ICruxDatasource {
     public Map<Keyword,Object> entity(Object eid);
 
     /**
+     * Returns the document map for an entity using an existing snapshot.
+     *
+     * @param snapshot a snapshot from {@link #newSnapshot()}.
+     * @param eid an object that can be coerced into an entity id.
+     * @return    the entity document map.
+     */
+    public Map<Keyword,Object> entity(Closeable snapshot, Object eid);
+
+    /**
      * Returns the transaction details for an entity. Details
      * include tx-id and tx-time.
      *

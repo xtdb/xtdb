@@ -2664,3 +2664,22 @@
           RuntimeException
           #"Spec assertion failed"
           (= #{[:id]} (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]})))))
+
+(t/deftest test-entity-snapshot-520
+  (let [ivan {:crux.db/id :ivan}
+        _ (f/transact! *api* [ivan])
+        db (api/db *api*)]
+    (with-open [snapshot (api/new-snapshot db)]
+      (t/is (= (api/entity db :ivan) (api/entity db snapshot :ivan) ivan))
+      (let [n 1000
+            acceptable-snapshot-speedup 1.4
+            factors (->> #(let [db-hit-ns-start (System/nanoTime)]
+                            (t/is (= ivan (api/entity db :ivan)))
+                            (let [db-hit-ns (- (System/nanoTime) db-hit-ns-start)
+                                  snapshot-hit-ns-start (System/nanoTime)]
+                              (t/is (= ivan (api/entity db snapshot :ivan)))
+                              (let [snapshot-hit-ns (- (System/nanoTime) snapshot-hit-ns-start)]
+                                (double (/ db-hit-ns
+                                           snapshot-hit-ns)))))
+                         (repeatedly n))]
+        (t/is (>= (/ (reduce + factors) n) acceptable-snapshot-speedup))))))
