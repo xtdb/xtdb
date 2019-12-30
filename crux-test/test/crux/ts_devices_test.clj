@@ -14,72 +14,68 @@
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
 ;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
 
-(def ^:const devices-device-info-csv-resource "ts/data/devices_small_device_info.csv")
-(def ^:const devices-readings-csv-resource "ts/data/devices_small_readings.csv")
+(def device-info-csv-resource (io/resource "ts/data/devices_small_device_info.csv"))
+(def readings-csv-resource (io/resource "ts/data/devices_small_readings.csv"))
 
 (def run-ts-devices-tests?
-  (boolean (and (io/resource devices-device-info-csv-resource)
-                (io/resource devices-readings-csv-resource)
+  (boolean (and device-info-csv-resource
+                readings-csv-resource
                 (Boolean/parseBoolean (System/getenv "CRUX_TS_DEVICES")))))
 
 (def ^:const readings-chunk-size 1000)
 
+(def info-docs
+  (when device-info-csv-resource
+    (with-open [rdr (io/reader device-info-csv-resource)]
+      (vec (for [device-info (line-seq rdr)
+                 :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")]]
+             {:crux.db/id (keyword "device-info" device-id)
+              :device-info/api-version api-version
+              :device-info/manufacturer manufacturer
+              :device-info/model model
+              :device-info/os-name os-name})))))
+
+(defn with-readings-docs [f]
+  (when readings-csv-resource
+    (with-open [rdr (io/reader readings-csv-resource)]
+      (f (for [reading (line-seq rdr)
+               :let [[time device-id battery-level battery-status
+                      battery-temperature bssid
+                      cpu-avg-1min cpu-avg-5min cpu-avg-15min
+                      mem-free mem-used rssi ssid] (str/split reading #",")]]
+           {:crux.db/id (keyword "reading" device-id)
+            :reading/time (inst/read-instant-date
+                           (-> time
+                               (str/replace " " "T")
+                               (str/replace #"-(\d\d)$" ".000-$1:00")))
+            :reading/device-id (keyword "device-info" device-id)
+            :reading/battery-level (Double/parseDouble battery-level)
+            :reading/battery-status (keyword battery-status)
+            :reading/battery-temperature (Double/parseDouble battery-temperature)
+            :reading/bssid bssid
+            :reading/cpu-avg-1min (Double/parseDouble cpu-avg-1min)
+            :reading/cpu-avg-5min (Double/parseDouble cpu-avg-5min)
+            :reading/cpu-avg-15min (Double/parseDouble cpu-avg-15min)
+            :reading/mem-free (Double/parseDouble mem-free)
+            :reading/mem-used (Double/parseDouble mem-used)
+            :reading/rssi (Double/parseDouble rssi)
+            :reading/ssid ssid})))))
+
 ;; Submits data from devices database into Crux node.
-(defn submit-ts-devices-data
-  ([node]
-   (submit-ts-devices-data
-    node
-    (io/resource devices-device-info-csv-resource)
-    (io/resource devices-readings-csv-resource)))
-  ([node info-resource readings-resource]
-   (with-open [info-in (io/reader info-resource)
-               readings-in (io/reader readings-resource)]
-     (let [info-tx-ops
-           (vec (for [device-info (line-seq info-in)
-                      :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")
-                            id (keyword "device-info" device-id)]]
-                  [:crux.tx/put
-                   {:crux.db/id id
-                    :device-info/api-version api-version
-                    :device-info/manufacturer manufacturer
-                    :device-info/model model
-                    :device-info/os-name os-name}]))]
-       (api/submit-tx node info-tx-ops)
-       (->> (line-seq readings-in)
-            (partition readings-chunk-size)
-            (reduce
-             (fn [{:keys [op-count last-tx]} chunk]
-               {:op-count (+ op-count (count chunk))
-                :last-tx (api/submit-tx
-                          node
-                          (vec (for [reading chunk
-                                     :let [[time device-id battery-level battery-status
-                                            battery-temperature bssid
-                                            cpu-avg-1min cpu-avg-5min cpu-avg-15min
-                                            mem-free mem-used rssi ssid] (str/split reading #",")
-                                           time (inst/read-instant-date
-                                                 (-> time
-                                                     (str/replace " " "T")
-                                                     (str/replace #"-(\d\d)$" ".000-$1:00")))
-                                           reading-id (keyword "reading" device-id)
-                                           device-id (keyword "device-info" device-id)]]
-                                 [:crux.tx/put
-                                  {:crux.db/id reading-id
-                                   :reading/time time
-                                   :reading/device-id device-id
-                                   :reading/battery-level (Double/parseDouble battery-level)
-                                   :reading/battery-status (keyword battery-status)
-                                   :reading/battery-temperature (Double/parseDouble battery-temperature)
-                                   :reading/bssid bssid
-                                   :reading/cpu-avg-1min (Double/parseDouble cpu-avg-1min)
-                                   :reading/cpu-avg-5min (Double/parseDouble cpu-avg-5min)
-                                   :reading/cpu-avg-15min (Double/parseDouble cpu-avg-15min)
-                                   :reading/mem-free (Double/parseDouble mem-free)
-                                   :reading/mem-used (Double/parseDouble mem-used)
-                                   :reading/rssi (Double/parseDouble rssi)
-                                   :reading/ssid ssid}
-                                  time])))})
-             {:op-count (count info-tx-ops)}))))))
+(defn submit-ts-devices-data [node]
+  (let [info-tx-ops (vec (for [info-doc info-docs]
+                           [:crux.tx/put info-doc]))]
+    (api/submit-tx node info-tx-ops)
+
+    (with-readings-docs
+      (fn [readings-docs]
+        (->> readings-docs
+             (partition-all readings-chunk-size)
+             (reduce (fn [{:keys [op-count last-tx]} chunk]
+                       {:op-count (+ op-count (count chunk))
+                        :last-tx (api/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
+                                                            [:crux.tx/put reading-doc time])))})
+                     {:op-count (count info-tx-ops)}))))))
 
 (defn with-ts-devices-data [f]
   (if run-ts-devices-tests?
