@@ -25,10 +25,9 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(def topology {:crux.node/tx-log k/tx-log
-               :crux.kafka/admin-client k/admin-client
-               :crux.kafka/admin-wrapper k/admin-wrapper
-               :crux.kafka/producer k/producer})
+(def topology
+  {:crux.node/tx-log k/tx-log
+   :crux.kafka/producer k/producer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
   (let [[{:keys [crux.node/tx-log]} close-fn] (n/start-modules topology options)]

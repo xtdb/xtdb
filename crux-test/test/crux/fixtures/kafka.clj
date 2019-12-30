@@ -50,21 +50,26 @@
         (cio/delete-dir zookeeper-data-dir)))))
 
 (def ^:dynamic ^KafkaProducer *producer*)
-(def ^:dynamic ^KafkaConsumer *consumer*)
+(def ^:dynamic ^KafkaConsumer *tx-consumer*)
+(def ^:dynamic ^KafkaConsumer *doc-consumer*)
 
 (def ^:dynamic *consumer-options* {})
 
 (defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              consumer (k/create-consumer
-                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
-                                 "group.id" (str (UUID/randomUUID))}
-                                *consumer-options*))]
-    (binding [*producer* producer
-              *consumer* consumer]
-      (f))))
+              tx-consumer (k/create-consumer
+                           (merge {"bootstrap.servers" *kafka-bootstrap-servers*
+                                   "group.id" (str (UUID/randomUUID))}
+                                  *consumer-options*))
 
-(def ^:dynamic *cluster-node*)
+              doc-consumer (k/create-consumer
+                            (merge {"bootstrap.servers" *kafka-bootstrap-servers*
+                                    "group.id" (str (UUID/randomUUID))}
+                                   *consumer-options*))]
+    (binding [*producer* producer
+              *tx-consumer* tx-consumer
+              *doc-consumer* doc-consumer]
+      (f))))
 
 (defn with-cluster-node-opts [f]
   (assert (bound? #'*kafka-bootstrap-servers*))

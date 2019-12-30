@@ -50,10 +50,10 @@
   {"message.timestamp.type" "LogAppendTime"})
 
 (def tx-topic-config
-  {"retention.ms" (str Long/MAX_VALUE)})
+  (merge default-topic-config {"retention.ms" (str Long/MAX_VALUE)}))
 
 (def doc-topic-config
-  {"cleanup.policy" "compact"})
+  (merge default-topic-config {"cleanup.policy" "compact"}))
 
 (defn- read-kafka-properties-file [f]
   (when f
@@ -179,7 +179,7 @@
 
 (defn index-docs [doc-records {:keys [indexer !agent]}]
   (let [doc-results (reduce (fn [{:keys [indexed-hashes doc-partition-offsets]} ^ConsumerRecord doc-record]
-                              (let [content-hash (.key doc-record)
+                              (let [content-hash (c/new-id (.key doc-record))
                                     doc (.value doc-record)]
                                 (db/index-doc indexer content-hash doc)
 
@@ -298,7 +298,7 @@
                                       (log/error t (or (.getMessage t) (-> t .getClass .getName))))))
     .start))
 
-(defn- start-indexing-consumer ^IndexingConsumer [{:keys [crux.node/indexer]} {::keys [doc-topic max-doc-threads] :as config}]
+(defn start-indexing-consumer ^IndexingConsumer [{:keys [crux.node/indexer]} {::keys [doc-topic max-doc-threads] :as config}]
   (let [consumer-config (->kafka-config config)]
     (with-open [admin-client (create-admin-client consumer-config)]
       (ensure-topics config admin-client)
