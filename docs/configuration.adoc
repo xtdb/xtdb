@@ -110,6 +110,15 @@ You can later stop the node if you wish:
 include::./src/docs/examples.clj[tags=close-node]
 ----
 
+If you want to run a memory-only node (_e.g._ for testing purpose), you can use the following code:
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=include-crux-api]
+
+include::./src/docs/examples.clj[tags=start-in-memory-standalone-node]
+----
+
+
 [#config-rocksdb]
 == RocksDB
 

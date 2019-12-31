@@ -20,6 +20,15 @@
 ;; end::start-standalone-node[]
   node)
 
+(defn example-start-in-memory-standalone []
+;; tag::start-in-memory-standalone-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-node {:crux.node/topology :crux.standalone/topology
+                    :crux.node/kv-store "crux.kv.memdb/kv"
+                    :crux.standalone/event-log-kv "crux.kv.memdb/kv"}))
+;; end::start-in-memory-standalone-node[]
+  node)
+
 (defn example-close-node [^java.io.Closeable node]
 ;; tag::close-node[]
 (.close node)
