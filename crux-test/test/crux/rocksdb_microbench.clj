@@ -21,8 +21,9 @@
     (ts-weather/with-condition-docs
       (fn [[first-doc :as condition-docs]]
         (time
-         (doseq [doc (take 10000 condition-docs)]
-           (db/index-doc (:indexer *api*) (c/new-id doc) doc)))
+         (doseq [doc-batch (->> (take 10000 condition-docs)
+                                (partition-all 100))]
+           (db/index-docs (:indexer *api*) (->> doc-batch (into {} (map (juxt c/new-id identity)))))))
 
         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
           (t/is (= first-doc (db/get-single-object (:object-store *api*) snapshot (c/new-id first-doc)))))))))

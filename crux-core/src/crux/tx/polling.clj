@@ -21,7 +21,9 @@
                     (if-let [^Message last-message (reduce (fn [last-message ^Message m]
                                                              (case (get (.headers m) :crux.tx/sub-topic)
                                                                :docs
-                                                               (db/index-doc indexer (.key m) (.body m))
+                                                               ;; TODO we'll likely be able to make this more efficient
+                                                               ;; if it can insert multiple docs at once
+                                                               (db/index-docs indexer {(.key m) (.body m)})
                                                                :txs
                                                                (db/index-tx indexer
                                                                             (.body m)

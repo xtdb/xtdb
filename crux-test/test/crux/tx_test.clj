@@ -281,8 +281,8 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
-    (db/index-doc (:indexer *api*) (c/new-id ivan1) ivan1)
-    (db/index-doc (:indexer *api*) (c/new-id ivan2) ivan2)
+    (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
+                                     (c/new-id ivan2) ivan2})
 
     (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]] t 1)
     (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]] t 2)
