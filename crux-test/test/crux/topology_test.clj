@@ -170,6 +170,54 @@
                    :args {}}}},
                 :args {}}}}
              (#'topo/start-system [node-topology metrics-topology] {})))
-    (t/is (= (#'topo/start-system [node-topology metrics-topology yadecorator-topology]) 
-            ))))
+
+    (t/is (= {:crux.node/indexer {:node-indexer {:deps {}, :args {}}},
+              :crux.metrics/indexer
+              {:metrics-indexer
+               {:deps #:crux.node{:indexer {:node-indexer {:deps {}, :args {}}}},
+                :args {}}},
+              :crux.yadecorator/indexer
+              {:yadecorator
+               {:deps
+                #:crux.node{:indexer
+                            {:metrics-indexer
+                             {:deps
+                              #:crux.node{:indexer
+                                          {:node-indexer {:deps {}, :args {}}}},
+                              :args {}}}},
+                :args {}}},
+              :crux.metrics/pull-server
+              {:pull-server
+               {:deps
+                #:crux.metrics{:indexer
+                               {:metrics-indexer
+                                {:deps
+                                 #:crux.node{:indexer
+                                             {:node-indexer {:deps {}, :args {}}}},
+                                 :args {}}}},
+                :args {}}},
+              :crux/node
+              {:node
+               {:deps
+                #:crux.node{:indexer
+                            {:yadecorator
+                             {:deps
+                              #:crux.node{:indexer
+                                          {:metrics-indexer
+                                           {:deps
+                                            #:crux.node{:indexer
+                                                        {:node-indexer
+                                                         {:deps {}, :args {}}}},
+                                            :args {}}}},
+                              :args {}}}},
+                :args {}}}}
+             (#'topo/start-system [node-topology metrics-topology yadecorator-topology] {}))))
+  (t/testing "with-arguments"
+    (t/is (= {:crux.node/indexer {:node-indexer {:deps {}, :args {}}},
+              :crux/node
+              {:node
+               {:deps #:crux.node{:indexer {:node-indexer {:deps {}, :args {}}}},
+                :args #:crux.node{:item true}}}}
+             (#'topo/start-system [node-topology] {:crux.node/item true})))))
+
 
