@@ -33,7 +33,7 @@
                        (cond-> to-remove (-> (update :modules #(apply dissoc % to-remove))
                                              (update :graph #(reduce dep/remove-all % to-remove))))
 
-                       (assoc-in [:modules module-key] (select-keys module [:deps :wraps]))
+                       (assoc-in [:modules module-key] (select-keys module [:start-fn :deps :wraps]))
                        (update :graph add-depends (map vector (repeat module-key) deps))
                        (cond-> wraps (-> (update-in [:modules wraps :wrappers] (fnil conj []) module-key)
                                          (update :graph dep/depend module-key wraps))))))
@@ -50,8 +50,8 @@
   ;; - if a node wraps another node, we want it to depend on the previous wrapper
 
   (add-depends (dep/graph)
-               (concat (for [module-key (keys modules)]
-                         [::system module-key])
+               (concat #_(for [module-key (keys modules)]
+                           [::system module-key])
 
                        (for [[module-key {:keys [deps wraps]}] modules
                              dep (cond-> deps wraps (conj wraps))]
@@ -59,3 +59,28 @@
                                               (take-while #(not= % module-key))
                                               last)
                                          dep)]))))
+
+;; Topology structure
+{;; module name
+ :node3 {;; start-fn returns record that is java.io.Closeable
+         :start-fn (fn [deps args])
+         :deps #{:node2}
+         ;; Optionally
+         :wraps :node1}}
+
+;; TODO add args
+;; ^crux.api.ICruxAPI
+(defn start-system [topologies]
+  (let [resolved-modules (resolve-modules topologies)
+        start-graph (module-start-graph resolved-modules)
+        start-order (dep/topo-sort start-graph)]
+    (reduce (fn [started-modules module]
+              (let [resolved-module (get resolved-modules module)
+                    start-fn (get resolved-module :start-fn)
+                    dependencies (get resolved-module :deps)
+                    resolved-dependencies (select-keys started-modules dependencies)]
+                (assoc started-modules
+                       module
+                       (start-fn resolved-dependencies {}))))
+            {} ;; No modules are started initially
+            start-order)))

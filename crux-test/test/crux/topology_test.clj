@@ -131,3 +131,9 @@
              (-> (#'topo/resolve-modules hairy-topologies)
                  (#'topo/module-start-graph)
                  :dependencies)))))
+
+(t/deftest start-node-test
+  (t/testing "standard node"
+    (t/is (= {:crux/node {:node {:deps {:crux.node/indexer {:node-indexer {:deps {} :args {}}}} :args {}}}
+              :crux.node/indexer {:node-indexer {:deps {} :args {}}}}
+             (#'topo/start-system [node-topology])))))
