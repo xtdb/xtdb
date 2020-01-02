@@ -12,6 +12,7 @@
            java.text.SimpleDateFormat
            java.time.Duration
            [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
+           [java.util.concurrent ThreadFactory]
            java.util.concurrent.locks.StampedLock))
 
 (s/def ::port (s/int-in 1 65536))
@@ -225,3 +226,20 @@
             *print-level* nil
             *print-namespace-maps* false]
     (pr-str xs)))
+
+(def uncaught-exception-handler
+  (reify Thread$UncaughtExceptionHandler
+    (uncaughtException [_ thread throwable]
+      (log/error throwable "Uncaught exception:"))))
+
+(defn install-uncaught-exception-handler! []
+  (when-not (Thread/getDefaultUncaughtExceptionHandler)
+    (Thread/setDefaultUncaughtExceptionHandler uncaught-exception-handler)))
+
+(defn thread-factory [name-prefix]
+  (let [idx (atom 0)]
+    (reify ThreadFactory
+      (newThread [_ r]
+        (doto (Thread. r)
+          (.setName (str name-prefix "-" (swap! idx inc)))
+          (.setUncaughtExceptionHandler uncaught-exception-handler))))))

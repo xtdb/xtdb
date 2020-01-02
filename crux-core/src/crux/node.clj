@@ -16,7 +16,7 @@
             [crux.tx :as tx])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
            java.io.Closeable
-           [java.util.concurrent Executors ThreadFactory]
+           [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
@@ -167,20 +167,9 @@
       (when (and (not @closed?) close-fn) (close-fn))
       (reset! closed? true))))
 
-(defn install-uncaught-exception-handler! []
-  (when-not (Thread/getDefaultUncaughtExceptionHandler)
-    (Thread/setDefaultUncaughtExceptionHandler
-     (reify Thread$UncaughtExceptionHandler
-       (uncaughtException [_ thread throwable]
-         (log/error throwable "Uncaught exception:"))))))
-
 (defn- start-kv-indexer [{::keys [kv-store tx-log object-store]} _]
   (tx/->KvIndexer kv-store tx-log object-store
-                  (Executors/newSingleThreadExecutor
-                   (reify ThreadFactory
-                     (newThread [_ r]
-                       (doto (Thread. r)
-                         (.setName "crux.tx.update-stats-thread")))))))
+                  (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
 
 (s/def ::topology-id
   (fn [id]
