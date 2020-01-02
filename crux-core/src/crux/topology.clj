@@ -61,26 +61,38 @@
                                          dep)]))))
 
 ;; Topology structure
-{;; module name
- :node3 {;; start-fn returns record that is java.io.Closeable
-         :start-fn (fn [deps args])
-         :deps #{:node2}
-         ;; Optionally
-         :wraps :node1}}
+;; {;; module name
+;;  :node3 {;; start-fn returns record that is java.io.Closeable
+;;          :start-fn (fn [deps args])
+;;          :deps #{:node2}
+;;          ;; Optionally
+;;          :wraps :node1}}
 
 ;; TODO add args
 ;; ^crux.api.ICruxAPI
 (defn start-system [topologies]
   (let [resolved-modules (resolve-modules topologies)
         start-graph (module-start-graph resolved-modules)
-        start-order (dep/topo-sort start-graph)]
+        start-order (dep/topo-sort start-graph)
+        _ (tap> start-graph)]
     (reduce (fn [started-modules module]
               (let [resolved-module (get resolved-modules module)
                     start-fn (get resolved-module :start-fn)
+                    ;; for each of the orginal deps, resolve them wrt wrappers
                     dependencies (get resolved-module :deps)
-                    resolved-dependencies (select-keys started-modules dependencies)]
+                    resolved-dependencies (into {} (map (fn [dep]
+                                                          [dep (get
+                                                                 started-modules
+                                                                 (or (last (get-in
+                                                                             resolved-modules
+                                                                             [dep :wappers]))
+                                                                     dep))])
+                                                        dependencies))
+                    _ (tap> [module dependencies])]
                 (assoc started-modules
                        module
                        (start-fn resolved-dependencies {}))))
             {} ;; No modules are started initially
             start-order)))
+
+

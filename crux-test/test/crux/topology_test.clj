@@ -14,7 +14,7 @@
 
 (def metrics-topology
   {:crux.metrics/pull-server {:start-fn (fn [deps args]
-                                          {:crux.metrics/pull-server {:deps deps :args args}})
+                                          {:pull-server {:deps deps :args args}})
                               :deps #{:crux.metrics/indexer}}
 
    :crux.metrics/indexer {:start-fn (fn [deps args]
@@ -92,8 +92,7 @@
 
 (t/deftest testing-start-graph
   (t/testing "simple"
-    (t/is (= {::topo/system #{:crux/node :crux.node/kv-store :crux.node/indexer}
-              :crux/node #{:crux.node/indexer :crux.node/kv-store}
+    (t/is (= {:crux/node #{:crux.node/indexer :crux.node/kv-store}
               :crux.node/indexer #{:crux.node/kv-store}}
              (-> (#'topo/module-start-graph {:crux/node {:deps #{:crux.node/indexer
                                                                  :crux.node/kv-store}}
@@ -101,10 +100,13 @@
                                              :crux.node/kv-store {:deps #{}}})
                  :dependencies))))
 
+  (t/testing "metrics-example"
+    (t/is (= {}
+             (#'topo/module-start-graph
+               (#'topo/resolve-modules [node-topology metrics-topology])))))
+
   (t/testing "wrapping"
-    (t/is (= {::topo/system #{:crux/node :crux.node/indexer :crux.yadecorator/indexer
-                              :crux.metrics/pull-server :crux.metrics/indexer}
-              :crux/node #{:crux.yadecorator/indexer}
+    (t/is (= {:crux/node #{:crux.yadecorator/indexer}
               :crux.metrics/pull-server #{:crux.metrics/indexer}
               :crux.metrics/indexer #{:crux.node/indexer}
               :crux.yadecorator/indexer #{:crux.metrics/indexer}}
@@ -119,8 +121,7 @@
                  :dependencies))))
 
   (t/testing "hairy topologies"
-    (t/is (= {::topo/system #{:n1 :n1-w1 :n1-w2 :n1-dep :n2 :n3 :n4 :n5}
-              :n1-w1 #{:n1},
+    (t/is (= {:n1-w1 #{:n1},
               :n1-w2 #{:n1-w1},
               :n1-dep #{:n1-w2},
               :n2 #{:n1-w1},
@@ -134,6 +135,39 @@
 
 (t/deftest start-node-test
   (t/testing "standard node"
-    (t/is (= {:crux/node {:node {:deps {:crux.node/indexer {:node-indexer {:deps {} :args {}}}} :args {}}}
+
+    (t/is (= {:crux/node
+              {:node
+               {:deps
+                {:crux.node/indexer {:node-indexer {:deps {} :args {}}}} :args {}}}
               :crux.node/indexer {:node-indexer {:deps {} :args {}}}}
-             (#'topo/start-system [node-topology])))))
+             (#'topo/start-system [node-topology])))
+
+    (t/is (= {:crux.node/indexer {:node-indexer {:deps {}, :args {}}},
+              :crux.metrics/indexer
+              {:metrics-indexer
+               {:deps {:crux.node/indexer {:node-indexer {:deps {}, :args {}}}},
+                :args {}}},
+              :crux.metrics/pull-server
+              {:pull-server
+               {:deps
+                {:crux.metrics/indexer
+                 {:metrics-indexer
+                  {:deps
+                   {:crux.node/indexer
+                    {:node-indexer
+                     {:deps {}, :args {}}}},
+                   :args {}}}},
+                :args {}}},
+              :crux/node
+              {:node
+               {:deps
+                {:crux.node/indexer ;; currently is crux.metrics/indexer
+                 {:metrics-indexer
+                  {:deps
+                   {:crux.node/indexer
+                    {:node-indexer {:deps {}, :args {}}}},
+                   :args {}}}},
+                :args {}}}}
+             (#'topo/start-system [node-topology metrics-topology])))))
+
