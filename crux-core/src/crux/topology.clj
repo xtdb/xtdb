@@ -68,12 +68,25 @@
 ;;          ;; Optionally
 ;;          :wraps :node1}}
 
+;; When a dependancy is wrapped, it loses its original key in the dependancy map
+;; This needs to be reverted.
+;; This function finds any oblect that has been wrapped, collates its wrappers,
+;; and does a find->repalace for any wrapper keyword
+;; - if key ∌ original deps, resolve wrapper
+(defn revert-dependancy-keys [resolved-modules start-graph module new-deps]
+  (let [old-deps (get-in resolved-modules [module :deps])]
+    (into {} (map (fn [[k v]] (if (contains? old-deps k)
+                                [k v]
+                                [(get-in resolved-modules [k :wraps]) v]))
+                  new-deps))))
+
 ;; TODO add args
 ;; ^crux.api.ICruxAPI
 (defn start-system [topologies]
-  (let [resolved-modules (doto (resolve-modules topologies) tap>)
+  (let [resolved-modules (resolve-modules topologies)
         start-graph (module-start-graph resolved-modules)
-        start-order (dep/topo-sort start-graph)]
+        start-order (dep/topo-sort start-graph)
+        revert-keys (partial revert-dependancy-keys resolved-modules start-graph)]
     (reduce (fn [started-modules module]
               (let [resolved-module (get resolved-modules module)
                     start-fn (get resolved-module :start-fn)
@@ -82,7 +95,7 @@
                     resolved-dependencies (select-keys started-modules dependencies)]
                 (assoc started-modules
                        module
-                       (start-fn resolved-dependencies {}))))
+                       (start-fn (revert-keys module resolved-dependencies) {}))))
             {} ;; No modules are started initially
             start-order)))
 

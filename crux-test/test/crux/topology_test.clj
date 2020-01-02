@@ -162,12 +162,14 @@
               :crux/node
               {:node
                {:deps
-                {:crux.node/indexer ;; currently is crux.metrics/indexer
+                {:crux.metrics/indexer
                  {:metrics-indexer
                   {:deps
                    {:crux.node/indexer
                     {:node-indexer {:deps {}, :args {}}}},
                    :args {}}}},
                 :args {}}}}
-             (#'topo/start-system [node-topology metrics-topology])))))
+             (#'topo/start-system [node-topology metrics-topology])))
+    (t/is (= (#'topo/start-system [node-topology metrics-topology yadecorator-topology]) 
+            ))))
 
