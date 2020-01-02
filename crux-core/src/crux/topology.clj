@@ -67,6 +67,9 @@
 ;;          :deps #{:node2}
 ;;          ;; Optionally
 ;;          :wraps :node1}}
+;; Args structure
+;; {:node3/kv-store "rocks"
+;;  :someother-thing/test? true}
 
 ;; When a dependancy is wrapped, it loses its original key in the dependancy map
 ;; This needs to be reverted.
@@ -82,7 +85,7 @@
 
 ;; TODO add args
 ;; ^crux.api.ICruxAPI
-(defn start-system [topologies]
+(defn start-system [topologies args]
   (let [resolved-modules (resolve-modules topologies)
         start-graph (module-start-graph resolved-modules)
         start-order (dep/topo-sort start-graph)
@@ -95,7 +98,9 @@
                     resolved-dependencies (select-keys started-modules dependencies)]
                 (assoc started-modules
                        module
-                       (start-fn (revert-keys module resolved-dependencies) {}))))
+                       (start-fn (revert-keys module resolved-dependencies) 
+                                 (filter (fn [[arg _]] 
+                                           (= (namespace arg) (str (namespace module) "." (name module))))
+                                         args)))))
             {} ;; No modules are started initially
             start-order)))
-

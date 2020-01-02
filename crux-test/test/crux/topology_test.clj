@@ -169,7 +169,7 @@
                     {:node-indexer {:deps {}, :args {}}}},
                    :args {}}}},
                 :args {}}}}
-             (#'topo/start-system [node-topology metrics-topology])))
+             (#'topo/start-system [node-topology metrics-topology] {:crux.metrics.indexer/kv :rocks})))
     (t/is (= (#'topo/start-system [node-topology metrics-topology yadecorator-topology]) 
             ))))
 
