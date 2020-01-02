@@ -111,7 +111,7 @@ newer one, if the existing document is as expected.
 [#transactions-delete]
 == Delete
 
-Deletes a document at a given `valid time`. Historical version of the
+Deletes a document at a given `valid time`. Historical versions of the
 document will still be available.
 
 [source,clojure]
@@ -123,7 +123,7 @@ document will still be available.
 [#transactions-evict]
 == Evict
 
-Evicts a document from Crux. Historical versions of the documents will no longer be available.
+Evicts a document from Crux. Historical versions of the document will no longer be available.
 
 [source,clojure]
 ----
