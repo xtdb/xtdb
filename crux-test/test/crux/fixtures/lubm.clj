@@ -7,11 +7,13 @@
 (def ^:const lubm-triples-resource-100k "lubm/lubm10.ntriples")
 
 (defn with-lubm-data [f]
-  (let [tx-ops (->> (concat (rdf/->tx-ops (rdf/ntriples "lubm/univ-bench.ntriples"))
-                            (rdf/->tx-ops (rdf/ntriples lubm-triples-resource-8k)))
-                    (rdf/->default-language)
-                    vec)]
-    (doseq [tx-ops (partition-all 1000 tx-ops)]
-      (api/submit-tx *api* (vec tx-ops)))
-    (api/sync *api* nil)
+  (let [last-tx (->> (concat (rdf/->tx-ops (rdf/ntriples "lubm/univ-bench.ntriples"))
+                             (rdf/->tx-ops (rdf/ntriples lubm-triples-resource-8k)))
+                     (rdf/->default-language)
+                     (partition-all 1000)
+                     (reduce (fn [_ tx-ops]
+                               (api/submit-tx *api* (vec tx-ops)))
+                             nil))]
+
+    (api/sync *api* (:crux.tx/tx-time last-tx) nil)
     (f)))

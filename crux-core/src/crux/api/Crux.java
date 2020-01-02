@@ -24,7 +24,7 @@ public class Crux {
      * Starts a query node.
      *
      * Options are specified as keywords using their long format name,
-     * i.e. :crux.kakfa/bootstrap-servers. A valid :crux.node/topology
+     * i.e. :crux.kafka/bootstrap-servers. A valid :crux.node/topology
      * must be specified, i.e. :crux.kafka/topology. For valid option
      * descriptions, consult the documentation for the individual
      * modules used in the specified topology.

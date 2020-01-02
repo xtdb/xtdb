@@ -4,8 +4,9 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kv :as fkv]
             [crux.io :as cio])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
@@ -17,72 +18,72 @@
 ;; NOTE: Results in link above doesn't match actual data, test is
 ;; adjusted for this.
 
-(def ^:const weather-locations-csv-resource "ts/data/weather_small_locations.csv")
-(def ^:const weather-conditions-csv-resource "ts/data/weather_small_conditions.csv")
+(def locations-csv-resource (io/resource "ts/data/weather_small_locations.csv"))
+(def conditions-csv-resource (io/resource "ts/data/weather_small_conditions.csv"))
 
-(def run-ts-weather-tests? (boolean (and (io/resource weather-locations-csv-resource)
-                                         (io/resource weather-conditions-csv-resource)
-                                         (Boolean/parseBoolean (System/getenv "CRUX_TS_WEATHER")))))
+(def run-ts-weather-tests?
+  (boolean (and locations-csv-resource
+                conditions-csv-resource
+                (Boolean/parseBoolean (System/getenv "CRUX_TS_WEATHER")))))
 
 (def ^:const conditions-chunk-size 1000)
 
-(defn submit-ts-weather-data
-  ([node]
-   (submit-ts-weather-data
-     node
-     (io/resource weather-locations-csv-resource)
-     (io/resource weather-conditions-csv-resource)))
-  ([node locations-resource conditions-resource]
-   (with-open [locations-in (io/reader locations-resource)
-               conditions-in (io/reader conditions-resource)]
-     (let [location-tx-ops (vec (for [location (line-seq locations-in)
-                                      :let [[device-id location environment] (str/split location #",")
-                                            id (keyword "location" device-id)
-                                            location (keyword location)
-                                            environment (keyword environment)]]
-                                  [:crux.tx/put
-                                   {:crux.db/id id
-                                    :location/location location
-                                    :location/environment environment}]))]
-       (api/submit-tx node location-tx-ops)
-       (->> (line-seq conditions-in)
-            (partition conditions-chunk-size)
-            (reduce
-             (fn [n chunk]
-               (api/submit-tx
-                node
-                (vec (for [condition chunk
-                           :let [[time device-id temperature humidity] (str/split condition #",")
-                                 time (inst/read-instant-date
-                                       (-> time
-                                           (str/replace " " "T")
-                                           (str/replace #"-(\d\d)$" ".000-$1:00")))
-                                 condition-id (keyword "condition" device-id)
-                                 location-device-id (keyword "location" device-id)]]
-                       [:crux.tx/put
-                        {:crux.db/id condition-id
-                         :condition/time time
-                         :condition/device-id location-device-id
-                         :condition/temperature (Double/parseDouble temperature)
-                         :condition/humidity (Double/parseDouble humidity)}
-                        time])))
-               (+ n (count chunk)))
-             (count location-tx-ops)))))))
+(def location-docs
+  (when locations-csv-resource
+    (with-open [rdr (io/reader locations-csv-resource)]
+      (vec (for [location (line-seq rdr)
+                 :let [[device-id location environment] (str/split location #",")]]
+             {:crux.db/id (keyword "location" device-id)
+              :location/location (keyword location)
+              :location/environment (keyword environment)})))))
+
+(defn with-condition-docs [f]
+  (when conditions-csv-resource
+    (with-open [rdr (io/reader conditions-csv-resource)]
+      (f (->> (line-seq rdr)
+              (map (fn [condition]
+                     (let [[time device-id temperature humidity] (str/split condition #",")]
+                       {:crux.db/id (keyword "condition" device-id)
+                        :condition/time (inst/read-instant-date
+                                         (-> time
+                                             (str/replace " " "T")
+                                             (str/replace #"-(\d\d)$" ".000-$1:00")))
+                        :condition/device-id (keyword "location" device-id)
+                        :condition/temperature (Double/parseDouble temperature)
+                        :condition/humidity (Double/parseDouble humidity)}))))))))
+
+(defn submit-ts-weather-data [node]
+  (let [location-tx-ops (vec (for [location-doc location-docs]
+                               [:crux.tx/put location-doc]))]
+    (api/submit-tx node location-tx-ops)
+
+    (with-condition-docs
+      (fn [condition-docs]
+        (->> condition-docs
+             (partition-all conditions-chunk-size)
+             (reduce (fn [{:keys [op-count last-tx]} chunk]
+                       {:op-count (+ op-count (count chunk))
+                        :last-tx (api/submit-tx node
+                                                (vec (for [{:keys [condition/time] :as condition-doc} chunk]
+                                                       [:crux.tx/put condition-doc time])))})
+                     {:op-count (count location-tx-ops)
+                      :last-tx nil}))))))
 
 
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
-    (let [submit-future (future (submit-ts-weather-data *api*))]
-      (api/sync *api* (java.time.Duration/ofMinutes 20))
-      (t/is (= 1001000 @submit-future))
+    (let [{:keys [last-tx op-count]} (submit-ts-weather-data *api*)]
+      (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
+      (assert (= 1001000 op-count) (str "actual op-count: " op-count))
       (f))
     (f)))
 
 (t/use-fixtures :once
-                fk/with-embedded-kafka-cluster
-                fk/with-kafka-client
-                fk/with-cluster-node-opts
-                with-ts-weather-data)
+  fk/with-embedded-kafka-cluster
+  fk/with-cluster-node-opts
+  fkv/with-kv-dir
+  fapi/with-node
+  with-ts-weather-data)
 
 ;; NOTE: Does not work with range, takes latest values.
 

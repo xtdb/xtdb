@@ -5,8 +5,9 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as f-api :refer [*api*]]
+            [crux.fixtures.api :as apif :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kv :as fkv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.rdf :as rdf]
@@ -325,12 +326,11 @@
 ;; Crux
 
 (defn load-rdf-into-crux [resource]
-  (let [submit-future (future
-                        (with-open [in (io/input-stream (io/resource resource))]
-                          (rdf/submit-ntriples (:tx-log *api*) in 1000)))]
+  (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream (io/resource resource))]
+                                         (rdf/submit-ntriples (:tx-log *api*) in 1000))]
     (println "Loaded into kafka awaiting Crux to catch up indexing...")
-    (api/sync *api* (java.time.Duration/ofMinutes 20))
-    (t/is (= 521585 @submit-future))))
+    (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
+    (t/is (= 521585 entity-count))))
 
 (defn with-watdiv-data [f]
   (if run-watdiv-tests?
@@ -372,15 +372,14 @@
             (throw (IllegalStateException. "Query timed out."))))))
 
 (t/use-fixtures :once
-                fk/with-embedded-kafka-cluster
-                fk/with-kafka-client
-                with-sail-repository
-                with-datomic
-                with-neo4j
-                fk/with-cluster-node-opts
-                ; perhaps should use with-node as well. if this config fails try uncommenting the line below
-                ; f-api/with-node
-                with-watdiv-data)
+  fk/with-embedded-kafka-cluster
+  with-sail-repository
+  with-datomic
+  with-neo4j
+  fk/with-cluster-node-opts
+  fkv/with-kv-dir
+  apif/with-node
+  with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query

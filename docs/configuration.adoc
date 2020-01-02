@@ -172,9 +172,8 @@ Kafka nodes have the following properties:
 |`:crux.kafka/create-topics`|Option to automatically create Kafka topics if they do not already exist|*true*
 |`:crux.kafka/doc-partitions`|Number of partitions for the document topic|*1*
 |`:crux.kafka/replication-factor`|Number of times to replicate data on Kafka|*1*
-|`:crux.kafka/group-id`|Kafka client group.id|*(Either environment variable _HOSTNAME_, _COMPUTERNAME_, or a random UUID)*
-|`:crux.kafka/kafka-properties-file`|File to supply Kakfa connection properties to the underlying Kafka API|
-|`:crux.kafka/kafka-properties-map`|Map to supply Kakfa connection properties to the underlying Kafka API|
+|`:crux.kafka/kafka-properties-file`|File to supply Kafka connection properties to the underlying Kafka API|
+|`:crux.kafka/kafka-properties-map`|Map to supply Kafka connection properties to the underlying Kafka API|
 |===
 
 [#kafka-dependency]

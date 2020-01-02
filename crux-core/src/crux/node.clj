@@ -187,7 +187,7 @@
     (and (or (string? id) (keyword? id) (symbol? id))
          (namespace (symbol id)))))
 
-(s/def ::start-fn fn?)
+(s/def ::start-fn ifn?)
 (s/def ::deps (s/coll-of keyword?))
 (s/def ::args (s/map-of keyword?
                         (s/keys :req [:crux.config/type]

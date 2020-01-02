@@ -1,5 +1,5 @@
 (defproject juxt/crux-kafka-embedded "derived-from-git"
-  :description "Crux Kakfa Embedded"
+  :description "Crux Kafka Embedded"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}

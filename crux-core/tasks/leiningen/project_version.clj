@@ -19,8 +19,16 @@
         (let [[_ prefix minor-version suffix] (re-find #"^(.*\.)(\d)+(\-(alpha|beta))?$" tag)]
           (format "%s%s%s-SNAPSHOT" prefix (inc (Integer/parseInt minor-version)) suffix))))))
 
+(def mvn-group-override
+  (System/getenv "CRUX_MVN_GROUP"))
+
 (defn middleware [project]
   (let [project-version (version-from-git)]
-    (postwalk (fn [x] (if (= "derived-from-git" x)
-                        project-version x))
-              project)))
+    (-> project
+        (->> (postwalk (fn [x]
+                         (if (= "derived-from-git" x) project-version x))))
+        (cond-> mvn-group-override (-> (assoc :group mvn-group-override)
+                                       (->> (postwalk (fn [x]
+                                                        (if (and (symbol? x) (= "juxt" (namespace x)))
+                                                          (symbol mvn-group-override (name x))
+                                                          x)))))))))
