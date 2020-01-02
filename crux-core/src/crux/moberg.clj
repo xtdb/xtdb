@@ -251,22 +251,19 @@
     (let [snapshot (kv/new-snapshot event-log-kv)]
       (MobergEventLogContext. snapshot (kv/new-iterator snapshot))))
 
-  (next-events [this context next-offset]
-    (let [i (:i context)]
-      (reify clojure.lang.IReduceInit
-        (reduce [_ f init]
-          (if-let [m (seek-message i ::event-log next-offset)]
-            (do
+  (next-events [this {:keys [i] :as context} next-offset]
+    (letfn [(more-events []
+              (lazy-seq
+               (when-let [m (next-message i ::event-log)]
+                 (log/debug "Consuming message:" (cio/pr-edn-str (message->edn m)))
+                 (cons m (more-events)))))]
+
+      (->> (lazy-seq
+            (when-let [m (seek-message i ::event-log next-offset)]
               (log/debug "Consuming message:" (cio/pr-edn-str (message->edn m)))
-              (loop [init' init m m n 1]
-                (let [result (f init' m)]
-                  (if (reduced? result)
-                    @result
-                    (if-let [next-m (and (< n (long batch-size))
-                                         (next-message i ::event-log))]
-                      (recur result next-m (inc n))
-                      result)))))
-            init)))))
+              (cons m (more-events))))
+
+           (take (long batch-size)))))
 
   (end-offset [this]
     (end-message-id-offset event-log-kv ::event-log)))
