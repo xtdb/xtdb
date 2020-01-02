@@ -1300,7 +1300,7 @@
                    {:crux.db/id (keyword (str i))
                     :offer i}]))
         submitted-tx (api/submit-tx *api* tx)]
-    (api/sync *api* (:crux.tx/tx-time submitted-tx) nil))
+    (tx/await-tx (:indexer *api*) submitted-tx 10000))
 
   (let [db (api/db *api*)
         ;; Much higher than needed, but catches the bug without flakiness.
