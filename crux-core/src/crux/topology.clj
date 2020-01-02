@@ -80,7 +80,7 @@
   (let [old-deps (get-in resolved-modules [module :deps])]
     (into {} (map (fn [[k v]] (if (contains? old-deps k)
                                 [k v]
-                                [(get-in resolved-modules [k :wraps]) v]))
+                                [(or (get-in resolved-modules [k :wraps]) k) v]))
                   new-deps))))
 
 ;; TODO add args
@@ -98,9 +98,10 @@
                     resolved-dependencies (select-keys started-modules dependencies)]
                 (assoc started-modules
                        module
-                       (start-fn (revert-keys module resolved-dependencies) 
-                                 (filter (fn [[arg _]] 
-                                           (= (namespace arg) (str (namespace module) "." (name module))))
-                                         args)))))
+                       (start-fn (revert-keys module resolved-dependencies)
+                                 (into {}
+                                       (filter (fn [[arg _]]
+                                                 (= (namespace arg) (str (namespace module) "." (name module))))
+                                               args))))))
             {} ;; No modules are started initially
             start-order)))
