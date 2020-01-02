@@ -275,7 +275,8 @@
                                     (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
                                     (idx/store-doc-idx-keys kv))
 
-                               (idx/doc-predicate-stats (vals upserted-docs) false))
+                               (->> (vals upserted-docs)
+                                    (map #(idx/doc-predicate-stats % false))))
 
                              (when (seq evicted-docs)
                                (with-open [snapshot (kv/new-snapshot kv)]
@@ -283,7 +284,9 @@
                                    (->> existing-docs
                                         (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
                                         (idx/delete-doc-idx-keys kv))
-                                   (idx/doc-predicate-stats upserted-docs true)))))]
+
+                                   (->> (vals existing-docs)
+                                        (map #(idx/doc-predicate-stats % true)))))))]
 
       (let [stats-fn ^Runnable #(idx/update-predicate-stats kv docs-stats)]
         (if stats-executor

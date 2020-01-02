@@ -298,7 +298,9 @@
                (nippy/thaw-from-in!)))))
 
 (defn swap-meta [kv k f & args]
-  (store-meta kv k (apply f (read-meta kv k) args)))
+  (let [ret (apply f (read-meta kv k) args)]
+    (store-meta kv k ret)
+    ret))
 
 ;; Object Store
 
@@ -311,14 +313,13 @@
     (not (or (vector? v) (set? v)))
     (vector)))
 
-(defn doc-predicate-stats [docs evicted?]
-  (->> (for [doc docs
-             [k v] doc]
-         {k (cond-> (count (vectorize-value v)) evicted? -)})
-       (apply merge-with + {})))
+(defn doc-predicate-stats [doc evicted?]
+  (->> (for [[k v] doc]
+         [k (cond-> (count (vectorize-value v)) evicted? -)])
+       (into {})))
 
-(defn update-predicate-stats [kv doc-stats]
-  (swap-meta kv :crux.kv/stats #(merge-with + % doc-stats)))
+(defn update-predicate-stats [kv docs-stats]
+  (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
 
 (defn doc-idx-keys [content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
