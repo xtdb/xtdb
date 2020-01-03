@@ -195,11 +195,8 @@
                                               [(.key record) (.value record)]))))))
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
-  (let [record (tx-record->tx-log-entry record)
-        {:crux.tx/keys [tx-time
-                        tx-id]} record
-        {:crux.tx.event/keys [tx-events]} record]
-    (db/index-tx indexer tx-events tx-time tx-id)
+  (let [{:keys [crux.tx.event/tx-events] :as record} (tx-record->tx-log-entry record)]
+    (db/index-tx indexer record)
     tx-events))
 
 (defn consume-and-index-entities

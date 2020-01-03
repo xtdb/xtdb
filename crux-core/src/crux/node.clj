@@ -167,9 +167,8 @@
       (when (and (not @closed?) close-fn) (close-fn))
       (reset! closed? true))))
 
-(defn- start-kv-indexer [{::keys [kv-store tx-log object-store]} _]
-  (tx/->KvIndexer kv-store tx-log object-store
-                  (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
+(defn- start-kv-indexer [deps _]
+  (tx/->KvIndexer deps (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
 
 (s/def ::topology-id
   (fn [id]

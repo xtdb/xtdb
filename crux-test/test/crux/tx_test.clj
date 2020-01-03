@@ -247,9 +247,9 @@
         evict-tx-id (inc put-tx-id)
 
         index-evict! #(db/index-tx (:indexer *api*)
-                                   [[:crux.tx/evict picasso-id #inst "2018-05-23"]]
-                                   evict-tx-time
-                                   evict-tx-id)]
+                                   {:crux.tx.event/tx-events [[:crux.tx/evict picasso-id #inst "2018-05-23"]]
+                                    :crux.tx/tx-time evict-tx-time
+                                    :crux.tx/tx-id evict-tx-id})]
 
     ;; we have to index these manually because the new evict API won't allow docs
     ;; with the legacy valid-time range
@@ -284,8 +284,8 @@
     (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
                                      (c/new-id ivan2) ivan2})
 
-    (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]] t 1)
-    (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]] t 2)
+    (db/index-tx (:indexer *api*) {:crux.tx.event/tx-events [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]], :crux.tx/tx-time t, :crux.tx/tx-id 1})
+    (db/index-tx (:indexer *api*) {:crux.tx.event/tx-events [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]], :crux.tx/tx-time t, :crux.tx/tx-id 2})
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
