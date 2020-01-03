@@ -33,7 +33,7 @@
                        (cond-> to-remove (-> (update :modules #(apply dissoc % to-remove))
                                              (update :graph #(reduce dep/remove-all % to-remove))))
 
-                       (assoc-in [:modules module-key] (select-keys module [:start-fn :deps :wraps]))
+                       (assoc-in [:modules module-key] (select-keys module [:deps :wraps]))
                        (update :graph add-depends (map vector (repeat module-key) deps))
                        (cond-> wraps (-> (update-in [:modules wraps :wrappers] (fnil conj []) module-key)
                                          (update :graph dep/depend module-key wraps))))))
@@ -89,10 +89,11 @@
   (let [resolved-modules (resolve-modules topologies)
         start-graph (module-start-graph resolved-modules)
         start-order (dep/topo-sort start-graph)
-        revert-keys (partial revert-dependancy-keys resolved-modules start-graph)]
+        revert-keys (partial revert-dependancy-keys resolved-modules start-graph)
+        all-topology (apply merge topologies)]
     (reduce (fn [started-modules module]
               (let [resolved-module (get resolved-modules module)
-                    start-fn (get resolved-module :start-fn)
+                    start-fn (get-in all-topology [module :start-fn])
                     ;; for each of the orginal deps, resolve them wrt wrappers
                     dependencies (get-in start-graph [:dependencies module])
                     resolved-dependencies (select-keys started-modules dependencies)]

@@ -100,11 +100,6 @@
                                              :crux.node/kv-store {:deps #{}}})
                  :dependencies))))
 
-  (t/testing "metrics-example"
-    (t/is (= {}
-             (#'topo/module-start-graph
-               (#'topo/resolve-modules [node-topology metrics-topology])))))
-
   (t/testing "wrapping"
     (t/is (= {:crux/node #{:crux.yadecorator/indexer}
               :crux.metrics/pull-server #{:crux.metrics/indexer}
@@ -141,7 +136,7 @@
                {:deps
                 {:crux.node/indexer {:node-indexer {:deps {} :args {}}}} :args {}}}
               :crux.node/indexer {:node-indexer {:deps {} :args {}}}}
-             (#'topo/start-system [node-topology])))
+             (#'topo/start-system [node-topology] {})))
 
     (t/is (= {:crux.node/indexer {:node-indexer {:deps {}, :args {}}},
               :crux.metrics/indexer
