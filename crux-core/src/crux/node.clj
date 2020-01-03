@@ -301,3 +301,24 @@
                     :object-store object-store
                     :closed? (atom false)
                     :lock (StampedLock.)})))
+
+(def node-topology
+  {:crux/node {:start-fn (fn [{::keys [kv-store tx-log indexer object-store] :as deps} {::keys [node-opts] :as args}]
+                           (let [status-fn #(apply merge (map status/status-map (cons (crux-version) (vals deps)))) ]
+                             (map->CruxNode {:close-fn close-fn
+                                             :status-fn status-fn
+                                             :options node-opts
+                                             :kv-store kv-store
+                                             :tx-log tx-log
+                                             :indexer indexer
+                                             :object-store object-store
+                                             :closed? (atom false)
+                                             :lock (StampedLock.)})))
+               :deps #{::kv-store ::tx-log ::indexer ::object-store}}})
+
+(api/start-node {:crux.node/topology :crux.standalone/topology
+        :crux.node/kv-store "crux.kv.memdb/kv"
+        :crux.kv/db-dir "data/db-dir-1"
+        :crux.standalone/event-log-dir "data/eventlog-1"
+        :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"})
+
