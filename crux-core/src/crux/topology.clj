@@ -50,7 +50,7 @@
   ;; - if a node wraps another node, we want it to depend on the previous wrapper
 
   (add-depends (dep/graph)
-               (concat #_(for [module-key (keys modules)]
+               (concat (for [module-key (keys modules)]
                            [::system module-key])
 
                        (for [[module-key {:keys [deps wraps]}] modules
@@ -92,7 +92,9 @@
         revert-keys (partial revert-dependancy-keys resolved-modules start-graph)
         all-topology (apply merge topologies)]
     (reduce (fn [started-modules module]
-              (let [resolved-module (get resolved-modules module)
+              (if (= module ::system)
+                started-modules
+                (let [resolved-module (get resolved-modules module)
                     start-fn (get-in all-topology [module :start-fn])
                     ;; for each of the orginal deps, resolve them wrt wrappers
                     dependencies (get-in start-graph [:dependencies module])
@@ -103,6 +105,6 @@
                                  (into {}
                                        (filter (fn [[arg _]]
                                                  (= (namespace arg) (str (namespace module) "." (name module))))
-                                               args))))))
+                                               args)))))))
             {} ;; No modules are started initially
             start-order)))

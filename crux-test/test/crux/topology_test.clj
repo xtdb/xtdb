@@ -92,7 +92,8 @@
 
 (t/deftest testing-start-graph
   (t/testing "simple"
-    (t/is (= {:crux/node #{:crux.node/indexer :crux.node/kv-store}
+    (t/is (= {:crux.topology/system #{:crux/node :crux.node/kv-store :crux.node/indexer}
+              :crux/node #{:crux.node/kv-store :crux.node/indexer}
               :crux.node/indexer #{:crux.node/kv-store}}
              (-> (#'topo/module-start-graph {:crux/node {:deps #{:crux.node/indexer
                                                                  :crux.node/kv-store}}
@@ -101,11 +102,15 @@
                  :dependencies))))
 
   (t/testing "wrapping"
-    (t/is (= {:crux/node #{:crux.yadecorator/indexer}
+    (t/is (= {:crux.topology/system #{:crux/node
+                                      :crux.metrics/pull-server
+                                      :crux.metrics/indexer
+                                      :crux.node/indexer
+                                      :crux.yadecorator/indexer}
+              :crux/node #{:crux.yadecorator/indexer}
               :crux.metrics/pull-server #{:crux.metrics/indexer}
               :crux.metrics/indexer #{:crux.node/indexer}
               :crux.yadecorator/indexer #{:crux.metrics/indexer}}
-
              (-> {:crux/node {:deps #{:crux.node/indexer}}
                   :crux.node/indexer {:deps #{}
                                       :wrappers [:crux.metrics/indexer :crux.yadecorator/indexer]}
@@ -116,12 +121,20 @@
                  :dependencies))))
 
   (t/testing "hairy topologies"
-    (t/is (= {:n1-w1 #{:n1},
-              :n1-w2 #{:n1-w1},
-              :n1-dep #{:n1-w2},
-              :n2 #{:n1-w1},
-              :n3 #{:n1-w2},
-              :n4 #{:n5},
+    (t/is (= {:crux.topology/system #{:n3
+                                      :n4
+                                      :n1-w1
+                                      :n2
+                                      :n1-w2
+                                      :n5
+                                      :n1-dep
+                                      :n1}
+              :n1-w1 #{:n1}
+              :n1-w2 #{:n1-w1}
+              :n1-dep #{:n1-w2}
+              :n2 #{:n1-w1}
+              :n3 #{:n1-w2}
+              :n4 #{:n5}
               :n5 #{:n3}}
 
              (-> (#'topo/resolve-modules hairy-topologies)
