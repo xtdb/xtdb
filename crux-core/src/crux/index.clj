@@ -297,64 +297,48 @@
                (DataInputStream.)
                (nippy/thaw-from-in!)))))
 
+(defn swap-meta [kv k f & args]
+  (let [ret (apply f (read-meta kv k) args)]
+    (store-meta kv k ret)
+    ret))
+
 ;; Object Store
-
-(defn normalize-value [v]
-  (cond-> v
-    (not (or (vector? v)
-             (set? v))) (vector)))
-
-(defn- normalize-doc [doc]
-  (->> (for [[k v] doc]
-         [k (normalize-value v)])
-       (into {})))
-
-(defn- doc-predicate-stats [normalized-doc]
-  (->> (for [[k v] normalized-doc]
-         [k (count v)])
-       (into {})))
-
-(defn update-predicate-stats [kv deleted? normalized-doc]
-  (let [op (if deleted?
-             -
-             +)]
-    (->> (doc-predicate-stats normalized-doc)
-         (merge-with op (read-meta kv :crux.kv/stats))
-         (store-meta kv :crux.kv/stats))))
-
-(defn index-doc [kv content-hash doc]
-  (let [id (c/->id-buffer (:crux.db/id doc))
-        content-hash (c/->id-buffer content-hash)
-        normalized-doc (normalize-doc doc)]
-    (kv/store kv (->> (for [[k v] normalized-doc
-                            :let [k (c/->id-buffer k)]
-                            v v
-                            :let [v (c/->value-buffer v)]
-                            :when (pos? (mem/capacity v))]
-                        [[(c/encode-attribute+value+entity+content-hash-key-to nil k v id content-hash)
-                          c/empty-buffer]
-                         [(c/encode-attribute+entity+content-hash+value-key-to nil k id content-hash v)
-                          c/empty-buffer]])
-                      (reduce into [])))
-    normalized-doc))
-
-(defn delete-doc-from-index [kv content-hash doc]
-  (let [id (c/->id-buffer (:crux.db/id doc))
-        content-hash (c/->id-buffer content-hash)
-        normalized-doc (normalize-doc doc)]
-    (kv/delete kv (->> (for [[k v] normalized-doc
-                             :let [k (c/->id-buffer k)]
-                             v v
-                             :let [v (c/->value-buffer v)]
-                             :when (pos? (mem/capacity v))]
-                         [(c/encode-attribute+value+entity+content-hash-key-to nil k v id content-hash)
-                          (c/encode-attribute+entity+content-hash+value-key-to nil k id content-hash v)])
-                       (reduce into [])))
-    normalized-doc))
 
 (defn evicted-doc?
   [{:crux.db/keys [id evicted?] :as doc}]
   (or (= :crux.db/evicted id) evicted?))
+
+(defn vectorize-value [v]
+  (cond-> v
+    (not (or (vector? v) (set? v)))
+    (vector)))
+
+(defn doc-predicate-stats [doc evicted?]
+  (->> (for [[k v] doc]
+         [k (cond-> (count (vectorize-value v)) evicted? -)])
+       (into {})))
+
+(defn update-predicate-stats [kv docs-stats]
+  (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
+
+(defn doc-idx-keys [content-hash doc]
+  (let [id (c/->id-buffer (:crux.db/id doc))
+        content-hash (c/->id-buffer content-hash)]
+    (->> (for [[k v] doc
+               :let [k (c/->id-buffer k)]
+               v (vectorize-value v)
+               :let [v (c/->value-buffer v)]
+               :when (pos? (mem/capacity v))]
+           [(c/encode-attribute+value+entity+content-hash-key-to nil k v id content-hash)
+            (c/encode-attribute+entity+content-hash+value-key-to nil k id content-hash v)])
+         (apply concat))))
+
+(defn store-doc-idx-keys [kv idx-keys]
+  (kv/store kv (for [k idx-keys]
+                 [k c/empty-buffer])))
+
+(defn delete-doc-idx-keys [kv idx-keys]
+  (kv/delete kv idx-keys))
 
 ;; Utils
 

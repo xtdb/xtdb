@@ -150,11 +150,11 @@
     (t/is (= #{["Key from an unknown door"] ["Magic beans"]
                ["A used sword"] ["A Rather Cozy Mug"]
                ["A Tell DPS Laptop (what?)"]
-               ["Flintlock pistol"]})
-          (crux/q db
-                  '[:find ?name
-                    :where
-                    [_ :artefact/title ?name]]))
+               ["Flintlock pistol"]}
+             (crux/q db
+                     '[:find ?name
+                       :where
+                       [_ :artefact/title ?name]])))
     (crux/sync system (:crux.tx/tx-time (crux/submit-tx
                                          system
                                          [[:crux.tx/delete :ids.artefacts/forbidden-beans
@@ -361,24 +361,25 @@
 
     (crux/sync system (:crux.tx/tx-time (crux/submit-tx system (first-ownership-tx))) nil)
 
-    (t/is (= (crux/q
+    (t/is (= #{["Mary" "A used sword"]
+               ["Mary" "Flintlock pistol"]
+               ["Mary" "A Rather Cozy Mug"]}
+             (crux/q
               (crux/db system #inst "1715-05-18")
-              who-has-what-query))
-          #{["Mary" "A used sword"]
-            ["Mary" "Flintlock pistol"]
-            ["Mary" "A Rather Cozy Mug"]})
+              who-has-what-query)))
 
-    (t/is (= (crux/q
-              (crux/db system #inst "1740-06-19")
-              who-has-what-query)
-             #{["Mary" "A used sword"]
+    (t/is (= #{["Mary" "A used sword"]
                ["Mary" "Flintlock pistol"]
                ["Mary" "A Rather Cozy Mug"]
-               ["Charles" "Key from an unknown door"]}))
-    (t/is (= (crux/q
+               ["Charles" "Key from an unknown door"]}
+             (crux/q
+              (crux/db system #inst "1740-06-19")
+              who-has-what-query)))
+
+    (t/is (= #{["Mary" "A used sword"]
+               ["Mary" "Flintlock pistol"]}
+             (crux/q
               (crux/db system
                        #inst "1715-06-19"
                        (:crux.tx/tx-time first-ownership-tx-response))
-              who-has-what-query)
-             #{["Mary" "A used sword"]
-               ["Mary" "Flintlock pistol"]}))))
+              who-has-what-query)))))

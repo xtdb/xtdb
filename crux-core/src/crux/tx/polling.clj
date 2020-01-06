@@ -17,22 +17,25 @@
                                                       :time nil}}))
   (while @running?
     (let [idle? (with-open [context (consumer/new-event-log-context event-log-consumer)]
-                  (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state) [:crux.tx/event-log :next-offset])]
-                    (if-let [^Message last-message (reduce (fn [last-message ^Message m]
-                                                             (case (get (.headers m) :crux.tx/sub-topic)
-                                                               :docs
-                                                               (db/index-doc indexer (.key m) (.body m))
-                                                               :txs
-                                                               (db/index-tx indexer
-                                                                            (.body m)
-                                                                            (.message-time m)
-                                                                            (.message-id m)))
-                                                             m)
-                                                           nil
-                                                           (consumer/next-events event-log-consumer context next-offset))]
+                  (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state) [:crux.tx/event-log :next-offset])
+                        msgs (consumer/next-events event-log-consumer context next-offset)
+                        {doc-msgs :docs, tx-msgs :txs} (->> msgs (group-by #(:crux.tx/sub-topic (.headers ^Message %))))]
+
+                    (when (seq doc-msgs)
+                      (db/index-docs indexer (->> doc-msgs
+                                                  (into {} (map (fn [^Message m]
+                                                                  [(.key m) (.body m)]))))))
+
+                    (doseq [^Message tx-msg tx-msgs]
+                      (db/index-tx indexer
+                                   (.body tx-msg)
+                                   (.message-time tx-msg)
+                                   (.message-id tx-msg)))
+
+                    (if-let [^Message last-msg (last msgs)]
                       (let [end-offset (consumer/end-offset event-log-consumer)
-                            tx-id (long (.message-id last-message))
-                            tx-time (.message-time last-message)
+                            tx-id (long (.message-id last-msg))
+                            tx-time (.message-time last-msg)
                             next-offset (inc tx-id)
                             lag (- end-offset next-offset)
                             _ (when (pos? lag)
@@ -45,6 +48,7 @@
                         (db/store-index-meta indexer :crux.tx/latest-completed-tx {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id})
                         (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)
                         false)
+
                       true)))]
       (when idle?
         (Thread/sleep idle-sleep-ms)))))

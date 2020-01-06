@@ -116,7 +116,7 @@
   (cons
    {:db/ident (:crux.db/id e)}
    (for [[_ v] e
-         v (idx/normalize-value v)
+         v (idx/vectorize-value v)
          :when (keyword? v)]
      {:db/ident v})))
 

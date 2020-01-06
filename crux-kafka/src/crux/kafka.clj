@@ -189,11 +189,10 @@
         (.seek consumer partition (long offset))
         (.seekToBeginning consumer [partition])))))
 
-(defn- index-doc-record [indexer ^ConsumerRecord record]
-  (let [content-hash (.key record)
-        doc (.value record)]
-    (db/index-doc indexer content-hash doc)
-    doc))
+(defn- index-doc-records [indexer doc-records]
+  (db/index-docs indexer (->> doc-records
+                              (into {} (map (fn [^ConsumerRecord record]
+                                              [(.key record) (.value record)]))))))
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [record (tx-record->tx-log-entry record)
@@ -214,8 +213,7 @@
             (.resume consumer [tx-topic-partition]))
         records (.poll consumer (Duration/ofMillis timeout))
         doc-records (vec (.records records (str doc-topic)))
-        _ (doseq [record doc-records]
-            (index-doc-record indexer record))
+        _ (index-doc-records indexer doc-records)
         tx-records (vec (.records records (str tx-topic)))
         pending-tx-records (swap! pending-txs-state into tx-records)
 

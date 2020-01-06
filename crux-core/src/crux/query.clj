@@ -532,7 +532,7 @@
         (let [value-buffer (get join-keys (.result-index binding))
               content-hash (.content-hash entity-tx)
               doc (db/get-single-object object-store snapshot content-hash)
-              values (idx/normalize-value (get doc (.attr binding)))
+              values (idx/vectorize-value (get doc (.attr binding)))
               value (if (or (nil? value-buffer)
                             (= (count values) 1))
                       (first values)
@@ -686,7 +686,7 @@
               args (vec (for [arg args]
                           (if (logic-var? arg)
                             arg
-                            (->> (map c/->value-buffer (idx/normalize-value arg))
+                            (->> (map c/->value-buffer (idx/vectorize-value arg))
                                  (into (sorted-set-by mem/buffer-comparator))))))]]
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth

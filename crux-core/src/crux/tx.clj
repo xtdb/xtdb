@@ -212,8 +212,7 @@
                         ;; these nested docs never go to the doc topic,
                         ;; it's slightly less of an issue. It's done
                         ;; this way to support nested fns.
-                        (doseq [arg-doc arg-docs]
-                          (db/index-doc indexer (c/new-id arg-doc) arg-doc))
+                        (db/index-docs indexer (->> arg-docs (into {} (map (juxt c/new-id identity)))))
                         {:docs (vec docs)
                          :ops-result (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
                                             (index-tx-event tx-event indexer kv object-store snapshot tx-log transact-time tx-id)))})
@@ -224,8 +223,7 @@
                           (log-tx-fn-error fn-result fn-id body args-id args)
                           false)}
         (let [{:keys [docs ops-result]} fn-result]
-          {:pre-commit-fn #(do (doseq [doc docs]
-                                 (db/index-doc indexer (c/new-id doc) doc))
+          {:pre-commit-fn #(do (db/index-docs indexer (->> docs (into {} (map (juxt c/new-id identity)))))
                                (every? true? (for [{:keys [pre-commit-fn]} ops-result
                                                    :when pre-commit-fn]
                                                (pre-commit-fn))))
@@ -263,28 +261,39 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS))))
 
   db/Indexer
-  (index-doc [_ content-hash doc]
-    (log/debug "Indexing doc:" content-hash)
+  (index-docs [_ docs]
+    (log/debugf "Indexing %d docs" (count docs))
 
-    (when (not (contains? doc :crux.db/id))
+    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
       (throw (IllegalArgumentException.
-              (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str doc)))))
+              (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
-    (let [content-hash (c/new-id content-hash)
-          evicted? (idx/evicted-doc? doc)]
-      (when-let [normalized-doc (if evicted?
-                                  (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
-                                                            (db/get-single-object object-store snapshot content-hash))]
-                                    (idx/delete-doc-from-index kv content-hash existing-doc))
+    (let [{evicted-docs true, upserted-docs false} (group-by (comp boolean idx/evicted-doc? val) docs)
 
-                                  (idx/index-doc kv content-hash doc))]
+          docs-stats (concat (when (seq upserted-docs)
+                               (->> upserted-docs
+                                    (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
+                                    (idx/store-doc-idx-keys kv))
 
-        (let [stats-fn #(idx/update-predicate-stats kv evicted? normalized-doc)]
-          (if stats-executor
-            (.submit stats-executor ^Runnable stats-fn)
-            (stats-fn))))
+                               (->> (vals upserted-docs)
+                                    (map #(idx/doc-predicate-stats % false))))
 
-      (db/put-objects object-store [[content-hash doc]])))
+                             (when (seq evicted-docs)
+                               (with-open [snapshot (kv/new-snapshot kv)]
+                                 (let [existing-docs (db/get-objects object-store snapshot (keys evicted-docs))]
+                                   (->> existing-docs
+                                        (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
+                                        (idx/delete-doc-idx-keys kv))
+
+                                   (->> (vals existing-docs)
+                                        (map #(idx/doc-predicate-stats % true)))))))]
+
+      (let [stats-fn ^Runnable #(idx/update-predicate-stats kv docs-stats)]
+        (if stats-executor
+          (.submit stats-executor stats-fn)
+          (stats-fn)))
+
+      (db/put-objects object-store docs)))
 
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)

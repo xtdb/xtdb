@@ -109,7 +109,7 @@
        (finally
          (set-log-level! ~ns level#)))))
 
-(n/install-uncaught-exception-handler!)
+(cio/install-uncaught-exception-handler!)
 
 ;; Usage, create a dev/$USER.clj file like this, and add it to
 ;; .gitignore:

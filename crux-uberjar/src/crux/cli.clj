@@ -5,7 +5,8 @@
             [clojure.tools.logging :as log]
             [crux.http-server :as srv]
             [crux.node :as n]
-            [crux.config :as cc])
+            [crux.config :as cc]
+            [crux.io :as cio])
   (:import java.io.Closeable))
 
 (def default-options
@@ -52,7 +53,7 @@
                       {:key k :value v}))))
 
 (defn start-node-from-command-line [args]
-  (n/install-uncaught-exception-handler!)
+  (cio/install-uncaught-exception-handler!)
   (let [{:keys [options
                 errors
                 summary]} (cli/parse-opts args cli-options)
