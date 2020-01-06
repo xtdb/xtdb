@@ -254,7 +254,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [kv tx-log object-store ^ExecutorService stats-executor]
+(defrecord KvIndexer [kv tx-log object-store ^ExecutorService stats-executor !hook-store]
   Closeable
   (close [_]
     (when stats-executor
@@ -268,10 +268,13 @@
 
     (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
-              (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str doc)))))
+               (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str doc)))))
 
     (let [content-hash (c/new-id content-hash)
-          evicted? (idx/evicted-doc? doc)]
+          evicted? (idx/evicted-doc? doc)
+          latter-fns (seq (map (fn [f] (f {:content-hash content-hash
+                                           :doc doc}))
+                               (:doc-hooks @!hook-store)))]
       (when-let [normalized-doc (if evicted?
                                   (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                                                             (db/get-single-object object-store snapshot content-hash))]
@@ -282,9 +285,13 @@
         (let [stats-fn #(idx/update-predicate-stats kv evicted? normalized-doc)]
           (if stats-executor
             (.submit stats-executor ^Runnable stats-fn)
-            (stats-fn))))
+            (stats-fn)))
 
-      (db/put-objects object-store [[content-hash doc]])))
+        (let [ret (db/put-objects object-store [[content-hash doc]])]
+          (seq (map (fn [f] (f {:result ret
+                                :evicted evicted?
+                                :normalized-doc normalized-doc}))
+                    latter-fns))))))
 
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
@@ -294,7 +301,11 @@
                               :crux.tx/tx-time tx-time
                               :crux.tx.event/tx-events tx-events}]
         (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
-                                        (index-tx-event tx-event this kv object-store snapshot tx-log tx-time tx-id)))]
+                                        (index-tx-event tx-event this kv object-store snapshot tx-log tx-time tx-id)))
+              latter-fns (seq (map (fn [f] (f {:tx-events tx-events
+                                               :tx-time tx-time
+                                               :tx-id tx-id}))
+                                   (:tx-hooks @!hook-store)))]
           (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
           (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                          :when pre-commit-fn]
@@ -302,9 +313,12 @@
                    (doall)
                    (every? true?))
             (do (kv/store kv (into (sorted-map-by mem/buffer-comparator) (mapcat :kvs) tx-command-results))
-                (doseq [{:keys [post-commit-fn]} tx-command-results
-                        :when post-commit-fn]
-                  (post-commit-fn)))
+                (let [ret (doseq [{:keys [post-commit-fn]} tx-command-results
+                                  :when post-commit-fn]
+                            (post-commit-fn))]
+                  (seq (map (fn [f] (f {:result ret
+                                        :tx-command-results tx-command-results}))
+                            latter-fns))))
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
                 (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
 
@@ -322,7 +336,13 @@
   (status-map [this]
     {:crux.index/index-version (idx/current-index-version kv)
      :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
-     :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
+     :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)})
+
+  db/TxHooks
+  (add-doc-hook! [_ hook]
+    (swap! !hook-store update :doc-hooks #(conj % hook)))
+  (add-tx-hook! [_ hook]
+    (swap! !hook-store update :tx-hooks #(conj % hook))))
 
 (defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
   ;; this will likely be going away as part of #442

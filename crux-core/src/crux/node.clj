@@ -13,8 +13,7 @@
             crux.object-store
             [crux.query :as q]
             [crux.status :as status]
-            [crux.tx :as tx]
-            [crux.hook :as hook])
+            [crux.tx :as tx])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
            java.io.Closeable
            [java.util.concurrent Executors ThreadFactory]
@@ -181,7 +180,9 @@
                    (reify ThreadFactory
                      (newThread [_ r]
                        (doto (Thread. r)
-                         (.setName "crux.tx.update-stats-thread")))))))
+                         (.setName "crux.tx.update-stats-thread")))))
+                  (atom {:tx-hooks []
+                         :doc-hooks []})))
 
 (s/def ::topology-id
   (fn [id]
@@ -267,7 +268,7 @@
 
 (def base-topology {::kv-store 'crux.kv.rocksdb/kv
                     ::object-store 'crux.object-store/kv-object-store
-                    ::indexer {:start-fn (comp hook/wrap-index-hooks start-kv-indexer)
+                    ::indexer {:start-fn start-kv-indexer
                                :deps [::kv-store ::tx-log ::object-store]}})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]

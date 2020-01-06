@@ -44,3 +44,9 @@
   (put-objects [this kvs])
   (delete-objects [this kvs]))
 ;; end::ObjectStore[]
+
+;; tag::TxHooks[]
+(defprotocol TxHooks
+  (add-doc-hook! [this hook])
+  (add-tx-hook! [this hook]))
+;; end::TxHooks[]
