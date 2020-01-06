@@ -192,7 +192,7 @@ include::./src/docs/examples.clj[tags=query-with-arguments5-r]
 ----
 
 [#queries_valid_time_travel]
-=== Valid time travel
+== Valid time travel
 
 Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
 
@@ -247,31 +247,6 @@ Result Set:
 include::./src/docs/examples.clj[tags=query-at-t-q2-r]
 ----
 
-[#queries_history_api]
-== History API
-
-[#history_full_document_history]
-=== Full Document History
-Crux allows you to retrieve all versions of a document:
-[source,clj]
-----
-include::./src/docs/examples.clj[tags=history-full]
-----
-
-[#history_document_history_range]
-=== Document History Range
-Retrievable document versions can be bounded by four time coordinates:
-
-* valid-time-start
-* tx-time-start
-* valid-time-end
-* tx-time-end
-
-All coordinates are inclusive. All coordinates can be null.
-[source,clj]
-----
-include::./src/docs/examples.clj[tags=history-range]
-----
 
 [#queries_joins]
 == Joins
@@ -404,7 +379,6 @@ connected to a given entity via the `:follow` attribute.
            (follow ?t ?e2)]]})
 ----
 
-
 [#queries_lazy_queries]
 == Lazy Queries
 
@@ -413,6 +387,32 @@ optionally a `snapshot` which is already opened and managed by the caller
 (using `with-open` for example). This version of the call returns a lazy
 sequence of the results, while the other version provides a set. A snapshot can
 be retrieved from a `kv` instance via `crux.api/new-snapshot`.
+
+[#queries_history_api]
+== History API
+
+[#history_full_document_history]
+=== Full Document History
+Crux allows you to retrieve all versions of a document:
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=history-full]
+----
+
+[#history_document_history_range]
+=== Document History Range
+Retrievable document versions can be bounded by four time coordinates:
+
+* valid-time-start
+* tx-time-start
+* valid-time-end
+* tx-time-end
+
+All coordinates are inclusive. All coordinates can be null.
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=history-range]
+----
 
 [#queries_clojure_tips]
 == Clojure Tips
