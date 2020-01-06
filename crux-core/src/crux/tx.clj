@@ -147,8 +147,9 @@
     {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
                        ;; can't rely on the old content-hashing returning the same hash for the same document
-                       (if (= (db/get-single-object object-store snapshot (c/new-id content-hash))
-                              (db/get-single-object object-store snapshot (c/new-id old-v)))
+                       (if (or (= (c/new-id content-hash) (c/new-id old-v))
+                               (= (db/get-single-object object-store snapshot (c/new-id content-hash))
+                                  (db/get-single-object object-store snapshot (c/new-id old-v))))
                          (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
                            (when-not correct-state?
                              (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
