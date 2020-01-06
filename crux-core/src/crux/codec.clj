@@ -29,19 +29,19 @@
 
 
 ; two main indexes for querying
-(def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
-(def ^:const ^:private attribute+entity+content-hash+value-index-id 2)
+(def ^:const ^:private avec-index-id 1)
+(def ^:const ^:private aecv-index-id 2)
 
 ; how they work
 (comment
   (api/submit-tx syst [:crux.tx/put {:crux.db/id :ids/ivan :name "ivan"}])
 
   ; [roughly speaking] for queries by attr name and value
-  ; in attribute+value+entity+content-hash-index-id
+  ; in avec-index-id
   ; [:name "ivan" :ids/ivan "ivan-content-hash"]
 
   ; [roughly speaking] for entity queries by id
-  ; in attribute+entity+content-hash+value-index-id
+  ; in aecv-index-id
   ; [:name :ids/ivan "ivan-content-hash" "ivan"]
 
   (api/q db {:find ?e
@@ -452,13 +452,13 @@
     (assert (= content-hash->doc-index-id index-id))
     (Id. (mem/slice-buffer k index-id-size id-size) 0)))
 
-(defn encode-attribute+value+entity+content-hash-key-to
+(defn encode-avec-key-to
   (^org.agrona.MutableDirectBuffer[b attr]
-   (encode-attribute+value+entity+content-hash-key-to b attr empty-buffer empty-buffer empty-buffer))
+   (encode-avec-key-to b attr empty-buffer empty-buffer empty-buffer))
   (^org.agrona.MutableDirectBuffer[b attr v]
-   (encode-attribute+value+entity+content-hash-key-to b attr v empty-buffer empty-buffer))
+   (encode-avec-key-to b attr v empty-buffer empty-buffer))
   (^org.agrona.MutableDirectBuffer[b attr v entity]
-   (encode-attribute+value+entity+content-hash-key-to b attr v entity empty-buffer))
+   (encode-avec-key-to b attr v entity empty-buffer))
   (^org.agrona.MutableDirectBuffer
    [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity ^DirectBuffer content-hash]
    (assert (= id-size (.capacity attr)) (mem/buffer->hex attr))
@@ -469,7 +469,7 @@
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (.capacity v) (.capacity entity) (.capacity content-hash))))]
      (mem/limit-buffer
       (doto b
-        (.putByte 0 attribute+value+entity+content-hash-index-id)
+        (.putByte 0 avec-index-id)
         (.putBytes index-id-size attr 0 id-size)
         (.putBytes (+ index-id-size id-size) v 0 (.capacity v))
         (.putBytes (+ index-id-size id-size (.capacity v)) entity 0 (.capacity entity))
@@ -478,25 +478,25 @@
 
 (defrecord EntityValueContentHash [eid value content-hash])
 
-(defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from
+(defn decode-avec-key->evc-from
   ^crux.codec.EntityValueContentHash [^DirectBuffer k]
   (let [length (long (.capacity k))]
     (assert (<= (+ index-id-size id-size id-size id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
-      (assert (= attribute+value+entity+content-hash-index-id index-id))
+      (assert (= avec-index-id index-id))
       (let [value-size (- length id-size id-size id-size index-id-size)
             value (mem/slice-buffer k (+ index-id-size id-size) value-size)
             entity (Id. (mem/slice-buffer k (+ index-id-size id-size value-size) id-size) 0)
             content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size value-size id-size) id-size) 0)]
         (->EntityValueContentHash entity value content-hash)))))
 
-(defn encode-attribute+entity+content-hash+value-key-to
+(defn encode-aecv-key-to
   (^org.agrona.MutableDirectBuffer [b attr]
-   ( encode-attribute+entity+content-hash+value-key-to b attr empty-buffer empty-buffer empty-buffer))
+   (encode-aecv-key-to b attr empty-buffer empty-buffer empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr entity]
-   ( encode-attribute+entity+content-hash+value-key-to b attr entity empty-buffer empty-buffer))
+   (encode-aecv-key-to b attr entity empty-buffer empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr entity content-hash]
-   ( encode-attribute+entity+content-hash+value-key-to b attr entity content-hash empty-buffer))
+   (encode-aecv-key-to b attr entity content-hash empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer v]
    (assert (= id-size (.capacity attr)) (mem/buffer->hex attr))
    (assert (or (= id-size (.capacity content-hash))
@@ -506,19 +506,19 @@
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (.capacity entity) (.capacity content-hash) (.capacity v))))]
      (mem/limit-buffer
       (doto b
-        (.putByte 0 attribute+entity+content-hash+value-index-id)
+        (.putByte 0 aecv-index-id)
         (.putBytes index-id-size attr 0 id-size)
         (.putBytes (+ index-id-size id-size) entity 0 (.capacity entity))
         (.putBytes (+ index-id-size id-size (.capacity entity)) content-hash 0 (.capacity content-hash))
         (.putBytes (+ index-id-size id-size (.capacity entity) (.capacity content-hash)) v 0 (.capacity v)))
       (+ index-id-size id-size (.capacity entity) (.capacity content-hash) (.capacity v))))))
 
-(defn decode-attribute+entity+content-hash+value-key->entity+value+content-hash-from
+(defn decode-aecv-key->evc-from
   ^crux.codec.EntityValueContentHash [^DirectBuffer k]
   (let [length (long (.capacity k))]
     (assert (<= (+ index-id-size id-size id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
-      (assert (= attribute+entity+content-hash+value-index-id index-id))
+      (assert (= aecv-index-id index-id))
       (let [value-size (- length id-size id-size id-size index-id-size)
             entity (Id. (mem/slice-buffer k (+ index-id-size id-size) id-size) 0)
             content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size id-size) id-size) 0)

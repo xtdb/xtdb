@@ -168,7 +168,7 @@
           (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
-                    :let [version-k (c/encode-attribute+entity+content-hash+value-key-to
+                    :let [version-k (c/encode-aecv-key-to
                                      nil
                                      (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
