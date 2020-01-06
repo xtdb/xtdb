@@ -292,7 +292,7 @@ include::./src/docs/examples.clj[tags=start-jdbc-node]
 ----
 
 [#config-http]
-== Http
+== HTTP
 
 Crux can be used programmatically as a library, but Crux also ships
 with an embedded HTTP server, that allows clients to use the API
