@@ -196,7 +196,7 @@
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [{:keys [crux.tx.event/tx-events] :as record} (tx-record->tx-log-entry record)]
-    (db/index-tx indexer record)
+    (db/index-tx indexer (select-keys record [:crux.tx/tx-time :crux.tx/tx-id]) tx-events)
     tx-events))
 
 (defn consume-and-index-entities

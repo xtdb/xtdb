@@ -17,7 +17,7 @@
 ;; tag::Indexer[]
 (defprotocol Indexer
   (index-docs [this docs])
-  (index-tx [this tx])
+  (index-tx [this tx tx-events])
   (docs-exist? [this content-hashes])
   (store-index-meta [this k v])
   (read-index-meta [this k]))

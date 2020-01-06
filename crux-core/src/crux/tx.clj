@@ -344,7 +344,7 @@
 
       (db/put-objects object-store docs)))
 
-  (index-tx [this {:crux.tx/keys [tx-time tx-id], :crux.tx.event/keys [tx-events], :as tx}]
+  (index-tx [this {:crux.tx/keys [tx-time tx-id] :as tx} tx-events]
     (s/assert :crux.tx.event/tx-events tx-events)
 
     (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
