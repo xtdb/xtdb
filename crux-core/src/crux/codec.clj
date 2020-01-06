@@ -490,9 +490,6 @@
             content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size value-size id-size) id-size) 0)]
         (->EntityValueContentHash entity value content-hash)))))
 
-;; TODO: Swap v and content-hash, so it has the same order as AVE,
-;; this allows skipping straight to the right version in crux.index,
-;; otherwise one has to scan each change of a field.
 (defn encode-attribute+entity+content-hash+value-key-to
   (^org.agrona.MutableDirectBuffer [b attr]
    ( encode-attribute+entity+content-hash+value-key-to b attr empty-buffer empty-buffer empty-buffer))
