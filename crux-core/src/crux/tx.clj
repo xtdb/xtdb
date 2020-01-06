@@ -183,7 +183,7 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [crux.node/object-store snapshot] :as deps}]
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [object-store snapshot] :as deps}]
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
@@ -197,7 +197,7 @@
 (defmethod index-tx-event :crux.tx/delete [[op k start-valid-time end-valid-time] tx deps]
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx deps)})
 
-(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [crux.node/object-store history snapshot] :as deps}]
+(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [object-store history snapshot] :as deps}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
@@ -219,7 +219,7 @@
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
-(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history crux.node/tx-log] :as deps}]
+(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history tx-log] :as deps}]
   (let [eid (c/new-id k)
         content-hashes (into #{} (map #(.content-hash ^EntityTx %)) (entity-history history eid))]
     {:pre-commit-fn #(cond
@@ -252,7 +252,7 @@
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
-(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:crux.node/keys [object-store kv-store indexer tx-log], :keys [snapshot], :as deps}]
+(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
@@ -301,7 +301,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [deps ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store tx-log ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -310,7 +310,7 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS))))
 
   db/Indexer
-  (index-docs [{{:crux.node/keys [object-store kv-store]} :deps} docs]
+  (index-docs [_ docs]
     (log/debugf "Indexing %d docs" (count docs))
 
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
@@ -344,16 +344,18 @@
 
       (db/put-objects object-store docs)))
 
-  (index-tx [{{:crux.node/keys [object-store kv-store tx-log]} :deps, :as indexer} {:crux.tx/keys [tx-time tx-id], :crux.tx.event/keys [tx-events], :as tx}]
+  (index-tx [this {:crux.tx/keys [tx-time tx-id], :crux.tx.event/keys [tx-events], :as tx}]
     (s/assert :crux.tx.event/tx-events tx-events)
 
     (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
 
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
-        (let [deps (assoc deps
-                          :crux.node/indexer indexer
-                          :snapshot snapshot)
+        (let [deps {:object-store object-store
+                    :kv-store kv-store
+                    :tx-log tx-log
+                    :indexer this
+                    :snapshot snapshot}
 
               res (reduce (fn [{:keys [history] :as acc} tx-event]
                             (let [{:keys [pre-commit-fn etxs post-commit-fn]} (index-tx-event tx-event tx (assoc deps :history history))]
@@ -376,25 +378,26 @@
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
                 (kv/store kv-store [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
 
-  (docs-exist? [{{:crux.node/keys [object-store kv-store]} :deps} content-hashes]
+  (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (db/known-keys? object-store snapshot content-hashes)))
 
-  (store-index-meta [{{:crux.node/keys [kv-store]} :deps} k v]
+  (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
 
-  (read-index-meta [{{:crux.node/keys [kv-store]} :deps}  k]
+  (read-index-meta [_  k]
     (idx/read-meta kv-store k))
 
   status/Status
-  (status-map [{{:crux.node/keys [kv-store]} :deps, :as indexer}]
+  (status-map [this]
     {:crux.index/index-version (idx/current-index-version kv-store)
-     :crux.tx/latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)
-     :crux.tx-log/consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)}))
+     :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
+     :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [deps args]
-               (->KvIndexer deps (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log]} args]
+               (->KvIndexer object-store kv-store tx-log
+                            (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
    :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store]})
 
 (defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
