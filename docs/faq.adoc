@@ -196,9 +196,7 @@ Crux node independently. Being able to read your writes when using the HTTP
 interface requires stickiness to a particular node. For a cluster of nodes to
 be linearizable as a whole would require that every node always sees the result
 of every transaction immediately after it is written.  This could be achieved
-with the cost of non-trivial additional latency. Further reading:
-http://www.bailis.org/papers/hat-vldb2014.pdf,
-https://jepsen.io/consistency/models/sequential
+with the cost of non-trivial additional latency. Further reading: http://www.bailis.org/papers/hat-vldb2014.pdf[_Highly Available Transactions: Virtues and Limitations_], https://jepsen.io/consistency/models/sequential[_Sequential Consistency_].
 
 How is consistency provided by Crux?::
 
