@@ -120,8 +120,11 @@
          first))
 
   (entity-history [_ eid]
-    ;; TODO
-    (idx/entity-history snapshot eid))
+    (let [keyfn (juxt etx->vt #(.tt ^EntityTx %))]
+      (merge-histories keyfn #(compare %2 %1)
+                       (idx/entity-history snapshot eid)
+                       (->> (get etxs eid)
+                            (sort-by keyfn #(compare %2 %1))))))
 
   (with-etxs [_ new-etxs]
     (->Snapshot+NewETXs snapshot
@@ -218,7 +221,7 @@
 
 (defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history crux.node/tx-log] :as deps}]
   (let [eid (c/new-id k)
-        history-descending (entity-history history eid)]
+        content-hashes (into #{} (map #(.content-hash ^EntityTx %)) (entity-history history eid))]
     {:pre-commit-fn #(cond
                        (empty? legacy-args) true
 
@@ -232,14 +235,14 @@
                                true))
 
      :post-commit-fn #(when tx-log
-                        (doseq [^EntityTx entity-tx history-descending]
+                        (doseq [content-hash content-hashes]
                           ;; TODO: Direct interface call to help
                           ;; Graal, not sure why this is needed,
                           ;; fails with get-proxy-class issue
                           ;; otherwise.
                           (.submit_doc
                            ^crux.db.TxLog tx-log
-                           (.content-hash entity-tx)
+                           content-hash
                            {:crux.db/id eid, :crux.db/evicted? true})))}))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
