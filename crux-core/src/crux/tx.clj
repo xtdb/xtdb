@@ -392,6 +392,11 @@
      :crux.tx/latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)
      :crux.tx-log/consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)}))
 
+(def kv-indexer
+  {:start-fn (fn [deps args]
+               (->KvIndexer deps (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
+   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store]})
+
 (defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
   ;; this will likely be going away as part of #442
   (let [max-lag-fn #(some->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
