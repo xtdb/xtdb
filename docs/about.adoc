@@ -51,3 +51,5 @@ include::contributing.adoc[leveloffset=+1]
 === Releases
 
 For technical changes, see the https://github.com/juxt/crux/blob/master/CHANGELOG.md[Changelog].
+
+include::faq.adoc[leveloffset=+1]
