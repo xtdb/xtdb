@@ -187,6 +187,7 @@ and any subsequent laws that may be relevant and applied retrospectively
   information to aid predictions and understanding of motives across time
 - Criminal Investigations – efficiently organise analysis and evidence whilst
   enabling a simple retracing of investigative efforts
+
 [#bitemp-examples]
 == Example Queries
 
@@ -406,13 +407,14 @@ bitemporal queries.
 In summary, the Crux indexes as a whole could be described as a "partially
 persistent and fully retroactive data structure".
 
-https://courses.csail.mit.edu/6.851/fall17/lectures/L02.html
-https://erikdemaine.org/papers/Retroactive_TALG/paper.pdf
+.Further reading:
+* https://courses.csail.mit.edu/6.851/fall17/lectures/L02.html[Advanced Data Structures]
+* https://erikdemaine.org/papers/Retroactive_TALG/paper.pdf[Retroactive Data Structures]
 
 [#bitemp-references]
 == References
 
-* https://juxt.pro/blog/posts/value-of-bitemporality.html
+* https://juxt.pro/blog/posts/value-of-bitemporality.html[Value of Bitemporality]
 * https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
 * https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
 * https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]

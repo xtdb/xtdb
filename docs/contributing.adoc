@@ -9,17 +9,15 @@ reflect our gratitude.
 == GitHub
 
 We currently use GitHub Issues to work on near-term changes to the Crux
-codebase and documentation. Please see the issues labelled with "good first
-issue" if you are looking for ideas to help push Crux forward:
-https://github.com/juxt/crux/labels/good%20first%20issue
+codebase and documentation. Please see the issues labelled with https://github.com/juxt/crux/labels/good%20first%20issue["good first issue"]
+if you are looking for ideas to help push Crux forward.
 
 PRs with fixes and improvements to these docs are very welcome.
 
 [#contributing-commits]
 == Commits
 
-Please strive to follow the best-practices for commit messages which are outlined here:
-https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
+Please strive to follow the best-practices for commit messages which are outlined https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html[here].
 
 [#contributing-cla]
 == CLA

@@ -14,7 +14,7 @@ Crux ultimately aims to make the use of bitemporal modelling intuitive and acces
 [#about-team]
 == Team
 
-See: https://github.com/juxt/crux/graphs/contributors
+See our https://github.com/juxt/crux/graphs/contributors[contributors].
 
 [#about-support]
 == Support
@@ -50,4 +50,6 @@ include::contributing.adoc[leveloffset=+1]
 [#about-releases]
 === Releases
 
-For technical changes, see:https://github.com/juxt/crux/blob/master/CHANGELOG.md
+For technical changes, see the https://github.com/juxt/crux/blob/master/CHANGELOG.md[Changelog].
+
+include::faq.adoc[leveloffset=+1]

@@ -81,4 +81,4 @@ include::./src/docs/examples.clj[tags=should-get-entity]
 
 === Next Steps
 
-Now you know the basics of how to interact with Crux you may want to dive into our <<#tutorials, tutorials>>. Otherwise, let's take a look at the kinds of things you are able to do with <<#queries,Queries>>.
+Now you know the basics of how to interact with Crux you may want to dive into our <<#tutorials, tutorials>> below. Otherwise, let's take a look at <<#configuration,setting up Crux>>.
