@@ -47,7 +47,7 @@
         doc-topic "test-can-transact-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)]
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil (atom {}))]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -70,7 +70,7 @@
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil (atom {}))
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
                (db [this]
@@ -128,7 +128,7 @@
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
 
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil)
+        indexer (tx/->KvIndexer *kv* tx-log (os/->KvObjectStore *kv*) nil (atom {}))
 
         node (reify crux.api.ICruxAPI
                (db [this]
@@ -179,7 +179,7 @@
                 (fkv/with-kv-store
                   (fn []
                     (let [object-store (os/->KvObjectStore *kv*)
-                          indexer (tx/->KvIndexer *kv* tx-log object-store nil)
+                          indexer (tx/->KvIndexer *kv* tx-log object-store nil (atom {}))
                           consume-opts {:indexer indexer
                                         :consumer fk/*consumer*
                                         :pending-txs-state (atom [])
