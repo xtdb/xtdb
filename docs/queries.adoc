@@ -401,7 +401,18 @@ The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
 optionally a `snapshot` which is already opened and managed by the caller
 (using `with-open` for example). This version of the call returns a lazy
 sequence of the results, while the other version provides a set. A snapshot can
-be retrieved from a `kv` instance via `crux.api/new-snapshot`.
+be retrieved from a `kv` instance via `crux.api/new-snapshot`. For example, a lazy version of a basic query from the top of this section:
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=lazy-query]
+----
+
+This will lazily return:
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=lazy-query-r]
+----
 
 [#queries_history_api]
 == History API
