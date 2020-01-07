@@ -17,8 +17,3 @@
 (api/q (api/db node) {:find ['e] :where [['e :crux.db/id :foo]]})
 
 (api/add-query-hook! node (fn [_] (let [start (System/currentTimeMillis)] (fn [_] (tap> (str "Query took: " (- (System/currentTimeMillis) start) "ms"))))))
-; clj/eval | (api/q (api/db node) {:find ['e] :where [['e :crux.db/id :foo]]})
-; clj/tap ⤸
-"Query took: -5ms"
-; clj/ret ⤸
-#{[:foo]}

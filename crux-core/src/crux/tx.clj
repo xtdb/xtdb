@@ -285,13 +285,14 @@
         (let [stats-fn #(idx/update-predicate-stats kv evicted? normalized-doc)]
           (if stats-executor
             (.submit stats-executor ^Runnable stats-fn)
-            (stats-fn)))
+            (stats-fn))))
 
         (let [ret (db/put-objects object-store [[content-hash doc]])]
           (seq (map (fn [f] (f {:result ret
                                 :evicted evicted?
                                 :normalized-doc normalized-doc}))
-                    latter-fns))))))
+                    latter-fns))
+          ret)))
 
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
@@ -318,7 +319,8 @@
                             (post-commit-fn))]
                   (seq (map (fn [f] (f {:result ret
                                         :tx-command-results tx-command-results}))
-                            latter-fns))))
+                            latter-fns))
+                  ret))
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
                 (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
 
