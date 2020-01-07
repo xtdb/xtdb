@@ -7,6 +7,7 @@ import java.util.Map;
 import java.time.Duration;
 import java.util.Set;
 import clojure.lang.Keyword;
+import clojure.lang.IFn;
 
 /**
  *  Provides API access to Crux.
@@ -150,4 +151,6 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return         Map containing attribute freqencies.
      */
     public Map<Keyword, Long> attributeStats();
+
+    public void add_query_hook_BANG_(IFn hook);
 }

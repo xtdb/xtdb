@@ -131,7 +131,9 @@
   Returns the latest known transaction time.")
 
   (attribute-stats [node]
-    "Returns frequencies map for indexed attributes"))
+    "Returns frequencies map for indexed attributes")
+
+  (add-query-hook! [node hook]))
 
 (defprotocol PCruxIngestClient
   "Provides API access to Crux ingestion."
@@ -198,7 +200,9 @@
      (.sync this transaction-time timeout)))
 
   (attribute-stats [this]
-    (.attributeStats this)))
+    (.attributeStats this))
+  (add-query-hook! [this hook]
+    (.add_query_hook_BANG_ this hook)))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI

@@ -42,13 +42,13 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn closed? ^StampedLock lock]
+(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn closed? ^StampedLock lock !query-hooks]
   ICruxAPI
   (db [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (let [tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
-        (q/db kv-store object-store tx-time tx-time))))
+        (q/db kv-store object-store tx-time tx-time @!query-hooks))))
 
   (db [this valid-time]
     (cio/with-read-lock lock
@@ -59,7 +59,7 @@
   (db [this valid-time transact-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (q/db kv-store object-store valid-time transact-time)))
+      (q/db kv-store object-store valid-time transact-time @!query-hooks)))
 
   (document [this content-hash]
     (cio/with-read-lock lock
@@ -145,6 +145,9 @@
       (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
                                                 (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
+
+  (add-query-hook! [this hook]
+    (swap! !query-hooks conj hook))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
@@ -302,4 +305,5 @@
                     :indexer indexer
                     :object-store object-store
                     :closed? (atom false)
-                    :lock (StampedLock.)})))
+                    :lock (StampedLock.)
+                    :!query-hooks (atom [])})))

@@ -1172,7 +1172,7 @@
     (let [entity-tx (entity-tx snapshot db eid)]
       (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
-(defrecord QueryDatasource [kv query-cache conform-cache object-store valid-time transact-time entity-as-of-idx]
+(defrecord QueryDatasource [kv query-cache conform-cache object-store valid-time transact-time entity-as-of-idx query-hooks]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
@@ -1183,11 +1183,18 @@
   (newSnapshot [this]
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
+  ;; TODO query-hooks here
   (q [this q]
-    (crux.query/q this q))
+    (let [latter-fns (seq (map #(% {:query q}) query-hooks))
+          result (crux.query/q this q)]
+      (seq (map #(% {:result result :query q}) latter-fns))
+      result))
 
   (q [this snapshot q]
-    (crux.query/q this snapshot q))
+    (let [latter-fns (seq (map #(% {:query q}) query-hooks))
+          result (crux.query/q this snapshot q)]
+      (seq (map #(% {:result result :query q}) latter-fns))
+      result))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
@@ -1203,14 +1210,15 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
+(defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time query-hooks]
   (->QueryDatasource kv
                      (lru/get-named-cache kv ::query-cache)
                      (lru/get-named-cache kv ::conform-cache)
                      object-store
                      valid-time
                      transact-time
-                     nil))
+                     nil
+                     query-hooks))
 
 (defn submitted-tx-updated-entity?
   ([kv object-store {:crux.tx/keys [tx-time] :as submitted-tx} eid]
