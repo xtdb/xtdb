@@ -663,3 +663,17 @@
                (api/q (api/db *api*) '{:find [parent child]
                                        :where [[parent :crux.db/id _]
                                                [child :joins parent]]}))))))
+
+(t/deftest tx-doc-hooks-422
+
+  (t/testing "doc hooks"
+    (let [test-atom-doc (atom false)]
+      (db/add-doc-hook! (:indexer *api*) (fn [_] (fn [_] (swap! test-atom-doc not))))
+      (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])
+      (t/is @test-atom-doc)))
+
+  (t/testing "tx hooks"
+    (let [test-atom-tx (atom false)]
+      (db/add-tx-hook! (:indexer *api*) (fn [_] (fn [_] (swap! test-atom-tx not))))
+      (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])
+      (t/is @test-atom-tx))))
