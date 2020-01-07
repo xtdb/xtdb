@@ -74,7 +74,7 @@
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date) [])))]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -132,7 +132,7 @@
 
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date) [])))]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)

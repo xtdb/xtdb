@@ -1224,4 +1224,4 @@
   ([kv object-store {:crux.tx/keys [tx-time] :as submitted-tx} eid]
    (submitted-tx-updated-entity? kv object-store submitted-tx tx-time eid))
   ([kv object-store {:crux.tx/keys [tx-id tx-time] :as submitted-tx} valid-time eid]
-   (= tx-id (:crux.tx/tx-id (entity-tx (db kv object-store valid-time tx-time) eid)))))
+   (= tx-id (:crux.tx/tx-id (entity-tx (db kv object-store valid-time tx-time []) eid)))))
