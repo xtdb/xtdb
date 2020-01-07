@@ -23,4 +23,12 @@
   ;; tag::LMDBDeps[]
   juxt/crux-lmdb {:mvn/version "19.12-1.6.1-alpha"}
   ;; end::LMDBDeps[]
+
+  ;; tag::HTTPDeps[]
+  juxt/crux-http-server {:mvn/version "19.12-1.6.1-alpha"}
+  ;; end::HTTPDeps[]
+
+  ;; tag::HTTPClientDeps[]
+  juxt/crux-http-client {:mvn/version "19.12-1.6.1-alpha"}
+  ;; end::HTTPClientDeps[]
   }}

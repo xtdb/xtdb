@@ -312,7 +312,42 @@ expose a HTTP port that will accept REST requests:
 
 Visit the guide on using the <<#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
+[#config-start-http-server]
+=== Starting a HTTP Server
+[#config-http-server-dependency]
+*Project Dependency*
 
+[source,clj]
+----
+include::./deps.edn[tags=HTTPDeps]
+----
+
+You can start up a *HTTP server* on a node using `crux.http-server/start-http-server` and passing in a crux node, with the option of passing some further HTTP options. In the example below, we start a HTTP server on a pre-existing node with some *CORS options* and the *server port* (could also be set within the node itself) set within `http-options`:
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=require-http-server]
+include::./src/docs/examples.clj[tags=start-http-server]
+----
+[#config-start-remote-client]
+=== Using a Remote API Client
+[#config-remote-client-dependency]
+*Project Dependency*
+
+[source,clj]
+----
+include::./deps.edn[tags=HTTPClientDeps]
+----
+
+To connect to a pre-existing remote node, you need a URL to the node and the above on your classpath. We can then call `crux.api/new-api-client`, passing the URL. If the node was started on `localhost:3000`, you can connect to it by doing the following:
+
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=start-http-client]
+----
+
+NOTE: The remote client requires valid and transaction time to be specified for all calls to `crux/db`.
 
 [#config-docker]
 == Docker
