@@ -53,6 +53,7 @@ For the purposes of this Hello World, we are using the simplest configuration of
 include::./src/docs/examples.clj[tags=submit-tx]
 ----
 
+[#get-started-query]
 === Querying
 
 [source,clj]
