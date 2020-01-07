@@ -2664,3 +2664,10 @@
           RuntimeException
           #"Spec assertion failed"
           (= #{[:id]} (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]})))))
+
+(t/deftest test-add-query-hooks-422
+  (let [test-atom (atom false)]
+    (f/transact! *api* [{:crux.db/id :id :this :that :these :those}])
+    (api/add-query-hook! *api* (fn [_] (fn [_] (swap! test-atom not))))
+    (api/q (api/db *api*) {:find ['e] :where [['e :this :that]]})
+    (t/is @test-atom)))
