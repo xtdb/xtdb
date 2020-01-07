@@ -257,6 +257,22 @@ node)
 ;; end::query-with-arguments5-r[]
 )
 
+(defn query-example-with-predicate-1 [node]
+  (crux/q
+   (crux/db node)
+   ;; tag::query-with-pred-1[]
+   {:find '[age]
+    :where '[[(odd? age)]]
+    :args [{'age 22} {'age 21}]}
+   ;; end::query-with-pred-1[]
+ ))
+
+#_(comment
+;; tag::query-with-pred-1-r[]
+#{[21]}
+;; end::query-with-pred-1-r[]
+)
+
 (defn query-example-at-time-setup [node]
  (crux/submit-tx
   node

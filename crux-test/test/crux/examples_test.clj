@@ -48,7 +48,6 @@
 
 (t/deftest test-example-rocks-node
   (let [node (ex/example-start-rocks)]
-
     ;; Testing example node with RocksDB is created properly
     (t/is (not= nil node))
     ;; Testing example node with RocksDB is closed properly
@@ -70,7 +69,8 @@
     (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-2 node)))
     (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-3 node)))
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-4 node)))
-    (t/is (= #{[22]} (ex/query-example-with-arguments-5 node))))
+    (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
+    (t/is (= #{[21]} (ex/query-example-with-predicate-1 node))))
   (cio/delete-dir "data"))
 
 (t/deftest test-example-time-queries

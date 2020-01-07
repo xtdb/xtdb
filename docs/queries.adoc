@@ -162,15 +162,6 @@ Result Set:
 include::./src/docs/examples.clj[tags=query-with-arguments3-r]
 ----
 
-=== Query: "Use predicates with arguments"
-
-[source,clj]
-----
-include::./src/docs/examples.clj[tags=query-with-arguments4]
-----
-
-Something else we can do with arguments is apply predicates to them directly within the clauses. Predicates return either `true` or `false` but all predicates used in clauses must return `true` in order for the given combination of field values to be part of the valid result set. In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I").
-
 [source,clj]
 ----
 include::./src/docs/examples.clj[tags=query-with-arguments4-r]
@@ -190,6 +181,30 @@ Result Set:
 ----
 include::./src/docs/examples.clj[tags=query-with-arguments5-r]
 ----
+
+[#queries_predicates]
+== Predicates
+
+Something else we can do with arguments is apply *predicates* to them directly within the clauses. Predicates return either `true` or `false` but all predicates used in clauses must return `true` in order for the given combination of field values to be part of the valid result set:
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=query-with-arguments4]
+----
+
+In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I"). Any *fully qualified* Clojure function function that returns a boolean can be used in place of `re-find`, for example:
+
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=query-with-pred-1]
+----
+
+Result:
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=query-with-pred-1-r]
+----
+
 
 [#queries_valid_time_travel]
 == Valid time travel
