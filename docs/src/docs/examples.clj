@@ -273,6 +273,24 @@ node)
 ;; end::query-with-pred-1-r[]
 )
 
+(defn query-example-lazy [node]
+  ;; tag::lazy-query[]
+  (crux/q
+   (crux/db node)
+   (crux.api/new-snapshot (crux/db node))
+   '{:find [p1]
+     :where [[p1 :name n]
+             [p1 :last-name n]
+             [p1 :name "Smith"]]})
+  ;; end::lazy-query[]
+  )
+
+#_(comment
+;; tag::lazy-query-r[]
+([:smith])
+;; end::lazy-query-r[]
+)
+
 (defn query-example-at-time-setup [node]
  (crux/submit-tx
   node
