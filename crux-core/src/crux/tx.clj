@@ -289,8 +289,7 @@
 
         (let [ret (db/put-objects object-store [[content-hash doc]])]
           (seq (map (fn [f] (f {:result ret
-                                :evicted evicted?
-                                :normalized-doc normalized-doc}))
+                                :evicted evicted?}))
                     latter-fns))
           ret)))
 
