@@ -167,10 +167,6 @@
       (when (and (not @closed?) close-fn) (close-fn))
       (reset! closed? true))))
 
-(defn- start-kv-indexer [{::keys [kv-store tx-log object-store]} _]
-  (tx/->KvIndexer kv-store tx-log object-store
-                  (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-
 (s/def ::topology-id
   (fn [id]
     (and (or (string? id) (keyword? id) (symbol? id))
@@ -253,10 +249,10 @@
                                :when (instance? Closeable m)]
                          (cio/try-close m)))]))
 
-(def base-topology {::kv-store 'crux.kv.rocksdb/kv
-                    ::object-store 'crux.object-store/kv-object-store
-                    ::indexer {:start-fn start-kv-indexer
-                               :deps [::kv-store ::tx-log ::object-store]}})
+(def base-topology
+  {::kv-store 'crux.kv.rocksdb/kv
+   ::object-store 'crux.object-store/kv-object-store
+   ::indexer 'crux.tx/kv-indexer})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
   (when-not topology

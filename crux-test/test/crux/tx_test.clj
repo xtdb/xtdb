@@ -247,9 +247,9 @@
         evict-tx-id (inc put-tx-id)
 
         index-evict! #(db/index-tx (:indexer *api*)
-                                   [[:crux.tx/evict picasso-id #inst "2018-05-23"]]
-                                   evict-tx-time
-                                   evict-tx-id)]
+                                   {:crux.tx/tx-time evict-tx-time
+                                    :crux.tx/tx-id evict-tx-id}
+                                   [[:crux.tx/evict picasso-id #inst "2018-05-23"]])]
 
     ;; we have to index these manually because the new evict API won't allow docs
     ;; with the legacy valid-time range
@@ -284,8 +284,8 @@
     (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
                                      (c/new-id ivan2) ivan2})
 
-    (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]] t 1)
-    (db/index-tx (:indexer *api*) [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]] t 2)
+    (db/index-tx (:indexer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
+    (db/index-tx (:indexer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 2} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
@@ -663,3 +663,46 @@
                (api/q (api/db *api*) '{:find [parent child]
                                        :where [[parent :crux.db/id _]
                                                [child :joins parent]]}))))))
+
+(t/deftest overlapping-valid-time-ranges-434
+  (let [_ (sync-submit-tx *api*
+                          [[:crux.tx/put {:crux.db/id :foo, :v 10} #inst "2020-01-10"]
+                           [:crux.tx/put {:crux.db/id :bar, :v 5} #inst "2020-01-05"]
+                           [:crux.tx/put {:crux.db/id :bar, :v 10} #inst "2020-01-10"]
+
+                           [:crux.tx/put {:crux.db/id :baz, :v 10} #inst "2020-01-10"]])
+
+        last-tx (sync-submit-tx *api*
+                                [[:crux.tx/put {:crux.db/id :bar, :v 7} #inst "2020-01-07"]
+                                 ;; mixing foo and bar shouldn't matter
+                                 [:crux.tx/put {:crux.db/id :foo, :v 8} #inst "2020-01-08" #inst "2020-01-12"] ; reverts to 10 afterwards
+                                 [:crux.tx/put {:crux.db/id :foo, :v 9} #inst "2020-01-09" #inst "2020-01-11"] ; reverts to 8 afterwards, then 10
+                                 [:crux.tx/put {:crux.db/id :bar, :v 8} #inst "2020-01-08" #inst "2020-01-09"] ; reverts to 7 afterwards
+                                 [:crux.tx/put {:crux.db/id :bar, :v 11} #inst "2020-01-11" #inst "2020-01-12"] ; reverts to 10 afterwards
+                                 ])
+
+        db (api/db *api*)]
+
+    (with-open [snapshot (api/new-snapshot db)]
+      (let [eid->history (fn [eid]
+                           (->> (idx/entity-history-seq-ascending snapshot (c/new-id eid)
+                                                                  #inst "2020-01-01"
+                                                                  (:crux.tx/tx-time last-tx))
+                                (map (fn [{:keys [content-hash vt]}]
+                                       [vt (:v (db/get-single-object (:object-store *api*) snapshot content-hash))]))))]
+        ;; transaction functions, asserts both still apply at the start of the transaction
+        (t/is (= [[#inst "2020-01-08" 8]
+                  [#inst "2020-01-09" 9]
+                  [#inst "2020-01-10" 9]
+                  [#inst "2020-01-11" 8]
+                  [#inst "2020-01-12" 10]]
+                 (eid->history :foo)))
+
+        (t/is (= [[#inst "2020-01-05" 5]
+                  [#inst "2020-01-07" 7]
+                  [#inst "2020-01-08" 8]
+                  [#inst "2020-01-09" 7]
+                  [#inst "2020-01-10" 10]
+                  [#inst "2020-01-11" 11]
+                  [#inst "2020-01-12" 10]]
+                 (eid->history :bar)))))))

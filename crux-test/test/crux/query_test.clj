@@ -1421,7 +1421,7 @@
                                       :name "Ivan 3rd"}]
                                     [:crux.tx/cas
                                      {:crux.db/id :ivan
-                                      :name "Ivan 2nd"}
+                                      :name "Ivan 3rd"}
                                      {:crux.db/id :ivan
                                       :name "Ivan 4th"}]])
               updated? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)]
