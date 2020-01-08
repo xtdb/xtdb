@@ -15,7 +15,7 @@
             crux.tx.event
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import crux.codec.EntityTx
+  (:import [crux.codec EntityTx EntityValueContentHash]
            crux.tx.consumer.Message
            java.io.Closeable
            [java.util.concurrent ExecutorService Executors TimeoutException TimeUnit]
@@ -75,7 +75,7 @@
 (defprotocol EntityHistory
   (entity-history-seq-ascending [_ eid valid-time tx-time])
   (entity-history-seq-descending [_ eid valid-time tx-time])
-  (entity-history [_ eid])
+  (all-content-hashes [_ eid])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
 
@@ -119,12 +119,13 @@
                                    vector))
          first))
 
-  (entity-history [_ eid]
-    (let [keyfn (juxt etx->vt #(.tt ^EntityTx %))]
-      (merge-histories keyfn #(compare %2 %1)
-                       (idx/entity-history snapshot eid)
-                       (->> (get etxs eid)
-                            (sort-by keyfn #(compare %2 %1))))))
+  (all-content-hashes [_ eid]
+    (with-open [i (kv/new-iterator snapshot)]
+      (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
+                      (map c/decode-aecv-key->evc-from)
+                      (map #(.content-hash ^EntityValueContentHash %))))
+            (set (->> (get etxs eid)
+                      (map #(.content-hash ^EntityTx %)))))))
 
   (with-etxs [_ new-etxs]
     (->Snapshot+NewETXs snapshot
@@ -221,7 +222,7 @@
 
 (defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history tx-log] :as deps}]
   (let [eid (c/new-id k)
-        content-hashes (into #{} (map #(.content-hash ^EntityTx %)) (entity-history history eid))]
+        content-hashes (all-content-hashes history eid)]
     {:pre-commit-fn #(cond
                        (empty? legacy-args) true
 
