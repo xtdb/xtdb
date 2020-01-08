@@ -318,25 +318,27 @@
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
-    (let [{evicted-docs true, upserted-docs false} (group-by (comp boolean idx/evicted-doc? val) docs)
+    (let [{docs-to-evict true, docs-to-upsert false} (group-by (comp boolean idx/evicted-doc? val) docs)
 
-          docs-stats (concat (when (seq upserted-docs)
-                               (->> upserted-docs
+          _ (when (seq docs-to-upsert)
+              (->> docs-to-upsert
+                   (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
+                   (idx/store-doc-idx-keys kv-store)))
+
+          docs-to-remove (when (seq docs-to-evict)
+                           (with-open [snapshot (kv/new-snapshot kv-store)]
+                             (let [existing-docs (db/get-objects object-store snapshot (keys docs-to-evict))]
+                               (->> existing-docs
                                     (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-                                    (idx/store-doc-idx-keys kv-store))
+                                    (idx/delete-doc-idx-keys kv-store))
 
-                               (->> (vals upserted-docs)
-                                    (map #(idx/doc-predicate-stats % false))))
+                               existing-docs)))
 
-                             (when (seq evicted-docs)
-                               (with-open [snapshot (kv/new-snapshot kv-store)]
-                                 (let [existing-docs (db/get-objects object-store snapshot (keys evicted-docs))]
-                                   (->> existing-docs
-                                        (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-                                        (idx/delete-doc-idx-keys kv-store))
+          docs-stats (concat (->> (vals docs-to-upsert)
+                                  (map #(idx/doc-predicate-stats % false)))
 
-                                   (->> (vals existing-docs)
-                                        (map #(idx/doc-predicate-stats % true)))))))]
+                             (->> (vals docs-to-remove)
+                                  (map #(idx/doc-predicate-stats % true))))]
 
       (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
         (if stats-executor
