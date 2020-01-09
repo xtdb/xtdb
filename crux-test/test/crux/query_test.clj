@@ -2689,12 +2689,13 @@
          (api/q (api/db *api*)
                 '{:find [offset]
                   :where [[e :offset offset]
-                          [(> offset -9223372036854775808)]] ;; Long/MAX_VALUE
+                          [(> offset -9223372036854775808)]] ;; Long/MIN_VALUE
                   :limit 1})))
 
-  (t/is (empty?
-         (api/q (api/db *api*)
-                '{:find [offset]
-                  :where [[e :offset offset]
-                          [(= e :foo)]]
-                  :limit 1}))))
+  (t/testing "checking that entity ranges don't have same bug"
+    (t/is (empty?
+           (api/q (api/db *api*)
+                  '{:find [offset]
+                    :where [[e :offset offset]
+                            [(= e :foo)]]
+                    :limit 1})))))
