@@ -10,6 +10,14 @@ Resources:
       ClusterSettings:
         - Name: 'containerInsights'
           Value: 'enabled'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'example-loggroup'
+      RetentionInDays: 7
+
+
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
@@ -44,7 +52,9 @@ Resources:
 
   ExampleTask:
     Type: AWS::ECS::TaskDefinition
-    DependsOn: ECRRepository
+    DependsOn:
+      - ECRRepository
+      - LogGroup
     Properties:
       Cpu: '0.25 vCPU'
       Memory: '0.5GB'
@@ -59,6 +69,12 @@ Resources:
           Name: 'example-container'
           Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/example-repository'
           Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
 
 
 
