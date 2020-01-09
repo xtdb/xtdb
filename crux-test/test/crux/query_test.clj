@@ -2683,3 +2683,19 @@
                                            snapshot-hit-ns)))))
                          (repeatedly n))]
         (t/is (>= (/ (reduce + factors) n) acceptable-snapshot-speedup))))))
+
+(t/deftest test-greater-than-range-predicate-545
+  (t/is (empty?
+         (api/q (api/db *api*)
+                '{:find [offset]
+                  :where [[e :offset offset]
+                          [(> offset -9223372036854775808)]] ;; Long/MIN_VALUE
+                  :limit 1})))
+
+  (t/testing "checking that entity ranges don't have same bug"
+    (t/is (empty?
+           (api/q (api/db *api*)
+                  '{:find [offset]
+                    :where [[e :offset offset]
+                            [(= e :foo)]]
+                    :limit 1})))))

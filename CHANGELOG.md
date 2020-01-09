@@ -11,6 +11,7 @@
 
 * [#506](https://github.com/juxt/crux/issues/506): Fix lifetime of EntityAsOfIdx within put/delete, was being closed too soon.
 * [#512](https://github.com/juxt/crux/issues/512): Fix race condition initialising id-hashing
+* [#545](https://github.com/juxt/crux/issues/545): Fix greater than range predicate bug on empty db
 
 ## 19.12-1.6.0-alpha
 

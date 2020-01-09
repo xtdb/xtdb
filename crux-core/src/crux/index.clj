@@ -71,11 +71,11 @@
       (attribute-value+placeholder k peek-state)))
 
   (next-values [this]
-    (let [last-k (.last-k peek-state)
-          prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
-      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
-                            (kv/seek i))]
-        (attribute-value+placeholder k peek-state)))))
+    (when-let [last-k (.last-k peek-state)]
+      (let [prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
+        (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
+                              (kv/seek i))]
+          (attribute-value+placeholder k peek-state))))))
 
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
   (let [attr (c/->id-buffer attr)
@@ -163,14 +163,14 @@
             placeholder)))))
 
   (next-values [this]
-    (let [last-k (.last-k peek-state)
-          prefix-size (+ c/index-id-size c/id-size c/id-size)]
-      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
-                            (kv/seek i))]
-        (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
-          (if (= ::deleted-entity placeholder)
-            (recur)
-            placeholder))))))
+    (when-let [last-k (.last-k peek-state)]
+      (let [prefix-size (+ c/index-id-size c/id-size c/id-size)]
+        (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
+                              (kv/seek i))]
+          (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+            (if (= ::deleted-entity placeholder)
+              (recur)
+              placeholder)))))))
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
   (let [attr (c/->id-buffer attr)
@@ -269,6 +269,14 @@
                                                   k
                                                   min-v)))]
     (->GreaterThanVirtualIndex idx)))
+
+(defn new-equals-virtual-index [idx v]
+  (let [v (c/->value-buffer v)
+        pred (value-comparsion-predicate zero? v)]
+    (->PredicateVirtualIndex idx pred (fn [k]
+                                        (if (pred k)
+                                          k
+                                          v)))))
 
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
   (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (mem/capacity prefix-v))
