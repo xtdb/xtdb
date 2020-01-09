@@ -14,7 +14,8 @@
             [crux.rdf :as rdf]
             [crux.api :as api]
             [crux.fixtures.api :as apif])
-  (:import clojure.lang.LazySeq
+  (:import crux.api.NodeOutOfSyncException
+           clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
            crux.moberg.MobergTxLog
@@ -65,8 +66,9 @@
 
     (t/testing "put works with no id"
       (t/is
-       (let [submitted-tx (.submitTx *api* [[:crux.tx/put content-ivan valid-time]])]
-         (.db *api* valid-time (:crux.tx/tx-time submitted-tx)))))
+       (let [{:keys [crux.tx/tx-time]} (.submitTx *api* [[:crux.tx/put content-ivan valid-time]])]
+         (.sync *api* tx-time nil)
+         (.db *api* valid-time tx-time))))
 
     (t/testing "Delete works with id"
       (t/is (.submitTx *api* [[:crux.tx/delete :ivan]])))))
@@ -361,3 +363,9 @@
               (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
                           (.next tq))
                     (lazy-seq (step)))))))))
+
+(t/deftest test-db-throws-if-future-tx-time-provided
+  (let [{:keys [^Date crux.tx/tx-time]} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])
+        _ (api/sync *api* tx-time nil)
+        the-future (Date. (+ (.getTime tx-time) 10000))]
+    (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))

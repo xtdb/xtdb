@@ -14,7 +14,7 @@
             [crux.query :as q]
             [crux.status :as status]
             [crux.tx :as tx])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException]
            java.io.Closeable
            [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
@@ -45,21 +45,23 @@
 (defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (let [tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
-        (q/db kv-store object-store tx-time tx-time))))
+    (.db this nil nil))
 
   (db [this valid-time]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (let [transact-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
-        (.db this valid-time transact-time))))
+    (.db this valid-time nil))
 
-  (db [this valid-time transact-time]
+  (db [this valid-time tx-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (q/db kv-store object-store valid-time transact-time)))
+      (let [latest-tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))
+            _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
+                (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
+                                                        tx-time latest-tx-time)
+                                                tx-time latest-tx-time)))
+            tx-time (or tx-time latest-tx-time)
+            valid-time (or valid-time tx-time)]
+
+        (q/db kv-store object-store valid-time tx-time))))
 
   (document [this content-hash]
     (cio/with-read-lock lock

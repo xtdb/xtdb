@@ -1,5 +1,10 @@
 # Changelog
 
+## 20.01-1.6.2-alpha
+
+### Bug fixes
+* [#546](https://github.com/juxt/crux/issues/546): `crux.node/db` errors if provided a tx-time later than the latest completed tx, to preserve repeatability of queries.
+
 ## 19.12-1.6.1-alpha
 
 ### Bug fixes

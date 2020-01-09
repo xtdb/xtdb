@@ -38,7 +38,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param transactionTime the transaction time.
      * @return                the database.
      */
-    public ICruxDatasource db(Date validTime, Date transactionTime);
+    public ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
      *  Reads a document from the document store based on its
