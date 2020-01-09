@@ -1,6 +1,6 @@
 #! /bin/env bash
 aws ecs run-task\
- --task-definition example-task:1\
+ --task-definition example-family\
  --cluster example-cluster\
  --launch-type FARGATE\
  --count 1\

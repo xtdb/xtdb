@@ -4,4 +4,4 @@
 
 (defn -main
   [& args]
-  (logging/info (json/write-str {"test" "123"})))
+  (println (json/write-str {"test" "123"})))
