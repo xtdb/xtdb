@@ -270,6 +270,14 @@
                                                   min-v)))]
     (->GreaterThanVirtualIndex idx)))
 
+(defn new-equals-virtual-index [idx v]
+  (let [v (c/->value-buffer v)
+        pred (value-comparsion-predicate zero? v)]
+    (->PredicateVirtualIndex idx pred (fn [k]
+                                        (if (pred k)
+                                          k
+                                          v)))))
+
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
   (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (mem/capacity prefix-v))
         pred (value-comparsion-predicate zero? prefix-v (mem/capacity prefix-v))]

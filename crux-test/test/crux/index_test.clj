@@ -340,6 +340,13 @@
              (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r 2))
                   (map second))))
 
+    (t/is (= [2]
+             (->> (idx/idx->seq (idx/new-equals-virtual-index r 2))
+                  (map second))))
+
+    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r 0))))
+    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r 6))))
+
     (t/testing "seek skips to lower range"
       (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/->value-buffer nil)))))
       (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/->value-buffer 1))))))

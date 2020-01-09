@@ -244,8 +244,7 @@
            [var (->> (for [{:keys [op val sym]} clauses
                            :let [type-prefix (c/value-buffer-type-id (c/->value-buffer val))]]
                        (case op
-                         = #(-> (idx/new-greater-than-equal-virtual-index % val)
-                                (idx/new-less-than-equal-virtual-index val)
+                         = #(-> (idx/new-equals-virtual-index % val)
                                 (idx/new-prefix-equal-virtual-index type-prefix))
                          < #(-> (idx/new-less-than-virtual-index % val)
                                 (idx/new-prefix-equal-virtual-index type-prefix))
