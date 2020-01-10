@@ -50,14 +50,14 @@
 (t/deftest test-can-write-entity-using-map-as-id
   (let [doc {:crux.db/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
+    (.awaitTx *api* submitted-tx nil)
     (t/is (.entity (.db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))))
 
 (t/deftest test-can-use-crux-ids
   (let [id #crux/id :https://adam.com
         doc {:crux.db/id id, :name "Adam"}
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
+    (.awaitTx *api* submitted-tx nil)
     (t/is (.entity (.db *api*) id))))
 
 (t/deftest test-single-id
@@ -66,8 +66,8 @@
 
     (t/testing "put works with no id"
       (t/is
-       (let [{:keys [crux.tx/tx-time]} (.submitTx *api* [[:crux.tx/put content-ivan valid-time]])]
-         (.sync *api* tx-time nil)
+       (let [{:crux.tx/keys [tx-time] :as tx} (.submitTx *api* [[:crux.tx/put content-ivan valid-time]])]
+         (.awaitTx *api* tx nil)
          (.db *api* valid-time tx-time))))
 
     (t/testing "Delete works with id"
@@ -88,10 +88,8 @@
 
   (t/testing "transaction"
     (let [valid-time (Date.)
-          {:keys [crux.tx/tx-time
-                  crux.tx/tx-id]
-           :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-      (t/is (= tx-time (.sync *api* (:crux.tx/tx-time submitted-tx) nil)))
+          {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+      (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
       (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
 
       (let [status-map (.status *api*)]
@@ -165,7 +163,7 @@
           (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
           (t/is (= {ivan-crux-id ivan} (.documents *api* #{(:crux.db/content-hash entity-tx)})))
           (t/is (= [entity-tx] (.history *api* :ivan)))
-          (t/is (= [entity-tx] (.historyRange *api* :ivan #inst "1990" #inst "1990" (:crux.tx/tx-time submitted-tx) (:crux.tx/tx-time submitted-tx))))
+          (t/is (= [entity-tx] (.historyRange *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
 
           (t/is (nil? (.document *api* (c/new-id :does-not-exist))))
           (t/is (nil? (.entityTx (.db *api* #inst "1999") :ivan)))))
@@ -204,21 +202,17 @@
 
         (t/testing "updated"
           (let [valid-time (Date.)
-                {:keys [crux.tx/tx-time
-                        crux.tx/tx-id]
-                 :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
+                submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
             (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
-            (t/is (= tx-time (.sync *api* (:crux.tx/tx-time submitted-tx) nil))))
+            (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil))))
 
           (let [stats (.attributeStats *api*)]
             (t/is (= 2 (:name stats)))))
 
         (t/testing "reflect evicted documents"
           (let [valid-time (Date.)
-                {:keys [crux.tx/tx-time
-                        crux.tx/tx-id]
-                 :as submitted-tx} (.submitTx *api* [[:crux.tx/evict :ivan]])]
-            (t/is (.sync *api* tx-time nil))
+                submitted-tx (.submitTx *api* [[:crux.tx/evict :ivan]])]
+            (t/is (.awaitTx *api* submitted-tx nil))
 
             ;; actual removal of the document happens asynchronously after
             ;; the transaction has been processed so waiting on the
@@ -233,9 +227,8 @@
         (t/testing "Add back evicted document"
           (assert (not (.entity (.db *api*) :ivan)))
           (let [valid-time (Date.)
-                {:keys [crux.tx/tx-time]
-                 :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-            (t/is (.sync *api* tx-time nil))
+                submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+            (t/is (.awaitTx *api* submitted-tx nil))
             (t/is (.entity (.db *api*) :ivan))))))))
 
 (t/deftest test-document-bug-123
@@ -271,10 +264,14 @@
             (t/is (= 2 (count result)))))))))
 
 (t/deftest test-db-history-api
-  (let [version-1-submitted-tx-time (.sync *api* (:crux.tx/tx-time (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])) nil)
-        version-2-submitted-tx-time (.sync *api* (:crux.tx/tx-time (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])) nil)
-        version-3-submitted-tx-time (.sync *api* (:crux.tx/tx-time (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]])) nil)
-        version-2-corrected-submitted-tx-time (.sync *api* (:crux.tx/tx-time (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true} #inst "2019-02-02"]])) nil)]
+  (let [version-1-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]]) nil)
+                                        :crux.tx/tx-time)
+        version-2-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]]) nil)
+                                        :crux.tx/tx-time)
+        version-3-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]]) nil)
+                                        :crux.tx/tx-time)
+        version-2-corrected-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true} #inst "2019-02-02"]]) nil)
+                                                  :crux.tx/tx-time)]
 
     (let [history (.history *api* :ivan)]
       (t/is (= 4 (count history))))

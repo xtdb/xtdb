@@ -1299,8 +1299,8 @@
                   [:crux.tx/put
                    {:crux.db/id (keyword (str i))
                     :offer i}]))
-        submitted-tx (api/submit-tx *api* tx)]
-    (tx/await-tx (:indexer *api*) submitted-tx 10000))
+        submitted-tx (doto (api/submit-tx *api* tx)
+                       (->> (api/await-tx *api*)))])
 
   (let [db (api/db *api*)
         ;; Much higher than needed, but catches the bug without flakiness.
@@ -1344,8 +1344,7 @@
         entity-slowdown-factor 5
         tx (api/submit-tx *api* (vec (for [n (range number-of-docs)]
                                        [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
-        ;; HACK temporarily using low-level tx/await-tx til we properly deprecate 'sync'
-        _ (tx/await-tx (:indexer *api*) tx 10000)
+        _ (api/await-tx *api* tx)
         db (api/db *api*)
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
@@ -1586,13 +1585,13 @@
                             :departure-time :na}
                            #inst "2019-01-11"]])
 
-    (let [last-submitted-tx (api/submit-tx *api* [[:crux.tx/put
-                                                   {:crux.db/id :p6
-                                                    :entry-pt :NY
-                                                    :arrival-time #inst "2019-01-12"
-                                                    :departure-time :na}
-                                                   #inst "2019-01-12"]])]
-      (.sync *api* (:crux.tx/tx-time last-submitted-tx) nil))
+    (doto (api/submit-tx *api* [[:crux.tx/put
+                                 {:crux.db/id :p6
+                                  :entry-pt :NY
+                                  :arrival-time #inst "2019-01-12"
+                                  :departure-time :na}
+                                 #inst "2019-01-12"]])
+      (->> (api/await-tx *api*)))
 
 
     (log/warn "test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper disabled due to intermittent failure, see #421")

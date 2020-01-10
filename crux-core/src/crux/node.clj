@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
+            [crux.api :as api]
             [crux.backup :as backup]
             [crux.codec :as c]
             [crux.config :as cc]
@@ -111,7 +112,7 @@
   (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx indexer submitted-tx (:crux.tx-log/await-tx-timeout options))
+      (api/await-tx this submitted-tx)
       (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid)))
 
   (newTxLogContext [this]
@@ -142,12 +143,18 @@
                                                 (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
 
-  (sync [this tx-time timeout]
+  (awaitTxTime [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
                                                 (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
+
+  (awaitTx [this tx timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (tx/await-tx indexer tx (or (and timeout (.toMillis timeout))
+                                  (:crux.tx-log/await-tx-timeout options)))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]

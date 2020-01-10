@@ -34,7 +34,7 @@
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
+    (.awaitTx *api* submitted-tx nil)
     (t/is (.entity (.db *api*) :origin-man))
     (t/testing "Tx log"
       (with-open [tx-log-context (.newTxLogContext *api*)]
@@ -87,7 +87,7 @@
          (reset! last-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id (keyword (str n))}]]))))
 
       (time
-       (.sync *api* (:crux.tx/tx-time last-tx) nil))))
+       (.awaitTx *api* last-tx nil))))
   (t/is true))
 
 (t/deftest test-ingest-bench

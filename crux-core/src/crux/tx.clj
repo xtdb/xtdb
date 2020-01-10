@@ -419,7 +419,6 @@
                (str "Timed out waiting for index to catch up, lag is: " (or (max-lag-fn)
                                                                             "unknown")))))))
 
-;;; TODO need to expose this as node/await-tx when 'sync' goes
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout-ms]
   (let [seen-tx (atom nil)]
     (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
@@ -432,8 +431,7 @@
               (str "Timed out waiting for: " (cio/pr-edn-str tx)
                    " index has: " (cio/pr-edn-str @seen-tx)))))))
 
-;;; will remove this when 'sync' goes
-(defn ^:deprecated await-tx-time [indexer transact-time timeout-ms]
+(defn await-tx-time [indexer transact-time timeout-ms]
   (let [seen-tx (atom nil)]
     (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
                            (reset! seen-tx latest-completed-tx)

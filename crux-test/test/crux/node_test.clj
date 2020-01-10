@@ -179,10 +179,8 @@
         (t/is n)
 
         (let [valid-time (Date.)
-              {:keys [crux.tx/tx-time
-                      crux.tx/tx-id]
-               :as submitted-tx} (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-          (t/is (= tx-time (.sync n (:crux.tx/tx-time submitted-tx) nil)))
+              submitted-tx (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+          (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
           (t/is (= #{[:ivan]} (.q (.db n)
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]}))))
@@ -201,10 +199,8 @@
                              :where [[e :name "Ivan"]]})))
 
           (let [valid-time (Date.)
-                {:keys [crux.tx/tx-time
-                        crux.tx/tx-id]
-                 :as submitted-tx} (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
-            (t/is (= tx-time (.sync n2 (:crux.tx/tx-time submitted-tx) nil)))
+                submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
+            (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
             (t/is (= #{[:ivan]} (.q (.db n2)
                                     '{:find [e]
                                       :where [[e :name "Iva"]]}))))

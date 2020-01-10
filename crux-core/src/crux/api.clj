@@ -117,18 +117,31 @@
   Returns true if the entity was updated in this transaction.")
 
   (sync
+    [node]
     [node ^Duration timeout]
-    [node ^Date transaction-time ^Duration timeout]
-    "If the transaction-time is supplied, blocks until indexing has
-  processed a tx with a greater-than transaction-time, otherwise
-  blocks until the node has caught up indexing the tx-log
-  backlog. Will throw an exception on timeout. The returned date is
-  the latest index time when this node has caught up as of this
-  call. This can be used as the second parameter in (db valid-time,
-  transaction-time) for consistent reads.
+    ^:deprecated [node ^Date transaction-time ^Duration timeout]
+    "Blocks until the node has caught up indexing to the latest tx available at
+  the time this method is called. Will throw an exception on timeout. The
+  returned date is the latest transaction time indexed by this node. This can be
+  used as the second parameter in (db valid-time, transaction-time) for
+  consistent reads.
 
   timeout – max time to wait, can be nil for the default.
   Returns the latest known transaction time.")
+
+  (await-tx-time
+    [node ^Date tx-time]
+    [node ^Date tx-time ^Duration timeout]
+    "Blocks until the node has indexed a transaction that is past the supplied
+  txTime. Will throw on timeout. The returned date is the latest index time when
+  this node has caught up as of this call.")
+
+  (await-tx
+    [node tx]
+    [node tx ^Duration timeout]
+    "Blocks until the node has indexed a transaction that is at or past the
+  supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
+  node.")
 
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes"))
@@ -192,10 +205,26 @@
     (.hasSubmittedTxCorrectedEntity this submitted-tx valid-time eid))
 
   (sync
+    ([this]
+     (.sync this nil))
     ([this timeout]
      (.sync this timeout))
+
+    ;; TODO deprecated
     ([this transaction-time timeout]
-     (.sync this transaction-time timeout)))
+     (.awaitTxTime this transaction-time timeout)))
+
+  (await-tx
+    ([this tx]
+     (await-tx this tx nil))
+    ([this tx timeout]
+     (.awaitTx this tx timeout)))
+
+  (await-tx-time
+    ([this tx-time]
+     (await-tx-time this tx-time nil))
+    ([this tx-time timeout]
+     (.awaitTxTime this tx-time timeout)))
 
   (attribute-stats [this]
     (.attributeStats this)))
