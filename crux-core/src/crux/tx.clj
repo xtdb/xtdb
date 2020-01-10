@@ -371,17 +371,21 @@
                           {:history (->Snapshot+NewETXs snapshot {})
                            :post-commit-fns []}
 
-                          tx-events)]
+                          tx-events)
+
+              completed-tx-kv (idx/meta-kv :crux.tx/latest-completed-tx tx)]
 
           (if (not= res ::aborted)
-            (do (kv/store kv-store (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs) (into (sorted-map-by mem/buffer-comparator))))
+            (do (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
+                                              completed-tx-kv)
+                                        (into (sorted-map-by mem/buffer-comparator))))
                 (doseq [post-commit-fn (:post-commit-fns res)]
                   (post-commit-fn)))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
+                (kv/store kv-store [completed-tx-kv
+                                    [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
-          (db/store-index-meta this :crux.tx/latest-completed-tx tx)
           tx))))
 
   (docs-exist? [_ content-hashes]
