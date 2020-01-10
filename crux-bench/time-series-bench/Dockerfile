@@ -4,8 +4,11 @@ VOLUME /root/.m2
 
 WORKDIR /time-series-bench
 
-ADD https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz ./resources/
+CMD ["lein", "run"]
+
+ADD logback.xml .
 ADD project.clj .
 ADD src/ ./src/
 
-CMD ["lein", "run"]
+ADD https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz ./resources/
+RUN tar -xf resources/devices_small.tar.gz -C resources/
