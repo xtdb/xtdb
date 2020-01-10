@@ -1,7 +1,7 @@
 #! /bin/env bash
 aws ecs run-task\
- --task-definition example-family\
- --cluster example-cluster\
+ --task-definition bench-family\
+ --cluster bench-cluster\
  --launch-type FARGATE\
  --count 1\
  --network-configuration \
