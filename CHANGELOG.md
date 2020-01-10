@@ -2,6 +2,9 @@
 
 ## 20.01-1.6.2-alpha
 
+### Changes
+* [#524](https://github.com/juxt/crux/issues/371): Batch ingesting docs into the KV store
+
 ### Bug fixes
 * [#371](https://github.com/juxt/crux/issues/371): Documents in failed CaS operations now get evicted correctly
 * [#434](https://github.com/juxt/crux/issues/434): Fix put/delete/CaS semantics when a transaction contains overlapping valid-time ranges for the same entity
