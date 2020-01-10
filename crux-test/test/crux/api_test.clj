@@ -13,7 +13,8 @@
             [crux.fixtures.kafka :as kf]
             [crux.rdf :as rdf]
             [crux.api :as api]
-            [crux.fixtures.api :as apif])
+            [crux.fixtures.api :as apif]
+            [crux.db :as db])
   (:import crux.api.NodeOutOfSyncException
            clojure.lang.LazySeq
            java.util.Date
@@ -366,3 +367,10 @@
         _ (api/sync *api* tx-time nil)
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
+
+(t/deftest test-latest-submitted-tx
+  (t/is (nil? (db/latest-submitted-tx (:tx-log *api*))))
+
+  (let [{:keys [crux.tx/tx-id]} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+    (t/is (= {:crux.tx/tx-id tx-id}
+             (db/latest-submitted-tx (:tx-log *api*))))))

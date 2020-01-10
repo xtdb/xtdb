@@ -12,9 +12,7 @@
   (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
     (db/store-index-meta
      indexer
-     :crux.tx-log/consumer-state {:crux.tx/event-log {:lag 0
-                                                      :next-offset 0
-                                                      :time nil}}))
+     :crux.tx-log/consumer-state {:crux.tx/event-log {:next-offset 0}}))
   (while @running?
     (let [idle? (with-open [context (consumer/new-event-log-context event-log-consumer)]
                   (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state) [:crux.tx/event-log :next-offset])
@@ -32,16 +30,8 @@
                         (db/index-tx indexer tx (.body tx-msg))))
 
                     (if-let [^Message last-msg (last msgs)]
-                      (let [end-offset (consumer/end-offset event-log-consumer)
-                            next-offset (inc (long (.message-id last-msg)))
-                            time (.message-time last-msg)
-                            lag (- end-offset next-offset)
-                            _ (when (pos? lag)
-                                (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
-                            consumer-state {:crux.tx/event-log
-                                            {:lag lag
-                                             :next-offset next-offset
-                                             :time time}}]
+                      (let [next-offset (inc (long (.message-id last-msg)))
+                            consumer-state {:crux.tx/event-log {:next-offset next-offset}}]
                         (log/debug "Event log consumer state:" (cio/pr-edn-str consumer-state))
                         (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)
                         false)

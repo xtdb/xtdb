@@ -234,6 +234,11 @@
            :crux.tx/tx-id (.message-id m)
            :crux.tx/tx-time (.message-time m)}))))
 
+  (latest-submitted-tx [_]
+    (let [end-offset (end-message-id-offset event-log-kv ::event-log)]
+      (when (> end-offset 1)
+        {:crux.tx/tx-id (dec end-offset)})))
+
   backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
     (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
