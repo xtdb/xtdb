@@ -14,7 +14,8 @@
             [crux.rdf :as rdf]
             [crux.api :as api]
             [crux.fixtures.api :as apif]
-            [crux.db :as db])
+            [crux.db :as db]
+            [crux.query :as q])
   (:import crux.api.NodeOutOfSyncException
            clojure.lang.LazySeq
            java.util.Date
@@ -371,6 +372,10 @@
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (db/latest-submitted-tx (:tx-log *api*))))
 
-  (let [{:keys [crux.tx/tx-id]} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+  (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
     (t/is (= {:crux.tx/tx-id tx-id}
-             (db/latest-submitted-tx (:tx-log *api*))))))
+             (db/latest-submitted-tx (:tx-log *api*)))))
+
+  (api/sync *api*)
+
+  (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))

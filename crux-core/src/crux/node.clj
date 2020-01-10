@@ -137,10 +137,8 @@
           tx-log-entry))))
 
   (sync [this timeout]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (-> (tx/await-no-consumer-lag indexer (or (and timeout (.toMillis timeout))
-                                                (:crux.tx-log/await-tx-timeout options)))
+    (when-let [tx (db/latest-submitted-tx (:tx-log this))]
+      (-> (api/await-tx this tx nil)
           :crux.tx/tx-time)))
 
   (awaitTxTime [this tx-time timeout]
