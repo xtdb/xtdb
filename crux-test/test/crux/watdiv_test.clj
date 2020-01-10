@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.kv :as fkv]
             [crux.index :as idx]
@@ -329,7 +329,7 @@
   (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream (io/resource resource))]
                                          (rdf/submit-ntriples (:tx-log *api*) in 1000))]
     (println "Loaded into kafka awaiting Crux to catch up indexing...")
-    (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
+    (fapi/submit+await-tx (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
     (t/is (= 521585 entity-count))))
 
 (defn with-watdiv-data [f]
@@ -378,7 +378,7 @@
   with-neo4j
   fk/with-cluster-node-opts
   fkv/with-kv-dir
-  apif/with-node
+  fapi/with-node
   with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all

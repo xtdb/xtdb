@@ -80,7 +80,7 @@
                         (range history-days))]
     (println "Txes submitted, synchronizing...")
     (let [sync-time (crux.bench/duration-millis
-                     (api/sync crux-node (:crux.tx/tx-time last-tx) (Duration/ofMinutes 20)))]
+                     (api/await-tx crux-node last-tx (Duration/ofMinutes 20)))]
       (swap! sync-times assoc [stocks-count history-days] sync-time)
       (println "Sync takes: " sync-time))))
 

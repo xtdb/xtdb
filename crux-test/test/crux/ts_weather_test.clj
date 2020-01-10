@@ -73,7 +73,7 @@
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
     (let [{:keys [last-tx op-count]} (submit-ts-weather-data *api*)]
-      (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
+      (api/await-tx *api* last-tx (java.time.Duration/ofMinutes 20))
       (assert (= 1001000 op-count) (str "actual op-count: " op-count))
       (f))
     (f)))

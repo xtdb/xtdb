@@ -4,7 +4,7 @@
             [crux.fixtures.standalone :as fs]
             [crux.moberg]
             [crux.codec :as c]
-            [crux.fixtures.api :refer [*api*] :as apif]
+            [crux.fixtures.api :refer [*api*] :as fapi]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.kafka :as fk :refer [*ingest-client*]]
             crux.jdbc
@@ -13,7 +13,7 @@
             [crux.fixtures.kafka :as kf]
             [crux.rdf :as rdf]
             [crux.api :as api]
-            [crux.fixtures.api :as apif]
+            [crux.fixtures.api :as fapi]
             [crux.db :as db]
             [crux.query :as q])
   (:import crux.api.NodeOutOfSyncException
@@ -38,7 +38,7 @@
         fs/with-standalone-node))))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir apif/with-node)
+(t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir fapi/with-node)
 
 (declare execute-sparql)
 
@@ -364,8 +364,7 @@
                     (lazy-seq (step)))))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided
-  (let [{:keys [^Date crux.tx/tx-time]} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])
-        _ (api/sync *api* tx-time nil)
+  (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
 

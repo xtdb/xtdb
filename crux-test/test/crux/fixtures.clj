@@ -36,7 +36,7 @@
    (delete-entities! api entities (cio/next-monotonic-date)))
   ([api entities ts]
    (let [submitted-tx (api/submit-tx api (entities->delete-tx-ops entities ts))]
-     (api/sync api (:crux.tx/tx-time submitted-tx) nil))
+     (api/await-tx api submitted-tx))
    entities))
 
 (defn random-person [] {:crux.db/id (UUID/randomUUID)

@@ -81,7 +81,7 @@
   (if run-ts-devices-tests?
     (let [{:keys [op-count last-tx]} (submit-ts-devices-data *api*)]
       (assert (= op-count 1001000) (str "actual op-count: " op-count))
-      (api/sync *api* (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
+      (api/await-tx *api* last-tx (java.time.Duration/ofMinutes 20))
       (f))
 
     (f)))
