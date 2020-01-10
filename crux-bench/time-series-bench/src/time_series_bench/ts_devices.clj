@@ -32,7 +32,7 @@
 (defn with-readings-docs [f]
   (when readings-csv-resource
     (with-open [rdr (io/reader readings-csv-resource)]
-      (f (for [reading (take 10000 (line-seq rdr))
+      (f (for [reading (line-seq rdr)
                :let [[time device-id battery-level battery-status
                       battery-temperature bssid
                       cpu-avg-1min cpu-avg-5min cpu-avg-15min
@@ -60,7 +60,6 @@
   (let [info-tx-ops (vec (for [info-doc info-docs]
                            [:crux.tx/put info-doc]))]
     (crux/submit-tx node info-tx-ops)
-
     (with-readings-docs
       (fn [readings-docs]
         (->> readings-docs
@@ -224,43 +223,52 @@
 ;; 2016-11-15 18:00:00-05 |                 6 |               100
 ;; (12 rows)
 
-(t/deftest test-min-max-battery-level-per-hour-for-pinto-or-focus-devices
-  (if run-ts-devices-tests?
-    (t/is (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
-              [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
-              [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
-              [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
-              [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
-              [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
-              [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
-              [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
-              [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
-             (let [reading-ids (->> (crux/q (crux/db *crux*)
-                                            '{:find [r]
-                                              :where [[r :reading/device-id device-id]
-                                                      (or [device-id :device-info/model "pinto"]
-                                                          [device-id :device-info/model "focus"])]})
-                                    (reduce into []))
-                   db (crux/db *crux* #inst "1970")]
-               (with-open [snapshot (crux/new-snapshot db)]
-                 (->> (for [r reading-ids]
-                        (for [entity-tx (crux/history-ascending db snapshot r)]
-                          (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
-                      (cio/merge-sort (fn [a b]
-                                        (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
-                      (partition-by :crux.db/valid-time)
-                      (take 12)
-                      (mapv (fn [group]
-                              (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
-                                [(:crux.db/valid-time (first group))
-                                 (first battery-levels)
-                                 (last battery-levels)]))))))))
-    (t/is true)))
+(defn test-min-max-battery-level-per-hour-for-pinto-or-focus-devices [node]
+  (try (let [start-time (System/currentTimeMillis)
+             result (let [reading-ids (->> (crux/q (crux/db node)
+                                                   '{:find [r]
+                                                     :where [[r :reading/device-id device-id]
+                                                             (or [device-id :device-info/model "pinto"]
+                                                                 [device-id :device-info/model "focus"])]})
+                                           (reduce into []))
+                          db (crux/db node #inst "1970")]
+                      (with-open [snapshot (crux/new-snapshot db)]
+                        (->> (for [r reading-ids]
+                               (for [entity-tx (crux/history-ascending db snapshot r)]
+                                 (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                             (cio/merge-sort (fn [a b]
+                                               (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
+                             (partition-by :crux.db/valid-time)
+                             (take 12)
+                             (mapv (fn [group]
+                                     (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
+                                       [(:crux.db/valid-time (first group))
+                                        (first battery-levels)
+                                        (last battery-levels)]))))))
+             end-time (System/currentTimeMillis)
+             successful?  (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
+                              [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
+                              [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
+                              [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
+                              [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
+                              [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
+                              [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
+                              [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
+                              [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
+                             result)]
+         (clojure.pprint/pprint {:crux.bench/bench-type ::history-ascending
+                                 ::query-time (- end-time start-time)
+                                 ::successful? successful?}))
+       (catch Exception e
+         (clojure.pprint/pprint {:crux.bench/bench-type ::history-ascending
+                                 ::error e})
+         (throw e))))
 
 
 (defn run-queries [node]
   (test-10-most-recent-battery-readings-for-charging-devices node)
-  (test-busiest-devices-1-min-avg-whose-battery-level-is-below-33-percent-and-is-not-charging node))
+  (test-busiest-devices-1-min-avg-whose-battery-level-is-below-33-percent-and-is-not-charging node)
+  (test-min-max-battery-level-per-hour-for-pinto-or-focus-devices node))
 
 (defn -main []
   (try
@@ -275,7 +283,7 @@
                                        :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
       (try
         (let [start-time (System/currentTimeMillis)]
-          (crux/sync node (:crux.tx/tx-time (submit-ts-devices-data node)) (java.time.Duration/ofMinutes 20))
+          (crux/sync node (:crux.tx/tx-time (:last-tx (submit-ts-devices-data node))) (java.time.Duration/ofMinutes 20))
           (clojure.pprint/pprint
            (merge {:crux.bench/bench-type :crux.bench.ts-devices/ingest
                    ::ingest-time (- (System/currentTimeMillis) start-time)}
@@ -291,5 +299,3 @@
       (run-queries node))
     (catch Exception e)
     (finally (cio/delete-dir "dev-storage"))))
-
-(-main)
