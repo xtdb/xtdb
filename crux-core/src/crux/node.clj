@@ -16,6 +16,7 @@
             [crux.tx :as tx])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException]
            java.io.Closeable
+           java.util.Date
            [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
 
@@ -59,7 +60,7 @@
                                                         tx-time latest-tx-time)
                                                 tx-time latest-tx-time)))
             tx-time (or tx-time latest-tx-time)
-            valid-time (or valid-time tx-time)]
+            valid-time (or valid-time (Date.))]
 
         (q/db kv-store object-store valid-time tx-time))))
 
