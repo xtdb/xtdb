@@ -5,6 +5,7 @@
 ### Bug fixes
 * [#371](https://github.com/juxt/crux/issues/371): Documents in failed CaS operations now get evicted correctly
 * [#434](https://github.com/juxt/crux/issues/434): Fix put/delete/CaS semantics when a transaction contains overlapping valid-time ranges for the same entity
+* [#545](https://github.com/juxt/crux/issues/545): Fix greater than range predicate bug on empty db
 * [#546](https://github.com/juxt/crux/issues/546): `crux.node/db` errors if provided a tx-time later than the latest completed tx, to preserve repeatability of queries.
 
 ## 19.12-1.6.1-alpha
@@ -13,7 +14,6 @@
 
 * [#506](https://github.com/juxt/crux/issues/506): Fix lifetime of EntityAsOfIdx within put/delete, was being closed too soon.
 * [#512](https://github.com/juxt/crux/issues/512): Fix race condition initialising id-hashing
-* [#545](https://github.com/juxt/crux/issues/545): Fix greater than range predicate bug on empty db
 
 ## 19.12-1.6.0-alpha
 
