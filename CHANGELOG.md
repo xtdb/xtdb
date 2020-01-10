@@ -4,6 +4,7 @@
 
 ### Changes
 * [#524](https://github.com/juxt/crux/issues/524): Batch ingesting docs into the KV store
+* [PR #520](https://github.com/juxt/crux/pull/520): New `entity` arity accepts a snapshot argument for >40% performance boost
 
 ### Bug fixes
 * [#371](https://github.com/juxt/crux/issues/371): Documents in failed CaS operations now get evicted correctly
@@ -29,7 +30,7 @@ These changes bump the index version to version 5 - a re-index of Crux nodes is 
 * [#326](https://github.com/juxt/crux/issues/326): Put/delete with start/end valid-time semantics made consistent
 
 ### New features
-* [#PR363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
+* [PR #363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
 * [#372](https://github.com/juxt/crux/issues/372): Add support for Java collection types with submitTx
 * [#377](https://github.com/juxt/crux/issues/377): Can use 'cons' within query predicates
 * [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
