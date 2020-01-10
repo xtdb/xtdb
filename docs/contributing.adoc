@@ -27,4 +27,4 @@ support a healthy Crux ecosystem over the indefinite future. Please complete
 the very short `.odt` LibreOffice template linked below and email it to us,
 crux@juxt.pro, along with a reference to your current PR on GitHub.
 
-link:open-crux-individual-contributor-license-agreement-cla.odt[Open Crux CLA]
+https://raw.githubusercontent.com/juxt/crux/master/docs/open-crux-individual-contributor-license-agreement-cla.odt[Open Crux CLA]
