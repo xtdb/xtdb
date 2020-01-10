@@ -6,7 +6,6 @@ WORKDIR /time-series-bench
 
 CMD ["lein", "run"]
 
-ADD logback.xml .
 ADD project.clj .
 ADD src/ ./src/
 
