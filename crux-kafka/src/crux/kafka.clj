@@ -234,10 +234,7 @@
                         (vec))]
 
     (doseq [record tx-records]
-      (index-tx-record indexer record)
-      (db/store-index-meta indexer :crux.tx/latest-completed-tx (-> record
-                                                                    tx-record->tx-log-entry
-                                                                    (select-keys [:crux.tx/tx-id :crux.tx/tx-time]))))
+      (index-tx-record indexer record))
 
     (when-let [records (seq (concat doc-records tx-records))]
       (update-stored-consumer-state indexer consumer records)

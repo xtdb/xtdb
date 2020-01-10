@@ -29,8 +29,7 @@
                     (doseq [^Message tx-msg tx-msgs]
                       (let [tx {:crux.tx/tx-time (.message-time tx-msg)
                                 :crux.tx/tx-id (.message-id tx-msg)}]
-                        (db/index-tx indexer tx (.body tx-msg))
-                        (db/store-index-meta indexer :crux.tx/latest-completed-tx tx)))
+                        (db/index-tx indexer tx (.body tx-msg))))
 
                     (if-let [^Message last-msg (last msgs)]
                       (let [end-offset (consumer/end-offset event-log-consumer)

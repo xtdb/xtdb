@@ -379,7 +379,10 @@
                   (post-commit-fn)))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
+                (kv/store kv-store [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
+
+          (db/store-index-meta this :crux.tx/latest-completed-tx tx)
+          tx))))
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
