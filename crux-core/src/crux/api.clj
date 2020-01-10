@@ -2,7 +2,8 @@
   "Public API of Crux."
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
-            [crux.codec :as c])
+            [crux.codec :as c]
+            [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
             ICruxAsyncIngestAPI ICruxDatasource]
            java.io.Closeable
@@ -210,9 +211,10 @@
     ([this timeout]
      (.sync this timeout))
 
-    ;; TODO deprecated
-    ([this transaction-time timeout]
-     (.awaitTxTime this transaction-time timeout)))
+    ([this tx-time timeout]
+     (defonce warn-on-deprecated-sync
+       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
+     (.awaitTxTime this tx-time timeout)))
 
   (await-tx
     ([this tx]
