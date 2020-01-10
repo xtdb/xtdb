@@ -2,11 +2,10 @@
   (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :as t]
             [crux.api :as crux]
             [crux.io :as cio]
-            [crux.kafka :as k]
-            [crux.kafka.embedded :as ek])
+            [crux.kafka.embedded :as ek]
+            [clojure.data.json :as json])
   (:import java.time.temporal.ChronoUnit
            java.util.Date))
 
@@ -39,9 +38,9 @@
                       mem-free mem-used rssi ssid] (str/split reading #",")]]
            {:crux.db/id (keyword "reading" device-id)
             :reading/time (inst/read-instant-date
-                           (-> time
-                               (str/replace " " "T")
-                               (str/replace #"-(\d\d)$" ".000-$1:00")))
+                            (-> time
+                                (str/replace " " "T")
+                                (str/replace #"-(\d\d)$" ".000-$1:00")))
             :reading/device-id (keyword "device-info" device-id)
             :reading/battery-level (Double/parseDouble battery-level)
             :reading/battery-status (keyword battery-status)
@@ -67,9 +66,9 @@
              (reduce (fn [{:keys [op-count last-tx]} chunk]
                        {:op-count (+ op-count (count chunk))
                         :last-tx (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
-                                                            [:crux.tx/put reading-doc time])))})
+                                                             [:crux.tx/put reading-doc time])))})
                      {:op-count (count info-tx-ops)}))))))
-  ;; 10 most recent battery temperature readings for charging devices
+;; 10 most recent battery temperature readings for charging devices
 ;; SELECT time, device_id, battery_temperature
 ;; FROM readings
 ;; WHERE battery_status = 'charging'
@@ -112,16 +111,16 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
-      (clojure.pprint/pprint {:crux.bench/bench-type ::recent-battery-readings
-                              ::query query
-                              ::query-time (- end-time start-time)
-                              ::successful? successful?}))
+      (json/print-json {:crux.bench/bench-type ::recent-battery-readings
+                        ::query query
+                        ::query-time (- end-time start-time)
+                        ::successful? successful?}))
     (catch Exception e
-        (clojure.pprint/pprint {:crux.bench/bench-type ::recent-battery-readings
-                                ::error e})
-        (throw e))))
+      (json/print-json {:crux.bench/bench-type ::recent-battery-readings
+                        ::error e})
+      (throw e))))
 
-  ;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
+;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
 
 ;; SELECT time, readings.device_id, cpu_avg_1min,
 ;; battery_level, battery_status, device_info.model
@@ -189,13 +188,13 @@
                            25.0
                            :discharging
                            "focus"]])]
-      (clojure.pprint/pprint {:crux.bench/bench-type ::busiest-devices
-                              ::query query
-                              ::query-time (- end-time start-time)
-                              ::successful? successful?}))
+      (json/print-json {:crux.bench/bench-type ::busiest-devices
+                        ::query query
+                        ::query-time (- end-time start-time)
+                        ::successful? successful?}))
     (catch Exception e
-        (clojure.pprint/pprint {:crux.bench/bench-type ::recent-battery-readings
-                                ::error e})
+      (json/print-json {:crux.bench/bench-type ::recent-battery-readings
+                        ::error e})
       (throw e))))
 
 ;; SELECT date_trunc('hour', time) "hour",
@@ -256,12 +255,12 @@
                               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
-         (clojure.pprint/pprint {:crux.bench/bench-type ::history-ascending
-                                 ::query-time (- end-time start-time)
-                                 ::successful? successful?}))
+         (json/print-json {:crux.bench/bench-type ::history-ascending
+                           ::query-time (- end-time start-time)
+                           ::successful? successful?}))
        (catch Exception e
-         (clojure.pprint/pprint {:crux.bench/bench-type ::history-ascending
-                                 ::error e})
+         (json/print-json {:crux.bench/bench-type ::history-ascending
+                           ::error e})
          (throw e))))
 
 
@@ -273,9 +272,9 @@
 (defn -main []
   (try
     (with-open [embedded-kafka (ek/start-embedded-kafka
-                                {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
-                                 :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
-                                 :crux.kafka.embedded/kafka-port 9092})
+                                 {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
+                                  :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
+                                  :crux.kafka.embedded/kafka-port 9092})
                 node (crux/start-node {:crux.node/topology :crux.kafka/topology
                                        :crux.node/kv-store "crux.kv.rocksdb/kv"
                                        :crux.kafka/bootstrap-servers "localhost:9092"
@@ -284,17 +283,17 @@
       (try
         (let [start-time (System/currentTimeMillis)]
           (crux/sync node (:crux.tx/tx-time (:last-tx (submit-ts-devices-data node))) (java.time.Duration/ofMinutes 20))
-          (clojure.pprint/pprint
-           (merge {:crux.bench/bench-type :crux.bench.ts-devices/ingest
-                   ::ingest-time (- (System/currentTimeMillis) start-time)}
-                  (select-keys
-                   (crux/status node)
-                   [:crux.kv/estimate-num-keys
-                    :crux.kv/size]))))
+          (json/print-json
+            (merge {:crux.bench/bench-type :crux.bench.ts-devices/ingest
+                    ::ingest-time (- (System/currentTimeMillis) start-time)}
+                   (select-keys
+                     (crux/status node)
+                     [:crux.kv/estimate-num-keys
+                      :crux.kv/size]))))
         (catch Exception e
-          (clojure.pprint/pprint
-           {:crux.bench/bench-type ::ingest
-            ::error e})
+          (json/print-json
+            {:crux.bench/bench-type ::ingest
+             ::error e})
           (throw e)))
       (run-queries node))
     (catch Exception e)
