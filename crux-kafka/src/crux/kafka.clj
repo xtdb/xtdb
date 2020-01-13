@@ -96,7 +96,7 @@
 
 ;;; Transacting Producer
 
-(defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic kafka-config]
+(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic doc-topic kafka-config]
   Closeable
   (close [_])
 
@@ -143,11 +143,10 @@
                     (step))))))))
 
   (latest-submitted-tx [this]
-    (with-open [consumer (create-consumer kafka-config)]
-      (let [tx-tp (TopicPartition. tx-topic 0)
-            end-offset (-> (.endOffsets consumer [tx-tp]) (get tx-tp))]
-        (when (pos? end-offset)
-          {:crux.tx/tx-id (dec end-offset)})))))
+    (let [tx-tp (TopicPartition. tx-topic 0)
+          end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
+      (when (pos? end-offset)
+        {:crux.tx/tx-id (dec end-offset)}))))
 
 ;;; Indexing Consumer
 
@@ -375,10 +374,15 @@
                (create-producer (derive-kafka-config options)))
    :args default-options})
 
+(def latest-submitted-tx-consumer
+  {:start-fn (fn [_ options]
+               (create-consumer (derive-kafka-config options)))
+   :args default-options})
+
 (def tx-log
-  {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
-               (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
-   :deps [::producer]
+  {:start-fn (fn [{::keys [producer latest-submitted-tx-consumer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
+               (->KafkaTxLog producer latest-submitted-tx-consumer tx-topic doc-topic (derive-kafka-config options)))
+   :deps [::producer ::latest-submitted-tx-consumer]
    :args default-options})
 
 (def topology
@@ -387,4 +391,5 @@
           ::admin-client admin-client
           ::admin-wrapper admin-wrapper
           ::producer producer
-          ::indexing-consumer indexing-consumer}))
+          ::indexing-consumer indexing-consumer
+          ::latest-submitted-tx-consumer latest-submitted-tx-consumer}))

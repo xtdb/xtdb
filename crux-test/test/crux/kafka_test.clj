@@ -46,7 +46,7 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
+        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log nil)]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -69,7 +69,7 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
+        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log nil)
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
@@ -125,7 +125,7 @@
 
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
 
-        tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
+        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
 
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log nil)

@@ -28,7 +28,8 @@
 (def topology {:crux.node/tx-log k/tx-log
                :crux.kafka/admin-client k/admin-client
                :crux.kafka/admin-wrapper k/admin-wrapper
-               :crux.kafka/producer k/producer})
+               :crux.kafka/producer k/producer
+               :crux.kafka/latest-submitted-tx-consumer k/latest-submitted-tx-consumer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
   (let [[{:keys [crux.node/tx-log]} close-fn] (n/start-modules topology options)]
