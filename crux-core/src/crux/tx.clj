@@ -28,6 +28,15 @@
 
 (s/def ::tx-id nat-int?)
 (s/def ::tx-time date?)
+(s/def ::submitted-tx (s/keys :req [::tx-id ::tx-time]))
+(s/def ::committed? boolean?)
+
+(s/def ::doc-ids (s/coll-of #(instance? crux.codec.Id %) :kind set?))
+(defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
+(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids]))
+
+(defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
+(defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx], :req-un [::committed?]))
 
 (defmulti conform-tx-op first)
 
@@ -354,7 +363,7 @@
     (s/assert :crux.tx.event/tx-events tx-events)
 
     (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
-    (bus/send event-bus {::bus/event-type ::indexing-tx, :tx tx})
+    (bus/send event-bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
 
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
@@ -391,7 +400,7 @@
                 (kv/store kv-store [completed-tx-kv
                                     [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
-          (bus/send event-bus {::bus/event-type ::indexed-tx, :tx tx, :committed? committed?})
+          (bus/send event-bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
 
   (docs-exist? [_ content-hashes]

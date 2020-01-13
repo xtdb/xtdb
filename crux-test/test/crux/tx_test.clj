@@ -718,6 +718,6 @@
 
       (t/is (= [{::bus/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
                 {::bus/event-type ::tx/indexed-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
-                {::bus/event-type ::tx/indexing-tx, :tx submitted-tx}
-                {::bus/event-type ::tx/indexed-tx, :tx submitted-tx, :committed? true}]
+                {::bus/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
+                {::bus/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
                @!events)))))

@@ -1,6 +1,7 @@
 (ns crux.event-bus
-  (:require [clojure.tools.logging :as log]
-            [crux.io :as cio])
+  (:require [crux.io :as cio]
+            [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s])
   (:import [java.io Closeable]
            [java.util.concurrent ExecutorService Executors TimeUnit]))
 
@@ -9,6 +10,15 @@
 
 (defprotocol EventSink
   (send [_ event]))
+
+(s/def ::event-type keyword?)
+(s/def ::event-types (s/coll-of ::event-type :kind set?))
+
+(defmulti event-spec ::event-type, :default ::default)
+(defmethod event-spec ::default [_] any?)
+
+(s/def ::event (s/and (s/keys :req [::event-type])
+                      (s/multi-spec event-spec ::event-type)))
 
 (defrecord EventBus [!listeners]
   EventSource
@@ -25,6 +35,8 @@
 
   EventSink
   (send [_ {::keys [event-type] :as event}]
+    (s/assert ::event event)
+
     (doseq [{:keys [^ExecutorService executor f ::event-types]} @!listeners]
       (when (or (nil? event-types) (contains? event-types event-type))
         (.submit executor ^Runnable #(f event)))))
