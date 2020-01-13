@@ -16,8 +16,8 @@
 ;; NOTE: Results in link above doesn't match actual data, test is
 ;; adjusted for this.
 
-(def locations-csv-resource (io/resource "ts/data/weather_small_locations.csv"))
-(def conditions-csv-resource (io/resource "ts/data/weather_small_conditions.csv"))
+(def locations-csv-resource (io/resource "weather_small_locations.csv"))
+(def conditions-csv-resource (io/resource "weather_small_conditions.csv"))
 
 (def ^:const conditions-chunk-size 1000)
 
