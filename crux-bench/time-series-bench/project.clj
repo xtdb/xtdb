@@ -6,4 +6,4 @@
                  [juxt/crux-kafka-embedded "20.01-1.6.2-alpha"]
                  [juxt/crux-rocksdb "20.01-1.6.2-alpha"]]
   :jvm-opts ["-Xms3g" "-Xmx3g"]
-  :main ^:skip-aot time-series-bench.ts-devices)
+  :main ^:skip-aot time-series-bench.main)

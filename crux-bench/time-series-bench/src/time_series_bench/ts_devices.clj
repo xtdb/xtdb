@@ -269,7 +269,7 @@
   (test-busiest-devices-1-min-avg-whose-battery-level-is-below-33-percent-and-is-not-charging node)
   (test-min-max-battery-level-per-hour-for-pinto-or-focus-devices node))
 
-(defn -main []
+(defn bench []
   (try
     (with-open [embedded-kafka (ek/start-embedded-kafka
                                  {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
@@ -282,7 +282,7 @@
                                        :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
       (try
         (let [start-time (System/currentTimeMillis)]
-          (crux/sync node (:crux.tx/tx-time (:last-tx (submit-ts-devices-data node))) (java.time.Duration/ofMinutes 20))
+          (crux/await-tx node (:last-tx (submit-ts-devices-data node)) (java.time.Duration/ofMinutes 20))
           (println (json/write-str
                      (merge {:crux.bench/bench-type ::ingest
                              ::ingest-time (- (System/currentTimeMillis) start-time)}

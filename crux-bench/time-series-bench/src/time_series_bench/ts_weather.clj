@@ -141,10 +141,10 @@
                          91.0
                          92.40000000000006]]
                        result)]
-    {:crux.bench/bench-type ::weather-last-10-readings-test
-     ::query query
-     ::query-time time-taken
-     ::successful? successful?}))
+    (println (json/write-str {:crux.bench/bench-type ::weather-last-10-readings-test
+                              ::query query
+                              ::query-time time-taken
+                              ::successful? successful?}))))
 
 ;; Last 10 readings from 'outside' locations
 
@@ -176,15 +176,15 @@
 
 (defn weather-last-10-readings-from-outside-locations-test [node]
   (let [query '{:find [time device-id location temperature humidity]
-                              :where [[c :condition/time time]
-                                      [c :condition/device-id device-id]
-                                      [c :condition/temperature temperature]
-                                      [c :condition/humidity humidity]
-                                      [device-id :location/location location]
-                                      [device-id :location/environment :outside]]
-                              :order-by [[time :desc] [device-id :asc]]
-                              :limit 10
-                              :timeout 120000}
+                :where [[c :condition/time time]
+                        [c :condition/device-id device-id]
+                        [c :condition/temperature temperature]
+                        [c :condition/humidity humidity]
+                        [device-id :location/location location]
+                        [device-id :location/environment :outside]]
+                :order-by [[time :desc] [device-id :asc]]
+                :limit 10
+                :timeout 120000}
         start-time (System/currentTimeMillis)
         result (for [[time device-id location temperature humidity]
                      (api/q (api/db node) query)]
@@ -241,10 +241,10 @@
                          91.0
                          96.9]]
                        result)]
-    {:crux.bench/bench-type ::weather-last-10-readings-from-outside-locations-test
-     ::query query
-     ::query-time time-taken
-     ::successful? successful?}))
+    (println (json/write-str {:crux.bench/bench-type ::weather-last-10-readings-from-outside-locations-test
+                              ::query query
+                              ::query-time time-taken
+                              ::successful? successful?}))))
 
 ;; Hourly average, min, and max temperatures for "field" locations
 
@@ -345,30 +345,31 @@
                         [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
                         [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
                        result)]
-    {:crux.bench/bench-type ::weather-hourly-average-min-max-temperatures-for-field-locations
-     ::query-time time-taken
-     ::successful? successful?}))
+    (println (json/write-str {:crux.bench/bench-type ::weather-hourly-average-min-max-temperatures-for-field-locations
+                              ::query-time time-taken
+                              ::successful? successful?}))))
 
 (defn run-queries [node]
   (weather-last-10-readings-test node)
-  (weather-last-10-readings-from-outside-locations-test node))
+  (weather-last-10-readings-from-outside-locations-test node)
+  (weather-hourly-average-min-max-temperatures-for-field-locations node))
 
-(defn -main []
+(defn bench []
   (try
     (with-open [embedded-kafka (ek/start-embedded-kafka
                                  {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
                                   :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
                                   :crux.kafka.embedded/kafka-port 9092})
                 node (api/start-node {:crux.node/topology :crux.kafka/topology
-                                       :crux.node/kv-store "crux.kv.rocksdb/kv"
-                                       :crux.kafka/bootstrap-servers "localhost:9092"
-                                       :crux.kv/db-dir "dev-storage/db-dir-1"
-                                       :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
+                                      :crux.node/kv-store "crux.kv.rocksdb/kv"
+                                      :crux.kafka/bootstrap-servers "localhost:9092"
+                                      :crux.kv/db-dir "dev-storage/db-dir-1"
+                                      :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
       (try
         (let [start-time (System/currentTimeMillis)]
-          (api/sync node
-                    (:crux.tx/tx-time (:last-tx (submit-ts-weather-data node)))
-                    (java.time.Duration/ofMinutes 20))
+          (api/await-tx node
+                        (:last-tx (submit-ts-weather-data node))
+                        (java.time.Duration/ofMinutes 20))
           (println (json/write-str
                      (merge {:crux.bench/bench-type ::ingest
                              ::ingest-time (- (System/currentTimeMillis) start-time)}
