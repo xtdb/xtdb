@@ -1,6 +1,5 @@
 (ns crux.repl-walkthrough-test
   (:require [crux.api :as crux]
-            [crux.decorators.aggregation.alpha :as aggr]
             [clojure.pprint :as pp]
 	    [clojure.test :as t])
   (:import (crux.api ICruxAPI)))
@@ -95,17 +94,7 @@
                                 [?group :group/name ?groupName]
                                 [?role :role/name ?roleName]]
                        :rules rules
-                       :args '[{?user :User1}]})))
-
-  (t/is (= [{:groupName :Group2, :roleCount 1}]
-           (aggr/q db {:aggr '{:partition-by [?groupName]
-                               :select
-                               {?roleCount [0 (inc acc) ?role]}}
-                       :where '[(user-roles-in-groups ?user1 ?role ?group)
-                                (user-roles-in-groups ?user2 ?role ?group)
-                                [?group :group/name ?groupName]]
-                       :rules rules
-                       :args '[{?user1 :User1 ?user2 :User2}]}))))
+                       :args '[{?user :User1}]}))))
 
 (t/deftest walkthrough-test
   (def crux-options
