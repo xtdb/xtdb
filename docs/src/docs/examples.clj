@@ -592,31 +592,6 @@ node)
   ;; end::bitempr[]
   )
 
-(comment ;; Used in decorators.adoc - will not work in this namespace
-
-  ;; tag::aggr1[]
-  (t/deftest test-count-aggregation
-    (f/transact-entity-maps!
-     *kv*
-     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
-      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
-      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
-      {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}])
-
-    (t/testing "with vector syntax"
-      (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
-                {:user-name "patrik" :post-count 3 :cost-sum 70}]
-               (aggr/q
-                (api/db *api*)
-                '{:aggr {:partition-by [?user-name]
-                         :select
-                         {?cost-sum [0 (+ acc ?post-cost)]
-                          ?post-count [0 (inc acc) ?e]}}
-                  :where [[?e :user/name ?user-name]
-                          [?e :post/cost ?post-cost]]})))))
-  ;; end::aggr1[]
-  )
-
 (comment ;; Not currently used, but could be useful after some reworking.
   ;; tag::blanks[]
   (t/deftest test-blanks

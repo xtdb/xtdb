@@ -13,7 +13,6 @@
                  [juxt/crux-jdbc "derived-from-git"]
                  [juxt/crux-http-server "derived-from-git"]
                  [juxt/crux-rdf "derived-from-git"]
-                 [juxt/crux-decorators "derived-from-git"]
 
                  ;; JDBC
                  [com.zaxxer/HikariCP "3.3.1"]

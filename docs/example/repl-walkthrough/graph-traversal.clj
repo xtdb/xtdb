@@ -3,7 +3,6 @@
 
 (ns walkthrough.graph-traversal
   (:require [crux.api :as crux]
-            [crux.decorators.aggregation.alpha :as aggr]
             [clojure.pprint :as pp])
   (:import (crux.api ICruxAPI)))
 
@@ -106,15 +105,5 @@
                        [?role :role/name ?roleName]]
                :rules rules
                :args '[{?user :User1}]}))
-
-;; find common groups based on shared roles and count the number of shared roles using the aggregation decorator, which wraps the default `crux/q` and looks for :aggr instead of :find
-(aggr/q db {:aggr '{:partition-by [?groupName]
-                    :select
-                    {?roleCount [0 (inc acc) ?role]}}
-            :where '[(user-roles-in-groups ?user1 ?role ?group)
-                     (user-roles-in-groups ?user2 ?role ?group)
-                     [?group :group/name ?groupName]]
-            :rules rules
-            :args '[{?user1 :User1 ?user2 :User2}]})
 
 ;; try adding additional :hasRoleInGroups values (e.g. `#{:U1G1R12 :U2G3R56 :U2G1R25}`) to :User1 by submitting a new version of the document
