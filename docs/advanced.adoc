@@ -2,6 +2,4 @@
 
 include::patterns.adoc[leveloffset=+1]
 
-include::decorators.adoc[leveloffset=+1]
-
 include::advanced_queries.adoc[leveloffset=+1]

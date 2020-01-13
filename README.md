@@ -164,12 +164,6 @@ Better write performance for heavy ingestion.
 
 ### Additional
 
-#### crux-decorators
-
-Aggregation decorator and experimental API composition.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-decorators.svg)](https://clojars.org/juxt/crux-decorators)
-
 #### crux-rdf
 
 Import RDF data and run a subset of SPARQL queries.

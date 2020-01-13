@@ -126,10 +126,11 @@ time-related information within your documents, for instance `valid-time`,
 `duration` or timestamps relating to additional temporal life-cycles (e.g.
 decision, receipt, notification, availability).
 
-Queries that use domain times do not automatically benefit from any kind of
-native indexes to support efficient execution, however Crux encourages you to
-build additional layers of functionality to do so. See <<#decorators,
-Decorators>>.
+Queries that use domain times do not automatically benefit from any
+kind of native indexes to support efficient execution, however Crux
+encourages you to build additional layers of functionality to do
+so. See https://github.com/crux-labs/crux-decorators[decorators] for
+examples.
 
 [#bitemp-uses]
 == Known Uses
