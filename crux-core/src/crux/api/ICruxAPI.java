@@ -96,7 +96,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return the status map.
      */
     public Map<Keyword,?> status();
-    // todo elaborate
+    // TODO elaborate
 
     /**
      * Checks if a submitted tx did update an entity.
@@ -121,28 +121,44 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public boolean hasSubmittedTxCorrectedEntity(Map<Keyword,?> submittedTx, Date validTime, Object eid);
 
     /**
-     * Blocks until the node has caught up indexing. Will throw an
-     * exception on timeout. The returned date is the latest index
-     * time when this node has caught up as of this call. This can be
-     * used as the second parameter in {@link #db(Date validTime,
-     * Date transactionTime)} for consistent reads.
+     * Blocks until the node has caught up indexing to the latest tx available
+     * at the time this method is called. Will throw an exception on timeout.
+     * The returned date is the latest transaction time indexed by this node.
+     * This can be used as the second parameter in {@link #db(Date validTime, Date transactionTime)}
+     * for consistent reads.
      *
      * @param timeout max time to wait, can be null for the default.
-     * @return        the latest known transaction time.
+     * @return the latest known transaction time.
      */
     public Date sync(Duration timeout);
 
     /**
-     * Blocks until the node has indexed a transaction that is past
-     * the supplied transactionTime. Will throw a timeout. The
-     * returned date is the latest index time when this node has
-     * caught up as of this call.
-     *
-     * @param transactionTime transaction time to sync past.
-     * @param timeout max time to wait, can be null for the default.
-     * @return        the latest known transaction time.
+     * @deprecated see {@link #awaitTxTime}
      */
-    public Date sync(Date transactionTime, Duration timeout);
+    @Deprecated
+    public Date sync(Date txTime, Duration timeout);
+
+    /**
+     * Blocks until the node has indexed a transaction that is past the supplied
+     * txTime. Will throw on timeout. The returned date is the latest index time
+     * when this node has caught up as of this call.
+     *
+     * @param txTime transaction time to await.
+     * @param timeout max time to wait, can be null for the default.
+     * @return the latest known transaction time.
+     */
+    public Date awaitTxTime(Date txTime, Duration timeout);
+
+    /**
+     * Blocks until the node has indexed a transaction that is at or past the
+     * supplied tx. Will throw on timeout. Returns the most recent tx indexed by
+     * the node.
+     *
+     * @param tx Transaction to await, as returned from submitTx.
+     * @param timeout max time to wait, can be null for the default.
+     * @return the latest known transaction.
+     */
+    public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
 
     /**
      * Return frequencies of indexed attributes.

@@ -13,11 +13,9 @@
 (t/use-fixtures :each fk/with-cluster-node-opts fkv/with-kv-dir apif/with-node)
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
-  (let [tx (crux/submit-tx *api* (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
-                                              (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
-                                      (rdf/->default-language)))]
-
-    (crux/sync *api* (:crux.tx/tx-time tx) nil))
+  (fapi/submit+await-tx (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
+                                     (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
+                             (rdf/->default-language)))
 
   (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
            (crux/q (crux/db *api*)
@@ -74,7 +72,7 @@
                                   (partition-all 1000)
                                   (reduce (fn [_ ops]
                                             (crux/submit-tx *api* ops))))]
-                 (crux/sync *api* (:crux.tx/tx-time last-tx) nil))))))
+                 (crux/await-tx *api* last-tx))))))
 
         (t/testing "querying transacted data"
           (t/is (= (rdf/with-prefix {:dbr "http://dbpedia.org/resource/"}

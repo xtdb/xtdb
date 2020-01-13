@@ -15,5 +15,5 @@
                                (api/submit-tx *api* (vec tx-ops)))
                              nil))]
 
-    (api/sync *api* (:crux.tx/tx-time last-tx) nil)
+    (api/await-tx *api* last-tx)
     (f)))

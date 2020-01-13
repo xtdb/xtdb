@@ -293,9 +293,12 @@
 
 ;; Meta
 
+(defn meta-kv [k v]
+  [(c/encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))
+   (mem/->off-heap (nippy/fast-freeze v))])
+
 (defn store-meta [kv k v]
-  (kv/store kv [[(c/encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))
-                 (mem/->off-heap (nippy/fast-freeze v))]]))
+  (kv/store kv [(meta-kv k v)]))
 
 (defn read-meta [kv k]
   (let [seek-k (c/encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))]

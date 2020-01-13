@@ -55,11 +55,9 @@
   (def node (crux/start-node crux-options))
   (t/is node)
 
-  (crux/sync node (:crux.tx/tx-time
-                   (crux/submit-tx
-                    node
-                    (mapv (fn [n] [:crux.tx/put n]) nodes)))
-             nil)
+  (crux/await-tx node (crux/submit-tx
+                       node
+                       (mapv (fn [n] [:crux.tx/put n]) nodes)))
 
   (def db (crux/db node))
 
@@ -108,45 +106,39 @@
 
   (t/is node)
 
-  (crux/sync node (:crux.tx/tx-time
-                   (crux/submit-tx
-                    node
-                    [[:crux.tx/put
-                      {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                       :name "Pablo"
-                       :last-name "Picasso"
-                       :location "Spain"}
-                      #inst "1881-10-25T09:20:27.966-00:00"]
-                     [:crux.tx/put
-                      {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                       :name "Pablo"
-                       :last-name "Picasso"
-                       :location "Sain2"}
-                      #inst "1881-10-25T09:20:27.966-00:00"]]))
-             nil)
+  (crux/await-tx node (crux/submit-tx
+                       node
+                       [[:crux.tx/put
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :location "Spain"}
+                         #inst "1881-10-25T09:20:27.966-00:00"]
+                        [:crux.tx/put
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :location "Sain2"}
+                         #inst "1881-10-25T09:20:27.966-00:00"]]))
 
-  (crux/sync node (:crux.tx/tx-time
-                   (crux/submit-tx
-                    node
-                    [[:crux.tx/cas
-                      {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                       :name "Pablo"
-                       :last-name "Picasso"
-                       :location "Spain"}
-                      {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                       :name "Pablo"
-                       :last-name "Picasso"
-                       :height 1.63
-                       :location "France"}
-                      #inst "1973-04-08T09:20:27.966-00:00"]]))
-             nil)
+  (crux/await-tx node (crux/submit-tx
+                       node
+                       [[:crux.tx/cas
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :location "Spain"}
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :height 1.63
+                          :location "France"}
+                         #inst "1973-04-08T09:20:27.966-00:00"]]))
 
-  (crux/sync node (:crux.tx/tx-time
-                   (crux/submit-tx
-                    node
-                    [[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
-                      #inst "1973-04-08T09:20:27.966-00:00"]]))
-             nil)
+  (crux/await-tx node (crux/submit-tx
+                       node
+                       [[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
+                         #inst "1973-04-08T09:20:27.966-00:00"]]))
 
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
            (crux/q
@@ -155,11 +147,9 @@
               :where [[e :name "Pablo"]]
               :full-results? true})))
 
-  (crux/sync node (:crux.tx/tx-time
-                   (crux/submit-tx
-                    node
-                    [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]]))
-             nil)
+  (crux/await-tx node (crux/submit-tx
+                       node
+                       [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]]))
 
   (t/is (empty? (crux/q
                  (crux/db node)
@@ -167,16 +157,15 @@
                    :where [[e :name "Pablo"]]
                    :full-results? true})))
 
-  (crux/sync node (:crux.tx/tx-time (crux/submit-tx
-                                     node
-                                     [[:crux.tx/put
-                                       {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                                        :name "Pablo"
-                                        :last-name "Picasso"
-                                        :height 1.63
-                                        :location "France"}
-                                       #inst "1973-04-08T09:20:27.966-00:00"]]))
-             nil)
+  (crux/await-tx node (crux/submit-tx
+                       node
+                       [[:crux.tx/put
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :height 1.63
+                          :location "France"}
+                         #inst "1973-04-08T09:20:27.966-00:00"]]))
 
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :height 1.63, :location "France"}]}
            (crux/q

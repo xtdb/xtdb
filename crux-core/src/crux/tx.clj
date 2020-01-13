@@ -371,15 +371,22 @@
                           {:history (->Snapshot+NewETXs snapshot {})
                            :post-commit-fns []}
 
-                          tx-events)]
+                          tx-events)
+
+              completed-tx-kv (idx/meta-kv :crux.tx/latest-completed-tx tx)]
 
           (if (not= res ::aborted)
-            (do (kv/store kv-store (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs) (into (sorted-map-by mem/buffer-comparator))))
+            (do (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
+                                              completed-tx-kv)
+                                        (into (sorted-map-by mem/buffer-comparator))))
                 (doseq [post-commit-fn (:post-commit-fns res)]
                   (post-commit-fn)))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
+                (kv/store kv-store [completed-tx-kv
+                                    [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
+
+          tx))))
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -403,23 +410,6 @@
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
    :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store]})
 
-(defn ^:deprecated await-no-consumer-lag [indexer timeout-ms]
-  ;; this will likely be going away as part of #442
-  (let [max-lag-fn #(some->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
-                             (vals)
-                             (seq)
-                             (map :lag)
-                             (reduce max 0))]
-    (if (cio/wait-while #(if-let [max-lag (max-lag-fn)]
-                           (pos? (long max-lag))
-                           true)
-                        timeout-ms)
-      (db/read-index-meta indexer :crux.tx/latest-completed-tx)
-      (throw (TimeoutException.
-               (str "Timed out waiting for index to catch up, lag is: " (or (max-lag-fn)
-                                                                            "unknown")))))))
-
-;;; TODO need to expose this as node/await-tx when 'sync' goes
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout-ms]
   (let [seen-tx (atom nil)]
     (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
@@ -432,8 +422,7 @@
               (str "Timed out waiting for: " (cio/pr-edn-str tx)
                    " index has: " (cio/pr-edn-str @seen-tx)))))))
 
-;;; will remove this when 'sync' goes
-(defn ^:deprecated await-tx-time [indexer transact-time timeout-ms]
+(defn await-tx-time [indexer transact-time timeout-ms]
   (let [seen-tx (atom nil)]
     (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
                            (reset! seen-tx latest-completed-tx)

@@ -96,7 +96,7 @@
 
 ;;; Transacting Producer
 
-(defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic kafka-config]
+(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic doc-topic kafka-config]
   Closeable
   (close [_])
 
@@ -140,7 +140,13 @@
          (lazy-seq
           (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
             (concat (map tx-record->tx-log-entry records)
-                    (step)))))))))
+                    (step))))))))
+
+  (latest-submitted-tx [this]
+    (let [tx-tp (TopicPartition. tx-topic 0)
+          end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
+      (when (pos? end-offset)
+        {:crux.tx/tx-id (dec end-offset)}))))
 
 ;;; Indexing Consumer
 
@@ -152,33 +158,23 @@
                                        (TopicPartition. (.topic r)
                                                         (.partition r))) records)
         partitions (vec (keys partition->records))
-        end-offsets (.endOffsets consumer partitions)
         stored-consumer-state (or (db/read-index-meta indexer :crux.tx-log/consumer-state) {})
         consumer-state (->> (for [^TopicPartition partition partitions
                                   :let [^ConsumerRecord last-record-in-batch (->> (get partition->records partition)
                                                                                   (sort-by #(.offset ^ConsumerRecord %))
                                                                                   (last))
-                                        next-offset (inc (.offset last-record-in-batch))
-                                        end-offset (get end-offsets partition)
-                                        lag (- end-offset next-offset)]]
-                              (do (when-not (zero? lag)
-                                    (log/debug "Falling behind" (str partition) "at:" next-offset "end:" end-offset))
-                                  [(topic-partition-meta-key partition)
-                                   {:next-offset next-offset
-                                    :time (Date. (.timestamp last-record-in-batch))
-                                    :lag lag}]))
+                                        next-offset (inc (.offset last-record-in-batch))]]
+                              [(topic-partition-meta-key partition)
+                               {:next-offset next-offset}])
                             (into stored-consumer-state))]
     (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))
 
 (defn- prune-consumer-state [indexer ^KafkaConsumer consumer partitions]
-  (let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)
-        end-offsets (.endOffsets consumer (vec partitions))]
+  (let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)]
     (->> (for [^TopicPartition partition partitions
                :let [partition-key (topic-partition-meta-key partition)
                      next-offset (or (get-in consumer-state [partition-key :next-offset]) 0)]]
-           [partition-key {:next-offset next-offset
-                           :lag (- (dec (get end-offsets partition)) next-offset)
-                           :time (get-in consumer-state [partition-key :time])}])
+           [partition-key {:next-offset next-offset}])
          (into {})
          (db/store-index-meta indexer :crux.tx-log/consumer-state))))
 
@@ -234,10 +230,7 @@
                         (vec))]
 
     (doseq [record tx-records]
-      (index-tx-record indexer record)
-      (db/store-index-meta indexer :crux.tx/latest-completed-tx (-> record
-                                                                    tx-record->tx-log-entry
-                                                                    (select-keys [:crux.tx/tx-id :crux.tx/tx-time]))))
+      (index-tx-record indexer record))
 
     (when-let [records (seq (concat doc-records tx-records))]
       (update-stored-consumer-state indexer consumer records)
@@ -381,10 +374,15 @@
                (create-producer (derive-kafka-config options)))
    :args default-options})
 
+(def latest-submitted-tx-consumer
+  {:start-fn (fn [_ options]
+               (create-consumer (derive-kafka-config options)))
+   :args default-options})
+
 (def tx-log
-  {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
-               (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
-   :deps [::producer]
+  {:start-fn (fn [{::keys [producer latest-submitted-tx-consumer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
+               (->KafkaTxLog producer latest-submitted-tx-consumer tx-topic doc-topic (derive-kafka-config options)))
+   :deps [::producer ::latest-submitted-tx-consumer]
    :args default-options})
 
 (def topology
@@ -393,4 +391,5 @@
           ::admin-client admin-client
           ::admin-wrapper admin-wrapper
           ::producer producer
-          ::indexing-consumer indexing-consumer}))
+          ::indexing-consumer indexing-consumer
+          ::latest-submitted-tx-consumer latest-submitted-tx-consumer}))

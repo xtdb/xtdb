@@ -13,8 +13,7 @@
 
 ;; https://jena.apache.org/tutorials/sparql.html
 (t/deftest test-can-transact-and-query-using-sparql
-  (let [tx (crux/submit-tx *api* (->> (rdf/ntriples "crux/vc-db-1.nt") (rdf/->tx-ops) (rdf/->default-language)))]
-    (crux/sync *api* (:crux.tx/tx-time tx) nil))
+  (fapi/submit+await-tx (->> (rdf/ntriples "crux/vc-db-1.nt") (rdf/->tx-ops) (rdf/->default-language)))
 
   (t/testing "querying transacted data"
     (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}

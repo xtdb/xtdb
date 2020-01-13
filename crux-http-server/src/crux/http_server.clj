@@ -246,7 +246,7 @@
         transaction-time (some->> (get-in request [:query-params "transactionTime"])
                                   (cio/parse-rfc3339-or-millis-date))]
     (let [last-modified (if transaction-time
-                          (.sync crux-node transaction-time timeout)
+                          (.awaitTxTime crux-node transaction-time timeout)
                           (.sync crux-node timeout))]
       (-> (success-response last-modified)
           (add-last-modified last-modified)))))

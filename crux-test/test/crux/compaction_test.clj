@@ -24,13 +24,13 @@
               :crux.kv/kv-store "crux.kv.memdb/kv"}]
     (try
       (let [api (Crux/startNode opts)
-            {:keys [crux.tx/tx-time]} (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
-        (api/sync api tx-time nil)
+            tx (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
+        (api/await-tx api tx)
         (f/transact! api [{:crux.db/id :foo}])
         (.close api)
 
         (with-open [api2 (Crux/startNode opts)]
-          (api/sync api2 tx-time nil)
+          (api/await-tx api2 tx nil)
           (t/is (= 2 (count (api/history api2 :foo))))))
       (finally
         (cio/delete-dir db-dir)))))

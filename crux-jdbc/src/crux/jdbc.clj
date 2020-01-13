@@ -130,7 +130,13 @@
          (lazy-seq
           (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
             (when (not= -1 x)
-              (cons x (step))))))))))
+              (cons x (step)))))))))
+
+  (latest-submitted-tx [this]
+    (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]
+                                                 {:builder-fn jdbcr/as-unqualified-lower-maps})
+                              :max_offset)]
+      {:crux.tx/tx-id max-offset})))
 
 (defn- event-result->message [dbtype result]
   (Message. (->v dbtype (:v result))

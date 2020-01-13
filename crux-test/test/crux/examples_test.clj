@@ -21,7 +21,7 @@
     (t/is (not= nil node))
     ;; Testing example submit-tx works properly (and wait for it to complete)
     (t/is (not= nil submitted))
-    (crux/sync node (:crux.tx/tx-time submitted) nil)
+    (crux/await-tx node submitted nil)
 
     ;; Testing 'getting started' example queries
     (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
@@ -64,7 +64,7 @@
 
 (t/deftest test-example-basic-queries
   (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
-    (crux/sync node (:crux.tx/tx-time (ex/query-example-setup node)) nil)
+    (crux/await-tx node (ex/query-example-setup node) nil)
     (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
     (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-2 node)))
@@ -75,13 +75,13 @@
 
 (t/deftest test-example-time-queries
   (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
-    (crux/sync node (:crux.tx/tx-time (ex/query-example-at-time-setup node)) nil)
+    (crux/await-tx node (ex/query-example-at-time-setup node) nil)
     (t/is (= #{} (ex/query-example-at-time-q1 node)))
     (t/is (= #{[:malcolm]} (ex/query-example-at-time-q2 node)))))
 
 (t/deftest test-example-join-queries
   (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
-    (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q1-setup node)) nil)
+    (crux/await-tx node (ex/query-example-join-q1-setup node) nil)
     (t/is (= #{[:ivan :ivan]
                [:petr :petr]
                [:sergei :sergei]
@@ -90,6 +90,6 @@
                [:denis-a :denis-b]
                [:denis-b :denis-a]}
              (ex/query-example-join-q1 node)))
-    (crux/sync node (:crux.tx/tx-time (ex/query-example-join-q2-setup node)) nil)
+    (crux/await-tx node (ex/query-example-join-q2-setup node) nil)
     (t/is (= #{[:petr]}
              (ex/query-example-join-q2 node)))))

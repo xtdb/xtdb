@@ -23,103 +23,94 @@
 
     (t/is system)
 
-    (crux/sync system (:crux.tx/tx-time
-                       (crux/submit-tx
-                        system
-                        [[:crux.tx/put
-                          {:crux.db/id :ids.people/Charles
-                           :person/name "Charles"
-                           :person/born #inst "1700-05-18"
-                           :person/location :ids.places/rarities-shop
-                           :person/str  40
-                           :person/int  40
-                           :person/dex  40
-                           :person/hp   40
-                           :person/gold 10000}
-                          #inst "1700-05-18"]]))
-               nil)
+    (crux/await-tx system (crux/submit-tx
+                           system
+                           [[:crux.tx/put
+                             {:crux.db/id :ids.people/Charles
+                              :person/name "Charles"
+                              :person/born #inst "1700-05-18"
+                              :person/location :ids.places/rarities-shop
+                              :person/str  40
+                              :person/int  40
+                              :person/dex  40
+                              :person/hp   40
+                              :person/gold 10000}
+                             #inst "1700-05-18"]]))
 
-    (crux/sync system (:crux.tx/tx-time
-                       (crux/submit-tx
-                        system
-                        [[:crux.tx/put
-                          {:crux.db/id :ids.people/Mary
-                           :person/name "Mary"
-                           :person/born #inst "1710-05-18"
-                           :person/location :ids.places/carribean
-                           :person/str  40
-                           :person/int  50
-                           :person/dex  50
-                           :person/hp   50}
-                          #inst "1710-05-18"]
-                         [:crux.tx/put
-                          {:crux.db/id :ids.people/Joe
-                           :person/name "Joe"
-                           :person/born #inst "1715-05-18"
-                           :person/location :ids.places/city
-                           :person/str  39
-                           :person/int  40
-                           :person/dex  60
-                           :person/hp   60
-                           :person/gold 70}
-                          #inst "1715-05-18"]]))
-               nil)
-    (crux/sync system (:crux.tx/tx-time
-                       (crux/submit-tx
-                        system
-                        [[:crux.tx/put
-                          {:crux.db/id :ids.artefacts/cozy-mug
-                           :artefact/title "A Rather Cozy Mug"
-                           :artefact.perks/int 3}
-                          #inst "1625-05-18"]
+    (crux/await-tx system (crux/submit-tx
+                           system
+                           [[:crux.tx/put
+                             {:crux.db/id :ids.people/Mary
+                              :person/name "Mary"
+                              :person/born #inst "1710-05-18"
+                              :person/location :ids.places/carribean
+                              :person/str  40
+                              :person/int  50
+                              :person/dex  50
+                              :person/hp   50}
+                             #inst "1710-05-18"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.people/Joe
+                              :person/name "Joe"
+                              :person/born #inst "1715-05-18"
+                              :person/location :ids.places/city
+                              :person/str  39
+                              :person/int  40
+                              :person/dex  60
+                              :person/hp   60
+                              :person/gold 70}
+                             #inst "1715-05-18"]]))
+    (crux/await-tx system (crux/submit-tx
+                           system
+                           [[:crux.tx/put
+                             {:crux.db/id :ids.artefacts/cozy-mug
+                              :artefact/title "A Rather Cozy Mug"
+                              :artefact.perks/int 3}
+                             #inst "1625-05-18"]
 
-                         [:crux.tx/put
-                          {:crux.db/id :ids.artefacts/forbidden-beans
-                           :artefact/title "Magic beans"
-                           :artefact.perks/int 30
-                           :artefact.perks/hp -20}
-                          #inst "1500-05-18"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.artefacts/forbidden-beans
+                              :artefact/title "Magic beans"
+                              :artefact.perks/int 30
+                              :artefact.perks/hp -20}
+                             #inst "1500-05-18"]
 
-                         [:crux.tx/put
-                          {:crux.db/id :ids.artefacts/pirate-sword
-                           :artefact/title "A used sword"}
-                          #inst "1710-05-18"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.artefacts/pirate-sword
+                              :artefact/title "A used sword"}
+                             #inst "1710-05-18"]
 
-                         [:crux.tx/put
-                          {:crux.db/id :ids.artefacts/flintlock-pistol
-                           :artefact/title "Flintlock pistol"}
-                          #inst "1710-05-18"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.artefacts/flintlock-pistol
+                              :artefact/title "Flintlock pistol"}
+                             #inst "1710-05-18"]
 
-                         [:crux.tx/put
-                          {:crux.db/id :ids.artefacts/unknown-key
-                           :artefact/title "Key from an unknown door"}
-                          #inst "1700-05-18"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.artefacts/unknown-key
+                              :artefact/title "Key from an unknown door"}
+                             #inst "1700-05-18"]
 
-                         [:crux.tx/put
-                          {:crux.db/id :ids.artefacts/laptop
-                           :artefact/title "A Tell DPS Laptop (what?)"}
-                          #inst "2016-05-18"]]))
-               nil)
+                            [:crux.tx/put
+                             {:crux.db/id :ids.artefacts/laptop
+                              :artefact/title "A Tell DPS Laptop (what?)"}
+                             #inst "2016-05-18"]]))
 
-    (crux/sync system (:crux.tx/tx-time
-                       (crux/submit-tx
-                        system
-                        [[:crux.tx/put
-                          {:crux.db/id :ids.places/continent
-                           :place/title "Ah The Continent"}
-                          #inst "1000-01-01"]
-                         [:crux.tx/put
-                          {:crux.db/id :ids.places/carribean
-                           :place/title "Ah The Good Ol Carribean Sea"
-                           :place/location :ids.places/carribean}
-                          #inst "1000-01-01"]
-                         [:crux.tx/put
-                          {:crux.db/id :ids.places/coconut-island
-                           :place/title "Coconut Island"
-                           :place/location :ids.places/carribean}
-                          #inst "1000-01-01"]]))
-               nil)
-
+    (crux/await-tx system (crux/submit-tx
+                           system
+                           [[:crux.tx/put
+                             {:crux.db/id :ids.places/continent
+                              :place/title "Ah The Continent"}
+                             #inst "1000-01-01"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.places/carribean
+                              :place/title "Ah The Good Ol Carribean Sea"
+                              :place/location :ids.places/carribean}
+                             #inst "1000-01-01"]
+                            [:crux.tx/put
+                             {:crux.db/id :ids.places/coconut-island
+                              :place/title "Coconut Island"
+                              :place/location :ids.places/carribean}
+                             #inst "1000-01-01"]]))
     (def db (crux/db system))
     (t/is (= {:crux.db/id :ids.people/Charles,
               :person/str 40,
@@ -155,16 +146,14 @@
                      '[:find ?name
                        :where
                        [_ :artefact/title ?name]])))
-    (crux/sync system (:crux.tx/tx-time (crux/submit-tx
-                                         system
-                                         [[:crux.tx/delete :ids.artefacts/forbidden-beans
-                                           #inst "1690-05-18"]]))
-               nil)
+    (crux/await-tx system (crux/submit-tx
+                           system
+                           [[:crux.tx/delete :ids.artefacts/forbidden-beans
+                             #inst "1690-05-18"]]))
 
-    (crux/sync system (:crux.tx/tx-time (crux/submit-tx
-                                         system
-                                         [[:crux.tx/evict :ids.artefacts/laptop]]))
-               nil)
+    (crux/await-tx system (crux/submit-tx
+                           system
+                           [[:crux.tx/evict :ids.artefacts/laptop]]))
 
     (t/is (= #{["Key from an unknown door"] ["A used sword"] ["A Rather Cozy Mug"] ["Flintlock pistol"]}
              (crux/q (crux/db system)
@@ -205,7 +194,7 @@
     (def first-ownership-tx-response
       (crux/submit-tx system (first-ownership-tx)))
 
-    (crux/sync system (:crux.tx/tx-time first-ownership-tx-response) nil)
+    (crux/await-tx system first-ownership-tx-response)
 
     (def who-has-what-query
       '[:find ?name ?atitle
@@ -274,10 +263,9 @@
          (crux/entity db entity-id)
          keys-to-pull)))
 
-    (crux/sync system (:crux.tx/tx-time (entity-update :ids.people/Charles
-                                                       {:person/int  50}
-                                                       #inst "1730-05-18"))
-               nil)
+    (crux/await-tx system (entity-update :ids.people/Charles
+                                         {:person/int  50}
+                                         #inst "1730-05-18"))
     (t/is (= (entity :ids.people/Charles)
              {:person/str 40,
               :person/dex 40,
@@ -307,59 +295,53 @@
               :person/gold 10000,
               :person/born #inst "1700-05-18T00:00:00.000-00:00"}))
 
-    (crux/sync system (:crux.tx/tx-time
-                       (let [theft-date #inst "1740-06-18"]
-                         (crux/submit-tx
-                          system
-                          [[:crux.tx/put
-                            (update (entity-at :ids.people/Charles theft-date)
-                                    :person/has
-                                    disj
-                                    :ids.artefacts/cozy-mug)
-                            theft-date]
-                           [:crux.tx/put
-                            (update (entity-at :ids.people/Mary theft-date)
-                                    :person/has
-                                    (comp set conj)
-                                    :ids.artefacts/cozy-mug)
-                            theft-date]])))
-               nil)
+    (crux/await-tx system (let [theft-date #inst "1740-06-18"]
+                            (crux/submit-tx
+                             system
+                             [[:crux.tx/put
+                               (update (entity-at :ids.people/Charles theft-date)
+                                       :person/has
+                                       disj
+                                       :ids.artefacts/cozy-mug)
+                               theft-date]
+                              [:crux.tx/put
+                               (update (entity-at :ids.people/Mary theft-date)
+                                       :person/has
+                                       (comp set conj)
+                                       :ids.artefacts/cozy-mug)
+                               theft-date]])))
     (t/is (= #{["Mary" "A used sword"]
                ["Mary" "Flintlock pistol"]
                ["Mary" "A Rather Cozy Mug"]
                ["Charles" "Key from an unknown door"]}
              (crux/q (crux/db system #inst "1740-06-18") who-has-what-query)))
 
-    (crux/sync system (:crux.tx/tx-time
-                       (let [marys-birth-inst #inst "1710-05-18"
-                             db (crux/db system marys-birth-inst)
-                             baby-mary (crux/entity db :ids.people/Mary)]
-                         (crux/submit-tx
-                          system
-                          [[:crux.tx/cas
-                            baby-mary
-                            (update baby-mary :person/has (comp set conj) :ids.artefacts/cozy-mug)
-                            marys-birth-inst]])))
-               nil)
+    (crux/await-tx system (let [marys-birth-inst #inst "1710-05-18"
+                                db (crux/db system marys-birth-inst)
+                                baby-mary (crux/entity db :ids.people/Mary)]
+                            (crux/submit-tx
+                             system
+                             [[:crux.tx/cas
+                               baby-mary
+                               (update baby-mary :person/has (comp set conj) :ids.artefacts/cozy-mug)
+                               marys-birth-inst]])))
 
 
-    (crux/sync system (:crux.tx/tx-time
-                       (let [mug-lost-date  #inst "1723-01-09"
-                             db (crux/db system mug-lost-date)
-                             mary (crux/entity db :ids.people/Mary)]
-                         (crux/submit-tx
-                          system
-                          [[:crux.tx/cas
-                            mary
-                            (update mary :person/has (comp set disj) :ids.artefacts/cozy-mug)
-                            mug-lost-date]])))
-               nil)
+    (crux/await-tx system (let [mug-lost-date  #inst "1723-01-09"
+                                db (crux/db system mug-lost-date)
+                                mary (crux/entity db :ids.people/Mary)]
+                            (crux/submit-tx
+                             system
+                             [[:crux.tx/cas
+                               mary
+                               (update mary :person/has (comp set disj) :ids.artefacts/cozy-mug)
+                               mug-lost-date]])))
     (t/is (= #{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
              (crux/q
               (crux/db system #inst "1715-05-18")
               who-has-what-query)))
 
-    (crux/sync system (:crux.tx/tx-time (crux/submit-tx system (first-ownership-tx))) nil)
+    (crux/await-tx system (crux/submit-tx system (first-ownership-tx)))
 
     (t/is (= #{["Mary" "A used sword"]
                ["Mary" "Flintlock pistol"]
