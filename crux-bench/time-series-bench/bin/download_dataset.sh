@@ -1,4 +1,4 @@
-#! /bin/env bash
+#!/usr/bin/env bash
 wget https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
 wget https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
 mkdir resources

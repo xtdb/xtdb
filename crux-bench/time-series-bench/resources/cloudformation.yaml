@@ -6,7 +6,7 @@ Resources:
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: 'bench-cluster'
+      ClusterName: 'crux-bench'
       ClusterSettings:
         - Name: 'containerInsights'
           Value: 'enabled'
@@ -14,14 +14,13 @@ Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: 'bench-loggroup'
+      LogGroupName: 'crux-bench'
       RetentionInDays: 365
-
 
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: 'bench-repository'
+      RepositoryName: 'crux-bench'
 
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -58,16 +57,15 @@ Resources:
     Properties:
       Cpu: '2 vCPU'
       Memory: '4GB'
-      Family: 'bench-family'
+      Family: 'time-series-bench'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
-        -
-          Name: 'bench-container'
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/bench-repository'
+        - Name: 'bench-container'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench'
           Essential: true
           LogConfiguration:
             LogDriver: awslogs
@@ -79,11 +77,11 @@ Resources:
   TaskSchedule:
     Type: AWS::Events::Rule
     Properties:
-      Name: "bench-scheduler"
+      Name: "time-series-scheduler"
       ScheduleExpression: "cron(0 0 ? * MON-FRI *)"
       State: "ENABLED"
       Targets:
-        - Id: "bench-family"
+        - Id: "time-series-bench"
           RoleArn:
             Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
           EcsParameters:

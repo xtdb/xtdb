@@ -1,7 +1,7 @@
-#! /bin/env bash
+#!/usr/bin/env bash
 aws ecs run-task\
- --task-definition bench-family\
- --cluster bench-cluster\
+ --task-definition time-series-bench\
+ --cluster crux-bench\
  --launch-type FARGATE\
  --count 1\
  --network-configuration \

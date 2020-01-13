@@ -1,4 +1,4 @@
-(defproject time-series-bench "0.1.0"
+(defproject juxt/crux-bench "0.1.0"
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/data.json "0.2.7"]
                  [juxt/crux-core "20.01-1.6.2-alpha"]
