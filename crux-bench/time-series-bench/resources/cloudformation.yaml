@@ -15,7 +15,7 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: 'bench-loggroup'
-      RetentionInDays: 7
+      RetentionInDays: 365
 
 
   ECRRepository:
