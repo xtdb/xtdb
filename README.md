@@ -184,6 +184,12 @@ One dependency to rule them all.
 
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-uberjar.svg)](https://clojars.org/juxt/crux-uberjar)
 
+## Crux Labs
+
+Have a look at the more experimental modules being developed over at [Crux Labs](https://github.com/crux-labs), such as [`crux-dataflow`](https://github.com/crux-labs/crux-dataflow) and the [`crux-console`](https://github.com/crux-labs/crux-console).
+
+We will use Crux Labs as a place to test ideas and early module development, that may eventually be officially supported and migrated to the official Crux repository.
+
 ## Using Clojure
 
 Please note that Clojure is not _required_ when using Crux. HTTP and Java
