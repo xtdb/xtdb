@@ -113,7 +113,7 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
       (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
                                 ::query query
-                                ::query-time (- end-time start-time)
+                                ::query-time-ms (- end-time start-time)
                                 ::successful? successful?})))
     (catch Exception e
       (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
@@ -190,7 +190,7 @@
                            "focus"]])]
       (println (json/write-str {:crux.bench/bench-type ::busiest-devices
                                 ::query query
-                                ::query-time (- end-time start-time)
+                                ::query-time-ms (- end-time start-time)
                                 ::successful? successful?})))
     (catch Exception e
       (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
@@ -256,7 +256,7 @@
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
          (println (json/write-str {:crux.bench/bench-type ::history-ascending
-                                   ::query-time (- end-time start-time)
+                                   ::query-time-ms (- end-time start-time)
                                    ::successful? successful?})))
        (catch Exception e
          (println (json/write-str {:crux.bench/bench-type ::history-ascending
@@ -285,7 +285,7 @@
           (crux/await-tx node (:last-tx (submit-ts-devices-data node)) (java.time.Duration/ofMinutes 20))
           (println (json/write-str
                      (merge {:crux.bench/bench-type ::ingest
-                             ::ingest-time (- (System/currentTimeMillis) start-time)}
+                             ::ingest-time-ms (- (System/currentTimeMillis) start-time)}
                             (select-keys
                               (crux/status node)
                               [:crux.kv/estimate-num-keys

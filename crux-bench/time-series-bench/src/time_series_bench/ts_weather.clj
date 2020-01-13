@@ -143,7 +143,7 @@
                        result)]
     (println (json/write-str {:crux.bench/bench-type ::weather-last-10-readings-test
                               ::query query
-                              ::query-time time-taken
+                              ::query-time-ms time-taken
                               ::successful? successful?}))))
 
 ;; Last 10 readings from 'outside' locations
@@ -243,7 +243,7 @@
                        result)]
     (println (json/write-str {:crux.bench/bench-type ::weather-last-10-readings-from-outside-locations-test
                               ::query query
-                              ::query-time time-taken
+                              ::query-time-ms time-taken
                               ::successful? successful?}))))
 
 ;; Hourly average, min, and max temperatures for "field" locations
@@ -346,7 +346,7 @@
                         [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
                        result)]
     (println (json/write-str {:crux.bench/bench-type ::weather-hourly-average-min-max-temperatures-for-field-locations
-                              ::query-time time-taken
+                              ::query-time-ms time-taken
                               ::successful? successful?}))))
 
 (defn run-queries [node]
@@ -372,7 +372,7 @@
                         (java.time.Duration/ofMinutes 20))
           (println (json/write-str
                      (merge {:crux.bench/bench-type ::ingest
-                             ::ingest-time (- (System/currentTimeMillis) start-time)}
+                             ::ingest-time-ms (- (System/currentTimeMillis) start-time)}
                             (select-keys (api/status node)
                                          [:crux.kv/estimate-num-keys
                                           :crux.kv/size])))))
