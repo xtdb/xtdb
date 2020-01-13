@@ -85,13 +85,13 @@ Resources:
       Targets:
         - Id: "bench-family"
           RoleArn:
-            Fn::GetAtt: ["TaskSchedulerRole", "Arn"]
-          EscParameters:
+            Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+          EcsParameters:
             TaskDefinitionArn:
-              Ref: "TaskDefinition"
+              Ref: "BenchTask"
             TaskCount: 1
           Arn:
-            Fn::GetAtt: ["EscCluster", "Arn"]
+            Fn::GetAtt: ["ECSCluster", "Arn"]
 
 
 # These are the values output by the CloudFormation template. Be careful
