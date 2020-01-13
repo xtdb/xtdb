@@ -148,11 +148,11 @@
                                                 (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
 
-  (awaitTx [this tx timeout]
+  (awaitTx [this submitted-tx timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx indexer tx (or (and timeout (.toMillis timeout))
-                                  (:crux.tx-log/await-tx-timeout options)))))
+      (tx/await-tx indexer submitted-tx (or (and timeout (.toMillis timeout))
+                                            (:crux.tx-log/await-tx-timeout options)))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]

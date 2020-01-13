@@ -217,10 +217,10 @@
      (.awaitTxTime this tx-time timeout)))
 
   (await-tx
-    ([this tx]
-     (await-tx this tx nil))
-    ([this tx timeout]
-     (.awaitTx this tx timeout)))
+    ([this submitted-tx]
+     (await-tx this submitted-tx nil))
+    ([this submitted-tx timeout]
+     (.awaitTx this submitted-tx timeout)))
 
   (await-tx-time
     ([this tx-time]
