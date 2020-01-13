@@ -111,13 +111,13 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
-      (json/print-json {:crux.bench/bench-type ::recent-battery-readings
-                        ::query query
-                        ::query-time (- end-time start-time)
-                        ::successful? successful?}))
+      (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
+                                ::query query
+                                ::query-time (- end-time start-time)
+                                ::successful? successful?})))
     (catch Exception e
-      (json/print-json {:crux.bench/bench-type ::recent-battery-readings
-                        ::error e})
+      (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
+                                ::error e}))
       (throw e))))
 
 ;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
@@ -188,13 +188,13 @@
                            25.0
                            :discharging
                            "focus"]])]
-      (json/print-json {:crux.bench/bench-type ::busiest-devices
-                        ::query query
-                        ::query-time (- end-time start-time)
-                        ::successful? successful?}))
+      (println (json/write-str {:crux.bench/bench-type ::busiest-devices
+                                ::query query
+                                ::query-time (- end-time start-time)
+                                ::successful? successful?})))
     (catch Exception e
-      (json/print-json {:crux.bench/bench-type ::recent-battery-readings
-                        ::error e})
+      (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
+                                ::error e}))
       (throw e))))
 
 ;; SELECT date_trunc('hour', time) "hour",
@@ -255,12 +255,12 @@
                               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
-         (json/print-json {:crux.bench/bench-type ::history-ascending
-                           ::query-time (- end-time start-time)
-                           ::successful? successful?}))
+         (println (json/write-str {:crux.bench/bench-type ::history-ascending
+                                   ::query-time (- end-time start-time)
+                                   ::successful? successful?})))
        (catch Exception e
-         (json/print-json {:crux.bench/bench-type ::history-ascending
-                           ::error e})
+         (println (json/write-str {:crux.bench/bench-type ::history-ascending
+                                   ::error e}))
          (throw e))))
 
 
@@ -283,17 +283,17 @@
       (try
         (let [start-time (System/currentTimeMillis)]
           (crux/sync node (:crux.tx/tx-time (:last-tx (submit-ts-devices-data node))) (java.time.Duration/ofMinutes 20))
-          (json/print-json
-            (merge {:crux.bench/bench-type :crux.bench.ts-devices/ingest
-                    ::ingest-time (- (System/currentTimeMillis) start-time)}
-                   (select-keys
-                     (crux/status node)
-                     [:crux.kv/estimate-num-keys
-                      :crux.kv/size]))))
+          (println (json/write-str
+                     (merge {:crux.bench/bench-type :crux.bench.ts-devices/ingest
+                             ::ingest-time (- (System/currentTimeMillis) start-time)}
+                            (select-keys
+                              (crux/status node)
+                              [:crux.kv/estimate-num-keys
+                               :crux.kv/size])))))
         (catch Exception e
-          (json/print-json
-            {:crux.bench/bench-type ::ingest
-             ::error e})
+          (println (json/write-str
+                     {:crux.bench/bench-type ::ingest
+                      ::error e}))
           (throw e)))
       (run-queries node))
     (catch Exception e)
