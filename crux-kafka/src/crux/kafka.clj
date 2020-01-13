@@ -188,7 +188,7 @@
 (defn- index-doc-records [indexer doc-records]
   (db/index-docs indexer (->> doc-records
                               (into {} (map (fn [^ConsumerRecord record]
-                                              [(.key record) (.value record)]))))))
+                                              [(c/new-id (.key record)) (.value record)]))))))
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [{:keys [crux.tx.event/tx-events] :as record} (tx-record->tx-log-entry record)]

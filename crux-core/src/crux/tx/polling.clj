@@ -2,7 +2,8 @@
   (:require [crux.db :as db]
             [crux.io :as cio]
             [clojure.tools.logging :as log]
-            [crux.tx.consumer :as consumer])
+            [crux.tx.consumer :as consumer]
+            [crux.codec :as c])
   (:import java.util.Date
            crux.tx.consumer.Message
            java.io.Closeable))
@@ -22,7 +23,7 @@
                     (when (seq doc-msgs)
                       (db/index-docs indexer (->> doc-msgs
                                                   (into {} (map (fn [^Message m]
-                                                                  [(.key m) (.body m)]))))))
+                                                                  [(c/new-id (.key m)) (.body m)]))))))
 
                     (doseq [^Message tx-msg tx-msgs]
                       (let [tx {:crux.tx/tx-time (.message-time tx-msg)

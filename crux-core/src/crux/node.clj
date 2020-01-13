@@ -14,7 +14,8 @@
             crux.object-store
             [crux.query :as q]
             [crux.status :as status]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.event-bus :as bus])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException]
            java.io.Closeable
            java.util.Date
@@ -44,7 +45,8 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn status-fn closed? ^StampedLock lock]
+(defrecord CruxNode [kv-store tx-log indexer object-store event-bus
+                     options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
     (.db this nil nil))
@@ -260,7 +262,8 @@
 (def base-topology
   {::kv-store 'crux.kv.rocksdb/kv
    ::object-store 'crux.object-store/kv-object-store
-   ::indexer 'crux.tx/kv-indexer})
+   ::indexer 'crux.tx/kv-indexer
+   ::event-bus 'crux.event-bus/event-bus})
 
 (defn options->topology [{:keys [crux.node/topology] :as options}]
   (when-not topology
@@ -282,7 +285,7 @@
   (let [options (into {} options)
         topology (options->topology options)
         [modules close-fn] (start-modules topology options)
-        {::keys [kv-store tx-log indexer object-store]} modules
+        {::keys [kv-store tx-log indexer object-store event-bus]} modules
         status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals modules)))))
         node-opts (parse-opts node-args options)]
     (map->CruxNode {:close-fn close-fn
@@ -292,5 +295,6 @@
                     :tx-log tx-log
                     :indexer indexer
                     :object-store object-store
+                    :event-bus event-bus
                     :closed? (atom false)
                     :lock (StampedLock.)})))
