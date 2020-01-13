@@ -284,7 +284,7 @@
         (let [start-time (System/currentTimeMillis)]
           (crux/sync node (:crux.tx/tx-time (:last-tx (submit-ts-devices-data node))) (java.time.Duration/ofMinutes 20))
           (println (json/write-str
-                     (merge {:crux.bench/bench-type :crux.bench.ts-devices/ingest
+                     (merge {:crux.bench/bench-type ::ingest
                              ::ingest-time (- (System/currentTimeMillis) start-time)}
                             (select-keys
                               (crux/status node)
