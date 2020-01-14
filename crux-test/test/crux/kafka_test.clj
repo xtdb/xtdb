@@ -103,10 +103,8 @@
 
     (t/testing "transacting and indexing"
       (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
-        (t/is (= 3
-                 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
-        (t/is (= 1
-                 (k/consume-and-index-txes consume-opts fk/*consumer*)))
+        (t/is (= 3 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
+        (t/is (= 1 (k/consume-and-index-txes consume-opts fk/*consumer*)))
         (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
 
         (t/testing "restoring to stored offsets"
