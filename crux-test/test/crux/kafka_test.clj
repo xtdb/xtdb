@@ -48,15 +48,20 @@
         doc-topic "test-can-transact-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)]
+        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
+        tx-offsets (k/map->IndexedOffsets {:indexer indexer
+                                           :k :crux.tx-log/consumer-state})
+        doc-offsets (k/map->IndexedOffsets {:indexer indexer
+                                            :k :crux.doc-log/consumer-state})]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer fk/*consumer* [doc-topic])
+    (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+    (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (db/submit-tx tx-log tx-ops)
 
-    (let [docs (map consumer-record->value (.poll fk/*consumer* (Duration/ofMillis 10000)))]
+    (let [docs (map consumer-record->value (.poll fk/*consumer2* (Duration/ofMillis 10000)))]
       (t/is (= 7 (count docs)))
       (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                  {:foaf/firstName "Pablo"
@@ -64,7 +69,10 @@
                (select-keys (first docs)
                             (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                               [:foaf/firstName
-                               :foaf/surname])))))))
+                               :foaf/surname])))))
+
+    (let [txes (map consumer-record->value (.poll fk/*consumer* (Duration/ofMillis 10000)))]
+      (t/is (= 7 (count (first txes)))))))
 
 (t/deftest test-can-transact-and-query-entities
   (let [tx-topic "test-can-transact-and-query-entities-tx"
@@ -79,7 +87,14 @@
         tx-offsets (k/map->IndexedOffsets {:indexer indexer
                                            :k :crux.tx-log/consumer-state})
         doc-offsets (k/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.doc-log/consumer-state})]
+                                            :k :crux.doc-log/consumer-state})
+        consume-opts {:indexer indexer
+                      :offsets tx-offsets
+                      :pending-txs-state (atom [])
+                      :tx-topic tx-topic}
+        doc-consume-opts {:indexer indexer
+                          :offsets doc-offsets
+                          :doc-topic doc-topic}]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -87,14 +102,7 @@
     (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (t/testing "transacting and indexing"
-      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)
-            consume-opts {:indexer indexer
-                          :offsets tx-offsets
-                          :pending-txs-state (atom [])
-                          :tx-topic tx-topic}
-            doc-consume-opts {:indexer indexer
-                              :offsets doc-offsets
-                              :doc-topic doc-topic}]
+      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
         (t/is (= 3
                  (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
         (t/is (= 1
@@ -125,6 +133,12 @@
               (t/is (= 1 (count log)))
               (t/is (= 3 (count (:crux.tx.event/tx-events (first log))))))))))))
 
+(defn- consume-topics [tx-consume-opts doc-consume-opts]
+  (loop []
+    (when (or (not= 0 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*))
+              (not= 0 (k/consume-and-index-txes tx-consume-opts fk/*consumer*)))
+      (recur))))
+
 (t/deftest test-can-process-compacted-documents
   ;; when doing a evict a tombstone document will be written to
   ;; replace the original document. The original document will be then
@@ -142,40 +156,41 @@
 
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
+        tx-offsets (k/map->IndexedOffsets {:indexer indexer
+                                           :k :crux.tx-log/consumer-state})
+        doc-offsets (k/map->IndexedOffsets {:indexer indexer
+                                            :k :crux.doc-log/consumer-state})
+        tx-consume-opts {:indexer indexer
+                         :offsets tx-offsets
+                         :pending-txs-state (atom [])
+                         :tx-topic tx-topic}
+        doc-consume-opts {:indexer indexer
+                          :offsets doc-offsets
+                          :doc-topic doc-topic}]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
+    (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+    (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (t/testing "transacting and indexing"
-      (let [consume-opts {:indexer indexer
-                          :consumer fk/*consumer*
-                          :pending-txs-state (atom [])
-                          :tx-topic tx-topic
-                          :doc-topic doc-topic}
-
-            evicted-doc {:crux.db/id :to-be-eviceted :personal "private"}
+      (let [evicted-doc {:crux.db/id :to-be-evicted :personal "private"}
             non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
             evicted-doc-hash
-            (do @(db/submit-tx
-                  tx-log
-                  [[:crux.tx/put evicted-doc]
-                   [:crux.tx/put non-evicted-doc]])
-
-                (k/consume-and-index-txes consume-opts)
-                (while (not= {:txs 0 :docs 0} (k/consume-and-index-txes consume-opts)))
+            (do @(db/submit-tx tx-log [[:crux.tx/put evicted-doc]
+                                       [:crux.tx/put non-evicted-doc]])
+                (t/is (= 2 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
+                (t/is (= 1 (k/consume-and-index-txes tx-consume-opts fk/*consumer*)))
                 (:crux.db/content-hash (q/entity-tx (api/db node) (:crux.db/id evicted-doc))))
 
             after-evict-doc {:crux.db/id :after-evict :personal "private"}
             {:crux.tx/keys [tx-id tx-time]}
             (do
               @(db/submit-tx tx-log [[:crux.tx/evict (:crux.db/id evicted-doc)]])
-              @(db/submit-tx
-                tx-log
-                [[:crux.tx/put after-evict-doc]]))]
+              @(db/submit-tx tx-log [[:crux.tx/put after-evict-doc]]))]
 
-        (while (not= {:txs 0 :docs 0} (k/consume-and-index-txes consume-opts)))
+        (consume-topics tx-consume-opts doc-consume-opts)
 
         (t/testing "querying transacted data"
           (t/is (= non-evicted-doc (q/entity (api/db node) (:crux.db/id non-evicted-doc))))
@@ -190,19 +205,23 @@
                   (fn []
                     (let [object-store (os/->KvObjectStore *kv*)
                           indexer (tx/->KvIndexer object-store *kv* tx-log (bus/->EventBus (atom #{})) nil)
-                          consume-opts {:indexer indexer
-                                        :consumer fk/*consumer*
-                                        :pending-txs-state (atom [])
-                                        :tx-topic tx-topic
-                                        :doc-topic doc-topic}]
-                      (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
-                      (k/consume-and-index-txes consume-opts)
-                      (t/is (= {:txs 0, :docs 1} (k/consume-and-index-txes consume-opts)))
+                          tx-offsets (k/map->IndexedOffsets {:indexer indexer
+                                                             :k :crux.tx-log/consumer-state})
+                          doc-offsets (k/map->IndexedOffsets {:indexer indexer
+                                                              :k :crux.doc-log/consumer-state})
+                          tx-consume-opts {:indexer indexer
+                                           :offsets tx-offsets
+                                           :pending-txs-state (atom [])
+                                           :tx-topic tx-topic}
+                          doc-consume-opts {:indexer indexer
+                                            :offsets doc-offsets
+                                            :doc-topic doc-topic}]
+                      (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+                      (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+                      (consume-topics tx-consume-opts doc-consume-opts)
+
                       ;; delete the object that would have been compacted away
                       (db/delete-objects object-store [evicted-doc-hash])
-
-                      (while (not= {:txs 0 :docs 0} (k/consume-and-index-txes consume-opts)))
-                      (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
 
                       (t/testing "querying transacted data"
                         (t/is (= non-evicted-doc (q/entity (api/db node) (:crux.db/id non-evicted-doc))))
