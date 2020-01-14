@@ -89,6 +89,11 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
+(defn- ensure-topic-exists [admin-client topic topic-config partitions {:keys [crux.kafka/replication-factor
+                                                                               crux.kafka/create-topics]}]
+  (when create-topics
+    (create-topic admin-client topic partitions replication-factor topic-config)))
+
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx.event/tx-events (.value record)
    :crux.tx/tx-id (.offset record)
@@ -157,7 +162,6 @@
   (read-offsets [this]
     (db/read-index-meta indexer k))
   (store-offsets [this offsets]
-    (println "Put offsets" offsets k)
     (db/store-index-meta indexer k offsets)))
 
 ;;; Indexing Consumer
@@ -276,12 +280,7 @@
 
 (defn- start-indexing-consumer
   ^java.io.Closeable
-  [admin-client consumer-config offsets topic topic-config index-fn
-   {:keys [crux.kafka/replication-factor
-           crux.kafka/partitions
-           crux.kafka/create-topics]}]
-  (when create-topics
-    (create-topic admin-client topic partitions replication-factor topic-config))
+  [consumer-config offsets topic index-fn]
   (let [running? (atom true)
         worker-thread
         (doto
@@ -343,33 +342,35 @@
                            :crux.config/type [map? identity]}})
 
 (def tx-indexing-consumer
-  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]} {:keys [::tx-topic] :as options}]
+  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]}
+                  {::keys [tx-topic] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      consumer-config (merge {"group.id" (::group-id options)} kafka-config)
-                     offsets (map->IndexedOffsets {:indexer indexer
-                                                   :k :crux.tx-log/consumer-state})
+                     offsets (map->IndexedOffsets {:indexer indexer :k :crux.tx-log/consumer-state})
                      index-fn (partial consume-and-index-txes
                                        {:indexer indexer
                                         :offsets offsets
                                         :timeout 1000
                                         :pending-txs-state (atom [])
                                         :tx-topic tx-topic})]
+                 (ensure-topic-exists admin-client tx-topic tx-topic-config 1 options)
                  (ensure-tx-topic-has-single-partition admin-client tx-topic)
-                 (start-indexing-consumer admin-client consumer-config offsets index-fn options)))
+                 (start-indexing-consumer consumer-config offsets tx-topic index-fn)))
    :deps [:crux.node/indexer ::admin-client]
    :args default-options})
 
 (def doc-indexing-consumer
-  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]} options]
+  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]}
+                  {::keys [doc-topic doc-partitions] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      consumer-config (merge {"group.id" (::group-id options)} kafka-config)
-                     offsets (map->IndexedOffsets {:indexer indexer
-                                                   :k :crux.doc-log/consumer-state})
-                     tx-indexing-fn (partial consume-and-index-documents {:indexer indexer
-                                                                          :offsets offsets
-                                                                          :timeout 1000
-                                                                          :doc-topic (::doc-topic options)})]
-                 (start-indexing-consumer admin-client consumer-config offsets options tx-indexing-fn)))
+                     offsets (map->IndexedOffsets {:indexer indexer :k :crux.doc-log/consumer-state})
+                     index-fn (partial consume-and-index-documents {:indexer indexer
+                                                                    :offsets offsets
+                                                                    :timeout 1000
+                                                                    :doc-topic (::doc-topic options)})]
+                 (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
+                 (start-indexing-consumer consumer-config offsets doc-topic index-fn)))
    :deps [:crux.node/indexer ::admin-client]
    :args default-options})
 
