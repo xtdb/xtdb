@@ -8,6 +8,4 @@
                  [ch.qos.logback/logback-classic "1.2.3"]]
   :jvm-opts ["-Xms3g" "-Xmx3g" "-Dlogback.configurationFile=logback.xml"]
   :resource-paths ["resources" "data"]
-  :jvm-opts ["-Xms3g" "-Xmx3g"]
-  :main ^:skip-aot crux.bench.main
-  :resource-paths ["resources" "data"])
+  :main ^:skip-aot crux.bench.main)
