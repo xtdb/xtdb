@@ -1,11 +1,11 @@
-(ns time-series-bench.ts-devices
+(ns crux.bench.ts-devices
   (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [crux.api :as crux]
             [crux.io :as cio]
             [crux.kafka.embedded :as ek]
-            [clojure.data.json :as json])
+            [crux.bench.utils :as utils])
   (:import java.time.temporal.ChronoUnit
            java.util.Date))
 
@@ -111,13 +111,13 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
-      (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
-                                ::query query
-                                ::query-time-ms (- end-time start-time)
-                                ::successful? successful?})))
+      (utils/output {:crux.bench/bench-type ::recent-battery-readings
+                     ::query query
+                     ::query-time-ms (- end-time start-time)
+                     ::successful? successful?}))
     (catch Exception e
-      (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
-                                ::error e}))
+      (utils/output {:crux.bench/bench-type ::recent-battery-readings
+                     ::error e})
       (throw e))))
 
 ;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
@@ -188,13 +188,13 @@
                            25.0
                            :discharging
                            "focus"]])]
-      (println (json/write-str {:crux.bench/bench-type ::busiest-devices
-                                ::query query
-                                ::query-time-ms (- end-time start-time)
-                                ::successful? successful?})))
+      (utils/output {:crux.bench/bench-type ::busiest-devices
+                     ::query query
+                     ::query-time-ms (- end-time start-time)
+                     ::successful? successful?}))
     (catch Exception e
-      (println (json/write-str {:crux.bench/bench-type ::recent-battery-readings
-                                ::error e}))
+      (utils/output {:crux.bench/bench-type ::recent-battery-readings
+                     ::error e})
       (throw e))))
 
 ;; SELECT date_trunc('hour', time) "hour",
@@ -255,12 +255,12 @@
                               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
-         (println (json/write-str {:crux.bench/bench-type ::history-ascending
-                                   ::query-time-ms (- end-time start-time)
-                                   ::successful? successful?})))
+         (utils/output {:crux.bench/bench-type ::history-ascending
+                        ::query-time-ms (- end-time start-time)
+                        ::successful? successful?}))
        (catch Exception e
-         (println (json/write-str {:crux.bench/bench-type ::history-ascending
-                                   ::error e}))
+         (utils/output {:crux.bench/bench-type ::history-ascending
+                        ::error e})
          (throw e))))
 
 
@@ -282,18 +282,19 @@
                                        :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
       (try
         (let [start-time (System/currentTimeMillis)]
-          (crux/await-tx node (:last-tx (submit-ts-devices-data node)) (java.time.Duration/ofMinutes 20))
-          (println (json/write-str
-                     (merge {:crux.bench/bench-type ::ingest
-                             ::ingest-time-ms (- (System/currentTimeMillis) start-time)}
-                            (select-keys
-                              (crux/status node)
-                              [:crux.kv/estimate-num-keys
-                               :crux.kv/size])))))
+          (crux/await-tx node
+                         (:last-tx (submit-ts-devices-data node)) (java.time.Duration/ofMinutes 20))
+          (utils/output
+            (merge {:crux.bench/bench-type ::ingest
+                    ::ingest-time-ms (- (System/currentTimeMillis) start-time)}
+                   (select-keys
+                     (crux/status node)
+                     [:crux.kv/estimate-num-keys
+                      :crux.kv/size]))))
         (catch Exception e
-          (println (json/write-str
-                     {:crux.bench/bench-type ::ingest
-                      ::error e}))
+          (utils/output
+            {:crux.bench/bench-type ::ingest
+             ::error e})
           (throw e)))
       (run-queries node))
     (catch Exception e)
