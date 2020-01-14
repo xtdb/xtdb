@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: An example stack.
+Description: A stack for running Crux Benchmarks
 
 Resources:
   # ECS Resources
@@ -65,7 +65,7 @@ Resources:
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
         - Name: 'bench-container'
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
           Essential: true
           LogConfiguration:
             LogDriver: awslogs
@@ -85,6 +85,11 @@ Resources:
           RoleArn:
             Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
           EcsParameters:
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: "ENABLED"
+                Subnets:
+                  - "subnet-5140ba2b"
             TaskDefinitionArn:
               Ref: "BenchTask"
             TaskCount: 1

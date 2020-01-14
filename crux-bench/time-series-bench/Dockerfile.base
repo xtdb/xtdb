@@ -5,7 +5,7 @@ WORKDIR /usr/local/lib/crux-bench
 ADD data/weather_small_locations.csv data/
 ADD data/weather_small_conditions.csv data/
 ADD data/devices_small_device_info.csv data/
-ADD data/weather_small_readings.csv data/
+ADD data/devices_small_readings.csv data/
 
 ADD project.clj .
 
