@@ -1,11 +1,12 @@
 FROM clojure:openjdk-11-lein-2.9.0
 
-WORKDIR /usr/local/lib/crux-bench
+WORKDIR /usr/local/lib/crux
 
-ADD data/weather_small_locations.csv data/
-ADD data/weather_small_conditions.csv data/
-ADD data/devices_small_device_info.csv data/
-ADD data/devices_small_readings.csv data/
+RUN git clone https://github.com/juxt/crux .
 
-RUN git clone https://github.com/juxt/crux && \
-    cd crux/ && lein sub install && cd ../
+ADD data/weather_small_locations.csv crux-bench/data/
+ADD data/weather_small_conditions.csv crux-bench/data/
+ADD data/devices_small_device_info.csv crux-bench/data/
+ADD data/devices_small_readings.csv crux-bench/data/
+
+RUN lein sub install

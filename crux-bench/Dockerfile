@@ -1,8 +1,8 @@
 FROM 955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:base
 
-CMD cd crux/ && \
-    git pull && \
-    lein sub install && \
-    cd crux-bench/ && \
-    cp -r /usr/local/lib/crux-bench/data . && \
-    lein run
+WORKDIR /usr/local/lib/crux
+
+CMD git pull && \
+  lein sub install && \
+  cd crux-bench/ && \
+  lein run
