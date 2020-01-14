@@ -8,11 +8,11 @@
     (utils/output {:crux.bench/bench-type ::main
                    ::message "Starting devices benchmark"
                    ::sys-time (System/currentTimeMillis)})
-    (devices/bench)
+    (utils/bench devices/submit-ts-devices-data devices/run-queries :ts-devices)
     (utils/output {:crux.bench/bench-type ::main
                    ::message "Starting weather benchmark"
                    ::sys-time (System/currentTimeMillis)})
-    (weather/bench)
+    (utils/bench weather/submit-ts-weather-data weather/run-queries :ts-weather)
     (utils/output (let [end-time (System/currentTimeMillis)]
                     {:crux.bench/bench-type ::main
                      ::message "Fishined benchmark"

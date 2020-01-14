@@ -353,34 +353,3 @@
   (weather-last-10-readings-test node)
   (weather-last-10-readings-from-outside-locations-test node)
   (weather-hourly-average-min-max-temperatures-for-field-locations node))
-
-(defn bench []
-  (try
-    (with-open [embedded-kafka (ek/start-embedded-kafka
-                                 {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
-                                  :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
-                                  :crux.kafka.embedded/kafka-port 9092})
-                node (api/start-node {:crux.node/topology :crux.kafka/topology
-                                      :crux.node/kv-store "crux.kv.rocksdb/kv"
-                                      :crux.kafka/bootstrap-servers "localhost:9092"
-                                      :crux.kv/db-dir "dev-storage/db-dir-1"
-                                      :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
-      (try
-        (let [start-time (System/currentTimeMillis)]
-          (api/await-tx node
-                        (:last-tx (submit-ts-weather-data node))
-                        (java.time.Duration/ofMinutes 20))
-          (utils/output
-            (merge {:crux.bench/bench-type ::ingest
-                    ::ingest-time-ms (- (System/currentTimeMillis) start-time)}
-                   (select-keys (api/status node)
-                                [:crux.kv/estimate-num-keys
-                                 :crux.kv/size]))))
-        (catch Exception e
-          (utils/output
-            {:crux.bench/bench-type ::ingest
-             ::error e})
-          (throw e)))
-      (run-queries node))
-    (catch Exception e)
-    (finally (cio/delete-dir "dev-storage"))))
