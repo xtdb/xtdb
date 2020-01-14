@@ -7,14 +7,13 @@
             [clojure.string :as string]
             [clojure.java.shell :as shell]))
 
-(def commit-hash (string/trim (:out (shell/sh "git" "rev-parse" "HEAD"))))
-(def crux-version (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
-                    (with-open [in (io/reader pom-file)]
-                      (let [{:strs [version
-                                    revision]}
-                            (cio/load-properties in)]
-                        version))))
+(def commit-hash
+  (string/trim (:out (shell/sh "git" "rev-parse" "HEAD"))))
 
+(def crux-version
+  (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
+    (with-open [in (io/reader pom-file)]
+      (get (cio/load-properties in) "version"))))
 
 (defn output [mp]
   (println (json/write-str (merge mp
