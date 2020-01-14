@@ -4,7 +4,6 @@
             [clojure.string :as str]
             [crux.api :as crux]
             [crux.io :as cio]
-            [crux.kafka.embedded :as ek]
             [crux.bench.utils :as utils])
   (:import java.time.temporal.ChronoUnit
            java.util.Date))

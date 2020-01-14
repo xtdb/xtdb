@@ -4,7 +4,6 @@
             [clojure.string :as str]
             [crux.api :as api]
             [crux.io :as cio]
-            [crux.kafka.embedded :as ek]
             [crux.bench.utils :as utils])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
