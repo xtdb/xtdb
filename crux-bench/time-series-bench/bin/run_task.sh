@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 aws ecs run-task\
- --task-definition time-series-bench\
+ --task-definition crux-bench\
  --cluster crux-bench\
  --launch-type FARGATE\
  --count 1\
