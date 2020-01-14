@@ -57,7 +57,7 @@ Resources:
     Properties:
       Cpu: '2 vCPU'
       Memory: '4GB'
-      Family: 'time-series-bench'
+      Family: 'crux-bench'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
       RequiresCompatibilities:
@@ -74,21 +74,60 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
+
+  TaskSchedulerRole:
+     Type: AWS::IAM::Role
+     Properties:
+       AssumeRolePolicyDocument:
+         Version: "2012-10-17"
+         Statement:
+           -
+             Effect: "Allow"
+             Principal:
+               Service:
+                 - "events.amazonaws.com"
+             Action:
+               - "sts:AssumeRole"
+       Path: /
+       Policies:
+         - PolicyDocument:
+             Statement:
+               - Effect: "Allow"
+                 Condition:
+                   ArnEquals:
+                     ecs:cluster:
+                       Fn::GetAtt: ["ECSCluster", "Arn"]
+                 Action: "ecs:RunTask"
+                 Resource: "*"
+               - Effect: "Allow"
+                 Condition:
+                   ArnEquals:
+                     ecs:cluster:
+                       Fn::GetAtt: ["ECSCluster", "Arn"]
+                 Action:
+                   - "iam:ListInstanceProfiles"
+                   - "iam:ListRoles"
+                   - "iam:PassRole"
+                 Resource: "*"
+           PolicyName: "TaskSchedulerPolicy"
+
   TaskSchedule:
     Type: AWS::Events::Rule
     Properties:
-      Name: "time-series-scheduler"
+      Name: "crux-bench-scheduler"
       ScheduleExpression: "cron(0 0 ? * MON-FRI *)"
       State: "ENABLED"
       Targets:
-        - Id: "time-series-bench"
+        - Id: "crux-bench"
           RoleArn:
-            Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+            Fn::GetAtt: ["TaskSchedulerRole", "Arn"]
           EcsParameters:
             LaunchType: "FARGATE"
             NetworkConfiguration:
               AwsVpcConfiguration:
                 AssignPublicIp: "ENABLED"
+                SecurityGroups:
+                  - "sg-0255e869"
                 Subnets:
                   - "subnet-5140ba2b"
             TaskDefinitionArn:
