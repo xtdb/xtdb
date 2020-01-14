@@ -75,26 +75,35 @@
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
+        tx-offsets (k/map->IndexedOffsets {:indexer indexer
+                                           :k :crux.tx-log/consumer-state})
+        doc-offsets (k/map->IndexedOffsets {:indexer indexer
+                                            :k :crux.doc-log/consumer-state})]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
+    (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+    (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (t/testing "transacting and indexing"
       (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)
-            consume-opts {:indexer indexer :consumer fk/*consumer*
+            consume-opts {:indexer indexer
+                          :offsets tx-offsets
                           :pending-txs-state (atom [])
-                          :tx-topic tx-topic
-                          :doc-topic doc-topic}]
-
-        (t/is (= {:txs 1 :docs 3}
-                 (k/consume-and-index-entities consume-opts)))
+                          :tx-topic tx-topic}
+            doc-consume-opts {:indexer indexer
+                              :offsets doc-offsets
+                              :doc-topic doc-topic}]
+        (t/is (= 3
+                 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
+        (t/is (= 1
+                 (k/consume-and-index-txes consume-opts fk/*consumer*)))
         (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
 
         (t/testing "restoring to stored offsets"
           (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
-          (k/seek-to-stored-offsets indexer fk/*consumer* (.assignment fk/*consumer*))
+          (k/seek-to-stored-offsets tx-offsets fk/*consumer* (.assignment fk/*consumer*))
           (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
 
         (t/testing "querying transacted data"
@@ -154,8 +163,8 @@
                   [[:crux.tx/put evicted-doc]
                    [:crux.tx/put non-evicted-doc]])
 
-                (k/consume-and-index-entities consume-opts)
-                (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
+                (k/consume-and-index-txes consume-opts)
+                (while (not= {:txs 0 :docs 0} (k/consume-and-index-txes consume-opts)))
                 (:crux.db/content-hash (q/entity-tx (api/db node) (:crux.db/id evicted-doc))))
 
             after-evict-doc {:crux.db/id :after-evict :personal "private"}
@@ -166,7 +175,7 @@
                 tx-log
                 [[:crux.tx/put after-evict-doc]]))]
 
-        (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
+        (while (not= {:txs 0 :docs 0} (k/consume-and-index-txes consume-opts)))
 
         (t/testing "querying transacted data"
           (t/is (= non-evicted-doc (q/entity (api/db node) (:crux.db/id non-evicted-doc))))
@@ -187,12 +196,12 @@
                                         :tx-topic tx-topic
                                         :doc-topic doc-topic}]
                       (k/subscribe-from-stored-offsets indexer fk/*consumer* [tx-topic doc-topic])
-                      (k/consume-and-index-entities consume-opts)
-                      (t/is (= {:txs 0, :docs 1} (k/consume-and-index-entities consume-opts)))
+                      (k/consume-and-index-txes consume-opts)
+                      (t/is (= {:txs 0, :docs 1} (k/consume-and-index-txes consume-opts)))
                       ;; delete the object that would have been compacted away
                       (db/delete-objects object-store [evicted-doc-hash])
 
-                      (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
+                      (while (not= {:txs 0 :docs 0} (k/consume-and-index-txes consume-opts)))
                       (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
 
                       (t/testing "querying transacted data"
