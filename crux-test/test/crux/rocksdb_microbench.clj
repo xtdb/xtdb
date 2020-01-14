@@ -1,5 +1,5 @@
 (ns crux.rocksdb-microbench
-  (:require [time-series-bench.ts-weather :as ts-weather]
+  (:require [crux.bench.ts-weather :as ts-weather]
             [clojure.test :as t]
             [crux.fixtures.standalone :as fs]
             [crux.fixtures.api :refer [*api*] :as fapi]

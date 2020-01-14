@@ -110,13 +110,15 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
-      (utils/output {:crux.bench/bench-type ::recent-battery-readings
-                     ::query query
-                     ::query-time-ms (- end-time start-time)
-                     ::successful? successful?}))
+      (utils/output {:crux.bench/bench-type :recent-battery-readings
+                     :bench-ns (str *ns*)
+                     :query (str query)
+                     :query-time-ms (- end-time start-time)
+                     :successful? successful?}))
     (catch Exception e
       (utils/output {:crux.bench/bench-type ::recent-battery-readings
-                     ::error e})
+                     :bench-ns (str *ns*)
+                     :error e})
       (throw e))))
 
 ;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
@@ -187,13 +189,15 @@
                            25.0
                            :discharging
                            "focus"]])]
-      (utils/output {:crux.bench/bench-type ::busiest-devices
-                     ::query query
-                     ::query-time-ms (- end-time start-time)
-                     ::successful? successful?}))
+      (utils/output {:crux.bench/bench-type :busiest-devices
+                     :bench-ns (str *ns*)
+                     :query (str query)
+                     :query-time-ms (- end-time start-time)
+                     :successful? successful?}))
     (catch Exception e
       (utils/output {:crux.bench/bench-type ::recent-battery-readings
-                     ::error e})
+                     :bench-ns (str *ns*)
+                     :error e})
       (throw e))))
 
 ;; SELECT date_trunc('hour', time) "hour",
@@ -254,12 +258,14 @@
                               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
-         (utils/output {:crux.bench/bench-type ::history-ascending
-                        ::query-time-ms (- end-time start-time)
-                        ::successful? successful?}))
+         (utils/output {:crux.bench/bench-type :history-ascending
+                        :bench-ns (str *ns*)
+                        :query-time-ms (- end-time start-time)
+                        :successful? successful?}))
        (catch Exception e
-         (utils/output {:crux.bench/bench-type ::history-ascending
-                        ::error e})
+         (utils/output {:crux.bench/bench-type :history-ascending
+                        :bench-ns (str *ns*)
+                        :error e})
          (throw e))))
 
 

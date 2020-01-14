@@ -140,10 +140,11 @@
                          91.0
                          92.40000000000006]]
                        result)]
-    (utils/output {:crux.bench/bench-type ::weather-last-10-readings-test
-                   ::query query
-                   ::query-time-ms time-taken
-                   ::successful? successful?})))
+    (utils/output {:crux.bench/bench-type :weather-last-10-readings-test
+                   :bench-ns (str *ns*)
+                   :query (str query)
+                   :query-time-ms time-taken
+                   :successful? successful?})))
 
 ;; Last 10 readings from 'outside' locations
 
@@ -240,10 +241,11 @@
                          91.0
                          96.9]]
                        result)]
-    (utils/output {:crux.bench/bench-type ::weather-last-10-readings-from-outside-locations-test
-                   ::query query
-                   ::query-time-ms time-taken
-                   ::successful? successful?})))
+    (utils/output {:crux.bench/bench-type :weather-last-10-readings-from-outside-locations-test
+                   :bench-ns (str *ns*)
+                   :query (str query)
+                   :query-time-ms time-taken
+                   :successful? successful?})))
 
 ;; Hourly average, min, and max temperatures for "field" locations
 
@@ -344,9 +346,10 @@
                         [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
                         [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
                        result)]
-    (utils/output {:crux.bench/bench-type ::weather-hourly-average-min-max-temperatures-for-field-locations
-                   ::query-time-ms time-taken
-                   ::successful? successful?})))
+    (utils/output {:crux.bench/bench-type :weather-hourly-average-min-max-temperatures-for-field-locations
+                   :bench-ns (str *ns*)
+                   :query-time-ms time-taken
+                   :successful? successful?})))
 
 (defn run-queries [node]
   (weather-last-10-readings-test node)

@@ -2,12 +2,26 @@
   (:require [clojure.data.json :as json]
             [crux.kafka.embedded :as ek]
             [crux.io :as cio]
-            [crux.api :as api]))
+            [clojure.java.io :as io]
+            [crux.api :as api]
+            [clojure.string :as string]
+            [clojure.java.shell :as shell]))
+
+(def commit-hash (string/trim (:out (shell/sh "git" "rev-parse" "HEAD"))))
+(def crux-version (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
+                    (with-open [in (io/reader pom-file)]
+                      (let [{:strs [version
+                                    revision]}
+                            (cio/load-properties in)]
+                        version))))
+
 
 (defn output [mp]
-  (println (json/write-str mp)))
+  (println (json/write-str (merge mp
+                                  {:crux-commit commit-hash
+                                   :crux-version crux-version}))))
 
-(defn bench [ingest queries version]
+(defn bench [ingest queries bench-ns]
   (try
     (with-open [embedded-kafka (ek/start-embedded-kafka
                                  {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
@@ -25,7 +39,7 @@
                         (java.time.Duration/ofMinutes 20))
           (output
             {:bench-type :ingest
-             :bench-version version
+             :bench-ns bench-ns
              :ingest-time-ms (- (System/currentTimeMillis) start-time)
              :crux-node-status (select-keys (api/status node)
                                             [:crux.kv/estimate-num-keys
@@ -33,7 +47,7 @@
         (catch Exception e
           (output
             {:bench-type :ingest
-             :bench-version version
+             :bench-ns bench-ns
              :error e})
           (throw e)))
       (queries node))
