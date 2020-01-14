@@ -85,6 +85,7 @@ Resources:
           RoleArn:
             Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
           EcsParameters:
+            LaunchType: "FARGATE"
             NetworkConfiguration:
               AwsVpcConfiguration:
                 AssignPublicIp: "ENABLED"
