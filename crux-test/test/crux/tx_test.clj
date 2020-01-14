@@ -704,17 +704,21 @@
     (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :frob, :foo :baz}))))))
 
 (t/deftest raises-tx-events-422
-  (let [!events (atom [])]
+  (let [!events (atom [])
+        !latch (promise)]
     (bus/listen (:event-bus *api*) {::bus/event-types #{::tx/indexing-docs ::tx/indexed-docs
                                                         ::tx/indexing-tx ::tx/indexed-tx}}
-                #(swap! !events conj %))
+                #(do
+                   (swap! !events conj %)
+                   (when (= ::tx/indexed-tx (::bus/event-type %))
+                     (deliver !latch @!events))))
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
           submitted-tx (fapi/submit+await-tx [[:crux.tx/put doc-1] [:crux.tx/put doc-2]])]
 
-      ;; to allow for the event handlers to be called asynchronously
-      (Thread/sleep 250)
+      (when (= ::timeout (deref !latch 500 ::timeout))
+        (t/is false))
 
       (t/is (= [{::bus/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
                 {::bus/event-type ::tx/indexed-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
