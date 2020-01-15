@@ -2497,6 +2497,17 @@
                       :where [[(identity false)]
                               [(identity 4) f]]})))))
 
+(t/deftest test-literal-rule-arguments-bug-507
+  ;; supplying 4 as the rule arg here is a necessary condition
+  (t/testing "range clause in rule"
+    (t/is (= #{}
+             (api/q (api/db *api*)
+                    '{:find [f]
+                      :where [(foo 4 f)]
+                      :rules [[(foo n f)
+                               [(<= 6 n)]
+                               [(identity n) f]]]})))))
+
 ;; Test from Racket Datalog documentation:
 ;; https://docs.racket-lang.org/datalog/datalog.html
 (t/deftest test-racket-datalog-fib
