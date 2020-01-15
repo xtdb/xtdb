@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.backup :as backup]
-            [crux.event-bus :as bus]
+            [crux.bus :as bus]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
@@ -312,7 +312,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store tx-log event-bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store tx-log bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -326,7 +326,7 @@
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
-    (bus/send event-bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
+    (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
     (let [{docs-to-evict true, docs-to-upsert false} (group-by (comp boolean idx/evicted-doc? val) docs)
 
@@ -352,7 +352,7 @@
 
       (db/put-objects object-store docs)
 
-      (bus/send event-bus {::bus/event-type ::indexed-docs, :doc-ids (set (keys docs))})
+      (bus/send bus {::bus/event-type ::indexed-docs, :doc-ids (set (keys docs))})
 
       (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
         (if stats-executor
@@ -363,7 +363,7 @@
     (s/assert :crux.tx.event/tx-events tx-events)
 
     (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
-    (bus/send event-bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
+    (bus/send bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
 
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
@@ -400,7 +400,7 @@
                 (kv/store kv-store [completed-tx-kv
                                     [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
-          (bus/send event-bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
+          (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
 
   (docs-exist? [_ content-hashes]
@@ -420,10 +420,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log event-bus]} args]
-               (->KvIndexer object-store kv-store tx-log event-bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log bus]} args]
+               (->KvIndexer object-store kv-store tx-log bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store :crux.node/event-bus]})
+   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout-ms]
   (let [seen-tx (atom nil)]

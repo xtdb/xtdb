@@ -15,7 +15,7 @@
             [crux.sparql :as sparql]
             [crux.api :as api]
             [crux.tx :as tx]
-            [crux.event-bus :as bus])
+            [crux.bus :as bus])
   (:import java.time.Duration
            java.util.List
            org.apache.kafka.clients.producer.ProducerRecord

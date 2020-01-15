@@ -1,4 +1,4 @@
-(ns crux.event-bus
+(ns crux.bus
   (:require [crux.io :as cio]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s])
@@ -25,7 +25,7 @@
   (listen [this listen-ops f]
     (let [{::keys [event-types]} listen-ops]
       (swap! !listeners
-             conj {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "event-bus-listener"))
+             conj {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
                    :f f
                    ::event-types event-types})
       nil))
@@ -51,6 +51,6 @@
         (catch Exception e
           (log/error e "error closing listener"))))))
 
-(def event-bus
+(def bus
   {:start-fn (fn [deps args]
                (->EventBus (atom #{})))})
