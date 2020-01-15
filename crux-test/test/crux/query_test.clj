@@ -2701,9 +2701,10 @@
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
                       {:crux.db/id :petr :name "Petr" :last-name "Petrov"}])
 
-  (t/is (= #{[:ivan] [:petr]} (api/q (api/db *api*) '{:find [e]
-                                                  :where [[e :crux.db/id _]]
-                                                  :timeout 10}))))
+  (t/is (= #{[:ivan] [:petr]}
+           (api/q (api/db *api*) '{:find [e]
+                                   :where [[e :crux.db/id _]]
+                                   :timeout 100}))))
 
 (t/deftest test-nil-query-attribute-453
   (f/transact! *api* [{:crux.db/id :id :this :that :these :those}])
