@@ -185,6 +185,9 @@
   (submitTx [_ tx-ops]
     (api-request-sync (str url "/tx-log") tx-ops))
 
+  (hasTxCommitted [_ submitted-tx]
+    (api-request-sync (str url "/tx-committed") submitted-tx)
+
   (newTxLogContext [_]
     (->RemoteApiStream (atom [])))
 
