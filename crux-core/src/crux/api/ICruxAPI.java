@@ -98,6 +98,17 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public Map<Keyword,?> status();
     // TODO elaborate
 
+
+    /**
+     * Checks if a submitted tx was successfully committed.
+     *
+     * @param submittedTx must be a map returned from {@link
+     * #submitTx(List txOps)}.
+     * @return            true if the submitted transaction was committed.
+     */
+    public boolean hasTxCommitted(Map<Keyword,?> submittedTx);
+
+
     /**
      * Checks if a submitted tx did update an entity.
      *

@@ -104,6 +104,11 @@
   (status [node]
     "Returns the status of this node as a map.")
 
+  (tx-committed? [node submitted-tx]
+    "Checks if a submitted tx was successfully committed.
+     submitted-tx must be a map returned from `submit-tx`.
+     Returns true if the submitted transaction was committed.")
+
   (submitted-tx-updated-entity? [node submitted-tx eid]
     "Checks if a submitted tx did update an entity.
   submitted-tx must be a map returned from `submit-tx`
@@ -204,6 +209,9 @@
 
   (submitted-tx-corrected-entity? [this submitted-tx ^Date valid-time eid]
     (.hasSubmittedTxCorrectedEntity this submitted-tx valid-time eid))
+
+  (tx-committed? [this submitted-tx]
+    (.hasTxCommitted this submitted-tx))
 
   (sync
     ([this]
