@@ -10,10 +10,10 @@
 
 (defn remove-log-file [f]
   (do
-    (io/delete-file "logtester.log")
-    (f)))
+    (f)
+    (io/delete-file "logtester.log")))
 
-(t/use-fixtures :once remove-log-file kvf/with-kv-dir fs/with-standalone-node apif/with-node)
+(t/use-fixtures :once kvf/with-kv-dir fs/with-standalone-node apif/with-node remove-log-file)
 
 (defn- sync-submit-tx [node tx-ops]
   (let [submitted-tx (api/submit-tx node tx-ops)]
@@ -23,36 +23,41 @@
 (t/deftest test-submit-tx-log
   (let [secret 33489857205]
 
-    ;; Put
-    (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :secure-document
-                                          :secret secret}]])
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
-    ;; Query on document
-    (api/q (api/db *api*) {:find ['s] :where [['e :secret 's]]})
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
-    ;; Put over exisiting doc
-    (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :secure-document
-                                          :secret-2 secret}]])
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
-    ;; Query on doc with args
-    (api/q (api/db *api*) {:find ['s 'ss]
-                           :where [['e :secret 's]
-                                   ['e :secret-2 'ss]]
-                           :args [{'ss secret}]})
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
-    ;; CAS
-    (sync-submit-tx *api* [[:crux.tx/cas
-                            {:crux.db/id :secure-document
-                             :secret secret
-                             :secret-2 secret}
-                            {:crux.db/id :secure-document
-                             :secret secret}]])
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
-    ;; Delete
-    (sync-submit-tx *api* [[:crux.tx/delete :secure-document]])
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
-    ;; Evict
-    (sync-submit-tx *api* [[:crux.tx/evict :secure-document]])
-    (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log"))))
+    (t/testing "Put"
+      (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :secure-document
+                                            :secret secret}]])
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
+    (t/testing "Query on doc"
+      (api/q (api/db *api*) {:find ['s] :where [['e :secret 's]]})
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
+    (t/testing "Put on existing doc"
+      (sync-submit-tx *api* [[:crux.tx/put {:crux.db/id :secure-document
+                                            :secret-2 secret}]])
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
+    (t/testing "Query on doc with args" (api/q (api/db *api*) {:find ['s 'ss]
+                                                               :where [['e :secret 's]
+                                                                       ['e :secret-2 'ss]]
+                                                               :args [{'ss secret}]})
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
+    (t/testing "CAS"
+      (sync-submit-tx *api* [[:crux.tx/cas
+                              {:crux.db/id :secure-document
+                               :secret secret
+                               :secret-2 secret}
+                              {:crux.db/id :secure-document
+                               :secret secret}]])
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
+    (t/testing "Delete"
+      (sync-submit-tx *api* [[:crux.tx/delete :secure-document]])
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
+    (t/testing "Evict" (sync-submit-tx *api* [[:crux.tx/evict :secure-document]])
+      (t/is (not (re-find (re-pattern (str secret)) (slurp "logtester.log")))))
+
     (t/is (slurp "logtester.log"))))
 
