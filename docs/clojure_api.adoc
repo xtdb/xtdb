@@ -84,28 +84,17 @@ toc::[]
      including tx-time and tx-id.")
 ----
 
-=== submitted-tx-updated-entity?
+=== tx-committed?
 
 [source,clj]
 ----
-  (submitted-tx-updated-entity? [node submitted-tx eid]
-    "Checks if a submitted tx did update an entity.
-    submitted-tx must be a map returned from `submit-tx`
-    eid is an object that can be coerced into an entity id.
-    Returns true if the entity was updated in this transaction.")
+  (tx-committed? [node submitted-tx]
+    "Checks if a submitted tx was successfully committed.
+     submitted-tx must be a map returned from `submit-tx`.
+     Returns true if the submitted transaction was committed.")
 ----
 
-=== submitted-tx-corrected-entity?
 
-[source,clj]
-----
-  (submitted-tx-corrected-entity? [node submitted-tx ^Date valid-time eid]
-    "Checks if a submitted tx did correct an entity as of valid time.
-    submitted-tx must be a map returned from `submit-tx`
-    valid-time valid time of the correction to check.
-    eid is an object that can be coerced into an entity id.
-    Returns true if the entity was updated in this transaction.")
-----
 
 === sync
 
