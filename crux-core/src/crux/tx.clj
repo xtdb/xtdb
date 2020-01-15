@@ -60,6 +60,10 @@
   (let [[op id & args] (conform-tx-op tx-op)]
     (filter map? args)))
 
+(defn tx-ops->id-and-docs [tx-ops]
+  (s/assert :crux.api/tx-ops tx-ops)
+  (map #(vector (str (c/new-id %)) %) (mapcat tx-op->docs tx-ops)))
+
 (defn tx-op->tx-event [tx-op]
   (let [[op id & args] (conform-tx-op tx-op)]
     (doto (into [op (str (c/new-id id))]
@@ -230,7 +234,8 @@
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
-(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history tx-log remote-document-store] :as deps}]
+(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx
+                                          {:keys [history ^crux.db.RemoteDocumentStore remote-document-store] :as deps}]
   (let [eid (c/new-id k)
         content-hashes (all-content-hashes history eid)]
     {:pre-commit-fn #(cond
@@ -245,16 +250,15 @@
                                           k evict-time-ranges-env-var)
                                true))
 
-     :post-commit-fn #(when tx-log
-                        (doseq [content-hash content-hashes]
-                          ;; TODO: Direct interface call to help
-                          ;; Graal, not sure why this is needed,
-                          ;; fails with get-proxy-class issue
-                          ;; otherwise.
-                          (.submit_doc
-                           ^crux.db.RemoteDocumentStore remote-document-store
-                           content-hash
-                           {:crux.db/id eid, :crux.db/evicted? true})))}))
+     :post-commit-fn #(when remote-document-store
+                        ;; TODO: Direct interface call to help
+                        ;; Graal, not sure why this is needed,
+                        ;; fails with get-proxy-class issue
+                        ;; otherwise.
+                        (.submit_docs
+                         remote-document-store
+                         (for [content-hash content-hashes]
+                           [(str content-hash) {:crux.db/id eid, :crux.db/evicted? true}])))}))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 

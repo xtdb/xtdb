@@ -101,24 +101,16 @@
   db/TxLog
   (submit-tx [this tx-ops]
     (try
-      (s/assert :crux.api/tx-ops tx-ops)
       (let [tx-events (map tx/tx-op->tx-event tx-ops)
-            content-hash->doc (->> (for [doc (mapcat tx/tx-op->docs tx-ops)]
-                                     [(c/new-id doc) doc])
-                                   (into {}))]
-        (doseq [f (->> (for [[content-hash doc] content-hash->doc]
-                         (db/submit-doc doc-store (str content-hash) doc))
-                       (doall))]
-          @f)
-        (.flush producer)
-        (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
-                                    (-> (.headers) (.add (str :crux.tx/docs)
-                                                         (nippy/fast-freeze (set (keys content-hash->doc))))))
-                                  (.send producer))]
-          (delay
-           (let [record-meta ^RecordMetadata @tx-send-future]
-             {:crux.tx/tx-id (.offset record-meta)
-              :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
+            content-hashes (->> (set (map c/new-id (mapcat tx/tx-op->docs tx-ops))))
+            tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
+                                  (-> (.headers) (.add (str :crux.tx/docs)
+                                                       (nippy/fast-freeze content-hashes))))
+                                (.send producer))]
+        (delay
+         (let [record-meta ^RecordMetadata @tx-send-future]
+           {:crux.tx/tx-id (.offset record-meta)
+            :crux.tx/tx-time (Date. (.timestamp record-meta))})))))
 
   (open-tx-log [this from-tx-id]
     (let [tx-topic-consumer ^KafkaConsumer (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false"))
@@ -186,9 +178,11 @@
   (close [_])
 
   db/RemoteDocumentStore
-  (submit-doc [this content-hash doc]
-    (->> (ProducerRecord. doc-topic content-hash doc)
-         (.send producer))))
+  (submit-docs [this id-and-docs]
+    (doseq [[content-hash doc] id-and-docs]
+      @(->> (ProducerRecord. doc-topic content-hash doc)
+            (.send producer)))
+    (.flush producer)))
 
 (defn consume-and-index-documents
   [{:keys [offsets indexer timeout doc-topic]

@@ -61,6 +61,7 @@
     (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
     (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
+    (db/submit-docs doc-store (tx/tx-ops->id-and-docs tx-ops))
     (db/submit-tx tx-log tx-ops)
 
     (let [docs (map consumer-record->value (.poll fk/*consumer2* (Duration/ofMillis 10000)))]
@@ -105,7 +106,8 @@
     (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (t/testing "transacting and indexing"
-      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
+      (let [_ (db/submit-docs doc-store (tx/tx-ops->id-and-docs tx-ops))
+            {:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
         (t/is (= 3 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
         (t/is (= 1 (k/consume-and-index-txes consume-opts fk/*consumer*)))
         (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
@@ -180,9 +182,11 @@
     (t/testing "transacting and indexing"
       (let [evicted-doc {:crux.db/id :to-be-evicted :personal "private"}
             non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
+            tx-ops [[:crux.tx/put evicted-doc]
+                    [:crux.tx/put non-evicted-doc]]
             evicted-doc-hash
-            (do @(db/submit-tx tx-log [[:crux.tx/put evicted-doc]
-                                       [:crux.tx/put non-evicted-doc]])
+            (do (db/submit-docs doc-store (tx/tx-ops->id-and-docs tx-ops))
+                @(db/submit-tx tx-log tx-ops)
                 (t/is (= 2 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
                 (t/is (= 1 (k/consume-and-index-txes tx-consume-opts fk/*consumer*)))
                 (:crux.db/content-hash (q/entity-tx (api/db node) (:crux.db/id evicted-doc))))
@@ -191,6 +195,7 @@
             {:crux.tx/keys [tx-id tx-time]}
             (do
               @(db/submit-tx tx-log [[:crux.tx/evict (:crux.db/id evicted-doc)]])
+              (db/submit-docs doc-store (tx/tx-ops->id-and-docs [[:crux.tx/put after-evict-doc]]))
               @(db/submit-tx tx-log [[:crux.tx/put after-evict-doc]]))]
 
         (consume-topics tx-consume-opts doc-consume-opts)

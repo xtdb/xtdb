@@ -79,8 +79,8 @@
 
 (defrecord JdbcTxLog [ds dbtype]
   db/RemoteDocumentStore
-  (submit-doc [this content-hash doc]
-    (let [id (str content-hash)]
+  (submit-docs [this id-and-docs]
+    (doseq [[id doc] id-and-docs]
       (if (idx/evicted-doc? doc)
         (do
           (insert-event! ds id doc "docs")
@@ -91,9 +91,6 @@
 
   db/TxLog
   (submit-tx [this tx-ops]
-    (s/assert :crux.api/tx-ops tx-ops)
-    (doseq [doc (mapcat tx/tx-op->docs tx-ops)]
-      (db/submit-doc this (str (c/new-id doc)) doc))
     (let [tx-events (map tx/tx-op->tx-event tx-ops)
           ^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "txs"))]
       (delay {:crux.tx/tx-id (.id tx)
