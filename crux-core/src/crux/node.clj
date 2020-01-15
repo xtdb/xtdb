@@ -108,15 +108,6 @@
       (ensure-node-open this)
       @(db/submit-tx tx-log tx-ops)))
 
-  (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
-    (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
-
-  (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (api/await-tx this submitted-tx)
-      (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid)))
-
   (hasTxCommitted [this submitted-tx]
     (cio/with-read-lock lock
       (let [tx-id (:crux.tx/tx-id submitted-tx)

@@ -1371,9 +1371,8 @@
                           tx-id] :as submitted-tx}
           (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
                                                    :name "Ivan 1st"}]])]
-
-      (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
-      (t/is (false? (api/submitted-tx-updated-entity? *api* submitted-tx :petr)))
+      (api/await-tx *api* submitted-tx )
+      (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
       (t/is (= #{["Ivan 1st"]} (api/q (api/db *api* tx-time tx-time)
                                       '{:find [n]
@@ -1390,7 +1389,8 @@
           (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
                                                    :name "Ivan 2nd"}]])]
 
-      (t/is (false? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
+      (api/await-tx *api* submitted-tx)
+      (t/is (false? (api/tx-committed? *api* submitted-tx)))
 
       (t/is (= #{["Ivan 1st"]} (api/q (api/db *api* tx-time tx-time)
                                       '{:find [n]
@@ -1405,8 +1405,8 @@
                                   :name "Ivan 1st"}
                                  {:crux.db/id :ivan
                                   :name "Ivan 2nd"}]])]
-
-      (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-update-tx :ivan)))
+      (api/await-tx *api* submitted-update-tx)
+      (t/is (true? (api/tx-committed? *api* submitted-update-tx)))
       (t/is (= #{["Ivan 2nd"]} (api/q (api/db *api* tx-time tx-time)
                                       '{:find [n]
                                         :where [[:ivan :name n]]})))
@@ -1423,7 +1423,8 @@
                                       :name "Ivan 3rd"}
                                      {:crux.db/id :ivan
                                       :name "Ivan 4th"}]])
-              updated? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)]
+              _ (api/await-tx *api* submitted-tx)
+              updated? (api/tx-committed? *api* submitted-tx)]
 
           ;; NOTE: adding tx log to failure message to help debug #321
           ;; "Duplicate CAS failure".
@@ -1443,13 +1444,14 @@
                                      {:crux.db/id :ivan
                                       :name "Ivan 5th"}]])]
 
-          (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
+          (api/await-tx *api* submitted-tx)
+          (t/is (true? (api/tx-committed? *api* submitted-tx)))
           (t/is (= #{["Ivan 5th"]} (api/q (api/db *api* tx-time
                                                   tx-time) '{:find [n]
                                                              :where [[:ivan :name n]]})))
 
           (t/testing "earlier submitted txs can still be checked"
-            (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-update-tx :ivan)))))))))
+            (t/is (true? (api/tx-committed? *api* submitted-update-tx)))))))))
 
 ;; https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
 ;; This test is based on section 7. Support for complex queries in

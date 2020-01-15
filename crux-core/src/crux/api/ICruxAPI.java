@@ -108,29 +108,6 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public boolean hasTxCommitted(Map<Keyword,?> submittedTx);
 
-
-    /**
-     * Checks if a submitted tx did update an entity.
-     *
-     * @param submittedTx must be a map returned from {@link
-     * #submitTx(List txOps)}.
-     * @param eid         an object that can be coerced into an entity id.
-     * @return            true if the entity was updated in this transaction.
-     */
-    public boolean hasSubmittedTxUpdatedEntity(Map<Keyword,?> submittedTx, Object eid);
-
-    /**
-     * Checks if a submitted tx did correct an entity as of valid
-     * time.
-     *
-     * @param submittedTx  must be a map returned from {@link
-     * #submitTx(List txOps)}.
-     * @param validTime    valid time of correction to check.
-     * @param eid          an object that can be coerced into an entity id.
-     * @return             true if the entity was updated in this transaction.
-     */
-    public boolean hasSubmittedTxCorrectedEntity(Map<Keyword,?> submittedTx, Date validTime, Object eid);
-
     /**
      * Blocks until the node has caught up indexing to the latest tx available
      * at the time this method is called. Will throw an exception on timeout.
