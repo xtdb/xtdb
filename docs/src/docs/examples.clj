@@ -275,13 +275,14 @@ node)
 
 (defn query-example-lazy [node]
   ;; tag::lazy-query[]
+(with-open [snapshot (crux.api/new-snapshot (crux/db node))]
   (crux/q
    (crux/db node)
-   (crux.api/new-snapshot (crux/db node))
+   snapshot
    '{:find [p1]
      :where [[p1 :name n]
              [p1 :last-name n]
-             [p1 :name "Smith"]]})
+             [p1 :name "Smith"]]}))
   ;; end::lazy-query[]
   )
 
