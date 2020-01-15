@@ -260,12 +260,10 @@
     (letfn [(more-events []
               (lazy-seq
                (when-let [m (next-message i ::event-log)]
-                 (log/debug "Consuming message:" (cio/pr-edn-str (message->edn m)))
                  (cons m (more-events)))))]
 
       (->> (lazy-seq
             (when-let [m (seek-message i ::event-log next-offset)]
-              (log/debug "Consuming message:" (cio/pr-edn-str (message->edn m)))
               (cons m (more-events))))
 
            (take (long batch-size)))))
