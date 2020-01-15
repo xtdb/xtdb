@@ -208,14 +208,12 @@
 
 (defrecord MobergTxLog [event-log-kv]
   db/RemoteDocumentStore
-  (submit-doc [this content-hash doc]
-    (send-message event-log-kv ::event-log content-hash doc {:crux.tx/sub-topic :docs}))
+  (submit-docs [this id-and-docs]
+    (doseq [[content-hash doc] id-and-docs]
+      (send-message event-log-kv ::event-log content-hash doc {:crux.tx/sub-topic :docs})))
 
   db/TxLog
   (submit-tx [this tx-ops]
-    (s/assert :crux.api/tx-ops tx-ops)
-    (doseq [doc (mapcat tx/tx-op->docs tx-ops)]
-      (db/submit-doc this (str (c/new-id doc)) doc))
     (let [tx-events (map tx/tx-op->tx-event tx-ops)
           m (send-message event-log-kv ::event-log nil tx-events {:crux.tx/sub-topic :txs})]
       (delay {:crux.tx/tx-id (.id m)

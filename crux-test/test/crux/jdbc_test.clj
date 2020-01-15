@@ -9,6 +9,7 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.lubm :as fl]
             [crux.fixtures.postgres :as fp]
+            [crux.api :as api]
             [crux.jdbc :as j]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as jdbcr]))
@@ -56,26 +57,27 @@
                                {:builder-fn jdbcr/as-unqualified-lower-maps})))))
 (t/deftest test-docs-retention
   (let [tx-log (:tx-log *api*)
+        doc-store (:remote-document-store *api*)
 
         doc {:crux.db/id (c/new-id :some-id) :a :b}
         doc-hash (str (c/new-id doc))
 
-        tx-1 (db/submit-tx tx-log [[:crux.tx/put doc]])]
+        tx-1 (api/submit-tx *api* [[:crux.tx/put doc]])]
 
     (t/is (= 1 (count (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
     (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))
 
     (t/testing "Compaction"
-      (db/submit-doc tx-log doc-hash :some-val)
+      (db/submit-docs tx-log [[doc-hash :some-val]])
       (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 
     (t/testing "Eviction"
-      (db/submit-doc tx-log doc-hash {:crux.db/id :some-id :crux.db/evicted? true})
+      (db/submit-docs tx-log [[doc-hash {:crux.db/id :some-id :crux.db/evicted? true}]])
       (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
                 {:crux.db/id :some-id :crux.db/evicted? true}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 
     (t/testing "Resurrect Document"
-      (let [tx-2 (db/submit-tx tx-log [[:crux.tx/put doc]])]
+      (let [tx-2 (api/submit-tx *api* [[:crux.tx/put doc]])]
         (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
                   {:crux.db/id :some-id :crux.db/evicted? true}
                   doc]
