@@ -1132,7 +1132,7 @@
                                  (fn [args]
                                    (mapv
                                      (fn [argsmap]
-                                       (into #{} (map (fn [[k v]] [k :hidden])
+                                       (into {} (map (fn [[k v]] [k :hidden])
                                                       argsmap)))
                                      args)))))
      (validate-args args)

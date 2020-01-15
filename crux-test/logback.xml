@@ -16,11 +16,22 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
+
     <root level="TRACE">
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FILE" />
     </root>
 
-    <logger name="org.apache.kafka" level="WARN" />
-    <logger name="org.apache.zookeeper" level="WARN" />
+    <logger name="crux" level="INFO" />
+    <logger name="crux.node" level="WARN" />
+    <logger name="crux.standalone" level="ERROR" />
+    <logger name="crux.hash" level="WARN" />
+    <logger name="crux.http-server" level="WARN" />
+    <logger name="crux.kafka" level="WARN" />
+    <logger name="crux.jdbc" level="WARN" />
+    <logger name="crux.kv.memdb" level="ERROR" />
+    <logger name="crux.rdf" level="ERROR" />
+    <logger name="crux.tx" level="WARN" />
+    <logger name="org.apache.kafka" level="ERROR" />
+    <logger name="org.apache.zookeeper" level="ERROR" />
 </configuration>
