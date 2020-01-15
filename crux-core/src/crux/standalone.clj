@@ -69,4 +69,6 @@
           ::event-log-consumer {:start-fn start-event-log-consumer
                                 :deps [::event-log-kv :crux.node/indexer]}
           :crux.node/tx-log {:start-fn start-moberg-event-log
-                             :deps [::event-log-kv]}}))
+                             :deps [::event-log-kv]}
+          :crux.node/remote-document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
+                                            :deps [:crux.node/tx-log]}}))

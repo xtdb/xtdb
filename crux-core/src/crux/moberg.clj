@@ -207,10 +207,11 @@
              (next-message i topic)))))))
 
 (defrecord MobergTxLog [event-log-kv]
-  db/TxLog
+  db/RemoteDocumentStore
   (submit-doc [this content-hash doc]
     (send-message event-log-kv ::event-log content-hash doc {:crux.tx/sub-topic :docs}))
 
+  db/TxLog
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
     (doseq [doc (mapcat tx/tx-op->docs tx-ops)]

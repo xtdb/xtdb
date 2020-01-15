@@ -78,7 +78,7 @@
   (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
 (defrecord JdbcTxLog [ds dbtype]
-  db/TxLog
+  db/RemoteDocumentStore
   (submit-doc [this content-hash doc]
     (let [id (str content-hash)]
       (if (idx/evicted-doc? doc)
@@ -89,6 +89,7 @@
           (insert-event! ds id doc "docs")
           (log/infof "Skipping doc insert %s" id)))))
 
+  db/TxLog
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
     (doseq [doc (mapcat tx/tx-op->docs tx-ops)]
@@ -187,4 +188,6 @@
                       ::event-log-consumer {:start-fn start-event-log-consumer
                                             :deps [:crux.node/indexer ::ds]}
                       :crux.node/tx-log {:start-fn start-tx-log
-                                         :deps [::ds]}}))
+                                         :deps [::ds]}
+                      :crux.node/remote-document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
+                                                        :deps [:crux.node/tx-log]}}))
