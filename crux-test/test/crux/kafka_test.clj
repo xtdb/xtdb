@@ -48,8 +48,9 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
+        doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+        tx-log (k/->KafkaTxLog doc-store fk/*producer* fk/*consumer* tx-topic {})
+        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                             :k :crux.tx-log/consumer-state})
         doc-offsets (kc/map->IndexedOffsets {:indexer indexer
@@ -79,8 +80,9 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
+        doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+        tx-log (k/->KafkaTxLog doc-store fk/*producer* fk/*consumer* tx-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
+        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
                (db [this]
@@ -148,10 +150,12 @@
 
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
 
-        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
+        doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+
+        tx-log (k/->KafkaTxLog doc-store fk/*producer* fk/*consumer* tx-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
 
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
+        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
 
         node (reify crux.api.ICruxAPI
                (db [this]
@@ -203,7 +207,8 @@
                 (fkv/with-kv-store
                   (fn []
                     (let [object-store (os/->KvObjectStore *kv*)
-                          indexer (tx/->KvIndexer object-store *kv* tx-log (bus/->EventBus (atom #{})) nil)
+                          doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+                          indexer (tx/->KvIndexer object-store *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
                           tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                                               :k :crux.tx-log/consumer-state})
                           doc-offsets (kc/map->IndexedOffsets {:indexer indexer

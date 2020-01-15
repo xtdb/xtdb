@@ -230,7 +230,7 @@
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
-(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history tx-log] :as deps}]
+(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history tx-log remote-document-store] :as deps}]
   (let [eid (c/new-id k)
         content-hashes (all-content-hashes history eid)]
     {:pre-commit-fn #(cond
@@ -252,7 +252,7 @@
                           ;; fails with get-proxy-class issue
                           ;; otherwise.
                           (.submit_doc
-                           ^crux.db.TxLog tx-log
+                           ^crux.db.RemoteDocumentStore remote-document-store
                            content-hash
                            {:crux.db/id eid, :crux.db/evicted? true})))}))
 
@@ -263,7 +263,9 @@
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
-(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
+(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
+                                       {:crux.tx/keys [tx-time tx-id] :as tx}
+                                       {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
@@ -312,7 +314,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store tx-log bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store tx-log remote-document-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -370,6 +372,7 @@
         (let [deps {:object-store object-store
                     :kv-store kv-store
                     :tx-log tx-log
+                    :remote-document-store remote-document-store
                     :indexer this
                     :snapshot snapshot}
 
@@ -421,10 +424,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log bus]} args]
-               (->KvIndexer object-store kv-store tx-log bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log remote-document-store bus]} args]
+               (->KvIndexer object-store kv-store tx-log remote-document-store bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/remote-document-store :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout-ms]
   (let [seen-tx (atom nil)]

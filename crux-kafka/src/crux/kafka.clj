@@ -12,6 +12,7 @@
             [taoensso.nippy :as nippy]
             [crux.kv :as kv])
   (:import crux.kafka.nippy.NippySerializer
+           crux.db.RemoteDocumentStore
            java.io.Closeable
            java.time.Duration
            [java.util Date Map]
@@ -93,15 +94,11 @@
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
 
-(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, doc-topic, kafka-config]
+(defrecord KafkaTxLog [^RemoteDocumentStore doc-store, ^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
   Closeable
   (close [_])
 
   db/TxLog
-  (submit-doc [this content-hash doc]
-    (->> (ProducerRecord. doc-topic content-hash doc)
-         (.send producer)))
-
   (submit-tx [this tx-ops]
     (try
       (s/assert :crux.api/tx-ops tx-ops)
@@ -110,7 +107,7 @@
                                      [(c/new-id doc) doc])
                                    (into {}))]
         (doseq [f (->> (for [[content-hash doc] content-hash->doc]
-                         (db/submit-doc this (str content-hash) doc))
+                         (db/submit-doc doc-store (str content-hash) doc))
                        (doall))]
           @f)
         (.flush producer)
@@ -183,6 +180,15 @@
     (swap! pending-txs-state (comp vec (partial drop (count tx-records))))
 
     (count tx-records)))
+
+(defrecord KafkaRemoteDocumentStore [^KafkaProducer producer, doc-topic]
+  Closeable
+  (close [_])
+
+  db/RemoteDocumentStore
+  (submit-doc [this content-hash doc]
+    (->> (ProducerRecord. doc-topic content-hash doc)
+         (.send producer))))
 
 (defn consume-and-index-documents
   [{:keys [offsets indexer timeout doc-topic]
@@ -281,14 +287,22 @@
    :args default-options})
 
 (def tx-log
-  {:start-fn (fn [{::keys [producer latest-submitted-tx-consumer]} {:keys [crux.kafka/tx-topic crux.kafka/doc-topic] :as options}]
-               (->KafkaTxLog producer latest-submitted-tx-consumer tx-topic doc-topic (derive-kafka-config options)))
-   :deps [::producer ::latest-submitted-tx-consumer]
+  {:start-fn (fn [{:keys [crux.node/remote-document-store ::producer ::latest-submitted-tx-consumer]}
+                  {:keys [crux.kafka/tx-topic] :as options}]
+               (->KafkaTxLog remote-document-store producer latest-submitted-tx-consumer tx-topic (derive-kafka-config options)))
+   :deps [::producer ::latest-submitted-tx-consumer :crux.node/remote-document-store]
+   :args default-options})
+
+(def remote-document-store
+  {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/doc-topic] :as options}]
+               (->KafkaRemoteDocumentStore producer doc-topic))
+   :deps [::producer]
    :args default-options})
 
 (def topology
   (merge n/base-topology
          {:crux.node/tx-log tx-log
+          :crux.node/remote-document-store remote-document-store
           ::admin-client admin-client
           ::admin-wrapper admin-wrapper
           ::producer producer
