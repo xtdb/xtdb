@@ -108,11 +108,10 @@
       (ensure-node-open this)
       @(db/submit-tx tx-log tx-ops)))
 
-  (hasTxCommitted [this submitted-tx]
+  (hasTxCommitted [this {:keys [crux.tx/tx-id
+                                crux.tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
-      (let [tx-id (:crux.tx/tx-id submitted-tx)
-            tx-time (:crux.tx/tx-time submitted-tx)
-            latest-tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
+      (let [latest-tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
         (if (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
           (throw
            (NodeOutOfSyncException.
