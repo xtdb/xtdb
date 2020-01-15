@@ -23,6 +23,7 @@
     (when close-fn (close-fn))))
 
 (def topology {:crux.node/tx-log k/tx-log
+               :crux.node/remote-document-store k/remote-document-store
                :crux.kafka/admin-client k/admin-client
                :crux.kafka/admin-wrapper k/admin-wrapper
                :crux.kafka/producer k/producer

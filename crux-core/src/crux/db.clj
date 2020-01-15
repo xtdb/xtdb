@@ -27,11 +27,13 @@
 
 ;; tag::TxLog[]
 (defprotocol TxLog
-  (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
   (open-tx-log ^crux.api.ITxLog [this from-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
+
+(defprotocol RemoteDocumentStore
+  (submit-doc [this content-hash doc]))
 
 ;; NOTE: The snapshot parameter here is an optimisation to avoid keep
 ;; opening snapshots and allow caching of iterators. A non-KV backed
