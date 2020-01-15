@@ -1,4 +1,5 @@
 (ns crux.bus
+  (:refer-clojure :exclude [send])
   (:require [crux.io :as cio]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s])
