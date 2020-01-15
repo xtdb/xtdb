@@ -110,13 +110,13 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
-      (utils/output {:crux.bench/bench-type :recent-battery-readings
+      (utils/output {:bench-type :recent-battery-readings
                      :bench-ns (str *ns*)
                      :query (str query)
                      :query-time-ms (- end-time start-time)
                      :successful? successful?}))
     (catch Exception e
-      (utils/output {:crux.bench/bench-type ::recent-battery-readings
+      (utils/output {:bench-type ::recent-battery-readings
                      :bench-ns (str *ns*)
                      :error e})
       (throw e))))
@@ -189,13 +189,13 @@
                            25.0
                            :discharging
                            "focus"]])]
-      (utils/output {:crux.bench/bench-type :busiest-devices
+      (utils/output {:bench-type :busiest-devices
                      :bench-ns (str *ns*)
                      :query (str query)
                      :query-time-ms (- end-time start-time)
                      :successful? successful?}))
     (catch Exception e
-      (utils/output {:crux.bench/bench-type ::recent-battery-readings
+      (utils/output {:bench-type ::recent-battery-readings
                      :bench-ns (str *ns*)
                      :error e})
       (throw e))))
@@ -258,12 +258,12 @@
                               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
-         (utils/output {:crux.bench/bench-type :history-ascending
+         (utils/output {:bench-type :history-ascending
                         :bench-ns (str *ns*)
                         :query-time-ms (- end-time start-time)
                         :successful? successful?}))
        (catch Exception e
-         (utils/output {:crux.bench/bench-type :history-ascending
+         (utils/output {:bench-type :history-ascending
                         :bench-ns (str *ns*)
                         :error e})
          (throw e))))
