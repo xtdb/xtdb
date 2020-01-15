@@ -1,11 +1,11 @@
-FROM clojure
+FROM 955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:base
 
-RUN mkdir -p /usr/src/app
-WORKDIR /usr/src/app
-COPY project.clj /usr/src/app/
-RUN lein deps
-COPY . /usr/src/app
-RUN apt-get update
-RUN apt-get install -y awscli
-RUN bench/bin/download_watdiv_files.sh
-CMD bench/bin/run_watdiv.sh
+WORKDIR /usr/local/lib/crux
+
+ENV GIT_ORIGIN=juxt
+ENV GIT_BRANCH=master
+
+CMD git fetch $GIT_ORIGIN && git checkout $GIT_ORIGIN/$GIT_BRANCH && \
+  lein sub -s "crux-core/:crux-kafka/:crux-kafka-embedded/:crux-rocksdb/:crux-bench/" install && \
+  cd crux-bench/ && \
+  lein run

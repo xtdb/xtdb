@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A stack for running Crux Benchmarks
+
+Resources:
+  # ECS Resources
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: 'crux-bench'
+      ClusterSettings:
+        - Name: 'containerInsights'
+          Value: 'enabled'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'crux-bench'
+      RetentionInDays: 365
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: 'crux-bench'
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+
+                # Allow the ECS tasks to upload logs to CloudWatch
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: '*'
+
+  BenchTask:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - ECRRepository
+      - LogGroup
+    Properties:
+      Cpu: '2 vCPU'
+      Memory: '4GB'
+      Family: 'crux-bench'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'bench-container'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+
+  TaskSchedulerRole:
+     Type: AWS::IAM::Role
+     Properties:
+       AssumeRolePolicyDocument:
+         Version: "2012-10-17"
+         Statement:
+           -
+             Effect: "Allow"
+             Principal:
+               Service:
+                 - "events.amazonaws.com"
+             Action:
+               - "sts:AssumeRole"
+       Path: /
+       Policies:
+         - PolicyDocument:
+             Statement:
+               - Effect: "Allow"
+                 Condition:
+                   ArnEquals:
+                     ecs:cluster:
+                       Fn::GetAtt: ["ECSCluster", "Arn"]
+                 Action: "ecs:RunTask"
+                 Resource: "*"
+               - Effect: "Allow"
+                 Condition:
+                   ArnEquals:
+                     ecs:cluster:
+                       Fn::GetAtt: ["ECSCluster", "Arn"]
+                 Action:
+                   - "iam:ListInstanceProfiles"
+                   - "iam:ListRoles"
+                   - "iam:PassRole"
+                 Resource: "*"
+           PolicyName: "TaskSchedulerPolicy"
+
+  TaskSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: "crux-bench-scheduler"
+      ScheduleExpression: "cron(0 0 ? * MON-FRI *)"
+      State: "ENABLED"
+      Targets:
+        - Id: "crux-bench"
+          RoleArn:
+            Fn::GetAtt: ["TaskSchedulerRole", "Arn"]
+          EcsParameters:
+            LaunchType: "FARGATE"
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: "ENABLED"
+                SecurityGroups:
+                  - "sg-0255e869"
+                Subnets:
+                  - "subnet-5140ba2b"
+            TaskDefinitionArn:
+              Ref: "BenchTask"
+            TaskCount: 1
+          Arn:
+            Fn::GetAtt: ["ECSCluster", "Arn"]
+
+
+# These are the values output by the CloudFormation template. Be careful
+# about changing any of them, because of them are exported with specific
+# names so that the other task related CF templates can use them.
+Outputs:
+  ClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref 'ECSCluster'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ClusterName' ] ]
