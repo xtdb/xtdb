@@ -989,10 +989,10 @@
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :attr-stats (cio/pr-edn-str attr-stats))
     (log/debug :var->bindings (cio/pr-edn-str var->bindings))
-    (constrain-result-fn [] [])
-    {:n-ary-join (-> (mapv idx/new-unary-join-virtual-index unary-join-index-groups)
-                     (idx/new-n-ary-join-layered-virtual-index)
-                     (idx/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
+    {:n-ary-join (when (constrain-result-fn [] [])
+                   (-> (mapv idx/new-unary-join-virtual-index unary-join-index-groups)
+                       (idx/new-n-ary-join-layered-virtual-index)
+                       (idx/new-n-ary-constraining-layered-virtual-index constrain-result-fn)))
      :var->bindings var->bindings}))
 
 ;; NOTE: For ascending sort, it might be possible to pick the right
