@@ -4,6 +4,7 @@
             [crux.fixtures.kv-only :refer [*kv-module*]]
             [crux.io :as cio]
             [crux.kafka :as k]
+            [crux.kafka.consumer :as kc]
             [crux.kafka.embedded :as ek]
             [crux.api :as api])
   (:import [java.util Properties UUID]
@@ -57,11 +58,11 @@
 
 (defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              consumer (k/create-consumer
+              consumer (kc/create-consumer
                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
                                 "group.id" (str (UUID/randomUUID))}
                                *consumer-options*))
-              consumer2 (k/create-consumer
+              consumer2 (kc/create-consumer
                          (merge {"bootstrap.servers" *kafka-bootstrap-servers*
                                  "group.id" (str (UUID/randomUUID))}
                                 *consumer-options*))]

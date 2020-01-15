@@ -10,6 +10,7 @@
             [crux.lru :as lru]
             [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.kafka :as k]
+            [crux.kafka.consumer :as kc]
             [crux.query :as q]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
@@ -49,15 +50,15 @@
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
-        tx-offsets (k/map->IndexedOffsets {:indexer indexer
-                                           :k :crux.tx-log/consumer-state})
-        doc-offsets (k/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.doc-log/consumer-state})]
+        tx-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                            :k :crux.tx-log/consumer-state})
+        doc-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                             :k :crux.doc-log/consumer-state})]
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (db/submit-tx tx-log tx-ops)
 
@@ -84,10 +85,10 @@
         node (reify crux.api.ICruxAPI
                (db [this]
                  (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
-        tx-offsets (k/map->IndexedOffsets {:indexer indexer
-                                           :k :crux.tx-log/consumer-state})
-        doc-offsets (k/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.doc-log/consumer-state})
+        tx-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                            :k :crux.tx-log/consumer-state})
+        doc-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                             :k :crux.doc-log/consumer-state})
         consume-opts {:indexer indexer
                       :offsets tx-offsets
                       :pending-txs-state (atom [])
@@ -98,8 +99,8 @@
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (t/testing "transacting and indexing"
       (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
@@ -109,7 +110,7 @@
 
         (t/testing "restoring to stored offsets"
           (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
-          (k/seek-to-stored-offsets tx-offsets fk/*consumer* (.assignment fk/*consumer*))
+          (kc/seek-to-stored-offsets tx-offsets fk/*consumer* (.assignment fk/*consumer*))
           (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
 
         (t/testing "querying transacted data"
@@ -155,10 +156,10 @@
         node (reify crux.api.ICruxAPI
                (db [this]
                  (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
-        tx-offsets (k/map->IndexedOffsets {:indexer indexer
-                                           :k :crux.tx-log/consumer-state})
-        doc-offsets (k/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.doc-log/consumer-state})
+        tx-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                            :k :crux.tx-log/consumer-state})
+        doc-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                             :k :crux.doc-log/consumer-state})
         tx-consume-opts {:indexer indexer
                          :offsets tx-offsets
                          :pending-txs-state (atom [])
@@ -169,8 +170,8 @@
 
     (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
 
     (t/testing "transacting and indexing"
       (let [evicted-doc {:crux.db/id :to-be-evicted :personal "private"}
@@ -203,10 +204,10 @@
                   (fn []
                     (let [object-store (os/->KvObjectStore *kv*)
                           indexer (tx/->KvIndexer object-store *kv* tx-log (bus/->EventBus (atom #{})) nil)
-                          tx-offsets (k/map->IndexedOffsets {:indexer indexer
-                                                             :k :crux.tx-log/consumer-state})
-                          doc-offsets (k/map->IndexedOffsets {:indexer indexer
-                                                              :k :crux.doc-log/consumer-state})
+                          tx-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                                              :k :crux.tx-log/consumer-state})
+                          doc-offsets (kc/map->IndexedOffsets {:indexer indexer
+                                                               :k :crux.doc-log/consumer-state})
                           tx-consume-opts {:indexer indexer
                                            :offsets tx-offsets
                                            :pending-txs-state (atom [])
@@ -214,8 +215,8 @@
                           doc-consume-opts {:indexer indexer
                                             :offsets doc-offsets
                                             :doc-topic doc-topic}]
-                      (k/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-                      (k/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+                      (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
+                      (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
                       (consume-topics tx-consume-opts doc-consume-opts)
 
                       ;; delete the object that would have been compacted away

@@ -7,16 +7,16 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.node :as n]
-            [crux.status :as status]
             [crux.tx :as tx]
+            [crux.kafka.consumer :as kc]
             [taoensso.nippy :as nippy])
-  (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
+  (:import crux.kafka.nippy.NippySerializer
            java.io.Closeable
            java.time.Duration
-           [java.util Date List Map]
+           [java.util Date Map]
            java.util.concurrent.ExecutionException
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
-           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
+           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
            org.apache.kafka.common.errors.TopicExistsException
            org.apache.kafka.common.TopicPartition))
@@ -38,13 +38,6 @@
    "compression.type" "snappy"
    "key.serializer" (.getName NippySerializer)
    "value.serializer" (.getName NippySerializer)})
-
-(def default-consumer-config
-  {"enable.auto.commit" "false"
-   "isolation.level" "read_committed"
-   "auto.offset.reset" "earliest"
-   "key.deserializer" (.getName NippyDeserializer)
-   "value.deserializer" (.getName NippyDeserializer)})
 
 (def default-topic-config
   {"message.timestamp.type" "LogAppendTime"})
@@ -71,10 +64,6 @@
   ^org.apache.kafka.clients.producer.KafkaProducer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
 
-(defn create-consumer
-  ^org.apache.kafka.clients.consumer.KafkaConsumer [config]
-  (KafkaConsumer. ^Map (merge default-consumer-config config)))
-
 (defn create-admin-client
   ^org.apache.kafka.clients.admin.AdminClient [config]
   (AdminClient/create ^Map config))
@@ -94,12 +83,14 @@
   (when create-topics
     (create-topic admin-client topic partitions replication-factor topic-config)))
 
+(defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
+  (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
+    (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
+
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx.event/tx-events (.value record)
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
-
-;;; Transacting Producer
 
 (defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, doc-topic, kafka-config]
   Closeable
@@ -132,7 +123,7 @@
               :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
 
   (new-tx-log-context [this]
-    (create-consumer (assoc kafka-config "enable.auto.commit" "false")))
+    (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false")))
 
   (tx-log [this tx-topic-consumer from-tx-id]
     (let [tx-topic-consumer ^KafkaConsumer tx-topic-consumer
@@ -152,58 +143,6 @@
           end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
       (when (pos? end-offset)
         {:crux.tx/tx-id (dec end-offset)}))))
-
-(defprotocol Offsets
-  (read-offsets [this])
-  (store-offsets [this offsets]))
-
-(defrecord IndexedOffsets [indexer k]
-  Offsets
-  (read-offsets [this]
-    (db/read-index-meta indexer k))
-  (store-offsets [this offsets]
-    (db/store-index-meta indexer k offsets)))
-
-;;; Indexing Consumer
-
-(defn- topic-partition-meta-key [^TopicPartition partition]
-  (keyword "crux.kafka.topic-partition" (str partition)))
-
-(defn- update-stored-consumer-state [offsets ^KafkaConsumer consumer records]
-  (let [partition->records (group-by (fn [^ConsumerRecord r]
-                                       (TopicPartition. (.topic r)
-                                                        (.partition r))) records)
-        partitions (vec (keys partition->records))
-        stored-consumer-state (or (read-offsets offsets) {})
-        consumer-state (->> (for [^TopicPartition partition partitions
-                                  :let [^ConsumerRecord last-record-in-batch (->> (get partition->records partition)
-                                                                                  (sort-by #(.offset ^ConsumerRecord %))
-                                                                                  (last))
-                                        next-offset (inc (.offset last-record-in-batch))]]
-                              [(topic-partition-meta-key partition)
-                               {:next-offset next-offset}])
-                            (into stored-consumer-state))]
-    (store-offsets offsets consumer-state)))
-
-(defn- prune-consumer-state [offsets ^KafkaConsumer consumer partitions]
-  (let [consumer-state (read-offsets offsets)]
-    (->> (for [^TopicPartition partition partitions
-               :let [partition-key (topic-partition-meta-key partition)
-                     next-offset (or (get-in consumer-state [partition-key :next-offset]) 0)]]
-           [partition-key {:next-offset next-offset}])
-         (into {})
-         (store-offsets offsets))))
-
-(defn seek-to-stored-offsets [offsets ^KafkaConsumer consumer partitions]
-  (let [consumer-state (read-offsets offsets)]
-    (doseq [^TopicPartition partition partitions]
-      (if-let [offset (get-in consumer-state [(topic-partition-meta-key partition) :next-offset])]
-        (.seek consumer partition (long offset))
-        (.seekToBeginning consumer [partition])))))
-
-(defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
-  (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
-    (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
 
 (defn consume-and-index-txes
   [{:keys [offsets indexer pending-txs-state timeout tx-topic]
@@ -241,63 +180,10 @@
         (db/index-tx indexer (select-keys record [:crux.tx/tx-time :crux.tx/tx-id]) tx-events)
         tx-events))
 
-    (when-let [records (seq tx-records)]
-      (update-stored-consumer-state offsets consumer records)
-      (swap! pending-txs-state (comp vec (partial drop (count tx-records)))))
+    (kc/update-stored-consumer-state offsets consumer records)
+    (swap! pending-txs-state (comp vec (partial drop (count tx-records))))
 
     (count tx-records)))
-
-;; TODO: This works as long as each node has a unique consumer group
-;; id, if not the node will only get a subset of the doc-topic. The
-;; tx-topic is always only one partition.
-(defn subscribe-from-stored-offsets
-  [offsets ^KafkaConsumer consumer ^List topics]
-  (.subscribe consumer
-              topics
-              (reify ConsumerRebalanceListener
-                (onPartitionsRevoked [_ partitions]
-                  (log/info "Partitions revoked:" (str partitions)))
-                (onPartitionsAssigned [_ partitions]
-                  (log/info "Partitions assigned:" (str partitions))
-                  (prune-consumer-state offsets consumer partitions)
-                  (seek-to-stored-offsets offsets consumer partitions)))))
-
-(defrecord IndexingConsumer [running? ^Thread worker-thread consumer-config]
-  status/Status
-  (status-map [_]
-    {:crux.zk/zk-active?
-     (try
-       (with-open [^KafkaConsumer consumer (create-consumer (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
-         (boolean (.listTopics consumer)))
-       (catch Exception e
-         (log/debug e "Could not list Kafka topics:")
-         false))})
-
-  Closeable
-  (close [_]
-    (reset! running? false)
-    (.join worker-thread)))
-
-(defn- start-indexing-consumer
-  ^java.io.Closeable
-  [consumer-config offsets topic index-fn]
-  (let [running? (atom true)
-        worker-thread
-        (doto
-            (Thread. ^Runnable (fn []
-                                 (with-open [consumer (create-consumer consumer-config)]
-                                   (subscribe-from-stored-offsets offsets consumer [topic])
-                                   (while @running?
-                                     (try
-                                       (index-fn consumer)
-                                       (catch Exception e
-                                         (log/error e "Error while consuming and indexing from Kafka:")
-                                         (Thread/sleep 500))))))
-                     "crux.kafka.indexing-consumer-thread")
-            (.start))]
-    (map->IndexingConsumer {:running? running?
-                            :consumer-config consumer-config
-                            :worker-thread worker-thread})))
 
 (defn consume-and-index-documents
   [{:keys [offsets indexer timeout doc-topic]
@@ -309,7 +195,7 @@
                                 (into {} (map (fn [^ConsumerRecord record]
                                                 [(c/new-id (.key record)) (.value record)])))))
     (when-let [records (seq doc-records)]
-      (update-stored-consumer-state offsets consumer records))
+      (kc/update-stored-consumer-state offsets consumer records))
     (count doc-records)))
 
 (def default-options
@@ -346,7 +232,7 @@
                   {::keys [tx-topic] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      consumer-config (merge {"group.id" (::group-id options)} kafka-config)
-                     offsets (map->IndexedOffsets {:indexer indexer :k :crux.tx-log/consumer-state})
+                     offsets (kc/map->IndexedOffsets {:indexer indexer :k :crux.tx-log/consumer-state})
                      index-fn (partial consume-and-index-txes
                                        {:indexer indexer
                                         :offsets offsets
@@ -355,7 +241,7 @@
                                         :tx-topic tx-topic})]
                  (ensure-topic-exists admin-client tx-topic tx-topic-config 1 options)
                  (ensure-tx-topic-has-single-partition admin-client tx-topic)
-                 (start-indexing-consumer consumer-config offsets tx-topic index-fn)))
+                 (kc/start-indexing-consumer consumer-config offsets tx-topic index-fn)))
    :deps [:crux.node/indexer ::admin-client]
    :args default-options})
 
@@ -364,13 +250,13 @@
                   {::keys [doc-topic doc-partitions] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      consumer-config (merge {"group.id" (::group-id options)} kafka-config)
-                     offsets (map->IndexedOffsets {:indexer indexer :k :crux.doc-log/consumer-state})
+                     offsets (kc/map->IndexedOffsets {:indexer indexer :k :crux.doc-log/consumer-state})
                      index-fn (partial consume-and-index-documents {:indexer indexer
                                                                     :offsets offsets
                                                                     :timeout 1000
                                                                     :doc-topic (::doc-topic options)})]
                  (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
-                 (start-indexing-consumer consumer-config offsets doc-topic index-fn)))
+                 (kc/start-indexing-consumer consumer-config offsets doc-topic index-fn)))
    :deps [:crux.node/indexer ::admin-client]
    :args default-options})
 
@@ -392,7 +278,7 @@
 
 (def latest-submitted-tx-consumer
   {:start-fn (fn [_ options]
-               (create-consumer (derive-kafka-config options)))
+               (kc/create-consumer (derive-kafka-config options)))
    :args default-options})
 
 (def tx-log
