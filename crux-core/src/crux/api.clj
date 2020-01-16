@@ -5,7 +5,7 @@
             [crux.codec :as c]
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource]
+            ICruxAsyncIngestAPI ICruxDatasource TxLogIterator]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -334,6 +334,17 @@
   ICruxAsyncIngestAPI
   (submit-tx-async [this tx-ops]
     (.submitTxAsync this (conform-tx-ops tx-ops))))
+
+(defrecord PTxLogIterator [^clojure.lang.SeqIterator lazy-seq-iterator]
+  TxLogIterator
+  (next [this]
+    (.next lazy-seq-iterator))
+
+  (hasNext [this]
+    (.hasNext lazy-seq-iterator))
+
+  Closeable
+  (close [_]))
 
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
