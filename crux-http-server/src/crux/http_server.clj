@@ -17,7 +17,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt])
-  (:import [crux.api ICruxAPI ICruxDatasource]
+  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException]
            java.time.Duration
            java.util.Date
@@ -254,6 +254,13 @@
 (defn- attribute-stats [^ICruxAPI crux-node]
   (success-response (.attributeStats crux-node)))
 
+(defn- tx-committed? [^ICruxAPI crux-node request]
+  (try
+    (let [submitted-tx (body->edn request)]
+      (success-response (.hasTxCommitted crux-node submitted-tx)))
+    (catch NodeOutOfSyncException e
+      (exception-response 400 e))))
+
 (def ^:private sparql-available? (try ; you can change it back to require when clojure.core fixes it to be thread-safe
                                    (requiring-resolve 'crux.sparql.protocol/sparql-query)
                                    true
@@ -309,6 +316,9 @@
 
     [#"^/tx-log$" [:post]]
     (transact crux-node request)
+
+    [#"^/tx-committed$" [:get]]
+    (tx-committed? crux-node request)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)

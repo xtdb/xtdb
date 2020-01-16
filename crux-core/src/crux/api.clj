@@ -104,18 +104,12 @@
   (status [node]
     "Returns the status of this node as a map.")
 
-  (submitted-tx-updated-entity? [node submitted-tx eid]
-    "Checks if a submitted tx did update an entity.
-  submitted-tx must be a map returned from `submit-tx`
-  eid is an object that can be coerced into an entity id.
-  Returns true if the entity was updated in this transaction.")
-
-  (submitted-tx-corrected-entity? [node submitted-tx ^Date valid-time eid]
-    "Checks if a submitted tx did correct an entity as of valid time.
-  submitted-tx must be a map returned from `submit-tx`
-  valid-time valid time of the correction to check.
-  eid is an object that can be coerced into an entity id.
-  Returns true if the entity was updated in this transaction.")
+  (tx-committed? [node submitted-tx]
+    "Checks if a submitted tx was successfully committed.
+     submitted-tx must be a map returned from `submit-tx`.
+     Returns true if the submitted transaction was committed,
+     false if the transaction was not committed, and throws `NodeOutOfSyncException`
+     if the node has not yet indexed the transaction.")
 
   (sync
     [node]
@@ -199,11 +193,8 @@
   (status [this]
     (.status this))
 
-  (submitted-tx-updated-entity? [this submitted-tx eid]
-    (.hasSubmittedTxUpdatedEntity this submitted-tx eid))
-
-  (submitted-tx-corrected-entity? [this submitted-tx ^Date valid-time eid]
-    (.hasSubmittedTxCorrectedEntity this submitted-tx valid-time eid))
+  (tx-committed? [this submitted-tx]
+    (.hasTxCommitted this submitted-tx))
 
   (sync
     ([this]

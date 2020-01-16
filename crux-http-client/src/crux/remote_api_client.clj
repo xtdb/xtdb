@@ -185,12 +185,8 @@
   (submitTx [_ tx-ops]
     (api-request-sync (str url "/tx-log") tx-ops))
 
-  (hasSubmittedTxUpdatedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
-    (.hasSubmittedTxCorrectedEntity this submitted-tx tx-time eid))
-
-  (hasSubmittedTxCorrectedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} valid-time eid]
-    (api-request-sync (str url "/sync?transactionTime=" (cio/format-rfc3339-date tx-time)) nil {:method :get})
-    (= tx-id (:crux.tx/tx-id (.entityTx (.db this valid-time tx-time) eid))))
+  (hasTxCommitted [_ submitted-tx]
+    (api-request-sync (str url "/tx-committed") submitted-tx))
 
   (newTxLogContext [_]
     (->RemoteApiStream (atom [])))

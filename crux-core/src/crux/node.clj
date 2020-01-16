@@ -108,14 +108,20 @@
       (ensure-node-open this)
       @(db/submit-tx tx-log tx-ops)))
 
-  (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
-    (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
-
-  (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
+  (hasTxCommitted [this {:keys [crux.tx/tx-id
+                                crux.tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (api/await-tx this submitted-tx)
-      (q/submitted-tx-updated-entity? kv-store object-store submitted-tx valid-time eid)))
+      (let [{latest-tx-id :crux.tx/tx-id
+             latest-tx-time :crux.tx/tx-time} (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+        (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
+          (throw
+           (NodeOutOfSyncException.
+            (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
+            tx-time latest-tx-time))
+          (nil?
+           (kv/get-value (kv/new-snapshot kv-store)
+                         (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
   (newTxLogContext [this]
     (cio/with-read-lock lock

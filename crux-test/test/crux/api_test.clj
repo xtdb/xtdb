@@ -92,7 +92,8 @@
     (let [valid-time (Date.)
           {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
-      (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+      (.awaitTx *api* submitted-tx nil)
+      (t/is (true? (.hasTxCommitted *api* submitted-tx)))
 
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
@@ -205,7 +206,8 @@
         (t/testing "updated"
           (let [valid-time (Date.)
                 submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
-            (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+            (.awaitTx *api* submitted-tx nil)
+            (t/is (true? (.hasTxCommitted *api* submitted-tx)))
             (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil))))
 
           (let [stats (.attributeStats *api*)]
@@ -235,10 +237,12 @@
 
 (t/deftest test-document-bug-123
   (let [version-1-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1}]])]
-    (t/is (true? (.hasSubmittedTxUpdatedEntity *api* version-1-submitted-tx :ivan))))
+    (.awaitTx *api* version-1-submitted-tx nil)
+    (t/is (true? (.hasTxCommitted *api* version-1-submitted-tx))))
 
   (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2}]])]
-    (t/is (true? (.hasSubmittedTxUpdatedEntity *api* version-2-submitted-tx :ivan))))
+    (.awaitTx *api* version-2-submitted-tx nil)
+    (t/is (true? (.hasTxCommitted *api* version-2-submitted-tx))))
 
   (let [history (.history *api* :ivan)]
     (t/is (= 2 (count history)))
@@ -250,9 +254,11 @@
 (t/deftest test-tx-log-skips-failed-transactions
   (let [valid-time (Date.)
         submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-    (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+    (.awaitTx *api* submitted-tx nil)
+    (t/is (true? (.hasTxCommitted *api* submitted-tx)))
     (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
-      (t/is (false? (.hasSubmittedTxUpdatedEntity *api* version-2-submitted-tx :ivan)))
+      (.awaitTx *api* version-2-submitted-tx nil)
+      (t/is (false? (.hasTxCommitted *api* version-2-submitted-tx)))
       (with-open [ctx (.newTxLogContext *api*)]
         (let [result (.txLog *api* ctx nil false)]
           (t/is (= [(assoc submitted-tx
@@ -260,7 +266,8 @@
                    result))))
 
       (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
-        (t/is (true? (.hasSubmittedTxUpdatedEntity *api* version-3-submitted-tx :ivan)))
+        (.awaitTx *api* version-3-submitted-tx nil)
+        (t/is (true? (.hasTxCommitted *api* version-3-submitted-tx)))
         (with-open [ctx (.newTxLogContext *api*)]
           (let [result (.txLog *api* ctx nil false)]
             (t/is (= 2 (count result)))))))))
@@ -337,7 +344,8 @@
     (kf/with-ingest-client
       (fn []
         (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-          (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+          (.awaitTx *api* submitted-tx nil)
+          (t/is (true? (.hasTxCommitted *api* submitted-tx)))
           (t/is (= #{[:ivan]} (.q (.db *api*)
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))

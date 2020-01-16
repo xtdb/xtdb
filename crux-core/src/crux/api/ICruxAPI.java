@@ -98,27 +98,16 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public Map<Keyword,?> status();
     // TODO elaborate
 
+
     /**
-     * Checks if a submitted tx did update an entity.
+     * Checks if a submitted tx was successfully committed.
      *
      * @param submittedTx must be a map returned from {@link
      * #submitTx(List txOps)}.
-     * @param eid         an object that can be coerced into an entity id.
-     * @return            true if the entity was updated in this transaction.
+     * @return true if the submitted transaction was committed, false if it was not committed.
+     * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
-    public boolean hasSubmittedTxUpdatedEntity(Map<Keyword,?> submittedTx, Object eid);
-
-    /**
-     * Checks if a submitted tx did correct an entity as of valid
-     * time.
-     *
-     * @param submittedTx  must be a map returned from {@link
-     * #submitTx(List txOps)}.
-     * @param validTime    valid time of correction to check.
-     * @param eid          an object that can be coerced into an entity id.
-     * @return             true if the entity was updated in this transaction.
-     */
-    public boolean hasSubmittedTxCorrectedEntity(Map<Keyword,?> submittedTx, Date validTime, Object eid);
+    public boolean hasTxCommitted(Map<Keyword,?> submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
