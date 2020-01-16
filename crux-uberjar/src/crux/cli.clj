@@ -13,16 +13,13 @@
   {:crux.node/topology :crux.kafka/topology})
 
 (def cli-options
-  [;; Kafka
-   ["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
+  [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
     :parse-fn #(cc/load-properties %)]
 
-   ;; HTTP
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default srv/default-server-port
     :parse-fn #(Long/parseLong %)]
 
-   ;; Extra
    ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
     :default nil
     :parse-fn edn/read-string]
