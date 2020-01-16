@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
+            [clojure.tools.logging.impl :as log-impl]
             [crux.api :as api]
             [crux.fixtures :as f]
             [crux.fixtures.api :as apif :refer [*api*]]
@@ -10,10 +11,10 @@
 
 (def !log-messages (atom []))
 (defn with-log-redef [f]
-  (with-redefs [clojure.tools.logging/log*
-                (fn [logger level throwable message]
-                  (println (count @!log-messages))
-                  (swap! !log-messages conj message))]
+  (with-redefs [log-impl/enabled? (constantly true)
+                log/log* (fn [logger level throwable message]
+                           (println (count @!log-messages))
+                           (swap! !log-messages conj message))]
     (f)))
 
 (t/use-fixtures :once kvf/with-kv-dir fs/with-standalone-node apif/with-node with-log-redef)
@@ -65,4 +66,3 @@
 
   (t/testing "Evict" (sync-submit-tx *api* [[:crux.tx/evict :secure-document]])
     (t/is (check-and-reset!))))
-
