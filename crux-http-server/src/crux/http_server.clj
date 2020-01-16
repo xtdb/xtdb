@@ -255,8 +255,11 @@
   (success-response (.attributeStats crux-node)))
 
 (defn- tx-committed? [^ICruxAPI crux-node request]
-  (let [submitted-tx (body->edn request)]
-    (success-response (.hasTxCommitted crux-node submitted-tx))))
+  (try
+    (let [submitted-tx (body->edn request)]
+      (success-response (.hasTxCommitted crux-node submitted-tx)))
+    (catch Exception e
+      (exception-response 400 e))))
 
 (def ^:private sparql-available? (try ; you can change it back to require when clojure.core fixes it to be thread-safe
                                    (requiring-resolve 'crux.sparql.protocol/sparql-query)
@@ -314,7 +317,7 @@
     [#"^/tx-log$" [:post]]
     (transact crux-node request)
 
-    [#"^/tx-committed$" [:post]]
+    [#"^/tx-committed$" [:get]]
     (tx-committed? crux-node request)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)

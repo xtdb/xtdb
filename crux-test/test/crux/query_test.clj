@@ -1371,7 +1371,7 @@
                           tx-id] :as submitted-tx}
           (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
                                                    :name "Ivan 1st"}]])]
-      (api/await-tx *api* submitted-tx )
+      (api/await-tx *api* submitted-tx)
       (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
       (t/is (= #{["Ivan 1st"]} (api/q (api/db *api* tx-time tx-time)

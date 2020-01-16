@@ -104,9 +104,10 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * @param submittedTx must be a map returned from {@link
      * #submitTx(List txOps)}.
-     * @return            true if the submitted transaction was committed.
+     * @return true if the submitted transaction was committed, false if it was not committed.
+     * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
-    public boolean hasTxCommitted(Map<Keyword,?> submittedTx);
+    public boolean hasTxCommitted(Map<Keyword,?> submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available

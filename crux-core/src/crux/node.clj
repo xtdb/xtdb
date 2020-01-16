@@ -112,8 +112,9 @@
                                 crux.tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [latest-tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))]
-        (if (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
+      (let [{latest-tx-id :crux.tx/tx-id
+             latest-tx-time :crux.tx/tx-time} (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+        (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
           (throw
            (NodeOutOfSyncException.
             (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
