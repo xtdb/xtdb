@@ -9,55 +9,50 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]))
 
-(def !log-messages (atom []))
-(defn with-log-redef [f]
-  (with-redefs [log-impl/enabled? (constantly true)
-                log/log* (fn [logger level throwable message]
-                           (println (count @!log-messages))
-                           (swap! !log-messages conj message))]
-    (f)))
-
-(t/use-fixtures :once kvf/with-kv-dir fs/with-standalone-node fapi/with-node with-log-redef)
-
 (def secret 33489857205)
-(defn check-and-reset! []
-  (let [res (every? #(not (re-find (re-pattern (str secret)) %)) @!log-messages)]
-    (reset! !log-messages [])
-    res))
 
-(t/deftest test-submit-tx-log
-  (t/testing "Put"
-    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
-                                          :secret secret}]])
-    (t/is (check-and-reset!)))
+(defn asserting-no-logged-secrets [f]
+  (let [!log-messages (atom [])]
+    (with-redefs [log-impl/enabled? (constantly true)
 
-  (t/testing "Query on doc"
-    (api/q (api/db *api*) {:find ['s] :where [['e :secret 's]]})
-    (t/is (check-and-reset!)))
+                  log/log* (fn [logger level throwable message]
+                             (swap! !log-messages conj message)
+                             nil)]
+      (f)
 
-  (t/testing "Put on existing doc"
-    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
-                                          :secret-2 secret}]])
-    (t/is (check-and-reset!)))
+      (t/is (every? (complement #(re-find (re-pattern (str secret)) %))
+                    @!log-messages)))))
 
-  (t/testing "Query on doc with args" (api/q (api/db *api*) {:find ['s 'ss]
-                                                             :where [['e :secret 's]
-                                                                     ['e :secret-2 'ss]]
-                                                             :args [{'ss secret}]})
-    (t/is (check-and-reset!)))
+(t/use-fixtures :once kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
+(t/use-fixtures :each asserting-no-logged-secrets)
 
-  (t/testing "CAS"
-    (fapi/submit+await-tx [[:crux.tx/cas
-                            {:crux.db/id :secure-document
-                             :secret secret
-                             :secret-2 secret}
-                            {:crux.db/id :secure-document
-                             :secret secret}]])
-    (t/is (check-and-reset!)))
+(t/deftest test-submit-putting-doc
+  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
+                                        :secret secret}]]))
 
-  (t/testing "Delete"
-    (fapi/submit+await-tx [[:crux.tx/delete :secure-document]])
-    (t/is (check-and-reset!)))
+(t/deftest test-submitting-putting-existing-doc
+  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
+                                        :secret-2 secret}]]))
 
-  (t/testing "Evict" (sync-submit-tx *api* [[:crux.tx/evict :secure-document]])
-    (t/is (check-and-reset!))))
+(t/deftest test-submitting-cas
+  (fapi/submit+await-tx [[:crux.tx/cas
+                          {:crux.db/id :secure-document
+                           :secret secret
+                           :secret-2 secret}
+                          {:crux.db/id :secure-document
+                           :secret secret}]]))
+
+(t/deftest test-submitting-delete
+  (fapi/submit+await-tx [[:crux.tx/delete :secure-document]]))
+
+(t/deftest test-submitting-evict
+  (fapi/submit+await-tx [[:crux.tx/evict :secure-document]]))
+
+(t/deftest test-query-with-args
+  (api/q (api/db *api*) {:find ['s 'ss]
+                         :where [['e :secret 's]
+                                 ['e :secret-2 'ss]]
+                         :args [{'ss secret}]}))
+
+(t/deftest test-querying-doc
+  (api/q (api/db *api*) {:find ['s] :where [['e :secret 's]]}))
