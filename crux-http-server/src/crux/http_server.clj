@@ -17,7 +17,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt])
-  (:import [crux.api ICruxAPI ICruxDatasource]
+  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException]
            java.time.Duration
            java.util.Date
@@ -258,7 +258,7 @@
   (try
     (let [submitted-tx (body->edn request)]
       (success-response (.hasTxCommitted crux-node submitted-tx)))
-    (catch Exception e
+    (catch NodeOutOfSyncException e
       (exception-response 400 e))))
 
 (def ^:private sparql-available? (try ; you can change it back to require when clojure.core fixes it to be thread-safe
