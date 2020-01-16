@@ -18,6 +18,18 @@ public interface ICruxIngestAPI extends Closeable {
     public Map<Keyword,?> submitTx(List<List<?>> txOps);
 
     /**
+     * Reads the transaction log. Optionally includes  operations, which allow the contents
+     * under the :crux.api/tx-ops key to be piped into (submit-tx tx-ops) of another
+     * Crux instance.
+     *
+     * @param fromTxId         optional transaction id to start from.
+     * @param withOps          should the operations with documents be included?
+     * @return                 a lazy sequence of the transaction log.
+     */
+
+    public TxLogIterator openTxLogIterator (Long fromTxId, boolean withOps);
+
+    /**
      * Returns a new transaction log context allowing for lazy reading
      * of the transaction log in a try-with-resources block using
      * {@link #txLog(Closeable txLogContext, Long fromTxId, boolean

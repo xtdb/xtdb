@@ -103,6 +103,31 @@
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 
+  (open-tx-log-iterator [this from-tx-id]
+    (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
+          running? (:running? (JdbcLogQueryContext. (atom true)))
+          consumer-f (fn [_ y]
+                       (.put q {:crux.tx/tx-id (int (:event_offset y))
+                                :crux.tx/tx-time (->date dbtype (:tx_time y))
+                                :crux.tx.event/tx-events (->v dbtype (:v y))})
+                       (if @running?
+                         nil
+                         (reduced nil)))]
+      (future
+        (try
+          (r/reduce consumer-f
+                    nil
+                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
+                                   (or from-tx-id 0)]
+                               {:builder-fn jdbcr/as-unqualified-lower-maps}))
+          (catch Throwable t
+            (log/error t "Exception occured reading event log")))
+        (.put q -1))
+      ((fn step []
+         (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
+           (when (not= -1 x)
+             (cons x (step))))))))
+
   (new-tx-log-context [this]
     (JdbcLogQueryContext. (atom true)))
 

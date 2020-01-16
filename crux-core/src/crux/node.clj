@@ -16,7 +16,7 @@
             [crux.status :as status]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException PTxLogIterator]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
@@ -122,6 +122,24 @@
           (nil?
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
+
+  (openTxLogIterator ^TxLogIterator [this from-tx-id with-ops?]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (PTxLogIterator.
+       (.iterator
+         (for [{:keys [crux.tx/tx-id
+                       crux.tx.event/tx-events] :as tx-log-entry} (db/open-tx-log-iterator tx-log from-tx-id)
+               :when (with-open [snapshot (kv/new-snapshot kv-store)]
+                       (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
+           (if with-ops?
+             (-> tx-log-entry
+                 (dissoc :crux.tx.event/tx-events)
+                 (assoc :crux.api/tx-ops
+                        (with-open [snapshot (kv/new-snapshot kv-store)]
+                          (->> tx-events
+                               (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
+             tx-log-entry))))))
 
   (newTxLogContext [this]
     (cio/with-read-lock lock

@@ -122,6 +122,18 @@
              {:crux.tx/tx-id (.offset record-meta)
               :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
 
+  (open-tx-log-iterator [this from-tx-id]
+    (let [tx-topic-consumer ^KafkaConsumer (create-consumer (assoc kafka-config "enable.auto.commit" "false"))
+          tx-topic-partition (TopicPartition. tx-topic 0)]
+      (.assign tx-topic-consumer [tx-topic-partition])
+      (if from-tx-id
+        (.seek tx-topic-consumer tx-topic-partition (long from-tx-id))
+        (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer)))
+      ((fn step []
+         (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
+           (concat (map tx-record->tx-log-entry records)
+                   (step)))))))
+
   (new-tx-log-context [this]
     (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false")))
 

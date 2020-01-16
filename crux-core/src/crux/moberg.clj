@@ -220,6 +220,17 @@
       (delay {:crux.tx/tx-id (.id m)
               :crux.tx/tx-time (.time m)})))
 
+  (open-tx-log-iterator [this from-tx-id]
+    (let [i (kv/new-iterator (kv/new-snapshot event-log-kv))]
+      (when-let [m (seek-message i ::event-log from-tx-id)]
+        (for [^Message m (->> (repeatedly #(next-message i ::event-log))
+                              (take-while identity)
+                              (cons m))
+              :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
+          {:crux.tx.event/tx-events (.body m)
+           :crux.tx/tx-id (.message-id m)
+           :crux.tx/tx-time (.message-time m)}))))
+
   (new-tx-log-context [this]
     (kv/new-snapshot event-log-kv))
 

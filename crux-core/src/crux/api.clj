@@ -149,6 +149,17 @@
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
 
+  (open-tx-log-iterator ^TxLogIterator [this from-tx-id with-ops?]
+    "Reads the transaction log. Optionally includes
+  operations, which allow the contents under the :crux.api/tx-ops
+  key to be piped into (submit-tx tx-ops) of another
+  Crux instance.
+
+  from-tx-id      optional transaction id to start from.
+  with-ops?       should the operations with documents be included?
+
+  Returns an iterator of the TxLog")
+
   (new-tx-log-context ^java.io.Closeable [node]
     "Returns a new transaction log context allowing for lazy reading
   of the transaction log in a try-with-resources block using
@@ -226,6 +237,9 @@
   ICruxIngestAPI
   (submit-tx [this tx-ops]
     (.submitTx this (conform-tx-ops tx-ops)))
+
+  (open-tx-log-iterator [this from-tx-id with-ops?]
+    (.openTxLogIterator this from-tx-id with-ops?))
 
   (new-tx-log-context ^java.io.Closeable [this]
     (.newTxLogContext this))
