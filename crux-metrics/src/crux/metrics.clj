@@ -2,11 +2,14 @@
   (:require [crux.api :as api]
             [crux.bus :as bus]))
 
+;; We might just want doc count
+
 ;; map of (key) event content and (value) meta info including start-time, end-time and diff
 (def !metrics (atom {::indexing-tx {}
                      ::indexed-tx {}
                      ::indexing-docs {}
-                     ::indexed-docs {}}))
+                     ::indexed-docs {}
+                     ::current-lag 0}))
 
 ;; NOTE: might need to deal with comitted
 (defn ingesting-docs []
@@ -20,6 +23,9 @@
 
 (defn ingested-tx []
   (count (::indexing-tx @!metrics)))
+
+(defn current-lag []
+  (::current-lag @!metrics))
 
 ;; Maybe give an atom to store metrics with
 (defn assign-ingest
@@ -40,7 +46,8 @@
                   (swap! !metrics update ::indexed-docs assoc doc-ids
                          {:start-time-ms start-time-ms
                           :end-time-ms end-time-ms
-                          :time-elapsed-ms (- end-time-ms start-time-ms)}))))
+                          :time-elapsed-ms (- end-time-ms start-time-ms)})
+                  (swap! !metrics update ::current-lag (- end-time-ms start-time-ms)))))
 
   (bus/listen (:bus node)
               {:crux.bus/event-types #{:crux.tx/indexing-tx}}
@@ -58,7 +65,8 @@
                   (swap! !metrics update ::indexed-tx assoc (:crux.tx/submitted-tx event)
                          {:start-time-ms start-time-ms
                           :end-time-ms end-time-ms
-                          :time-elapsed-ms (- end-time-ms start-time-ms)})))))
+                          :time-elapsed-ms (- end-time-ms start-time-ms)})
+                  (swap! !metrics update ::current-lag (- end-time-ms start-time-ms))))))
 
 #_(with-open [node (api/start-node {:crux.node/topology :crux.standalone/topology
                                     :crux.node/kv-store "crux.kv.memdb/kv"
