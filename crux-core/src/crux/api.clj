@@ -108,7 +108,7 @@
     "Checks if a submitted tx was successfully committed.
      submitted-tx must be a map returned from `submit-tx`.
      Returns true if the submitted transaction was committed,
-     false if the transaction was not commi553e, and throws `NodeOutOfSyncException`
+     false if the transaction was not committed, and throws `NodeOutOfSyncException`
      if the node has not yet indexed the transaction.")
 
   (sync
