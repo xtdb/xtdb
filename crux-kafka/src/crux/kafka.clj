@@ -9,7 +9,8 @@
             [crux.node :as n]
             [crux.tx :as tx]
             [crux.kafka.consumer :as kc]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.kv :as kv])
   (:import crux.kafka.nippy.NippySerializer
            java.io.Closeable
            java.time.Duration
@@ -123,7 +124,7 @@
               :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
 
   (open-tx-log-iterator [this from-tx-id]
-    (let [tx-topic-consumer ^KafkaConsumer (create-consumer (assoc kafka-config "enable.auto.commit" "false"))
+    (let [tx-topic-consumer ^KafkaConsumer (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false"))
           tx-topic-partition (TopicPartition. tx-topic 0)]
       (.assign tx-topic-consumer [tx-topic-partition])
       (if from-tx-id
@@ -133,22 +134,6 @@
          (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
            (concat (map tx-record->tx-log-entry records)
                    (step)))))))
-
-  (new-tx-log-context [this]
-    (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false")))
-
-  (tx-log [this tx-topic-consumer from-tx-id]
-    (let [tx-topic-consumer ^KafkaConsumer tx-topic-consumer
-          tx-topic-partition (TopicPartition. tx-topic 0)]
-      (.assign tx-topic-consumer [tx-topic-partition])
-      (if from-tx-id
-        (.seek tx-topic-consumer tx-topic-partition (long from-tx-id))
-        (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer)))
-      ((fn step []
-         (lazy-seq
-          (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
-            (concat (map tx-record->tx-log-entry records)
-                    (step))))))))
 
   (latest-submitted-tx [this]
     (let [tx-tp (TopicPartition. tx-topic 0)

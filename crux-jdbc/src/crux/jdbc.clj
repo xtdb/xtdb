@@ -128,35 +128,6 @@
            (when (not= -1 x)
              (cons x (step))))))))
 
-  (new-tx-log-context [this]
-    (JdbcLogQueryContext. (atom true)))
-
-  (tx-log [this tx-log-context from-tx-id]
-    (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
-          running? (:running? tx-log-context)
-          consumer-f (fn [_ y]
-                       (.put q {:crux.tx/tx-id (int (:event_offset y))
-                                :crux.tx/tx-time (->date dbtype (:tx_time y))
-                                :crux.tx.event/tx-events (->v dbtype (:v y))})
-                       (if @running?
-                         nil
-                         (reduced nil)))]
-      (future
-        (try
-          (r/reduce consumer-f
-                    nil
-                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
-                                   (or from-tx-id 0)]
-                               {:builder-fn jdbcr/as-unqualified-lower-maps}))
-          (catch Throwable t
-            (log/error t "Exception occured reading event log")))
-        (.put q -1))
-      ((fn step []
-         (lazy-seq
-          (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
-            (when (not= -1 x)
-              (cons x (step)))))))))
-
   (latest-submitted-tx [this]
     (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})

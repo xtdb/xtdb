@@ -16,10 +16,10 @@
   (newTxLogContext [_]
     (db/new-tx-log-context tx-log))
 
-  (txLog [_ tx-log-context from-tx-id with-documents?]
+  (open-tx-log-iterator [_ from-tx-id with-ops?]
     (when with-documents?
-      (throw (IllegalArgumentException. "with-documents? not supported")))
-    (db/tx-log tx-log tx-log-context from-tx-id))
+      (throw (IllegalArgumentException. "with-ops? not supported")))
+    (db/open-tx-log-iterator tx-log from-tx-id))
 
   Closeable
   (close [_]

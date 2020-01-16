@@ -141,26 +141,6 @@
                                (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
              tx-log-entry))))))
 
-  (newTxLogContext [this]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (db/new-tx-log-context tx-log)))
-
-  (txLog [this tx-log-context from-tx-id with-ops?]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (for [{:keys [crux.tx/tx-id
-                    crux.tx.event/tx-events] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
-            :when (with-open [snapshot (kv/new-snapshot kv-store)]
-                    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
-        (if with-ops?
-          (-> tx-log-entry
-              (dissoc :crux.tx.event/tx-events)
-              (assoc :crux.api/tx-ops
-                     (with-open [snapshot (kv/new-snapshot kv-store)]
-                       (->> tx-events
-                            (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
-          tx-log-entry))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]

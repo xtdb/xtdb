@@ -28,8 +28,6 @@
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
   (open-tx-log-iterator [this from-tx-id])
-  (new-tx-log-context ^java.io.Closeable [this])
-  (tx-log [this tx-log-context from-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 

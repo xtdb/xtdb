@@ -7,7 +7,7 @@
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Duration
            java.util.Date
-           [crux.api Crux ICruxAPI ICruxDatasource]))
+           [crux.api Crux ICruxAPI ICruxDatasource PTxLogIterator]))
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
@@ -188,10 +188,7 @@
   (hasTxCommitted [_ submitted-tx]
     (api-request-sync (str url "/tx-committed") submitted-tx))
 
-  (newTxLogContext [_]
-    (->RemoteApiStream (atom [])))
-
-  (txLog [_ tx-log-context from-tx-id with-documents?]
+  (openTxLogIterator [this from-tx-id with-ops?]
     (let [params (->> [(when from-tx-id
                          (str "from-tx-id=" from-tx-id))
                        (when with-documents?
@@ -202,9 +199,8 @@
                                  (seq params) (str "?" params))
                                nil
                                {:method :get
-                                :as :stream})]
-      (register-stream-with-remote-stream! tx-log-context in)
-      (edn-list->lazy-seq in)))
+                                :as :stream})])
+    (PTxLogIterator. (.iterator (edn-list->lazy-seq in))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")

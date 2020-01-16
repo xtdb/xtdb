@@ -231,20 +231,6 @@
            :crux.tx/tx-id (.message-id m)
            :crux.tx/tx-time (.message-time m)}))))
 
-  (new-tx-log-context [this]
-    (kv/new-snapshot event-log-kv))
-
-  (tx-log [this tx-log-context from-tx-id]
-    (let [i (kv/new-iterator tx-log-context)]
-      (when-let [m (seek-message i ::event-log from-tx-id)]
-        (for [^Message m (->> (repeatedly #(next-message i ::event-log))
-                              (take-while identity)
-                              (cons m))
-              :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
-          {:crux.tx.event/tx-events (.body m)
-           :crux.tx/tx-id (.message-id m)
-           :crux.tx/tx-time (.message-time m)}))))
-
   (latest-submitted-tx [_]
     (let [end-offset (end-message-id-offset event-log-kv ::event-log)]
       (when (> end-offset 1)
