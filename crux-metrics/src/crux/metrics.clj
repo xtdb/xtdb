@@ -71,14 +71,10 @@
                     (swap! !metrics update ::latest-latency (- end-time-ms start-time-ms)))))
     !metrics))
 
-#_(with-open [node (api/start-node {:crux.node/topology :crux.standalone/topology
-                                    :crux.node/kv-store "crux.kv.memdb/kv"
-                                    :crux.kv/db-dir "data/db-dir-1"
-                                    :crux.standalone/event-log-dir "data/eventlog-1"
-                                    :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"})]
-    (Thread/sleep 1000)
-    (def !mets (assign-ingest node))
-    (Thread/sleep 1000)
-    (api/submit-tx node [[:crux.tx/put {:crux.db/id (keyword (str (rand-int 1000)))}]])
-    (Thread/sleep 2000)
-    @!mets)
+;; TODO maybe a better way to do this
+(def metrics-map
+  {::ingesting-tx {:function (resolve 'ingesting-tx)}
+   ::ingested-docs {:function (resolve 'ingested-docs)}
+   ::ingested-tx {:function (resolve 'ingested-tx)}
+   ::latest-latency {:function (resolve 'latest-latency)}
+   ::latest-tx-id-lag {:function (resolve 'latest-tx-id-lag)}})
