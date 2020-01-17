@@ -71,11 +71,6 @@
     (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
 
-(defrecord JdbcLogQueryContext [running?]
-  Closeable
-  (close [_]
-    (reset! running? false)))
-
 (defn- doc-exists? [ds k]
   (not-empty (jdbc/execute-one! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
@@ -105,7 +100,7 @@
 
   (open-tx-log-iterator [this from-tx-id]
     (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
-          running? (:running? (JdbcLogQueryContext. (atom true)))
+          running? (atom true)
           consumer-f (fn [_ y]
                        (.put q {:crux.tx/tx-id (int (:event_offset y))
                                 :crux.tx/tx-time (->date dbtype (:tx_time y))
@@ -123,10 +118,12 @@
           (catch Throwable t
             (log/error t "Exception occured reading event log")))
         (.put q -1))
-      ((fn step []
-         (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
-           (when (not= -1 x)
-             (cons x (step))))))))
+      (db/->closeable-tx-log-iterator
+       #(reset! running? false)
+       ((fn step []
+          (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
+            (when (not= -1 x)
+              (cons x (step)))))))))
 
   (latest-submitted-tx [this]
     (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]

@@ -23,7 +23,7 @@
            java.util.function.Supplier
            [java.io Closeable DataInputStream DataOutput]
            java.nio.ByteOrder
-           java.util.Date))
+           [java.util Date Iterator]))
 
 ;; Based on
 ;; https://github.com/facebook/rocksdb/wiki/Implement-Queue-Service-Using-RocksDB
@@ -221,15 +221,18 @@
               :crux.tx/tx-time (.time m)})))
 
   (open-tx-log-iterator [this from-tx-id]
-    (let [i (kv/new-iterator (kv/new-snapshot event-log-kv))]
-      (when-let [m (seek-message i ::event-log from-tx-id)]
-        (for [^Message m (->> (repeatedly #(next-message i ::event-log))
-                              (take-while identity)
-                              (cons m))
-              :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
-          {:crux.tx.event/tx-events (.body m)
-           :crux.tx/tx-id (.message-id m)
-           :crux.tx/tx-time (.message-time m)}))))
+    (let [snapshot (kv/new-snapshot event-log-kv)
+          i (kv/new-iterator snapshot)]
+      (db/->closeable-tx-log-iterator
+       #(.close ^Closeable snapshot)
+       (when-let [m (seek-message i ::event-log from-tx-id)]
+         (for [^Message m (->> (repeatedly #(next-message i ::event-log))
+                               (take-while identity)
+                               (cons m))
+               :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
+           {:crux.tx.event/tx-events (.body m)
+            :crux.tx/tx-id (.message-id m)
+            :crux.tx/tx-time (.message-time m)})))))
 
   (latest-submitted-tx [_]
     (let [end-offset (end-message-id-offset event-log-kv ::event-log)]

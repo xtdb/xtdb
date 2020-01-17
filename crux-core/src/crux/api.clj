@@ -324,17 +324,6 @@
   (submit-tx-async [this tx-ops]
     (.submitTxAsync this (conform-tx-ops tx-ops))))
 
-(defrecord PTxLogIterator [^clojure.lang.SeqIterator lazy-seq-iterator]
-  TxLogIterator
-  (next [this]
-    (.next lazy-seq-iterator))
-
-  (hasNext [this]
-    (.hasNext lazy-seq-iterator))
-
-  Closeable
-  (close [_]))
-
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
 

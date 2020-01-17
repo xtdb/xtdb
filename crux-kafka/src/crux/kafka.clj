@@ -130,10 +130,12 @@
       (if from-tx-id
         (.seek tx-topic-consumer tx-topic-partition (long from-tx-id))
         (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer)))
-      ((fn step []
-         (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
-           (concat (map tx-record->tx-log-entry records)
-                   (step)))))))
+      (db/->closeable-tx-log-iterator
+       #(.close tx-topic-consumer)
+       ((fn step []
+          (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
+            (concat (map tx-record->tx-log-entry records)
+                    (step))))))))
 
   (latest-submitted-tx [this]
     (let [tx-tp (TopicPartition. tx-topic 0)
