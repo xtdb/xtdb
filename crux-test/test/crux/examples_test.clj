@@ -37,7 +37,7 @@
       (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
                 :name "Pablo"
                 :last-name "Picasso"}
-               (crux/entity (crux/db remote-api (java.util.Date.) (java.util.Date.))
+               (crux/entity (crux/db remote-api)
                             :dbpedia.resource/Pablo-Picasso))))
 
     ;; Testing example standalone node is closed properly
@@ -80,7 +80,7 @@
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-4 node)))
     (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
     (t/is (= #{[21]} (ex/query-example-with-predicate-1 node)))
-    (t/is (= [:smith]) (first (ex/query-example-lazy node))))
+    (t/is (= [:smith] (first (ex/query-example-lazy node)))))
   (cio/delete-dir "data"))
 
 (t/deftest test-example-time-queries
