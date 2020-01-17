@@ -193,23 +193,23 @@
                    (inst-ms tx-time))))
 
 (defn poll-source-records [^ICruxAPI api source-offset props]
-  (with-open [tx-log-context (.newTxLogContext api)]
-    (let [url (get props CruxSourceConnector/URL_CONFIG)
-          topic (get props CruxSourceConnector/TOPIC_CONFIG)
-          format (get props CruxSourceConnector/FORMAT_CONFIG)
-          mode (get props CruxSourceConnector/MODE_CONFIG)
-          batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
-          source-partition {"url" url}
-          formatter (case format
-                      "edn" cio/pr-edn-str
-                      "json" json/generate-string
-                      "transit" write-transit)
-          tx-log-entry->source-records (case mode
-                                         "tx" tx-log-entry->tx-source-records
-                                         "doc" tx-log-entry->doc-source-records)
-          from-tx-id (inc (long (or (get source-offset "offset") -1)))]
+  (let [url (get props CruxSourceConnector/URL_CONFIG)
+        topic (get props CruxSourceConnector/TOPIC_CONFIG)
+        format (get props CruxSourceConnector/FORMAT_CONFIG)
+        mode (get props CruxSourceConnector/MODE_CONFIG)
+        batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
+        source-partition {"url" url}
+        formatter (case format
+                    "edn" cio/pr-edn-str
+                    "json" json/generate-string
+                    "transit" write-transit)
+        tx-log-entry->source-records (case mode
+                                       "tx" tx-log-entry->tx-source-records
+                                       "doc" tx-log-entry->doc-source-records)
+        from-tx-id (inc (long (or (get source-offset "offset") -1)))]
+    (with-open [tx-log-iterator (.openTxLogIterator api from-tx-id true)]
       (log/info "source offset:" source-offset "tx-id:" from-tx-id "format:" format "mode:" mode)
-      (let [records (->> (.txLog api tx-log-context from-tx-id true)
+      (let [records (->> (iterator-seq tx-log-iterator)
                          (take (Long/parseLong batch-size))
                          (map #(tx-log-entry->source-records source-partition topic formatter %))
                          (reduce into []))]
