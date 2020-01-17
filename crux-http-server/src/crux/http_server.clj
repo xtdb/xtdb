@@ -17,7 +17,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt])
-  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
+  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException TxLogIterator]
            [java.io Closeable IOException]
            java.time.Duration
            java.util.Date
@@ -159,17 +159,19 @@
       (.close ctx)
       (throw t))))
 
-(defn- streamed-iterator-response [iterator]
+(defn- streamed-iterator-response [^TxLogIterator iterator]
   (try
     (->> (rio/piped-input-stream
           (fn [out]
-            (with-open [out (io/writer out)]
+            (with-open [out (io/writer out)
+                        iterator iterator]
               (.write out "(")
               (doseq [x (iterator-seq iterator)]
                 (.write out (cio/pr-edn-str x)))
               (.write out ")"))))
          (response 200 {"Content-Type" "application/edn"}))
     (catch Throwable t
+      (.close iterator)
       (throw t))))
 
 (def ^:private date? (partial instance? Date))
@@ -244,10 +246,10 @@
 
 ;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxAPI crux-node request]
-  (let [with-documents? (Boolean/parseBoolean (get-in request [:query-params "with-documents"]))
+  (let [with-ops? (Boolean/parseBoolean (get-in request [:query-params "with-ops"]))
         from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
                             (Long/parseLong))
-        result (.openTxLogIterator crux-node from-tx-id with-documents?)]
+        ^TxLogIterator result (.openTxLogIterator crux-node from-tx-id with-ops?)]
     (-> (streamed-iterator-response result)
         (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
 
