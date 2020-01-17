@@ -1,7 +1,7 @@
 (ns tmt.noopnil
   (:require [crux.api :as api]))
 
-(def node (api/start-node {:crux.node/topology :crux.standalone/topology
+(def node (api/start-node {:crux.node/topology 'crux.standalone/topology
                            :crux.kv/db-dir "data/db-dir-1"
                            :crux.standalone/event-log-dir "data/eventlog-1" }))
 
@@ -38,4 +38,3 @@
                        :crux.db.fn/args [:id (java.util.Date.) {:crux.db/id :id :this :that}]}]])
 
 (api/q (api/db node) {:find ['e] :where [['e :crux.db/id :id]] :full-results? true})
-

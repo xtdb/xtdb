@@ -46,7 +46,7 @@
                                    (keys n))))))
 
   (def crux-options
-    {:crux.node/topology :crux.standalone/topology
+    {:crux.node/topology 'crux.standalone/topology
      :crux.node/kv-store "crux.kv.memdb/kv"
      :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"
      :crux.standalone/event-log-dir "data/event-log-dir-1"
@@ -96,7 +96,7 @@
 
 (t/deftest walkthrough-test
   (def crux-options
-    {:crux.node/topology :crux.standalone/topology
+    {:crux.node/topology 'crux.standalone/topology
      :crux.node/kv-store "crux.kv.memdb/kv"
      :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"
      :crux.standalone/event-log-dir "data/event-log-dir-1"

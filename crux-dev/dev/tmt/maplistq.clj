@@ -2,7 +2,7 @@
   (:require [crux.api :as api]))
 
 (def opts
-  {:crux.node/topology :crux.standalone/topology
+  {:crux.node/topology 'crux.standalone/topology
    :crux.node/kv-store "crux.kv.memdb/kv"
    :crux.kv/db-dir "data/db-dir-1"
    :crux.standalone/event-log-dir "data/eventlog-1"

@@ -16,7 +16,7 @@
 (defn example-start-standalone []
 ;; tag::start-standalone-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology :crux.standalone/topology
+  (crux/start-node {:crux.node/topology 'crux.standalone/topology
                     :crux.node/kv-store "crux.kv.memdb/kv"
                     :crux.kv/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"
@@ -51,7 +51,7 @@ embedded-kafka)
 (defn example-start-cluster []
 ;; tag::start-cluster-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology :crux.kafka/topology
+  (crux/start-node {:crux.node/topology 'crux.kafka/topology
                     :crux.node/kv-store "crux.kv.memdb/kv"
                     :crux.kafka/bootstrap-servers "localhost:9092"}))
 ;; end::start-cluster-node[]
@@ -60,7 +60,7 @@ node)
 (defn example-start-rocks []
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology :crux.standalone/topology
+  (crux/start-node {:crux.node/topology 'crux.standalone/topology
                     :crux.node/kv-store "crux.kv.rocksdb/kv"
                     :crux.kv/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"}))
@@ -70,7 +70,7 @@ node)
 (defn example-start-lmdb []
 ;; tag::start-standalone-with-lmdb[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology :crux.standalone/topology
+  (crux/start-node {:crux.node/topology 'crux.standalone/topology
                     :crux.node/kv-store "crux.kv.lmdb/kv"
                     :crux.kv/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"
@@ -81,7 +81,7 @@ node)
 (defn example-start-jdbc []
 ;; tag::start-jdbc-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology :crux.jdbc/topology
+  (crux/start-node {:crux.node/topology 'crux.jdbc/topology
                     :crux.jdbc/dbtype "postgresql"
                     :crux.jdbc/dbname "cruxdb"
                     :crux.jdbc/host "<host>"

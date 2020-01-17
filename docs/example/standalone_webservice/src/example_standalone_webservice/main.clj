@@ -704,9 +704,9 @@
 (defn run-node [{:keys [server-port http-port] :as options} with-node-fn]
   (with-open [crux-node (case (System/getenv "CRUX_MODE")
                           "CLUSTER_NODE" (api/start-node (assoc options
-                                                                :crux.node/topology :crux.kafka/topology))
+                                                                :crux.node/topology 'crux.kafka/topology))
                           (api/start-node (assoc options
-                                                 :crux.node/topology :crux.standalone/topology)))
+                                                 :crux.node/topology 'crux.standalone/topology)))
               api-server (srv/start-http-server
                            crux-node
                            {:server-port http-port

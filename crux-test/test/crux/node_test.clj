@@ -15,7 +15,7 @@
            (clojure.lang Keyword)))
 
 (t/deftest test-properties-to-topology
-  (let [t (n/options->topology {:crux.node/topology [:crux.jdbc/topology]})]
+  (let [t (n/options->topology {:crux.node/topology ['crux.jdbc/topology]})]
 
     (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
              (-> t :crux.node/tx-log)))
@@ -23,7 +23,7 @@
              (-> t :crux.node/kv-store))))
 
   (t/testing "override module in topology"
-    (let [t (n/options->topology {:crux.node/topology [:crux.jdbc/topology]
+    (let [t (n/options->topology {:crux.node/topology ['crux.jdbc/topology]
                                   :crux.node/kv-store :crux.kv.memdb/kv})]
 
       (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
@@ -35,7 +35,7 @@
   (let [data-dir (cio/create-tmpdir "kv-store")
         event-log-dir (cio/create-tmpdir "kv-store")]
     (try
-      (let [n (n/start {:crux.node/topology [:crux.standalone/topology]
+      (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
                         :crux.kv/db-dir (str data-dir)
                         :crux.standalone/event-log-dir (str event-log-dir)})]
         (t/is (.status n))
@@ -58,7 +58,7 @@
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (let [data-dir (cio/create-tmpdir "kv-store")]
     (try
-      (with-open [n (n/start {:crux.node/topology [:crux.jdbc/topology]})]
+      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]})]
         (t/is false))
       (catch Throwable e
         (t/is (re-find #"Arg :crux.jdbc/dbtype required" (.getMessage e))))
@@ -117,7 +117,7 @@
 (t/deftest test-can-start-JDBC-node
   (let [data-dir (cio/create-tmpdir "kv-store")]
     (try
-      (with-open [n (n/start {:crux.node/topology [:crux.jdbc/topology]
+      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
                               :crux.kv/db-dir (str data-dir)
                               :crux.jdbc/dbtype "h2"
                               :crux.jdbc/dbname "cruxtest"})]
@@ -128,7 +128,7 @@
 (t/deftest test-can-set-standalone-kv-store
   (let [event-log-dir (cio/create-tmpdir "kv-store")]
     (try
-      (with-open [n (n/start {:crux.node/topology [:crux.standalone/topology]
+      (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                               :crux.kv/kv-store :crux.kv.memdb/kv
                               :crux.standalone/event-log-dir (str event-log-dir)
                               :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
@@ -149,7 +149,7 @@
 (t/deftest test-conflicting-standalone-props
   (let [event-log-dir (cio/create-tmpdir "kv-store")]
     (try
-      (with-open [n (n/start {:crux.node/topology [:crux.standalone/topology]
+      (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                               :crux.kv/kv-store :crux.kv.memdb/kv
                               :crux.standalone/event-log-sync-interval-ms 1000
                               :crux.standalone/event-log-sync? true
@@ -164,11 +164,11 @@
 (t/deftest topology-resolution-from-java
   (let [mem-db-node-options
         (doto (HashMap.)
-          (.put (Keyword/intern "crux.node/topology") (Keyword/intern "crux.standalone/topology"))
-          (.put (Keyword/intern "crux.node/kv-store") "crux.kv.memdb/kv")
-          (.put (Keyword/intern "crux.standalone/event-log-kv-store") "crux.kv.memdb/kv")
-          (.put (Keyword/intern "crux.standalone/event-log-dir") "data/eventlog")
-          (.put (Keyword/intern "crux.kv/db-dir") "data/db-dir"))
+          (.put :crux.node/topology 'crux.standalone/topology)
+          (.put :crux.node/kv-store 'crux.kv.memdb/kv)
+          (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
+          (.put :crux.standalone/event-log-dir "data/eventlog")
+          (.put :crux.kv/db-dir "data/db-dir"))
         memdb-node (Crux/startNode mem-db-node-options)]
     (t/is memdb-node)
     (t/is (not (.close memdb-node)))))
@@ -177,7 +177,7 @@
   (let [kv-data-dir-1 (cio/create-tmpdir "kv-store1")
         kv-data-dir-2 (cio/create-tmpdir "kv-store2")]
     (try
-      (with-open [n (n/start {:crux.node/topology [:crux.jdbc/topology]
+      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
                               :crux.kv/db-dir (str kv-data-dir-1)
                               :crux.jdbc/dbtype "h2"
                               :crux.jdbc/dbname "cruxtest1"})]
@@ -194,7 +194,7 @@
                                 '{:find [e]
                                   :where [[e :name "Ivan"]]})))
 
-        (with-open [n2 (n/start {:crux.node/topology [:crux.jdbc/topology]
+        (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
                                  :crux.kv/db-dir (str kv-data-dir-2)
                                  :crux.jdbc/dbtype "h2"
                                  :crux.jdbc/dbname "cruxtest2"})]

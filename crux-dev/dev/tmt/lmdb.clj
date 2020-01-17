@@ -1,7 +1,7 @@
 (ns tmt.lmdb
   (:require [crux.api :as api]))
 
-(def node (api/start-node {:crux.node/topology :crux.standalone/topology
+(def node (api/start-node {:crux.node/topology 'crux.standalone/topology
                            :crux.node/kv-store "crux.kv.lmdb/kv"
                            :crux.kv/db-dir "data/db-dir-1"
                            :crux.standalone/event-log-dir "data/eventlog-1"

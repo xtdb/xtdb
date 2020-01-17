@@ -338,7 +338,7 @@
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
-  options {:crux.node/topology e.g. \"crux.standalone/topology\"}
+  options {:crux.node/topology 'crux.standalone/topology}
 
   Options are specified as keywords using their long format name, like
   :crux.kafka/bootstrap-servers etc. See the individual modules used in the specified

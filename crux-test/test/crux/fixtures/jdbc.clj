@@ -10,7 +10,7 @@
 
 (defn with-jdbc-node [dbtype f & [opts]]
   (let [dbtype (name dbtype)
-        options (merge {:crux.node/topology :crux.jdbc/topology
+        options (merge {:crux.node/topology 'crux.jdbc/topology
                         :crux.jdbc/dbtype (name dbtype)
                         :crux.jdbc/dbname "cruxtest"}
                        opts)

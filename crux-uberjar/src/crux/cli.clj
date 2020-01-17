@@ -10,7 +10,7 @@
   (:import java.io.Closeable))
 
 (def default-options
-  {:crux.node/topology :crux.kafka/topology})
+  {:crux.node/topology 'crux.kafka/topology})
 
 (def cli-options
   [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
