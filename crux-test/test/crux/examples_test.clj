@@ -31,6 +31,15 @@
     (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
     (t/is (not (empty? (ex/example-query-valid-time node))))
 
+    ;; Testing http-server/http-client using the standalone node
+    (with-open [http-server (ex/example-start-http-server node)
+                remote-api (ex/example-start-http-client)]
+      (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                :name "Pablo"
+                :last-name "Picasso"}
+               (crux/entity (crux/db remote-api (java.util.Date.) (java.util.Date.))
+                            :dbpedia.resource/Pablo-Picasso))))
+
     ;; Testing example standalone node is closed properly
     (t/is (nil? (ex/example-close-node node)))))
 

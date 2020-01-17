@@ -9,6 +9,10 @@
 (require '[crux.kafka.embedded :as ek])
 ;; end::require-ek[]
 
+;; tag::require-http-server[]
+(require '[crux.http-server :as srv])
+;; end::require-http-server[]
+
 (defn example-start-standalone []
 ;; tag::start-standalone-node[]
 (def ^crux.api.ICruxAPI node
@@ -84,6 +88,31 @@ node)
                     :crux.jdbc/user "<user>"
                     :crux.jdbc/password "<password>"}))
   ;; end::start-jdbc-node[]
+  )
+
+(defn example-start-http-server [node]
+;; tag::start-http-server[]
+(def http-options
+  {:server-port 3000
+   :cors-access-control
+   [:access-control-allow-origin [#".*"]
+    :access-control-allow-headers ["X-Requested-With"
+                                   "Content-Type"
+                                   "Cache-Control"
+                                   "Origin"
+                                   "Accept"
+                                   "Authorization"
+                                   "X-Custom-Header"]
+    :access-control-allow-methods [:get :post]]})
+
+(srv/start-http-server node http-options)
+;; end::start-http-server[]
+  )
+
+(defn example-start-http-client []
+;; tag::start-http-client[]
+(crux/new-api-client "http://localhost:3000")
+;; end::start-http-client[]
   )
 
 (defn example-submit-tx [node]
