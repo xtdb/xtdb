@@ -174,7 +174,7 @@
       (t/testing "tx-log"
         (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
           (let [result (iterator-seq tx-log-iterator)]
-            ;(t/is (not (realized? result)))
+            (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
                              :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))
@@ -183,7 +183,7 @@
         (t/testing "with ops"
           (with-open [tx-log-iterator (.openTxLogIterator *api* nil true)]
             (let [result (iterator-seq tx-log-iterator)]
-              ;(t/is (not (realized? result)))
+              (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
                                :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
                        result))
@@ -191,10 +191,7 @@
 
         (t/testing "from tx id"
           (with-open [tx-log-iterator (.openTxLogIterator *api* (inc tx-id) false)]
-            (let [result (iterator-seq tx-log-iterator)]
-              ;(t/is (not (realized? result)))
-              (t/is (empty? result))
-              (t/is (realized? result))))))
+            (t/is (empty? (iterator-seq tx-log-iterator))))))
 
       (t/testing "statistics"
         (let [stats (.attributeStats *api*)]
