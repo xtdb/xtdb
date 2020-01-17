@@ -13,8 +13,8 @@
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
 
-  (open-tx-log-iterator [_ from-tx-id with-ops?]
-    (when with-documents?
+  (openTxLogIterator ^crux.api.TxLogIterator [_ from-tx-id with-ops?]
+    (when with-ops?
       (throw (IllegalArgumentException. "with-ops? not supported")))
     (db/open-tx-log-iterator tx-log from-tx-id))
 

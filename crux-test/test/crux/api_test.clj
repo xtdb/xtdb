@@ -17,7 +17,6 @@
             [crux.db :as db]
             [crux.query :as q])
   (:import crux.api.NodeOutOfSyncException
-           clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
            crux.moberg.MobergTxLog
@@ -124,7 +123,6 @@
             (with-open [snapshot (.newSnapshot db)]
               (let [result (.q db snapshot '{:find [e]
                                              :where [[e :name "Ivan"]]})]
-                (t/is (instance? LazySeq result))
                 (t/is (not (realized? result)))
                 (t/is (= '([:ivan]) result))
                 (t/is (realized? result))))))
@@ -135,7 +133,6 @@
               (let [result (.q db snapshot '{:find [e]
                                              :where [[e :name "Ivan"]]
                                              :full-results? true})]
-                (t/is (instance? LazySeq result))
                 (t/is (not (realized? result)))
                 (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}]) result))
                 (t/is (realized? result))))))
@@ -346,15 +343,13 @@
 
           (with-open [tx-log-iterator (.openTxLogIterator *ingest-client* nil false)]
             (let [result (iterator-seq tx-log-iterator)]
-              (t/is (instance? LazySeq result))
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
                                :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
                        result))
               (t/is (realized? result))))
 
-          (with-open [tx-log-iterator (.openTxLogIterator *ingest-client* nil false)]
-            (t/is (thrown? IllegalArgumentException (iterator-seq tx-log-iterator)))))))
+          (t/is (thrown? IllegalArgumentException (.openTxLogIterator *ingest-client* nil true))))))
     (t/is true)))
 
 (defn execute-sparql [^RepositoryConnection conn q]
