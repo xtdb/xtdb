@@ -4,7 +4,8 @@
             [crux.api :as crux]
             [clojure.java.io :as io]
             [docs.examples :as ex]
-            [crux.io :as cio]))
+            [crux.io :as cio])
+  (:import (java.io Closeable)))
 
 (defn- clear-test-dirs [f]
   (try
@@ -32,8 +33,8 @@
     (t/is (not (empty? (ex/example-query-valid-time node))))
 
     ;; Testing http-server/http-client using the standalone node
-    (with-open [http-server (ex/example-start-http-server node)
-                remote-api (ex/example-start-http-client)]
+    (with-open [http-server ^Closeable (ex/example-start-http-server node)
+                remote-api ^Closeable (ex/example-start-http-client)]
       (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
                 :name "Pablo"
                 :last-name "Picasso"}
