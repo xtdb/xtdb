@@ -163,20 +163,27 @@
              (if (and (logic-var? e) (= e v))
                (rewrite-self-join-triple-clause clause)
                {:triple [clause]}))
-           {type [(case type
-                    :pred (let [{:keys [pred]} clause
-                                {:keys [pred-fn args]} pred]
-                            (if-let [range-pred (and (= 2 (count args))
-                                                     (every? logic-var? args)
-                                                     (get pred->built-in-range-pred pred-fn))]
-                              (assoc-in clause [:pred :pred-fn] range-pred)
-                              clause))
-                    :range (let [[type clause] (first clause)]
-                             (if (= :val-sym type)
-                               (update clause :op range->inverse-range)
-                               clause))
-                    :unify (first clause)
-                    clause)]}))
+
+           (case type
+             :pred {:pred [(let [{:keys [pred]} clause
+                                 {:keys [pred-fn args]} pred]
+                             (if-let [range-pred (and (= 2 (count args))
+                                                      (every? logic-var? args)
+                                                      (get pred->built-in-range-pred pred-fn))]
+                               (assoc-in clause [:pred :pred-fn] range-pred)
+                               clause))]}
+
+             :range (let [[order clause] (first clause)
+                          {:keys [op sym val] :as clause} (cond-> clause
+                                                            (= :val-sym order) (update :op range->inverse-range))]
+                      (if-not (logic-var? sym)
+                        {:pred [{:pred {:pred-fn (resolve op), :args [sym val]}}]}
+                        {:range [clause]}))
+
+             :unify {:unify [(first clause)]}
+
+             {type [clause]})))
+
        (apply merge-with into)))
 
 (defn- collect-vars [{triple-clauses :triple
