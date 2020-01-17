@@ -132,7 +132,7 @@ include::./deps.edn[tags=RocksDeps]
 include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
 ----
 
-You can create a node with custom RocksDB options, by passing some extra keywords in the topology. These are:
+You can create a node with custom RocksDB options by passing extra keywords in the topology. These are:
 
 * `:crux.kv.rocksdb/disable-wal?`, which takes a boolean (if true, disables the *write ahead log*)
 * `:crux.kv.rocksdb/db-options`, which takes a RocksDB 'Options' object (see more https://javadoc.io/doc/org.rocksdb/rocksdbjni/6.2.2/org/rocksdb/Options.html[here], from the *RocksDB javadocs*)
