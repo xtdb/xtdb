@@ -55,7 +55,6 @@
   (hasNext [this]
     (.hasNext lazy-seq-iterator))
 
-  Closeable
   (close [_]
     (close-fn)))
 

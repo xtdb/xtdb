@@ -45,24 +45,6 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord TxLogIteratorWithOps [^TxLogIterator tx-log-iterator ^Closeable snapshot object-store]
-  TxLogIterator
-  (next [this]
-    (let [tx-log-entry (.next tx-log-iterator)]
-      (-> tx-log-entry
-          (dissoc :crux.tx.event/tx-events)
-          (assoc :crux.api/tx-ops
-                 (->> (:crux.tx.event/tx-events tx-log-entry)
-                      (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))
-
-  (hasNext [this]
-    (.hasNext tx-log-iterator))
-
-  Closeable
-  (close [_]
-    (.close tx-log-iterator)
-    (.close snapshot)))
-
 (defrecord CruxNode [kv-store tx-log indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
@@ -144,10 +126,28 @@
   (openTxLogIterator ^TxLogIterator [this from-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-log-iterator (db/open-tx-log-iterator tx-log from-tx-id)]
-        (if with-ops?
-          (->TxLogIteratorWithOps tx-log-iterator (kv/new-snapshot kv-store) object-store)
-          tx-log-iterator))))
+      (let [tx-log-iterator (db/open-tx-log-iterator tx-log from-tx-id)
+            snapshot (kv/new-snapshot kv-store)
+            filtered-txs (filter
+                          #(nil?
+                            (kv/get-value snapshot
+                                          (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))
+                          (iterator-seq tx-log-iterator))
+            tx-log (if with-ops?
+                     (map (fn [{:keys [crux.tx/tx-id
+                                       crux.tx.event/tx-events] :as tx-log-entry}]
+                            (-> tx-log-entry
+                                (dissoc :crux.tx.event/tx-events)
+                                (assoc :crux.api/tx-ops
+                                       (->> tx-events
+                                            (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
+                          filtered-txs)
+                     filtered-txs)]
+
+        (db/->closeable-tx-log-iterator (fn []
+                                          (.close snapshot)
+                                          (.close tx-log-iterator))
+                                        tx-log))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]
