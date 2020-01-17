@@ -190,23 +190,25 @@
 
 (s/def ::start-fn ifn?)
 (s/def ::deps (s/coll-of keyword?))
-(s/def ::args (s/map-of keyword?
-                        (s/keys :req [:crux.config/type]
-                                :req-un [:crux.config/doc]
-                                :opt-un [:crux.config/default
-                                         :crux.config/required?])))
+
+(s/def ::args
+  (s/map-of keyword?
+            (s/keys :req [:crux.config/type]
+                    :req-un [:crux.config/doc]
+                    :opt-un [:crux.config/default
+                             :crux.config/required?])))
 
 (defn- resolve-topology-id [id]
   (s/assert ::topology-id id)
   (-> id symbol requiring-resolve var-get))
 
-(s/def ::module (s/and (s/and (s/or :module-id ::topology-id :module map?)
-                              (s/conformer
-                               (fn [[m-or-id s]]
-                                 (if (= :module-id m-or-id)
-                                   (resolve-topology-id s) s))))
-                       (s/keys :req-un [::start-fn]
-                               :opt-un [::deps ::args])))
+(s/def ::module
+  (s/and (s/and (s/or :module-id ::topology-id, :module map?)
+                (s/conformer
+                 (fn [[m-or-id s]]
+                   (cond-> s (= :module-id m-or-id) resolve-topology-id))))
+         (s/keys :req-un [::start-fn]
+                 :opt-un [::deps ::args])))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k m]
