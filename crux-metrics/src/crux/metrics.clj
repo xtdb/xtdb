@@ -2,40 +2,34 @@
   (:require [crux.api :as api]
             [crux.bus :as bus]))
 
-;; We might just want doc count
-
-;; map of (key) event content and (value) meta info including start-time, end-time and diff
-(def !metrics (atom {::indexing-tx {}
-                     ::indexed-tx {}
-                     ::indexing-docs {}
-                     ::indexed-docs {}
-                     ::current-lag 0}))
-
-;; NOTE: might need to deal with comitted
-(defn ingesting-docs []
-  (count (::indexing-docs @!metrics)))
-
-(defn ingesting-tx []
+(defn ingesting-tx [!metrics]
   (count (::indexing-tx @!metrics)))
 
-(defn ingested-docs []
+(defn ingested-docs [!metrics]
   (count (::indexing-docs @!metrics)))
 
-(defn ingested-tx []
+(defn ingested-tx [!metrics]
   (count (::indexing-tx @!metrics)))
 
-(defn current-lag []
+(defn current-lag [!metrics]
   (::current-lag @!metrics))
 
-;; Maybe give an atom to store metrics with
+;; I might be storing too much metadata. Maybe timings don't need to be stored
 (defn assign-ingest
   [node]
+  "Assigns listeners to an event bus for a given node.
+  Returns an atom containing uptading metrics"
 
-  (bus/listen (:bus node)
-              {:crux.bus/event-types #{:crux.tx/indexing-docs}}
-              (fn [{:keys [doc-ids]}]
-                (swap! !metrics update ::indexing-docs assoc
-                       doc-ids {:start-time-ms (System/currentTimeMillis)})))
+  (let [!metrics (atom {::indexing-tx {}
+                        ::indexed-tx {}
+                        ::indexing-docs {}
+                        ::indexed-docs {}
+                        ::current-lag 0})]
+    (bus/listen (:bus node)
+                {:crux.bus/event-types #{:crux.tx/indexing-docs}}
+                (fn [{:keys [doc-ids]}]
+                  (swap! !metrics update ::indexing-docs assoc
+                         doc-ids {:start-time-ms (System/currentTimeMillis)})))
   (bus/listen (:bus node)
               {:crux.bus/event-types #{:crux.tx/indexed-docs}}
               (fn [{:keys [doc-ids]}]
@@ -66,7 +60,8 @@
                          {:start-time-ms start-time-ms
                           :end-time-ms end-time-ms
                           :time-elapsed-ms (- end-time-ms start-time-ms)})
-                  (swap! !metrics update ::current-lag (- end-time-ms start-time-ms))))))
+                  (swap! !metrics update ::current-lag (- end-time-ms start-time-ms)))))
+  !metrics))
 
 #_(with-open [node (api/start-node {:crux.node/topology :crux.standalone/topology
                                     :crux.node/kv-store "crux.kv.memdb/kv"
