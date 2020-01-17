@@ -13,9 +13,6 @@
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
 
-  (newTxLogContext [_]
-    (db/new-tx-log-context tx-log))
-
   (open-tx-log-iterator [_ from-tx-id with-ops?]
     (when with-documents?
       (throw (IllegalArgumentException. "with-ops? not supported")))

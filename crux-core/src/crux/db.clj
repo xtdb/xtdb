@@ -29,7 +29,7 @@
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
-  (open-tx-log-iterator [this from-tx-id])
+  (open-tx-log-iterator ^TxLogIterator [this from-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 
@@ -47,8 +47,7 @@
   (delete-objects [this kvs]))
 ;; end::ObjectStore[]
 
-(defrecord CloseableTxLogIterator [close-fn
-                                   ^Iterator lazy-seq-iterator]
+(defrecord CloseableTxLogIterator [close-fn ^Iterator lazy-seq-iterator]
   TxLogIterator
   (next [this]
     (.next lazy-seq-iterator))

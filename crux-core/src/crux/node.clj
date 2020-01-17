@@ -16,7 +16,7 @@
             [crux.status :as status]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException PTxLogIterator]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException TxLogIterator]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
@@ -44,6 +44,24 @@
 (defn- ensure-node-open [{:keys [closed?]}]
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
+
+(defrecord TxLogIteratorWithOps [^TxLogIterator tx-log-iterator ^Closeable snapshot object-store]
+  TxLogIterator
+  (next [this]
+    (let [tx-log-entry (.next tx-log-iterator)]
+      (-> tx-log-entry
+          (dissoc :crux.tx.event/tx-events)
+          (assoc :crux.api/tx-ops
+                 (->> (:crux.tx.event/tx-events tx-log-entry)
+                      (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))
+
+  (hasNext [this]
+    (.hasNext tx-log-iterator))
+
+  Closeable
+  (close [_]
+    (.close tx-log-iterator)
+    (.close snapshot)))
 
 (defrecord CruxNode [kv-store tx-log indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
@@ -126,21 +144,10 @@
   (openTxLogIterator ^TxLogIterator [this from-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (PTxLogIterator.
-       (.iterator
-         (for [{:keys [crux.tx/tx-id
-                       crux.tx.event/tx-events] :as tx-log-entry} (db/open-tx-log-iterator tx-log from-tx-id)
-               :when (with-open [snapshot (kv/new-snapshot kv-store)]
-                       (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
-           (if with-ops?
-             (-> tx-log-entry
-                 (dissoc :crux.tx.event/tx-events)
-                 (assoc :crux.api/tx-ops
-                        (with-open [snapshot (kv/new-snapshot kv-store)]
-                          (->> tx-events
-                               (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
-             tx-log-entry))))))
-
+      (let [tx-log-iterator (db/open-tx-log-iterator tx-log from-tx-id)]
+        (if with-ops?
+          (->TxLogIteratorWithOps tx-log-iterator (kv/new-snapshot kv-store) object-store)
+          tx-log-iterator))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]
