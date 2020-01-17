@@ -3,10 +3,10 @@
 
 (def opts
   {:crux.node/topology 'crux.standalone/topology
-   :crux.node/kv-store "crux.kv.memdb/kv"
+   :crux.node/kv-store 'crux.kv.memdb/kv
    :crux.kv/db-dir "data/db-dir-1"
    :crux.standalone/event-log-dir "data/eventlog-1"
-   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"})
+   :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv})
 
 (def node
   (api/start-node opts))

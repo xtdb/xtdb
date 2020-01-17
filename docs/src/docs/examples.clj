@@ -17,10 +17,10 @@
 ;; tag::start-standalone-node[]
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology 'crux.standalone/topology
-                    :crux.node/kv-store "crux.kv.memdb/kv"
+                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kv/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"
-                    :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
+                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}))
 ;; end::start-standalone-node[]
   node)
 
@@ -52,7 +52,7 @@ embedded-kafka)
 ;; tag::start-cluster-node[]
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology 'crux.kafka/topology
-                    :crux.node/kv-store "crux.kv.memdb/kv"
+                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kafka/bootstrap-servers "localhost:9092"}))
 ;; end::start-cluster-node[]
 node)
@@ -61,7 +61,7 @@ node)
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology 'crux.standalone/topology
-                    :crux.node/kv-store "crux.kv.rocksdb/kv"
+                    :crux.node/kv-store 'crux.kv.rocksdb/kv
                     :crux.kv/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"}))
 ;; end::start-standalone-with-rocks[]
@@ -71,10 +71,10 @@ node)
 ;; tag::start-standalone-with-lmdb[]
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology 'crux.standalone/topology
-                    :crux.node/kv-store "crux.kv.lmdb/kv"
+                    :crux.node/kv-store 'crux.kv.lmdb/kv
                     :crux.kv/db-dir "data/db-dir-1"
                     :crux.standalone/event-log-dir "data/eventlog-1"
-                    :crux.standalone/event-log-kv-store "crux.kv.lmdb/kv"}))
+                    :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv}))
 ;; end::start-standalone-with-lmdb[]
 node)
 

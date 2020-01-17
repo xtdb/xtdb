@@ -4,9 +4,9 @@
 
 (def node-mem
   (c/start-node {:crux.node/topology 'crux.standalone/topology
-                 :crux.node/kv-store "crux.kv.memdb/kv"
+                 :crux.node/kv-store 'crux.kv.memdb/kv
                  :crux.kv/db-dir "data/db-dir-mem"
-                 :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"
+                 :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
                  :crux.standalone/event-log-dir "data/eventlog-mem"}))
 
 (c/submit-tx node-mem [[:crux.tx/put {:crux.db/id {:a 1

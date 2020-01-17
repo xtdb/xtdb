@@ -688,7 +688,7 @@
 (def log-dir "data/eventlog-1")
 
 (def crux-options
-  {:crux.node/kv-store "crux.kv.rocksdb/kv"
+  {:crux.node/kv-store 'crux.kv.rocksdb/kv
    :crux.kafka/bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
    :crux.standalone/event-log-dir log-dir
    :crux.kv/db-dir index-dir
