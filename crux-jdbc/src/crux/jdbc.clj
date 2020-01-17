@@ -121,9 +121,10 @@
       (db/->closeable-tx-log-iterator
        #(reset! running? false)
        ((fn step []
-          (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
-            (when (not= -1 x)
-              (cons x (step)))))))))
+          (lazy-seq
+           (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
+             (when (not= -1 x)
+               (cons x (step))))))))))
 
   (latest-submitted-tx [this]
     (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]
