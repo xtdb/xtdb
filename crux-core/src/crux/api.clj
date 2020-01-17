@@ -149,7 +149,7 @@
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
 
-  (open-tx-log-iterator ^TxLogIterator [this from-tx-id with-ops?]
+  (open-tx-log-iterator ^crux.api.TxLogIterator [this from-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another
@@ -219,7 +219,7 @@
   (submit-tx [this tx-ops]
     (.submitTx this (conform-tx-ops tx-ops)))
 
-  (open-tx-log-iterator [this from-tx-id with-ops?]
+  (open-tx-log-iterator ^crux.api.TxLogIterator [this from-tx-id with-ops?]
     (.openTxLogIterator this from-tx-id with-ops?)))
 
 (defprotocol PCruxDatasource

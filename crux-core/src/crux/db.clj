@@ -29,7 +29,7 @@
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
-  (open-tx-log-iterator ^TxLogIterator [this from-tx-id])
+  (open-tx-log-iterator ^crux.api.TxLogIterator [this from-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 
