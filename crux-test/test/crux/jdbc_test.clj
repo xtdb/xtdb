@@ -40,14 +40,14 @@
     (.awaitTx *api* submitted-tx nil)
     (t/is (.entity (.db *api*) :origin-man))
     (t/testing "Tx log"
-      (with-open [tx-log-context (.newTxLogContext *api*)]
+      (with-open [tx-log-iterator (.openTxLogIterator *api* 0 false)]
         (t/is (= [{:crux.tx/tx-id 2,
                    :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
                    :crux.tx.event/tx-events
                    [[:crux.tx/put
                      (str (c/new-id (:crux.db/id doc)))
                      (str (c/new-id doc))]]}]
-                 (.txLog *api* tx-log-context 0 false)))))))
+                 (iterator-seq tx-log-iterator)))))))
 
 (defn- docs [dbtype ds id]
   (jdbc/with-transaction [t ds]

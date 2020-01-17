@@ -172,30 +172,27 @@
           (t/is (nil? (.entityTx (.db *api* #inst "1999") :ivan)))))
 
       (t/testing "tx-log"
-        (with-open [ctx (.newTxLogContext *api*)]
-          (let [result (.txLog *api* ctx nil false)]
-            (t/is (instance? LazySeq result))
-            (t/is (not (realized? result)))
+        (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
+          (let [result (iterator-seq tx-log-iterator)]
+            ;(t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
                              :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))
             (t/is (realized? result))))
 
         (t/testing "with ops"
-          (with-open [ctx (.newTxLogContext *api*)]
-            (let [result (.txLog *api* ctx nil true)]
-              (t/is (instance? LazySeq result))
-              (t/is (not (realized? result)))
+          (with-open [tx-log-iterator (.openTxLogIterator *api* nil true)]
+            (let [result (iterator-seq tx-log-iterator)]
+              ;(t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
                                :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
                        result))
               (t/is (realized? result)))))
 
         (t/testing "from tx id"
-          (with-open [ctx (.newTxLogContext *api*)]
-            (let [result (.txLog *api* ctx (inc tx-id) false)]
-              (t/is (instance? LazySeq result))
-              (t/is (not (realized? result)))
+          (with-open [tx-log-iterator (.openTxLogIterator *api* (inc tx-id) false)]
+            (let [result (iterator-seq tx-log-iterator)]
+              ;(t/is (not (realized? result)))
               (t/is (empty? result))
               (t/is (realized? result))))))
 
@@ -259,8 +256,8 @@
     (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
       (.awaitTx *api* version-2-submitted-tx nil)
       (t/is (false? (.hasTxCommitted *api* version-2-submitted-tx)))
-      (with-open [ctx (.newTxLogContext *api*)]
-        (let [result (.txLog *api* ctx nil false)]
+      (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
+        (let [result (iterator-seq tx-log-iterator)]
           (t/is (= [(assoc submitted-tx
                            :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                    result))))
@@ -268,8 +265,8 @@
       (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
         (.awaitTx *api* version-3-submitted-tx nil)
         (t/is (true? (.hasTxCommitted *api* version-3-submitted-tx)))
-        (with-open [ctx (.newTxLogContext *api*)]
-          (let [result (.txLog *api* ctx nil false)]
+        (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
+          (let [result (iterator-seq tx-log-iterator)]
             (t/is (= 2 (count result)))))))))
 
 (t/deftest test-db-history-api
@@ -350,8 +347,8 @@
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))
 
-          (with-open [ctx (.newTxLogContext *ingest-client*)]
-            (let [result (.txLog *ingest-client* ctx nil false)]
+          (with-open [tx-log-iterator (.openTxLogIterator *ingest-client* nil false)]
+            (let [result (iterator-seq tx-log-iterator)]
               (t/is (instance? LazySeq result))
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
@@ -359,8 +356,8 @@
                        result))
               (t/is (realized? result))))
 
-          (with-open [ctx (.newTxLogContext *ingest-client*)]
-            (t/is (thrown? IllegalArgumentException (.txLog *ingest-client* ctx nil true)))))))
+          (with-open [tx-log-iterator (.openTxLogIterator *ingest-client* nil false)]
+            (t/is (thrown? IllegalArgumentException (iterator-seq tx-log-iterator)))))))
     (t/is true)))
 
 (defn execute-sparql [^RepositoryConnection conn q]

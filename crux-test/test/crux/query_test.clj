@@ -1430,10 +1430,11 @@
           ;; "Duplicate CAS failure".
           (t/is (true? updated?)
                 (when-not updated?
-                  (with-open [tx-log-context (api/new-tx-log-context *api*)]
-                    (with-out-str
-                      (doseq [tx (api/tx-log *api* tx-log-context nil true)]
+                  (with-out-str
+                    (with-open [tx-log-iterator (api/open-tx-log-iterator *api* nil true)]
+                      (doseq [tx (iterator-seq tx-log-iterator)]
                         (prn tx))))))
+
           (t/is (= #{["Ivan 4th"]} (api/q (api/db *api* tx-time
                                                   tx-time) '{:find [n]
                                                              :where [[:ivan :name n]]})))))
