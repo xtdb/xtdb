@@ -1,10 +1,13 @@
 (ns crux.metrics.dropwizard
-  (:require [metrics.core :as dropwiz]
-            [metrics.gauges :as gauges]
-            [crux.metrics :as c-mets]))
+  (:require [crux.metrics.bus :as met-bus]
+            [metrics.core :as dropwiz]
+            [metrics.gauges :as gauges]))
 
-(defn codahale-register-node [reg node]
-  (map (fn [[namesp data]]
-         (gauges/gauge-fn reg (name namesp) (:function data)))
-       c-mets/metrics-map))
+;; TODO better name
+(defn cx-met->metrics [reg !metrics]
+  (map (fn [[fn-sym func]]
+         (gauges/gauge-fn reg (str fn-sym) #(func !metrics)))
+       (ns-publics 'crux.metrics.gauges)))
 
+(defn node->metrics [reg node]
+  (cx-met->metrics reg (met-bus/assign-ingest node)))
