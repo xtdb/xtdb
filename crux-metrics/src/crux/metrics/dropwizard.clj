@@ -1,6 +1,5 @@
 (ns crux.metrics.dropwizard
   (:require [crux.metrics.bus :as met-bus]
-            [metrics.core :as dropwiz]
             [metrics.gauges :as gauges]))
 
 (defn cx-met->metrics [reg !metrics]

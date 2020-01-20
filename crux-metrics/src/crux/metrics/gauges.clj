@@ -1,5 +1,6 @@
 (ns crux.metrics.gauges)
 
+;; Ingest metrcis
 (defn ingesting-docs
   "Number of documents currently queued for ingest"
   [!metrics]
@@ -24,13 +25,13 @@
 
   (count (:crux.metrics/indexed-tx @!metrics)))
 
-(defn latest-ingest-latency
+(defn latest-ingest-latency-tx
   "Time taken for latest ingest of a tx"
   [!metrics]
 
   (:crux.metrics/latest-latency-tx @!metrics))
 
-(defn latest-ingest-latency
+(defn latest-ingest-latency-docs
   "Time taken for latest ingest of a doc"
   [!metrics]
 

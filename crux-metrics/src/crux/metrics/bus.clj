@@ -4,9 +4,9 @@
 
 ;; I might be storing too much metadata. Maybe timings don't need to be stored
 (defn assign-ingest
-  [node]
   "Assigns listeners to an event bus for a given node.
   Returns an atom containing uptading metrics"
+  [node]
 
   (let [!metrics (atom {:crux.metrics/indexing-tx {}
                         :crux.metrics/indexed-tx {}
