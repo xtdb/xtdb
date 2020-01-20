@@ -59,4 +59,4 @@
     (close-fn)))
 
 (defn ->closeable-tx-log-iterator [close-fn ^Iterable sq]
-  (->CloseableTxLogIterator close-fn (.iterator sq)))
+  (->CloseableTxLogIterator close-fn (.iterator (lazy-seq sq))))

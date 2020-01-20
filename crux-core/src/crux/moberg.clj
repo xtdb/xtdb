@@ -225,15 +225,14 @@
           i (kv/new-iterator snapshot)]
       (db/->closeable-tx-log-iterator
        #(.close ^Closeable snapshot)
-       (lazy-seq
-        (when-let [m (seek-message i ::event-log from-tx-id)]
-          (for [^Message m (->> (repeatedly #(next-message i ::event-log))
-                                (take-while identity)
-                                (cons m))
-                :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
-            {:crux.tx.event/tx-events (.body m)
-             :crux.tx/tx-id (.message-id m)
-             :crux.tx/tx-time (.message-time m)}))))))
+       (when-let [m (seek-message i ::event-log from-tx-id)]
+         (for [^Message m (->> (repeatedly #(next-message i ::event-log))
+                               (take-while identity)
+                               (cons m))
+               :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
+           {:crux.tx.event/tx-events (.body m)
+            :crux.tx/tx-id (.message-id m)
+            :crux.tx/tx-time (.message-time m)})))))
 
   (latest-submitted-tx [_]
     (let [end-offset (end-message-id-offset event-log-kv ::event-log)]

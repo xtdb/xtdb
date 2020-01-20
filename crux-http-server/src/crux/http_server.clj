@@ -159,21 +159,6 @@
       (.close ctx)
       (throw t))))
 
-(defn- streamed-iterator-response [^TxLogIterator iterator]
-  (try
-    (->> (rio/piped-input-stream
-          (fn [out]
-            (with-open [out (io/writer out)
-                        iterator iterator]
-              (.write out "(")
-              (doseq [x (iterator-seq iterator)]
-                (.write out (cio/pr-edn-str x)))
-              (.write out ")"))))
-         (response 200 {"Content-Type" "application/edn"}))
-    (catch Throwable t
-      (.close iterator)
-      (throw t))))
-
 (def ^:private date? (partial instance? Date))
 (s/def ::valid-time date?)
 (s/def ::transact-time date?)
@@ -250,7 +235,7 @@
         from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
                             (Long/parseLong))
         ^TxLogIterator result (.openTxLogIterator crux-node from-tx-id with-ops?)]
-    (-> (streamed-iterator-response result)
+    (-> (streamed-edn-response result (iterator-seq result))
         (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
 
 (defn- sync-handler [^ICruxAPI crux-node request]

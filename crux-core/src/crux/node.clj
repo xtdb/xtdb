@@ -128,21 +128,18 @@
       (ensure-node-open this)
       (let [tx-log-iterator (db/open-tx-log-iterator tx-log from-tx-id)
             snapshot (kv/new-snapshot kv-store)
-            filtered-txs (filter
-                          #(nil?
-                            (kv/get-value snapshot
-                                          (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))
-                          (iterator-seq tx-log-iterator))
-            tx-log (if with-ops?
-                     (map (fn [{:keys [crux.tx/tx-id
-                                       crux.tx.event/tx-events] :as tx-log-entry}]
-                            (-> tx-log-entry
-                                (dissoc :crux.tx.event/tx-events)
-                                (assoc :crux.api/tx-ops
-                                       (->> tx-events
-                                            (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
-                          filtered-txs)
-                     filtered-txs)]
+            tx-log (-> (iterator-seq tx-log-iterator)
+                       (->> (filter
+                             #(nil?
+                               (kv/get-value snapshot
+                                             (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))))
+                       (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
+                                                            crux.tx.event/tx-events] :as tx-log-entry}]
+                                                 (-> tx-log-entry
+                                                     (dissoc :crux.tx.event/tx-events)
+                                                     (assoc :crux.api/tx-ops
+                                                            (->> tx-events
+                                                                 (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
 
         (db/->closeable-tx-log-iterator (fn []
                                           (.close snapshot)
