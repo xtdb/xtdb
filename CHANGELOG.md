@@ -1,5 +1,12 @@
 # Changelog
 
+## 20.01-1.6.3-alpha
+
+### Changes
+
+### Bug fixes
+* [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
+
 ## 20.01-1.6.2-alpha
 
 ### Changes
