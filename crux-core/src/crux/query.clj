@@ -141,7 +141,8 @@
 (def ^:private pred->built-in-range-pred {< (comp neg? compare)
                                           <= (comp not pos? compare)
                                           > (comp pos? compare)
-                                          >= (comp not neg? compare)})
+                                          >= (comp not neg? compare)
+                                          = =})
 
 (def ^:private range->inverse-range '{< >=
                                       <= >
@@ -177,7 +178,8 @@
                           {:keys [op sym val] :as clause} (cond-> clause
                                                             (= :val-sym order) (update :op range->inverse-range))]
                       (if-not (logic-var? sym)
-                        {:pred [{:pred {:pred-fn (resolve op), :args [sym val]}}]}
+                        {:pred [{:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
+                                        :args [sym val]}}]}
                         {:range [clause]}))
 
              :unify {:unify [(first clause)]}
