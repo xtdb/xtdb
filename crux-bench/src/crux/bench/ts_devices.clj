@@ -97,7 +97,7 @@
                           [r :reading/battery-temperature battery-temperature]]
                   :order-by [[time :desc] [device-id :desc]]
                   :limit 10}
-          query-result (crux/q (crux/db node) query)
+          query-result (doall (crux/q (crux/db node) query))
           end-time (System/currentTimeMillis)
           successful? (= query-result
                          [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
@@ -111,13 +111,13 @@
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
                           [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
       (utils/output {:bench-type :recent-battery-readings
-                     :bench-ns (str *ns*)
+                     :bench-ns :ts-devices
                      :query (str query)
                      :query-time-ms (- end-time start-time)
                      :successful? successful?}))
     (catch Exception e
       (utils/output {:bench-type ::recent-battery-readings
-                     :bench-ns (str *ns*)
+                     :bench-ns :ts-devices
                      :error e})
       (throw e))))
 
@@ -156,7 +156,7 @@
                           [device-id :device-info/model model]]
                   :order-by [[cpu-avg-1min :desc] [time :desc]]
                   :limit 5}
-          query-result (crux/q (crux/db node) query)
+          query-result (doall (crux/q (crux/db node) query))
           end-time (System/currentTimeMillis)
           successful? (= query-result
                          [[#inst "2016-11-15T20:19:30.000-00:00"
@@ -190,13 +190,13 @@
                            :discharging
                            "focus"]])]
       (utils/output {:bench-type :busiest-devices
-                     :bench-ns (str *ns*)
+                     :bench-ns :ts-devices
                      :query (str query)
                      :query-time-ms (- end-time start-time)
                      :successful? successful?}))
     (catch Exception e
       (utils/output {:bench-type ::recent-battery-readings
-                     :bench-ns (str *ns*)
+                     :bench-ns :ts-devices
                      :error e})
       (throw e))))
 
@@ -259,12 +259,12 @@
                               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
                              result)]
          (utils/output {:bench-type :history-ascending
-                        :bench-ns (str *ns*)
+                        :bench-ns :ts-devices
                         :query-time-ms (- end-time start-time)
                         :successful? successful?}))
        (catch Exception e
          (utils/output {:bench-type :history-ascending
-                        :bench-ns (str *ns*)
+                        :bench-ns :ts-devices
                         :error e})
          (throw e))))
 
