@@ -4,6 +4,7 @@
             [crux.fixtures.kv-only :refer [*kv-module*]]
             [crux.io :as cio]
             [crux.kafka :as k]
+            [crux.kafka.consumer :as kc]
             [crux.kafka.embedded :as ek]
             [crux.api :as api])
   (:import [java.util Properties UUID]
@@ -51,17 +52,23 @@
 
 (def ^:dynamic ^KafkaProducer *producer*)
 (def ^:dynamic ^KafkaConsumer *consumer*)
+(def ^:dynamic ^KafkaConsumer *consumer2*)
 
 (def ^:dynamic *consumer-options* {})
 
 (defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              consumer (k/create-consumer
+              consumer (kc/create-consumer
+                        (merge {"bootstrap.servers" *kafka-bootstrap-servers*
+                                "group.id" (str (UUID/randomUUID))}
+                               *consumer-options*))
+              consumer2 (kc/create-consumer
                          (merge {"bootstrap.servers" *kafka-bootstrap-servers*
                                  "group.id" (str (UUID/randomUUID))}
                                 *consumer-options*))]
     (binding [*producer* producer
-              *consumer* consumer]
+              *consumer* consumer
+              *consumer2* consumer2]
       (f))))
 
 (def ^:dynamic *cluster-node*)

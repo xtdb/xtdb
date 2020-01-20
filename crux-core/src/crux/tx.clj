@@ -417,6 +417,7 @@
   (status-map [this]
     {:crux.index/index-version (idx/current-index-version kv-store)
      :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
+     :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
