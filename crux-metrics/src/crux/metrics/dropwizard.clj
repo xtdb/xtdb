@@ -3,7 +3,6 @@
             [metrics.core :as dropwiz]
             [metrics.gauges :as gauges]))
 
-;; TODO better name
 (defn cx-met->metrics [reg !metrics]
   (map (fn [[fn-sym func]]
          (gauges/gauge-fn reg (str fn-sym) #(func !metrics)))

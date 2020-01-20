@@ -12,7 +12,8 @@
                         :crux.metrics/indexed-tx {}
                         :crux.metrics/indexing-docs {}
                         :crux.metrics/indexed-docs {}
-                        :crux.metrics/latest-latency -1
+                        :crux.metrics/latest-latency-docs -1
+                        :crux.metrics/latest-latency-tx -1
                         :crux.metrics/latest-tx-id []})]
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
@@ -28,9 +29,8 @@
                     (swap! !metrics update :crux.metrics/indexing-docs dissoc doc-ids)
                     (swap! !metrics update :crux.metrics/indexed-docs assoc doc-ids
                            {:start-time-ms start-time-ms
-                            :end-time-ms end-time-ms
                             :time-elapsed-ms (- end-time-ms start-time-ms)})
-                    (swap! !metrics assoc :crux.metrics/latest-latency (- end-time-ms start-time-ms)))))
+                    (swap! !metrics assoc :crux.metrics/latest-latency-docs (- end-time-ms start-time-ms)))))
 
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexing-tx}}
@@ -50,7 +50,6 @@
                     (swap! !metrics update :crux.metrics/indexing-tx dissoc (:crux.tx/submitted-tx event))
                     (swap! !metrics update :crux.metrics/indexed-tx assoc (:crux.tx/submitted-tx event)
                            {:start-time-ms start-time-ms
-                            :end-time-ms end-time-ms
                             :time-elapsed-ms (- end-time-ms start-time-ms)})
-                    (swap! !metrics update :crux.metrics/latest-latency (- end-time-ms start-time-ms)))))
+                    (swap! !metrics update :crux.metrics/latest-latency-tx (- end-time-ms start-time-ms)))))
     !metrics))

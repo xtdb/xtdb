@@ -24,12 +24,17 @@
 
   (count (:crux.metrics/indexed-tx @!metrics)))
 
-;; TODO spilt into doc and tx
 (defn latest-ingest-latency
-  "Time taken for latest ingest"
+  "Time taken for latest ingest of a tx"
   [!metrics]
 
-  (:crux.metrics/latest-latency @!metrics))
+  (:crux.metrics/latest-latency-tx @!metrics))
+
+(defn latest-ingest-latency
+  "Time taken for latest ingest of a doc"
+  [!metrics]
+
+  (:crux.metrics/latest-latency-docs @!metrics))
 
 (defn tx-id-lag
   "Diffence between the latest submitted tx-id and the current status of the
