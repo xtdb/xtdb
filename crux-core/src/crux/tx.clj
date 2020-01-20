@@ -250,15 +250,8 @@
                                           k evict-time-ranges-env-var)
                                true))
 
-     :post-commit-fn #(when remote-document-store
-                        ;; TODO: Direct interface call to help
-                        ;; Graal, not sure why this is needed,
-                        ;; fails with get-proxy-class issue
-                        ;; otherwise.
-                        (.submit_docs
-                         remote-document-store
-                         (for [content-hash content-hashes]
-                           [(str content-hash) {:crux.db/id eid, :crux.db/evicted? true}])))}))
+     :tombstones (into {} (for [content-hash content-hashes]
+                            [content-hash {:crux.db/id eid, :crux.db/evicted? true}]))}))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
@@ -309,9 +302,7 @@
          :etxs (cond-> (mapcat :etxs ops-result)
                  args-doc (conj (c/->EntityTx args-id tx-time tx-time tx-id args-v)))
 
-         :post-commit-fn #(doseq [{:keys [post-commit-fn]} ops-result
-                                  :when post-commit-fn]
-                            (post-commit-fn))}))))
+         :tombstones (into {} (mapcat :tombstones) ops-result)}))))
 
 (defmethod index-tx-event :default [[op & _] tx deps]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
@@ -381,15 +372,15 @@
                     :snapshot snapshot}
 
               res (reduce (fn [{:keys [history] :as acc} tx-event]
-                            (let [{:keys [pre-commit-fn etxs post-commit-fn]} (index-tx-event tx-event tx (assoc deps :history history))]
+                            (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc deps :history history))]
                               (if (and pre-commit-fn (not (pre-commit-fn)))
                                 (reduced ::aborted)
                                 (-> acc
                                     (update :history with-etxs etxs)
-                                    (cond-> post-commit-fn (update :post-commit-fns conj post-commit-fn))))))
+                                    (update :tombstones merge tombstones)))))
 
                           {:history (->Snapshot+NewETXs snapshot {})
-                           :post-commit-fns []}
+                           :tombstones {}}
 
                           tx-events)
 
@@ -397,11 +388,14 @@
               completed-tx-kv (idx/meta-kv :crux.tx/latest-completed-tx tx)]
 
           (if (not= res ::aborted)
-            (do (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
-                                              completed-tx-kv)
-                                        (into (sorted-map-by mem/buffer-comparator))))
-                (doseq [post-commit-fn (:post-commit-fns res)]
-                  (post-commit-fn)))
+            (do
+              (when-let [tombstones (not-empty (:tombstones res))]
+                (db/index-docs this tombstones)
+                (db/submit-docs remote-document-store tombstones))
+
+              (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
+                                            completed-tx-kv)
+                                      (into (sorted-map-by mem/buffer-comparator)))))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
                 (kv/store kv-store [completed-tx-kv
