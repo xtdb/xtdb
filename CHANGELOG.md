@@ -4,6 +4,9 @@
 
 ### Changes
 
+### Breaking changes
+* [#555](https://github.com/juxt/crux/issues/555): Removes `submitted-tx-updated-entity?` and `submitted-tx-corrected-entity?` from the API, replacing them with a new function, `tx-committed?`.
+
 ### Bug fixes
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
 
