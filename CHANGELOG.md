@@ -9,12 +9,13 @@
 
 ### Bug fixes
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
+* [#507](https://github.com/juxt/crux/issues/507): ranges in rules revert to a predicate if neither argument is a logic var
 
 ## 20.01-1.6.2-alpha
 
 ### Changes
 * [#524](https://github.com/juxt/crux/issues/524): Batch ingesting docs into the KV store
-* [PR #520](https://github.com/juxt/crux/pull/520): New `entity` arity accepts a snapshot argument for >40% performance boost
+* [#520](https://github.com/juxt/crux/pull/520): New `entity` arity accepts a snapshot argument for >40% performance boost
 
 ### Bug fixes
 * [#371](https://github.com/juxt/crux/issues/371): Documents in failed CaS operations now get evicted correctly
@@ -40,7 +41,7 @@ These changes bump the index version to version 5 - a re-index of Crux nodes is 
 * [#326](https://github.com/juxt/crux/issues/326): Put/delete with start/end valid-time semantics made consistent
 
 ### New features
-* [PR #363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
+* [#363](https://github.com/juxt/crux/pull/363): Allow `full-results?` and other boolean flags in a vector-style query
 * [#372](https://github.com/juxt/crux/issues/372): Add support for Java collection types with submitTx
 * [#377](https://github.com/juxt/crux/issues/377): Can use 'cons' within query predicates
 * [#414](https://github.com/juxt/crux/issues/414): Developer tool for query tracing
