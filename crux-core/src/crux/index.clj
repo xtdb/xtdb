@@ -881,39 +881,40 @@
   (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (NAryWalkState. [] nil)))
 
 (defn layered-idx->seq [idx]
-  (let [max-depth (long (db/max-depth idx))
-        build-result (fn [max-ks [max-k new-values]]
-                       (when new-values
-                         (conj max-ks max-k)))
-        build-leaf-results (fn [max-ks idx]
-                             (for [result (idx->seq idx)
-                                   :let [leaf-key (build-result max-ks result)]
-                                   :when leaf-key]
-                               [leaf-key (last result)]))
-        step (fn step [max-ks ^long depth needs-seek?]
-               (when (Thread/interrupted)
-                 (throw (InterruptedException.)))
-               (let [close-level (fn []
-                                   (when (pos? depth)
-                                     (lazy-seq
-                                      (db/close-level idx)
-                                      (step (pop max-ks) (dec depth) false))))
-                     open-level (fn [result]
-                                  (db/open-level idx)
-                                  (if-let [max-ks (build-result max-ks result)]
-                                    (step max-ks (inc depth) true)
-                                    (do (db/close-level idx)
-                                        (step max-ks depth false))))]
-                 (if (= depth (dec max-depth))
-                   (concat (build-leaf-results max-ks idx)
-                           (close-level))
-                   (if-let [result (if needs-seek?
-                                     (db/seek-values idx nil)
-                                     (db/next-values idx))]
-                     (open-level result)
-                     (close-level)))))]
-    (when (pos? max-depth)
-      (step [] 0 true))))
+  (when idx
+    (let [max-depth (long (db/max-depth idx))
+          build-result (fn [max-ks [max-k new-values]]
+                         (when new-values
+                           (conj max-ks max-k)))
+          build-leaf-results (fn [max-ks idx]
+                               (for [result (idx->seq idx)
+                                     :let [leaf-key (build-result max-ks result)]
+                                     :when leaf-key]
+                                 [leaf-key (last result)]))
+          step (fn step [max-ks ^long depth needs-seek?]
+                 (when (Thread/interrupted)
+                   (throw (InterruptedException.)))
+                 (let [close-level (fn []
+                                     (when (pos? depth)
+                                       (lazy-seq
+                                        (db/close-level idx)
+                                        (step (pop max-ks) (dec depth) false))))
+                       open-level (fn [result]
+                                    (db/open-level idx)
+                                    (if-let [max-ks (build-result max-ks result)]
+                                      (step max-ks (inc depth) true)
+                                      (do (db/close-level idx)
+                                          (step max-ks depth false))))]
+                   (if (= depth (dec max-depth))
+                     (concat (build-leaf-results max-ks idx)
+                             (close-level))
+                     (if-let [result (if needs-seek?
+                                       (db/seek-values idx nil)
+                                       (db/next-values idx))]
+                       (open-level result)
+                       (close-level)))))]
+      (when (pos? max-depth)
+        (step [] 0 true)))))
 
 (defn- relation-virtual-index-depth ^long [^RelationIteratorsState iterators-state]
   (dec (count (.indexes iterators-state))))

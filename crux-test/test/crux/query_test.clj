@@ -2484,6 +2484,20 @@
                              [y :crux.db/id]
                              [(!= x y)]]]}))))
 
+(t/deftest test-failing-predicates-at-top-level-bug
+  (t/testing "predicate order shouldn't matter"
+    (t/is (= #{}
+             (api/q (api/db *api*)
+                    '{:find [f]
+                      :where [[(identity 4) f]
+                              [(identity false)]]})))
+
+    (t/is (= #{}
+             (api/q (api/db *api*)
+                    '{:find [f]
+                      :where [[(identity false)]
+                              [(identity 4) f]]})))))
+
 ;; Tests from
 ;; https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf
 
