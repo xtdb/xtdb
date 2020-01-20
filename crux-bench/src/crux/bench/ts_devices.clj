@@ -97,7 +97,7 @@
                           [r :reading/battery-temperature battery-temperature]]
                   :order-by [[time :desc] [device-id :desc]]
                   :limit 10}
-          query-result (doall (crux/q (crux/db node) query))
+          query-result (crux/q (crux/db node) query)
           end-time (System/currentTimeMillis)
           successful? (= query-result
                          [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
@@ -156,7 +156,7 @@
                           [device-id :device-info/model model]]
                   :order-by [[cpu-avg-1min :desc] [time :desc]]
                   :limit 5}
-          query-result (doall (crux/q (crux/db node) query))
+          query-result (crux/q (crux/db node) query)
           end-time (System/currentTimeMillis)
           successful? (= query-result
                          [[#inst "2016-11-15T20:19:30.000-00:00"

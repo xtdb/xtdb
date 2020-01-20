@@ -97,7 +97,7 @@
                 :order-by [[time :desc] [device-id :asc]]
                 :limit 10}
         start-time (System/currentTimeMillis)
-        result (doall (api/q (api/db node) query))
+        result (api/q (api/db node) query)
         time-taken (- (System/currentTimeMillis) start-time)
         successful? (= [[#inst "2016-11-16T21:18:00.000-00:00"
                          :location/weather-pro-000000
@@ -186,9 +186,9 @@
                 :limit 10
                 :timeout 120000}
         start-time (System/currentTimeMillis)
-        result (doall (for [[time device-id location temperature humidity]
-                            (api/q (api/db node) query)]
-                        [time device-id location (trunc temperature 2) (trunc humidity 2)]))
+        result (for [[time device-id location temperature humidity]
+                     (api/q (api/db node) query)]
+                 [time device-id location (trunc temperature 2) (trunc humidity 2)])
         time-taken (- (System/currentTimeMillis) start-time)
         successful? (= [[#inst "2016-11-16T21:18:00.000-00:00"
                          :location/weather-pro-000000
@@ -242,7 +242,7 @@
                          96.9]]
                        result)]
     (utils/output {:bench-type :weather-last-10-readings-from-outside-locations-test
-                   :bench-ns :ts-weather
+                   :bench-ns (str *ns*)
                    :query (str query)
                    :query-time-ms time-taken
                    :successful? successful?})))
@@ -298,28 +298,28 @@
 
 (defn weather-hourly-average-min-max-temperatures-for-field-locations [node]
   (let [start-time (System/currentTimeMillis)
-        result (doall (let [condition-ids (->> (api/q (api/db node)
-                                                      '{:find [c]
-                                                        :where [[c :condition/device-id device-id]
-                                                                [device-id :location/location location]
-                                                                [(crux.ts-weather-test/kw-starts-with? location "field-")]]
-                                                        :timeout 120000})
-                                               (reduce into []))
-                            db (api/db node #inst "1970")]
-                        (with-open [snapshot (api/new-snapshot db)]
-                          (->> (for [c condition-ids]
-                                 (for [entity-tx (api/history-ascending db snapshot c)]
-                                   (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
-                               (cio/merge-sort (fn [a b]
-                                                 (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
-                               (partition-by :crux.db/valid-time)
-                               (take 24)
-                               (mapv (fn [group]
-                                       (let [temperatures (sort (mapv (comp :condition/temperature :crux.db/doc) group))]
-                                         [(:crux.db/valid-time (first group))
-                                          (trunc (/ (reduce + temperatures) (count group)) 2)
-                                          (trunc (first temperatures) 2)
-                                          (trunc (last temperatures) 2)])))))))
+        result (let [condition-ids (->> (api/q (api/db node)
+                                               '{:find [c]
+                                                 :where [[c :condition/device-id device-id]
+                                                         [device-id :location/location location]
+                                                         [(crux.ts-weather-test/kw-starts-with? location "field-")]]
+                                                 :timeout 120000})
+                                        (reduce into []))
+                     db (api/db node #inst "1970")]
+                 (with-open [snapshot (api/new-snapshot db)]
+                   (->> (for [c condition-ids]
+                          (for [entity-tx (api/history-ascending db snapshot c)]
+                            (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                        (cio/merge-sort (fn [a b]
+                                          (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
+                        (partition-by :crux.db/valid-time)
+                        (take 24)
+                        (mapv (fn [group]
+                                (let [temperatures (sort (mapv (comp :condition/temperature :crux.db/doc) group))]
+                                  [(:crux.db/valid-time (first group))
+                                   (trunc (/ (reduce + temperatures) (count group)) 2)
+                                   (trunc (first temperatures) 2)
+                                   (trunc (last temperatures) 2)]))))))
         time-taken (- (System/currentTimeMillis) start-time)
         successful? (= [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
                         [#inst "2016-11-15T13:00:00.000-00:00" 74.43 68.7 80.4]
