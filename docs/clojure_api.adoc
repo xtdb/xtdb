@@ -96,24 +96,46 @@ toc::[]
      if the node has not yet indexed the transaction.")
 ----
 
+=== await-tx
 
+[source,clj]
+----
+  (await-tx
+    [node tx]
+    [node tx ^Duration timeout]
+    "Blocks until the node has indexed a transaction that is at or past the
+  supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
+  node.")
+----
+
+=== await-tx-time
+
+[source,clj]
+----
+  (await-tx-time
+    [node ^Date tx-time]
+    [node ^Date tx-time ^Duration timeout]
+    "Blocks until the node has indexed a transaction that is past the supplied
+  txTime. Will throw on timeout. The returned date is the latest index time when
+  this node has caught up as of this call.")
+----
 
 === sync
 
 [source,clj]
 ----
-  (sync
+ (sync
+    [node]
     [node ^Duration timeout]
-    [node ^Date transaction-time ^Duration timeout]
-    "If the transaction-time is supplied, blocks until indexing has
-    processed a tx with a greater-than transaction-time, otherwise
-    blocks until the node has caught up indexing the tx-log
-    backlog. Will throw an exception on timeout. The returned date is
-    the latest index time when this node has caught up as of this
-    call. This can be used as the second parameter in (db valid-time,
-    transaction-time) for consistent reads.
-    timeout – max time to wait, can be null for the default.
-    Returns the latest known transaction time.")
+    "Blocks until the node has caught up indexing to the latest tx available at
+  the time this method is called. Will throw an exception on timeout. The
+  returned date is the latest transaction time indexed by this node. This can be
+  used as the second parameter in (db valid-time, transaction-time) for
+  consistent reads.
+
+  timeout – max time to wait, can be nil for the default.
+  Returns the latest known transaction time.")
+
 ----
 
 === new-tx-log-context
