@@ -165,8 +165,7 @@
 
     (doseq [record tx-records]
       (let [{:keys [crux.tx.event/tx-events] :as record} (tx-record->tx-log-entry record)]
-        (db/index-tx indexer (select-keys record [:crux.tx/tx-time :crux.tx/tx-id]) tx-events)
-        tx-events))
+        (db/index-tx indexer (select-keys record [:crux.tx/tx-time :crux.tx/tx-id]) tx-events)))
 
     (kc/update-stored-consumer-state offsets consumer records)
     (swap! pending-txs-state (comp vec (partial drop (count tx-records))))
@@ -197,6 +196,28 @@
       (kc/update-stored-consumer-state offsets consumer records))
     (count doc-records)))
 
+(defn consume-and-index-documents-from-txes
+  [{:keys [offsets indexer remote-document-store timeout tx-topic]
+    :or {timeout 5000}}
+   ^KafkaConsumer consumer]
+  (let [records (.poll consumer (Duration/ofMillis timeout))
+        tx-records (vec (.records records (str tx-topic)))]
+    (doseq [^ConsumerRecord tx-record tx-records]
+      (let [content-hashes (->> (.lastHeader (.headers tx-record)
+                                             (str :crux.tx/docs))
+                                (.value)
+                                (nippy/fast-thaw))]
+        (let [docs (db/fetch-docs remote-document-store content-hashes)]
+          (db/index-docs indexer docs))))
+    (when (seq tx-records)
+      (kc/update-stored-consumer-state offsets consumer tx-records))
+    (count tx-records)))
+
+(defn- group-name []
+  (str/trim (or (System/getenv "HOSTNAME")
+                (System/getenv "COMPUTERNAME")
+                (.toString (java.util.UUID/randomUUID)))))
+
 (def default-options
   {::bootstrap-servers {:doc "URL for connecting to Kafka i.e. \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
                         :default "localhost:9092"
@@ -217,9 +238,7 @@
                          :default 1
                          :crux.config/type :crux.config/nat-int}
    ::group-id {:doc "Kafka client group.id"
-               :default (str/trim (or (System/getenv "HOSTNAME")
-                                      (System/getenv "COMPUTERNAME")
-                                      (.toString (java.util.UUID/randomUUID))))
+               :default (group-name)
                :crux.config/type :crux.config/string}
    ::kafka-properties-file {:doc "Used for supplying Kafka connection properties to the underlying Kafka API."
                             :crux.config/type :crux.config/string}
@@ -258,6 +277,24 @@
                  (kc/start-indexing-consumer consumer-config offsets doc-topic index-fn)))
    :deps [:crux.node/indexer ::admin-client]
    :args default-options})
+
+(def doc-indexing-from-tx-topic-consumer
+  {:start-fn (fn [{:keys [crux.node/indexer crux.node/remote-document-store]}
+                  {::keys [tx-topic] :as options}]
+               (let [kafka-config (derive-kafka-config options)
+                     consumer-config (merge {"group.id" (::doc-group-id options)} kafka-config)
+                     offsets (kc/map->IndexedOffsets {:indexer indexer :k :crux.tx-doc-log/consumer-state})
+                     index-fn (partial consume-and-index-documents-from-txes {:indexer indexer
+                                                                              :remote-document-store remote-document-store
+                                                                              :offsets offsets
+                                                                              :timeout 1000
+                                                                              :tx-topic (::tx-topic options)})]
+                 (kc/start-indexing-consumer consumer-config offsets tx-topic index-fn)))
+   :deps [:crux.node/indexer :crux.node/remote-document-store ::tx-indexing-consumer]
+   :args (assoc default-options
+                ::doc-group-id {:doc "Kafka client group.id for ingesting documents using tx topic"
+                                :default (str "documents-" (group-name))
+                                :crux.config/type :crux.config/string})})
 
 (def admin-client
   {:start-fn (fn [_ options]
