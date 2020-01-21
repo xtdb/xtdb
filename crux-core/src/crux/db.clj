@@ -33,7 +33,8 @@
 ;; end::TxLog[]
 
 (defprotocol RemoteDocumentStore
-  (submit-docs [this id-and-docs]))
+  (submit-docs [this id-and-docs])
+  (fetch-docs [this ids]))
 
 ;; NOTE: The snapshot parameter here is an optimisation to avoid keep
 ;; opening snapshots and allow caching of iterators. A non-KV backed
