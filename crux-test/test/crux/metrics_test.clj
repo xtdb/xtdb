@@ -17,10 +17,11 @@
                 :crux.metrics/indexed-tx 0
                 :crux.metrics/indexing-docs 0
                 :crux.metrics/indexed-docs 0
-                :crux.metrics/latest-tx-id []}))
+                :crux.metrics/latest-tx-id []
+                :crux.metrics/tx-time-lag 0}))
       (api/await-tx *api* (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :test}]]))
       ;; Might have not run the listener. May fail
-      (t/is (= (dissoc @!metrics :crux.metrics/latest-tx-id)
+      (t/is (= (dissoc @!metrics :crux.metrics/latest-tx-id :crux.metrics/tx-time-lag)
                {:crux.metrics/indexing-tx 0
                 :crux.metrics/indexed-tx 1
                 :crux.metrics/indexing-docs 0

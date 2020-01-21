@@ -12,6 +12,7 @@
                         :crux.metrics/indexed-tx 0
                         :crux.metrics/indexing-docs 0
                         :crux.metrics/indexed-docs 0
+                        :crux.metrics/tx-time-lag 0
                         :crux.metrics/latest-tx-id []})]
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
@@ -34,9 +35,9 @@
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
                 (fn [event]
-                  (let [meta-doc (get (:crux.metrics/indexing-tx @!metrics) (:crux.tx/submitted-tx event))
-                        start-time-ms (:start-time-ms meta-doc)
-                        end-time-ms (System/currentTimeMillis)]
-                    (swap! !metrics update :crux.metrics/indexing-tx dec)
-                    (swap! !metrics update :crux.metrics/indexed-tx inc))))
+                  (swap! !metrics update :crux.metrics/indexing-tx dec)
+                  (swap! !metrics update :crux.metrics/indexed-tx inc)
+                  (swap! !metrics assoc :crux.metrics/tx-time-lag
+                         (- (System/currentTimeMillis)
+                            (inst-ms (get-in event [:crux.tx/submitted-tx :crux.tx/tx-time]))))))
     !metrics))
