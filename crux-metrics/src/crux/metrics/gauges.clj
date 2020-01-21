@@ -1,4 +1,6 @@
-(ns crux.metrics.gauges)
+(ns crux.metrics.gauges
+  "Gauges for metrics library. This ns is used in dropwizard.clj which requires
+  that any method in this ns takes a metrics map.")
 
 ;; Ingest metrcis
 (defn ingesting-docs
@@ -34,3 +36,7 @@
     (if status
       (- latest status)
       0)))
+
+(defn tx-time-lag
+  "ms time differance between tx-time and the current system time"
+  (:crux.metrics/tx-time-lag @!metrics))
