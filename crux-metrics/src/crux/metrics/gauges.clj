@@ -43,8 +43,8 @@
 
   (:crux.metrics/tx-time-lag @!metrics))
 
-(def gauges {'ingested-docs #'crux.metrics.gauges/ingested-docs,
-             'ingested-tx #'crux.metrics.gauges/ingested-tx,
-             'ingesting-docs #'crux.metrics.gauges/ingesting-docs,
-             'ingesting-tx #'crux.metrics.gauges/ingesting-tx,
-             'tx-id-lag #'crux.metrics.gauges/tx-id-lag})
+(def ingest-gauges {'ingested-docs #'crux.metrics.gauges/ingested-docs,
+                    'ingested-tx #'crux.metrics.gauges/ingested-tx,
+                    'ingesting-docs #'crux.metrics.gauges/ingesting-docs,
+                    'ingesting-tx #'crux.metrics.gauges/ingesting-tx,
+                    'tx-id-lag #'crux.metrics.gauges/tx-id-lag})

@@ -7,8 +7,8 @@
 
 (defn register-metrics [reg !metrics]
   (run! (fn [[fn-sym func]]
-          (gauges/gauge-fn reg (str fn-sym) #(func !metrics)))
-        crux.metrics.gauges/gauges))
+          (gauges/gauge-fn reg ["node" "ingest" (str fn-sym)] #(func !metrics)))
+        crux.metrics.gauges/ingest-gauges))
 
 (defn create-assign-metrics [reg bus indexer]
   (register-metrics reg (met-bus/assign-ingest bus indexer)))
