@@ -1,6 +1,6 @@
 # Changelog
 
-## 20.01-1.6.3-alpha
+## 20.01-1.6.3-alpha-SNAPSHOT
 
 ### Changes
 
