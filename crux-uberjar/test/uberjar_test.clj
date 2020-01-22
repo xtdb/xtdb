@@ -4,7 +4,7 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]))
 
-;; This is a hacky way to allow the uberjar tests to be ran from a directory other than crux-uberjar - typically crux-dev.
+;; This is a hacky way to allow the uberjar tests to be ran from a directory other than crux-uberjar - typically the repo root.
 (def in-uberjar-directory?
   (let [active-directory (.getCanonicalPath (clojure.java.io/file "."))]
     (str/ends-with? active-directory "/crux-uberjar")))
@@ -12,7 +12,7 @@
 (def uberjar-directory
   (if in-uberjar-directory?
     "."
-    "../crux-uberjar"))
+    "./crux-uberjar"))
 
 (def results-file
   (str uberjar-directory "/target/uberjar-test-results"))

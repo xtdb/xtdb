@@ -1,6 +1,6 @@
 (ns crux.cached-entities-index-test
   "Sanity check for cached entities index.
-  For microbench see crux-dev/dev/crux-microbench/cached-entities-index-bench"
+  For microbench see dev/crux-microbench/cached-entities-index-bench"
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.index :as idx]

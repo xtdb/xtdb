@@ -5,13 +5,13 @@ notes.md
 .lein-repl-history
 .lein-failures
 pom.xml
-target
+target/
 *.log
 /setprofiler.sh
 /data
 /dev-storage*
 /crux-dev/dev-storage*
-/website/aero-deploy.tar.gz
+dev-data/
 /docs/index.html
 /docs/docs.zip
 /docs/javadoc
@@ -36,9 +36,8 @@ crux-bench/datomic-data/**/*
 
 .projectile
 /crux-uberjar/data
-/crux-dev/.testing-oracle.edn
-/crux-dev/.testing-mysql.edn
-/crux-dev/data/
+/.testing-oracle.edn
+/.testing-mysql.edn
 
 .prepl-port
 tags

@@ -1,5 +1,5 @@
 (defproject juxt/crux-core "derived-from-git"
-  :description "Crux Core"
+  :description "An open source document database with bitemporal graph queries"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
