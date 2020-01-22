@@ -57,7 +57,7 @@
                                {:builder-fn jdbcr/as-unqualified-lower-maps})))))
 (t/deftest test-docs-retention
   (let [tx-log (:tx-log *api*)
-        doc-store (:remote-document-store *api*)
+        doc-store (:document-store *api*)
 
         doc {:crux.db/id (c/new-id :some-id) :a :b}
         doc-hash (str (c/new-id doc))
