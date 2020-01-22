@@ -47,7 +47,11 @@ Resources:
                 # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
+
+                # Allow the ECS tasks to get secret values from the secrets manager
+                - 'secretsmanager:GetSecretValue'
               Resource: '*'
+
 
   BenchTask:
     Type: AWS::ECS::TaskDefinition
@@ -67,6 +71,10 @@ Resources:
         - Name: 'bench-container'
           Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
           Essential: true
+          Secrets:
+            - Name: "SLACK_URL"
+              ValueFrom:
+                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -81,8 +89,7 @@ Resources:
        AssumeRolePolicyDocument:
          Version: "2012-10-17"
          Statement:
-           -
-             Effect: "Allow"
+           - Effect: "Allow"
              Principal:
                Service:
                  - "events.amazonaws.com"
