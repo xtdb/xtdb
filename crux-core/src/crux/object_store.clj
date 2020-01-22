@@ -17,9 +17,6 @@
 
 (defrecord KvObjectStore [kv]
   db/ObjectStore
-  (init [this {:keys [kv]} options]
-    (assoc this :kv kv))
-
   (get-single-object [this snapshot k]
     (let [doc-key (c/->id-buffer k)
           seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) doc-key)]
@@ -59,10 +56,6 @@
 
 (defrecord FileObjectStore [dir]
   db/ObjectStore
-  (init [this _ {:keys [crux.index/file-object-store-dir] :as options}]
-    (.mkdirs (io/file file-object-store-dir))
-    (assoc this :dir file-object-store-dir))
-
   (get-single-object [this _ k]
     (let [doc-key (str (c/new-id k))
           doc-file (io/file dir doc-key)]
@@ -154,8 +147,9 @@
    :args {::doc-cache-size doc-cache-size-opt}})
 
 (def file-object-store
-  {:start-fn (fn [{:keys [crux.node/kv-store]} {::keys [doc-cache-size]}]
-               (->CachedObjectStore (lru/new-cache doc-cache-size) (->FileObjectStore)))
+  {:start-fn (fn [{:keys [crux.node/kv-store]} {:keys [::doc-cache-size crux.index/file-object-store-dir]}]
+               (.mkdirs (io/file file-object-store-dir))
+               (->CachedObjectStore (lru/new-cache doc-cache-size) (->FileObjectStore file-object-store-dir)))
    :deps [:crux.node/kv-store]
    :args {::file-object-store-dir {:doc "Directory to store objects"
                                    :required? true
