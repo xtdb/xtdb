@@ -1,6 +1,4 @@
-(ns crux.metrics.gauges
-  "Gauges for metrics library. This ns is used in dropwizard.clj which requires
-  that any method in this ns takes a metrics map.")
+(ns crux.metrics.gauges)
 
 ;; Ingest metrcis
 (defn ingesting-docs

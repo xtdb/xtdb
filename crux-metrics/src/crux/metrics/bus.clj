@@ -1,6 +1,5 @@
 (ns crux.metrics.bus
-  (:require [crux.api :as api]
-            [crux.bus :as bus]
+  (:require [crux.bus :as bus]
             [crux.db :as db]))
 
 ;; I might be storing too much metadata. Maybe timings don't need to be stored
@@ -17,11 +16,11 @@
                         :crux.metrics/latest-tx-id []})]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
-                (fn [{:keys [doc-ids]}]
+                (fn [_]
                   (swap! !metrics update :crux.metrics/indexing-docs inc)))
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
-                (fn [{:keys [doc-ids]}]
+                (fn [_]
                   (swap! !metrics update :crux.metrics/indexing-docs dec)
                   (swap! !metrics update :crux.metrics/indexed-docs inc)))
 
