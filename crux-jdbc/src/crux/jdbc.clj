@@ -80,7 +80,8 @@
 (defrecord JdbcTxLog [ds dbtype]
   db/RemoteDocumentStore
   (submit-docs [this id-and-docs]
-    (doseq [[id doc] id-and-docs]
+    (doseq [[id doc] id-and-docs
+            :let [id (str id)]]
       (if (idx/evicted-doc? doc)
         (do
           (insert-event! ds id doc "docs")
