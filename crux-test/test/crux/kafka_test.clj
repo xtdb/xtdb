@@ -48,7 +48,7 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
-        doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+        doc-store (k/->KafkaDocumentStore fk/*producer* doc-topic)
         tx-log (k/->KafkaTxLog doc-store fk/*producer* fk/*consumer* tx-topic {})
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
@@ -81,7 +81,7 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-        doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+        doc-store (k/->KafkaDocumentStore fk/*producer* doc-topic)
         tx-log (k/->KafkaTxLog doc-store fk/*producer* fk/*consumer* tx-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
@@ -152,7 +152,7 @@
 
         tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
 
-        doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+        doc-store (k/->KafkaDocumentStore fk/*producer* doc-topic)
 
         tx-log (k/->KafkaTxLog doc-store fk/*producer* fk/*consumer* tx-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
 
@@ -212,7 +212,7 @@
                 (fkv/with-kv-store
                   (fn []
                     (let [object-store (os/->KvObjectStore *kv*)
-                          doc-store (k/->KafkaRemoteDocumentStore fk/*producer* doc-topic)
+                          doc-store (k/->KafkaDocumentStore fk/*producer* doc-topic)
                           indexer (tx/->KvIndexer object-store *kv* tx-log doc-store (bus/->EventBus (atom #{})) nil)
                           tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                                               :k :crux.tx-log/consumer-state})

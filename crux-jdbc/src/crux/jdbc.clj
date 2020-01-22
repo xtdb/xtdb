@@ -78,7 +78,7 @@
   (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
 (defrecord JdbcTxLog [ds dbtype]
-  db/RemoteDocumentStore
+  db/DocumentStore
   (submit-docs [this id-and-docs]
     (doseq [[id doc] id-and-docs
             :let [id (str id)]]
