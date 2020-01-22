@@ -4,6 +4,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.kafka :as k]
+            [crux.kafka.consumer :as kc]
             [crux.lru :as lru]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
@@ -32,7 +33,7 @@
 (def ^:private data-consumer-config {"max.poll.records" "1"})
 
 (defn- hint-consumer-main-loop [keydir running? consumer-config {:keys [timeout] :or {timeout 1000} :as options}]
-  (with-open [consumer (k/create-consumer consumer-config)]
+  (with-open [consumer (kc/create-consumer consumer-config)]
     (let [topic-partitions [(TopicPartition. (get options :hint-topic) 0)]]
       (.assign consumer topic-partitions)
       (.seekToBeginning consumer topic-partitions)
@@ -68,7 +69,7 @@
           consumer-tl (ThreadLocal/withInitial
                        (reify Supplier
                          (get [_]
-                           (doto (k/create-consumer (merge consumer-config data-consumer-config))
+                           (doto (kc/create-consumer (merge consumer-config data-consumer-config))
                              (->> (swap! consumers conj))))))]
       (assoc this
              :keydir keydir
