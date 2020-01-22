@@ -36,6 +36,9 @@
                  ;; Matrix
                  [org.roaringbitmap/RoaringBitmap "0.8.11"]
 
+                 [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
+                 [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
+
                  [integrant "0.8.0"]
                  [integrant/repl "0.3.1"]]
 
