@@ -16,12 +16,11 @@
   (register-metrics reg (met-bus/assign-ingest bus indexer)))
 
 (def registry
-  {::registry {:start-fn (fn [{:crux.node/keys [bus indexer]} _]
-                           (let [reg  (drpwz-m/new-registry)]
-                             (register-metrics reg
-                                               (met-bus/assign-ingest bus indexer))
+  {::registry {:start-fn (fn [{:keys [crux.metrics/state]} _]
+                           (let [reg (drpwz-m/new-registry)]
+                             (register-metrics reg state)
                              reg))
-               :deps #{:crux.node/bus :crux.node/indexer}}})
+               :deps #{:crux.metrics/state}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]

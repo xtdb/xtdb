@@ -41,4 +41,3 @@
                          (- (System/currentTimeMillis)
                             (inst-ms (get-in event [:crux.tx/submitted-tx :crux.tx/tx-time]))))))
     !metrics))
-
