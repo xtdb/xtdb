@@ -207,7 +207,7 @@
              (next-message i topic)))))))
 
 (defrecord MobergTxLog [event-log-kv]
-  db/RemoteDocumentStore
+  db/DocumentStore
   (submit-docs [this id-and-docs]
     (doseq [[content-hash doc] id-and-docs]
       (send-message event-log-kv ::event-log content-hash doc {:crux.tx/sub-topic :docs})))
