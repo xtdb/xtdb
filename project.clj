@@ -29,12 +29,15 @@
                  [juxt/crux-http-server "derived-from-git"]
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
-                 [org.clojure/tools.namespace "0.2.11"]]
 
-  :profiles {:hakan {:dependencies [[org.ejml/ejml-dsparse "0.38"
-                                     :exclusions [com.google.code.findbugs/jsr305]]]}
+                 ;; Håkan
+                 [org.ejml/ejml-dsparse "0.38" :exclusions [com.google.code.findbugs/jsr305]]
 
-             :matrix {:dependencies [[org.roaringbitmap/RoaringBitmap "0.8.11"]]}}
+                 ;; Matrix
+                 [org.roaringbitmap/RoaringBitmap "0.8.11"]
+
+                 [integrant "0.8.0"]
+                 [integrant/repl "0.3.1"]]
 
   :source-paths ["dev"]
 

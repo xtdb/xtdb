@@ -6,7 +6,7 @@
             [crux.fixtures :as f]
             [crux-microbench.ticker-data-gen :as data-gen]
             [crux.api :as api]
-            [crux.bench]
+            [crux.bench-test]
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
@@ -79,7 +79,7 @@
                         nil
                         (range history-days))]
     (println "Txes submitted, synchronizing...")
-    (let [sync-time (crux.bench/duration-millis
+    (let [sync-time (crux.bench-test/duration-millis
                      (api/await-tx crux-node last-tx (Duration/ofMinutes 20)))]
       (swap! sync-times assoc [stocks-count history-days] sync-time)
       (println "Sync takes: " sync-time))))
@@ -90,7 +90,7 @@
   (api/q db query)
   (api/q db query)
   (for [_ (range n)]
-    (crux.bench/duration-millis (api/q db query))))
+    (crux.bench-test/duration-millis (api/q db query))))
 
 (defn- naively-bench-query [test-id query query-id cache-on?]
   (binding [crux.query/*with-entities-cache?* cache-on?]
