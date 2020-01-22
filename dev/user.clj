@@ -16,6 +16,7 @@
 
 (def config
   {:node (merge {:crux.node/topology 'crux.standalone/topology
-                 :crux.standalone/event-log-dir "dev-storage/event-log"})})
+                 :crux.kv/db-dir "dev/dev-node/db-dir"
+                 :crux.standalone/event-log-dir "dev/dev-node/event-log"})})
 
 (ir/set-prep! (fn [] config))

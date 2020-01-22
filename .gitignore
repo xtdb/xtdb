@@ -12,7 +12,6 @@ target/
 *.log
 
 /setprofiler.sh
-/dev-storage
 
 /.testing-oracle.edn
 /.testing-mysql.edn
