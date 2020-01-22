@@ -5,7 +5,8 @@
                  [juxt/crux-kafka "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-rocksdb "derived-from-git"]
-                 [ch.qos.logback/logback-classic "1.2.3"]]
+                 [ch.qos.logback/logback-classic "1.2.3"]
+                 [clj-http "3.10.0"]]
 
   :middleware [leiningen.project-version/middleware]
 
