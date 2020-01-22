@@ -316,4 +316,5 @@
                     :object-store object-store
                     :bus bus
                     :closed? (atom false)
-                    :lock (StampedLock.)})))
+                    :lock (StampedLock.)
+                    :registry (:crux.metrics.dropwizard/registry modules)})))

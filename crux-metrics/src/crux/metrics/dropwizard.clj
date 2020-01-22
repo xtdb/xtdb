@@ -1,11 +1,21 @@
 (ns crux.metrics.dropwizard
   (:require [crux.metrics.bus :as met-bus]
-            [metrics.gauges :as gauges]))
+            [metrics.gauges :as gauges]
+            [metrics.core :as drpwz-m]
+            crux.metrics.gauges))
 
-(defn cx-met->metrics [reg !metrics]
+(defn register-metrics [reg !metrics]
   (map (fn [[fn-sym func]]
          (gauges/gauge-fn reg (str fn-sym) #(func !metrics)))
-       (ns-publics 'crux.metrics.gauges)))
+       crux.metrics.gauges/gauges))
 
-(defn node->metrics [reg node]
-  (cx-met->metrics reg (met-bus/assign-ingest node)))
+(defn create-assign-metrics [reg bus indexer]
+  (register-metrics reg (met-bus/assign-ingest bus indexer)))
+
+(def module
+  {::registry {:start-fn (fn [{:crux.node/keys [bus indexer]} args]
+                           (let [reg  (drpwz-m/new-registry)]
+                             (register-metrics reg
+                                              (met-bus/assign-ingest bus indexer))
+                             reg))
+               :deps #{:crux.node/bus :crux.node/indexer}}})
