@@ -4,7 +4,10 @@
             [crux.io :as cio]
             [crux.tx :as tx])
   (:import crux.api.ICruxAPI
-           java.util.UUID))
+           java.util.UUID
+           [java.io File]
+           [java.nio.file Files FileVisitResult SimpleFileVisitor]
+           java.nio.file.attribute.FileAttribute))
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
@@ -48,3 +51,14 @@
 
 (defn people [people-mixins]
   (->> people-mixins (map merge (repeatedly random-person))))
+
+(defn with-tmp-dir* [prefix f]
+  (let [dir (.toFile (Files/createTempDirectory prefix (make-array FileAttribute 0)))]
+    (try
+      (f dir)
+      (finally
+        (cio/delete-dir dir)))))
+
+(defmacro with-tmp-dir [prefix [dir-binding] & body]
+  `(with-tmp-dir* ~prefix (fn [~(-> dir-binding (with-meta {:type File}))]
+                            ~@body)))
