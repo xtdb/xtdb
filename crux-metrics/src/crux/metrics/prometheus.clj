@@ -28,4 +28,4 @@
 
 (def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} args]
                                    (ring/serve (handler state (atom (init-gauges)))))
-                       :deps {:crux.metrics/state}}})
+                       :deps #{:crux.metrics/state}}})
