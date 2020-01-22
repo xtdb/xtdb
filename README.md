@@ -244,6 +244,8 @@ Retrieve the current version of the document:
   * `(halt!)` to stop it
   * `(reset)` to stop it, reload changed namespaces, and restart it
   * `(reset-all)` to stop it, reload all namespaces, and restart it
+  * if you're using Emacs/CIDER, `cider-ns-refresh` will do all this for you - `C-c M-n M-r`, `, s x` in Spacemacs
+  * Conjure users can use `ConjureRefresh`, see the [docs](https://github.com/Olical/conjure#mappings) for bindings
   * see [Integrant REPL](https://github.com/weavejester/integrant-repl) for more details.
 * You should now have a running Crux node under `(:node user/system)` - you can verify this by calling `(crux/status (:node system))`.
 * Most of the time, you shouldn't need to bounce the REPL, but:
