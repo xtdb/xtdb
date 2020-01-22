@@ -46,3 +46,5 @@
                     'ingesting-docs #'crux.metrics.gauges/ingesting-docs,
                     'ingesting-tx #'crux.metrics.gauges/ingesting-tx,
                     'tx-id-lag #'crux.metrics.gauges/tx-id-lag})
+
+(:doc (meta #'crux.metrics.gauges/ingesting-tx))
