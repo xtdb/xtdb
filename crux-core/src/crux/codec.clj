@@ -1,4 +1,5 @@
 (ns crux.codec
+  #:clojure.tools.namespace.repl{:load false, :unload false} ; because of the deftypes in here
   (:require [clojure.edn :as edn]
             [crux.hash :as hash]
             [crux.memory :as mem]
