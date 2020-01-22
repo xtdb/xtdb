@@ -129,7 +129,7 @@
 ;; (ns dev)
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
-;;                         {:crux.node/topology :crux.standalone/topology
+;;                         {:crux.node/topology 'crux.standalone/topology
 ;;                          :event-log-dir (str storage-dir "/event-log")
 ;;                          :crux.standalone/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false

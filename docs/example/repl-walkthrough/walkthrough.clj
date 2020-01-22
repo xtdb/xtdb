@@ -9,7 +9,7 @@
 
 
 (def crux-options
-  {:crux.node/topology :crux.standalone/topology
+  {:crux.node/topology 'crux.standalone/topology
    :crux.node/kv-store "crux.kv.memdb/kv" ; in-memory, see docs for LMDB/RocksDB storage
    :crux.standalone/event-log-kv-store "crux.kv.memdb/kv" ; same as above
    :crux.standalone/event-log-dir "data/event-log-dir-1" ; :event-log-dir is ignored when using MemKv

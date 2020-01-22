@@ -39,9 +39,9 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology :crux.kafka/topology
+  (crux/start-node {:crux.node/topology ['crux.kafka/topology]
                     :crux.kafka/bootstrap-servers "localhost:9092"
-		    :server-port 3000}))
+		                :server-port 3000}))
 
 (srv/start-http-server node)
 ----

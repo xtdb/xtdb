@@ -4,15 +4,15 @@
             [crux.remote-api-client :as cli]))
 
 (def node-rocks
-  (api/start-node {:crux.node/topology :crux.standalone/topology
+  (api/start-node {:crux.node/topology 'crux.standalone/topology
                    :crux.kv/db-dir "data/db-dir-rocks"
                    :crux.standalone/event-log-dir "data/eventlog-rocks"}))
 
 (def node-mem
-  (api/start-node {:crux.node/topology :crux.standalone/topology
-                   :crux.node/kv-store "crux.kv.memdb/kv"
+  (api/start-node {:crux.node/topology 'crux.standalone/topology
+                   :crux.node/kv-store 'crux.kv.memdb/kv
                    :crux.kv/db-dir "data/db-dir-mem"
-                   :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"
+                   :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
                    :crux.standalone/event-log-dir "data/eventlog-mem"}))
 
 (def srv-rocks

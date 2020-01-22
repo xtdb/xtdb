@@ -5,8 +5,8 @@
 
 
 (def opts
-  {:crux.node/topology :crux.standalone/topology
-   :crux.node/kv-store "crux.kv.rocksdb/kv"
+  {:crux.node/topology 'crux.standalone/topology
+   :crux.node/kv-store 'crux.kv.rocksdb/kv
    :crux.standalone/event-log-dir "data/eventlog-1"
    :crux.kv/db-dir "data/db-dir-1"})
 

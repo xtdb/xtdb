@@ -203,8 +203,8 @@
 (def ^:private default-block-size (* 16 SizeUnit/KB))
 
 (def crux-options
-  {:crux.node/topology :crux.kafka/topology
-   :crux.node/kv-store "crux.kv.rocksdb/kv"
+  {:crux.node/topology 'crux.kafka/topology
+   :crux.node/kv-store 'crux.kv.rocksdb/kv
    :crux.kafka/bootstrap-servers "kafka-cluster2-kafka-bootstrap.crux:9092"
    :crux.standalone/event-log-dir log-dir
    :crux.kv/db-dir index-dir

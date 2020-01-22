@@ -11,7 +11,7 @@
 (def ^:dynamic *sync* false)
 
 (defn ^Closeable start-kv-store [opts]
-  (n/start-module *kv-module* nil opts))
+  (n/start-component *kv-module* nil opts))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]

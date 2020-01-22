@@ -285,7 +285,7 @@ Options:
 
 [source,clj]
 ----
-{:crux.node/topology e.g. "crux.standalone/topology"}
+{:crux.node/topology ['crux.standalone/topology]}
 ----
 
 Options are specified as keywords using their long format name, like

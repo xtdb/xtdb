@@ -26,8 +26,8 @@
                                  {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
                                   :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
                                   :crux.kafka.embedded/kafka-port 9092})
-                node (api/start-node {:crux.node/topology :crux.kafka/topology
-                                      :crux.node/kv-store "crux.kv.rocksdb/kv"
+                node (api/start-node {:crux.node/topology 'crux.kafka/topology
+                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
                                       :crux.kafka/bootstrap-servers "localhost:9092"
                                       :crux.kv/db-dir "dev-storage/db-dir-1"
                                       :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]

@@ -7,11 +7,11 @@
 (t/deftest space-tutorial-test
   (def ^crux.api.ICruxAPI crux
     (crux/start-node
-       {:crux.node/topology :crux.standalone/topology
-        :crux.node/kv-store "crux.kv.memdb/kv"
+       {:crux.node/topology 'crux.standalone/topology
+        :crux.node/kv-store 'crux.kv.memdb/kv
         :crux.standalone/event-log-dir "data/eventlog-1"
         :crux.kv/db-dir "data/db-dir"
-        :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
+        :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}))
 
   (def manifest
     {:crux.db/id :manifest
@@ -565,7 +565,7 @@
     (.close ^Closeable crux)
     (def crux
       (crux/start-node
-       {:crux.node/topology :crux.standalone/topology
+       {:crux.node/topology 'crux.standalone/topology
         :crux.node/kv-store "crux.kv.memdb/kv"
         :crux.standalone/event-log-dir "data/eventlog-1"
         :crux.kv/db-dir "data/db-dir"
