@@ -38,7 +38,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log indexer remote-document-store object-store bus
+(defrecord CruxNode [kv-store tx-log document-store indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
@@ -102,7 +102,7 @@
   (submitTx [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/submit-docs remote-document-store (tx/tx-ops->id-and-docs tx-ops))
+      (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
       @(db/submit-tx tx-log tx-ops)))
 
   (hasTxCommitted [this {:keys [crux.tx/tx-id crux.tx/tx-time] :as submitted-tx}]
@@ -168,7 +168,7 @@
   (submitTxAsync [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/submit-docs remote-document-store (tx/tx-ops->id-and-docs tx-ops))
+      (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
       (db/submit-tx tx-log tx-ops)))
 
   backup/INodeBackup
