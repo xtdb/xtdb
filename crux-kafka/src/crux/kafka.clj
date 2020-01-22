@@ -12,7 +12,7 @@
             [taoensso.nippy :as nippy]
             [crux.kv :as kv])
   (:import crux.kafka.nippy.NippySerializer
-           crux.db.RemoteDocumentStore
+           crux.db.DocumentStore
            java.io.Closeable
            java.time.Duration
            [java.util Date Map]
@@ -94,7 +94,7 @@
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
 
-(defrecord KafkaTxLog [^RemoteDocumentStore doc-store, ^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
+(defrecord KafkaTxLog [^DocumentStore doc-store, ^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
   Closeable
   (close [_])
 
@@ -172,11 +172,11 @@
 
     (count tx-records)))
 
-(defrecord KafkaRemoteDocumentStore [^KafkaProducer producer, doc-topic]
+(defrecord KafkaDocumentStore [^KafkaProducer producer, doc-topic]
   Closeable
   (close [_])
 
-  db/RemoteDocumentStore
+  db/DocumentStore
   (submit-docs [this id-and-docs]
     (doseq [[content-hash doc] id-and-docs]
       @(->> (ProducerRecord. doc-topic content-hash doc)
@@ -326,7 +326,7 @@
 
 (def document-store
   {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/doc-topic] :as options}]
-               (->KafkaRemoteDocumentStore producer doc-topic))
+               (->KafkaDocumentStore producer doc-topic))
    :deps [::producer]
    :args default-options})
 

@@ -9,7 +9,7 @@
   Closeable
   (close [_])
 
-  db/RemoteDocumentStore
+  db/DocumentStore
   (fetch-docs [this ids]
     (log/debug "Fetching" (cio/pr-edn-str ids))
     (into {}

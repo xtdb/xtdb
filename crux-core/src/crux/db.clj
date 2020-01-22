@@ -32,7 +32,7 @@
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 
-(defprotocol RemoteDocumentStore
+(defprotocol DocumentStore
   (submit-docs [this id-and-docs])
   (fetch-docs [this ids]))
 
