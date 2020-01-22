@@ -10,7 +10,7 @@
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
 
 (t/deftest ingest
-  (let [!metrics (cx-bus/assign-ingest *api*)]
+  (let [!metrics (cx-bus/assign-ingest (:bus *api*) (:indexer *api*))]
     (t/testing "assign listeners"
       (t/is (= @!metrics
                {:crux.metrics/indexing-tx 0
