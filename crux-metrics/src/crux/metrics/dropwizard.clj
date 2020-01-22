@@ -6,9 +6,9 @@
             crux.metrics.gauges))
 
 (defn register-metrics [reg !metrics]
-  (map (fn [[fn-sym func]]
-         (gauges/gauge-fn reg (str fn-sym) #(func !metrics)))
-       crux.metrics.gauges/gauges))
+  (run! (fn [[fn-sym func]]
+          (gauges/gauge-fn reg (str fn-sym) #(func !metrics)))
+        crux.metrics.gauges/gauges))
 
 (defn create-assign-metrics [reg bus indexer]
   (register-metrics reg (met-bus/assign-ingest bus indexer)))
@@ -22,8 +22,10 @@
                :deps #{:crux.node/bus :crux.node/indexer}}})
 
 (def jmx-reporter
-  {::jmx {:start-fn (fn [{::keys [registry]} args]
-                      (let [jmx-rep (jmx/reporter registry {})]
+  {::jmx {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]
+                      (let [jmx-rep (jmx/reporter registry
+                                                  (merge {:domain "crux.metrics"}
+                                                         jmx-reporter-opts))]
                         (jmx/start jmx-rep)
                         jmx-rep))
           :deps #{::registry}}})
