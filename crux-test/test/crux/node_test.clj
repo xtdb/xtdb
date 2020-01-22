@@ -7,7 +7,9 @@
             crux.kv.memdb
             crux.kv.rocksdb
             [crux.node :as n]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [crux.fixtures :as f]
+            [clojure.java.io :as io])
   (:import crux.moberg.MobergTxLog
            java.util.Date
            crux.api.Crux
@@ -115,106 +117,91 @@
       (t/is (= [:b] @stopped)))))
 
 (t/deftest test-can-start-JDBC-node
-  (let [data-dir (cio/create-tmpdir "kv-store")]
-    (try
-      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
-                              :crux.kv/db-dir (str data-dir)
-                              :crux.jdbc/dbtype "h2"
-                              :crux.jdbc/dbname "cruxtest"})]
-        (t/is n))
-      (finally
-        (cio/delete-dir data-dir)))))
+  (f/with-tmp-dir "data" [data-dir]
+    (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
+                            :crux.kv/db-dir (str (io/file data-dir "kv-store"))
+                            :crux.jdbc/dbtype "h2"
+                            :crux.jdbc/dbname (str (io/file data-dir "cruxtest"))})]
+      (t/is n))))
 
 (t/deftest test-can-set-standalone-kv-store
-  (let [event-log-dir (cio/create-tmpdir "kv-store")]
-    (try
-      (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                              :crux.kv/kv-store :crux.kv.memdb/kv
-                              :crux.standalone/event-log-dir (str event-log-dir)
-                              :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
-        (t/is n))
-      (finally
-        (cio/delete-dir event-log-dir)))))
+  (f/with-tmp-dir "data" [data-dir]
+    (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
+                            :crux.kv/kv-store :crux.kv.memdb/kv
+                            :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
+                            :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
+      (t/is n))))
 
 (t/deftest test-properties-file-to-node
-  (let [event-log-dir (cio/create-tmpdir "kv-store")]
-    (try
-      (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-                                    :crux.standalone/event-log-dir (str event-log-dir)))]
-        (t/is (instance? MobergTxLog (-> n :tx-log)))
-        (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))
-      (finally
-        (cio/delete-dir event-log-dir)))))
+  (f/with-tmp-dir "data" [data-dir]
+    (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
+                                  :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
+      (t/is (instance? MobergTxLog (-> n :tx-log)))
+      (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))))
 
 (t/deftest test-conflicting-standalone-props
-  (let [event-log-dir (cio/create-tmpdir "kv-store")]
+  (f/with-tmp-dir "data" [data-dir]
     (try
       (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                               :crux.kv/kv-store :crux.kv.memdb/kv
                               :crux.standalone/event-log-sync-interval-ms 1000
                               :crux.standalone/event-log-sync? true
-                              :crux.standalone/event-log-dir (str event-log-dir)
+                              :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
                               :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
         (t/is false))
       (catch java.lang.AssertionError e
-        (t/is true))
-      (finally
-        (cio/delete-dir event-log-dir)))))
+        (t/is true)))))
 
 (t/deftest topology-resolution-from-java
-  (let [mem-db-node-options
-        (doto (HashMap.)
-          (.put :crux.node/topology 'crux.standalone/topology)
-          (.put :crux.node/kv-store 'crux.kv.memdb/kv)
-          (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
-          (.put :crux.standalone/event-log-dir "data/eventlog")
-          (.put :crux.kv/db-dir "data/db-dir"))
-        memdb-node (Crux/startNode mem-db-node-options)]
-    (t/is memdb-node)
-    (t/is (not (.close memdb-node)))))
+  (f/with-tmp-dir "data" [data-dir]
+    (let [mem-db-node-options
+          (doto (HashMap.)
+            (.put :crux.node/topology 'crux.standalone/topology)
+            (.put :crux.node/kv-store 'crux.kv.memdb/kv)
+            (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
+            (.put :crux.standalone/event-log-dir (str (io/file data-dir "eventlog")))
+            (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
+          memdb-node (Crux/startNode mem-db-node-options)]
+      (t/is memdb-node)
+      (t/is (not (.close memdb-node))))))
 
 (t/deftest test-start-up-2-nodes
-  (let [kv-data-dir-1 (cio/create-tmpdir "kv-store1")
-        kv-data-dir-2 (cio/create-tmpdir "kv-store2")]
-    (try
-      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
-                              :crux.kv/db-dir (str kv-data-dir-1)
-                              :crux.jdbc/dbtype "h2"
-                              :crux.jdbc/dbname "cruxtest1"})]
-        (t/is n)
+  (f/with-tmp-dir "data" [data-dir]
+    (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
+                            :crux.kv/db-dir (str (io/file data-dir "kv1"))
+                            :crux.jdbc/dbtype "h2"
+                            :crux.jdbc/dbname (str (io/file data-dir "cruxtest1"))})]
+      (t/is n)
 
-        (let [valid-time (Date.)
-              submitted-tx (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-          (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
-          (t/is (= #{[:ivan]} (.q (.db n)
-                                  '{:find [e]
-                                    :where [[e :name "Ivan"]]}))))
-
-        (t/is (= #{[:ivan]} (.q (.db n)
-                                '{:find [e]
-                                  :where [[e :name "Ivan"]]})))
-
-        (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
-                                 :crux.kv/db-dir (str kv-data-dir-2)
-                                 :crux.jdbc/dbtype "h2"
-                                 :crux.jdbc/dbname "cruxtest2"})]
-
-          (t/is (= #{} (.q (.db n2)
-                           '{:find [e]
-                             :where [[e :name "Ivan"]]})))
-
-          (let [valid-time (Date.)
-                submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
-            (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
-            (t/is (= #{[:ivan]} (.q (.db n2)
-                                    '{:find [e]
-                                      :where [[e :name "Iva"]]}))))
-
-          (t/is n2))
-
+      (let [valid-time (Date.)
+            submitted-tx (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+        (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
         (t/is (= #{[:ivan]} (.q (.db n)
                                 '{:find [e]
                                   :where [[e :name "Ivan"]]}))))
-      (finally
-        (cio/delete-dir kv-data-dir-1)
-        (cio/delete-dir kv-data-dir-2)))))
+
+      (t/is (= #{[:ivan]} (.q (.db n)
+                              '{:find [e]
+                                :where [[e :name "Ivan"]]})))
+
+      (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
+                               :crux.kv/db-dir (str (io/file data-dir "kv2"))
+                               :crux.jdbc/dbtype "h2"
+                               :crux.jdbc/dbname (str (io/file data-dir "cruxtest2"))})]
+
+        (t/is (= #{} (.q (.db n2)
+                         '{:find [e]
+                           :where [[e :name "Ivan"]]})))
+
+        (let [valid-time (Date.)
+              submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
+          (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
+          (t/is (= #{[:ivan]} (.q (.db n2)
+                                  '{:find [e]
+                                    :where [[e :name "Iva"]]}))))
+
+        (t/is n2))
+
+      (t/is (= #{[:ivan]} (.q (.db n)
+                              '{:find [e]
+                                :where [[e :name "Ivan"]]}))))))

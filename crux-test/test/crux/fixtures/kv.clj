@@ -1,14 +1,12 @@
 (ns crux.fixtures.kv
-  (:require [crux.fixtures.api :as apif]
+  (:require [crux.fixtures :as f]
+            [crux.fixtures.api :as apif]
             [crux.io :as cio]
             [clojure.test :as t]))
 
 (defn with-kv-dir [f]
-  (let [db-dir (cio/create-tmpdir "kv-store")]
-    (try
-      (apif/with-opts {:crux.kv/db-dir (str db-dir)} f)
-      (finally
-        (cio/delete-dir db-dir)))))
+  (f/with-tmp-dir "kv-store" [db-dir]
+    (apif/with-opts {:crux.kv/db-dir (str db-dir)} f)))
 
 (defn with-kv-store [kv-store f]
   (apif/with-opts {:crux.node/kv-store kv-store} f))

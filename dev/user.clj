@@ -16,9 +16,6 @@
 
 (def config
   {:node (merge {:crux.node/topology 'crux.standalone/topology
-                 :crux.standalone/event-log-dir "dev-data/event-log"}
-                (case (System/getProperty "user.name")
-                  ;; put your user-specific node config in here
-                  {}))})
+                 :crux.standalone/event-log-dir "dev-storage/event-log"})})
 
 (ir/set-prep! (fn [] config))
