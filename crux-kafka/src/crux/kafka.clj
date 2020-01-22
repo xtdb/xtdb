@@ -197,7 +197,7 @@
     (count doc-records)))
 
 (defn consume-and-index-documents-from-txes
-  [{:keys [offsets indexer remote-document-store timeout tx-topic]
+  [{:keys [offsets indexer document-store timeout tx-topic]
     :or {timeout 5000}}
    ^KafkaConsumer consumer]
   (let [records (.poll consumer (Duration/ofMillis timeout))
@@ -207,7 +207,7 @@
                                              (str :crux.tx/docs))
                                 (.value)
                                 (nippy/fast-thaw))]
-        (let [docs (db/fetch-docs remote-document-store content-hashes)]
+        (let [docs (db/fetch-docs document-store content-hashes)]
           (db/index-docs indexer docs))))
     (when (seq tx-records)
       (kc/update-stored-consumer-state offsets consumer tx-records))
@@ -279,18 +279,18 @@
    :args default-options})
 
 (def doc-indexing-from-tx-topic-consumer
-  {:start-fn (fn [{:keys [crux.node/indexer crux.node/remote-document-store]}
+  {:start-fn (fn [{:keys [crux.node/indexer crux.node/document-store]}
                   {::keys [tx-topic] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      consumer-config (merge {"group.id" (::doc-group-id options)} kafka-config)
                      offsets (kc/map->IndexedOffsets {:indexer indexer :k :crux.tx-doc-log/consumer-state})
                      index-fn (partial consume-and-index-documents-from-txes {:indexer indexer
-                                                                              :remote-document-store remote-document-store
+                                                                              :document-store document-store
                                                                               :offsets offsets
                                                                               :timeout 1000
                                                                               :tx-topic (::tx-topic options)})]
                  (kc/start-indexing-consumer consumer-config offsets tx-topic index-fn)))
-   :deps [:crux.node/indexer :crux.node/remote-document-store ::tx-indexing-consumer]
+   :deps [:crux.node/indexer :crux.node/document-store ::tx-indexing-consumer]
    :args (assoc default-options
                 ::doc-group-id {:doc "Kafka client group.id for ingesting documents using tx topic"
                                 :default (str "documents-" (group-name))
@@ -318,13 +318,13 @@
    :args default-options})
 
 (def tx-log
-  {:start-fn (fn [{:keys [crux.node/remote-document-store ::producer ::latest-submitted-tx-consumer]}
+  {:start-fn (fn [{:keys [crux.node/document-store ::producer ::latest-submitted-tx-consumer]}
                   {:keys [crux.kafka/tx-topic] :as options}]
-               (->KafkaTxLog remote-document-store producer latest-submitted-tx-consumer tx-topic (derive-kafka-config options)))
-   :deps [::producer ::latest-submitted-tx-consumer :crux.node/remote-document-store]
+               (->KafkaTxLog document-store producer latest-submitted-tx-consumer tx-topic (derive-kafka-config options)))
+   :deps [::producer ::latest-submitted-tx-consumer :crux.node/document-store]
    :args default-options})
 
-(def remote-document-store
+(def document-store
   {:start-fn (fn [{::keys [producer]} {:keys [crux.kafka/doc-topic] :as options}]
                (->KafkaRemoteDocumentStore producer doc-topic))
    :deps [::producer]
@@ -333,7 +333,7 @@
 (def topology
   (merge n/base-topology
          {:crux.node/tx-log tx-log
-          :crux.node/remote-document-store remote-document-store
+          :crux.node/document-store document-store
           ::admin-client admin-client
           ::admin-wrapper admin-wrapper
           ::producer producer

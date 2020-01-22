@@ -187,5 +187,5 @@
                                             :deps [:crux.node/indexer ::ds]}
                       :crux.node/tx-log {:start-fn start-tx-log
                                          :deps [::ds]}
-                      :crux.node/remote-document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
+                      :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
                                                         :deps [:crux.node/tx-log]}}))

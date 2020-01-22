@@ -235,7 +235,7 @@
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
 (defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx
-                                          {:keys [history ^crux.db.RemoteDocumentStore remote-document-store] :as deps}]
+                                          {:keys [history ^crux.db.RemoteDocumentStore document-store] :as deps}]
   (let [eid (c/new-id k)
         content-hashes (all-content-hashes history eid)]
     {:pre-commit-fn #(cond
@@ -309,7 +309,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store tx-log remote-document-store bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store tx-log document-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -367,7 +367,7 @@
         (let [deps {:object-store object-store
                     :kv-store kv-store
                     :tx-log tx-log
-                    :remote-document-store remote-document-store
+                    :document-store document-store
                     :indexer this
                     :snapshot snapshot}
 
@@ -394,7 +394,7 @@
                                       (into (sorted-map-by mem/buffer-comparator))))
               (when-let [tombstones (not-empty (:tombstones res))]
                 (db/index-docs this tombstones)
-                (db/submit-docs remote-document-store tombstones)))
+                (db/submit-docs document-store tombstones)))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
                 (kv/store kv-store [completed-tx-kv
@@ -421,10 +421,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log remote-document-store bus]} args]
-               (->KvIndexer object-store kv-store tx-log remote-document-store bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log document-store bus]} args]
+               (->KvIndexer object-store kv-store tx-log document-store bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/remote-document-store :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/document-store :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout-ms]
   (let [seen-tx (atom nil)]
