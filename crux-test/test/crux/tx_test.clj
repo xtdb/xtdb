@@ -602,7 +602,7 @@
                 #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]))))
 
 (t/deftest nil-transaction-fn-457
-  (when tx/tx-fns-enabled?
+  (with-redefs [tx/tx-fns-enabled? true]
     (let [merge-fn {:crux.db/id :my-fn
                     :crux.db.fn/body '(fn [db] nil)}]
 
