@@ -25,4 +25,6 @@
                           crux.main.graal]
           :main crux.main.graal}
   :aot [crux.main]
-  :main crux.main)
+  :main crux.main
+
+  :profiles {:uberjar-test {:uberjar-name "crux-test-uberjar.jar"}})

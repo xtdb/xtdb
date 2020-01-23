@@ -4,7 +4,8 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [crux.fixtures :as f]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [crux.io :as cio]))
 
 ;; This is a hacky way to allow the uberjar tests to be ran from a directory other than crux-uberjar - typically the repo root.
 (def working-directory
@@ -12,22 +13,30 @@
     "."
     "./crux-uberjar"))
 
+(defn build-uberjar []
+  (log/info "building uberjar...")
+
+  (let [{:keys [exit out] :as res} (sh/sh "lein" "with-profiles" "+uberjar-test" "uberjar"
+                                          :dir working-directory)]
+    (when-not (zero? exit)
+      (throw (ex-info "lein uberjar exited with non-zero exit code" res))))
+
+  (log/info "built uberjar, starting server..."))
+
 (t/deftest test-uberjar-can-start
   (f/with-tmp-dir "uberjar" [uberjar-dir]
-    (log/debug "building uberjar...")
-    (let [uberjar (let [{:keys [exit out] :as res} (sh/sh "lein" "uberjar"
-                                                             :dir working-directory)]
-                    (if (zero? exit)
-                      out
-                      (throw (ex-info "lein uberjar exited with non-zero exit code" res))))
-          _ (log/debug "built uberjar, starting server...")
+    (build-uberjar)
 
-          results (:out (sh/sh "timeout" "10s"
-                               "java" "-jar" uberjar
-                               "-x" (pr-str {:crux.node/topology 'crux.standalone/topology
-                                             :crux.standalone/event-log-dir (str (io/file uberjar-dir "event-log"))
-                                             :crux.kv/db-dir (str (io/file uberjar-dir "db-dir"))})
-                               :dir working-directory))]
+    (let [results (-> (sh/sh "timeout" "10s"
+                             "java" "-jar" "target/crux-test-uberjar.jar"
+                             "-x" (pr-str {:crux.node/topology 'crux.standalone/topology
+                                           :crux.standalone/event-log-dir (str (io/file uberjar-dir "event-log"))
+                                           :crux.kv/db-dir (str (io/file uberjar-dir "db-dir"))})
+                             "-s" (str (cio/free-port))
+                             :dir working-directory)
+                      :out)]
+
+      (println results)
 
       (t/testing "Results exist"
         (t/is (string? results)))
