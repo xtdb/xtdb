@@ -299,6 +299,8 @@
 
     (Thread/sleep 1000)
 
+    (t/is (db/docs-exist? (:indexer *api*) [content-hash]))
+
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= {content-hash picasso}
                (db/get-objects (:object-store *api*) snapshot [content-hash])))
