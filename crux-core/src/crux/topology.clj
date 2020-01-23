@@ -2,7 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [com.stuartsierra.dependency :as dep]
             [crux.io :as cio])
-  (:import (java.io Closeable)))
+  (:import (java.io Closeable)
+           (crux.api ICruxAPI)))
 
 (s/def ::resolvable-id
   (fn [id]
@@ -84,6 +85,12 @@
         options (merge options (parse-opts args options))]
     (start-fn deps options)))
 
+(defn- close-topology [started-order]
+  (->> (reverse started-order)
+       (filter #(instance? Closeable %))
+       (remove #(instance? ICruxAPI %)) ; not pretty, but prevents infinite loop
+       (run! cio/try-close)))
+
 (defn start-topology [options]
   (let [options (into {} options)
         topology (options->topology options)]
@@ -100,11 +107,7 @@
                                       (swap! started assoc k c)
                                       [k c])))
                             (catch Throwable t
-                              (doseq [c (reverse @started-order)]
-                                (when (instance? Closeable c)
-                                  (cio/try-close c)))
+                              (close-topology @started-order)
                               (throw t)))]
       [started-modules (fn []
-                         (->> (reverse @started-order)
-                              (filter #(instance? Closeable %))
-                              (run! cio/try-close)))])))
+                         (close-topology @started-order))])))

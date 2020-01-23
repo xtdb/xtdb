@@ -27,20 +27,12 @@
                    (Boolean/parseBoolean check-asserts)
                    true))
 
-(defrecord CruxVersion [version revision]
-  status/Status
-  (status-map [this]
-    {:crux.version/version version
-     :crux.version/revision revision}))
-
 (def crux-version
-  (memoize
-   (fn []
-     (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
-       (with-open [in (io/reader pom-file)]
-         (let [{:strs [version
-                       revision]} (cio/load-properties in)]
-           (->CruxVersion version revision)))))))
+  (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
+    (with-open [in (io/reader pom-file)]
+      (let [{:strs [version revision]} (cio/load-properties in)]
+        {:crux.version/version version
+         :crux.version/revision revision}))))
 
 (defn- ensure-node-open [{:keys [closed?]}]
   (when @closed?
@@ -186,30 +178,32 @@
       (when (and (not @closed?) close-fn) (close-fn))
       (reset! closed? true))))
 
+(def ^:private node-component
+  {:start-fn (fn [{::keys [indexer object-store bus tx-log kv-store]} node-opts]
+               (map->CruxNode {:options node-opts
+                               :kv-store kv-store
+                               :tx-log tx-log
+                               :indexer indexer
+                               :object-store object-store
+                               :bus bus
+                               :closed? (atom false)
+                               :lock (StampedLock.)}))
+   :deps #{::indexer ::kv-store ::bus ::object-store ::tx-log}
+   :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout in milliseconds for waiting."
+                                         :default 10000
+                                         :crux.config/type :crux.config/nat-int}}})
+
 (def base-topology
   {::kv-store 'crux.kv.rocksdb/kv
    ::object-store 'crux.object-store/kv-object-store
    ::indexer 'crux.tx/kv-indexer
-   ::bus 'crux.bus/bus})
-
-(def node-args
-  {:crux.tx-log/await-tx-timeout
-   {:doc "Default timeout in milliseconds for waiting."
-    :default 10000
-    :crux.config/type :crux.config/nat-int}})
+   ::bus 'crux.bus/bus
+   ::node 'crux.node/node-component})
 
 (defn start ^crux.api.ICruxAPI [options]
-  (let [[components close-fn] (topo/start-topology options)
-        {::keys [kv-store tx-log indexer object-store bus]} components
-        status-fn (fn [] (apply merge (map status/status-map (cons (crux-version) (vals components)))))
-        node-opts (topo/parse-opts node-args options)]
-    (map->CruxNode {:close-fn close-fn
-                    :status-fn status-fn
-                    :options node-opts
-                    :kv-store kv-store
-                    :tx-log tx-log
-                    :indexer indexer
-                    :object-store object-store
-                    :bus bus
-                    :closed? (atom false)
-                    :lock (StampedLock.)})))
+  (let [[{::keys [node] :as components} close-fn] (topo/start-topology options)]
+    (assoc node
+      :status-fn (fn []
+                   (merge crux-version
+                          (into {} (mapcat status/status-map) (vals (dissoc components ::node)))))
+      :close-fn close-fn)))

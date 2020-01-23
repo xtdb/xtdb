@@ -50,55 +50,6 @@
       (finally
         (cio/delete-dir data-dir)))))
 
-(t/deftest test-option-parsing
-  (with-open [n (n/start {:foo 2
-                          :boo false
-                          :crux.node/topology {:a {:args {:foo {:crux.config/type :crux.config/int
-                                                                :doc "An argument"
-                                                                :default 3}
-                                                          :boo {:crux.config/type :crux.config/boolean
-                                                                :doc "An argument"
-                                                                :default true}}
-                                                   :start-fn (fn [_ {:keys [foo boo]}]
-                                                               (t/is (= 2 foo))
-                                                               (t/is (= false boo)))}}})]
-    (t/is true)))
-
-(t/deftest test-nodes-shutdown-in-order
-  (let [started (atom [])
-        stopped (atom [])]
-    (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
-                                                     :start-fn (fn [{:keys [b]} _]
-                                                                 (assert b)
-                                                                 (swap! started conj :a)
-                                                                 (reify java.io.Closeable
-                                                                   (close [_]
-                                                                     (swap! stopped conj :a))))}
-                                                 :b {:start-fn (fn [_ _]
-                                                                 (swap! started conj :b)
-                                                                 (reify java.io.Closeable
-                                                                   (close [_]
-                                                                     (swap! stopped conj :b))))}}})]
-      (t/is (= [:b :a] @started)))
-    (t/is (= [:a :b] @stopped)))
-
-  (t/testing "With Exception"
-    (let [started (atom [])
-          stopped (atom [])]
-      (try
-        (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
-                                                         :start-fn (fn [_ _]
-                                                                     (throw (Exception.)))}
-                                                     :b {:start-fn (fn [_ _]
-                                                                     (swap! started conj :b)
-                                                                     (reify java.io.Closeable
-                                                                       (close [_]
-                                                                         (swap! stopped conj :b))))}}})]
-          (t/is false))
-        (catch Exception e))
-      (t/is (= [:b] @started))
-      (t/is (= [:b] @stopped)))))
-
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
