@@ -35,8 +35,7 @@ in a safe location that is accessible from your Crux REPL.
 
 == Start a Clojure REPL
 
-`crux-kafka` must be provided. For instance, navigate to `crux-dev` and run
-`lein repl`
+`crux-kafka` must be provided. Run `lein repl`
 
 Update the various values based on your configuration and run the following
 code to connect to your cluster and make a transaction:

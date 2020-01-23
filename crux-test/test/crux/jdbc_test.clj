@@ -1,7 +1,9 @@
 (ns crux.jdbc-test
   (:require [clojure.test :as t]
+            [clojure.java.io :as io]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.fixtures :as f]
             [crux.fixtures.api :as apif :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.kv :as kvf]
@@ -12,10 +14,11 @@
             [next.jdbc.result-set :as jdbcr]))
 
 (defn- with-each-jdbc-node [f]
-  (t/testing "H2 Database"
-    (fj/with-jdbc-node "h2" f))
-  (t/testing "SQLite Database"
-    (fj/with-jdbc-node "sqlite" f))
+  (f/with-tmp-dir "jdbc" [jdbc-dir]
+    (t/testing "H2 Database"
+      (fj/with-jdbc-node "h2" f {:crux.jdbc/dbname (str (io/file jdbc-dir "h2"))}))
+    (t/testing "SQLite Database"
+      (fj/with-jdbc-node "sqlite" f {:crux.jdbc/dbname (str (io/file jdbc-dir "sqlite"))})))
   (t/testing "Postgresql Database"
     (fp/with-embedded-postgres f))
 

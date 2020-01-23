@@ -12,7 +12,8 @@
                  [juxt/crux-http-server "derived-from-git"]
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-rocksdb "derived-from-git"]
-                 [juxt/crux-lmdb "derived-from-git"]]
+                 [juxt/crux-lmdb "derived-from-git"]
+                 [juxt/crux-test "derived-from-git" :scope "test"]]
   :middleware [leiningen.project-version/middleware]
   :graal {:dependencies [[org.clojure/clojure "1.9.0"]
                          [org.slf4j/slf4j-simple "1.7.26"]]
@@ -24,4 +25,6 @@
                           crux.main.graal]
           :main crux.main.graal}
   :aot [crux.main]
-  :main crux.main)
+  :main crux.main
+
+  :profiles {:uberjar-test {:uberjar-name "crux-test-uberjar.jar"}})

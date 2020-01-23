@@ -235,17 +235,29 @@ Retrieve the current version of the document:
 (crux/entity my-db :some/fancy-id)
 ```
 
-### Development "uber" REPL
+### Developing Crux
 
-* To run a REPL that includes depedencies for all components of Crux, first build the sub-modules using `lein sub install`.
-* Then, `cd crux-dev` and `lein repl`.
-* Once you've connected to the REPL, in the `user` namespace, run `(dev)` to load the dev namespace.
-* You can now `(start)`, `(stop)` and `(reset)` the Crux development system (amongst other things).
-* You should now have a running Crux node in the `dev/node` var - you can verify this by calling `(crux/status node)`.
+* To run a REPL that includes dependencies for all components of Crux, first build the sub-modules using `lein sub install`.
+* Start a REPL with `lein repl` (with `--headless` if you're just going to connect to it from your editor).
+* Once you've connected to the REPL, in the `user` namespace, run:
+  * `(go)` to start up the dev node
+  * `(halt!)` to stop it
+  * `(reset)` to stop it, reload changed namespaces, and restart it
+  * `(reset-all)` to stop it, reload all namespaces, and restart it
+  * if you're using Emacs/CIDER, `cider-ns-refresh` will do all this for you - `C-c M-n M-r`, `, s x` in Spacemacs
+  * Conjure users can use `ConjureRefresh`, see the [docs](https://github.com/Olical/conjure#mappings) for bindings
+  * see [Integrant REPL](https://github.com/weavejester/integrant-repl) for more details.
+* You should now have a running Crux node under `(:node user/system)` - you can verify this by calling `(crux/status (:node system))`.
+* Most of the time, you shouldn't need to bounce the REPL, but:
+  * if you change any of the dependencies of any of the modules, that'll require another `lein sub install` and a REPL bounce
+  * if you change any of the Java classes, that'll require a `lein sub javac` and a REPL bounce
+  * otherwise, `(user/reset)` (or just `(reset)` if you're already in the `user` ns) should be sufficient.
+* You can run module tests from the root of the git repo without a `lein sub install`, because of the lein checkouts - all of the tests are in scope here, so things like `lein test :only crux.tx-test` should also work.
+* Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
 
 ### Testing
 
-The recommended way of running the primary tests is `lein build`.
+The recommended way of running the full test suite is `lein build`.
 
 ## Copyright & License
 The MIT License (MIT)

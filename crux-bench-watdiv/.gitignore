@@ -1,0 +1,3 @@
+/data/**/*
+/datomic-data/**/*
+/watdiv_*

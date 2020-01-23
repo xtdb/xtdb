@@ -4,14 +4,20 @@
             [crux.fixtures :as f]
             [crux.io :as cio]
             [crux.jdbc :as j]
-            [next.jdbc :as jdbc])
-  (:import crux.api.Crux))
+            [next.jdbc :as jdbc]
+            [clojure.java.io :as io])
+  (:import crux.api.Crux
+           [java.nio.file Files]))
+
+(def ^:dynamic *db-name*)
 
 (defn- with-prep-for-tests [f]
-  (let [ds (jdbc/get-datasource {:dbtype "h2"
-                                 :dbname "cruxtest"})]
-    (j/prep-for-tests! "h2" ds))
-  (f))
+  (f/with-tmp-dir "compaction-test" [dir]
+    (let [db-name (.getPath (io/file dir "cruxtest"))
+          ds (jdbc/get-datasource {:dbtype "h2", :dbname db-name})]
+      (j/prep-for-tests! "h2" ds)
+      (binding [*db-name* db-name]
+        (f)))))
 
 (t/use-fixtures :each with-prep-for-tests)
 
@@ -19,7 +25,7 @@
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         opts {:crux.node/topology 'crux.jdbc/topology
               :crux.jdbc/dbtype "h2"
-              :crux.jdbc/dbname "cruxtest"
+              :crux.jdbc/dbname *db-name*
               :crux.kv/db-dir db-dir
               :crux.kv/kv-store "crux.kv.memdb/kv"}]
     (try

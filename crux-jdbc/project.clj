@@ -9,5 +9,6 @@
                  [seancorfield/next.jdbc "1.0.9"]
                  [org.clojure/java.data "0.1.4"]
                  [com.zaxxer/HikariCP "3.3.1"]
-                 [com.taoensso/nippy "2.14.0"]]
+                 [com.taoensso/nippy "2.14.0"]
+                 [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]]
   :middleware [leiningen.project-version/middleware])
