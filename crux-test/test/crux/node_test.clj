@@ -17,21 +17,17 @@
            (clojure.lang Keyword)))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
-  (let [data-dir (cio/create-tmpdir "kv-store")
-        event-log-dir (cio/create-tmpdir "kv-store")]
+  (f/with-tmp-dir "data" [data-dir]
     (try
       (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                        :crux.kv/db-dir (str data-dir)
-                        :crux.standalone/event-log-dir (str event-log-dir)})]
+                        :crux.kv/db-dir (str (io/file data-dir "db"))
+                        :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))})]
         (t/is (.status n))
         (.close n)
         (.status n)
         (t/is false))
       (catch IllegalStateException e
-        (t/is (= "Crux node is closed" (.getMessage e))))
-      (finally
-        (cio/delete-dir data-dir)
-        (cio/delete-dir event-log-dir)))))
+        (t/is (= "Crux node is closed" (.getMessage e)))))))
 
 (t/deftest test-start-node-complain-if-no-topology
   (try
@@ -41,9 +37,10 @@
       (t/is (re-find #"Please specify :crux.node/topology" (.getMessage e))))))
 
 (t/deftest test-start-node-should-throw-missing-argument-exception
-  (let [data-dir (cio/create-tmpdir "kv-store")]
+  (f/with-tmp-dir "data" [data-dir]
     (try
-      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]})]
+      (with-open [n (n/start {:crux.node/topology '[crux.jdbc/topology]
+                              :crux.kv/db-dir (str (io/file data-dir "db"))})]
         (t/is false))
       (catch Throwable e
         (t/is (re-find #"Arg :crux.jdbc/dbtype required" (.getMessage e))))
@@ -62,6 +59,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                             :crux.kv/kv-store :crux.kv.memdb/kv
+                            :crux.kv/db-dir (str (io/file data-dir "db"))
                             :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
                             :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
       (t/is n))))
@@ -69,7 +67,8 @@
 (t/deftest test-properties-file-to-node
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-                                  :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
+                             :crux.db/db-dir (str (io/file data-dir "db"))
+                             :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
       (t/is (instance? MobergTxLog (-> n :tx-log)))
       (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))))
 
@@ -78,6 +77,7 @@
     (try
       (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                               :crux.kv/kv-store :crux.kv.memdb/kv
+                              :crux.kv/db-dir (str (io/file data-dir "db"))
                               :crux.standalone/event-log-sync-interval-ms 1000
                               :crux.standalone/event-log-sync? true
                               :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
@@ -92,6 +92,7 @@
           (doto (HashMap.)
             (.put :crux.node/topology 'crux.standalone/topology)
             (.put :crux.node/kv-store 'crux.kv.memdb/kv)
+            (.put :crux.kv/db-dir (str (io/file data-dir "db")))
             (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
             (.put :crux.standalone/event-log-dir (str (io/file data-dir "eventlog")))
             (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
