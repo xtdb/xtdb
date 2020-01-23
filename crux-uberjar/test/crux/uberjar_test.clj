@@ -7,11 +7,11 @@
             [clojure.tools.logging :as log]
             [crux.io :as cio]))
 
-;; This is a hacky way to allow the uberjar tests to be ran from a directory other than crux-uberjar - typically the repo root.
 (def working-directory
-  (if (str/ends-with? (.getCanonicalPath (clojure.java.io/file ".")) "/crux-uberjar")
-    "."
-    "./crux-uberjar"))
+  (-> (io/as-file (io/resource "crux/uberjar_test.clj"))
+      .getParentFile
+      .getParentFile
+      .getParentFile))
 
 (defn build-uberjar []
   (log/info "building uberjar...")
