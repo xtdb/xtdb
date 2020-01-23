@@ -17,7 +17,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt])
-  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
+  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException ITxLog]
            [java.io Closeable IOException]
            java.time.Duration
            java.util.Date
@@ -231,12 +231,11 @@
 
 ;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxAPI crux-node request]
-  (let [with-documents? (Boolean/parseBoolean (get-in request [:query-params "with-documents"]))
+  (let [with-ops? (Boolean/parseBoolean (get-in request [:query-params "with-ops"]))
         from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
                             (Long/parseLong))
-        ctx (.newTxLogContext crux-node)
-        result (.txLog crux-node ctx from-tx-id with-documents?)]
-    (-> (streamed-edn-response ctx result)
+        ^ITxLog result (.openTxLog crux-node from-tx-id with-ops?)]
+    (-> (streamed-edn-response result (iterator-seq result))
         (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
 
 (defn- sync-handler [^ICruxAPI crux-node request]

@@ -5,7 +5,7 @@
             [crux.codec :as c]
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource]
+            ICruxAsyncIngestAPI ICruxDatasource ITxLog]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -149,24 +149,16 @@
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
 
-  (new-tx-log-context ^java.io.Closeable [node]
-    "Returns a new transaction log context allowing for lazy reading
-  of the transaction log in a try-with-resources block using
-  (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-ops?).
-
-  Returns an implementation specific context.")
-
-  (tx-log [node tx-log-context from-tx-id with-ops?]
-    "Reads the transaction log lazily. Optionally includes
+  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
+    "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another
   Crux instance.
 
-  tx-log-context  a context from (new-tx-log-context node)
   from-tx-id      optional transaction id to start from.
   with-ops?       should the operations with documents be included?
 
-  Returns a lazy sequence of the transaction log."))
+  Returns an iterator of the TxLog"))
 
 (extend-protocol PCruxNode
   ICruxAPI
@@ -227,11 +219,8 @@
   (submit-tx [this tx-ops]
     (.submitTx this (conform-tx-ops tx-ops)))
 
-  (new-tx-log-context ^java.io.Closeable [this]
-    (.newTxLogContext this))
-
-  (tx-log [this tx-log-context from-tx-id with-ops?]
-    (.txLog this tx-log-context from-tx-id with-ops?)))
+  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
+    (.openTxLog this from-tx-id with-ops?)))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and

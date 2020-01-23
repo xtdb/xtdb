@@ -16,7 +16,7 @@
             [crux.status :as status]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
@@ -123,26 +123,28 @@
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
-  (newTxLogContext [this]
+  (openTxLog ^ITxLog [this from-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/new-tx-log-context tx-log)))
+      (let [tx-log-iterator (db/open-tx-log tx-log from-tx-id)
+            snapshot (kv/new-snapshot kv-store)
+            tx-log (-> (iterator-seq tx-log-iterator)
+                       (->> (filter
+                             #(nil?
+                               (kv/get-value snapshot
+                                             (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))))
+                       (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
+                                                            crux.tx.event/tx-events] :as tx-log-entry}]
+                                                 (-> tx-log-entry
+                                                     (dissoc :crux.tx.event/tx-events)
+                                                     (assoc :crux.api/tx-ops
+                                                            (->> tx-events
+                                                                 (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
 
-  (txLog [this tx-log-context from-tx-id with-ops?]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (for [{:keys [crux.tx/tx-id
-                    crux.tx.event/tx-events] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
-            :when (with-open [snapshot (kv/new-snapshot kv-store)]
-                    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
-        (if with-ops?
-          (-> tx-log-entry
-              (dissoc :crux.tx.event/tx-events)
-              (assoc :crux.api/tx-ops
-                     (with-open [snapshot (kv/new-snapshot kv-store)]
-                       (->> tx-events
-                            (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
-          tx-log-entry))))
+        (db/->closeable-tx-log-iterator (fn []
+                                          (.close snapshot)
+                                          (.close tx-log-iterator))
+                                        tx-log))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]

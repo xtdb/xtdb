@@ -2,6 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [crux.io :as cio]
+            [crux.db :as db]
             [crux.codec :as c]
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
@@ -188,14 +189,11 @@
   (hasTxCommitted [_ submitted-tx]
     (api-request-sync (str url "/tx-committed") submitted-tx))
 
-  (newTxLogContext [_]
-    (->RemoteApiStream (atom [])))
-
-  (txLog [_ tx-log-context from-tx-id with-documents?]
+  (openTxLog [this from-tx-id with-ops?]
     (let [params (->> [(when from-tx-id
                          (str "from-tx-id=" from-tx-id))
-                       (when with-documents?
-                         (str "with-documents=" with-documents?))]
+                       (when with-ops?
+                         (str "with-ops=" with-ops?))]
                       (remove nil?)
                       (str/join "&"))
           in (api-request-sync (cond-> (str url "/tx-log")
@@ -203,8 +201,8 @@
                                nil
                                {:method :get
                                 :as :stream})]
-      (register-stream-with-remote-stream! tx-log-context in)
-      (edn-list->lazy-seq in)))
+      (db/->closeable-tx-log-iterator #(.close ^Closeable in)
+                                      (edn-list->lazy-seq in))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")

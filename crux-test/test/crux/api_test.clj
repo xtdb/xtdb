@@ -17,7 +17,6 @@
             [crux.db :as db]
             [crux.query :as q])
   (:import crux.api.NodeOutOfSyncException
-           clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
            crux.moberg.MobergTxLog
@@ -124,7 +123,6 @@
             (with-open [snapshot (.newSnapshot db)]
               (let [result (.q db snapshot '{:find [e]
                                              :where [[e :name "Ivan"]]})]
-                (t/is (instance? LazySeq result))
                 (t/is (not (realized? result)))
                 (t/is (= '([:ivan]) result))
                 (t/is (realized? result))))))
@@ -135,7 +133,6 @@
               (let [result (.q db snapshot '{:find [e]
                                              :where [[e :name "Ivan"]]
                                              :full-results? true})]
-                (t/is (instance? LazySeq result))
                 (t/is (not (realized? result)))
                 (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}]) result))
                 (t/is (realized? result))))))
@@ -172,9 +169,8 @@
           (t/is (nil? (.entityTx (.db *api* #inst "1999") :ivan)))))
 
       (t/testing "tx-log"
-        (with-open [ctx (.newTxLogContext *api*)]
-          (let [result (.txLog *api* ctx nil false)]
-            (t/is (instance? LazySeq result))
+        (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+          (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
                              :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
@@ -182,9 +178,8 @@
             (t/is (realized? result))))
 
         (t/testing "with ops"
-          (with-open [ctx (.newTxLogContext *api*)]
-            (let [result (.txLog *api* ctx nil true)]
-              (t/is (instance? LazySeq result))
+          (with-open [tx-log-iterator (.openTxLog *api* nil true)]
+            (let [result (iterator-seq tx-log-iterator)]
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
                                :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
@@ -192,12 +187,8 @@
               (t/is (realized? result)))))
 
         (t/testing "from tx id"
-          (with-open [ctx (.newTxLogContext *api*)]
-            (let [result (.txLog *api* ctx (inc tx-id) false)]
-              (t/is (instance? LazySeq result))
-              (t/is (not (realized? result)))
-              (t/is (empty? result))
-              (t/is (realized? result))))))
+          (with-open [tx-log-iterator (.openTxLog *api* (inc tx-id) false)]
+            (t/is (empty? (iterator-seq tx-log-iterator))))))
 
       (t/testing "statistics"
         (let [stats (.attributeStats *api*)]
@@ -259,8 +250,8 @@
     (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
       (.awaitTx *api* version-2-submitted-tx nil)
       (t/is (false? (.hasTxCommitted *api* version-2-submitted-tx)))
-      (with-open [ctx (.newTxLogContext *api*)]
-        (let [result (.txLog *api* ctx nil false)]
+      (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+        (let [result (iterator-seq tx-log-iterator)]
           (t/is (= [(assoc submitted-tx
                            :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                    result))))
@@ -268,8 +259,8 @@
       (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
         (.awaitTx *api* version-3-submitted-tx nil)
         (t/is (true? (.hasTxCommitted *api* version-3-submitted-tx)))
-        (with-open [ctx (.newTxLogContext *api*)]
-          (let [result (.txLog *api* ctx nil false)]
+        (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+          (let [result (iterator-seq tx-log-iterator)]
             (t/is (= 2 (count result)))))))))
 
 (t/deftest test-db-history-api
@@ -350,17 +341,15 @@
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))
 
-          (with-open [ctx (.newTxLogContext *ingest-client*)]
-            (let [result (.txLog *ingest-client* ctx nil false)]
-              (t/is (instance? LazySeq result))
+          (with-open [tx-log-iterator (.openTxLog *ingest-client* nil false)]
+            (let [result (iterator-seq tx-log-iterator)]
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
                                :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
                        result))
               (t/is (realized? result))))
 
-          (with-open [ctx (.newTxLogContext *ingest-client*)]
-            (t/is (thrown? IllegalArgumentException (.txLog *ingest-client* ctx nil true)))))))
+          (t/is (thrown? IllegalArgumentException (.openTxLog *ingest-client* nil true))))))
     (t/is true)))
 
 (defn execute-sparql [^RepositoryConnection conn q]
