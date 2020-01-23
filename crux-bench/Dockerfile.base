@@ -2,16 +2,7 @@ FROM clojure:openjdk-11-lein-2.9.0
 
 WORKDIR /usr/local/lib/crux
 
-RUN git init && \
-  git remote add -f juxt https://github.com/juxt/crux && \
-  git remote add -f dan https://github.com/danmason/crux && \
-  git remote add -f jms https://github.com/jarohen/crux && \
-  git remote add -f tmt https://github.com/t-taylor/crux && \
-  git checkout juxt/master
-
 ADD data/weather_small_locations.csv crux-bench/data/
 ADD data/weather_small_conditions.csv crux-bench/data/
 ADD data/devices_small_device_info.csv crux-bench/data/
 ADD data/devices_small_readings.csv crux-bench/data/
-
-RUN lein sub -s "crux-core/:crux-kafka/:crux-kafka-embedded/:crux-rocksdb/:crux-bench/" install
