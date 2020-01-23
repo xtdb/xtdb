@@ -20,7 +20,9 @@
                 :crux.metrics/latest-tx-id []
                 :crux.metrics/tx-time-lag 0}))
       (api/await-tx *api* (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :test}]]))
-      ;; Might have not run the listener. May fail
+      ;; Might have not run the listener. May fail. Placeholder sleep until a
+      ;; better solution is used
+      (Thread/sleep 50)
       (t/is (= (dissoc @!metrics :crux.metrics/latest-tx-id :crux.metrics/tx-time-lag)
                {:crux.metrics/indexing-tx 0
                 :crux.metrics/indexed-tx 1
