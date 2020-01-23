@@ -4,6 +4,7 @@
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.node :as n]
+            [crux.topology :as topo]
             [crux.tx.polling :as p])
   (:import java.io.Closeable))
 
@@ -34,7 +35,7 @@
   (let [options {:crux.kv/db-dir event-log-dir
                  :crux.kv/sync? event-log-sync?
                  :crux.kv/check-and-store-index-version false}]
-    (n/start-component event-log-kv-store nil options)))
+    (topo/start-component event-log-kv-store nil options)))
 
 (defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
   (when event-log-kv

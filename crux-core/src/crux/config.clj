@@ -11,8 +11,8 @@
    ::nat-int [nat-int? (fn [x]
                          (or (and (string? x) (Long/parseLong x)) x))]
    ::string [string? identity]
-   ::module [(fn [m] (s/valid? :crux.node/module m))
-             (fn [m] (s/conform :crux.node/module m))]})
+   ::module [(fn [m] (s/valid? :crux.topology/module m))
+             (fn [m] (s/conform :crux.topology/module m))]})
 
 (s/def ::type (s/and (s/conformer (fn [x] (or (property-types x) x)))
                      (fn [x] (and (vector? x) (-> x first fn?) (some-> x second fn?)))))

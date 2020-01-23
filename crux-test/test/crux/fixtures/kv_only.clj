@@ -2,7 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [crux.io :as cio]
-            [crux.node :as n])
+            [crux.topology :as topo])
   (:import java.io.Closeable))
 
 (def ^:dynamic *kv*)
@@ -11,7 +11,7 @@
 (def ^:dynamic *sync* false)
 
 (defn ^Closeable start-kv-store [opts]
-  (n/start-component *kv-module* nil opts))
+  (topo/start-component *kv-module* nil opts))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]

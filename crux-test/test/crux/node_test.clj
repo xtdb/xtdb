@@ -16,23 +16,6 @@
            (java.util HashMap)
            (clojure.lang Keyword)))
 
-(t/deftest test-properties-to-topology
-  (let [t (n/options->topology {:crux.node/topology ['crux.jdbc/topology]})]
-
-    (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
-             (-> t :crux.node/tx-log)))
-    (t/is (= (s/conform ::n/component crux.kv.rocksdb/kv)
-             (-> t :crux.node/kv-store))))
-
-  (t/testing "override module in topology"
-    (let [t (n/options->topology {:crux.node/topology ['crux.jdbc/topology]
-                                  :crux.node/kv-store :crux.kv.memdb/kv})]
-
-      (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
-               (-> t :crux.node/tx-log)))
-      (t/is (= (s/conform ::n/component crux.kv.memdb/kv)
-               (-> t :crux.node/kv-store))))))
-
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (let [data-dir (cio/create-tmpdir "kv-store")
         event-log-dir (cio/create-tmpdir "kv-store")]
