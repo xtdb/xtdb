@@ -17,7 +17,6 @@
 (defn handler [!metrics !store]
   (fn [_]
     (run! (fn [[func-sym func]]
-            (tap> (str func-sym " " (func !metrics)))
             (prometheus/set-gauge
               @!store
               "crux_metrics"
