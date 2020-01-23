@@ -54,16 +54,18 @@
                   :content-type :json})))
 
 (defn format-and-post-results-to-slack [result]
-  (prn result)
   (let [result-strings (map
-                        (fn [bench-map] (->> (dissoc bench-map :bench-ns :crux-commit :crux-version)
-                                             (keys)
-                                             (map (fn [key] (format "*%s*: %s" (name key) (bench-map key))))
-                                             (string/join "\n")))
+                        (fn [{bench-time :time-taken-ms :as bench-map}]
+                          (let [formatted-bench (assoc bench-map :time-taken (java.time.Duration/ofMillis bench-time))]
+                            (->> (dissoc formatted-bench :bench-ns :crux-commit :crux-version :time-taken-ms)
+                                 (keys)
+                                 (map (fn [key-name] (format "*%s*: %s" (name key-name) (formatted-bench key-name))))
+                                 (string/join "\n"))))
                         result)
         formatted-string (->> result-strings
                               (string/join "\n\n")
                               (format "*%s*\n========\n%s\n" *bench-ns*))]
+    (prn formatted-string)
     (post-to-slack formatted-string)))
 
 (defn with-bench-ns* [bench-ns f]
