@@ -2,7 +2,8 @@
   (:require [crux.bench :as bench]
             [crux.bench.ts-weather :as weather]
             [crux.bench.ts-devices :as devices]
-            [clj-http.client :as client]))
+            [clj-http.client :as client]
+            [clojure.tools.logging :as log]))
 
 (defn -main []
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"

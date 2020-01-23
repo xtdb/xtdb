@@ -47,8 +47,10 @@
 
 (defn post-to-slack [message]
   (when (System/getenv "SLACK_URL")
-    (client/post (System/getenv "SLACK_URL")
-                 {:body (clojure.data.json/write-str {:text message})
+    (client/post (-> (System/getenv "SLACK_URL")
+                      (clojure.data.json/read-str)
+                      (get "slack-url"))
+                 {:body (json/write-str {:text message})
                   :content-type :json})))
 
 (defn format-and-post-results-to-slack [result]
