@@ -44,7 +44,6 @@
 (defprotocol ObjectStore
   (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
-  (known-keys? [this snapshot ks])
   (put-objects [this kvs])
   (delete-objects [this kvs]))
 ;; end::ObjectStore[]
