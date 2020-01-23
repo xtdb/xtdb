@@ -17,10 +17,10 @@
 (defn handler [!metrics !store]
   (fn [_]
     (run! (fn [[func-sym func]]
-            (tap> )
+            (tap> (str func-sym " " (func !metrics)))
             (prometheus/set-gauge
               @!store
-              "crux.metrics"
+              "crux_metrics"
               (string/replace (str func-sym) "-" "_")
               (func !metrics)
               ["ingest"]))
@@ -28,5 +28,9 @@
     (prometheus/dump-metrics (:registry @!store))))
 
 (def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} args]
-                                   (ring/serve (handler state (atom (init-gauges)))))
+                                   (let [!store (atom (init-gauges))]
+                                     (ring/serve (prometheus/instrument-handler
+                                                   (handler state !store)
+                                                   "crux_node"
+                                                   (:registry @!store)))))
                        :deps #{:crux.metrics/state}}})
