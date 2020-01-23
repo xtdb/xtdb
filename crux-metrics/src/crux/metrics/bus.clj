@@ -1,43 +1,62 @@
 (ns crux.metrics.bus
   (:require [crux.bus :as bus]
-            [crux.db :as db]))
+            [crux.db :as db]
+            [metrics.timers :as timers]
+            [metrics.gauges :as gauges]))
 
-;; I might be storing too much metadata. Maybe timings don't need to be stored
 (defn assign-ingest
   "Assigns listeners to an event bus for a given node.
   Returns an atom containing uptading metrics"
-  [bus indexer]
+  [bus indexer registry]
 
-  (let [!metrics (atom {:crux.metrics/indexing-tx 0
-                        :crux.metrics/indexed-tx 0
-                        :crux.metrics/indexing-docs 0
-                        :crux.metrics/indexed-docs 0
-                        :crux.metrics/tx-time-lag 0
-                        :crux.metrics/latest-tx-id []})]
+  (let [docs-ingest-timer (timers/timer registry ["metrics" "ingest" "docs_timer"])
+        tx-ingest-timer (timers/timer registry ["metrics" "ingest" "tx_timer"])
+        !timer-contexts (atom {:tx {}
+                               :docs {}
+                               :tx-id-lag 0})
+        ingesting-docs (gauges/gauge-fn registry
+                                        ["metrics" "ingest" "docs_ingesting"]
+                                        #(count (:docs @!timer-contexts)))
+        ingesting-tx (gauges/gauge-fn registry
+                                      ["metrics" "ingest" "tx_ingesting"]
+                                      #(count (:tx @!timer-contexts)))]
+
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
-                (fn [_]
-                  (swap! !metrics update :crux.metrics/indexing-docs inc)))
+                (fn [{:keys [doc-ids]}]
+                  (swap! !timer-contexts assoc-in
+                         [:docs doc-ids]
+                         (timers/start docs-ingest-timer))))
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
-                (fn [_]
-                  (swap! !metrics update :crux.metrics/indexing-docs dec)
-                  (swap! !metrics update :crux.metrics/indexed-docs inc)))
+                (fn [{:keys [doc-ids]}]
+                  (timers/stop (get-in [:docs doc-ids] @!timer-contexts))
+                  (swap! !timer-contexts update :docs dissoc doc-ids)))
 
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-tx}}
-                (fn [event]
-                  (swap! !metrics assoc :crux.metrics/latest-tx-id
-                         [(:crux.tx/tx-id (:crux.tx/submitted-tx event))
-                          (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))])
-                  (swap! !metrics update :crux.metrics/indexing-tx inc)))
+                (fn [{:keys [crux.tx/submitted-tx]}]
+                  (swap! !timer-contexts assoc-in
+                         [:docs submitted-tx]
+                         (timers/start tx-ingest-timer))
+
+                  (swap! !timer-contexts assoc :tx-id-lag
+                         (- (:crux.tx/tx-id submitted-tx)
+                            (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
+                  (swap! !timer-contexts assoc :tx-time-lag
+                         (- (System/currentTimeMillis)
+                            (inst-ms (get submitted-tx :crux.tx/tx-time))))))
 
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
-                (fn [event]
-                  (swap! !metrics update :crux.metrics/indexing-tx dec)
-                  (swap! !metrics update :crux.metrics/indexed-tx inc)
-                  (swap! !metrics assoc :crux.metrics/tx-time-lag
+                (fn [{:keys [crux.tx/submitted-tx]}]
+                  (timers/stop (get-in [:tx submitted-tx] @!timer-contexts))
+                  (swap! !timer-contexts update :tx dissoc submitted-tx)
+
+                  (swap! !timer-contexts assoc :tx-id-lag
+                         (- (:crux.tx/tx-id submitted-tx)
+                            (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
+                  (swap! !timer-contexts assoc :tx-time-lag
                          (- (System/currentTimeMillis)
-                            (inst-ms (get-in event [:crux.tx/submitted-tx :crux.tx/tx-time]))))))
+                            (inst-ms (get submitted-tx :crux.tx/tx-time))))))
     !metrics))

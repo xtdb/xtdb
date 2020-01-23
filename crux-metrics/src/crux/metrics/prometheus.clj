@@ -2,7 +2,8 @@
   (:require [prometheus.core :as prometheus]
             [clojure.string :as string]
             [ring.server.standalone :as ring]
-            crux.metrics.gauges))
+            crux.metrics.gauges
+            crux.metrics))
 
 (defn init-gauges []
   (reduce (fn [store [func-sym func]] (prometheus/register-gauge
@@ -26,12 +27,9 @@
           crux.metrics.gauges/ingest-gauges)
     (prometheus/dump-metrics (:registry @!store))))
 
-(def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} args]
+(def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} _]
                                    (let [!store (atom (init-gauges))]
-                                     (ring/serve (prometheus/instrument-handler
-                                                   (handler state !store)
-                                                   "crux_node"
-                                                   (:registry @!store)))))
+                                     (ring/serve (handler state !store))))
                        :deps #{:crux.metrics/state}}})
 
 (def with-server (merge crux.metrics/state server))

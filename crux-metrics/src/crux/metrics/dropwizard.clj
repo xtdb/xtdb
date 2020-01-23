@@ -25,11 +25,10 @@
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]
-                               (let [jmx-rep (jmx/reporter registry
-                                                           (merge {:domain "crux.metrics"}
-                                                                  jmx-reporter-opts))]
-                                 (jmx/start jmx-rep)
-                                 jmx-rep))
+                               (doto (jmx/reporter registry
+                                                   (merge {:domain "crux.metrics"}
+                                                          jmx-reporter-opts))
+                                 jmx/start))
                    :deps #{::registry}}})
 
 (def console-reporter
