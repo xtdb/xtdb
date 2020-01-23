@@ -34,3 +34,5 @@
                                                    "crux_node"
                                                    (:registry @!store)))))
                        :deps #{:crux.metrics/state}}})
+
+(def with-server (merge crux.metrics/state server))

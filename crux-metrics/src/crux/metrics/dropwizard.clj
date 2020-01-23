@@ -5,7 +5,8 @@
             [metrics.reporters.jmx :as jmx]
             [metrics.reporters.console :as console]
             [metrics.reporters.csv :as csv]
-            crux.metrics.gauges))
+            crux.metrics.gauges
+            crux.metrics))
 
 (defn register-metrics [reg !metrics]
   (run! (fn [[fn-sym func]]
@@ -49,3 +50,7 @@
                                  (csv/start csv-rep (or csv-reporter-rate 1))
                                  csv-rep))
                    :deps #{::registry}}})
+
+(def with-jmx (merge crux.metrics/state registry jmx-reporter))
+(def with-console (merge crux.metrics/state registry console-reporter))
+(def with-csv (merge crux.metrics/state registry csv-reporter))
