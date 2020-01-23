@@ -405,7 +405,11 @@
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (db/known-keys? object-store snapshot content-hashes)))
+      (let [docs (db/get-objects object-store snapshot content-hashes)]
+        (every? (fn [content-hash]
+                  (when-let [doc (get docs content-hash)]
+                    (idx/doc-indexed? kv-store (:crux.db/id doc) content-hash)))
+                content-hashes))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
