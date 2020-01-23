@@ -18,8 +18,8 @@
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
                 (fn [{:keys [doc-ids]}]
-                  (swap! !metrics update :crux.metrics/indexing-docs assoc
-                         doc-ids {:start-time-ms (System/currentTimeMillis)})))
+                  (swap! !metrics assoc-in [:crux.metrics/indexing-docs doc-ids]
+                         {:start-time-ms (System/currentTimeMillis)})))
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids]}]
@@ -38,8 +38,8 @@
                   (swap! !metrics assoc :crux.metrics/latest-tx-id
                          [(:crux.tx/tx-id (:crux.tx/submitted-tx event))
                           (:crux.tx/tx-id (:crux.tx/latest-completed-tx (api/status node)))])
-                  (swap! !metrics update :crux.metrics/indexing-tx assoc
-                         (:crux.tx/submitted-tx event) {:start-time-ms (System/currentTimeMillis)})))
+                  (swap! !metrics assoc-in [:crux.metrics/indexing-tx (:crux.tx/submitted-tx event)]
+                         {:start-time-ms (System/currentTimeMillis)})))
 
     (bus/listen (:bus node)
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
