@@ -51,16 +51,13 @@
 
 (defn start-node-from-command-line [args]
   (cio/install-uncaught-exception-handler!)
-  (let [{:keys [options
-                errors
-                summary]} (cli/parse-opts args cli-options)
+  (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)
         {:keys [server-port properties-file extra-edn-options]} options
         options (merge default-options
                        {:server-port server-port}
                        extra-edn-options
                        properties-file)
-        {:keys [version
-                revision]} (n/crux-version)]
+        {:keys [version revision]} n/crux-version]
     (cond
       (:help options)
       (println summary)
