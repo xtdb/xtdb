@@ -27,5 +27,5 @@ public interface ICruxIngestAPI extends Closeable {
      * @return                 a lazy sequence of the transaction log.
      */
 
-    public TxLogIterator openTxLogIterator (Long fromTxId, boolean withOps);
+    public ITxLog openTxLog (Long fromTxId, boolean withOps);
 }

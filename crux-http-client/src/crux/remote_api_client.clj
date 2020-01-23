@@ -189,7 +189,7 @@
   (hasTxCommitted [_ submitted-tx]
     (api-request-sync (str url "/tx-committed") submitted-tx))
 
-  (openTxLogIterator [this from-tx-id with-ops?]
+  (openTxLog [this from-tx-id with-ops?]
     (let [params (->> [(when from-tx-id
                          (str "from-tx-id=" from-tx-id))
                        (when with-ops?

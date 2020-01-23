@@ -1431,7 +1431,7 @@
           (t/is (true? updated?)
                 (when-not updated?
                   (with-out-str
-                    (with-open [tx-log-iterator (api/open-tx-log-iterator *api* nil true)]
+                    (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
                       (doseq [tx (iterator-seq tx-log-iterator)]
                         (prn tx))))))
 

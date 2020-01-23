@@ -16,7 +16,7 @@
             [crux.query :as q])
   (:import [java.util Date]
            [java.time Duration]
-           [crux.api TxLogIterator]))
+           [crux.api ITxLog]))
 
 (t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir fapi/with-node f/with-silent-test-check)
 
@@ -446,7 +446,7 @@
         (fapi/submit+await-tx [[:crux.tx/put tx2-ivan tx2-valid-time]
                                [:crux.tx/put tx2-petr tx2-valid-time]])]
 
-    (with-open [log-iterator (db/open-tx-log-iterator (:tx-log *api*) nil)]
+    (with-open [log-iterator (db/open-tx-log (:tx-log *api*) nil)]
       (let [log (iterator-seq log-iterator)]
         (t/is (not (realized? log)))
         (t/is (= [{:crux.tx/tx-id tx1-id
@@ -588,7 +588,7 @@
   (fapi/submit+await-tx [[:crux.tx/cas {:crux.db/id :to-evict} {:crux.db/id :to-evict :test "test"}]])
   (fapi/submit+await-tx [[:crux.tx/evict :to-evict]])
 
-  (with-open [log-iterator (api/open-tx-log-iterator *api* nil true)]
+  (with-open [log-iterator (api/open-tx-log *api* nil true)]
     (t/is (= (->> (iterator-seq log-iterator)
                   (map :crux.api/tx-ops))
              [[[:crux.tx/put

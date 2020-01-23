@@ -17,7 +17,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt])
-  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException TxLogIterator]
+  (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException ITxLog]
            [java.io Closeable IOException]
            java.time.Duration
            java.util.Date
@@ -234,7 +234,7 @@
   (let [with-ops? (Boolean/parseBoolean (get-in request [:query-params "with-ops"]))
         from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
                             (Long/parseLong))
-        ^TxLogIterator result (.openTxLogIterator crux-node from-tx-id with-ops?)]
+        ^ITxLog result (.openTxLog crux-node from-tx-id with-ops?)]
     (-> (streamed-edn-response result (iterator-seq result))
         (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
 

@@ -13,10 +13,10 @@
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
 
-  (openTxLogIterator ^crux.api.TxLogIterator [_ from-tx-id with-ops?]
+  (openTxLog ^crux.api.ITxLog [_ from-tx-id with-ops?]
     (when with-ops?
       (throw (IllegalArgumentException. "with-ops? not supported")))
-    (db/open-tx-log-iterator tx-log from-tx-id))
+    (db/open-tx-log tx-log from-tx-id))
 
   Closeable
   (close [_]

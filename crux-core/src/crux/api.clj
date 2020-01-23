@@ -5,7 +5,7 @@
             [crux.codec :as c]
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource TxLogIterator]
+            ICruxAsyncIngestAPI ICruxDatasource ITxLog]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -149,7 +149,7 @@
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
 
-  (open-tx-log-iterator ^crux.api.TxLogIterator [this from-tx-id with-ops?]
+  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another
@@ -219,8 +219,8 @@
   (submit-tx [this tx-ops]
     (.submitTx this (conform-tx-ops tx-ops)))
 
-  (open-tx-log-iterator ^crux.api.TxLogIterator [this from-tx-id with-ops?]
-    (.openTxLogIterator this from-tx-id with-ops?)))
+  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
+    (.openTxLog this from-tx-id with-ops?)))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and

@@ -98,7 +98,7 @@
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 
-  (open-tx-log-iterator [this from-tx-id]
+  (open-tx-log [this from-tx-id]
     (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
           running? (atom true)
           consumer-f (fn [_ y]

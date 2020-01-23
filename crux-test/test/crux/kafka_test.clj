@@ -121,7 +121,7 @@
                             :where [[e :foaf/firstName "Pablo"]]})))))
 
         (t/testing "can read tx log"
-          (with-open [tx-log-iterator (db/open-tx-log-iterator tx-log nil)]
+          (with-open [tx-log-iterator (db/open-tx-log tx-log nil)]
             (let [log (iterator-seq tx-log-iterator)]
               (t/is (not (realized? log)))
               ;; Cannot compare the tx-ops as they contain blank nodes

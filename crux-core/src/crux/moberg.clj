@@ -220,7 +220,7 @@
       (delay {:crux.tx/tx-id (.id m)
               :crux.tx/tx-time (.time m)})))
 
-  (open-tx-log-iterator [this from-tx-id]
+  (open-tx-log [this from-tx-id]
     (let [snapshot (kv/new-snapshot event-log-kv)
           i (kv/new-iterator snapshot)]
       (db/->closeable-tx-log-iterator

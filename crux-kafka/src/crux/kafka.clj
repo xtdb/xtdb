@@ -123,7 +123,7 @@
              {:crux.tx/tx-id (.offset record-meta)
               :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
 
-  (open-tx-log-iterator [this from-tx-id]
+  (open-tx-log [this from-tx-id]
     (let [tx-topic-consumer ^KafkaConsumer (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false"))
           tx-topic-partition (TopicPartition. tx-topic 0)]
       (.assign tx-topic-consumer [tx-topic-partition])

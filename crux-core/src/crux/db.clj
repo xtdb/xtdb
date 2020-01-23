@@ -1,7 +1,7 @@
 (ns crux.db
   (:import java.io.Closeable
            java.util.Iterator
-           crux.api.TxLogIterator))
+           crux.api.ITxLog))
 
 ;; tag::Index[]
 (defprotocol Index
@@ -29,7 +29,7 @@
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
-  (open-tx-log-iterator ^crux.api.TxLogIterator [this from-tx-id])
+  (open-tx-log ^crux.api.ITxLog [this from-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 
@@ -48,7 +48,7 @@
 ;; end::ObjectStore[]
 
 (defrecord CloseableTxLogIterator [close-fn ^Iterator lazy-seq-iterator]
-  TxLogIterator
+  ITxLog
   (next [this]
     (.next lazy-seq-iterator))
 

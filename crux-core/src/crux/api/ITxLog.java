@@ -5,5 +5,5 @@ import java.util.Iterator;
 import java.util.Map;
 import clojure.lang.Keyword;
 
-public interface TxLogIterator extends Iterator<Map<Keyword, ?>>, Closeable {
+public interface ITxLog extends Iterator<Map<Keyword, ?>>, Closeable {
 }

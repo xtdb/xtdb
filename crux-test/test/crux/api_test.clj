@@ -169,7 +169,7 @@
           (t/is (nil? (.entityTx (.db *api* #inst "1999") :ivan)))))
 
       (t/testing "tx-log"
-        (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
+        (with-open [tx-log-iterator (.openTxLog *api* nil false)]
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
@@ -178,7 +178,7 @@
             (t/is (realized? result))))
 
         (t/testing "with ops"
-          (with-open [tx-log-iterator (.openTxLogIterator *api* nil true)]
+          (with-open [tx-log-iterator (.openTxLog *api* nil true)]
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
@@ -187,7 +187,7 @@
               (t/is (realized? result)))))
 
         (t/testing "from tx id"
-          (with-open [tx-log-iterator (.openTxLogIterator *api* (inc tx-id) false)]
+          (with-open [tx-log-iterator (.openTxLog *api* (inc tx-id) false)]
             (t/is (empty? (iterator-seq tx-log-iterator))))))
 
       (t/testing "statistics"
@@ -250,7 +250,7 @@
     (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
       (.awaitTx *api* version-2-submitted-tx nil)
       (t/is (false? (.hasTxCommitted *api* version-2-submitted-tx)))
-      (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
+      (with-open [tx-log-iterator (.openTxLog *api* nil false)]
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (= [(assoc submitted-tx
                            :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
@@ -259,7 +259,7 @@
       (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
         (.awaitTx *api* version-3-submitted-tx nil)
         (t/is (true? (.hasTxCommitted *api* version-3-submitted-tx)))
-        (with-open [tx-log-iterator (.openTxLogIterator *api* nil false)]
+        (with-open [tx-log-iterator (.openTxLog *api* nil false)]
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (= 2 (count result)))))))))
 
@@ -341,7 +341,7 @@
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))
 
-          (with-open [tx-log-iterator (.openTxLogIterator *ingest-client* nil false)]
+          (with-open [tx-log-iterator (.openTxLog *ingest-client* nil false)]
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
@@ -349,7 +349,7 @@
                        result))
               (t/is (realized? result))))
 
-          (t/is (thrown? IllegalArgumentException (.openTxLogIterator *ingest-client* nil true))))))
+          (t/is (thrown? IllegalArgumentException (.openTxLog *ingest-client* nil true))))))
     (t/is true)))
 
 (defn execute-sparql [^RepositoryConnection conn q]

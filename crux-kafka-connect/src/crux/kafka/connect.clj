@@ -207,7 +207,7 @@
                                        "tx" tx-log-entry->tx-source-records
                                        "doc" tx-log-entry->doc-source-records)
         from-tx-id (inc (long (or (get source-offset "offset") -1)))]
-    (with-open [tx-log-iterator (.openTxLogIterator api from-tx-id true)]
+    (with-open [tx-log-iterator (.openTxLog api from-tx-id true)]
       (log/info "source offset:" source-offset "tx-id:" from-tx-id "format:" format "mode:" mode)
       (let [records (->> (iterator-seq tx-log-iterator)
                          (take (Long/parseLong batch-size))

@@ -16,7 +16,7 @@
             [crux.status :as status]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException TxLogIterator]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
@@ -123,10 +123,10 @@
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
-  (openTxLogIterator ^TxLogIterator [this from-tx-id with-ops?]
+  (openTxLog ^ITxLog [this from-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-log-iterator (db/open-tx-log-iterator tx-log from-tx-id)
+      (let [tx-log-iterator (db/open-tx-log tx-log from-tx-id)
             snapshot (kv/new-snapshot kv-store)
             tx-log (-> (iterator-seq tx-log-iterator)
                        (->> (filter

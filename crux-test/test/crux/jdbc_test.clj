@@ -40,7 +40,7 @@
     (.awaitTx *api* submitted-tx nil)
     (t/is (.entity (.db *api*) :origin-man))
     (t/testing "Tx log"
-      (with-open [tx-log-iterator (.openTxLogIterator *api* 0 false)]
+      (with-open [tx-log-iterator (.openTxLog *api* 0 false)]
         (t/is (= [{:crux.tx/tx-id 2,
                    :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
                    :crux.tx.event/tx-events
