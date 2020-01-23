@@ -2,7 +2,10 @@
 #
 # Check https://circleci.com/docs/2.0/language-clojure/ for more details
 #
-version: 2
+orbs:
+  aws-ecr: circleci/aws-ecr@6.7.0
+
+version: 2.1
 jobs:
   build:
     docker:
@@ -41,61 +44,18 @@ jobs:
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh
 
-  long-build:
-    docker:
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      - image: circleci/clojure:lein-2.9.1
-
-
-    working_directory: ~/crux
-
-    environment:
-      LEIN_ROOT: "true"
-      # Customize the JVM maximum heap limit
-      JVM_OPTS: -Xmx3200m
-      CRUX_TS_DEVICES: "true"
-      CRUX_TS_WEATHER: "true"
-
-    steps:
-      - checkout
-
-      # Download and cache dependencies
-      - restore_cache:
-          keys:
-          - v1-dependencies-{{ checksum "project.clj" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
-      - run: lein sub install
-      - run: lein deps
-      - run:
-          name: Install datasets for ts-weather-test and ts-devices-test
-          command: |
-            mkdir -p crux-test/resources/ts/data
-            cd crux-test/resource/ts/data/
-            wget https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
-            tar -xzf weather_small.tar.gz
-            wget https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
-            tar -xzf devices_small.tar.gz
-      - save_cache:
-          paths:
-            - ~/.m2
-          key: v1-dependencies-{{ checksum "project.clj" }}
-
-      - run: lein do version, sub test, check
-
 workflows:
-  version: 2
+  version: 2.1
   commit:
     jobs:
       - build
-  nightly:
-    triggers:
-      - schedule:
-          cron: "0 0 * * *"
+  deploy:
+    jobs:
+      - aws-ecr/build-and-push-image:
           filters:
             branches:
-              only:
-                - master
-    jobs:
-      - build
+              only: master
+          workspace-root: '~/crux'
+          dockerfile: 'crux-bench/Dockerfile'
+          repo: 'crux-bench'
+          tag: 'master, commit-$CIRCLE_SHA1'
