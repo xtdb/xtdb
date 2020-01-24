@@ -44,22 +44,10 @@
                       start)]
       (try
         (with-open [out (io/reader (.getInputStream process))]
-          (let [started-line? #(str/includes? % "org.eclipse.jetty.server.Server - Started")
-                out-lines (->> (line-seq out)
-                               (map #(doto % println)))
-                _ (or (t/is (->> out-lines (filter started-line?) first))
-                      (println (slurp (.getErrorStream process))))
-                results (->> out-lines
-                             (take-while (complement started-line?))
-                             (str/join "\n"))]
-
-            (t/testing "Crux version"
-              (t/is (str/includes? results "Crux version:")))
-
-            (t/testing "Options loaded"
-              (t/is (str/includes? results "options:")))
-
-            (t/testing "Options presented"
-              (t/is (str/includes? results ":server-port")))))
+          (or (t/is (->> (line-seq out)
+                         (map #(doto % println))
+                         (filter #(str/includes? % "org.eclipse.jetty.server.Server - Started"))
+                         first))
+              (println (slurp (.getErrorStream process)))))
         (finally
           (.destroy process))))))
