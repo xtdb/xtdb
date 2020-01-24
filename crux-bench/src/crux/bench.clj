@@ -6,7 +6,9 @@
             [clojure.tools.logging :as log]
             [clojure.java.io :as io]
             [clojure.java.shell :as shell]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [clj-http.client :as client]
+            [crux.fixtures :as f]))
 
 (def commit-hash
   (string/trim (:out (shell/sh "git" "rev-parse" "HEAD"))))
@@ -44,6 +46,21 @@
 (defmacro ^{:style/indent 1} run-bench [bench-type & body]
   `(run-bench* ~bench-type (fn [] ~@body)))
 
+(defn post-to-slack [message]
+  (when-let [slack-url (System/getenv "SLACK_URL")]
+    (client/post (-> slack-url
+                     (json/read-str)
+                     (get "slack-url"))
+                 {:body (json/write-str {:text message})
+                  :content-type :json})))
+
+(defn ->slack-message [{bench-time :time-taken-ms :as bench-map}]
+  (->> (for [[k v] (-> bench-map
+                       (assoc :time-taken (java.time.Duration/ofMillis bench-time))
+                       (dissoc :bench-ns :crux-commit :crux-version :time-taken-ms))]
+         (format "*%s*: %s" (name k) v))
+       (string/join "\n")))
+
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
@@ -53,8 +70,15 @@
 
     (log/infof "finished bench-ns '%s'." bench-ns)
 
-    (doseq [result @*!bench-results*]
-      (println (json/write-str result)))))
+    (let [results @*!bench-results*]
+      (run! (comp println json/write-str) results)
+      (post-to-slack (format "*%s*\n========\n%s\n"
+                             *bench-ns*
+                             (->> results
+                                  (map ->slack-message)
+                                  (string/join "\n\n")
+
+                                  (post-to-slack)))))))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
@@ -62,16 +86,17 @@
 (def ^:dynamic *node*)
 
 (defn with-node* [f]
-  (with-open [embedded-kafka (ek/start-embedded-kafka
-                              {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
-                               :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
-                               :crux.kafka.embedded/kafka-port 9092})
-              node (api/start-node {:crux.node/topology 'crux.kafka/topology
-                                    :crux.node/kv-store 'crux.kv.rocksdb/kv
-                                    :crux.kafka/bootstrap-servers "localhost:9092"
-                                    :crux.kv/db-dir "dev-storage/db-dir-1"
-                                    :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
-    (f node)))
+  (f/with-tmp-dir "dev-storage" [data-dir]
+    (with-open [embedded-kafka (ek/start-embedded-kafka
+                                {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                                 :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                                 :crux.kafka.embedded/kafka-port 9092})
+                node (api/start-node {:crux.node/topology 'crux.kafka/topology
+                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
+                                      :crux.kafka/bootstrap-servers "localhost:9092"
+                                      :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))
+                                      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog-1"))})]
+      (f node))))
 
 (defmacro with-node [[node-binding] & body]
   `(with-node* (fn [~node-binding] ~@body)))

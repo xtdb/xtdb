@@ -6,7 +6,8 @@
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-uberjar"
-   "crux-test"])
+   "crux-test"
+   "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
   :url "https://github.com/juxt/crux"
@@ -29,6 +30,7 @@
                  [juxt/crux-http-server "derived-from-git"]
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
+                 [juxt/crux-bench "derived-from-git"]
 
                  ;; Håkan
                  [org.ejml/ejml-dsparse "0.38" :exclusions [com.google.code.findbugs/jsr305]]
