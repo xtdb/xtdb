@@ -67,13 +67,18 @@ jobs:
 
         - run: sh ./crux-bench/bin/download_dataset.sh
         - run: lein sub -s crux-bench uberjar
+        - run:
+            command: |
+              echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV
+              echo 'export BUILD_TAGS="master,commit-$CIRCLE_SHA1"' >> $BASH_ENV
 
         - setup_remote_docker
         - aws-ecr/build-and-push-image:
               dockerfile: 'Dockerfile'
+              extra-build-args: '${BUILD_ARG}'
               path: "crux-bench/"
               repo: 'crux-bench'
-              tag: 'master'
+              tag: '${BUILD_TAGS}'
 
 workflows:
   version: 2.1
