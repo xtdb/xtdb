@@ -26,18 +26,16 @@
 
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
-    (kf/with-cluster-node-opts f))
+    ((t/join-fixtures [kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Local API StandaloneNode"
-    (fs/with-standalone-node f))
+    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "JDBC Node"
-    (fj/with-jdbc-node :h2 f))
+    ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Remote API"
-    (fn [f]
-      (fh/with-http-server
-        fs/with-standalone-node))))
+    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node fh/with-http-server]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each with-each-api-implementation kvf/with-kv-dir fapi/with-node)
+(t/use-fixtures :each with-each-api-implementation)
 
 (declare execute-sparql)
 
