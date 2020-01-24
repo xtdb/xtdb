@@ -238,6 +238,7 @@
   (let [timeout (some->> (get-in request [:query-params "timeout"])
                          (Long/parseLong)
                          (Duration/ofMillis))
+        ;; TODO this'll get cut down with the rest of the sync deprecation
         transaction-time (some->> (get-in request [:query-params "transactionTime"])
                                   (cio/parse-rfc3339-or-millis-date))]
     (let [last-modified (if transaction-time
@@ -245,6 +246,26 @@
                           (.sync crux-node timeout))]
       (-> (success-response last-modified)
           (add-last-modified last-modified)))))
+
+(defn- await-tx-time-handler [^ICruxAPI crux-node request]
+  (let [timeout (some->> (get-in request [:query-params "timeout"])
+                         (Long/parseLong)
+                         (Duration/ofMillis))
+        tx-time (some->> (get-in request [:query-params "tx-time"])
+                         (cio/parse-rfc3339-or-millis-date))]
+    (let [last-modified (.awaitTxTime crux-node tx-time timeout)]
+      (-> (success-response last-modified)
+          (add-last-modified last-modified)))))
+
+(defn- await-tx-handler [^ICruxAPI crux-node request]
+  (let [timeout (some->> (get-in request [:query-params "timeout"])
+                         (Long/parseLong)
+                         (Duration/ofMillis))
+        tx-id (-> (get-in request [:query-params "tx-id"])
+                  (Long/parseLong))]
+    (let [{:keys [crux.tx/tx-time] :as tx} (.awaitTx crux-node {:crux.tx/tx-id tx-id} timeout)]
+      (-> (success-response tx)
+          (add-last-modified tx-time)))))
 
 (defn- attribute-stats [^ICruxAPI crux-node]
   (success-response (.attributeStats crux-node)))
@@ -305,6 +326,12 @@
 
     [#"^/sync$" [:get]]
     (sync-handler crux-node request)
+
+    [#"^/await-tx$" [:get]]
+    (await-tx-handler crux-node request)
+
+    [#"^/await-tx-time$" [:get]]
+    (await-tx-time-handler crux-node request)
 
     [#"^/tx-log$" [:get]]
     (tx-log crux-node request)

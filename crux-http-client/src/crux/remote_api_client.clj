@@ -213,6 +213,14 @@
                         transaction-time (str "?transactionTime=" (cio/format-rfc3339-date transaction-time))
                         timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
 
+  (awaitTxTime [_ tx-time timeout]
+    (api-request-sync (cond-> (str url "/await-tx-time?tx-time=" (cio/format-rfc3339-date tx-time))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+
+  (awaitTx [_ tx timeout]
+    (api-request-sync (cond-> (str url "/await-tx?tx-id=" (:crux.tx/tx-id tx))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+
   Closeable
   (close [_]))
 
