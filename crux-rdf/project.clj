@@ -9,4 +9,5 @@
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "3.0.0"]
                  [ring/ring-core "1.7.1" :scope "provided"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
-  :middleware [leiningen.project-version/middleware])
+  :middleware [leiningen.project-version/middleware]
+  :pedantic? :abort)

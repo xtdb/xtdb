@@ -7,10 +7,13 @@
                  [juxt/crux-rocksdb "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
                  [ch.qos.logback/logback-classic "1.2.3"]
-                 [clj-http "3.10.0"]]
+
+                 [clj-http "3.10.0" :exclusions [org.apache.httpcomponents/httpclient]]
+                 [org.apache.httpcomponents/httpclient "4.5.9"]]
 
   :middleware [leiningen.project-version/middleware]
 
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g" "-Dlogback.configurationFile=logback.xml"]
-  :main ^:skip-aot crux.bench.main)
+  :main ^:skip-aot crux.bench.main
+  :pedantic? :abort)

@@ -13,4 +13,5 @@
                  [org.lwjgl/lwjgl "3.2.3" :classifier "natives-macos" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.3" :classifier "natives-macos" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.3"]]
-  :middleware [leiningen.project-version/middleware])
+  :middleware [leiningen.project-version/middleware]
+  :pedantic? :abort)

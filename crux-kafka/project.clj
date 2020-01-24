@@ -15,4 +15,5 @@
   :javac-options ["-source" "8" "-target" "8"
                   "-Xlint:all,-options,-path"
                   "-Werror"
-                  "-proc:none"])
+                  "-proc:none"]
+  :pedantic? :abort)

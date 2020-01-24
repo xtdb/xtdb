@@ -5,8 +5,8 @@
    "crux-jdbc"
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
-   "crux-uberjar"
    "crux-test"
+   "crux-uberjar"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -27,7 +27,7 @@
                  [juxt/crux-kafka-connect "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
-                 [juxt/crux-http-server "derived-from-git"]
+                 [juxt/crux-http-server "derived-from-git" :exclusions [commons-codec]]
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
                  [juxt/crux-bench "derived-from-git"]
@@ -63,4 +63,6 @@
   :global-vars {*warn-on-reflection* true}
 
   :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
-            "build" ["do" ["sub" "install"] ["sub" "test"]]})
+            "build" ["do" ["sub" "install"] ["sub" "test"]]}
+
+  :pedantic? :abort)

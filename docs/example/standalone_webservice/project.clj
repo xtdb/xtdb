@@ -22,4 +22,5 @@
                  [cljsjs/codemirror "5.44.0-1"]]
   :global-vars {*warn-on-reflection* false}
   :main example-standalone-webservice.main
-  :jvm-opts ["--illegal-access=deny"])
+  :jvm-opts ["--illegal-access=deny"]
+  :pedantic? :abort)

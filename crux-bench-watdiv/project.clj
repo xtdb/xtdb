@@ -25,4 +25,5 @@
   :uberjar-name "crux-bench-uberjar.jar"
   :jar-name "crux-bench.jar"
   :aot [crux-bench.main]
-  :main crux-bench.main)
+  :main crux-bench.main
+  :pedantic? :abort)
