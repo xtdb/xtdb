@@ -40,7 +40,6 @@
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids]}]
                   (timers/stop (get-in @!timer-contexts [:docs doc-ids]))
-                  (get-in @!timer-contexts [:docs doc-ids])
                   (swap! !timer-contexts update :docs dissoc doc-ids)))
 
     (bus/listen bus
