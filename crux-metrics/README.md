@@ -15,30 +15,30 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard/with-console]
+                                      'crux.metrics/with-console]
                                      ;; optional args
-                                     :crux.metrics.dropwizard/console-reporter-opts {}
-                                     :crux.metrics.dropwizard/console-reporter-rate 1})
+                                     :crux.metrics/console-reporter-opts {}
+                                     :crux.metrics/console-reporter-rate 1})
 ```
 
 ### CSV
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard/with-csv]
+                                      'crux.metrics/with-csv]
                                      ;; optional args
-                                     :crux.metrics.dropwizard/csv-reporter-opts {}
-                                     :crux.metrics.dropwizard/csv-reporter-file "/tmp/csv_reporter"
-                                     :crux.metrics.dropwizard/csv-reporter-rate 1})
+                                     :crux.metrics/csv-reporter-opts {}
+                                     :crux.metrics/csv-reporter-file "/tmp/csv_reporter"
+                                     :crux.metrics/csv-reporter-rate 1})
 ```
 
 ### JMX
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard/with-jmx]
+                                      'crux.metrics/with-jmx]
                                      ;; optional args
-                                     :crux.metrics.dropwizard/jmx-reporter-opts {}})
+                                     :crux.metrics/jmx-reporter-opts {}})
 ```
 
 
