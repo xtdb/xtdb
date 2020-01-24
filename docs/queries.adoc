@@ -192,7 +192,7 @@ Something else we can do with arguments is apply *predicates* to them directly w
 include::./src/docs/examples.clj[tags=query-with-arguments4]
 ----
 
-In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I"). Any *fully qualified* Clojure function function that returns a boolean can be used in place of `re-find`, for example:
+In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I"). Any *fully qualified* Clojure function that returns a boolean can be used in place of `re-find`, for example:
 
 [source,clj]
 ----
