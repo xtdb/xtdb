@@ -7,7 +7,8 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as shell]
             [clojure.string :as string]
-            [clj-http.client :as client]))
+            [clj-http.client :as client]
+            [crux.fixtures :as f]))
 
 (def commit-hash
   (string/trim (:out (shell/sh "git" "rev-parse" "HEAD"))))
@@ -46,27 +47,20 @@
   `(run-bench* ~bench-type (fn [] ~@body)))
 
 (defn post-to-slack [message]
-  (when (System/getenv "SLACK_URL")
-    (client/post (-> (System/getenv "SLACK_URL")
-                      (clojure.data.json/read-str)
-                      (get "slack-url"))
+  (when-let [slack-url (System/getenv "SLACK_URL")]
+    (client/post (-> slack-url
+                     (json/read-str)
+                     (get "slack-url"))
                  {:body (json/write-str {:text message})
                   :content-type :json})))
 
-(defn format-and-post-results-to-slack [result]
-  (let [result-strings (map
-                        (fn [{bench-time :time-taken-ms :as bench-map}]
-                          (let [formatted-bench (assoc bench-map :time-taken (java.time.Duration/ofMillis bench-time))]
-                            (->> (dissoc formatted-bench :bench-ns :crux-commit :crux-version :time-taken-ms)
-                                 (keys)
-                                 (map (fn [key-name] (format "*%s*: %s" (name key-name) (formatted-bench key-name))))
-                                 (string/join "\n"))))
-                        result)
-        formatted-string (->> result-strings
-                              (string/join "\n\n")
-                              (format "*%s*\n========\n%s\n" *bench-ns*))]
-    (prn formatted-string)
-    (post-to-slack formatted-string)))
+(defn ->slack-message [{bench-time :time-taken-ms :as bench-map}]
+  (let [formatted-bench (-> (assoc bench-map :time-taken (java.time.Duration/ofMillis bench-time))
+                            (dissoc :bench-ns :crux-commit :crux-version :time-taken-ms))]
+    (->> (keys formatted-bench)
+         (map #(format "*%s*: %s" (name %) (formatted-bench %)))
+         (string/join "\n"))))
+
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
@@ -77,9 +71,13 @@
 
     (log/infof "finished bench-ns '%s'." bench-ns)
 
-    (doseq [result @*!bench-results*]
-      (println (json/write-str result)))
-    (format-and-post-results-to-slack @*!bench-results*)))
+    (let [results @*!bench-results*]
+      (run! #(println (json/write-str %)) results)
+      (->> results
+           (map ->slack-message)
+           (string/join "\n\n")
+           (format "*%s*\n========\n%s\n" *bench-ns*)
+           (post-to-slack)))))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
@@ -87,18 +85,17 @@
 (def ^:dynamic *node*)
 
 (defn with-node* [f]
-  (try (with-open [embedded-kafka (ek/start-embedded-kafka
-                                   {:crux.kafka.embedded/zookeeper-data-dir "dev-storage/zookeeper"
-                                    :crux.kafka.embedded/kafka-log-dir "dev-storage/kafka-log"
-                                    :crux.kafka.embedded/kafka-port 9092})
-                   node (api/start-node {:crux.node/topology 'crux.kafka/topology
-                                         :crux.node/kv-store 'crux.kv.rocksdb/kv
-                                         :crux.kafka/bootstrap-servers "localhost:9092"
-                                         :crux.kv/db-dir "dev-storage/db-dir-1"
-                                         :crux.standalone/event-log-dir "dev-storage/eventlog-1"})]
-         (f node))
-       (catch Exception e e)
-       (finally (cio/delete-dir "dev-storage"))))
+  (f/with-tmp-dir "dev-storage" [data-dir]
+    (with-open [embedded-kafka (ek/start-embedded-kafka
+                                {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                                 :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                                 :crux.kafka.embedded/kafka-port 9092})
+                node (api/start-node {:crux.node/topology 'crux.kafka/topology
+                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
+                                      :crux.kafka/bootstrap-servers "localhost:9092"
+                                      :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))
+                                      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog-1"))})]
+      (f node))))
 
 (defmacro with-node [[node-binding] & body]
   `(with-node* (fn [~node-binding] ~@body)))
