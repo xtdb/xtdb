@@ -72,11 +72,13 @@
 
     (let [results @*!bench-results*]
       (run! (comp println json/write-str) results)
-      (->> results
-           (map ->slack-message)
-           (string/join "\n\n")
-           (format "*%s*\n========\n%s\n" *bench-ns*)
-           (post-to-slack)))))
+      (post-to-slack (format "*%s*\n========\n%s\n"
+                             *bench-ns*
+                             (->> results
+                                  (map ->slack-message)
+                                  (string/join "\n\n")
+
+                                  (post-to-slack)))))))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
