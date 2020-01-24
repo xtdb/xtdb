@@ -39,23 +39,47 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum "project.clj" }}
 
-      - run: lein do version, sub test, check
+      - run: lein do version, check
 
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh
+
+  deploy:
+    docker:
+      # CircleCI maintains a library of pre-built images
+      # documented at https://circleci.com/docs/2.0/circleci-images/
+      - image: circleci/clojure:lein-2.9.1
+
+    working_directory: ~/crux
+    steps:
+        - checkout
+        - restore_cache:
+            keys:
+              - v1-dependencies-{{ checksum "project.clj" }}
+              - v1-dependencies-
+        - run: lein sub install
+        - run: lein deps
+
+        - save_cache:
+            paths:
+              - ~/.m2
+            key: v1-dependencies-{{ checksum "project.clj" }}
+
+        - run: sh ./crux-bench/bin/download_dataset.sh
+        - run: lein sub -s crux-bench uberjar
+
+        - setup_remote_docker
+        - aws-ecr/build-and-push-image:
+              dockerfile: 'Dockerfile'
+              path: "crux-bench/"
+              repo: 'crux-bench'
+              tag: 'master'
 
 workflows:
   version: 2.1
   commit:
     jobs:
       - build
-  deploy:
-    jobs:
-      - aws-ecr/build-and-push-image:
-          filters:
-            branches:
-              only: master
-          workspace-root: '~/crux'
-          dockerfile: 'crux-bench/Dockerfile'
-          repo: 'crux-bench'
-          tag: 'master, commit-$CIRCLE_SHA1'
+      - deploy:
+          requires:
+            - build
