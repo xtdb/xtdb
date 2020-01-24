@@ -71,7 +71,7 @@
     (log/infof "finished bench-ns '%s'." bench-ns)
 
     (let [results @*!bench-results*]
-      (run! #(println (json/write-str %)) results)
+      (run! (comp println json/write-str) results)
       (->> results
            (map ->slack-message)
            (string/join "\n\n")
