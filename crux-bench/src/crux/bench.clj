@@ -11,7 +11,8 @@
             [crux.fixtures :as f]))
 
 (def commit-hash
-  (string/trim (:out (shell/sh "git" "rev-parse" "HEAD"))))
+  (System/getenv "COMMIT_HASH"))
+
 
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
@@ -76,9 +77,7 @@
                              *bench-ns*
                              (->> results
                                   (map ->slack-message)
-                                  (string/join "\n\n")
-
-                                  (post-to-slack)))))))
+                                  (string/join "\n\n")))))))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
