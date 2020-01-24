@@ -1,11 +1,12 @@
 # Changelog
 
-## 20.01-1.6.3-alpha-SNAPSHOT
+## 20.01-1.7.0-alpha-SNAPSHOT
 
 ### Changes
 
 ### Breaking changes
 * [#555](https://github.com/juxt/crux/issues/555): Removes `submitted-tx-updated-entity?` and `submitted-tx-corrected-entity?` from the API, replacing them with a new function, `tx-committed?`.
+* [#556](https://github.com/juxt/crux/issues/556): Removes `new-tx-log-context` and `tx-log` from the API, replacing them with `open-tx-log`.
 
 ### Bug fixes
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
