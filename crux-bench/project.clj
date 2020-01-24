@@ -16,4 +16,5 @@
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g" "-Dlogback.configurationFile=logback.xml"]
   :main ^:skip-aot crux.bench.main
+  :uberjar-name "crux-bench-standalone.jar"
   :pedantic? :warn)

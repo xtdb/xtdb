@@ -1,6 +1,11 @@
-FROM 955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:base
+FROM clojure:openjdk-11-lein-2.9.0
 
 WORKDIR /usr/local/lib/crux
+
+ADD data/weather_small_locations.csv crux-bench/data/
+ADD data/weather_small_conditions.csv crux-bench/data/
+ADD data/devices_small_device_info.csv crux-bench/data/
+ADD data/devices_small_readings.csv crux-bench/data/
 
 ADD . .
 RUN lein sub -s "crux-core/:crux-kafka/:crux-kafka-embedded/:crux-rocksdb/:crux-bench/" install
