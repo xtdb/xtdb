@@ -9,10 +9,10 @@
   (:import (java.io File)))
 
 (def ^File working-directory
-  (.. (io/as-file (io/resource "crux/uberjar_test.clj"))
-      getParentFile
-      getParentFile
-      getParentFile))
+  (-> (io/as-file (io/resource "crux/uberjar_test.clj"))
+      (.getParentFile)
+      (.getParentFile)
+      (.getParentFile)))
 
 (defn build-uberjar []
   (log/info "building uberjar...")
