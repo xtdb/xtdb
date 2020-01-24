@@ -278,11 +278,15 @@
     (catch NodeOutOfSyncException e
       (exception-response 400 e))))
 
-(def ^:private sparql-available? (try ; you can change it back to require when clojure.core fixes it to be thread-safe
-                                   (requiring-resolve 'crux.sparql.protocol/sparql-query)
-                                   true
-                                   (catch IOException _
-                                     false)))
+(defn latest-completed-tx [^ICruxAPI crux-node]
+  (success-response (.latestCompletedTx crux-node)))
+
+(def ^:private sparql-available?
+  (try ; you can change it back to require when clojure.core fixes it to be thread-safe
+    (requiring-resolve 'crux.sparql.protocol/sparql-query)
+    true
+    (catch IOException _
+      false)))
 
 ;; ---------------------------------------------------
 ;; Jetty server
@@ -342,6 +346,9 @@
 
     [#"^/tx-committed$" [:get]]
     (tx-committed? crux-node request)
+
+    [#"^/latest-completed-tx" [:get]]
+    (latest-completed-tx crux-node)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)
