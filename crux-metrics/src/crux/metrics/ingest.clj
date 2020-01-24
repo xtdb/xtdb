@@ -1,6 +1,7 @@
-(ns crux.metrics.bus
+(ns crux.metrics.ingest
   (:require [crux.bus :as bus]
             [crux.db :as db]
+            [metrics.core :as metrics]
             [metrics.timers :as timers]
             [metrics.gauges :as gauges]))
 
@@ -9,18 +10,27 @@
   Returns an atom containing uptading metrics"
   [bus indexer registry]
 
+  ;; Create registry and add timer metrics + lag gauge
+  ;; NOTE: might be a way to see currently running timers, so indexing* gauges
+  ;; can be discarded
   (let [docs-ingest-timer (timers/timer registry ["metrics" "ingest" "docs_timer"])
         tx-ingest-timer (timers/timer registry ["metrics" "ingest" "tx_timer"])
         !timer-contexts (atom {:tx {}
-                               :docs {}
-                               :tx-id-lag 0})
+                               :docs {}})
+        !tx-lags (atom {:tx-id-lag 0
+                        :tx-time-lag 0 })
         ingesting-docs (gauges/gauge-fn registry
                                         ["metrics" "ingest" "docs_ingesting"]
                                         #(count (:docs @!timer-contexts)))
         ingesting-tx (gauges/gauge-fn registry
                                       ["metrics" "ingest" "tx_ingesting"]
-                                      #(count (:tx @!timer-contexts)))]
-
+                                      #(count (:tx @!timer-contexts)))
+        tx-id-lag (gauges/gauge-fn registry
+                                   ["metrics" "ingest" "tx_id_lag"]
+                                   #(:tx-id-lag @!tx-lags))
+        tx-time-lag (gauges/gauge-fn registry
+                                     ["metrics" "ingest" "tx_time_lag"]
+                                     #(:tx-time-lag @!tx-lags))]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
                 (fn [{:keys [doc-ids]}]
@@ -40,10 +50,10 @@
                          [:docs submitted-tx]
                          (timers/start tx-ingest-timer))
 
-                  (swap! !timer-contexts assoc :tx-id-lag
+                  (swap! !tx-lags assoc :tx-id-lag
                          (- (:crux.tx/tx-id submitted-tx)
                             (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
-                  (swap! !timer-contexts assoc :tx-time-lag
+                  (swap! !tx-lags assoc :tx-time-lag
                          (- (System/currentTimeMillis)
                             (inst-ms (get submitted-tx :crux.tx/tx-time))))))
 
@@ -53,10 +63,11 @@
                   (timers/stop (get-in [:tx submitted-tx] @!timer-contexts))
                   (swap! !timer-contexts update :tx dissoc submitted-tx)
 
-                  (swap! !timer-contexts assoc :tx-id-lag
+                  (swap! !tx-lags assoc :tx-id-lag
                          (- (:crux.tx/tx-id submitted-tx)
                             (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
-                  (swap! !timer-contexts assoc :tx-time-lag
+                  (swap! !tx-lags assoc :tx-time-lag
                          (- (System/currentTimeMillis)
                             (inst-ms (get submitted-tx :crux.tx/tx-time))))))
-    !metrics))
+
+    registry))

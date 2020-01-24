@@ -30,6 +30,4 @@
 (def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} _]
                                    (let [!store (atom (init-gauges))]
                                      (ring/serve (handler state !store))))
-                       :deps #{:crux.metrics/state}}})
-
-(def with-server (merge crux.metrics/state server))
+                       :deps #{:crux.metrics.components/registry}}})

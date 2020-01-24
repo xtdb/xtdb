@@ -1,27 +1,18 @@
-(ns crux.metrics.dropwizard
-  (:require [crux.metrics.bus :as met-bus]
-            [metrics.gauges :as gauges]
+(ns crux.metrics.components
+  (:require [crux.metrics.ingest :as ingest]
             [metrics.core :as drpwz-m]
             [metrics.reporters.jmx :as jmx]
             [metrics.reporters.console :as console]
-            [metrics.reporters.csv :as csv]
-            crux.metrics.gauges
-            crux.metrics))
-
-(defn register-metrics [reg !metrics]
-  (run! (fn [[fn-sym func]]
-          (gauges/gauge-fn reg ["node" "ingest" (str fn-sym)] #(func !metrics)))
-        crux.metrics.gauges/ingest-gauges))
-
-(defn create-assign-metrics [reg bus indexer]
-  (register-metrics reg (met-bus/assign-ingest bus indexer)))
+            [metrics.reporters.csv :as csv]))
 
 (def registry
-  {::registry {:start-fn (fn [{:keys [crux.metrics/state]} _]
+  {::registry {:start-fn (fn [{:crux.node/keys [indexer bus]} _]
+                           ;; When more metrics are added we can pass a
+                           ;; registry around
                            (let [reg (drpwz-m/new-registry)]
-                             (register-metrics reg state)
+                             (ingest/assign-ingest bus indexer reg)
                              reg))
-               :deps #{:crux.metrics/state}}})
+               :deps #{:crux.node/indexer :crux.node/bus}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]
@@ -50,6 +41,6 @@
                                  csv-rep))
                    :deps #{::registry}}})
 
-(def with-jmx (merge crux.metrics/state registry jmx-reporter))
-(def with-console (merge crux.metrics/state registry console-reporter))
-(def with-csv (merge crux.metrics/state registry csv-reporter))
+(def with-jmx (merge registry jmx-reporter))
+(def with-console (merge registry console-reporter))
+(def with-csv (merge registry csv-reporter))
