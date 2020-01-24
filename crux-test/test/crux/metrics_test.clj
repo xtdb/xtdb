@@ -7,6 +7,7 @@
             [crux.api :as api]
             [metrics.core :as metrics]
             [metrics.meters :as meters]
+            [metrics.timers :as timers]
             [metrics.gauges :as gauges])
   (:import (java.io Closeable)))
 
@@ -19,8 +20,8 @@
                                                                 :tx-log (:tx-log *api*)})]
     (t/testing "initial ingest values"
       (t/is (nil? (gauges/value (:tx-id-lag mets))))
-      (t/is (= 0 (meters/count (:docs-ingest-meter mets))))
-      (t/is (= 0 (meters/count (:tx-ingest-meter mets)))))
+      (t/is (zero? (meters/count (:docs-ingest-meter mets))))
+      (t/is (zero? (timers/number-recorded (:tx-ingest-timer mets)))))
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
 
@@ -28,5 +29,5 @@
 
     (t/testing "post ingest values"
       (t/is (= 1 (meters/count (:docs-ingest-meter mets))))
-      (t/is (= 1 (meters/count (:tx-ingest-meter mets))))
-      (t/is (zero? (gauges/value (:tx-id-lag mets)))))))
+      (t/is (zero? (gauges/value (:tx-id-lag mets))))
+      (t/is (= 1 (timers/number-recorded (:tx-ingest-timer mets)))))))
