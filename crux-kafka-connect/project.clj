@@ -43,4 +43,5 @@
                   "-proc:none"]
   :plugins [[lein-licenses "0.2.2"]
             [thomasa/mranderson "0.5.1"]]
-  :mranderson {:unresolved-tree true})
+  :mranderson {:unresolved-tree true}
+  :pedantic? :abort)

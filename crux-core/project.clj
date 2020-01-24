@@ -20,4 +20,5 @@
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
                   "-Werror"
-                  "-proc:none"])
+                  "-proc:none"]
+  :pedantic? :abort)

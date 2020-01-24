@@ -26,4 +26,5 @@
   :aot [crux.main]
   :main crux.main
 
-  :profiles {:uberjar-test {:uberjar-name "crux-test-uberjar.jar"}})
+  :profiles {:uberjar-test {:uberjar-name "crux-test-uberjar.jar"}}
+  :pedantic? :abort)

@@ -13,4 +13,5 @@
 
    [ch.qos.logback/logback-classic "1.2.3"]]
   :global-vars {*warn-on-reflection* true}
-  :main imdb.main)
+  :main imdb.main
+  :pedantic? :abort)
