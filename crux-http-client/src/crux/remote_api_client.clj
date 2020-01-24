@@ -187,7 +187,7 @@
     (api-request-sync (str url "/tx-log") tx-ops))
 
   (hasTxCommitted [_ submitted-tx]
-    (api-request-sync (str url "/tx-committed") submitted-tx))
+    (api-request-sync (str url "/tx-committed?tx-id=" (:crux.tx/tx-id submitted-tx)) nil {:method :get}))
 
   (openTxLog [this from-tx-id with-ops?]
     (let [params (->> [(when from-tx-id

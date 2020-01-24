@@ -272,8 +272,9 @@
 
 (defn- tx-committed? [^ICruxAPI crux-node request]
   (try
-    (let [submitted-tx (body->edn request)]
-      (success-response (.hasTxCommitted crux-node submitted-tx)))
+    (let [tx-id (-> (get-in request [:query-params "tx-id"])
+                    (Long/parseLong))]
+      (success-response (.hasTxCommitted crux-node {:crux.tx/tx-id tx-id})))
     (catch NodeOutOfSyncException e
       (exception-response 400 e))))
 
