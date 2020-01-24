@@ -61,7 +61,6 @@
          (map #(format "*%s*: %s" (name %) (formatted-bench %)))
          (string/join "\n"))))
 
-
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
