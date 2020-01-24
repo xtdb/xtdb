@@ -46,8 +46,9 @@
   (close [_]
     (doseq [{:keys [^ExecutorService executor]} @!listeners]
       (try
-        (.shutdownNow executor)
+        (.shutdown executor)
         (or (.awaitTermination executor 5 TimeUnit/SECONDS)
+            (.shutdownNow executor)
             (log/warn "event bus listener not shut down after 5s"))
         (catch Exception e
           (log/error e "error closing listener"))))))

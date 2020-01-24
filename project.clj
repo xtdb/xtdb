@@ -5,6 +5,7 @@
    "crux-jdbc"
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
+   "crux-metrics"
    "crux-test"
    "crux-uberjar"
    "crux-bench"])

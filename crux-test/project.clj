@@ -12,6 +12,7 @@
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
                  [juxt/crux-http-server "derived-from-git" :exclusions [commons-codec]]
+                 [juxt/crux-metrics "derived-from-git"]
                  [juxt/crux-rdf "derived-from-git"]
 
                  ;; JDBC
