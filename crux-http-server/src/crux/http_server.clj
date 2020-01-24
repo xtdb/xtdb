@@ -44,9 +44,7 @@
     :body body}))
 
 (defn- success-response [m]
-  (response (if m
-              200
-              404)
+  (response (if (some? m) 200 404)
             {"Content-Type" "application/edn"}
             (cio/pr-edn-str m)))
 
@@ -71,10 +69,8 @@
         (exception-response 400 e))))) ;;Invalid edn
 
 (defn- add-last-modified [response date]
-  (if date
-    (->> (rt/format-date date)
-         (assoc-in response [:headers "Last-Modified"]))
-    response))
+  (cond-> response
+    date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
 ;; ---------------------------------------------------
 ;; Services
