@@ -1,7 +1,7 @@
 (ns crux.metrics.prometheus
   (:require [prometheus.core :as prometheus]
             [clojure.string :as string]
-            [ring.server.standalone :as ring]
+            #_[ring.server.standalone :as ring]
             crux.metrics.gauges
             crux.metrics))
 
@@ -27,7 +27,7 @@
           crux.metrics.gauges/ingest-gauges)
     (prometheus/dump-metrics (:registry @!store))))
 
-(def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} _]
+#_(def server {::server {:start-fn (fn [{:keys [crux.metrics/state]} _]
                                    (let [!store (atom (init-gauges))]
                                      (ring/serve (handler state !store))))
                        :deps #{:crux.metrics.components/registry}}})
