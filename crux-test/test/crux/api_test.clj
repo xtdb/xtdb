@@ -366,11 +366,11 @@
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
 
 (t/deftest test-latest-submitted-tx
-  (t/is (nil? (db/latest-submitted-tx (:tx-log *api*))))
+  (t/is (nil? (.latestSubmittedTx *api*)))
 
   (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
     (t/is (= {:crux.tx/tx-id tx-id}
-             (db/latest-submitted-tx (:tx-log *api*)))))
+             (.latestSubmittedTx *api*))))
 
   (api/sync *api*)
 

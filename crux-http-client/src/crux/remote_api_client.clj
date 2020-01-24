@@ -232,6 +232,9 @@
   (latestCompletedTx [_]
     (api-request-sync (str url "/latest-completed-tx") nil {:method :get}))
 
+  (latestSubmittedTx [_]
+    (api-request-sync (str url "/latest-submitted-tx") nil {:method :get}))
+
   Closeable
   (close [_]))
 

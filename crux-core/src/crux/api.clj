@@ -142,6 +142,9 @@
   (latest-completed-tx [node]
     "Returns the latest transaction to have been indexed by this node.")
 
+  (latest-submitted-tx [node]
+    "Returns the latest transaction to have been submitted to this cluster")
+
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes"))
 
@@ -217,6 +220,9 @@
 
   (latest-completed-tx [node]
     (.latestCompletedTx node))
+
+  (latest-submitted-tx [node]
+    (.latestSubmittedTx node))
 
   (attribute-stats [this]
     (.attributeStats this)))
