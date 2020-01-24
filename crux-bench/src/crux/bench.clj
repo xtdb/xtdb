@@ -55,11 +55,11 @@
                   :content-type :json})))
 
 (defn ->slack-message [{bench-time :time-taken-ms :as bench-map}]
-  (let [formatted-bench (-> (assoc bench-map :time-taken (java.time.Duration/ofMillis bench-time))
-                            (dissoc :bench-ns :crux-commit :crux-version :time-taken-ms))]
-    (->> (keys formatted-bench)
-         (map #(format "*%s*: %s" (name %) (formatted-bench %)))
-         (string/join "\n"))))
+  (->> (for [[k v] (-> bench-map
+                       (assoc :time-taken (java.time.Duration/ofMillis bench-time))
+                       (dissoc :bench-ns :crux-commit :crux-version :time-taken-ms))]
+         (format "*%s*: %s" (name k) v))
+       (string/join "\n")))
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
