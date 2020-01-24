@@ -5,8 +5,8 @@
    "crux-jdbc"
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
-   "crux-uberjar"
    "crux-test"
+   "crux-uberjar"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
