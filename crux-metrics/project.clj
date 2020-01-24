@@ -7,6 +7,6 @@
                  [juxt/crux-core "derived-from-git"]
                  [metrics-clojure "2.10.0"]
                  [com.soundcloud/prometheus-clj "2.4.1"]
-                 [ring-server "0.5.0"]]
+                 #_[ring-server "0.5.0"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware])

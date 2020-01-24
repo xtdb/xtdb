@@ -3,34 +3,35 @@
             [crux.fixtures.api :as apif :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.metrics.bus :as cx-bus]
-            [crux.metrics.gauges :as cx-gauges]
-            [crux.api :as api]))
+            [crux.metrics.ingest :as ingest-metrics]
+            [crux.api :as api]
+            [metrics.core :as metrics]
+            [metrics.timers :as timers]
+            [metrics.gauges :as gauges]))
+
+;; Hack to fix v while we wait for https://github.com/metrics-clojure/metrics-clojure/issues/141 to happen
+;; https://github.com/metrics-clojure/metrics-clojure/commit/9650d765c991f648f67b9d7e195edd50330e6f60
+(def ^:private number-recorded timers/number-recorded)
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
 
 (t/deftest ingest
-  (let [!metrics (cx-bus/assign-ingest (:bus *api*) (:indexer *api*))]
-    (t/testing "assign listeners"
-      (t/is (= @!metrics
-               {:crux.metrics/indexing-tx 0
-                :crux.metrics/indexed-tx 0
-                :crux.metrics/indexing-docs 0
-                :crux.metrics/indexed-docs 0
-                :crux.metrics/latest-tx-id []
-                :crux.metrics/tx-time-lag 0}))
-      (api/await-tx *api* (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :test}]]))
-      ;; Might have not run the listener. May fail. Placeholder sleep until a
-      ;; better solution is used
-      (Thread/sleep 50)
-      (t/is (= (dissoc @!metrics :crux.metrics/latest-tx-id :crux.metrics/tx-time-lag)
-               {:crux.metrics/indexing-tx 0
-                :crux.metrics/indexed-tx 1
-                :crux.metrics/indexing-docs 0
-                :crux.metrics/indexed-docs 1})))
-    (t/testing "internal gauges"
-      (t/is (= (cx-gauges/ingesting-tx !metrics) 0))
-      (t/is (= (cx-gauges/ingested-tx !metrics) 1))
-      (t/is (= (cx-gauges/ingesting-docs !metrics) 0))
-      (t/is (= (cx-gauges/ingested-docs !metrics) 1)))))
+  (let [registry (metrics/new-registry)
+        ;; Assign metrics
+        mets (ingest-metrics/assign-ingest (:bus *api*) (:indexer *api*) registry)]
+    (t/testing "inital ingest values"
+      (= 0 (gauges/value (:ingesting-docs mets)))
+      (= 0 (gauges/value (:ingesting-tx mets)))
+      (= 0 (gauges/value (:tx-id-lag mets)))
+      (= 0 (gauges/value (:tx-time-lag mets)))
+      (= 0 (number-recorded (:docs-ingest-timer mets)))
+      (= 0 (number-recorded (:tx-ingest-timer mets))))
+
+    (api/await-tx *api* (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :test}]]))
+
+    (t/testing "post ingest values"
+      (= 1 (+ (gauges/value (:ingesting-docs mets))
+              (number-recorded (:docs-ingest-timer mets))))
+      (= 1 (+ (gauges/value (:ingesting-tx mets))
+              (number-recorded (:tx-ingest-timer mets)))))))
 

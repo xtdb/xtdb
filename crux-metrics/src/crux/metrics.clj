@@ -1,4 +1,4 @@
-(ns crux.metrics.components
+(ns crux.metrics
   (:require [crux.metrics.ingest :as ingest]
             [metrics.core :as drpwz-m]
             [metrics.reporters.jmx :as jmx]

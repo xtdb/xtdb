@@ -1,7 +1,6 @@
 (ns crux.metrics.ingest
   (:require [crux.bus :as bus]
             [crux.db :as db]
-            [metrics.core :as metrics]
             [metrics.timers :as timers]
             [metrics.gauges :as gauges]))
 
@@ -69,5 +68,9 @@
                   (swap! !tx-lags assoc :tx-time-lag
                          (- (System/currentTimeMillis)
                             (inst-ms (get submitted-tx :crux.tx/tx-time))))))
-
-    registry))
+    {:ingesting-docs ingesting-docs
+     :ingesting-tx ingesting-tx
+     :tx-id-lag tx-id-lag
+     :tx-time-lag tx-time-lag
+     :docs-ingest-timer docs-ingest-timer
+     :tx-ingest-timer tx-ingest-timer}))
