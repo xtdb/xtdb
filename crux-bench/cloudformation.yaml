@@ -69,7 +69,7 @@ Resources:
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
         - Name: 'bench-container'
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:master'
           Essential: true
           Secrets:
             - Name: "SLACK_URL"
