@@ -21,6 +21,35 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: 'crux-bench'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+          "rules": [
+          {
+            "rulePriority": 1,
+            "description": "Only keep latest five images of master",
+            "selection": {
+              "tagStatus": "tagged",
+              "tagPrefixList": ["master"],
+              "countType": "imageCountMoreThan",
+              "countNumber": 5
+            },
+            "action": { "type": "expire" }
+          },
+          {
+            "rulePriority": 2,
+            "description": "Only keep images for 14 days",
+            "selection": {
+              "tagStatus": "tagged",
+              "tagPrefixList": ["commit-"],
+              "countType": "sinceImagePushed",
+              "countNumber": 14,
+              "countUnit": "days"
+            },
+            "action": { "type": "expire" }
+          }]
+          }
+
 
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
