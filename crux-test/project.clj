@@ -7,11 +7,11 @@
                  [juxt/crux-core "derived-from-git"]
                  [juxt/crux-rocksdb "derived-from-git"]
                  [juxt/crux-lmdb "derived-from-git"]
-                 [juxt/crux-kafka "derived-from-git"]
+                 [juxt/crux-kafka "derived-from-git" :exclusions [commons-codec]]
                  [juxt/crux-kafka-connect "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
-                 [juxt/crux-http-server "derived-from-git"]
+                 [juxt/crux-http-server "derived-from-git" :exclusions [commons-codec]]
                  [juxt/crux-rdf "derived-from-git"]
 
                  ;; JDBC
@@ -21,7 +21,8 @@
                  [com.opentable.components/otj-pg-embedded "0.13.1" :exclusions [org.slf4j/slf4j-api
                                                                                  org.tukaani/xz
                                                                                  com.github.spotbugs/spotbugs-annotations
-                                                                                 org.apache.commons/commons-lang3]]
+                                                                                 org.apache.commons/commons-lang3
+                                                                                 commons-codec]]
                  [org.xerial/sqlite-jdbc "3.28.0"]
                  [mysql/mysql-connector-java "8.0.17"]
 
@@ -35,24 +36,21 @@
                  [org.clojure/data.json "0.2.7"]
 
                  ;; Outer tests:
-                 [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0" :exclusions [commons-codec]]
                  [criterium "0.4.5"]
 
                  ;; Watdiv:
-                 [com.datomic/datomic-free "0.9.5697"
-                  :exclusions [org.slf4j/slf4j-nop]]
-                 [org.neo4j/neo4j "3.5.8"
-                  :exclusions [com.github.ben-manes.caffeine/caffeine
-                               com.github.luben/zstd-jni
-                               io.netty/netty-all
-                               org.ow2.asm/asm
-                               org.ow2.asm/asm-analysis
-                               org.ow2.asm/asm-tree
-                               org.ow2.asm/asm-util]]
+                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop commons-codec]]
+                 [org.neo4j/neo4j "3.5.8" :exclusions [com.github.ben-manes.caffeine/caffeine
+                                                       com.github.luben/zstd-jni
+                                                       io.netty/netty-all
+                                                       org.ow2.asm/asm
+                                                       org.ow2.asm/asm-analysis
+                                                       org.ow2.asm/asm-tree
+                                                       org.ow2.asm/asm-util]]
 
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
-                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0"
-                  :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
+                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
   :jvm-opts
   ["-server" "-Xmx8g"
    "-Dlogback.configurationFile=logback.xml"]

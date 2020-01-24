@@ -27,7 +27,7 @@
                  [juxt/crux-kafka-connect "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
-                 [juxt/crux-http-server "derived-from-git"]
+                 [juxt/crux-http-server "derived-from-git" :exclusions [commons-codec]]
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
                  [juxt/crux-bench "derived-from-git"]
