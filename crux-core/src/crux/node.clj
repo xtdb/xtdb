@@ -202,8 +202,9 @@
 
 (defn start ^crux.api.ICruxAPI [options]
   (let [[{::keys [node] :as components} close-fn] (topo/start-topology options)]
-    (assoc node
-      :status-fn (fn []
-                   (merge crux-version
-                          (into {} (mapcat status/status-map) (vals (dissoc components ::node)))))
-      :close-fn close-fn)))
+    (-> node
+        (assoc :status-fn (fn []
+                            (merge crux-version
+                                   (into {} (mapcat status/status-map) (vals (dissoc components ::node)))))
+               :close-fn close-fn)
+        (vary-meta assoc ::topology components))))
