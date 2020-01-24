@@ -26,10 +26,12 @@
                                       #(count (:tx @!timer-contexts)))
         tx-id-lag (gauges/gauge-fn registry
                                    ["metrics" "ingest" "tx_id_lag"]
-                                   #(:tx-id-lag @!tx-lags))
+                                   #(- (:tx-id-lag @!tx-lags)
+                                       (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
         tx-time-lag (gauges/gauge-fn registry
                                      ["metrics" "ingest" "tx_time_lag"]
-                                     #(:tx-time-lag @!tx-lags))]
+                                     #(- (System/currentTimeMillis)
+                                         (:tx-time-lag @!tx-lags)))]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
                 (fn [{:keys [doc-ids]}]
@@ -50,11 +52,9 @@
                          (timers/start tx-ingest-timer))
 
                   (swap! !tx-lags assoc :tx-id-lag
-                         (- (:crux.tx/tx-id submitted-tx)
-                            (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
+                         (:crux.tx/tx-id submitted-tx))
                   (swap! !tx-lags assoc :tx-time-lag
-                         (- (System/currentTimeMillis)
-                            (inst-ms (get submitted-tx :crux.tx/tx-time))))))
+                         (inst-ms (get submitted-tx :crux.tx/tx-time)))))
 
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
@@ -63,11 +63,9 @@
                   (swap! !timer-contexts update :tx dissoc submitted-tx)
 
                   (swap! !tx-lags assoc :tx-id-lag
-                         (- (:crux.tx/tx-id submitted-tx)
-                            (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
+                         (:crux.tx/tx-id submitted-tx))
                   (swap! !tx-lags assoc :tx-time-lag
-                         (- (System/currentTimeMillis)
-                            (inst-ms (get submitted-tx :crux.tx/tx-time))))))
+                         (inst-ms (get submitted-tx :crux.tx/tx-time)))))
     {:ingesting-docs ingesting-docs
      :ingesting-tx ingesting-tx
      :tx-id-lag tx-id-lag
