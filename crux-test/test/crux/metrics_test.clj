@@ -1,6 +1,6 @@
 (ns crux.metrics-test
   (:require [clojure.test :as t]
-            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.metrics.ingest :as ingest-metrics]
@@ -18,20 +18,21 @@
 (t/deftest ingest
   (let [registry (metrics/new-registry)
         ;; Assign metrics
-        mets (ingest-metrics/assign-ingest (:bus *api*) (:indexer *api*) registry)]
-    (t/testing "inital ingest values"
-      (= 0 (gauges/value (:ingesting-docs mets)))
-      (= 0 (gauges/value (:ingesting-tx mets)))
-      (= 0 (gauges/value (:tx-id-lag mets)))
-      (= 0 (gauges/value (:tx-time-lag mets)))
-      (= 0 (number-recorded (:docs-ingest-timer mets)))
-      (= 0 (number-recorded (:tx-ingest-timer mets))))
+        mets (ingest-metrics/assign-ingest registry #:crux.node{:bus (:bus *api*)
+                                                                :indexer (:indexer *api*)
+                                                                :tx-log (:tx-log *api*)})]
+    (t/testing "initial ingest values"
+      (t/is (= 0 (gauges/value (:ingesting-docs mets))))
+      (t/is (= 0 (gauges/value (:ingesting-tx mets))))
+      (t/is (nil? (gauges/value (:tx-id-lag mets))))
+      (t/is (= 0 (number-recorded (:docs-ingest-timer mets))))
+      (t/is (= 0 (number-recorded (:tx-ingest-timer mets)))))
 
-    (api/await-tx *api* (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :test}]]))
+    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
 
     (t/testing "post ingest values"
-      (= 1 (+ (gauges/value (:ingesting-docs mets))
-              (number-recorded (:docs-ingest-timer mets))))
-      (= 1 (+ (gauges/value (:ingesting-tx mets))
-              (number-recorded (:tx-ingest-timer mets)))))))
-
+      (t/is (= 1 (+ (gauges/value (:ingesting-docs mets))
+                    (number-recorded (:docs-ingest-timer mets)))))
+      (t/is (= 1 (+ (gauges/value (:ingesting-tx mets))
+                    (number-recorded (:tx-ingest-timer mets)))))
+      (t/is (zero? (gauges/value (:tx-id-lag mets)))))))

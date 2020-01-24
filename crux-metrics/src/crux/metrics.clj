@@ -6,12 +6,12 @@
             [metrics.reporters.csv :as csv]))
 
 (def registry
-  {::registry {:start-fn (fn [{:crux.node/keys [indexer bus]} _]
+  {::registry {:start-fn (fn [deps _]
                            ;; When more metrics are added we can pass a
                            ;; registry around
                            (doto (drpwz-m/new-registry)
-                             (#(ingest/assign-ingest bus indexer %))))
-               :deps #{:crux.node/indexer :crux.node/bus}}})
+                             (ingest/assign-ingest deps)))
+               :deps #{:crux.node/indexer :crux.node/bus :crux.node/tx-log}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]

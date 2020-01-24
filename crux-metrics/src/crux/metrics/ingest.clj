@@ -2,12 +2,13 @@
   (:require [crux.bus :as bus]
             [crux.db :as db]
             [metrics.timers :as timers]
-            [metrics.gauges :as gauges]))
+            [metrics.gauges :as gauges]
+            [crux.tx :as tx]))
 
 (defn assign-ingest
   "Assigns listeners to an event bus for a given node.
   Returns an atom containing uptading metrics"
-  [bus indexer registry]
+  [registry {:crux.node/keys [bus indexer tx-log]}]
 
   ;; Create registry and add timer metrics + lag gauge
   ;; NOTE: might be a way to see currently running timers, so indexing* gauges
@@ -16,8 +17,6 @@
         tx-ingest-timer (timers/timer registry ["metrics" "ingest" "tx_timer"])
         !timer-contexts (atom {:tx {}
                                :docs {}})
-        !tx-lags (atom {:tx-id-lag 0
-                        :tx-time-lag 0 })
         ingesting-docs (gauges/gauge-fn registry
                                         ["metrics" "ingest" "docs_ingesting"]
                                         #(count (:docs @!timer-contexts)))
@@ -26,12 +25,9 @@
                                       #(count (:tx @!timer-contexts)))
         tx-id-lag (gauges/gauge-fn registry
                                    ["metrics" "ingest" "tx_id_lag"]
-                                   #(- (:tx-id-lag @!tx-lags)
-                                       (:crux.tx/tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx))))
-        tx-time-lag (gauges/gauge-fn registry
-                                     ["metrics" "ingest" "tx_time_lag"]
-                                     #(- (System/currentTimeMillis)
-                                         (:tx-time-lag @!tx-lags)))]
+                                   #(when-let [latest-tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+                                      (- (::tx/tx-id (db/latest-submitted-tx tx-log))
+                                         (::tx/tx-id latest-tx-id))))]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-docs}}
                 (fn [{:keys [doc-ids]}]
@@ -49,26 +45,15 @@
                 (fn [{:keys [crux.tx/submitted-tx]}]
                   (swap! !timer-contexts assoc-in
                          [:tx submitted-tx]
-                         (timers/start tx-ingest-timer))
-
-                  (swap! !tx-lags assoc :tx-id-lag
-                         (:crux.tx/tx-id submitted-tx))
-                  (swap! !tx-lags assoc :tx-time-lag
-                         (inst-ms (get submitted-tx :crux.tx/tx-time)))))
+                         (timers/start tx-ingest-timer))))
 
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
                 (fn [{:keys [crux.tx/submitted-tx]}]
                   (timers/stop (get-in @!timer-contexts [:tx submitted-tx]))
-                  (swap! !timer-contexts update :tx dissoc submitted-tx)
-
-                  (swap! !tx-lags assoc :tx-id-lag
-                         (:crux.tx/tx-id submitted-tx))
-                  (swap! !tx-lags assoc :tx-time-lag
-                         (inst-ms (get submitted-tx :crux.tx/tx-time)))))
+                  (swap! !timer-contexts update :tx dissoc submitted-tx)))
     {:ingesting-docs ingesting-docs
      :ingesting-tx ingesting-tx
      :tx-id-lag tx-id-lag
-     :tx-time-lag tx-time-lag
      :docs-ingest-timer docs-ingest-timer
      :tx-ingest-timer tx-ingest-timer}))
