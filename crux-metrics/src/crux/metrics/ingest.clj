@@ -39,14 +39,15 @@
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids]}]
-                  (timers/stop (get-in [:docs doc-ids] @!timer-contexts))
+                  (timers/stop (get-in @!timer-contexts [:docs doc-ids]))
+                  (get-in @!timer-contexts [:docs doc-ids])
                   (swap! !timer-contexts update :docs dissoc doc-ids)))
 
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-tx}}
                 (fn [{:keys [crux.tx/submitted-tx]}]
                   (swap! !timer-contexts assoc-in
-                         [:docs submitted-tx]
+                         [:tx submitted-tx]
                          (timers/start tx-ingest-timer))
 
                   (swap! !tx-lags assoc :tx-id-lag
@@ -59,7 +60,7 @@
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
                 (fn [{:keys [crux.tx/submitted-tx]}]
-                  (timers/stop (get-in [:tx submitted-tx] @!timer-contexts))
+                  (timers/stop (get-in @!timer-contexts [:tx submitted-tx]))
                   (swap! !timer-contexts update :tx dissoc submitted-tx)
 
                   (swap! !tx-lags assoc :tx-id-lag
