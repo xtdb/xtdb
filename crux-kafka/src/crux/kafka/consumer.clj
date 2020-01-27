@@ -98,8 +98,10 @@
 
 (defn start-indexing-consumer
   ^java.io.Closeable
-  [consumer-config offsets topic index-fn]
-  (let [running? (atom true)
+  [{:keys [indexer offsets kafka-config group-id topic]} offsets-k index-fn]
+  (let [consumer-config (merge {"group.id" group-id} kafka-config)
+        offsets (map->IndexedOffsets {:indexer indexer :k offsets-k})
+        running? (atom true)
         worker-thread
         (doto
             (Thread. ^Runnable (fn []
@@ -107,7 +109,11 @@
                                    (subscribe-from-stored-offsets offsets consumer [topic])
                                    (while @running?
                                      (try
-                                       (index-fn consumer)
+                                       (index-fn {:indexer indexer
+                                                  :consumer consumer
+                                                  :topic topic
+                                                  :offsets offsets
+                                                  :timeout 1000})
                                        (catch Exception e
                                          (log/error e "Error while consuming and indexing from Kafka:")
                                          (Thread/sleep 500))))))
