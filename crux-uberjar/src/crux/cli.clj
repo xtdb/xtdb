@@ -10,7 +10,7 @@
   (:import java.io.Closeable))
 
 (def default-options
-  {:crux.node/topology 'crux.kafka/topology})
+  {:crux.node/topology '[crux.standalone/topology crux.http-server/module]})
 
 (def cli-options
   [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
@@ -54,7 +54,7 @@
   (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)
         {:keys [server-port properties-file extra-edn-options]} options
         options (merge default-options
-                       {:server-port server-port}
+                       {:crux.http-server/port server-port}
                        extra-edn-options
                        properties-file)
         {:keys [version revision]} n/crux-version]
@@ -71,6 +71,5 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (with-open [node (n/start options)
-                      http-server ^Closeable (srv/start-http-server node options)]
+          (with-open [node (n/start options)]
             @(shutdown-hook-promise))))))
