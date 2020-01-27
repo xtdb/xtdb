@@ -4,8 +4,6 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.metrics.indexer :as indexer-metrics]
-            [crux.metrics.kv-store :as kv-metrics]
-            [crux.api :as api]
             [metrics.core :as metrics]
             [metrics.meters :as meters]
             [metrics.timers :as timers]
@@ -14,10 +12,10 @@
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
 
-(t/deftest test-ingest-metrics
+(t/deftest test-indexer-metrics
   (let [{:crux.node/keys [bus indexer tx-log]} (:crux.node/topology (meta *api*))
         registry (metrics/new-registry)
-        mets (ingest-metrics/assign-ingest registry #:crux.node{:bus bus, :indexer indexer, :tx-log tx-log})]
+        mets (indexer-metrics/assign-listeners registry #:crux.node{:bus bus, :indexer indexer, :tx-log tx-log})]
     (t/testing "initial ingest values"
       (t/is (nil? (gauges/value (:tx-id-lag mets))))
       (t/is (zero? (meters/count (:docs-ingest-meter mets))))
@@ -30,13 +28,3 @@
       (t/is (= 1 (meters/count (:docs-ingest-meter mets))))
       (t/is (zero? (gauges/value (:tx-id-lag mets))))
       (t/is (= 1 (timers/number-recorded (:tx-ingest-timer mets)))))))
-
-(t/deftest test-kv-metrics
-  (let [registry (metrics/new-registry)
-        mets (kv-metrics/assign-listeners registry #:crux.node{:kv-store (:kv-store *api*)})]
-    (t/testing "initial store values"
-      (t/is (= 0 (gauges/value (:estimate-num-keys mets))))
-      (t/is (= 0 (gauges/value (:kv-size-mb)))))
-
-    ;; Post ingest values might be inconsistent, so I'm leaving them for now
-    ))
