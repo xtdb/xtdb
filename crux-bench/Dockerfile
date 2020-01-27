@@ -1,11 +1,13 @@
-FROM 955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:base
+FROM clojure:openjdk-11-lein-2.9.0
 
 WORKDIR /usr/local/lib/crux
+CMD java -cp crux-bench-standalone.jar -Xms3g -Xmx3g clojure.main -m crux.bench.main
 
-ENV GIT_ORIGIN=juxt
-ENV GIT_BRANCH=master
+ADD data/weather_small_locations.csv crux-bench/data/
+ADD data/weather_small_conditions.csv crux-bench/data/
+ADD data/devices_small_device_info.csv crux-bench/data/
+ADD data/devices_small_readings.csv crux-bench/data/
 
-CMD git fetch $GIT_ORIGIN && git checkout $GIT_ORIGIN/$GIT_BRANCH && \
-  lein sub -s "crux-core/:crux-kafka/:crux-kafka-embedded/:crux-rocksdb/:crux-bench/" install && \
-  cd crux-bench/ && \
-  lein run
+ARG crux_commit='commit-not-found'
+ENV COMMIT_HASH=$crux_commit
+ADD target/crux-bench-standalone.jar .
