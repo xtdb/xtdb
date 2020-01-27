@@ -5,7 +5,7 @@
 (defn assign-estimate-num-keys-gauge
   [registry {:crux.node/keys [kv-store]}]
   (gauges/gauge-fn registry ["crux" "kv" "assign-estimate-num-keys-gauge"]
-                   #(:crux.kv/assign-estimate-num-keys-gauge (status/status-map kv-store))))
+                   #(:crux.kv/estimate-num-keys (status/status-map kv-store))))
 
 (defn assign-kv-size-mb-gauge
   [registry {:crux.node/keys [kv-store]}]

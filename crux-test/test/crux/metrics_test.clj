@@ -4,6 +4,7 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.metrics.indexer :as indexer-metrics]
+            [crux.metrics.kv-store :as kv-store-metrics]
             [metrics.core :as metrics]
             [metrics.meters :as meters]
             [metrics.timers :as timers]
@@ -28,3 +29,13 @@
       (t/is (= 1 (meters/count (:docs-ingest-meter mets))))
       (t/is (zero? (gauges/value (:tx-id-lag mets))))
       (t/is (= 1 (timers/number-recorded (:tx-ingest-timer mets)))))))
+
+(t/deftest test-kv-store-metrics
+  (let [{:crux.node/keys [kv-store]} (:crux.node/topology (meta *api*))
+        registry (metrics/new-registry)
+        mets (kv-store-metrics/assign-listeners registry #:crux.node{:kv-store kv-store})]
+
+    (t/testing "initial kv-store values"
+      (t/is (gauges/value (:estimate-num-keys mets)))
+      (t/is (gauges/value (:kv-size-mb mets))))))
+
