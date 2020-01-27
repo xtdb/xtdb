@@ -89,7 +89,10 @@
   (status [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (status-fn)))
+      (if status-fn
+        (status-fn)
+        ;; fallback for before status-fn's set
+        (into {} (mapcat status/status-map) [indexer kv-store object-store tx-log]))))
 
   (attributeStats [this]
     (cio/with-read-lock lock
