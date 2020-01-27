@@ -3,14 +3,14 @@
             [clojure.pprint :as pp]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [crux.http-server :as srv]
             [crux.node :as n]
             [crux.config :as cc]
             [crux.io :as cio])
   (:import java.io.Closeable))
 
 (def default-options
-  {:crux.node/topology '[crux.standalone/topology crux.http-server/module]})
+  {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
+   :crux.standalone/event-log-dir "event-log"})
 
 (def cli-options
   [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
@@ -47,6 +47,7 @@
 
 (defn start-node-from-command-line [args]
   (cio/install-uncaught-exception-handler!)
+
   (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)
         {:keys [properties-file extra-edn-options]} options
         options (merge default-options
