@@ -16,10 +16,6 @@
   [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
     :parse-fn #(cc/load-properties %)]
 
-   ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
-    :default srv/default-server-port
-    :parse-fn #(Long/parseLong %)]
-
    ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
     :default nil
     :parse-fn edn/read-string]
@@ -52,9 +48,8 @@
 (defn start-node-from-command-line [args]
   (cio/install-uncaught-exception-handler!)
   (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)
-        {:keys [server-port properties-file extra-edn-options]} options
+        {:keys [properties-file extra-edn-options]} options
         options (merge default-options
-                       {:crux.http-server/port server-port}
                        extra-edn-options
                        properties-file)
         {:keys [version revision]} n/crux-version]
