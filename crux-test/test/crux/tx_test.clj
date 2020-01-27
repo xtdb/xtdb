@@ -354,6 +354,23 @@
      [#inst "2019-11-26" 1 nil]
      [#inst "2019-11-29" 0 25]]
 
+    ;; override a range
+    [[25 #inst "2019-11-25" #inst "2019-11-27"]
+     [nil #inst "2019-11-25" #inst "2019-11-27"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 1 nil]
+     [#inst "2019-11-26" 2 26]
+     [#inst "2019-11-27" 2 26]
+     [#inst "2019-11-29" 0 nil]]
+
+    ;; merge a range
+    [[25 #inst "2019-11-25" #inst "2019-11-27"]
+     [26 #inst "2019-11-26" #inst "2019-11-29"]]
+    [[#inst "2019-11-25" 0 25]
+     [#inst "2019-11-26" 1 26]
+     [#inst "2019-11-27" 1 26]
+     [#inst "2019-11-29" 0 nil]]
+
     ;; shouldn't override the value at end-vt if there's one there
     [[25 #inst "2019-11-25"]
      [29 #inst "2019-11-29"]
