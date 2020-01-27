@@ -249,7 +249,7 @@ Retrieve the current version of the document:
   * see [Integrant REPL](https://github.com/weavejester/integrant-repl) for more details.
 * You should now have a running Crux node under `(:node user/system)` - you can verify this by calling `(crux/status (:node system))`.
 * Most of the time, you shouldn't need to bounce the REPL, but:
-  * if you change any of the dependencies of any of the modules, that'll require another `lein sub install` and a REPL bounce
+  * if you add a module, or change any of the dependencies of any of the modules, that'll require another `lein sub install` and a REPL bounce
   * if you change any of the Java classes, that'll require a `lein sub javac` and a REPL bounce
   * otherwise, `(user/reset)` (or just `(reset)` if you're already in the `user` ns) should be sufficient.
 * You can run module tests from the root of the git repo without a `lein sub install`, because of the lein checkouts - all of the tests are in scope here, so things like `lein test :only crux.tx-test` should also work.
