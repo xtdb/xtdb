@@ -8,4 +8,4 @@
                  [org.rocksdb/rocksdbjni "6.2.2"]
                  [com.github.jnr/jnr-ffi "2.1.9"]]
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :abort)
+  :pedantic? :warn)

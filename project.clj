@@ -66,4 +66,4 @@
   :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
             "build" ["do" ["sub" "install"] ["sub" "test"]]}
 
-  :pedantic? :abort)
+  :pedantic? :warn)

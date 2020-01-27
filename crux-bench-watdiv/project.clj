@@ -26,4 +26,4 @@
   :jar-name "crux-bench.jar"
   :aot [crux-bench.main]
   :main crux-bench.main
-  :pedantic? :abort)
+  :pedantic? :warn)

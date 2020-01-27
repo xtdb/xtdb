@@ -10,4 +10,4 @@
                  [ring/ring-core "1.7.1" :scope "provided"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :abort)
+  :pedantic? :warn)

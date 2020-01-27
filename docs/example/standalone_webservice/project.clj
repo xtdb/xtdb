@@ -23,4 +23,4 @@
   :global-vars {*warn-on-reflection* false}
   :main example-standalone-webservice.main
   :jvm-opts ["--illegal-access=deny"]
-  :pedantic? :abort)
+  :pedantic? :warn)

@@ -12,4 +12,4 @@
                  [com.taoensso/nippy "2.14.0"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]]
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :abort)
+  :pedantic? :warn)

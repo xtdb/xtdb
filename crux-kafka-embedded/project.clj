@@ -15,4 +15,4 @@
                                log4j]]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :abort)
+  :pedantic? :warn)

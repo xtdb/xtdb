@@ -57,4 +57,4 @@
    "-Dlogback.configurationFile=logback.xml"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
-  :pedantic? :abort)
+  :pedantic? :warn)

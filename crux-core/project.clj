@@ -21,4 +21,4 @@
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
-  :pedantic? :abort)
+  :pedantic? :warn)
