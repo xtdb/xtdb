@@ -7,14 +7,11 @@
             [metrics.timers :as timers]))
 
 (defn assign-tx-id-lag [registry {:crux.node/keys [node]}]
-  (assert node)
   (gauges/gauge-fn registry
                    ["crux" "indexer" "tx-id-lag"]
-                   #(let [completed (api/latest-completed-tx node)]
-                      (if completed
-                        (- (::tx/tx-id (api/latest-submitted-tx node))
-                           (::tx/tx-id (api/latest-completed-tx node)))
-                        0))))
+                   #(when-let [completed (api/latest-completed-tx node)]
+                      (- (::tx/tx-id (api/latest-submitted-tx node))
+                         (::tx/tx-id completed)))))
 
 (defn assign-doc-meter [registry {:crux.node/keys [bus]}]
   (let [meter (meters/meter registry ["crux" "indexer" "indexed-docs"])]

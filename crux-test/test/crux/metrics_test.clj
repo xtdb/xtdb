@@ -13,9 +13,9 @@
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
 
 (t/deftest test-indexer-metrics
-  (let [{:crux.node/keys [bus indexer tx-log]} (:crux.node/topology (meta *api*))
+  (let [{:crux.node/keys [node bus indexer]} (:crux.node/topology (meta *api*))
         registry (metrics/new-registry)
-        mets (indexer-metrics/assign-listeners registry #:crux.node{:bus bus, :indexer indexer, :tx-log tx-log})]
+        mets (indexer-metrics/assign-listeners registry #:crux.node{:node node, :bus bus, :indexer indexer})]
     (t/testing "initial ingest values"
       (t/is (nil? (gauges/value (:tx-id-lag mets))))
       (t/is (zero? (meters/count (:docs-ingest-meter mets))))
