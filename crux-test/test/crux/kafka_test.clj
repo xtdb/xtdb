@@ -233,9 +233,6 @@
                       (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
                       (consume-topics tx-consume-opts doc-consume-opts)
 
-                      ;; delete the object that would have been compacted away
-                      (db/delete-objects object-store [evicted-doc-hash])
-
                       (t/testing "querying transacted data"
                         (t/is (= non-evicted-doc (api/entity (api/db node) (:crux.db/id non-evicted-doc))))
                         (t/is (nil? (api/entity (api/db node) (:crux.db/id evicted-doc))))
