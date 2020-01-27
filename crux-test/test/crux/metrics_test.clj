@@ -14,10 +14,9 @@
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
 
 (t/deftest test-ingest-metrics
-  (let [registry (metrics/new-registry)
-        mets (ingest-metrics/assign-ingest registry #:crux.node{:bus (:bus *api*)
-                                                                :indexer (:indexer *api*)
-                                                                :tx-log (:tx-log *api*)})]
+  (let [{:crux.node/keys [bus indexer tx-log]} (:crux.node/topology (meta *api*))
+        registry (metrics/new-registry)
+        mets (ingest-metrics/assign-ingest registry #:crux.node{:bus bus, :indexer indexer, :tx-log tx-log})]
     (t/testing "initial ingest values"
       (t/is (nil? (gauges/value (:tx-id-lag mets))))
       (t/is (zero? (meters/count (:docs-ingest-meter mets))))
@@ -25,7 +24,7 @@
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
 
-    (.close ^Closeable (:bus *api*))
+    (.close ^Closeable bus)
 
     (t/testing "post ingest values"
       (t/is (= 1 (meters/count (:docs-ingest-meter mets))))
