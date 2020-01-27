@@ -47,9 +47,14 @@
   (let [topology (-> topology
                      (cond-> (not (vector? topology)) vector)
                      (->> (map #(s/conform ::module %))
-                          (apply merge)))]
-    (->> (merge topology (select-keys options (keys topology)))
-         (s/conform ::resolved-topology))))
+                          (apply merge))
+                     (as-> topology (merge topology (select-keys options (keys topology)))))
+        resolved-topology (s/conform ::resolved-topology topology)]
+    (when (s/invalid? resolved-topology)
+      (s/explain ::resolved-topology topology)
+      (throw (IllegalArgumentException. "invalid topology")))
+
+    resolved-topology))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k c]
