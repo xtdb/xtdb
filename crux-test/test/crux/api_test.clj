@@ -211,7 +211,7 @@
         (t/testing "reflect evicted documents"
           (let [valid-time (Date.)
                 submitted-tx (.submitTx *api* [[:crux.tx/evict :ivan]])]
-            (t/is (.awaitTx *api* submitted-tx (java.time.Duration/ofSeconds 5)))
+            (t/is (.awaitTx *api* submitted-tx nil))
 
             ;; actual removal of the document happens asynchronously after
             ;; the transaction has been processed so waiting on the
@@ -335,7 +335,8 @@
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
 
 (t/deftest test-ingest-client
-  (if (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+  (if (and (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+           (instance? crux.kafka.KafkaDocumentStore (:document-store *api*)))
     (kf/with-ingest-client
       (fn []
         (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
