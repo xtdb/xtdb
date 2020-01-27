@@ -44,9 +44,7 @@
     :body body}))
 
 (defn- success-response [m]
-  (response (if m
-              200
-              404)
+  (response (if (some? m) 200 404)
             {"Content-Type" "application/edn"}
             (cio/pr-edn-str m)))
 
@@ -71,10 +69,8 @@
         (exception-response 400 e))))) ;;Invalid edn
 
 (defn- add-last-modified [response date]
-  (if date
-    (->> (rt/format-date date)
-         (assoc-in response [:headers "Last-Modified"]))
-    response))
+  (cond-> response
+    date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
 ;; ---------------------------------------------------
 ;; Services
@@ -242,6 +238,7 @@
   (let [timeout (some->> (get-in request [:query-params "timeout"])
                          (Long/parseLong)
                          (Duration/ofMillis))
+        ;; TODO this'll get cut down with the rest of the sync deprecation
         transaction-time (some->> (get-in request [:query-params "transactionTime"])
                                   (cio/parse-rfc3339-or-millis-date))]
     (let [last-modified (if transaction-time
@@ -250,21 +247,49 @@
       (-> (success-response last-modified)
           (add-last-modified last-modified)))))
 
+(defn- await-tx-time-handler [^ICruxAPI crux-node request]
+  (let [timeout (some->> (get-in request [:query-params "timeout"])
+                         (Long/parseLong)
+                         (Duration/ofMillis))
+        tx-time (some->> (get-in request [:query-params "tx-time"])
+                         (cio/parse-rfc3339-or-millis-date))]
+    (let [last-modified (.awaitTxTime crux-node tx-time timeout)]
+      (-> (success-response last-modified)
+          (add-last-modified last-modified)))))
+
+(defn- await-tx-handler [^ICruxAPI crux-node request]
+  (let [timeout (some->> (get-in request [:query-params "timeout"])
+                         (Long/parseLong)
+                         (Duration/ofMillis))
+        tx-id (-> (get-in request [:query-params "tx-id"])
+                  (Long/parseLong))]
+    (let [{:keys [crux.tx/tx-time] :as tx} (.awaitTx crux-node {:crux.tx/tx-id tx-id} timeout)]
+      (-> (success-response tx)
+          (add-last-modified tx-time)))))
+
 (defn- attribute-stats [^ICruxAPI crux-node]
   (success-response (.attributeStats crux-node)))
 
 (defn- tx-committed? [^ICruxAPI crux-node request]
   (try
-    (let [submitted-tx (body->edn request)]
-      (success-response (.hasTxCommitted crux-node submitted-tx)))
+    (let [tx-id (-> (get-in request [:query-params "tx-id"])
+                    (Long/parseLong))]
+      (success-response (.hasTxCommitted crux-node {:crux.tx/tx-id tx-id})))
     (catch NodeOutOfSyncException e
       (exception-response 400 e))))
 
-(def ^:private sparql-available? (try ; you can change it back to require when clojure.core fixes it to be thread-safe
-                                   (requiring-resolve 'crux.sparql.protocol/sparql-query)
-                                   true
-                                   (catch IOException _
-                                     false)))
+(defn latest-completed-tx [^ICruxAPI crux-node]
+  (success-response (.latestCompletedTx crux-node)))
+
+(defn latest-submitted-tx [^ICruxAPI crux-node]
+  (success-response (.latestSubmittedTx crux-node)))
+
+(def ^:private sparql-available?
+  (try ; you can change it back to require when clojure.core fixes it to be thread-safe
+    (requiring-resolve 'crux.sparql.protocol/sparql-query)
+    true
+    (catch IOException _
+      false)))
 
 ;; ---------------------------------------------------
 ;; Jetty server
@@ -310,6 +335,12 @@
     [#"^/sync$" [:get]]
     (sync-handler crux-node request)
 
+    [#"^/await-tx$" [:get]]
+    (await-tx-handler crux-node request)
+
+    [#"^/await-tx-time$" [:get]]
+    (await-tx-time-handler crux-node request)
+
     [#"^/tx-log$" [:get]]
     (tx-log crux-node request)
 
@@ -318,6 +349,12 @@
 
     [#"^/tx-committed$" [:get]]
     (tx-committed? crux-node request)
+
+    [#"^/latest-completed-tx" [:get]]
+    (latest-completed-tx crux-node)
+
+    [#"^/latest-submitted-tx" [:get]]
+    (latest-submitted-tx crux-node)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)

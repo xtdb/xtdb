@@ -149,6 +149,17 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
 
+
+    /**
+       @return the latest transaction to have been indexed by this node.
+     */
+    public Map<Keyword, ?> latestCompletedTx();
+
+    /**
+       @return the latest transaction to have been submitted to this cluster
+    */
+    public Map<Keyword, ?> latestSubmittedTx();
+
     /**
      * Return frequencies of indexed attributes.
      *

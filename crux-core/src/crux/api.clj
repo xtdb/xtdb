@@ -138,6 +138,12 @@
   supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
   node.")
 
+  (latest-completed-tx [node]
+    "Returns the latest transaction to have been indexed by this node.")
+
+  (latest-submitted-tx [node]
+    "Returns the latest transaction to have been submitted to this cluster")
+
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes"))
 
@@ -210,6 +216,12 @@
      (await-tx-time this tx-time nil))
     ([this tx-time timeout]
      (.awaitTxTime this tx-time timeout)))
+
+  (latest-completed-tx [node]
+    (.latestCompletedTx node))
+
+  (latest-submitted-tx [node]
+    (.latestSubmittedTx node))
 
   (attribute-stats [this]
     (.attributeStats this)))

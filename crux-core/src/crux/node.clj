@@ -157,6 +157,12 @@
       (tx/await-tx indexer submitted-tx (or (and timeout (.toMillis timeout))
                                             (:crux.tx-log/await-tx-timeout options)))))
 
+  (latestCompletedTx [this]
+    (db/read-index-meta indexer ::tx/latest-completed-tx))
+
+  (latestSubmittedTx [this]
+    (db/latest-submitted-tx tx-log))
+
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
     (cio/with-read-lock lock

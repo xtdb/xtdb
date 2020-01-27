@@ -5,10 +5,10 @@
             [crux.db :as db]
             [crux.codec :as c]
             [crux.query :as q])
-  (:import [java.io Closeable InputStreamReader IOException PushbackReader]
+  (:import (java.io Closeable InputStreamReader IOException PushbackReader)
            java.time.Duration
            java.util.Date
-           [crux.api Crux ICruxAPI ICruxDatasource]))
+           (crux.api Crux ICruxAPI ICruxDatasource NodeOutOfSyncException)))
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
@@ -155,8 +155,16 @@
   (db [_ valid-time]
     (->RemoteDatasource url valid-time nil))
 
-  (db [_ valid-time transact-time]
-    (->RemoteDatasource url valid-time transact-time))
+  (db [_ valid-time tx-time]
+    (when tx-time
+      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx") nil {:method :get})
+                               :crux.tx/tx-time)]
+        (when (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time)))
+          (throw (NodeOutOfSyncException.
+                  (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
+                  tx-time latest-tx-time)))))
+
+    (->RemoteDatasource url valid-time tx-time))
 
   (document [_ content-hash]
     (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
@@ -187,7 +195,7 @@
     (api-request-sync (str url "/tx-log") tx-ops))
 
   (hasTxCommitted [_ submitted-tx]
-    (api-request-sync (str url "/tx-committed") submitted-tx))
+    (api-request-sync (str url "/tx-committed?tx-id=" (:crux.tx/tx-id submitted-tx)) nil {:method :get}))
 
   (openTxLog [this from-tx-id with-ops?]
     (let [params (->> [(when from-tx-id
@@ -212,6 +220,20 @@
     (api-request-sync (cond-> (str url "/sync")
                         transaction-time (str "?transactionTime=" (cio/format-rfc3339-date transaction-time))
                         timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+
+  (awaitTxTime [_ tx-time timeout]
+    (api-request-sync (cond-> (str url "/await-tx-time?tx-time=" (cio/format-rfc3339-date tx-time))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+
+  (awaitTx [_ tx timeout]
+    (api-request-sync (cond-> (str url "/await-tx?tx-id=" (:crux.tx/tx-id tx))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+
+  (latestCompletedTx [_]
+    (api-request-sync (str url "/latest-completed-tx") nil {:method :get}))
+
+  (latestSubmittedTx [_]
+    (api-request-sync (str url "/latest-submitted-tx") nil {:method :get}))
 
   Closeable
   (close [_]))
