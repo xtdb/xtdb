@@ -224,7 +224,11 @@
                                            :tx-topic tx-topic}
                           doc-consume-opts {:indexer indexer
                                             :offsets doc-offsets
-                                            :doc-topic doc-topic}]
+                                            :doc-topic doc-topic}
+                          node (reify crux.api.ICruxAPI
+                                 (db [this]
+                                   (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))]
+
                       (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
                       (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
                       (consume-topics tx-consume-opts doc-consume-opts)
