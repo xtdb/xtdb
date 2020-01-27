@@ -8,7 +8,6 @@
    "crux-metrics"
    "crux-test"
    "crux-cli"
-   "crux-uberjar"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -59,7 +58,6 @@
                "crux-jdbc/test"
                "crux-http-client/test"
                "crux-http-server/test"
-               "crux-uberjar/test"
                "crux-test/test"]
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"]
