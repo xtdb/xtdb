@@ -9,10 +9,6 @@
 (require '[crux.kafka.embedded :as ek])
 ;; end::require-ek[]
 
-;; tag::require-http-server[]
-(require '[crux.http-server :as srv])
-;; end::require-http-server[]
-
 (defn example-start-standalone []
 ;; tag::start-standalone-node[]
 (def ^crux.api.ICruxAPI node
@@ -25,10 +21,21 @@
   node)
 
 (defn example-close-node [^java.io.Closeable node]
-;; tag::close-node[]
-(.close node)
-;; end::close-node[]
-)
+  ;; tag::close-node[]
+  (.close node)
+  ;; end::close-node[]
+  )
+
+(defn example-start-standalone-http []
+;; tag::start-standalone-http-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
+                    :crux.node/kv-store 'crux.kv.memdb/kv
+                    :crux.kv/db-dir "data/db-dir-1"
+                    :crux.standalone/event-log-dir "data/eventlog-1"
+                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}))
+;; end::start-standalone-http-node[]
+  node)
 
 (defn example-start-embedded-kafka []
 ;; tag::ek-example[]
@@ -88,25 +95,6 @@ node)
                     :crux.jdbc/user "<user>"
                     :crux.jdbc/password "<password>"}))
   ;; end::start-jdbc-node[]
-  )
-
-(defn example-start-http-server [node]
-;; tag::start-http-server[]
-(def http-options
-  {:server-port 3000
-   :cors-access-control
-   [:access-control-allow-origin [#".*"]
-    :access-control-allow-headers ["X-Requested-With"
-                                   "Content-Type"
-                                   "Cache-Control"
-                                   "Origin"
-                                   "Accept"
-                                   "Authorization"
-                                   "X-Custom-Header"]
-    :access-control-allow-methods [:get :post]]})
-
-(srv/start-http-server node http-options)
-;; end::start-http-server[]
   )
 
 (defn example-start-http-client []

@@ -32,17 +32,23 @@
     (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
     (t/is (not (empty? (ex/example-query-valid-time node))))
 
-    ;; Testing http-server/http-client using the standalone node
-    (with-open [http-server ^Closeable (ex/example-start-http-server node)
-                remote-api ^Closeable (ex/example-start-http-client)]
+    ;; Testing example standalone node is closed properly
+    (t/is (nil? (ex/example-close-node node)))))
+
+(t/deftest test-example-http-node
+  (with-open [underlying-node ^Closeable (ex/example-start-standalone-http)
+              node ^Closeable (ex/example-start-http-client)]
+    ;; Testing example standalone node is created properly
+    (t/is node)
+
+    (let [submitted (ex/example-submit-tx node)]
+      (crux/await-tx node submitted nil)
       (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
                 :name "Pablo"
                 :last-name "Picasso"}
-               (crux/entity (crux/db remote-api)
-                            :dbpedia.resource/Pablo-Picasso))))
-
-    ;; Testing example standalone node is closed properly
-    (t/is (nil? (ex/example-close-node node)))))
+               (crux/entity (crux/db node) :dbpedia.resource/Pablo-Picasso)))
+      (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
+      (t/is (not (empty? (ex/example-query-valid-time node)))))))
 
 (t/deftest test-example-kafka-node
   (let [embedded-kafka (ex/example-start-embedded-kafka)
