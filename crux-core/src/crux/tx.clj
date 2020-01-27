@@ -405,12 +405,14 @@
 
   (docs-indexed? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (db/get-objects object-store snapshot content-hashes)
-      (let [docs (db/get-objects object-store snapshot content-hashes)]
-        (every? (fn [content-hash]
-                  (when-let [doc (get docs content-hash)]
-                    (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)))
-                content-hashes))))
+      (and (db/known-keys? object-store snapshot content-hashes)
+           (let [docs (db/get-objects object-store snapshot content-hashes)]
+             (every? (fn [content-hash]
+                       (if-let [doc (get docs content-hash)]
+                         (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)
+                         ;; We can assume the doc is evicted:
+                         true))
+                     content-hashes)))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
