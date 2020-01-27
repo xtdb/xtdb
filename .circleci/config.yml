@@ -91,6 +91,8 @@ jobs:
             - v1-dependencies-{{ checksum "project.clj" }}
             - v1-dependencies-
       - run: lein sub -s crux-cli uberjar
+      - run: mkdir crux-cli/jars/
+      - run: cp crux-cli/target/*-standalone.jar crux-cli/jars/
       - persist_to_workspace:
           root: ./
           paths:
@@ -105,7 +107,7 @@ jobs:
           at: ./
       - run:
           command: |
-            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" "./crux-cli/target/"
+            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" "./crux-cli/jars/"
 
 
 workflows:
