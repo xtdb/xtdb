@@ -187,17 +187,17 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer object-store tx-log kv-store bus]} node-opts]
+  {:start-fn (fn [{::keys [indexer document-store object-store tx-log kv-store bus]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
                                :indexer indexer
-                               :remote-document-store remote-document-store
+                               :document-store document-store
                                :object-store object-store
                                :bus bus
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::kv-store ::bus ::remote-document-store ::object-store ::tx-log}
+   :deps #{::indexer ::kv-store ::bus ::document-store ::object-store ::tx-log}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})
