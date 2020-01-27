@@ -202,7 +202,7 @@
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
-                         correct-state? (db/docs-exist? indexer [content-hash])]
+                         correct-state? (db/docs-indexed? indexer [content-hash])]
                      (when-not correct-state?
                        (log/error "Put, incorrect doc state for:" content-hash "tx id:" (:crux.tx/tx-id tx)))
                      correct-state?)
@@ -403,8 +403,9 @@
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
 
-  (docs-exist? [_ content-hashes]
+  (docs-indexed? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
+      (db/get-objects object-store snapshot content-hashes)
       (let [docs (db/get-objects object-store snapshot content-hashes)]
         (every? (fn [content-hash]
                   (when-let [doc (get docs content-hash)]
