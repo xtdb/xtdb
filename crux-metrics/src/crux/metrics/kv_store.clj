@@ -2,12 +2,12 @@
   (:require [crux.status :as status]
             [metrics.gauges :as gauges]))
 
-(defn estimate-num-keys
+(defn assign-estimate-num-keys-gauge
   [registry {:crux.node/keys [kv-store]}]
-  (gauges/gauge-fn registry ["crux" "kv" "estimate-num-keys"]
-                   #(:crux.kv/estimate-num-keys (status/status-map kv-store))))
+  (gauges/gauge-fn registry ["crux" "kv" "assign-estimate-num-keys-gauge"]
+                   #(:crux.kv/assign-estimate-num-keys-gauge (status/status-map kv-store))))
 
-(defn kv-size-mb
+(defn assign-kv-size-mb-gauge
   [registry {:crux.node/keys [kv-store]}]
   (gauges/gauge-fn registry ["crux" "kv" "kv-size-mb"]
                    #(:crux.kv/size (status/status-map kv-store))))
@@ -16,5 +16,5 @@
 (defn assign-listeners
   [registry deps]
 
-  {:estimate-num-keys (estimate-num-keys registry deps)
-   :kv-size-mb (kv-size-mb registry deps)})
+  {:estimate-num-keys (assign-estimate-num-keys-gauge registry deps)
+   :kv-size-mb (assign-kv-size-mb-gauge registry deps)})
