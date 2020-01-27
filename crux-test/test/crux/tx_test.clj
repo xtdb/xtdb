@@ -13,7 +13,8 @@
             [crux.kv :as kv]
             [crux.api :as api]
             [crux.rdf :as rdf]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.node :as n])
   (:import [java.util Date]
            [java.time Duration]
            [crux.api ITxLog]))
@@ -707,8 +708,9 @@
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
         !latch (promise)]
-    (bus/listen (:bus *api*) {::bus/event-types #{::tx/indexing-docs ::tx/indexed-docs
-                                                  ::tx/indexing-tx ::tx/indexed-tx}}
+    (bus/listen (get-in (meta *api*) [::n/topology ::n/bus])
+                {::bus/event-types #{::tx/indexing-docs ::tx/indexed-docs
+                                     ::tx/indexing-tx ::tx/indexed-tx}}
                 #(do
                    (swap! !events conj %)
                    (when (= ::tx/indexed-tx (::bus/event-type %))

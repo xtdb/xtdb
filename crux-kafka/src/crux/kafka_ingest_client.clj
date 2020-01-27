@@ -1,7 +1,7 @@
 (ns crux.kafka-ingest-client
-  (:require [crux.node :as n]
-            [crux.db :as db]
-            [crux.kafka :as k])
+  (:require [crux.db :as db]
+            [crux.kafka :as k]
+            [crux.topology :as topo])
   (:import crux.api.ICruxAsyncIngestAPI
            java.io.Closeable))
 
@@ -29,5 +29,6 @@
                :crux.kafka/latest-submitted-tx-consumer k/latest-submitted-tx-consumer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [[{:keys [crux.node/tx-log]} close-fn] (n/start-components topology options)]
+  (let [[{:keys [crux.node/tx-log]} close-fn] (topo/start-topology (merge {:crux.node/topology topology}
+                                                                          options))]
     (map->CruxKafkaIngestClient {:tx-log tx-log :close-fn close-fn})))

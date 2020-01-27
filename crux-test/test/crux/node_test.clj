@@ -16,39 +16,18 @@
            (java.util HashMap)
            (clojure.lang Keyword)))
 
-(t/deftest test-properties-to-topology
-  (let [t (n/options->topology {:crux.node/topology ['crux.jdbc/topology]})]
-
-    (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
-             (-> t :crux.node/tx-log)))
-    (t/is (= (s/conform ::n/component crux.kv.rocksdb/kv)
-             (-> t :crux.node/kv-store))))
-
-  (t/testing "override module in topology"
-    (let [t (n/options->topology {:crux.node/topology ['crux.jdbc/topology]
-                                  :crux.node/kv-store :crux.kv.memdb/kv})]
-
-      (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
-               (-> t :crux.node/tx-log)))
-      (t/is (= (s/conform ::n/component crux.kv.memdb/kv)
-               (-> t :crux.node/kv-store))))))
-
 (t/deftest test-calling-shutdown-node-fails-gracefully
-  (let [data-dir (cio/create-tmpdir "kv-store")
-        event-log-dir (cio/create-tmpdir "kv-store")]
+  (f/with-tmp-dir "data" [data-dir]
     (try
       (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                        :crux.kv/db-dir (str data-dir)
-                        :crux.standalone/event-log-dir (str event-log-dir)})]
+                        :crux.kv/db-dir (str (io/file data-dir "db"))
+                        :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))})]
         (t/is (.status n))
         (.close n)
         (.status n)
         (t/is false))
       (catch IllegalStateException e
-        (t/is (= "Crux node is closed" (.getMessage e))))
-      (finally
-        (cio/delete-dir data-dir)
-        (cio/delete-dir event-log-dir)))))
+        (t/is (= "Crux node is closed" (.getMessage e)))))))
 
 (t/deftest test-start-node-complain-if-no-topology
   (try
@@ -58,63 +37,15 @@
       (t/is (re-find #"Please specify :crux.node/topology" (.getMessage e))))))
 
 (t/deftest test-start-node-should-throw-missing-argument-exception
-  (let [data-dir (cio/create-tmpdir "kv-store")]
+  (f/with-tmp-dir "data" [data-dir]
     (try
-      (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]})]
+      (with-open [n (n/start {:crux.node/topology '[crux.jdbc/topology]
+                              :crux.kv/db-dir (str (io/file data-dir "db"))})]
         (t/is false))
       (catch Throwable e
         (t/is (re-find #"Arg :crux.jdbc/dbtype required" (.getMessage e))))
       (finally
         (cio/delete-dir data-dir)))))
-
-(t/deftest test-option-parsing
-  (with-open [n (n/start {:foo 2
-                          :boo false
-                          :crux.node/topology {:a {:args {:foo {:crux.config/type :crux.config/int
-                                                                :doc "An argument"
-                                                                :default 3}
-                                                          :boo {:crux.config/type :crux.config/boolean
-                                                                :doc "An argument"
-                                                                :default true}}
-                                                   :start-fn (fn [_ {:keys [foo boo]}]
-                                                               (t/is (= 2 foo))
-                                                               (t/is (= false boo)))}}})]
-    (t/is true)))
-
-(t/deftest test-nodes-shutdown-in-order
-  (let [started (atom [])
-        stopped (atom [])]
-    (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
-                                                     :start-fn (fn [{:keys [b]} _]
-                                                                 (assert b)
-                                                                 (swap! started conj :a)
-                                                                 (reify java.io.Closeable
-                                                                   (close [_]
-                                                                     (swap! stopped conj :a))))}
-                                                 :b {:start-fn (fn [_ _]
-                                                                 (swap! started conj :b)
-                                                                 (reify java.io.Closeable
-                                                                   (close [_]
-                                                                     (swap! stopped conj :b))))}}})]
-      (t/is (= [:b :a] @started)))
-    (t/is (= [:a :b] @stopped)))
-
-  (t/testing "With Exception"
-    (let [started (atom [])
-          stopped (atom [])]
-      (try
-        (with-open [n (n/start {:crux.node/topology {:a {:deps [:b]
-                                                         :start-fn (fn [_ _]
-                                                                     (throw (Exception.)))}
-                                                     :b {:start-fn (fn [_ _]
-                                                                     (swap! started conj :b)
-                                                                     (reify java.io.Closeable
-                                                                       (close [_]
-                                                                         (swap! stopped conj :b))))}}})]
-          (t/is false))
-        (catch Exception e))
-      (t/is (= [:b] @started))
-      (t/is (= [:b] @stopped)))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
@@ -128,6 +59,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                             :crux.kv/kv-store :crux.kv.memdb/kv
+                            :crux.kv/db-dir (str (io/file data-dir "db"))
                             :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
                             :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
       (t/is n))))
@@ -135,7 +67,8 @@
 (t/deftest test-properties-file-to-node
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-                                  :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
+                             :crux.db/db-dir (str (io/file data-dir "db"))
+                             :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
       (t/is (instance? MobergTxLog (-> n :tx-log)))
       (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))))
 
@@ -144,6 +77,7 @@
     (try
       (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                               :crux.kv/kv-store :crux.kv.memdb/kv
+                              :crux.kv/db-dir (str (io/file data-dir "db"))
                               :crux.standalone/event-log-sync-interval-ms 1000
                               :crux.standalone/event-log-sync? true
                               :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
@@ -158,6 +92,7 @@
           (doto (HashMap.)
             (.put :crux.node/topology 'crux.standalone/topology)
             (.put :crux.node/kv-store 'crux.kv.memdb/kv)
+            (.put :crux.kv/db-dir (str (io/file data-dir "db")))
             (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
             (.put :crux.standalone/event-log-dir (str (io/file data-dir "eventlog")))
             (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
