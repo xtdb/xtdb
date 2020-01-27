@@ -132,9 +132,6 @@
         @(.send producer (ProducerRecord. hint-topic doc-key hint))
         (swap! keydir assoc doc-key hint))))
 
-  (delete-objects [this ks]
-    (db/put-objects this (zipmap ks (repeat nil))))
-
   Closeable
   (close [this]
     (reset! running? false)
@@ -163,8 +160,6 @@
   (db/get-single-object os nil :bar)
   ;;=>  "foo"
 
-  (db/delete-objects os [:bar])
-  ;;=> nil
   (db/known-keys? os nil [:bar])
   ;;=>  false
 

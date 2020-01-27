@@ -47,10 +47,6 @@
                    [(c/encode-doc-key-to nil (c/->id-buffer k))
                     (mem/->off-heap (nippy/fast-freeze v))])))
 
-  (delete-objects [this ks]
-    (kv/delete kv (for [k ks]
-                    (c/encode-doc-key-to nil (c/->id-buffer k)))))
-
   Closeable
   (close [_]))
 
@@ -87,11 +83,6 @@
           (.exists doc-file)))
       ks))
 
-  (delete-objects [this ks]
-    (doseq [k ks
-            :let [doc-key (str (c/new-id k))]]
-      (.delete (io/file dir doc-key))))
-
   Closeable
   (close [_]))
 
@@ -123,13 +114,6 @@
         (do
           (lru/evict cache k)
           [k v]))))
-
-  (delete-objects [this ks]
-    (db/delete-objects
-      object-store
-      (for [k ks
-            :let [k (c/->id-buffer k)]]
-        (do (lru/evict cache k) k))))
 
   Closeable
   (close [_]))
