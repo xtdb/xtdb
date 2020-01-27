@@ -3,7 +3,8 @@
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.metrics.ingest :as ingest-metrics]
+            [crux.metrics.indexer :as indexer-metrics]
+            [crux.metrics.kv-store :as kv-metrics]
             [crux.api :as api]
             [metrics.core :as metrics]
             [metrics.meters :as meters]
@@ -23,10 +24,19 @@
       (t/is (zero? (timers/number-recorded (:tx-ingest-timer mets)))))
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
-
     (.close ^Closeable bus)
 
     (t/testing "post ingest values"
       (t/is (= 1 (meters/count (:docs-ingest-meter mets))))
       (t/is (zero? (gauges/value (:tx-id-lag mets))))
       (t/is (= 1 (timers/number-recorded (:tx-ingest-timer mets)))))))
+
+(t/deftest test-kv-metrics
+  (let [registry (metrics/new-registry)
+        mets (kv-metrics/assign-listeners registry #:crux.node{:kv-store (:kv-store *api*)})]
+    (t/testing "initial store values"
+      (t/is (= 0 (gauges/value (:estimate-num-keys mets))))
+      (t/is (= 0 (gauges/value (:kv-size-mb)))))
+
+    ;; Post ingest values might be inconsistent, so I'm leaving them for now
+    ))
