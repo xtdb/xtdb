@@ -33,7 +33,6 @@ jobs:
 
       - run: lein sub install
       - run: lein deps
-
       - save_cache:
           paths:
             - ~/.m2
@@ -109,12 +108,31 @@ jobs:
           command: |
             ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" "./crux-cli/jars/"
 
+  deploy-docker:
+    docker:
+      - image: docker:19.03.5
+    working_directory: ~/crux
+    steps:
+      - attach_workspace:
+          at: ./
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          command: |
+            cd crux-cli/
+            docker build -t "danmason/crux-standalone:latest" .
+            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+            docker push "danmason/crux-standalone:latest"
+
 
 workflows:
   version: 2.1
   commit:
     jobs:
-      - build
+      - build:
+          filters:
+            tags:
+              only: /.*/
       - deploy:
           requires:
             - build
@@ -127,6 +145,21 @@ workflows:
           filters:
             tags:
               only: /.*/
+            branches:
+              ignore: /.*/
       - deploy-uberjars:
           requires:
             - create-uberjars
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - deploy-docker:
+          requires:
+            - create-uberjars
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
