@@ -138,7 +138,6 @@
   supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
   node.")
 
-
   (latest-completed-tx [node]
     "Returns the latest transaction to have been indexed by this node.")
 
