@@ -33,6 +33,7 @@
                :crux.kafka/latest-submitted-tx-consumer k/latest-submitted-tx-consumer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [[{:keys [crux.node/tx-log]} close-fn] (topo/start-topology (merge {:crux.node/topology topology}
-                                                                          options))]
-    (map->CruxKafkaIngestClient {:tx-log tx-log :close-fn close-fn})))
+  (let [[{:keys [crux.node/tx-log crux.node/document-store]} close-fn]
+        (topo/start-topology (merge {:crux.node/topology topology}
+                                    options))]
+    (map->CruxKafkaIngestClient {:tx-log tx-log :document-store document-store :close-fn close-fn})))
