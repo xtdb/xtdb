@@ -750,6 +750,6 @@
 (t/deftest test-wait-while
   (let [twice-no (let [!atom (atom 3)]
                    #(pos? (swap! !atom dec)))]
-    (t/is (false? (cio/wait-while twice-no 100)))
-    (t/is (true? (cio/wait-while twice-no 400)))
+    (t/is (false? (cio/wait-while twice-no (Duration/ofMillis 100))))
+    (t/is (true? (cio/wait-while twice-no (Duration/ofMillis 400))))
     (t/is (true? (cio/wait-while twice-no nil)))))

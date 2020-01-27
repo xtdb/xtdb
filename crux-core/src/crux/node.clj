@@ -149,15 +149,13 @@
   (awaitTxTime [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
-                                                (:crux.tx-log/await-tx-timeout options)))
+      (-> (tx/await-tx-time indexer tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
 
   (awaitTx [this submitted-tx timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx indexer submitted-tx (or (and timeout (.toMillis timeout))
-                                            (:crux.tx-log/await-tx-timeout options)))))
+      (tx/await-tx indexer submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
 
   (latestCompletedTx [this]
     (db/read-index-meta indexer ::tx/latest-completed-tx))
@@ -197,9 +195,9 @@
                                :closed? (atom false)
                                :lock (StampedLock.)}))
    :deps #{::indexer ::kv-store ::bus ::object-store ::tx-log}
-   :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout in milliseconds for waiting."
-                                         :default 10000
-                                         :crux.config/type :crux.config/nat-int}}})
+   :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
+                                         :default nil
+                                         :crux.config/type :crux.config/duration}}})
 
 (def base-topology
   {::kv-store 'crux.kv.rocksdb/kv

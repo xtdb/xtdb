@@ -117,8 +117,8 @@
     (catch Throwable t
       (log/error t "Could not close:" c))))
 
-(defn wait-while [p timeout-ms]
-  (let [timeout-at (some-> timeout-ms (+ (System/currentTimeMillis)))]
+(defn wait-while [p ^Duration timeout]
+  (let [timeout-at (some-> timeout .toMillis (+ (System/currentTimeMillis)))]
     (loop []
       (if (p)
         (do (Thread/sleep 100)
