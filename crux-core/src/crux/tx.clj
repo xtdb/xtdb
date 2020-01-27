@@ -198,11 +198,11 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [object-store snapshot] :as deps}]
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [indexer] :as deps}]
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
-                         correct-state? (db/known-keys? object-store snapshot [content-hash])]
+                         correct-state? (db/docs-exist? indexer [content-hash])]
                      (when-not correct-state?
                        (log/error "Put, incorrect doc state for:" content-hash "tx id:" (:crux.tx/tx-id tx)))
                      correct-state?)
@@ -408,7 +408,7 @@
       (let [docs (db/get-objects object-store snapshot content-hashes)]
         (every? (fn [content-hash]
                   (when-let [doc (get docs content-hash)]
-                    (idx/doc-indexed? kv-store (:crux.db/id doc) content-hash)))
+                    (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)))
                 content-hashes))))
 
   (store-index-meta [_ k v]
