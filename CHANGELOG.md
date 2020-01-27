@@ -12,6 +12,10 @@
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
 * [#507](https://github.com/juxt/crux/issues/507): ranges in rules revert to a predicate if neither argument is a logic var
 
+### New Features
+* [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
+* [#492](https://github.com/juxt/crux/issues/492): Adding metrics to expose local disk usage
+
 ## 20.01-1.6.2-alpha
 
 ### Changes
