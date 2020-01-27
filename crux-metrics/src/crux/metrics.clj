@@ -13,7 +13,7 @@
                            (doto (drpwz-m/new-registry)
                              (indexer-metrics/assign-listeners deps)
                              (kv-metrics/assign-listeners deps)))
-               :deps #{:crux.node/indexer :crux.node/bus :crux.node/tx-log :crux.node/kv-store}}})
+               :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]

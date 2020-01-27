@@ -1,17 +1,20 @@
 (ns crux.metrics.indexer
   (:require [crux.bus :as bus]
-            [crux.db :as db]
+            [crux.api :as api]
             [crux.tx :as tx]
             [metrics.gauges :as gauges]
             [metrics.meters :as meters]
             [metrics.timers :as timers]))
 
-(defn assign-tx-id-lag [registry {:crux.node/keys [bus indexer tx-log]}]
+(defn assign-tx-id-lag [registry {:crux.node/keys [node]}]
+  (assert node)
   (gauges/gauge-fn registry
                    ["crux" "indexer" "tx-id-lag"]
-                   #(when-let [latest-tx-id (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
-                      (- (::tx/tx-id (db/latest-submitted-tx tx-log))
-                         (::tx/tx-id latest-tx-id)))))
+                   #(let [completed (api/latest-completed-tx node)]
+                      (if completed
+                        (- (::tx/tx-id (api/latest-submitted-tx node))
+                           (::tx/tx-id (api/latest-completed-tx node)))
+                        0))))
 
 (defn assign-doc-meter [registry {:crux.node/keys [bus]}]
   (let [meter (meters/meter registry ["crux" "indexer" "indexed-docs"])]
@@ -41,7 +44,7 @@
 (defn assign-listeners
   "Assigns listeners to an event bus for a given node.
   Returns an atom containing uptading metrics"
-  [registry {:crux.node/keys [bus indexer tx-log] :as deps}]
+  [registry deps]
   {:tx-id-lag (assign-tx-id-lag registry deps)
    :docs-ingest-meter (assign-doc-meter registry deps)
    :tx-ingest-timer (assign-tx-timer registry deps)})
