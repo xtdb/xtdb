@@ -14,5 +14,5 @@
   :middleware [leiningen.project-version/middleware]
   :aot [crux.main]
   :main crux.main
-
+  :uberjar-name "crux-standalone-20.01-1.6.3-alpha-standalone.jar"
   :pedantic? :warn)

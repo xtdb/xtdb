@@ -80,6 +80,19 @@ jobs:
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
 
+  deploy-uberjars:
+    docker:
+      - image: cibuilds/github:0.10
+    steps:
+      - attach_workspace:
+          at: ~/crux
+      - run: cd crux-bench/
+      - run: lein uberjar
+      - run:
+          command: |
+            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" "./target/*-standalone.jar"
+
+
 workflows:
   version: 2.1
   commit:
@@ -91,3 +104,9 @@ workflows:
           filters:
             branches:
               only: master
+      - deploy-uberjars:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /.*/
