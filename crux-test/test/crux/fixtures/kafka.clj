@@ -56,6 +56,9 @@
 
 (def ^:dynamic *consumer-options* {})
 
+(defn with-consumer []
+  )
+
 (defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
               consumer (kc/create-consumer
