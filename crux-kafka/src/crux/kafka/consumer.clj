@@ -143,6 +143,7 @@
   (let [consumer-config (merge {"group.id" group-id} kafka-config)
         offsets (map->IndexedOffsets {:indexer indexer :k offsets})
         running? (atom true)
+        pending-records (atom [])
         worker-thread
         (doto
             (Thread. ^Runnable (fn []
@@ -157,7 +158,7 @@
                                                    :timeout 1000
                                                    :index-fn index-fn}]
                                          (if accept-fn
-                                           (consume-and-block (merge opts {:pending-records-state (atom [])
+                                           (consume-and-block (merge opts {:pending-records-state pending-records
                                                                            :accept-fn accept-fn}))
                                            (consume opts)))
                                        (catch Exception e
