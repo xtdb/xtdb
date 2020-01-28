@@ -1,32 +1,19 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
-            [clojure.java.io :as io]
+            [crux.api :as api]
             [crux.codec :as c]
-            [crux.io :as cio]
-            [clojure.tools.logging :as log]
             [crux.db :as db]
-            [crux.index :as idx]
+            [crux.fixtures.api :as fapi :refer [*api* *opts*]]
             [crux.fixtures.kafka :as fk]
-            [crux.object-store :as os]
-            [crux.lru :as lru]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.kafka :as k]
             [crux.kafka.consumer :as kc]
             [crux.query :as q]
             [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
-            [crux.api :as api]
-            [crux.tx :as tx]
-            [crux.bus :as bus]
-            [crux.fixtures.api :refer [*api* *opts*] :as fapi])
+            [crux.tx :as tx])
   (:import java.time.Duration
-           java.util.List
-           org.apache.kafka.clients.producer.ProducerRecord
-           org.apache.kafka.clients.consumer.ConsumerRecord
-           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
-           org.apache.kafka.common.TopicPartition
-           java.io.Closeable))
+           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
+           org.apache.kafka.clients.producer.ProducerRecord))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each fk/with-cluster-node-opts kvf/with-kv-dir)
