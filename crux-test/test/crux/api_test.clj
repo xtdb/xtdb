@@ -38,7 +38,7 @@
                        fh/with-http-client])
      f))
   (t/testing "Kafka and Remote Doc Store"
-    ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts]) f)))
+    ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
