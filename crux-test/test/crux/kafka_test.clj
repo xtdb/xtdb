@@ -57,7 +57,7 @@
     (fn []
       (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
             {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* tx-ops)
-            _ (.awaitTx *api* submitted-tx nil)]
+            _ (.awaitTx *api* submitted-tx (Duration/ofSeconds 20))]
 
         (t/testing "transacting and indexing"
           (t/is (= 3 (count (docs-on-topic (:crux.kafka/doc-topic *opts*)))))
@@ -83,16 +83,18 @@
                 (t/is (realized? result))))))
 
         (t/testing "new node can pick-up"
-          (kvf/with-kv-dir
+          (fapi/with-opts {:crux.kafka/group-id "different-test-group"}
             (fn []
-              (fapi/with-node
+              (kvf/with-kv-dir
                 (fn []
-                  (.awaitTx *api* submitted-tx nil)
-                  (t/is (= #{[:http://example.org/Picasso]}
-                           (q/q (api/db *api*)
-                                (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                                  '{:find [e]
-                                    :where [[e :foaf/firstName "Pablo"]]}))))))))
+                  (fapi/with-node
+                    (fn []
+                      (.awaitTx *api* submitted-tx (Duration/ofSeconds 20))
+                      (t/is (= #{[:http://example.org/Picasso]}
+                               (q/q (api/db *api*)
+                                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                      '{:find [e]
+                                        :where [[e :foaf/firstName "Pablo"]]}))))))))))
 
           (t/testing "no new txes or docs"
             (t/is (= 3 (count (docs-on-topic (:crux.kafka/doc-topic *opts*)))))
@@ -148,7 +150,8 @@
 
             (t/testing "new node can pick-up"
               (fapi/with-opts {:crux.node/topology ['crux.kafka/topology]
-                               :crux.kafka/doc-topic "compacted-doc-topic"}
+                               :crux.kafka/doc-topic "compacted-doc-topic"
+                               :crux.kafka/group-id "different-test-group"}
                 (fn []
                   (kvf/with-kv-dir
                     (fn []

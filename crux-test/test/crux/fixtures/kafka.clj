@@ -52,7 +52,6 @@
 
 (def ^:dynamic ^KafkaProducer *producer*)
 (def ^:dynamic ^KafkaConsumer *consumer*)
-(def ^:dynamic ^KafkaConsumer *consumer2*)
 
 (def ^:dynamic *consumer-options* {})
 
@@ -70,14 +69,9 @@
               consumer (kc/create-consumer
                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
                                 "group.id" (str (UUID/randomUUID))}
-                               *consumer-options*))
-              consumer2 (kc/create-consumer
-                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
-                                 "group.id" (str (UUID/randomUUID))}
-                                *consumer-options*))]
+                               *consumer-options*))]
     (binding [*producer* producer
-              *consumer* consumer
-              *consumer2* consumer2]
+              *consumer* consumer]
       (f))))
 
 (def ^:dynamic *cluster-node*)
@@ -89,6 +83,7 @@
               *doc-topic* (str "doc-topic-" test-id)]
       (apif/with-opts {:crux.node/topology ['crux.kafka/topology]
                        :crux.node/kv-store *kv-module*
+                       :crux.kafka/group-id (str test-id)
                        :crux.kafka/tx-topic *tx-topic*
                        :crux.kafka/doc-topic *doc-topic*
                        :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
