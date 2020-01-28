@@ -28,80 +28,89 @@
            java.io.Closeable))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node)
+(t/use-fixtures :each fk/with-cluster-node-opts kvf/with-kv-dir)
 
 (defn- consumer-record->value [^ConsumerRecord record]
   (.value record))
 
+(defn- txes-on-topic []
+  (with-open [tx-consumer ^KafkaConsumer (fk/with-consumer)]
+    (let [tx-offsets (kc/map->IndexedOffsets {:indexer (:indexer *api*) :k ::txes})]
+      (kc/subscribe-from-stored-offsets tx-offsets tx-consumer [(:crux.kafka/tx-topic *opts*)]))
+    (doall (map consumer-record->value (.poll tx-consumer (Duration/ofMillis 10000))))))
+
+(defn- docs-on-topic []
+  (with-open [doc-consumer ^KafkaConsumer (fk/with-consumer)]
+    (let [doc-offsets (kc/map->IndexedOffsets {:indexer (:indexer *api*) :k ::docs})]
+      (kc/subscribe-from-stored-offsets doc-offsets doc-consumer [(:crux.kafka/doc-topic *opts*)]))
+    (map consumer-record->value (.poll doc-consumer (Duration/ofMillis 10000)))))
+
 (t/deftest test-can-transact-entities
-  (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
-        submitted-tx (.submitTx *api* tx-ops)
-        _ (.awaitTx *api* submitted-tx nil)]
+  (fapi/with-node
+    (fn []
+      (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
+            submitted-tx (.submitTx *api* tx-ops)
+            _ (.awaitTx *api* submitted-tx nil)]
 
-    (t/testing "tx-log contains relevant txes"
-      (with-open [tx-consumer ^KafkaConsumer (fk/with-consumer)]
-        (let [tx-offsets (kc/map->IndexedOffsets {:indexer (:indexer *api*) :k ::txes})]
-          (kc/subscribe-from-stored-offsets tx-offsets tx-consumer [(:crux.kafka/tx-topic *opts*)]))
-        (let [txes (map consumer-record->value (.poll tx-consumer (Duration/ofMillis 10000)))]
-          (t/is (= 7 (count (first txes)))))))
+        (t/testing "tx-log contains relevant txes"
+          (let [txes (txes-on-topic)]
+            (t/is (= 7 (count (first txes))))))
 
-    (t/testing "doc-log contains relevant docs"
-      (with-open [doc-consumer ^KafkaConsumer (fk/with-consumer)]
-        (let [doc-offsets (kc/map->IndexedOffsets {:indexer (:indexer *api*) :k ::docs})]
-          (kc/subscribe-from-stored-offsets doc-offsets doc-consumer [(:crux.kafka/doc-topic *opts*)]))
-        (let [docs (map consumer-record->value (.poll doc-consumer (Duration/ofMillis 10000)))]
-          (t/is (= 7 (count docs)))
-          (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                     {:foaf/firstName "Pablo"
-                      :foaf/surname "Picasso"})
-                   (select-keys (first docs)
-                                (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                                  [:foaf/firstName
-                                   :foaf/surname])))))))))
+        (t/testing "doc-log contains relevant docs"
+          (let [docs (docs-on-topic)]
+            (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                       {:foaf/firstName "Pablo"
+                        :foaf/surname "Picasso"})
+                     (select-keys (first docs)
+                                  (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                    [:foaf/firstName
+                                     :foaf/surname]))))))))))
 
 (t/deftest test-can-transact-and-query-entities
-  (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-        submitted-tx (.submitTx *api* tx-ops)
-        _ (.awaitTx *api* submitted-tx nil)]
+  (fapi/with-node
+    (fn []
+      (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
+            {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* tx-ops)
+            _ (.awaitTx *api* submitted-tx nil)]
 
-    (t/testing "querying transacted data"
-      (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (api/db *api*)
-                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                      '{:find [e]
-                        :where [[e :foaf/firstName "Pablo"]]})))))
+        (t/testing "transacting and indexing"
+          (t/is (= 3 (count (docs-on-topic))))
+          (t/is (= 1 (count (txes-on-topic)))))
 
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
-
-    (t/testing "transacting and indexing"
-      (let [_ (db/submit-docs doc-store (tx/tx-ops->id-and-docs tx-ops))
-            {:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
-        (t/is (= 3 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
-        (t/is (= 1 (k/consume-and-index-txes consume-opts fk/*consumer*)))
-        (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
-
-        ;; Stop and node and fire it up again
-        (t/testing "restoring to stored offsets"
-          (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
-          (kc/seek-to-stored-offsets tx-offsets fk/*consumer* (.assignment fk/*consumer*))
-          (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
-
-
+        (t/testing "querying transacted data"
+          (t/is (= #{[:http://example.org/Picasso]}
+                   (q/q (api/db *api*)
+                        (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                          '{:find [e]
+                            :where [[e :foaf/firstName "Pablo"]]})))))
 
         (t/testing "can read tx log"
-          (with-open [tx-log-iterator (db/open-tx-log tx-log nil)]
-            (let [log (iterator-seq tx-log-iterator)]
-              (t/is (not (realized? log)))
-              ;; Cannot compare the tx-ops as they contain blank nodes
-              ;; with random ids.
-              (t/is (= {:crux.tx/tx-time tx-time
-                        :crux.tx/tx-id tx-id}
-                       (dissoc (first log) :crux.tx.event/tx-events)))
-              (t/is (= 1 (count log)))
-              (t/is (= 3 (count (:crux.tx.event/tx-events (first log))))))))))))
+          (t/testing "tx-log"
+            (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+              (let [result (iterator-seq tx-log-iterator)]
+                (t/is (not (realized? result)))
+                (t/is (= {:crux.tx/tx-time tx-time
+                          :crux.tx/tx-id tx-id}
+                         (dissoc (first result) :crux.tx.event/tx-events)))
+                (t/is (= 1 (count result)))
+                (t/is (= 3 (count (:crux.tx.event/tx-events (first result)))))
+                (t/is (realized? result))))))
+
+        (t/testing "new node can pick-up"
+          (kvf/with-kv-dir
+            (fn []
+              (fapi/with-node
+                (fn []
+                  (.awaitTx *api* submitted-tx (Duration/ofSeconds 10))
+                  (t/is (= #{[:http://example.org/Picasso]}
+                           (q/q (api/db *api*)
+                                (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                  '{:find [e]
+                                    :where [[e :foaf/firstName "Pablo"]]}))))))))
+
+          (t/testing "no new txes or docs"
+            (t/is (= 3 (count (docs-on-topic))))
+            (t/is (= 1 (count (txes-on-topic))))))))))
 
 #_(defn- consume-topics [tx-consume-opts doc-consume-opts]
   (loop []
