@@ -48,7 +48,7 @@
                                         :args-doc (s/? ::args-doc)))
 
 (s/def ::tx-op (s/multi-spec tx-op first))
-(s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
+(s/def ::tx-ops (s/coll-of ::tx-op :kind sequential?))
 
 (defn- conform-tx-ops  [tx-ops]
   (->> tx-ops
