@@ -57,7 +57,10 @@
 (def ^:dynamic *consumer-options* {})
 
 (defn with-consumer []
-  )
+  (kc/create-consumer
+   (merge {"bootstrap.servers" *kafka-bootstrap-servers*
+           "group.id" (str (UUID/randomUUID))}
+          *consumer-options*)))
 
 (defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
