@@ -4,6 +4,7 @@
             [crux.status :as status])
   (:import crux.kafka.nippy.NippyDeserializer
            java.io.Closeable
+           java.time.Duration
            [java.util List Map]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            org.apache.kafka.common.TopicPartition))
@@ -96,11 +97,51 @@
     (reset! running? false)
     (.join worker-thread)))
 
+(defn consume
+  [{:keys [offsets indexer timeout topic ^KafkaConsumer consumer index-fn]
+    :or {timeout 5000}}]
+  (let [records (.poll consumer (Duration/ofMillis timeout))
+        records (vec (.records records (str topic)))]
+    (index-fn records)
+    (when-let [records (seq records)]
+      (update-stored-consumer-state offsets consumer records))
+    (count records)))
+
+(defn consume-and-block
+  [{:keys [offsets indexer pending-records-state timeout topic ^KafkaConsumer consumer accept-fn index-fn]
+    :or {timeout 5000}}]
+  (assert (and accept-fn index-fn))
+  (let [topic-partition (TopicPartition. topic 0)
+        _ (when (and (.contains (.paused consumer) topic-partition)
+                     (empty? @pending-records-state))
+            (log/debug "Resuming" topic)
+            (.resume consumer [topic-partition]))
+        records (.poll consumer (Duration/ofMillis timeout))
+        records (vec (.records records (str topic)))
+        pending-records (swap! pending-records-state into records)
+        records (->> pending-records
+                     (take-while (fn [^ConsumerRecord record]
+                                   (let [ready? (accept-fn record)]
+                                     (when-not ready?
+                                       (when-not (.contains (.paused consumer) topic-partition)
+                                         (log/debug "Pausing" topic)
+                                         (.pause consumer [topic-partition]))
+                                       (log/info "Paused" topic "pending:" (count pending-records)))
+                                     ready?)))
+                     (vec))]
+
+    (index-fn records)
+
+    (update-stored-consumer-state offsets consumer records)
+    (swap! pending-records-state (comp vec (partial drop (count records))))
+
+    (count records)))
+
 (defn start-indexing-consumer
   ^java.io.Closeable
-  [{:keys [indexer offsets kafka-config group-id topic]} offsets-k index-fn]
+  [{:keys [indexer offsets kafka-config group-id topic accept-fn index-fn]}]
   (let [consumer-config (merge {"group.id" group-id} kafka-config)
-        offsets (map->IndexedOffsets {:indexer indexer :k offsets-k})
+        offsets (map->IndexedOffsets {:indexer indexer :k offsets})
         running? (atom true)
         worker-thread
         (doto
@@ -109,11 +150,16 @@
                                    (subscribe-from-stored-offsets offsets consumer [topic])
                                    (while @running?
                                      (try
-                                       (index-fn {:indexer indexer
-                                                  :consumer consumer
-                                                  :topic topic
-                                                  :offsets offsets
-                                                  :timeout 1000})
+                                       (let [opts {:indexer indexer
+                                                   :consumer consumer
+                                                   :topic topic
+                                                   :offsets offsets
+                                                   :timeout 1000
+                                                   :index-fn index-fn}]
+                                         (if accept-fn
+                                           (consume-and-block (merge opts {:pending-records-state (atom [])
+                                                                           :accept-fn accept-fn}))
+                                           (consume opts)))
                                        (catch Exception e
                                          (log/error e "Error while consuming and indexing from Kafka:")
                                          (Thread/sleep 500))))))
