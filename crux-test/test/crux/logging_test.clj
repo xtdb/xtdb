@@ -5,7 +5,7 @@
             [clojure.tools.logging.impl :as log-impl]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*node*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]))
 
@@ -49,10 +49,10 @@
   (fapi/submit+await-tx [[:crux.tx/evict :secure-document]]))
 
 (t/deftest test-query-with-args
-  (api/q (api/db *api*) {:find ['s 'ss]
-                         :where [['e :secret 's]
-                                 ['e :secret-2 'ss]]
-                         :args [{'ss secret}]}))
+  (api/q (api/db *node*) {:find ['s 'ss]
+                          :where [['e :secret 's]
+                                  ['e :secret-2 'ss]]
+                          :args [{'ss secret}]}))
 
 (t/deftest test-querying-doc
-  (api/q (api/db *api*) {:find ['s] :where [['e :secret 's]]}))
+  (api/q (api/db *node*) {:find ['s] :where [['e :secret 's]]}))

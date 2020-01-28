@@ -5,7 +5,8 @@
             [crux.io :as cio]
             [crux.jdbc :as j]
             [next.jdbc :as jdbc]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.node :as n])
   (:import crux.api.Crux
            [java.nio.file Files]))
 
@@ -29,14 +30,14 @@
               :crux.kv/db-dir db-dir
               :crux.kv/kv-store "crux.kv.memdb/kv"}]
     (try
-      (let [api (Crux/startNode opts)
+      (let [api (api/start-node opts)
             tx (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
         (api/await-tx api tx)
         (f/transact! api [{:crux.db/id :foo}])
         (.close api)
 
-        (with-open [api2 (Crux/startNode opts)]
-          (api/await-tx api2 tx nil)
+        (with-open [api2 (api/start-node opts)]
+          (api/await-tx api2 tx)
           (t/is (= 2 (count (api/history api2 :foo))))))
       (finally
         (cio/delete-dir db-dir)))))

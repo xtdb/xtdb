@@ -1,6 +1,6 @@
 (ns crux.metrics-test
   (:require [clojure.test :as t]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*node*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.metrics.indexer :as indexer-metrics]
@@ -14,7 +14,7 @@
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
 
 (t/deftest test-indexer-metrics
-  (let [{:crux.node/keys [node bus indexer]} (:crux.node/topology (meta *api*))
+  (let [{:crux.node/keys [node bus indexer]} (:crux.node/topology (meta *node*))
         registry (metrics/new-registry)
         mets (indexer-metrics/assign-listeners registry #:crux.node{:node node, :bus bus, :indexer indexer})]
     (t/testing "initial ingest values"
@@ -31,11 +31,10 @@
       (t/is (= 1 (timers/number-recorded (:tx-ingest-timer mets)))))))
 
 (t/deftest test-kv-store-metrics
-  (let [{:crux.node/keys [kv-store]} (:crux.node/topology (meta *api*))
+  (let [{:crux.node/keys [kv-store]} (:crux.node/topology (meta *node*))
         registry (metrics/new-registry)
         mets (kv-store-metrics/assign-listeners registry #:crux.node{:kv-store kv-store})]
 
     (t/testing "initial kv-store values"
       (t/is (gauges/value (:estimate-num-keys mets)))
       (t/is (gauges/value (:kv-size-mb mets))))))
-

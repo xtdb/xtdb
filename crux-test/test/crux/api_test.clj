@@ -4,7 +4,7 @@
             [crux.fixtures.standalone :as fs]
             [crux.moberg]
             [crux.codec :as c]
-            [crux.fixtures.api :refer [*api*] :as fapi]
+            [crux.fixtures.api :as fapi :refer [*api* *node*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.kafka :as fk :refer [*ingest-client*]]
             crux.jdbc
@@ -75,7 +75,7 @@
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= (merge {:crux.index/index-version 6}
-                    (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+                    (when (instance? crux.kafka.KafkaTxLog (:tx-log *node*))
                       {:crux.zk/zk-active? true}))
              (select-keys (.status *api*) [:crux.index/index-version :crux.zk/zk-active?]))))
 
@@ -329,7 +329,7 @@
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
 
 (t/deftest test-ingest-client
-  (if (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+  (if (instance? crux.kafka.KafkaTxLog (:tx-log *node*))
     (kf/with-ingest-client
       (fn []
         (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
@@ -361,15 +361,15 @@
 (t/deftest test-db-throws-if-future-tx-time-provided
   (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
-    (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
+    (t/is (thrown? NodeOutOfSyncException (api/db *node* the-future the-future)))))
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (.latestSubmittedTx *api*)))
 
-  (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+  (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *node* [[:crux.tx/put {:crux.db/id :foo}]])]
     (t/is (= {:crux.tx/tx-id tx-id}
              (.latestSubmittedTx *api*))))
 
-  (api/sync *api*)
+  (api/sync *node*)
 
-  (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))
+  (t/is (= {:crux.db/id :foo} (api/entity (api/db *node*) :foo))))

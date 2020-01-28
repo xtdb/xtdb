@@ -19,9 +19,9 @@
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
     (try
-      (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                        :crux.kv/db-dir (str (io/file data-dir "db"))
-                        :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))})]
+      (let [n (Crux/startNode {:crux.node/topology ['crux.standalone/topology]
+                               :crux.kv/db-dir (str (io/file data-dir "db"))
+                               :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))})]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -102,10 +102,10 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
-                            :crux.kv/db-dir (str (io/file data-dir "kv1"))
-                            :crux.jdbc/dbtype "h2"
-                            :crux.jdbc/dbname (str (io/file data-dir "cruxtest1"))})]
+    (with-open [n (Crux/startNode {:crux.node/topology ['crux.jdbc/topology]
+                                   :crux.kv/db-dir (str (io/file data-dir "kv1"))
+                                   :crux.jdbc/dbtype "h2"
+                                   :crux.jdbc/dbname (str (io/file data-dir "cruxtest1"))})]
       (t/is n)
 
       (let [valid-time (Date.)
@@ -119,10 +119,10 @@
                               '{:find [e]
                                 :where [[e :name "Ivan"]]})))
 
-      (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
-                               :crux.kv/db-dir (str (io/file data-dir "kv2"))
-                               :crux.jdbc/dbtype "h2"
-                               :crux.jdbc/dbname (str (io/file data-dir "cruxtest2"))})]
+      (with-open [n2 (Crux/startNode {:crux.node/topology ['crux.jdbc/topology]
+                                      :crux.kv/db-dir (str (io/file data-dir "kv2"))
+                                      :crux.jdbc/dbtype "h2"
+                                      :crux.jdbc/dbname (str (io/file data-dir "cruxtest2"))})]
 
         (t/is (= #{} (.q (.db n2)
                          '{:find [e]

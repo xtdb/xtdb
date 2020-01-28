@@ -4,7 +4,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures.api :as apif :refer [*api* *node*]]
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.lubm :as fl]
@@ -55,31 +55,32 @@
                 (jdbc/execute! t ["SELECT V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
                                {:builder-fn jdbcr/as-unqualified-lower-maps})))))
 (t/deftest test-docs-retention
-  (let [tx-log (:tx-log *api*)
+  (let [tx-log (:tx-log *node*)
 
         doc {:crux.db/id (c/new-id :some-id) :a :b}
         doc-hash (str (c/new-id doc))
 
         tx-1 (db/submit-tx tx-log [[:crux.tx/put doc]])]
 
-    (t/is (= 1 (count (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
-    (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))
+    (t/is (= 1 (count (docs fj/*dbtype* (:ds tx-log) doc-hash))))
+    (t/is (= [doc] (docs fj/*dbtype* (:ds tx-log) doc-hash)))
 
     (t/testing "Compaction"
       (db/submit-doc tx-log doc-hash :some-val)
-      (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
+      (t/is (= [doc] (docs fj/*dbtype* (:ds tx-log) doc-hash))))
 
     (t/testing "Eviction"
       (db/submit-doc tx-log doc-hash {:crux.db/id :some-id :crux.db/evicted? true})
       (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
-                {:crux.db/id :some-id :crux.db/evicted? true}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
+                {:crux.db/id :some-id :crux.db/evicted? true}]
+               (docs fj/*dbtype* (:ds tx-log) doc-hash))))
 
     (t/testing "Resurrect Document"
       (let [tx-2 (db/submit-tx tx-log [[:crux.tx/put doc]])]
         (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
                   {:crux.db/id :some-id :crux.db/evicted? true}
                   doc]
-                 (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))))))
+                 (docs fj/*dbtype* (:ds tx-log) doc-hash)))))))
 
 (t/deftest test-micro-bench
   (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))

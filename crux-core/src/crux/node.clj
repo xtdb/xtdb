@@ -17,11 +17,12 @@
             [crux.topology :as topo]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog]
+  (:import [crux.api NodeOutOfSyncException ITxLog]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
-           java.util.concurrent.locks.StampedLock))
+           java.util.concurrent.locks.StampedLock
+           (java.time Duration)))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
                    (Boolean/parseBoolean check-asserts)
@@ -40,12 +41,12 @@
 
 (defrecord CruxNode [kv-store tx-log indexer object-store
                      options close-fn status-fn closed? ^StampedLock lock]
-  ICruxAPI
+  api/PCruxNode
   (db [this]
-    (.db this nil nil))
+    (api/db this nil nil))
 
   (db [this valid-time]
-    (.db this valid-time nil))
+    (api/db this valid-time nil))
 
   (db [this valid-time tx-time]
     (cio/with-read-lock lock
@@ -78,7 +79,7 @@
       (with-open [snapshot (kv/new-snapshot kv-store)]
         (mapv c/entity-tx->edn (idx/entity-history snapshot eid)))))
 
-  (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+  (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -91,18 +92,12 @@
       (ensure-node-open this)
       (status-fn)))
 
-  (attributeStats [this]
+  (attribute-stats [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (idx/read-meta kv-store :crux.kv/stats)))
 
-  (submitTx [this tx-ops]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      @(db/submit-tx tx-log tx-ops)))
-
-  (hasTxCommitted [this {:keys [crux.tx/tx-id
-                                crux.tx/tx-time] :as submitted-tx}]
+  (tx-committed? [this {:keys [crux.tx/tx-id crux.tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (let [{latest-tx-id :crux.tx/tx-id
@@ -116,7 +111,40 @@
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
-  (openTxLog ^ITxLog [this from-tx-id with-ops?]
+  (sync [this] (api/sync this nil))
+  (sync [this timeout]
+    (when-let [tx (db/latest-submitted-tx (:tx-log this))]
+      (-> (api/await-tx this tx nil)
+          :crux.tx/tx-time)))
+
+  (await-tx-time [this tx-time] (api/await-tx-time this tx-time nil))
+  (await-tx-time [this tx-time timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis ^Duration timeout))
+                                                (:crux.tx-log/await-tx-timeout options)))
+          :crux.tx/tx-time)))
+
+  (await-tx [this submitted-tx] (api/await-tx this submitted-tx nil))
+  (await-tx [this submitted-tx timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (tx/await-tx indexer submitted-tx (or (and timeout (.toMillis ^Duration timeout))
+                                            (:crux.tx-log/await-tx-timeout options)))))
+
+  (latest-completed-tx [this]
+    (db/read-index-meta indexer ::tx/latest-completed-tx))
+
+  (latest-submitted-tx [this]
+    (db/latest-submitted-tx tx-log))
+
+  api/PCruxIngestClient
+  (submit-tx [this tx-ops]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      @(db/submit-tx tx-log tx-ops)))
+
+  (open-tx-log ^ITxLog [this from-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (let [tx-log-iterator (db/open-tx-log tx-log from-tx-id)
@@ -139,32 +167,8 @@
                                           (.close tx-log-iterator))
                                         tx-log))))
 
-  (sync [this timeout]
-    (when-let [tx (db/latest-submitted-tx (:tx-log this))]
-      (-> (api/await-tx this tx nil)
-          :crux.tx/tx-time)))
-
-  (awaitTxTime [this tx-time timeout]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-time (or (and timeout (.toMillis timeout))
-                                                (:crux.tx-log/await-tx-timeout options)))
-          :crux.tx/tx-time)))
-
-  (awaitTx [this submitted-tx timeout]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (tx/await-tx indexer submitted-tx (or (and timeout (.toMillis timeout))
-                                            (:crux.tx-log/await-tx-timeout options)))))
-
-  (latestCompletedTx [this]
-    (db/read-index-meta indexer ::tx/latest-completed-tx))
-
-  (latestSubmittedTx [this]
-    (db/latest-submitted-tx tx-log))
-
-  ICruxAsyncIngestAPI
-  (submitTxAsync [this tx-ops]
+  api/PCruxAsyncIngestClient
+  (submit-tx-async [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (db/submit-tx tx-log tx-ops)))
@@ -180,9 +184,11 @@
 
   Closeable
   (close [_]
-    (cio/with-write-lock lock
-      (when (and (not @closed?) close-fn) (close-fn))
-      (reset! closed? true))))
+    (when-not @closed?
+      (cio/with-write-lock lock
+        (when-not @closed?
+          (reset! closed? true)
+          (when close-fn (close-fn)))))))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer object-store tx-log kv-store]} node-opts]
@@ -205,7 +211,7 @@
    ::bus 'crux.bus/bus
    ::node 'crux.node/node-component})
 
-(defn start ^crux.api.ICruxAPI [options]
+(defn start ^Closeable [options]
   (let [[{::keys [node] :as components} close-fn] (topo/start-topology options)]
     (-> node
         (assoc :status-fn (fn []

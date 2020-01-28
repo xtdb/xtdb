@@ -1,9 +1,9 @@
 (ns crux.topology
   (:require [clojure.spec.alpha :as s]
+            [crux.api :as api]
             [com.stuartsierra.dependency :as dep]
             [crux.io :as cio])
-  (:import (java.io Closeable)
-           (crux.api ICruxAPI)))
+  (:import (java.io Closeable)))
 
 (s/def ::resolvable-id
   (fn [id]
@@ -88,7 +88,6 @@
 (defn- close-topology [started-order]
   (->> (reverse started-order)
        (filter #(instance? Closeable %))
-       (remove #(instance? ICruxAPI %)) ; not pretty, but prevents infinite loop
        (run! cio/try-close)))
 
 (defn start-topology [options]

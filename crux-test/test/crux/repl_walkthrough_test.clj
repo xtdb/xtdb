@@ -3,9 +3,8 @@
             [clojure.pprint :as pp]
             [clojure.test :as t]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as fapi :refer [*api*]]
-            [clojure.java.io :as io])
-  (:import (crux.api ICruxAPI)))
+            [crux.fixtures.api :as fapi :refer [*node*]]
+            [clojure.java.io :as io]))
 
 (t/use-fixtures :each
   (fn [f]
@@ -41,7 +40,7 @@
 (t/deftest graph-traversal-test
   (fapi/submit+await-tx (mapv (fn [n] [:crux.tx/put n]) nodes))
 
-  (let [db (crux/db *api*)]
+  (let [db (crux/db *node*)]
     (t/is (= #{[:Role2] [:Role3]}
              (crux/q db '{:find [?roleName]
                           :where
@@ -102,14 +101,14 @@
 
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
            (crux/q
-            (crux/db *api* #inst "1973-04-07T09:20:27.966-00:00")
+            (crux/db *node* #inst "1973-04-07T09:20:27.966-00:00")
             '{:find [e]
               :where [[e :name "Pablo"]]
               :full-results? true})))
 
   (fapi/submit+await-tx [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
 
-  (t/is (empty? (crux/q (crux/db *api*)
+  (t/is (empty? (crux/q (crux/db *node*)
                         '{:find [e]
                           :where [[e :name "Pablo"]]
                           :full-results? true})))
@@ -126,7 +125,7 @@
                :last-name "Picasso"
                :height 1.63
                :location "France"}]}
-           (crux/q (crux/db *api*)
+           (crux/q (crux/db *node*)
                    '{:find [e]
                      :where [[e :name "Pablo"]]
                      :full-results? true}))))

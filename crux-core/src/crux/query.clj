@@ -10,7 +10,8 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.api :as api])
   (:import clojure.lang.ExceptionInfo
            crux.api.ICruxDatasource
            crux.codec.EntityTx
@@ -1192,40 +1193,28 @@
      (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
 (defrecord QueryDatasource [kv query-cache conform-cache object-store valid-time transact-time entity-as-of-idx]
-  ICruxDatasource
-  (entity [this eid]
-    (entity this eid))
+  api/PCruxDatasource
+  (entity [this eid] (entity this eid))
+  (entity [this snapshot eid] (entity this snapshot eid))
+  (entity-tx [this eid] (entity-tx this eid))
 
-  (entity [this snapshot eid]
-    (entity this snapshot eid))
+  (new-snapshot [this] (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
-  (entityTx [this eid]
-    (entity-tx this eid))
+  (q [this q] (crux.query/q this q))
+  (q [this snapshot q] (crux.query/q this snapshot q))
 
-  (newSnapshot [this]
-    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
-
-  (q [this q]
-    (crux.query/q this q))
-
-  (q [this snapshot q]
-    (crux.query/q this snapshot q))
-
-  (historyAscending [this snapshot eid]
+  (history-ascending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
-  (historyDescending [this snapshot eid]
+  (history-descending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-descending snapshot eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
-  (validTime [_]
-    valid-time)
+  (valid-time [_] valid-time)
+  (transaction-time [_] transact-time))
 
-  (transactionTime [_]
-    transact-time))
-
-(defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
+(defn db [kv object-store valid-time transact-time]
   (->QueryDatasource kv
                      (lru/get-named-cache kv ::query-cache)
                      (lru/get-named-cache kv ::conform-cache)

@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*node*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.kv :as fkv]
             [crux.index :as idx]
@@ -327,7 +327,7 @@
 
 (defn load-rdf-into-crux [resource]
   (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream (io/resource resource))]
-                                         (rdf/submit-ntriples (:tx-log *api*) in 1000))]
+                                         (rdf/submit-ntriples (:tx-log *node*) in 1000))]
     (println "Loaded into kafka awaiting Crux to catch up indexing...")
     (fapi/submit+await-tx (:crux.tx/tx-time last-tx) (java.time.Duration/ofMinutes 20))
     (t/is (= 521585 entity-count))))
@@ -406,7 +406,7 @@
          (when crux-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":crux-results " (lazy-count-with-timeout *api* (sparql/sparql->datalog q) query-timeout-ms)
+                     (.write out (str ":crux-results " (lazy-count-with-timeout *node* (sparql/sparql->datalog q) query-timeout-ms)
                                       "\n"))
                      true
                      (catch Throwable t

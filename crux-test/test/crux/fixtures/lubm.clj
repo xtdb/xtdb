@@ -1,5 +1,5 @@
 (ns crux.fixtures.lubm
-  (:require [crux.fixtures.api :refer [*api*]]
+  (:require [crux.fixtures.api :refer [*node*]]
             [crux.api :as api]
             [crux.rdf :as rdf]))
 
@@ -12,8 +12,8 @@
                      (rdf/->default-language)
                      (partition-all 1000)
                      (reduce (fn [_ tx-ops]
-                               (api/submit-tx *api* (vec tx-ops)))
+                               (api/submit-tx *node* (vec tx-ops)))
                              nil))]
 
-    (api/await-tx *api* last-tx)
+    (api/await-tx *node* last-tx)
     (f)))

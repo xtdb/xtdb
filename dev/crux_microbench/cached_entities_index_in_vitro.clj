@@ -9,14 +9,14 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux-microbench.ticker-data-gen :as data-gen]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :refer [*node*]]
             [crux.fixtures.standalone :as fs]
             [crux.kv :as kv])
   (:import (java.util Date)))
 
 (defn- -microbench-cached-index []
-  (f/transact! *api* data-gen/currencies)
-  (let [db (api/db *api*)
+  (f/transact! *node* data-gen/currencies)
+  (let [db (api/db *node*)
         d (Date.)]
     (println "cache hit gains")
     (with-open [snapshot (api/new-snapshot db)
@@ -44,9 +44,9 @@
         (t/is seeked)
         (t/is seeked-2))))
 
-  (let [db (api/db *api*)
+  (let [db (api/db *node*)
         tickers (data-gen/gen-tickers 1000)
-        _ (f/transact! *api* tickers)
+        _ (f/transact! *node* tickers)
         d (Date.)]
     (println "cache miss overhead")
     (with-open [snapshot (api/new-snapshot db)

@@ -2,7 +2,7 @@
   (:require [crux.bench.ts-weather :as ts-weather]
             [clojure.test :as t]
             [crux.fixtures.standalone :as fs]
-            [crux.fixtures.api :refer [*api*] :as fapi]
+            [crux.fixtures.api :refer [*node*] :as fapi]
             [crux.fixtures.kv :as fkv]
             [crux.db :as db]
             [crux.codec :as c]
@@ -23,7 +23,7 @@
         (time
          (doseq [doc-batch (->> (take 10000 condition-docs)
                                 (partition-all 100))]
-           (db/index-docs (:indexer *api*) (->> doc-batch (into {} (map (juxt c/new-id identity)))))))
+           (db/index-docs (:indexer *node*) (->> doc-batch (into {} (map (juxt c/new-id identity)))))))
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= first-doc (db/get-single-object (:object-store *api*) snapshot (c/new-id first-doc)))))))))
+        (with-open [snapshot (kv/new-snapshot (:kv-store *node*))]
+          (t/is (= first-doc (db/get-single-object (:object-store *node*) snapshot (c/new-id first-doc)))))))))

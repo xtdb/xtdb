@@ -82,7 +82,7 @@
         tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        node (reify crux.api.ICruxAPI
+        node (reify crux.api.PCruxNode
                (db [this]
                  (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
@@ -153,7 +153,7 @@
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
 
-        node (reify crux.api.ICruxAPI
+        node (reify crux.api.PCruxNode
                (db [this]
                  (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer

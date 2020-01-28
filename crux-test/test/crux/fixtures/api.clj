@@ -4,6 +4,7 @@
            [java.util ArrayList List]))
 
 (def ^:dynamic ^ICruxAPI *api*)
+(def ^:dynamic *node*)
 (def ^:dynamic *opts* nil)
 
 (defn with-opts [opts f]
@@ -11,13 +12,14 @@
     (f)))
 
 (defn with-node [f]
-  (with-open [node (Crux/startNode *opts*)]
-    (binding [*api* node]
+  (with-open [api (Crux/startNode *opts*)]
+    (binding [*api* api
+              *node* (:node api)]
       (f))))
 
 (defn submit+await-tx [tx-ops]
-  (let [tx (crux/submit-tx *api* tx-ops)]
-    (crux/await-tx *api* tx)
+  (let [tx (crux/submit-tx *node* tx-ops)]
+    (crux/await-tx *node* tx)
     tx))
 
 ;; Literal vectors aren't type hinted as List in Clojure, and cannot

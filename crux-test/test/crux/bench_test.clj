@@ -4,7 +4,7 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.standalone :as fs]
-            [crux.fixtures.api :refer [*api*] :as apif]
+            [crux.fixtures.api :refer [*node*] :as apif]
             [crux.fixtures.kv :as fkv]
             [crux.query :as q]
             [clojure.spec.alpha :as s]
@@ -44,7 +44,7 @@
       (double (/ (- (System/nanoTime) start#) 1e6)))))
 
 (defn- insert-docs [ts docs]
-  (api/submit-tx *api* (f/maps->tx-ops docs ts)))
+  (api/submit-tx *node* (f/maps->tx-ops docs ts)))
 
 (defn- insert-data [n batch-size ts]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
@@ -53,7 +53,7 @@
 (defn- perform-query [ts query]
   (let [q (query queries)
         q-fn (fn []
-               (let [db (api/db *api* ts)]
+               (let [db (api/db *node* ts)]
                  (if (= query :id)
                    (api/entity db :hardcoded-id)
                    (q/q db q))))]

@@ -1,5 +1,5 @@
 (ns crux.fixtures.http-server
-  (:require [crux.fixtures.api :refer [*api*]]
+  (:require [crux.fixtures.api :refer [*api* *node*]]
             [crux.http-server :as srv]
             [crux.io :as cio])
   (:import crux.api.Crux))
@@ -9,8 +9,9 @@
 
 (defn with-http-server [f]
   (let [server-port (cio/free-port)]
-    (with-open [http-server ^java.io.Closeable (srv/start-http-server *api* {:server-port server-port})]
+    (with-open [http-server ^java.io.Closeable (srv/start-http-server *node* {:server-port server-port})]
       (binding [*api-url* (str "http://" *host* ":" server-port)]
         (with-open [api-client (Crux/newApiClient *api-url*)]
-          (binding [*api* api-client]
+          (binding [*api* api-client
+                    *node* (:node api-client)]
             (f)))))))

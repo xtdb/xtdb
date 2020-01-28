@@ -4,14 +4,14 @@
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [clear go suspend resume halt reset reset-all]])
-  (:import [crux.api ICruxAPI]))
+  (:import (java.io Closeable)))
 
 (ctn/disable-reload!)
 
 (defmethod i/init-key :node [_ node-opts]
   (crux/start-node node-opts))
 
-(defmethod i/halt-key! :node [_ ^ICruxAPI node]
+(defmethod i/halt-key! :node [_ ^Closeable node]
   (.close node))
 
 (def config

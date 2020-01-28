@@ -8,7 +8,7 @@
             [crux.api :as api]
             [crux.bench-test]
             [crux.fixtures :as f]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :refer [*node*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.standalone :as fs]
             [crux.fixtures.api :as f-api]
@@ -94,7 +94,7 @@
 
 (defn- naively-bench-query [test-id query query-id cache-on?]
   (binding [crux.query/*with-entities-cache?* cache-on?]
-    (let [db (api/db *api*)
+    (let [db (api/db *node*)
           durations (naive-durations-measure query db sample-size)
           avg (avg durations)
           res
@@ -144,7 +144,7 @@
 ; (untangle-plot-data (read-string (slurp "test-times.edn")))
 
 (defn- with-tickers-and-history [f]
-  (upload-stocks-with-history *api*)
+  (upload-stocks-with-history *node*)
   (f))
 
 (defn- with-local-setup [f]

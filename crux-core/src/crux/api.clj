@@ -4,9 +4,7 @@
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [clojure.tools.logging :as log])
-  (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ITxLog]
-           java.io.Closeable
+  (:import java.io.Closeable
            java.util.Date
            java.time.Duration))
 
@@ -49,15 +47,6 @@
 
 (s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind sequential?))
-
-(defn- conform-tx-ops  [tx-ops]
-  (->> tx-ops
-       (mapv
-        (fn [tx-op]
-          (map
-           #(if (instance? java.util.Map %) (into {} %) %)
-           tx-op)))
-       (mapv vec)))
 
 (defprotocol PCruxNode
   "Provides API access to Crux."
@@ -166,74 +155,6 @@
 
   Returns an iterator of the TxLog"))
 
-(extend-protocol PCruxNode
-  ICruxAPI
-  (db
-    ([this]
-     (.db this))
-    ([this ^Date valid-time]
-     (.db this valid-time))
-    ([this ^Date valid-time ^Date transaction-time]
-     (.db this valid-time transaction-time)))
-
-  (document [this content-hash]
-    (.document this content-hash))
-
-  (documents [this content-hash-set]
-    (.documents this content-hash-set))
-
-  (history [this eid]
-    (.history this eid))
-
-  (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
-
-  (status [this]
-    (.status this))
-
-  (tx-committed? [this submitted-tx]
-    (.hasTxCommitted this submitted-tx))
-
-  (sync
-    ([this]
-     (.sync this nil))
-    ([this timeout]
-     (.sync this timeout))
-
-    ([this tx-time timeout]
-     (defonce warn-on-deprecated-sync
-       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-     (.awaitTxTime this tx-time timeout)))
-
-  (await-tx
-    ([this submitted-tx]
-     (await-tx this submitted-tx nil))
-    ([this submitted-tx timeout]
-     (.awaitTx this submitted-tx timeout)))
-
-  (await-tx-time
-    ([this tx-time]
-     (await-tx-time this tx-time nil))
-    ([this tx-time timeout]
-     (.awaitTxTime this tx-time timeout)))
-
-  (latest-completed-tx [node]
-    (.latestCompletedTx node))
-
-  (latest-submitted-tx [node]
-    (.latestSubmittedTx node))
-
-  (attribute-stats [this]
-    (.attributeStats this)))
-
-(extend-protocol PCruxIngestClient
-  ICruxIngestAPI
-  (submit-tx [this tx-ops]
-    (.submitTx this (conform-tx-ops tx-ops)))
-
-  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
-    (.openTxLog this from-tx-id with-ops?)))
-
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
   transaction time."
@@ -290,39 +211,6 @@
   If a tx time was specified when db value was acquired then returns
   the specified time."))
 
-(extend-protocol PCruxDatasource
-  ICruxDatasource
-  (entity
-    ([this eid]
-     (.entity this eid))
-    ([this snapshot eid]
-     (.entity this snapshot eid)))
-
-  (entity-tx [this eid]
-    (.entityTx this eid))
-
-  (new-snapshot [this]
-    (.newSnapshot this))
-
-  (q
-    ([this query]
-     (.q this query))
-    ([this snapshot query]
-     (.q this snapshot query)))
-
-  (history-ascending [this snapshot eid]
-    (.historyAscending this snapshot eid))
-
-  (history-descending [this snapshot eid]
-    (.historyDescending this snapshot eid))
-
-  (valid-time
-    [this]
-    (.validTime this))
-
-  (transaction-time [this]
-    (.transactionTime this)))
-
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."
   (submit-tx-async [node tx-ops]
@@ -330,11 +218,6 @@
   style transactions. Non-blocking.  Returns a deref with map with
   details about the submitted transaction, including tx-time and
   tx-id."))
-
-(extend-protocol PCruxAsyncIngestClient
-  ICruxAsyncIngestAPI
-  (submit-tx-async [this tx-ops]
-    (.submitTxAsync this (conform-tx-ops tx-ops))))
 
 (defn start-node
   "NOTE: requires any dependendies on the classpath that the Crux modules may need.
@@ -345,18 +228,17 @@
   :crux.kafka/bootstrap-servers etc. See the individual modules used in the specified
   topology for option descriptions.
 
-  returns a node which implements ICruxAPI and
-  java.io.Closeable. Latter allows the node to be stopped by
-  calling `(.close node)`.
+  returns a node which implements java.io.Closeable,
+  allowing the node to be stopped by calling `(.close node)`.
 
   throws IndexVersionOutOfSyncException if the index needs rebuilding.
   throws NonMonotonicTimeException if the clock has moved backwards since
     last run. Only applicable when using the event log."
-  ^ICruxAPI [options]
-  (Crux/startNode options))
+  ^java.io.Closeable [options]
+  ((requiring-resolve 'crux.node/start) options))
 
 (defn new-api-client
-  "Creates a new remote API client ICruxAPI. The remote client
+  "Creates a new remote API client. The remote client
   requires valid and transaction time to be specified for all
   calls to `db`.
 
@@ -367,8 +249,8 @@
   url the URL to a Crux HTTP end-point.
 
   returns a remote API client."
-  ^ICruxAPI [url]
-  (Crux/newApiClient url))
+  ^java.io.Closeable [url]
+  ((requiring-resolve 'crux.remote-api-client/new-api-client) url))
 
 (defn new-ingest-client
   "Starts an ingest client for transacting into Kafka without running a
@@ -387,8 +269,7 @@
    :crux.kafka/doc-partitions     1
    :crux.kafka/replication-factor 1}
 
-  Returns a crux.api.ICruxIngestAPI component that implements
-  java.io.Closeable, which allows the client to be stopped by calling
-  close."
-  ^ICruxAsyncIngestAPI [options]
-  (Crux/newIngestClient options))
+  Returns a component that implements java.io.Closeable, which allows
+  the client to be stopped by calling close."
+  ^java.io.Closeable [options]
+  ((requiring-resolve 'crux.kafka-ingest-client/new-ingest-client) options))

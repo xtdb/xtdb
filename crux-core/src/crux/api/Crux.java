@@ -40,7 +40,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        return (ICruxAPI) resolve("crux.node/start").invoke(options);
+        return (ICruxAPI) resolve("crux.java/start-node").invoke(options);
     }
 
     /**
@@ -56,7 +56,7 @@ public class Crux {
      * @return    a remote API client.
      */
     public static ICruxAPI newApiClient(String url) {
-        return (ICruxAPI) resolve("crux.remote-api-client/new-api-client").invoke(url);
+        return (ICruxAPI) resolve("crux.java/start-remote-api-client").invoke(url);
     }
 
     /**
@@ -76,6 +76,6 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
-        return (ICruxAsyncIngestAPI) resolve("crux.kafka-ingest-client/new-ingest-client").invoke(options);
+        return (ICruxAsyncIngestAPI) resolve("crux.java/start-async-ingest-client").invoke(options);
     }
 }

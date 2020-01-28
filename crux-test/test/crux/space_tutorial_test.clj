@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [crux.api :as crux]
             [crux.io :as cio]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*node*]]
             [crux.fixtures :as f]
             [clojure.java.io :as io])
   (:import java.io.Closeable))
@@ -27,7 +27,7 @@
    :cargo ["stereo" "gold fish" "slippers" "secret note"]})
 
 (defn filter-appearance [description]
-  (crux/q (crux/db *api*)
+  (crux/q (crux/db *node*)
           {:find '[name IUPAC]
            :where '[[e :common-name name]
                     [e :IUPAC-name IUPAC]
@@ -40,7 +40,7 @@
 
 (defn stock-check
   [company-id item]
-  {:result (crux/q (crux/db *api*)
+  {:result (crux/q (crux/db *node*)
                    {:find '[name funds stock]
                     :where ['[e :company-name name]
                             '[e :credits funds]
@@ -69,10 +69,10 @@
               :id/employee "22910x2",
               :badges "SETUP",
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest)))
+             (crux/entity (crux/db *node*) :manifest)))
 
     (t/is (= #{["secret note"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      {:find '[belongings]
                       :where '[[e :cargo belongings]]
                       :args [{'belongings "secret note"}]}))))
@@ -138,9 +138,9 @@
                             #inst "2115-02-19T18"]])
 
     (t/is (= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 21}
-             (crux/entity (crux/db *api* #inst "2115-02-14") :stock/Pu)))
+             (crux/entity (crux/db *node* #inst "2115-02-14") :stock/Pu)))
     (t/is (= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
-             (crux/entity (crux/db *api* #inst "2115-02-18") :stock/Pu)))
+             (crux/entity (crux/db *node* #inst "2115-02-18") :stock/Pu)))
 
     (fapi/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT"])]])
 
@@ -150,7 +150,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (crux/entity (crux/db *node*) :manifest))))
 
   (t/testing "mercury-tests"
     (put-all! [{:crux.db/id :commodity/Pu
@@ -200,52 +200,52 @@
              :appearance "white solid"
              :density 1.73
              :radioactive false}
-            (crux/entity (crux/db *api*) :commodity/borax)))
+            (crux/entity (crux/db *node*) :commodity/borax)))
     (t/is (= #{[:commodity/Pu] [:commodity/Au]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      '{:find [element]
                        :where [[element :type :element/metal]]})))
     (t/is (=
-           (crux/q (crux/db *api*)
+           (crux/q (crux/db *node*)
                    '{:find [element]
                      :where [[element :type :element/metal]]} )
 
-           (crux/q (crux/db *api*)
+           (crux/q (crux/db *node*)
                    {:find '[element]
                     :where '[[element :type :element/metal]]} )
 
-           (crux/q (crux/db *api*)
+           (crux/q (crux/db *node*)
                    (quote
                     {:find [element]
                      :where [[element :type :element/metal]]}) )))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      '{:find [name]
                        :where [[e :type :element/metal]
                                [e :common-name name]]} )))
 
     (t/is (= #{["Nitrogen" 1.2506] ["Carbon" 2.267] ["Methane" 0.717] ["Borax" 1.73] ["Gold" 19.3] ["Plutonium" 19.816]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      '{:find [name rho]
                        :where [[e :density rho]
                                [e :common-name name]]})))
 
     (t/is (= #{["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      '{:find [name]
                        :where [[e :common-name name]
                                [e :radioactive true]]})))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      {:find '[name]
                       :where '[[e :type t]
                                [e :common-name name]]
                       :args [{'t :element/metal}]})))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      {:find '[name]
                       :where '[[e :type t]
                                [e :common-name name]]
@@ -263,7 +263,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (crux/entity (crux/db *node*) :manifest))))
 
   (t/testing "neptune-test"
     (fapi/submit+await-tx [[:crux.tx/put
@@ -314,21 +314,21 @@
                             #inst "2112-06-03"]])
 
     (t/is (= #{[true :Full]}
-             (crux/q (crux/db *api* #inst "2115-07-03")
+             (crux/q (crux/db *node* #inst "2115-07-03")
                      '{:find [cover type]
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
                                [e :cover-type type]]})))
 
     (t/is (= #{}
-             (crux/q (crux/db *api* #inst "2112-07-03")
+             (crux/q (crux/db *node* #inst "2112-07-03")
                      '{:find [cover type]
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
                                [e :cover-type type]]})))
 
     (t/is (= #{[true :Promotional]}
-             (crux/q (crux/db *api* #inst "2111-07-03")
+             (crux/q (crux/db *node* #inst "2111-07-03")
                      '{:find [cover type]
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
@@ -343,7 +343,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (crux/entity (crux/db *node*) :manifest))))
 
   (t/testing "saturn-tests"
     (put-all! [{:crux.db/id :gold-harmony
@@ -462,7 +462,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "CAS"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (crux/entity (crux/db *node*) :manifest))))
 
   (t/testing "jupiter-tests"
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :kaarlang/clients
@@ -487,22 +487,22 @@
 
     (t/is (= {:crux.db/id :kaarlang/clients
               :clients [:blue-energy :gold-harmony :tombaugh-resources]}
-             (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
+             (crux/entity (crux/db *node* #inst "2114-01-01T09") :kaarlang/clients)))
 
     ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
     (t/is (crux/history-ascending
-           (crux/db *api*)
-           (crux/new-snapshot (crux/db *api* #inst "2116-01-01T09")) ;; <1>
+           (crux/db *node*)
+           (crux/new-snapshot (crux/db *node* #inst "2116-01-01T09")) ;; <1>
            :kaarlang/clients))
 
     (fapi/submit+await-tx [[:crux.tx/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
 
-    (t/is nil? (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients))
+    (t/is nil? (crux/entity (crux/db *node* #inst "2114-01-01T09") :kaarlang/clients))
 
     ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
     (t/is (crux/history-ascending
-           (crux/db *api*)
-           (crux/new-snapshot (crux/db *api* #inst "2116-01-01T09")) ;; <1>
+           (crux/db *node*)
+           (crux/new-snapshot (crux/db *node* #inst "2116-01-01T09")) ;; <1>
            :kaarlang/clients))))
 
 (t/deftest Oumuamua-test
@@ -550,21 +550,21 @@
                :origin-planet "Earth",
                :identity-tag :JA012992129120,
                :DOB #inst "2090-12-07T00:00:00.000-00:00"}]}
-           (full-query *api*)))
+           (full-query *node*)))
 
   (fapi/submit+await-tx [[:crux.tx/evict :person/kaarlang]]) ;; <1>
-  (t/is empty? (full-query *api*))
+  (t/is empty? (full-query *node*))
 
   ;; Check not nil, history constantly changing so it is hard to check otherwise
-  (t/is (crux/history-descending (crux/db *api*)
-                                 (crux/new-snapshot (crux/db *api*))
+  (t/is (crux/history-descending (crux/db *node*)
+                                 (crux/new-snapshot (crux/db *node*))
                                  :person/kaarlang))
-  (t/is (crux/history-descending (crux/db *api*)
-                                 (crux/new-snapshot (crux/db *api*))
+  (t/is (crux/history-descending (crux/db *node*)
+                                 (crux/new-snapshot (crux/db *node*))
                                  :person/ilex))
-  (t/is (crux/history-descending (crux/db *api*)
-                                 (crux/new-snapshot (crux/db *api*))
+  (t/is (crux/history-descending (crux/db *node*)
+                                 (crux/new-snapshot (crux/db *node*))
                                  :person/thadd))
-  (t/is (crux/history-descending (crux/db *api*)
-                                 (crux/new-snapshot (crux/db *api*))
+  (t/is (crux/history-descending (crux/db *node*)
+                                 (crux/new-snapshot (crux/db *node*))
                                  :person/johanna)))

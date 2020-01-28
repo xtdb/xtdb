@@ -10,7 +10,7 @@
             [crux.kv :as kv]
             [crux.fixtures :as f]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.api :refer [*node*]]
             [crux.fixtures.standalone :as fs]
             [crux.fixtures.api :as apif]))
 
@@ -18,8 +18,8 @@
 
 (t/deftest test-cached-index
   (t/testing "cached index sanity"
-    (f/transact! *api* [{:crux.db/id :currency.id/eur}])
-    (let [db (api/db *api*)
+    (f/transact! *node* [{:crux.db/id :currency.id/eur}])
+    (let [db (api/db *node*)
           d (java.util.Date.)]
       (t/is (api/entity db :currency.id/eur))
       (with-open [snapshot (api/new-snapshot db)

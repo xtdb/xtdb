@@ -1,6 +1,6 @@
 (ns crux.sparql-test
   (:require [clojure.test :as t]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*node*]]
             [crux.api :as crux]
             [crux.fixtures.kv :as fkv]
             [crux.fixtures.api :as apif]
@@ -17,7 +17,7 @@
 
   (t/testing "querying transacted data"
     (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 SELECT ?x
@@ -27,7 +27,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
                [(keyword "http://somewhere/SarahJones/") "Sarah Jones"]
                [(keyword "http://somewhere/JohnSmith/") "John Smith"]
                [(keyword "http://somewhere/MattJones/") "Matt Jones"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 SELECT ?x ?fname
@@ -35,7 +35,7 @@ WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
 
     (t/is (= #{["John"]
                ["Rebecca"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 SELECT ?givenName
@@ -46,7 +46,7 @@ WHERE
 
     (t/is (= #{["Rebecca"]
                ["Sarah"]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -57,7 +57,7 @@ WHERE
   FILTER regex(?g, \"r\", \"i\") }"))))
 
     (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 PREFIX info: <http://somewhere/peopleInfo#>
@@ -74,7 +74,7 @@ WHERE
                ["Sarah Jones" :crux.sparql/optional]
                ["John Smith" 25]
                ["Matt Jones" :crux.sparql/optional]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 PREFIX info:    <http://somewhere/peopleInfo#>
@@ -89,7 +89,7 @@ WHERE
 
     (t/is (= #{["Becky Smith" 23]
                ["John Smith" 25]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 PREFIX info:   <http://somewhere/peopleInfo#>
@@ -105,7 +105,7 @@ WHERE
     (t/is (= #{["Sarah Jones" :crux.sparql/optional]
                ["John Smith" 25]
                ["Matt Jones" :crux.sparql/optional]}
-             (crux/q (crux/db *api*)
+             (crux/q (crux/db *node*)
                      (sparql/sparql->datalog
                       "
 PREFIX info:        <http://somewhere/peopleInfo#>
