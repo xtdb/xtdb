@@ -201,7 +201,6 @@ Start a standalone in-memory (i.e. not persisted anywhere) node:
 
 ``` clojure
 (require '[crux.api :as crux])
-(import '[crux.api ICruxAPI])
 
 (def my-node
   (crux/start-node

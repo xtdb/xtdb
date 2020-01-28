@@ -8,8 +8,7 @@
             [ring.util.time :as rt]
             [crux.io :as cio]
             [crux.api :as api])
-  (:import [org.eclipse.rdf4j.model BNode IRI Literal]
-           crux.api.ICruxAPI))
+  (:import [org.eclipse.rdf4j.model BNode IRI Literal]))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]

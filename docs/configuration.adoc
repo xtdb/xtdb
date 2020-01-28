@@ -36,8 +36,7 @@ it needs locally. This is good for experimenting with Crux and
 for small to medium sized deployments, where running a single instance
 is permissible.
 
-Crux nodes implement the `ICruxAPI` interface and are the
-starting point for making use of Crux. Nodes also implement
+Crux nodes are the starting point for making use of Crux. Nodes implement
 `java.io.Closeable` and can therefore be lifecycle managed.
 
 [#config-properties]

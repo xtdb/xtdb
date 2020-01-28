@@ -264,7 +264,7 @@ Represents the database as of a specific valid and transaction time.
 
 [source,clj]
 ----
-(defn start-node ^ICruxAPI [options])
+(defn start-node [options])
 ----
 
 NOTE: requires any dependendies on the classpath that the Crux modules may need.
@@ -277,12 +277,11 @@ Options:
 ----
 
 Options are specified as keywords using their long format name, like
-`:crux.kafka/bootstrap-servers` etc. See the individual modules used in the specified
-topology for option descriptions.
+`:crux.kafka/bootstrap-servers` etc. See the individual modules used in the
+specified topology for option descriptions.
 
-returns a node which implements ICruxAPI and
-java.io.Closeable. Latter allows the node to be stopped by
-calling `(.close node)`.
+returns a node which implements java.io.Closeable. Latter allows the node to be
+stopped by calling `(.close node)`.
 
 throws IndexVersionOutOfSyncException if the index needs rebuilding.
 throws NonMonotonicTimeException if the clock has moved backwards since
@@ -292,12 +291,11 @@ last run. Only applicable when using the event log.
 
 [source,clj]
 ----
-(defn new-api-client ^ICruxAPI [url])
+(defn new-api-client [url])
 ----
 
-Creates a new remote API client ICruxAPI. The remote client
-requires valid and transaction time to be specified for all
-calls to `db`.
+Creates a new remote API client. The remote client requires valid and
+transaction time to be specified for all calls to `db`.
 
 NOTE: requires either clj-http or http-kit on the classpath,
 see crux.remote-api-client/*internal-http-request-fn*

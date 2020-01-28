@@ -2,8 +2,7 @@
 ; $ clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.crux-standalone
-  (:require [crux.api :as crux])
-  (:import (crux.api ICruxAPI)))
+  (:require [crux.api :as crux]))
 
 ; this standalone configuration is the easiest way to try Crux, no Kafka needed
 
@@ -99,30 +98,3 @@
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true})
-
-
-(comment
-  ; use the following to help when not starting the node from the REPL
-
-  (defn run-node [{:keys [server-port] :as options} with-node-fn]
-    (with-open [crux-node (crux/start-node options)]
-      (with-node-fn crux-node)))
-
-  (declare s node)
-
-  ; run a node and return control to the REPL
-  (def ^ICruxAPI s
-    (future
-      (run-node
-        crux-options
-        (fn [crux-node]
-          (def node crux-node)
-          (Thread/sleep Long/MAX_VALUE)))))
-
-  ; close the node by cancelling the future
-  (future-cancel s)
-
-  ; ...or close the node directly
-  (.close node)
-
-)

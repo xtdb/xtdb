@@ -3,8 +3,7 @@
 
 (ns walkthrough.graph-traversal
   (:require [crux.api :as crux]
-            [clojure.pprint :as pp])
-  (:import (crux.api ICruxAPI)))
+            [clojure.pprint :as pp]))
 
 ;; inspired by http://docs.neo4j.org/chunked/stable/cypher-cookbook-hyperedges.html and https://github.com/Datomic/day-of-datomic/blob/master/tutorial/graph.clj
 

@@ -43,9 +43,8 @@ code to connect to your cluster and make a transaction:
 [source,clj]
 ----
 (require '[crux.api :as crux])
-(import (crux.api ICruxAPI))
 
-(def ^crux.api.ICruxAPI node
+(def node
   (crux/start-node
    {:crux.node/topology 'crux.kafka/topology
     :crux.node/kv-store 'crux.kv.memdb/kv
