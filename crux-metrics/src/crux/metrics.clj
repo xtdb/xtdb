@@ -1,6 +1,7 @@
 (ns crux.metrics
   (:require [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.kv-store :as kv-metrics]
+            [crux.metrics.query :as query-metrics]
             [metrics.core :as drpwz-m]
             [metrics.reporters.jmx :as jmx]
             [metrics.reporters.console :as console]
@@ -12,7 +13,8 @@
                            ;; registry around
                            (doto (drpwz-m/new-registry)
                              (indexer-metrics/assign-listeners deps)
-                             (kv-metrics/assign-listeners deps)))
+                             (kv-metrics/assign-listeners deps)
+                             (query-metrics/assign-listeners deps)))
                :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}}})
 
 (def jmx-reporter

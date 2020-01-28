@@ -10,7 +10,8 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.bus :as bus])
   (:import clojure.lang.ExceptionInfo
            crux.api.ICruxDatasource
            crux.codec.EntityTx
@@ -1191,7 +1192,8 @@
    (let [entity-tx (entity-tx snapshot db eid)]
      (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
-(defrecord QueryDatasource [kv query-cache conform-cache object-store valid-time transact-time entity-as-of-idx]
+(defrecord QueryDatasource [kv query-cache conform-cache object-store
+                            valid-time transact-time entity-as-of-idx bus]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
@@ -1206,10 +1208,31 @@
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
   (q [this q]
-    (crux.query/q this q))
+    (let [uuid (java.util.UUID/randomUUID)
+          safe-query (dissoc (normalize-query q) :args)]
+      (when bus
+        (bus/send bus {:crux.bus/event-type ::submitted-query
+                       ::query safe-query
+                       ::uuid uuid}))
+      (let [ret (crux.query/q this q)]
+        (when bus
+          (bus/send bus {:crux.bus/event-type ::completed-query
+                         ::query safe-query
+                         ::uuid uuid}))
+        ret)))
 
   (q [this snapshot q]
-    (crux.query/q this snapshot q))
+    (let [uuid (java.util.UUID/randomUUID)]
+      (when bus
+        (bus/send bus {:crux.bus/event-type ::submitted-query
+                       ::query (dissoc q :args)
+                       ::uuid uuid}))
+      (let [ret (crux.query/q this snapshot q)]
+        (when bus
+          (bus/send bus {:crux.bus/event-type ::completed-query
+                         ::query (dissoc q :args)
+                         ::uuid uuid}))
+        ret)))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
@@ -1225,11 +1248,22 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource [kv object-store valid-time transact-time]
-  (->QueryDatasource kv
-                     (lru/get-named-cache kv ::query-cache)
-                     (lru/get-named-cache kv ::conform-cache)
-                     object-store
-                     valid-time
-                     transact-time
-                     nil))
+(defn db ^crux.api.ICruxDatasource
+  ([kv object-store valid-time transact-time]
+   (->QueryDatasource kv
+                      (lru/get-named-cache kv ::query-cache)
+                      (lru/get-named-cache kv ::conform-cache)
+                      object-store
+                      valid-time
+                      transact-time
+                      nil
+                      nil))
+  ([kv object-store valid-time transact-time bus]
+   (->QueryDatasource kv
+                      (lru/get-named-cache kv ::query-cache)
+                      (lru/get-named-cache kv ::conform-cache)
+                      object-store
+                      valid-time
+                      transact-time
+                      nil
+                      bus)))

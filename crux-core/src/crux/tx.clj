@@ -268,7 +268,7 @@
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db kv-store object-store tx-time tx-time)
+        db (q/db kv-store object-store tx-time tx-time nil)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)
