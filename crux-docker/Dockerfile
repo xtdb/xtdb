@@ -8,9 +8,9 @@ EXPOSE 7888
 
 WORKDIR /usr/lib/crux
 
-ENTRYPOINT ["clojure", "-J-Dlogback.configurationFile=logback.xml", "-m", "crux.docker"]
+ENTRYPOINT ["clojure", "-m", "crux.docker"]
 
-ADD logback.xml .
+ADD resources/logback.xml ./resources/
 ADD deps.edn .
 ADD crux.edn /etc/crux.edn
 ADD src/ ./src/

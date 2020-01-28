@@ -52,9 +52,7 @@
 
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
                  [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
-  :jvm-opts
-  ["-server" "-Xmx8g"
-   "-Dlogback.configurationFile=logback.xml"]
+  :jvm-opts ["-server" "-Xmx8g"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
   :pedantic? :warn)

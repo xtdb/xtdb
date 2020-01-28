@@ -12,7 +12,7 @@ services:
       - "crux-dev-data:/var/lib/crux"
       - "./crux.edn:/etc/crux.edn"
       - "./deps.edn:/usr/lib/crux/deps.edn"
-      - "./logback.xml:/usr/lib/crux/logback.xml"
+      - "./logback.xml:/usr/lib/crux/resources/logback.xml"
 
 volumes:
   m2:
