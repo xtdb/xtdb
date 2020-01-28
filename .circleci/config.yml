@@ -38,7 +38,7 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum "project.clj" }}
 
-      - run: lein do version, check
+      - run: lein do version, sub test, check
 
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh
@@ -85,13 +85,12 @@ jobs:
     working_directory: ~/crux
     steps:
       - checkout
+      - run: lein sub install
       - restore_cache:
           keys:
             - v1-dependencies-{{ checksum "project.clj" }}
             - v1-dependencies-
       - run: lein sub -s crux-cli uberjar
-      - run: mkdir crux-cli/jars/
-      - run: cp crux-cli/target/*-standalone.jar crux-cli/jars/
       - persist_to_workspace:
           root: ./
           paths:
@@ -106,7 +105,9 @@ jobs:
           at: ./
       - run:
           command: |
-            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" "./crux-cli/jars/"
+            UBERJAR_NAME="crux-cli/target/crux-standalone-${CIRCLE_TAG}-standalone.jar"
+            mv crux-cli/target/crux-standalone.jar $UBERJAR_NAME
+            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" $UBERJAR_NAME
 
   deploy-docker:
     docker:
@@ -119,10 +120,11 @@ jobs:
           docker_layer_caching: true
       - run:
           command: |
+            DOCKER_TAG="${DOCKER_USER}/crux-standalone:${CIRCLE_TAG}"
             cd crux-cli/
-            docker build -t "danmason/crux-standalone:latest" .
+            docker build -t $DOCKER_TAG .
             echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-            docker push "danmason/crux-standalone:latest"
+            docker push $DOCKER_TAG
 
 
 workflows:
