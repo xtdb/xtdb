@@ -36,7 +36,7 @@
   "Eclipse Distribution License v1.0"]
  [[org.rocksdb/rocksdbjni "6.0.1"] "BSD 3-Clause"]
  [[org.clojure/clojure "1.10.0"] "Eclipse Public License 1.0"]
- [[org.slf4j/slf4j-api "1.7.25"] "MIT License"]
+ [[org.slf4j/slf4j-api "1.7.29"] "MIT License"]
  [[com.taoensso/nippy "2.14.0"] "Eclipse Public License"]
  [[com.taoensso/truss "1.5.0"] "Eclipse Public License"]
  [[org.clojure/tools.reader "1.1.1"] "Eclipse Public License 1.0"]
