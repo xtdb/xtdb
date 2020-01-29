@@ -1,15 +1,15 @@
 (ns crux.metrics.kv-store
   (:require [crux.status :as status]
-            [metrics.gauges :as gauges]))
+            [crux.dropwizard :as dropwizard]))
 
 (defn assign-estimate-num-keys-gauge
   [registry {:crux.node/keys [kv-store]}]
-  (gauges/gauge-fn registry ["crux" "kv" "assign-estimate-num-keys-gauge"]
+  (dropwizard/gauge-fn registry ["crux" "kv" "assign-estimate-num-keys-gauge"]
                    #(:crux.kv/estimate-num-keys (status/status-map kv-store))))
 
 (defn assign-kv-size-mb-gauge
   [registry {:crux.node/keys [kv-store]}]
-  (gauges/gauge-fn registry ["crux" "kv" "kv-size-mb"]
+  (dropwizard/gauge-fn registry ["crux" "kv" "kv-size-mb"]
                    #(:crux.kv/size (status/status-map kv-store))))
   
 

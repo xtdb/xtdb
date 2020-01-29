@@ -2,16 +2,16 @@
   (:require [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.kv-store :as kv-metrics]
             [crux.metrics.query :as query-metrics]
-            [metrics.core :as drpwz-m]
-            [metrics.reporters.jmx :as jmx]
-            [metrics.reporters.console :as console]
-            [metrics.reporters.csv :as csv]))
+            [crux.dropwizard :as dropwizard]
+            [crux.dropwizard.jmx :as jmx]
+            [crux.dropwizard.console :as console]
+            [crux.dropwizard.csv :as csv]))
 
 (def registry
   {::registry {:start-fn (fn [deps _]
                            ;; When more metrics are added we can pass a
                            ;; registry around
-                           (doto (drpwz-m/new-registry)
+                           (doto (dropwizard/new-registry)
                              (indexer-metrics/assign-listeners deps)
                              (kv-metrics/assign-listeners deps)
                              (query-metrics/assign-listeners deps)))
