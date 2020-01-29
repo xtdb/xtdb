@@ -6,7 +6,6 @@
             [crux.fixtures.standalone :as fs]
             [crux.fixtures.api :refer [*api*] :as apif]
             [crux.fixtures.kv :as fkv]
-            [crux.query :as q]
             [clojure.spec.alpha :as s]
             [clojure.test :as t])
   (:import java.util.Date))
@@ -56,7 +55,7 @@
                (let [db (api/db *api* ts)]
                  (if (= query :id)
                    (api/entity db :hardcoded-id)
-                   (q/q db q))))]
+                   (api/q db q))))]
     ;; Assert this query is in good working order first:
     (assert (pos? (count (q-fn))))
     (q-fn)))

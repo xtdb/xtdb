@@ -1096,16 +1096,16 @@
 
 ;; TODO: Move future here to a bounded thread pool.
 (defn q
-  ([{:keys [kv conform-cache] :as db} q]
+  ([{:keys [kv] :as db} ^ConformedQuery conformed-q]
    (let [start-time (System/currentTimeMillis)
-         q (.q-normalized (normalize-and-conform-query conform-cache q))
+         q (.q-normalized conformed-q)
          query-future (future
                         (try
                           (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
                             (let [result-coll-fn (if (:order-by q)
                                                    (comp vec distinct)
                                                    set)
-                                  result (result-coll-fn (crux.query/q db snapshot q))]
+                                  result (result-coll-fn (crux.query/q db snapshot conformed-q))]
                               (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                               (log/debug :query-result-size (count result))
                               result))
@@ -1130,10 +1130,9 @@
        (throw result)
        result)))
 
-  ([{:keys [object-store conform-cache kv valid-time transact-time] :as db} snapshot q]
-   (let [conformed-query (normalize-and-conform-query conform-cache q)
-         q (.q-normalized conformed-query)
-         q-conformed (.q-conformed conformed-query)
+  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot ^ConformedQuery conformed-q]
+   (let [q (.q-normalized conformed-q)
+         q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
          stats (idx/read-meta kv :crux.kv/stats)]
      ;; Hide args from logging outputs
@@ -1207,24 +1206,25 @@
   (newSnapshot [this]
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
-  (q [this q]
-    (let [uuid (delay (java.util.UUID/randomUUID))
-          safe-query (delay (dissoc (normalize-query q) :args))]
+  (q [this query]
+    (let [conformed-query (normalize-and-conform-query conform-cache query)
+          uuid (java.util.UUID/randomUUID)
+          safe-query (-> conformed-query .q-normalized (dissoc :args))]
       (when bus
         (bus/send bus {:crux.bus/event-type ::submitted-query
-                       ::query @safe-query
-                       ::uuid @uuid}))
-      (let [ret (crux.query/q this q)]
+                       ::query safe-query
+                       ::uuid uuid}))
+      (let [ret (q this conformed-query)]
         (when bus
           (bus/send bus {:crux.bus/event-type ::completed-query
-                         ::query @safe-query
-                         ::uuid @uuid}))
+                         ::query safe-query
+                         ::uuid uuid}))
         ret)))
 
-  (q [this snapshot q]
+  (q [this snapshot query]
     ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
     ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (crux.query/q this snapshot q))
+    (q this snapshot (normalize-and-conform-query conform-cache query)))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
