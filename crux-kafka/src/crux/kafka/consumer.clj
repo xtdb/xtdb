@@ -24,7 +24,15 @@
   (read-offsets [this])
   (store-offsets [this offsets]))
 
-(defrecord IndexedOffsets [indexer k]
+(defrecord TxOffset [indexer]
+  Offsets
+  (read-offsets [this]
+    {:next-offset (inc (get (db/read-index-meta indexer :crux.tx/latest-completed-tx) :crux.tx/tx-id 0))})
+
+  ;; no-op - this is stored by the indexer itself
+  (store-offsets [this offsets]))
+
+(defrecord ConsumerOffsets [indexer k]
   Offsets
   (read-offsets [this]
     (db/read-index-meta indexer k))
@@ -141,7 +149,6 @@
   ^java.io.Closeable
   [{:keys [indexer offsets kafka-config group-id topic accept-fn index-fn]}]
   (let [consumer-config (merge {"group.id" group-id} kafka-config)
-        offsets (map->IndexedOffsets {:indexer indexer :k offsets})
         running? (atom true)
         pending-records (atom [])
         worker-thread
