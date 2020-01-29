@@ -31,15 +31,15 @@
   (f/with-tmp-dir "uberjar" [uberjar-dir]
     (build-uberjar)
 
-    (let [opts {:crux.node/topology 'crux.standalone/topology
+    (let [opts {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
                 :crux.standalone/event-log-dir (str (io/file uberjar-dir "event-log"))
+                :crux.http-server/port (cio/free-port)
                 :crux.kv/db-dir (str (io/file uberjar-dir "db-dir"))}
 
           process (.. (ProcessBuilder. (string-array
                                         "timeout" "30s"
                                         "java" "-jar" "target/crux-test-uberjar.jar"
-                                        "-x" (pr-str opts)
-                                        "-s" (str (cio/free-port))))
+                                        "-x" (pr-str opts)))
                       (directory working-directory)
                       start)]
       (try

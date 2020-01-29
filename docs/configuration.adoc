@@ -312,7 +312,7 @@ expose a HTTP port that will accept REST requests:
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Component|Property|Description
-|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
+|crux.http-server|`port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
 Visit the guide on using the <<#rest,REST api>> for examples
@@ -327,12 +327,12 @@ of how to interact with Crux over HTTP.
 include::./deps.edn[tags=HTTPDeps]
 ----
 
-You can start up a *HTTP server* on a node using `crux.http-server/start-http-server` and passing in a crux node, with the option of passing some further HTTP options. In the example below, we start a HTTP server on a pre-existing node with some *CORS options* and the *server port* (could also be set within the node itself) set within `http-options`:
+You can start up a *HTTP server* on a node by including
+`crux.http-server/module` in your topology, optionally passing the server port:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=require-http-server]
-include::./src/docs/examples.clj[tags=start-http-server]
+include::./src/docs/examples.clj[tags=start-standalone-http-server]
 ----
 [#config-start-remote-client]
 === Using a Remote API Client

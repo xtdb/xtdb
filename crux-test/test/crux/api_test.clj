@@ -32,7 +32,10 @@
   (t/testing "JDBC Node"
     ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Remote API"
-    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node fh/with-http-server]) f)))
+    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
+                       fapi/with-node
+                       fh/with-http-client])
+     f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)

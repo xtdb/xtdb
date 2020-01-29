@@ -208,7 +208,7 @@
         snapshot (.newSnapshot db)
         history (.historyAscending db snapshot (c/new-id eid))]
     (-> (streamed-edn-response snapshot history)
-        (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
+        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- history-descending [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
@@ -216,7 +216,7 @@
         snapshot (.newSnapshot db)
         history (.historyDescending db snapshot (c/new-id eid))]
     (-> (streamed-edn-response snapshot history)
-        (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
+        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- transact [^ICruxAPI crux-node request]
   (let [tx-ops (body->edn request)
@@ -232,7 +232,7 @@
                             (Long/parseLong))
         ^ITxLog result (.openTxLog crux-node from-tx-id with-ops?)]
     (-> (streamed-edn-response result (iterator-seq result))
-        (add-last-modified (get-in (.status crux-node) [:crux.tx/latest-completed-tx :crux.tx/tx-time])))))
+        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- sync-handler [^ICruxAPI crux-node request]
   (let [timeout (some->> (get-in request [:query-params "timeout"])
@@ -370,7 +370,7 @@
   (close [_]
     (.stop server)))
 
-(defn start-http-server
+(defn ^:deprecated start-http-server
   "Starts a HTTP server listening to the specified server-port, serving
   the Crux HTTP API. Takes a either a crux.api.ICruxAPI or its
   dependencies explicitly as arguments (internal use)."
@@ -390,3 +390,21 @@
                               :join? false})]
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
+
+(def module
+  {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
+                         (let [server (j/run-jetty (-> (partial handler node)
+                                                       (p/wrap-params)
+                                                       (wrap-exception-handling))
+                                                   {:port port
+                                                    :join? false})]
+                           (log/info "HTTP server started on port: " port)
+                           (->HTTPServer server options)))
+             :deps #{:crux.node/node}
+
+             ;; I'm deliberately not porting across CORS here as I don't think we should be encouraging
+             ;; Crux servers to be exposed directly to browsers. Better pattern here for individual apps
+             ;; to expose the functionality they need to? (JH)
+             :args {::port {:crux.config/type :crux.config/nat-int
+                            :doc "Port to start the HTTP server on"
+                            :default default-server-port}}}})

@@ -18,58 +18,69 @@
 (t/deftest test-example-standalone-node
   (let [node (ex/example-start-standalone)
         submitted (ex/example-submit-tx node)]
-    ;; Testing example standalone node is created properly
-    (t/is (not= nil node))
-    ;; Testing example submit-tx works properly (and wait for it to complete)
-    (t/is (not= nil submitted))
-    (crux/await-tx node submitted nil)
+    (t/testing "example standalone node is created properly"
+      (t/is (not= nil node)))
 
-    ;; Testing 'getting started' example queries
-    (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
-              :name "Pablo"
-              :last-name "Picasso"}
-           (ex/example-query-entity node)))
-    (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
-    (t/is (not (empty? (ex/example-query-valid-time node))))
+    (t/testing "example submit-tx works properly (and wait for it to complete)"
+      (t/is (not= nil submitted))
+      (crux/await-tx node submitted nil))
 
-    ;; Testing http-server/http-client using the standalone node
-    (with-open [http-server ^Closeable (ex/example-start-http-server node)
-                remote-api ^Closeable (ex/example-start-http-client)]
+    (t/testing "'getting started' example queries"
       (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
                 :name "Pablo"
                 :last-name "Picasso"}
-               (crux/entity (crux/db remote-api)
-                            :dbpedia.resource/Pablo-Picasso))))
+               (ex/example-query-entity node)))
+      (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
+      (t/is (not (empty? (ex/example-query-valid-time node)))))
 
-    ;; Testing example standalone node is closed properly
-    (t/is (nil? (ex/example-close-node node)))))
+    (t/testing "example standalone node is closed properly"
+      (t/is (nil? (ex/example-close-node node))))))
+
+(t/deftest test-example-http-node
+  (with-open [underlying-node ^Closeable (ex/example-start-standalone-http)
+              node ^Closeable (ex/example-start-http-client)]
+    (t/testing "example standalone node is created properly"
+      (t/is node))
+
+    (let [submitted (ex/example-submit-tx node)]
+      (crux/await-tx node submitted nil)
+      (t/is (= {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                :name "Pablo"
+                :last-name "Picasso"}
+               (crux/entity (crux/db node) :dbpedia.resource/Pablo-Picasso)))
+      (t/is (= #{[:dbpedia.resource/Pablo-Picasso]} (ex/example-query node)))
+      (t/is (not (empty? (ex/example-query-valid-time node)))))))
 
 (t/deftest test-example-kafka-node
   (let [embedded-kafka (ex/example-start-embedded-kafka)
         node (ex/example-start-cluster)]
-    ;; Testing example embedded kafka is created properly
-    (t/is (not= nil embedded-kafka))
-    ;; Testing example cluster node is created properly
-    (t/is (not= nil node))
-    ;; Testing example cluster node is closed properly
-    (t/is (nil? (ex/example-close-node node)))
-    ;; Testing example embedded kafka node is closed properly
-    (t/is (nil? (ex/example-stop-embedded-kafka embedded-kafka)))))
+    (t/testing "example embedded kafka is created properly"
+      (t/is (not= nil embedded-kafka)))
+
+    (t/testing "example cluster node is created properly"
+      (t/is (not= nil node)))
+
+    (t/testing "example cluster node is closed properly"
+      (t/is (nil? (ex/example-close-node node))))
+
+    (t/testing "example embedded kafka node is closed properly"
+      (t/is (nil? (ex/example-stop-embedded-kafka embedded-kafka))))))
 
 (t/deftest test-example-rocks-node
   (let [node (ex/example-start-rocks)]
-    ;; Testing example node with RocksDB is created properly
-    (t/is (not= nil node))
-    ;; Testing example node with RocksDB is closed properly
-    (t/is (nil? (ex/example-close-node node)))))
+    (t/testing "example node with RocksDB is created properly"
+      (t/is (not= nil node)))
+
+    (t/testing "example node with RocksDB is closed properly"
+      (t/is (nil? (ex/example-close-node node))))))
 
 (t/deftest test-example-lmdb-node
   (let [node (ex/example-start-lmdb)]
+    (t/testing "example node with LMDB is created properly"
+      (t/is (not= nil node)))
 
-    ;; Testing example node with LMDB is created properly
-    (t/is (not= nil node))
-    ;; Testing example node with LMDB is closed properly
-    (t/is (nil? (ex/example-close-node node)))))
+    (t/testing "example node with LMDB is closed properly"
+      (t/is (nil? (ex/example-close-node node))))))
 
 (t/deftest test-example-basic-queries
   (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
@@ -93,6 +104,7 @@
 (t/deftest test-example-join-queries
   (with-open [^crux.api.ICruxAPI node (ex/example-start-standalone)]
     (crux/await-tx node (ex/query-example-join-q1-setup node) nil)
+
     (t/is (= #{[:ivan :ivan]
                [:petr :petr]
                [:sergei :sergei]
@@ -101,6 +113,7 @@
                [:denis-a :denis-b]
                [:denis-b :denis-a]}
              (ex/query-example-join-q1 node)))
+
     (crux/await-tx node (ex/query-example-join-q2-setup node) nil)
     (t/is (= #{[:petr]}
              (ex/query-example-join-q2 node)))))
