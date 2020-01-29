@@ -6,14 +6,14 @@
   [registry {:crux.node/keys [bus]}]
   (let [!timer-store (atom {})
         query-timer (dropwizard/timer registry ["crux" "query" "timer"])]
-    (bus/listen bus #{:crux.query/submitted-query}
+    (bus/listen bus {:crux.bus/event-types #{:crux.query/submitted-query}}
               (fn [event]
-                (swap! !timer-store assoc event (dropwizard/start query-timer))))
+                (swap! !timer-store assoc (:crux.query/uuid event) (dropwizard/start query-timer))))
 
-    (bus/listen bus #{:crux.query/completed-query}
+    (bus/listen bus {:crux.bus/event-types #{:crux.query/completed-query}}
               (fn [event]
-                (dropwizard/stop (get @!timer-store event))
-                (swap! !timer-store dissoc event)))
+                (dropwizard/stop (get @!timer-store (:crux.query/uuid event)))
+                (swap! !timer-store dissoc (:crux.query/uuid event))))
     query-timer))
 
 (defn assign-listeners
