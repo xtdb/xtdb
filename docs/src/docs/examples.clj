@@ -1,107 +1,91 @@
-(ns docs.examples)
+(ns docs.examples
+  (:require [clojure.java.io :as io]))
 
 ;; tag::include-crux-api[]
-(require '[crux.api :as crux])
-(import (crux.api ICruxAPI))
+(require '[crux.api :as crux]
+         '[clojure.java.io :as io])
 ;; end::include-crux-api[]
 
 ;; tag::require-ek[]
 (require '[crux.kafka.embedded :as ek])
 ;; end::require-ek[]
 
-(defn example-start-standalone []
 ;; tag::start-standalone-node[]
-(def ^crux.api.ICruxAPI node
+(defn start-standalone-node ^crux.api.ICruxAPI [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.memdb/kv
-                    :crux.kv/db-dir "data/db-dir-1"
-                    :crux.standalone/event-log-dir "data/eventlog-1"
-                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}))
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))
+                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
+                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
 ;; end::start-standalone-node[]
-  node)
 
-(defn example-close-node [^java.io.Closeable node]
-  ;; tag::close-node[]
-  (.close node)
-  ;; end::close-node[]
+(defn close-node [^java.io.Closeable node]
+;; tag::close-node[]
+(.close node)
+;; end::close-node[]
   )
 
-(defn example-start-standalone-http []
 ;; tag::start-standalone-http-node[]
-(def ^crux.api.ICruxAPI node
+(defn start-standalone-http-node [port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
                     :crux.node/kv-store 'crux.kv.memdb/kv
-                    :crux.kv/db-dir "data/db-dir-1"
-                    :crux.standalone/event-log-dir "data/eventlog-1"
-                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}))
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))
+                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
+                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))
+                    :crux.http-server/port port}))
 ;; end::start-standalone-http-node[]
-  node)
 
-(defn example-start-embedded-kafka []
 ;; tag::ek-example[]
-(def storage-dir "dev-storage")
-(def embedded-kafka-options
-  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
-   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
-   :crux.kafka.embedded/kafka-port 9092})
-
-(def embedded-kafka (ek/start-embedded-kafka embedded-kafka-options))
+(defn start-embedded-kafka [kafka-port storage-dir]
+  (ek/start-embedded-kafka {:crux.kafka.embedded/zookeeper-data-dir (str (io/file storage-dir "zk-data"))
+                            :crux.kafka.embedded/kafka-log-dir (str (io/file storage-dir "kafka-log"))
+                            :crux.kafka.embedded/kafka-port kafka-port}))
 ;; end::ek-example[]
-embedded-kafka)
 
-(defn example-stop-embedded-kafka [^java.io.Closeable embedded-kafka]
+(defn stop-embedded-kafka [^java.io.Closeable embedded-kafka]
 ;; tag::ek-close[]
 (.close embedded-kafka)
 ;; end::ek-close[]
 )
 
-(defn example-start-cluster []
 ;; tag::start-cluster-node[]
-(def ^crux.api.ICruxAPI node
+(defn start-cluster [kafka-port]
   (crux/start-node {:crux.node/topology '[crux.kafka/topology]
                     :crux.node/kv-store 'crux.kv.memdb/kv
-                    :crux.kafka/bootstrap-servers "localhost:9092"}))
+                    :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)}))
 ;; end::start-cluster-node[]
-node)
 
-(defn example-start-rocks []
 ;; tag::start-standalone-with-rocks[]
-(def ^crux.api.ICruxAPI node
+(defn start-rocks-node [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.rocksdb/kv
-                    :crux.kv/db-dir "data/db-dir-1"
-                    :crux.standalone/event-log-dir "data/eventlog-1"}))
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))
+                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
 ;; end::start-standalone-with-rocks[]
-node)
 
-(defn example-start-lmdb []
 ;; tag::start-standalone-with-lmdb[]
-(def ^crux.api.ICruxAPI node
+(defn start-lmdb-node [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.lmdb/kv
-                    :crux.kv/db-dir "data/db-dir-1"
-                    :crux.standalone/event-log-dir "data/eventlog-1"
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))
+                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))
                     :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv}))
 ;; end::start-standalone-with-lmdb[]
-node)
 
-(defn example-start-jdbc []
 ;; tag::start-jdbc-node[]
-(def ^crux.api.ICruxAPI node
+(defn start-jdbc-node []
   (crux/start-node {:crux.node/topology '[crux.jdbc/topology]
                     :crux.jdbc/dbtype "postgresql"
                     :crux.jdbc/dbname "cruxdb"
                     :crux.jdbc/host "<host>"
                     :crux.jdbc/user "<user>"
                     :crux.jdbc/password "<password>"}))
-  ;; end::start-jdbc-node[]
-  )
+;; end::start-jdbc-node[]
 
-(defn example-start-http-client []
 ;; tag::start-http-client[]
-(crux/new-api-client "http://localhost:3000")
+(defn start-http-client [port]
+  (crux/new-api-client (str "http://localhost:" port)))
 ;; end::start-http-client[]
-  )
 
 (defn example-submit-tx [node]
 ;; tag::submit-tx[]
