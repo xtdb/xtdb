@@ -1208,30 +1208,31 @@
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
   (q [this q]
-    (let [uuid (java.util.UUID/randomUUID)
-          safe-query (dissoc (normalize-query q) :args)]
+    (let [uuid (delay (java.util.UUID/randomUUID))
+          safe-query (delay (dissoc (normalize-query q) :args))]
       (when bus
         (bus/send bus {:crux.bus/event-type ::submitted-query
-                       ::query safe-query
-                       ::uuid uuid}))
+                       ::query @safe-query
+                       ::uuid @uuid}))
       (let [ret (crux.query/q this q)]
         (when bus
           (bus/send bus {:crux.bus/event-type ::completed-query
-                         ::query safe-query
-                         ::uuid uuid}))
+                         ::query @safe-query
+                         ::uuid @uuid}))
         ret)))
 
   (q [this snapshot q]
-    (let [uuid (java.util.UUID/randomUUID)]
+    (let [uuid (delay (java.util.UUID/randomUUID))
+          safe-query (delay (dissoc (normalize-query q) :args))]
       (when bus
         (bus/send bus {:crux.bus/event-type ::submitted-query
-                       ::query (dissoc q :args)
-                       ::uuid uuid}))
+                       ::query @safe-query
+                       ::uuid @uuid}))
       (let [ret (crux.query/q this snapshot q)]
         (when bus
           (bus/send bus {:crux.bus/event-type ::completed-query
-                         ::query (dissoc q :args)
-                         ::uuid uuid}))
+                         ::query @safe-query
+                         ::uuid @uuid}))
         ret)))
 
   (historyAscending [this snapshot eid]
