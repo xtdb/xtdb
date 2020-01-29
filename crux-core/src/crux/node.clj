@@ -38,9 +38,8 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store
-                     options close-fn status-fn closed? ^StampedLock lock
-                     bus]
+(defrecord CruxNode [kv-store tx-log indexer object-store bus
+                     options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
     (.db this nil nil))
@@ -194,9 +193,9 @@
                                :tx-log tx-log
                                :indexer indexer
                                :object-store object-store
+                               :bus bus
                                :closed? (atom false)
-                               :lock (StampedLock.)
-                               :bus bus}))
+                               :lock (StampedLock.)}))
    :deps #{::indexer ::kv-store ::bus ::object-store ::tx-log}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout in milliseconds for waiting."
                                          :default 10000
