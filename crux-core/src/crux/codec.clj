@@ -60,7 +60,7 @@
 (def ^:const ^:private failed-tx-id-index-id 5)
 
 ; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
-(def ^:const ^:private index-version-index-id 6)
+(def ^:const ^:private index-version-index-id 5)
 
 ; second bitemp index [also reverse]
 ; z combines vt and tt

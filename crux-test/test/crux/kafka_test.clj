@@ -20,7 +20,7 @@
 
 (defn- poll-topic [offsets topic]
   (with-open [tx-consumer ^KafkaConsumer (fk/with-consumer)]
-    (let [tx-offsets (kc/map->IndexedOffsets {:indexer (:indexer *api*) :k offsets})]
+    (let [tx-offsets (kc/map->ConsumerOffsets {:indexer (:indexer *api*) :k offsets})]
       (kc/subscribe-from-stored-offsets tx-offsets tx-consumer [topic]))
     (doall (map (juxt #(.key ^ConsumerRecord %) #(.value ^ConsumerRecord %))
                 (.poll tx-consumer (Duration/ofMillis 10000))))))
