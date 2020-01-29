@@ -1,5 +1,6 @@
 (ns crux.metrics-test
   (:require [clojure.test :as t]
+            [crux.api :as api]
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
@@ -46,4 +47,14 @@
         mets (query-metrics/assign-listeners registry #:crux.node{:bus bus})]
 
     (t/testing "inital query timer values"
-      (t/is (zero? (timers/number-recorded (:query-timer mets)))))))
+      (t/is (zero? (timers/number-recorded (:query-timer mets)))))
+
+    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
+
+    (api/q (api/db *api*) {:find ['e] :where [['e :crux.db/id '_]]})
+
+    ;; Commented for now until metrics-clojure release
+    ;; https://github.com/metrics-clojure/metrics-clojure/issues/141
+    ;; https://github.com/metrics-clojure/metrics-clojure/commit/9650d765c991f648f67b9d7e195edd50330e6f60
+    #_(t/testing "post query timer values"
+        (t/is (zero? (timers/number-recorded (:query-timer mets)))))))
