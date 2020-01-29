@@ -1222,18 +1222,9 @@
         ret)))
 
   (q [this snapshot q]
-    (let [uuid (delay (java.util.UUID/randomUUID))
-          safe-query (delay (dissoc (normalize-query q) :args))]
-      (when bus
-        (bus/send bus {:crux.bus/event-type ::submitted-query
-                       ::query @safe-query
-                       ::uuid @uuid}))
-      (let [ret (crux.query/q this snapshot q)]
-        (when bus
-          (bus/send bus {:crux.bus/event-type ::completed-query
-                         ::query @safe-query
-                         ::uuid @uuid}))
-        ret)))
+    ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
+    ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
+    (crux.query/q this snapshot q))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
