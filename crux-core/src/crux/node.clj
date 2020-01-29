@@ -89,9 +89,9 @@
   (status [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
+      ;; we don't have status-fn set when other components use node as a dependency within the topology
       (if status-fn
         (status-fn)
-        ;; fallback for before status-fn's set
         (into {} (mapcat status/status-map) [indexer kv-store object-store tx-log]))))
 
   (attributeStats [this]
@@ -104,8 +104,7 @@
       (ensure-node-open this)
       @(db/submit-tx tx-log tx-ops)))
 
-  (hasTxCommitted [this {:keys [crux.tx/tx-id
-                                crux.tx/tx-time] :as submitted-tx}]
+  (hasTxCommitted [this {:keys [crux.tx/tx-id crux.tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (let [{latest-tx-id :crux.tx/tx-id
