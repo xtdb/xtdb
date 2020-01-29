@@ -1,9 +1,9 @@
 (ns crux.dropwizard.jmx
-  "JMX reporting"
   (:import java.util.concurrent.TimeUnit
-           [com.codahale.metrics JmxReporter MetricRegistry MetricFilter]))
+           [com.codahale.metrics MetricRegistry]
+           [com.codahale.metrics.jmx JmxReporter]))
 
-(defn ^com.codahale.metrics.JmxReporter reporter
+(defn ^com.codahale.metrics.jmx.JmxReporter reporter
   [^MetricRegistry reg opts]
   (let [b (JmxReporter/forRegistry reg)]
     (when-let [^String d (:domain opts)]
@@ -12,8 +12,6 @@
       (.convertRatesTo b ru))
     (when-let [^TimeUnit du (:duration-unit opts)]
       (.convertDurationsTo b du))
-    (when-let [^MetricFilter f (:filter opts)]
-      (.filter b f))
     (.build b)))
 
 (defn start

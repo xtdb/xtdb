@@ -50,5 +50,7 @@
 
     (api/q (api/db *api*) {:find ['e] :where [['e :crux.db/id '_]]})
 
+    (.close ^Closeable bus)
+
     (t/testing "post query timer values"
       (t/is (not (zero? (dropwizard/number-recorded (:query-timer mets))))))))
