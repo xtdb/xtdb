@@ -5,6 +5,7 @@
             [crux.fixtures.standalone :as fs]
             [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.kv-store :as kv-store-metrics]
+            [crux.metrics.query :as query-metrics]
             [metrics.core :as metrics]
             [metrics.meters :as meters]
             [metrics.timers :as timers]
@@ -39,3 +40,10 @@
       (t/is (gauges/value (:estimate-num-keys mets)))
       (t/is (gauges/value (:kv-size-mb mets))))))
 
+(t/deftest test-query-metrics
+  (let [{:crux.node/keys [bus]} (:crux.node/topology (meta *api*))
+        registry (metrics/new-registry)
+        mets (query-metrics/assign-listeners registry #:crux.node{:bus bus})]
+
+    (t/testing "inital query timer values"
+      (t/is (zero? (timers/number-recorded (:query-timer mets)))))))

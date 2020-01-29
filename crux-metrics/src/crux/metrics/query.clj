@@ -12,7 +12,7 @@
 
     (bus/listen bus #{:crux.query/completed-query}
               (fn [event]
-                (get @!timer-store event)
+                (timers/stop (get @!timer-store event))
                 (swap! !timer-store dissoc event)))
     query-timer))
 
