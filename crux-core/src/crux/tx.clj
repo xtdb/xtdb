@@ -384,20 +384,20 @@
 
                           tx-events)
 
-              committed? (not= res ::aborted)
-              completed-tx-kv (idx/meta-kv :crux.tx/latest-completed-tx tx)]
+              committed? (not= res ::aborted)]
 
           (if (not= res ::aborted)
             (do
-              (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
-                                            completed-tx-kv)
-                                      (into (sorted-map-by mem/buffer-comparator))))
               (when-let [tombstones (not-empty (:tombstones res))]
                 (db/index-docs this tombstones)
-                (db/submit-docs document-store tombstones)))
+                (db/submit-docs document-store tombstones))
+
+              (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
+                                            (idx/meta-kv :crux.tx/latest-completed-tx tx))
+                                      (into (sorted-map-by mem/buffer-comparator)))))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [completed-tx-kv
+                (kv/store kv-store [(idx/meta-kv :crux.tx/latest-completed-tx tx)
                                     [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
