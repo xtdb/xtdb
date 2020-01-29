@@ -70,7 +70,7 @@ jobs:
         - run:
             command: |
               echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV
-              echo 'export BUILD_TAGS="master,commit-$CIRCLE_SHA1"' >> $BASH_ENV
+              echo 'export BUILD_TAGS="master,master-$CIRCLE_SHA1"' >> $BASH_ENV
 
         - setup_remote_docker
         - aws-ecr/build-and-push-image:

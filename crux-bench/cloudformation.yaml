@@ -41,7 +41,7 @@ Resources:
             "description": "Only keep images for 14 days",
             "selection": {
               "tagStatus": "tagged",
-              "tagPrefixList": ["commit-"],
+              "tagPrefixList": ["master-"],
               "countType": "sinceImagePushed",
               "countNumber": 14,
               "countUnit": "days"
