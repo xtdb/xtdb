@@ -19,6 +19,7 @@
            java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
+           java.util.UUID
            org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
@@ -1202,17 +1203,17 @@
 
   (q [this query]
     (let [conformed-query (normalize-and-conform-query conform-cache query)
-          uuid (java.util.UUID/randomUUID)
+          query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
       (when bus
         (bus/send bus {:crux.bus/event-type ::submitted-query
                        ::query safe-query
-                       ::uuid uuid}))
+                       ::query-id query-id}))
       (let [ret (q this conformed-query)]
         (when bus
           (bus/send bus {:crux.bus/event-type ::completed-query
                          ::query safe-query
-                         ::uuid uuid}))
+                         ::query-id query-id}))
         ret)))
 
   (q [this snapshot query]
