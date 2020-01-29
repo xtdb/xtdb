@@ -1135,15 +1135,9 @@
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
          stats (idx/read-meta kv :crux.kv/stats)]
-     ;; Hide args from logging outputs
-     (log/debug :query (cio/pr-edn-str
-                         (update q :args
-                                 (fn [args]
-                                   (mapv
-                                     (fn [argsmap]
-                                       (into {} (map (fn [[k v]] [k :hidden])
-                                                      argsmap)))
-                                     args)))))
+     (log/debug :query (cio/pr-edn-str (-> q
+                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
+                                           (dissoc :args))))
      (validate-args args)
      (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time)
                               *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
