@@ -53,7 +53,6 @@
     (when (s/invalid? resolved-topology)
       (s/explain ::resolved-topology topology)
       (throw (IllegalArgumentException. "invalid topology")))
-
     resolved-topology))
 
 (defn- start-order [system]
