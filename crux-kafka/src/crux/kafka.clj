@@ -199,7 +199,7 @@
                (ensure-topic-exists admin-client tx-topic tx-topic-config 1 options)
                (ensure-tx-topic-has-single-partition admin-client tx-topic)
                (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets :crux.tx-log/consumer-state
+                                            :offsets (kc/->TxOffset indexer)
                                             :kafka-config (derive-kafka-config options)
                                             :group-id group-id
                                             :topic tx-topic
@@ -219,7 +219,7 @@
                   {::keys [doc-topic doc-partitions group-id] :as options}]
                (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
                (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets :crux.doc-log/consumer-state
+                                            :offsets (kc/->ConsumerOffsets indexer :crux.tx-log/consumer-state)
                                             :kafka-config (derive-kafka-config options)
                                             :group-id group-id
                                             :topic doc-topic
@@ -241,7 +241,7 @@
   {:start-fn (fn [{:keys [crux.node/indexer crux.node/document-store]}
                   {::keys [tx-topic doc-group-id] :as options}]
                (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets :crux.tx-doc-log/consumer-state
+                                            :offsets (kc/->ConsumerOffsets indexer :crux.tx-log/consumer-state)
                                             :kafka-config (derive-kafka-config options)
                                             :group-id doc-group-id
                                             :topic tx-topic
