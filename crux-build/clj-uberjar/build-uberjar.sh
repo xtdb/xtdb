@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-clj -A:pack
+clojure -A:pack
