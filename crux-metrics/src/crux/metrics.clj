@@ -2,10 +2,11 @@
   (:require [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.kv-store :as kv-metrics]
             [crux.metrics.query :as query-metrics]
-            [crux.metrics.dropwizard :as dropwizard]
-            [crux.metrics.dropwizard.jmx :as jmx]
-            [crux.metrics.dropwizard.console :as console]
-            [crux.metrics.dropwizard.csv :as csv]))
+            [crux.dropwizard :as dropwizard]
+            [crux.dropwizard.jmx :as jmx]
+            [crux.dropwizard.console :as console]
+            [crux.dropwizard.csv :as csv]
+            [crux.dropwizard.cloudwatch :as cloudwatch]))
 
 (def registry
   {::registry {:start-fn (fn [deps _]
@@ -40,6 +41,16 @@
                                  (csv/start (or csv-reporter-rate 1))))
                    :deps #{::registry}}})
 
+;; TODO a decision for consistency, should args be a flat map in the config, or
+;; contained in a arg themself
+
+(def cloudwatch-reporter
+  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} args]
+                                      (doto (cloudwatch/report registry args)
+                                        cloudwatch/start))
+                          :deps #{::registry}}})
+
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))
 (def with-csv (merge registry csv-reporter))
+(def with-cloudwatch (merge registry cloudwatch-reporter))

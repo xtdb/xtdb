@@ -3,7 +3,7 @@
            [com.codahale.metrics MetricRegistry]
            [com.codahale.metrics.jmx JmxReporter]))
 
-(defn ^com.codahale.metrics.jmx.JmxReporter reporter
+(defn reporter ^JmxReporter
   [^MetricRegistry reg opts]
   (let [b (JmxReporter/forRegistry reg)]
     (when-let [^String d (:domain opts)]

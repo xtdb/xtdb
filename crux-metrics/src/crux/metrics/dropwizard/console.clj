@@ -5,7 +5,7 @@
            java.io.PrintStream
            java.util.Locale))
 
-(defn ^com.codahale.metrics.ConsoleReporter reporter
+(defn reporter ^ConsoleReporter
   [^MetricRegistry reg opts]
   (let [b (ConsoleReporter/forRegistry reg)]
     (when-let [^PrintStream s (:stream opts)]
