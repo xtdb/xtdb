@@ -5,8 +5,9 @@
             [clojure.tools.logging :as log]
             [crux.node :as n]
             [crux.config :as cc]
-            [crux.io :as cio])
-  (:import java.io.Closeable))
+            [crux.io :as cio]
+            [clojure.java.io :as io])
+  (:import (java.io Closeable File)))
 
 (def default-options
   {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
@@ -16,8 +17,13 @@
    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv})
 
 (def cli-options
-  [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
-    :parse-fn #(cc/load-properties %)]
+  [["-e" "--edn-file EDN_FILE" "EDN file to load Crux options from"
+    :parse-fn io/file
+    :validate [#(.exists ^File %) "EDN file doesn't exist"]]
+
+   ["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
+    :parse-fn io/file
+    :parse-fn [#(.exists ^File %) "Properties file doesn't exist"]]
 
    ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
     :default nil
@@ -48,14 +54,29 @@
     (pp/print-table (for [[k v] options]
                       {:key k :value v}))))
 
+(defn- if-it-exists [^File f]
+  (when (.exists f)
+    f))
+
+(defn merge-options [{:keys [edn-file properties-file extra-edn-options]}]
+  (merge default-options
+         (some-> (or properties-file
+                     (-> (io/file "crux.properties") if-it-exists)
+                     (io/resource "crux.properties"))
+                 (cc/load-properties))
+         (some-> (or edn-file
+                     (-> (io/file "crux.edn") if-it-exists)
+                     (io/resource "crux.edn"))
+                 (slurp)
+                 (edn/read-string))
+         extra-edn-options))
+
 (defn start-node-from-command-line [args]
   (cio/install-uncaught-exception-handler!)
 
-  (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)
-        {:keys [properties-file extra-edn-options]} options
-        options (merge default-options
-                       extra-edn-options
-                       properties-file)
+  (let [{:keys [options errors summary]} (-> (cli/parse-opts args cli-options)
+                                             (update :options merge-options))
+
         {:keys [version revision]} n/crux-version]
     (cond
       (:help options)
