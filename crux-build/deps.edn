@@ -8,5 +8,4 @@
         juxt/crux-core {:mvn/version "derived-from-git"}
         juxt/crux-http-server {:mvn/version "derived-from-git"}
         juxt/crux-cli {:mvn/version "derived-from-git"}
-
         }}
