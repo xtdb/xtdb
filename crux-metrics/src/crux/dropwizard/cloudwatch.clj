@@ -4,6 +4,8 @@
            [java.io Closeable]
            [software.amazon.awssdk.services.cloudwatch CloudWatchAsyncClient]
            [software.amazon.awssdk.regions Region]
+           ;; TODO what creds do i use???
+           [software.amazon.awssdk.auth.credentials AnonymousCredentialsProvider]
            [java.util.concurrent TimeUnit]
            [com.codahale.metrics MetricRegistry MetricFilter]))
 
@@ -12,6 +14,7 @@
 (defn ^CloudWatchReporter report
   [^MetricRegistry reg {::keys [regions dry-run? jvm-metrics?] :as args}]
   (let [cwac (-> (CloudWatchAsyncClient/builder)
+                 (.credentialsProvider (AnonymousCredentialsProvider/create))
                  ((fn [c] (reduce #(.region %1 (Region/of %2)) c regions)))
                  (.build))]
     ;; Might need seperate cwacs for regions
