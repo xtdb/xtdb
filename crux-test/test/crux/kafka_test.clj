@@ -84,7 +84,7 @@
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
+                 (q/db *kv* object-store nil (cio/next-monotonic-date) (cio/next-monotonic-date))))
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                             :k :crux.tx-log/consumer-state})
         doc-offsets (kc/map->IndexedOffsets {:indexer indexer
@@ -115,10 +115,10 @@
 
         (t/testing "querying transacted data"
           (t/is (= #{[:http://example.org/Picasso]}
-                   (q/q (api/db node)
-                        (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                          '{:find [e]
-                            :where [[e :foaf/firstName "Pablo"]]})))))
+                   (api/q (api/db node)
+                          (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                            '{:find [e]
+                              :where [[e :foaf/firstName "Pablo"]]})))))
 
         (t/testing "can read tx log"
           (with-open [tx-log-iterator (db/open-tx-log tx-log nil)]
@@ -155,7 +155,7 @@
 
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
+                 (q/db *kv* object-store nil (cio/next-monotonic-date) (cio/next-monotonic-date))))
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                             :k :crux.tx-log/consumer-state})
         doc-offsets (kc/map->IndexedOffsets {:indexer indexer
@@ -181,7 +181,7 @@
                                        [:crux.tx/put non-evicted-doc]])
                 (t/is (= 2 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
                 (t/is (= 1 (k/consume-and-index-txes tx-consume-opts fk/*consumer*)))
-                (:crux.db/content-hash (q/entity-tx (api/db node) (:crux.db/id evicted-doc))))
+                (:crux.db/content-hash (api/entity-tx (api/db node) (:crux.db/id evicted-doc))))
 
             after-evict-doc {:crux.db/id :after-evict :personal "private"}
             {:crux.tx/keys [tx-id tx-time]}
@@ -192,9 +192,9 @@
         (consume-topics tx-consume-opts doc-consume-opts)
 
         (t/testing "querying transacted data"
-          (t/is (= non-evicted-doc (q/entity (api/db node) (:crux.db/id non-evicted-doc))))
-          (t/is (nil? (q/entity (api/db node) (:crux.db/id evicted-doc))))
-          (t/is (= after-evict-doc (q/entity (api/db node) (:crux.db/id after-evict-doc)))))
+          (t/is (= non-evicted-doc (api/entity (api/db node) (:crux.db/id non-evicted-doc))))
+          (t/is (nil? (api/entity (api/db node) (:crux.db/id evicted-doc))))
+          (t/is (= after-evict-doc (api/entity (api/db node) (:crux.db/id after-evict-doc)))))
 
         (t/testing "re-indexing the same transactions after doc compaction"
           (binding [fk/*consumer-options* {"max.poll.records" "1"}]
@@ -223,6 +223,6 @@
                       (db/delete-objects object-store [evicted-doc-hash])
 
                       (t/testing "querying transacted data"
-                        (t/is (= non-evicted-doc (q/entity (api/db node) (:crux.db/id non-evicted-doc))))
-                        (t/is (nil? (q/entity (api/db node) (:crux.db/id evicted-doc))))
-                        (t/is (= after-evict-doc (q/entity (api/db node) (:crux.db/id after-evict-doc))))))))))))))))
+                        (t/is (= non-evicted-doc (api/entity (api/db node) (:crux.db/id non-evicted-doc))))
+                        (t/is (nil? (api/entity (api/db node) (:crux.db/id evicted-doc))))
+                        (t/is (= after-evict-doc (api/entity (api/db node) (:crux.db/id after-evict-doc))))))))))))))))

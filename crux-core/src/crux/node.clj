@@ -38,7 +38,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store
+(defrecord CruxNode [kv-store tx-log indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
@@ -58,7 +58,7 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db kv-store object-store valid-time tx-time))))
+        (q/db kv-store object-store bus valid-time tx-time))))
 
   (document [this content-hash]
     (cio/with-read-lock lock
@@ -187,12 +187,13 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer object-store tx-log kv-store]} node-opts]
+  {:start-fn (fn [{::keys [indexer object-store tx-log kv-store bus]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
                                :indexer indexer
                                :object-store object-store
+                               :bus bus
                                :closed? (atom false)
                                :lock (StampedLock.)}))
    :deps #{::indexer ::kv-store ::bus ::object-store ::tx-log}
