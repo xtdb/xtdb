@@ -9,4 +9,7 @@ sed clj-uberjar/deps.edn -e $CRUX_VERSION_SUB > crux-builder/clj-uberjar/deps.ed
 cp docker/build-docker.sh docker/crux.edn docker/Dockerfile crux-builder/docker/
 sed docker/deps.edn -e $CRUX_VERSION_SUB > crux-builder/docker/deps.edn
 
+cp mvn-uberjar/pom.xml crux-builder/mvn-uberjar/
+sed mvn-uberjar/build-uberjar.sh -e $CRUX_VERSION_SUB > crux-builder/mvn-uberjar/build-uberjar.sh
+
 tar -czf crux-builder.tar.gz crux-builder/

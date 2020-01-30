@@ -1,0 +1,4 @@
+*
+!.gitignore
+!build-uberjar.sh
+!pom.xml
