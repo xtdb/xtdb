@@ -60,7 +60,7 @@
                "crux-uberjar/test"
                "crux-test/test"]
 
-  :jvm-opts ["-Dlogback.configurationFile=logback-dev.xml"]
+  :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"]
   :global-vars {*warn-on-reflection* true}
 
   :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
