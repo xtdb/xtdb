@@ -93,7 +93,7 @@
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
 
-(defrecord KafkaTxLog [^DocumentStore doc-store, ^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
+(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
   Closeable
   (close [_])
 
@@ -274,10 +274,10 @@
    :args default-options})
 
 (def tx-log
-  {:start-fn (fn [{:keys [crux.node/document-store ::producer ::latest-submitted-tx-consumer]}
+  {:start-fn (fn [{:keys [::producer ::latest-submitted-tx-consumer]}
                   {:keys [crux.kafka/tx-topic] :as options}]
-               (->KafkaTxLog document-store producer latest-submitted-tx-consumer tx-topic (derive-kafka-config options)))
-   :deps [::producer ::latest-submitted-tx-consumer :crux.node/document-store]
+               (->KafkaTxLog producer latest-submitted-tx-consumer tx-topic (derive-kafka-config options)))
+   :deps [::producer ::latest-submitted-tx-consumer]
    :args default-options})
 
 (def document-store
