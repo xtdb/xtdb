@@ -2,5 +2,4 @@
  :crux.http-server/port 3000
  :crux.kv/kv-store crux.kv.memdb/kv
  :crux.standalone/event-log-kv-store crux.kv.memdb/kv
- :crux.kv/db-dir "/var/lib/crux/db"
- :crux.standalone/event-log-dir "/var/lib/crux/event-log"}
+ :crux.standalone/event-log-dir "data/event-log"}
