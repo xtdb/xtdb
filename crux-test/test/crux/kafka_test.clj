@@ -84,7 +84,7 @@
         object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
+                 (q/db *kv* object-store nil (cio/next-monotonic-date) (cio/next-monotonic-date))))
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                             :k :crux.tx-log/consumer-state})
         doc-offsets (kc/map->IndexedOffsets {:indexer indexer
@@ -155,7 +155,7 @@
 
         node (reify crux.api.ICruxAPI
                (db [this]
-                 (q/db *kv* object-store (cio/next-monotonic-date) (cio/next-monotonic-date))))
+                 (q/db *kv* object-store nil (cio/next-monotonic-date) (cio/next-monotonic-date))))
         tx-offsets (kc/map->IndexedOffsets {:indexer indexer
                                             :k :crux.tx-log/consumer-state})
         doc-offsets (kc/map->IndexedOffsets {:indexer indexer

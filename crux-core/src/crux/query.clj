@@ -1186,8 +1186,9 @@
    (let [entity-tx (entity-tx snapshot db eid)]
      (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
-(defrecord QueryDatasource [kv query-cache conform-cache object-store
-                            valid-time transact-time entity-as-of-idx bus]
+(defrecord QueryDatasource [kv object-store bus
+                            query-cache conform-cache
+                            valid-time transact-time entity-as-of-idx]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
@@ -1235,22 +1236,12 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource
-  ([kv object-store valid-time transact-time]
-   (->QueryDatasource kv
-                      (lru/get-named-cache kv ::query-cache)
-                      (lru/get-named-cache kv ::conform-cache)
-                      object-store
-                      valid-time
-                      transact-time
-                      nil
-                      nil))
-  ([kv object-store valid-time transact-time bus]
-   (->QueryDatasource kv
-                      (lru/get-named-cache kv ::query-cache)
-                      (lru/get-named-cache kv ::conform-cache)
-                      object-store
-                      valid-time
-                      transact-time
-                      nil
-                      bus)))
+(defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
+  (->QueryDatasource kv
+                     object-store
+                     bus
+                     (lru/get-named-cache kv ::query-cache)
+                     (lru/get-named-cache kv ::conform-cache)
+                     valid-time
+                     transact-time
+                     nil))

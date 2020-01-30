@@ -58,7 +58,7 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db kv-store object-store valid-time tx-time bus))))
+        (q/db kv-store object-store bus valid-time tx-time))))
 
   (document [this content-hash]
     (cio/with-read-lock lock
