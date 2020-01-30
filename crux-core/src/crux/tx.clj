@@ -212,7 +212,9 @@
 (defmethod index-tx-event :crux.tx/delete [[op k start-valid-time end-valid-time] tx deps]
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx deps)})
 
-(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [object-store history snapshot] :as deps}]
+(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
+                                        {:crux.tx/keys [tx-time tx-id] :as tx}
+                                        {:keys [object-store history snapshot] :as deps}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
