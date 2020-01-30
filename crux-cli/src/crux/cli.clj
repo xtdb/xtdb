@@ -10,7 +10,10 @@
 
 (def default-options
   {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-   :crux.standalone/event-log-dir "event-log"})
+   :crux.kv/db-dir "db-dir"
+   :crux.standalone/event-log-dir "event-log"
+   :crux.standalone/kv-store 'crux.kv.memdb/kv
+   :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv})
 
 (def cli-options
   [["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"

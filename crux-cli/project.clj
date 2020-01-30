@@ -8,8 +8,7 @@
                  [org.clojure/tools.cli "0.4.2"]
                  [ch.qos.logback/logback-classic "1.2.3" :exclusions [org.slf4j/slf4j-api]]
                  [juxt/crux-core "derived-from-git"]
-                 [juxt/crux-http-server "derived-from-git"]
-                 [juxt/crux-rocksdb "derived-from-git"]]
+                 [juxt/crux-http-server "derived-from-git"]]
 
   :middleware [leiningen.project-version/middleware]
   :aot [crux.main]
