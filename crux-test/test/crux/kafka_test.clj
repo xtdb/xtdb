@@ -8,7 +8,6 @@
             [crux.fixtures.kv :as kvf]
             [crux.kafka :as k]
             [crux.kafka.consumer :as kc]
-            [crux.query :as q]
             [crux.rdf :as rdf]
             [crux.tx :as tx])
   (:import java.time.Duration
@@ -65,7 +64,7 @@
 
         (t/testing "querying transacted data"
           (t/is (= #{[:http://example.org/Picasso]}
-                   (q/q (api/db *api*)
+                   (api/q (api/db *api*)
                         (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                           '{:find [e]
                             :where [[e :foaf/firstName "Pablo"]]})))))
@@ -91,7 +90,7 @@
                     (fn []
                       (.awaitTx *api* submitted-tx (Duration/ofSeconds 20))
                       (t/is (= #{[:http://example.org/Picasso]}
-                               (q/q (api/db *api*)
+                               (api/q (api/db *api*)
                                     (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                                       '{:find [e]
                                         :where [[e :foaf/firstName "Pablo"]]}))))))))))
@@ -128,7 +127,7 @@
                                                                                  [:crux.tx/put non-evicted-doc]])
               _ (.awaitTx *api* submitted-tx nil)
 
-              evicted-doc-hash (:crux.db/content-hash (q/entity-tx (api/db *api*) (:crux.db/id evicted-doc)))
+              evicted-doc-hash (:crux.db/content-hash (api/entity-tx (api/db *api*) (:crux.db/id evicted-doc)))
 
               {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/evict (:crux.db/id evicted-doc)]])
               _ (.awaitTx *api* submitted-tx nil)
@@ -137,9 +136,9 @@
               _ (.awaitTx *api* submitted-tx nil)]
 
           (t/testing "querying transacted data"
-            (t/is (= non-evicted-doc (q/entity (api/db *api*) (:crux.db/id non-evicted-doc))))
-            (t/is (nil? (q/entity (api/db *api*) (:crux.db/id evicted-doc))))
-            (t/is (= after-evict-doc (q/entity (api/db *api*) (:crux.db/id after-evict-doc)))))
+            (t/is (= non-evicted-doc (api/entity (api/db *api*) (:crux.db/id non-evicted-doc))))
+            (t/is (nil? (api/entity (api/db *api*) (:crux.db/id evicted-doc))))
+            (t/is (= after-evict-doc (api/entity (api/db *api*) (:crux.db/id after-evict-doc)))))
 
           (t/testing "compaction"
             (compact-to-topic "compacted-doc-topic" (docs-on-topic (:crux.kafka/doc-topic *opts*)))
@@ -159,9 +158,9 @@
                         (fn []
                           (.awaitTx *api* submitted-tx nil)
                           (t/testing "querying transacted data"
-                            (t/is (= non-evicted-doc (q/entity (api/db *api*) (:crux.db/id non-evicted-doc))))
-                            (t/is (nil? (q/entity (api/db *api*) (:crux.db/id evicted-doc))))
-                            (t/is (= after-evict-doc (q/entity (api/db *api*) (:crux.db/id after-evict-doc)))))))))))
+                            (t/is (= non-evicted-doc (api/entity (api/db *api*) (:crux.db/id non-evicted-doc))))
+                            (t/is (nil? (api/entity (api/db *api*) (:crux.db/id evicted-doc))))
+                            (t/is (= after-evict-doc (api/entity (api/db *api*) (:crux.db/id after-evict-doc)))))))))))
 
               (t/testing "no new txes or docs"
                 (t/is (= 3 (count (docs-on-topic "compacted-doc-topic"))))
