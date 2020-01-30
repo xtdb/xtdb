@@ -45,9 +45,14 @@
 ;; contained in a arg themself
 
 (def cloudwatch-reporter
-  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} args]
-                                      (doto (cloudwatch/report registry args)
-                                        cloudwatch/start))
+  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]}
+                                         {:crux.dropwizard.cloudwatch/keys
+                                          [seconds length unit]
+                                          :as args}]
+                                      (let [cw-rep (cloudwatch/report registry args)]
+                                        (if (and length unit)
+                                          (cloudwatch/start cw-rep length unit)
+                                          (cloudwatch/start cw-rep (or seconds 1)))))
                           :deps #{::registry}}})
 
 (def with-jmx (merge registry jmx-reporter))
