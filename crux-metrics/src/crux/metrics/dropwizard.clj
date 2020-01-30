@@ -23,7 +23,7 @@
 
 ;;;; Gauges
 
-(defn gauge-fn [^MetricRegistry reg title ^IFn f]
+(defn gauge [^MetricRegistry reg title ^IFn f]
   (let [g (reify Gauge
             (getValue [this]
               (f)))
