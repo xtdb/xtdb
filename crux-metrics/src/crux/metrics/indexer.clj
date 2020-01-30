@@ -6,13 +6,13 @@
 
 (defn assign-tx-id-lag [registry {:crux.node/keys [node]}]
   (dropwizard/gauge-fn registry
-                       ["crux" "indexer" "tx-id-lag"]
+                       ["indexer" "tx-id-lag"]
                        #(when-let [completed (api/latest-completed-tx node)]
                           (- (::tx/tx-id (api/latest-submitted-tx node))
                              (::tx/tx-id completed)))))
 
 (defn assign-doc-meter [registry {:crux.node/keys [bus]}]
-  (let [meter (dropwizard/meter registry ["crux" "indexer" "indexed-docs"])]
+  (let [meter (dropwizard/meter registry ["indexer" "indexed-docs"])]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids]}]
@@ -21,7 +21,7 @@
     meter))
 
 (defn assign-tx-timer [registry {:crux.node/keys [bus]}]
-  (let [timer (dropwizard/timer registry ["crux" "indexer" "indexed-txs"])
+  (let [timer (dropwizard/timer registry ["indexer" "indexed-txs"])
         !timer (atom nil)]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexing-tx}}

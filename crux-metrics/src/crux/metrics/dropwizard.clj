@@ -8,8 +8,7 @@
   (MetricRegistry.))
 
 (defn- metric-name [path]
-  (MetricRegistry/name ^String (first path)
-                       ^"[Ljava.lang.String;" (into-array String (rest path))))
+  (MetricRegistry/name "crux" ^"[Ljava.lang.String;" (into-array String path)))
 
 ;;;; Timers
 
