@@ -14,7 +14,8 @@
            java.util.Date
            crux.api.Crux
            (java.util HashMap)
-           (clojure.lang Keyword)))
+           (clojure.lang Keyword)
+           (java.time Duration)))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
@@ -70,7 +71,7 @@
                              :crux.db/db-dir (str (io/file data-dir "db"))
                              :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
       (t/is (instance? MobergTxLog (-> n :tx-log)))
-      (t/is (= 20000 (-> n :options :crux.tx-log/await-tx-timeout))))))
+      (t/is (= (Duration/ofSeconds 20) (-> n :options :crux.tx-log/await-tx-timeout))))))
 
 (t/deftest test-conflicting-standalone-props
   (f/with-tmp-dir "data" [data-dir]
