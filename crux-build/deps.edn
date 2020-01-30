@@ -1,0 +1,18 @@
+{:deps {org.clojure/clojure {:mvn/version "1.10.1"}
+
+        ;; Logging
+        org.slf4j/slf4j-api {:mvn/version "1.7.29"}
+        ch.qos.logback/logback-classic {:mvn/version "1.2.3"}
+
+        ;; Crux
+        juxt/crux-core {:mvn/version "20.01-1.6.2-alpha"}
+        juxt/crux-http-server {:mvn/version "20.01-1.6.2-alpha"}
+        juxt/crux-cli {:mvn/version "20.01-1.6.3-alpha-SNAPSHOT"}}
+ :aliases {:pack {:extra-deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git"
+                                                :sha "c70740ffc10805f34836da2160fa1899601fac02"
+                                                :tag "master"}}
+                  :main-opts ["-m" "mach.pack.alpha.capsule" "crux.jar"
+                              "-e" "build"
+                              "--application-id" "crux"
+                              "--application-version" "20.01-1.6.2-alpha"
+                              "-m" "crux.main"]}}}
