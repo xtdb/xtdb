@@ -8,7 +8,6 @@
         juxt/crux-core {:mvn/version "derived-from-git"}
         juxt/crux-http-server {:mvn/version "derived-from-git"}
         juxt/crux-cli {:mvn/version "derived-from-git"}
-
         }
 
  :aliases {:pack {:extra-deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git"
@@ -18,4 +17,8 @@
                               "-e" "build"
                               "--application-id" "crux"
                               "--application-version" "derived-from-git"
-                              "-m" "crux.main"]}}}
+                              "-m" "crux.main"]}
+           :kafka {:extra-deps {juxt/crux-kafka {:mvn/version "derived-from-git"}}}
+           :rocksdb {:extra-deps {juxt/crux-rocksdb {:mvn/version "derived-from-git"}}}
+           :lmdb {:extra-deps {juxt/crux-lmdb {:mvn/version "derived-from-git"}}}
+           :rdf {:extra-deps {juxt/crux-rdf {:mvn/version "derived-from-git"}}}}}
