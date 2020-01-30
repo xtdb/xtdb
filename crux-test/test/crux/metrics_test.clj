@@ -7,7 +7,7 @@
             [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.kv-store :as kv-store-metrics]
             [crux.metrics.query :as query-metrics]
-            [crux.dropwizard :as dropwizard])
+            [crux.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
@@ -18,16 +18,16 @@
         mets (indexer-metrics/assign-listeners registry #:crux.node{:node node, :bus bus, :indexer indexer})]
     (t/testing "initial ingest values"
       (t/is (nil? (dropwizard/value (:tx-id-lag mets))))
-      (t/is (zero? (dropwizard/mark-count (:docs-ingest-meter mets))))
-      (t/is (zero? (dropwizard/number-recorded (:tx-ingest-timer mets)))))
+      (t/is (zero? (dropwizard/meter-count (:docs-ingest-meter mets))))
+      (t/is (zero? (dropwizard/meter-count (:tx-ingest-timer mets)))))
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
     (.close ^Closeable bus)
 
     (t/testing "post ingest values"
-      (t/is (= 1 (dropwizard/mark-count (:docs-ingest-meter mets))))
+      (t/is (= 1 (dropwizard/meter-count (:docs-ingest-meter mets))))
       (t/is (zero? (dropwizard/value (:tx-id-lag mets))))
-      (t/is (= 1 (dropwizard/number-recorded (:tx-ingest-timer mets)))))))
+      (t/is (= 1 (dropwizard/meter-count (:tx-ingest-timer mets)))))))
 
 (t/deftest test-kv-store-metrics
   (let [{:crux.node/keys [kv-store]} (:crux.node/topology (meta *api*))
@@ -44,7 +44,7 @@
         mets (query-metrics/assign-listeners registry #:crux.node{:bus bus})]
 
     (t/testing "inital query timer values"
-      (t/is (zero? (dropwizard/number-recorded (:query-timer mets)))))
+      (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
 
@@ -53,4 +53,4 @@
     (.close ^Closeable bus)
 
     (t/testing "post query timer values"
-      (t/is (not (zero? (dropwizard/number-recorded (:query-timer mets))))))))
+      (t/is (not (zero? (dropwizard/meter-count (:query-timer mets))))))))

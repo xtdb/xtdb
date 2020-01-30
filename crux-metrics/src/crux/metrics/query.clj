@@ -1,6 +1,6 @@
 (ns crux.metrics.query
   (:require [crux.bus :as bus]
-            [crux.dropwizard :as dropwizard]))
+            [crux.metrics.dropwizard :as dropwizard]))
 
 (defn assign-query-timer
   [registry {:crux.node/keys [bus]}]

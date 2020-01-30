@@ -2,7 +2,7 @@
   (:require [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]
-            [crux.dropwizard :as dropwizard]))
+            [crux.metrics.dropwizard :as dropwizard]))
 
 (defn assign-tx-id-lag [registry {:crux.node/keys [node]}]
   (dropwizard/gauge-fn registry

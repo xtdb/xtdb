@@ -1,4 +1,4 @@
-(ns crux.dropwizard.csv
+(ns crux.metrics.dropwizard.csv
   (:require [clojure.java.io :as io])
   (:import java.util.concurrent.TimeUnit
            [com.codahale.metrics CsvReporter MetricRegistry MetricFilter ScheduledReporter]

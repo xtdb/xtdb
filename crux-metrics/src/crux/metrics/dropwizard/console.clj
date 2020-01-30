@@ -1,4 +1,4 @@
-(ns crux.dropwizard.console
+(ns crux.metrics.dropwizard.console
   "Console reporting"
   (:import java.util.concurrent.TimeUnit
            [com.codahale.metrics MetricRegistry ScheduledReporter ConsoleReporter Clock MetricFilter]

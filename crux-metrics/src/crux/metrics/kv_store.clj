@@ -1,6 +1,6 @@
 (ns crux.metrics.kv-store
   (:require [crux.status :as status]
-            [crux.dropwizard :as dropwizard]))
+            [crux.metrics.dropwizard :as dropwizard]))
 
 (defn assign-estimate-num-keys-gauge
   [registry {:crux.node/keys [kv-store]}]
@@ -11,7 +11,7 @@
   [registry {:crux.node/keys [kv-store]}]
   (dropwizard/gauge-fn registry ["crux" "kv" "kv-size-mb"]
                    #(:crux.kv/size (status/status-map kv-store))))
-  
+
 
 (defn assign-listeners
   [registry deps]

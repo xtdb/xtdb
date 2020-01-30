@@ -1,4 +1,4 @@
-(ns crux.dropwizard.jmx
+(ns crux.metrics.dropwizard.jmx
   (:import java.util.concurrent.TimeUnit
            [com.codahale.metrics MetricRegistry]
            [com.codahale.metrics.jmx JmxReporter]))
