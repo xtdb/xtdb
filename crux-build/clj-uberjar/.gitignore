@@ -1,0 +1,4 @@
+*
+!.gitignore
+!deps.edn
+!build-uberjar.sh
