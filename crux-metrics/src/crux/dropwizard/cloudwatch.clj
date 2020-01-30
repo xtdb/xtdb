@@ -10,15 +10,16 @@
 ;; Does not throw an exception with an invalid region, beware
 ;; Could add some sort of identifier for global dimensions
 (defn ^CloudWatchReporter report
-  [^MetricRegistry reg {::keys [regions dry-run? jvm-metrics?]}]
+  [^MetricRegistry reg {::keys [regions dry-run? jvm-metrics?] :as args}]
   (let [cwac (-> (CloudWatchAsyncClient/builder)
                  ((fn [c] (reduce #(.region %1 (Region/of %2)) c regions)))
                  (.build))]
     ;; Might need seperate cwacs for regions
     (-> (cond-> (CloudWatchReporter/forRegistry reg cwac "crux.dropwizard.cloudwatch")
-          jvm-metrics? (.withJvmMetrics)
-          dry-run? (.withDryRun))
-        (.withGlobalDimensions "crux.noe=metrics"))))
+          jvm-metrics? .withJvmMetrics
+          dry-run? .withDryRun)
+        (.withGlobalDimensions (into-array String ["crux.node=metrics"]))
+        .build)))
 
 (defn start
 
