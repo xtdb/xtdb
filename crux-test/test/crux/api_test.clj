@@ -39,8 +39,8 @@
      f))
   (t/testing "Kafka and Remote Doc Store"
     ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "Kafka and Remote Doc Store backing Object Store"
-    ((t/join-fixtures [ds/with-remote-doc-store-opts ds/with-same-doc-object-store kf/with-cluster-node-opts
+  (t/testing "Kafka and Remote Doc Store backed Object Store"
+    ((t/join-fixtures [ds/with-remote-doc-store-opts ds/with-doc-backed-object-store kf/with-cluster-node-opts
                        kvf/with-kv-dir fapi/with-node]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)

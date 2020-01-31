@@ -34,7 +34,7 @@
   (let [options {:crux.kv/db-dir event-log-dir
                  :crux.kv/sync? event-log-sync?
                  :crux.kv/check-and-store-index-version false}]
-    (topo/start-component event-log-kv-store nil options)))
+    (t/start-component event-log-kv-store nil options)))
 
 (defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
   (when event-log-kv
