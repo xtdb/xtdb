@@ -7,6 +7,7 @@
       <crux.artifact-id>crux-custom</crux.artifact-id>
       <crux.crux-version>derived-from-git</crux.crux-version>
       <crux.artifact-version>derived-from-git</crux.artifact-version>
+      <crux.uberjar-name>crux.jar</crux.uberjar-name>
   </properties>
 
   <groupId>${crux.group-id}</groupId>
@@ -71,6 +72,7 @@
                           <mainClass>crux.main</mainClass>
                       </transformer>
                   </transformers>
+                  <outputFile>${crux.uberjar-name}</outputFile>
               </configuration>
               <executions>
                   <execution>

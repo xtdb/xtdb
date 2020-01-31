@@ -15,5 +15,6 @@ sed $DEPS_EDN -e $CRUX_VERSION_SUB > crux-builder/docker/deps.edn
 
 cp mvn-uberjar/pom.xml crux-builder/mvn-uberjar/
 sed mvn-uberjar/build-uberjar.sh -e $CRUX_VERSION_SUB > crux-builder/mvn-uberjar/build-uberjar.sh
+chmod +x crux-builder/mvn-uberjar/build-uberjar.sh
 
 tar -czf crux-builder.tar.gz crux-builder/
