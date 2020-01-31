@@ -79,16 +79,89 @@ jobs:
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
 
+  create-uberjars:
+    docker:
+      - image: circleci/clojure:lein-2.9.1
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - run: lein sub install
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "project.clj" }}
+            - v1-dependencies-
+      - run: lein sub -s crux-cli uberjar
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - ./
+
+  deploy-uberjars:
+    docker:
+      - image: cibuilds/github:0.10
+    working_directory: ~/crux
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          command: |
+            UBERJAR_NAME="crux-cli/target/crux-standalone-${CIRCLE_TAG}-standalone.jar"
+            mv crux-cli/target/crux-standalone.jar $UBERJAR_NAME
+            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -delete "${CIRCLE_TAG}" $UBERJAR_NAME
+
+  deploy-docker:
+    docker:
+      - image: docker:19.03.5
+    working_directory: ~/crux
+    steps:
+      - attach_workspace:
+          at: ./
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          command: |
+            DOCKER_TAG="${DOCKER_USER}/crux-standalone:${CIRCLE_TAG}"
+            cd crux-cli/
+            docker build -t $DOCKER_TAG .
+            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+            docker push $DOCKER_TAG
 
 
 workflows:
   version: 2.1
   commit:
     jobs:
-      - build
+      - build:
+          filters:
+            tags:
+              only: /.*/
       - deploy:
           requires:
             - build
           filters:
             branches:
               only: master
+      - create-uberjars:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - deploy-uberjars:
+          requires:
+            - create-uberjars
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - deploy-docker:
+          requires:
+            - create-uberjars
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
