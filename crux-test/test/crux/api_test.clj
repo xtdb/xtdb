@@ -14,6 +14,7 @@
             [crux.rdf :as rdf]
             [crux.api :as api]
             [crux.fixtures.api :as fapi]
+            [crux.fixtures.doc-store :as ds]
             [crux.db :as db]
             [crux.query :as q])
   (:import crux.api.NodeOutOfSyncException
@@ -35,7 +36,9 @@
     ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
                        fapi/with-node
                        fh/with-http-client])
-     f)))
+     f))
+  (t/testing "Kafka and Remote Doc Store"
+    ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
@@ -332,7 +335,8 @@
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
 
 (t/deftest test-ingest-client
-  (if (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+  (if (and (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+           (instance? crux.kafka.KafkaDocumentStore (:document-store *api*)))
     (kf/with-ingest-client
       (fn []
         (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]

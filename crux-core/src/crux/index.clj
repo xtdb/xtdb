@@ -353,6 +353,12 @@
 
 ;; Utils
 
+(defn doc-indexed? [snapshot eid content-hash]
+  (let [k (c/->id-buffer :crux.db/id)
+        eid (c/->id-buffer eid)
+        content-hash (c/->id-buffer content-hash)]
+    (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
+
 (defn current-index-version [kv]
   (with-open [snapshot (kv/new-snapshot kv)]
     (some->> (kv/get-value snapshot (c/encode-index-version-key-to nil))

@@ -38,7 +38,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store bus
+(defrecord CruxNode [kv-store tx-log document-store indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
@@ -102,6 +102,7 @@
   (submitTx [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
+      (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
       @(db/submit-tx tx-log tx-ops)))
 
   (hasTxCommitted [this {:keys [crux.tx/tx-id crux.tx/tx-time] :as submitted-tx}]
@@ -167,6 +168,7 @@
   (submitTxAsync [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
+      (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
       (db/submit-tx tx-log tx-ops)))
 
   backup/INodeBackup
@@ -185,16 +187,17 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer object-store tx-log kv-store bus]} node-opts]
+  {:start-fn (fn [{::keys [indexer document-store object-store tx-log kv-store bus]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
                                :indexer indexer
+                               :document-store document-store
                                :object-store object-store
                                :bus bus
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::kv-store ::bus ::object-store ::tx-log}
+   :deps #{::indexer ::kv-store ::bus ::document-store ::object-store ::tx-log}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})

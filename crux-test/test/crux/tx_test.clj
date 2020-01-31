@@ -295,9 +295,11 @@
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (db/submit-doc (:tx-log *api*) content-hash picasso)
+    (db/submit-docs (:tx-log *api*) [[content-hash picasso]])
 
     (Thread/sleep 1000)
+
+    (t/is (db/docs-indexed? (:indexer *api*) [content-hash]))
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= {content-hash picasso}

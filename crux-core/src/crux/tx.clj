@@ -60,6 +60,10 @@
   (let [[op id & args] (conform-tx-op tx-op)]
     (filter map? args)))
 
+(defn tx-ops->id-and-docs [tx-ops]
+  (s/assert :crux.api/tx-ops tx-ops)
+  (map #(vector (str (c/new-id %)) %) (mapcat tx-op->docs tx-ops)))
+
 (defn tx-op->tx-event [tx-op]
   (let [[op id & args] (conform-tx-op tx-op)]
     (doto (into [op (str (c/new-id id))]
@@ -194,11 +198,11 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [object-store snapshot] :as deps}]
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [indexer] :as deps}]
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
-                         correct-state? (db/known-keys? object-store snapshot [content-hash])]
+                         correct-state? (db/docs-indexed? indexer [content-hash])]
                      (when-not correct-state?
                        (log/error "Put, incorrect doc state for:" content-hash "tx id:" (:crux.tx/tx-id tx)))
                      correct-state?)
@@ -208,7 +212,9 @@
 (defmethod index-tx-event :crux.tx/delete [[op k start-valid-time end-valid-time] tx deps]
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx deps)})
 
-(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [object-store history snapshot] :as deps}]
+(defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
+                                        {:crux.tx/keys [tx-time tx-id] :as tx}
+                                        {:keys [object-store history snapshot] :as deps}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
@@ -230,7 +236,8 @@
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
-(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history tx-log] :as deps}]
+(defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx
+                                          {:keys [history ^crux.db.DocumentStore document-store] :as deps}]
   (let [eid (c/new-id k)
         content-hashes (all-content-hashes history eid)]
     {:pre-commit-fn #(cond
@@ -245,16 +252,8 @@
                                           k evict-time-ranges-env-var)
                                true))
 
-     :post-commit-fn #(when tx-log
-                        (doseq [content-hash content-hashes]
-                          ;; TODO: Direct interface call to help
-                          ;; Graal, not sure why this is needed,
-                          ;; fails with get-proxy-class issue
-                          ;; otherwise.
-                          (.submit_doc
-                           ^crux.db.TxLog tx-log
-                           content-hash
-                           {:crux.db/id eid, :crux.db/evicted? true})))}))
+     :tombstones (into {} (for [content-hash content-hashes]
+                            [content-hash {:crux.db/id eid, :crux.db/evicted? true}]))}))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
@@ -263,7 +262,9 @@
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
-(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op] {:crux.tx/keys [tx-time tx-id] :as tx} {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
+(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
+                                       {:crux.tx/keys [tx-time tx-id] :as tx}
+                                       {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
@@ -303,16 +304,14 @@
          :etxs (cond-> (mapcat :etxs ops-result)
                  args-doc (conj (c/->EntityTx args-id tx-time tx-time tx-id args-v)))
 
-         :post-commit-fn #(doseq [{:keys [post-commit-fn]} ops-result
-                                  :when post-commit-fn]
-                            (post-commit-fn))}))))
+         :tombstones (into {} (mapcat :tombstones) ops-result)}))))
 
 (defmethod index-tx-event :default [[op & _] tx deps]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store tx-log bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store tx-log document-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -370,42 +369,52 @@
         (let [deps {:object-store object-store
                     :kv-store kv-store
                     :tx-log tx-log
+                    :document-store document-store
                     :indexer this
                     :snapshot snapshot}
 
               res (reduce (fn [{:keys [history] :as acc} tx-event]
-                            (let [{:keys [pre-commit-fn etxs post-commit-fn]} (index-tx-event tx-event tx (assoc deps :history history))]
+                            (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc deps :history history))]
                               (if (and pre-commit-fn (not (pre-commit-fn)))
                                 (reduced ::aborted)
                                 (-> acc
                                     (update :history with-etxs etxs)
-                                    (cond-> post-commit-fn (update :post-commit-fns conj post-commit-fn))))))
+                                    (update :tombstones merge tombstones)))))
 
                           {:history (->Snapshot+NewETXs snapshot {})
-                           :post-commit-fns []}
+                           :tombstones {}}
 
                           tx-events)
 
-              committed? (not= res ::aborted)
-              completed-tx-kv (idx/meta-kv :crux.tx/latest-completed-tx tx)]
+              committed? (not= res ::aborted)]
 
           (if (not= res ::aborted)
-            (do (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
-                                              completed-tx-kv)
-                                        (into (sorted-map-by mem/buffer-comparator))))
-                (doseq [post-commit-fn (:post-commit-fns res)]
-                  (post-commit-fn)))
+            (do
+              (when-let [tombstones (not-empty (:tombstones res))]
+                (db/index-docs this tombstones)
+                (db/submit-docs document-store tombstones))
+
+              (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
+                                            (idx/meta-kv :crux.tx/latest-completed-tx tx))
+                                      (into (sorted-map-by mem/buffer-comparator)))))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [completed-tx-kv
+                (kv/store kv-store [(idx/meta-kv :crux.tx/latest-completed-tx tx)
                                     [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
 
-  (docs-exist? [_ content-hashes]
+  (docs-indexed? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (db/known-keys? object-store snapshot content-hashes)))
+      (and (db/known-keys? object-store snapshot content-hashes)
+           (let [docs (db/get-objects object-store snapshot content-hashes)]
+             (every? (fn [content-hash]
+                       (if-let [doc (get docs content-hash)]
+                         (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)
+                         ;; We can assume the doc is evicted:
+                         true))
+                     content-hashes)))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
@@ -421,10 +430,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log bus]} args]
-               (->KvIndexer object-store kv-store tx-log bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log document-store bus]} args]
+               (->KvIndexer object-store kv-store tx-log document-store bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/document-store :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]

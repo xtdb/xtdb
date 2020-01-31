@@ -78,9 +78,10 @@
   (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
 (defrecord JdbcTxLog [ds dbtype]
-  db/TxLog
-  (submit-doc [this content-hash doc]
-    (let [id (str content-hash)]
+  db/DocumentStore
+  (submit-docs [this id-and-docs]
+    (doseq [[id doc] id-and-docs
+            :let [id (str id)]]
       (if (idx/evicted-doc? doc)
         (do
           (insert-event! ds id doc "docs")
@@ -89,10 +90,8 @@
           (insert-event! ds id doc "docs")
           (log/infof "Skipping doc insert %s" id)))))
 
+  db/TxLog
   (submit-tx [this tx-ops]
-    (s/assert :crux.api/tx-ops tx-ops)
-    (doseq [doc (mapcat tx/tx-op->docs tx-ops)]
-      (db/submit-doc this (str (c/new-id doc)) doc))
     (let [tx-events (map tx/tx-op->tx-event tx-ops)
           ^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "txs"))]
       (delay {:crux.tx/tx-id (.id tx)
@@ -187,4 +186,6 @@
                       ::event-log-consumer {:start-fn start-event-log-consumer
                                             :deps [:crux.node/indexer ::ds]}
                       :crux.node/tx-log {:start-fn start-tx-log
-                                         :deps [::ds]}}))
+                                         :deps [::ds]}
+                      :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
+                                                        :deps [:crux.node/tx-log]}}))

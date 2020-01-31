@@ -20,18 +20,21 @@
 (defprotocol Indexer
   (index-docs [this docs])
   (index-tx [this tx tx-events])
-  (docs-exist? [this content-hashes])
+  (docs-indexed? [this content-hashes])
   (store-index-meta [this k v])
   (read-index-meta [this k]))
 ;; end::Indexer[]
 
 ;; tag::TxLog[]
 (defprotocol TxLog
-  (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
   (open-tx-log ^crux.api.ITxLog [this from-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
+
+(defprotocol DocumentStore
+  (submit-docs [this id-and-docs])
+  (fetch-docs [this ids]))
 
 ;; NOTE: The snapshot parameter here is an optimisation to avoid keep
 ;; opening snapshots and allow caching of iterators. A non-KV backed
@@ -39,12 +42,10 @@
 ;; hide it.
 ;; tag::ObjectStore[]
 (defprotocol ObjectStore
-  (init [this partial-node options])
   (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
   (known-keys? [this snapshot ks])
-  (put-objects [this kvs])
-  (delete-objects [this kvs]))
+  (put-objects [this kvs]))
 ;; end::ObjectStore[]
 
 (defrecord CloseableTxLogIterator [close-fn ^Iterator lazy-seq-iterator]

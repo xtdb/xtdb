@@ -1,228 +1,167 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
-            [clojure.java.io :as io]
-            [crux.io :as cio]
-            [clojure.tools.logging :as log]
+            [crux.api :as api]
+            [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
+            [crux.fixtures.api :as fapi :refer [*api* *opts*]]
             [crux.fixtures.kafka :as fk]
-            [crux.object-store :as os]
-            [crux.lru :as lru]
-            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
+            [crux.fixtures.kv :as kvf]
             [crux.kafka :as k]
             [crux.kafka.consumer :as kc]
-            [crux.query :as q]
             [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
-            [crux.api :as api]
-            [crux.tx :as tx]
-            [crux.bus :as bus])
+            [crux.tx :as tx])
   (:import java.time.Duration
-           java.util.List
-           org.apache.kafka.clients.producer.ProducerRecord
-           org.apache.kafka.clients.consumer.ConsumerRecord
-           org.apache.kafka.common.TopicPartition
-           java.io.Closeable))
+           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
+           org.apache.kafka.clients.producer.ProducerRecord))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fk/with-kafka-client fkv/with-memdb fkv/with-kv-store)
+(t/use-fixtures :each fk/with-cluster-node-opts kvf/with-kv-dir)
 
-(defn- consumer-record->value [^ConsumerRecord record]
-  (.value record))
+(defn- poll-topic [offsets topic]
+  (with-open [tx-consumer ^KafkaConsumer (fk/with-consumer)]
+    (let [tx-offsets (kc/map->ConsumerOffsets {:indexer (:indexer *api*) :k offsets})]
+      (kc/subscribe-from-stored-offsets tx-offsets tx-consumer [topic]))
+    (doall (map (juxt #(.key ^ConsumerRecord %) #(.value ^ConsumerRecord %))
+                (.poll tx-consumer (Duration/ofMillis 10000))))))
 
-(t/deftest test-can-produce-and-consume-message-using-embedded-kafka
-  (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
-        person {:crux.db/id "foo"}
-        partitions [(TopicPartition. topic 0)]]
+(defn- txes-on-topic []
+  (poll-topic ::txes (:crux.kafka/tx-topic *opts*)))
 
-    (k/create-topic fk/*admin-client* topic 1 1 {})
-
-    @(.send fk/*producer* (ProducerRecord. topic person))
-
-    (.assign fk/*consumer* partitions)
-    (let [records (.poll fk/*consumer* (Duration/ofMillis 10000))]
-      (t/is (= 1 (count (seq records))))
-      (t/is (= person (first (map consumer-record->value records)))))))
+(defn- docs-on-topic [t]
+  (poll-topic ::docs t))
 
 (t/deftest test-can-transact-entities
-  (let [tx-topic "test-can-transact-entities-tx"
-        doc-topic "test-can-transact-entities-doc"
-        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
-        tx-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.tx-log/consumer-state})
-        doc-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                             :k :crux.doc-log/consumer-state})]
+  (fapi/with-node
+    (fn []
+      (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
+            submitted-tx (.submitTx *api* tx-ops)
+            _ (.awaitTx *api* submitted-tx nil)]
 
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+        (t/testing "tx-log contains relevant txes"
+          (let [txes (txes-on-topic)]
+            (t/is (= 7 (count (second (first txes)))))))
 
-    (db/submit-tx tx-log tx-ops)
-
-    (let [docs (map consumer-record->value (.poll fk/*consumer2* (Duration/ofMillis 10000)))]
-      (t/is (= 7 (count docs)))
-      (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                 {:foaf/firstName "Pablo"
-                  :foaf/surname "Picasso"})
-               (select-keys (first docs)
-                            (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                              [:foaf/firstName
-                               :foaf/surname])))))
-
-    (let [txes (map consumer-record->value (.poll fk/*consumer* (Duration/ofMillis 10000)))]
-      (t/is (= 7 (count (first txes)))))))
+        (t/testing "doc-log contains relevant docs"
+          (let [docs (docs-on-topic (:crux.kafka/doc-topic *opts*))]
+            (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                       {:foaf/firstName "Pablo"
+                        :foaf/surname "Picasso"})
+                     (select-keys (second (first docs))
+                                  (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                    [:foaf/firstName
+                                     :foaf/surname]))))))))))
 
 (t/deftest test-can-transact-and-query-entities
-  (let [tx-topic "test-can-transact-and-query-entities-tx"
-        doc-topic "test-can-transact-and-query-entities-doc"
-        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
-        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
-        object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        node (reify crux.api.ICruxAPI
-               (db [this]
-                 (q/db *kv* object-store nil (cio/next-monotonic-date) (cio/next-monotonic-date))))
-        tx-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.tx-log/consumer-state})
-        doc-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                             :k :crux.doc-log/consumer-state})
-        consume-opts {:indexer indexer
-                      :offsets tx-offsets
-                      :pending-txs-state (atom [])
-                      :tx-topic tx-topic}
-        doc-consume-opts {:indexer indexer
-                          :offsets doc-offsets
-                          :doc-topic doc-topic}]
+  (fapi/with-node
+    (fn []
+      (let [tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
+            {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* tx-ops)
+            _ (.awaitTx *api* submitted-tx (Duration/ofSeconds 20))]
 
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
-
-    (t/testing "transacting and indexing"
-      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
-        (t/is (= 3 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
-        (t/is (= 1 (k/consume-and-index-txes consume-opts fk/*consumer*)))
-        (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000))))
-
-        (t/testing "restoring to stored offsets"
-          (.seekToBeginning fk/*consumer* (.assignment fk/*consumer*))
-          (kc/seek-to-stored-offsets tx-offsets fk/*consumer* (.assignment fk/*consumer*))
-          (t/is (empty? (.poll fk/*consumer* (Duration/ofMillis 1000)))))
+        (t/testing "transacting and indexing"
+          (t/is (= 3 (count (docs-on-topic (:crux.kafka/doc-topic *opts*)))))
+          (t/is (= 1 (count (txes-on-topic)))))
 
         (t/testing "querying transacted data"
           (t/is (= #{[:http://example.org/Picasso]}
-                   (api/q (api/db node)
-                          (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                            '{:find [e]
-                              :where [[e :foaf/firstName "Pablo"]]})))))
+                   (api/q (api/db *api*)
+                        (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                          '{:find [e]
+                            :where [[e :foaf/firstName "Pablo"]]})))))
 
         (t/testing "can read tx log"
-          (with-open [tx-log-iterator (db/open-tx-log tx-log nil)]
-            (let [log (iterator-seq tx-log-iterator)]
-              (t/is (not (realized? log)))
-              ;; Cannot compare the tx-ops as they contain blank nodes
-              ;; with random ids.
-              (t/is (= {:crux.tx/tx-time tx-time
-                        :crux.tx/tx-id tx-id}
-                       (dissoc (first log) :crux.tx.event/tx-events)))
-              (t/is (= 1 (count log)))
-              (t/is (= 3 (count (:crux.tx.event/tx-events (first log))))))))))))
+          (t/testing "tx-log"
+            (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+              (let [result (iterator-seq tx-log-iterator)]
+                (t/is (not (realized? result)))
+                (t/is (= {:crux.tx/tx-time tx-time
+                          :crux.tx/tx-id tx-id}
+                         (dissoc (first result) :crux.tx.event/tx-events)))
+                (t/is (= 1 (count result)))
+                (t/is (= 3 (count (:crux.tx.event/tx-events (first result)))))
+                (t/is (realized? result))))))
 
-(defn- consume-topics [tx-consume-opts doc-consume-opts]
-  (loop []
-    (when (or (not= 0 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*))
-              (not= 0 (k/consume-and-index-txes tx-consume-opts fk/*consumer*)))
-      (recur))))
+        (t/testing "new node can pick-up"
+          (fapi/with-opts {:crux.kafka/group-id "different-test-group"}
+            (fn []
+              (kvf/with-kv-dir
+                (fn []
+                  (fapi/with-node
+                    (fn []
+                      (.awaitTx *api* submitted-tx (Duration/ofSeconds 20))
+                      (t/is (= #{[:http://example.org/Picasso]}
+                               (api/q (api/db *api*)
+                                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                                      '{:find [e]
+                                        :where [[e :foaf/firstName "Pablo"]]}))))))))))
+
+          (t/testing "no new txes or docs"
+            (t/is (= 3 (count (docs-on-topic (:crux.kafka/doc-topic *opts*)))))
+            (t/is (= 1 (count (txes-on-topic))))))))))
+
+(defn- compact-to-topic [topic docs]
+  (k/create-topic fk/*admin-client* topic 1 1 {})
+
+  (with-open [producer (fk/with-producer)]
+    (doseq [[k v] (->> docs
+                       (reverse)
+                       (reduce (fn [docs doc]
+                                 (if (contains? (set (map (comp str first) docs)) (str (first doc)))
+                                   docs
+                                   (conj docs doc))) [])
+                       reverse)]
+      @(.send producer (ProducerRecord. topic k v)))))
 
 (t/deftest test-can-process-compacted-documents
   ;; when doing a evict a tombstone document will be written to
   ;; replace the original document. The original document will be then
   ;; removed once kafka compacts it away.
+  (fapi/with-node
+    (fn []
+      (t/testing "transacting and indexing"
+        (let [evicted-doc {:crux.db/id :to-be-evicted :personal "private"}
+              non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
+              after-evict-doc {:crux.db/id :after-evict :personal "private"}
 
-  (let [tx-topic "test-can-process-compacted-documents-tx"
-        doc-topic "test-can-process-compacted-documents-doc"
+              {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/put evicted-doc]
+                                                                                 [:crux.tx/put non-evicted-doc]])
+              _ (.awaitTx *api* submitted-tx nil)
 
-        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
+              evicted-doc-hash (:crux.db/content-hash (api/entity-tx (api/db *api*) (:crux.db/id evicted-doc)))
 
-        tx-log (k/->KafkaTxLog fk/*producer* fk/*consumer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
+              {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/evict (:crux.db/id evicted-doc)]])
+              _ (.awaitTx *api* submitted-tx nil)
 
-        object-store  (os/->CachedObjectStore (lru/new-cache os/default-doc-cache-size) (os/->KvObjectStore *kv*))
-        indexer (tx/->KvIndexer (os/->KvObjectStore *kv*) *kv* tx-log (bus/->EventBus (atom #{})) nil)
+              {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/put after-evict-doc]])
+              _ (.awaitTx *api* submitted-tx nil)]
 
-        node (reify crux.api.ICruxAPI
-               (db [this]
-                 (q/db *kv* object-store nil (cio/next-monotonic-date) (cio/next-monotonic-date))))
-        tx-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                            :k :crux.tx-log/consumer-state})
-        doc-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                             :k :crux.doc-log/consumer-state})
-        tx-consume-opts {:indexer indexer
-                         :offsets tx-offsets
-                         :pending-txs-state (atom [])
-                         :tx-topic tx-topic}
-        doc-consume-opts {:indexer indexer
-                          :offsets doc-offsets
-                          :doc-topic doc-topic}]
+          (t/testing "querying transacted data"
+            (t/is (= non-evicted-doc (api/entity (api/db *api*) (:crux.db/id non-evicted-doc))))
+            (t/is (nil? (api/entity (api/db *api*) (:crux.db/id evicted-doc))))
+            (t/is (= after-evict-doc (api/entity (api/db *api*) (:crux.db/id after-evict-doc)))))
 
-    (k/create-topic fk/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic fk/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-    (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
+          (t/testing "compaction"
+            (compact-to-topic "compacted-doc-topic" (docs-on-topic (:crux.kafka/doc-topic *opts*)))
+            (assert (= #{{:crux.db/id :not-evicted, :personal "private"}
+                         {:crux.db/id (c/new-id :to-be-evicted) :crux.db/evicted? true}
+                         {:crux.db/id :after-evict, :personal "private"}}
+                       (set (map second (docs-on-topic "compacted-doc-topic")))))
 
-    (t/testing "transacting and indexing"
-      (let [evicted-doc {:crux.db/id :to-be-evicted :personal "private"}
-            non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
-            evicted-doc-hash
-            (do @(db/submit-tx tx-log [[:crux.tx/put evicted-doc]
-                                       [:crux.tx/put non-evicted-doc]])
-                (t/is (= 2 (k/consume-and-index-documents doc-consume-opts fk/*consumer2*)))
-                (t/is (= 1 (k/consume-and-index-txes tx-consume-opts fk/*consumer*)))
-                (:crux.db/content-hash (api/entity-tx (api/db node) (:crux.db/id evicted-doc))))
+            (t/testing "new node can pick-up"
+              (fapi/with-opts {:crux.node/topology ['crux.kafka/topology]
+                               :crux.kafka/doc-topic "compacted-doc-topic"
+                               :crux.kafka/group-id "different-test-group"}
+                (fn []
+                  (kvf/with-kv-dir
+                    (fn []
+                      (fapi/with-node
+                        (fn []
+                          (.awaitTx *api* submitted-tx nil)
+                          (t/testing "querying transacted data"
+                            (t/is (= non-evicted-doc (api/entity (api/db *api*) (:crux.db/id non-evicted-doc))))
+                            (t/is (nil? (api/entity (api/db *api*) (:crux.db/id evicted-doc))))
+                            (t/is (= after-evict-doc (api/entity (api/db *api*) (:crux.db/id after-evict-doc)))))))))))
 
-            after-evict-doc {:crux.db/id :after-evict :personal "private"}
-            {:crux.tx/keys [tx-id tx-time]}
-            (do
-              @(db/submit-tx tx-log [[:crux.tx/evict (:crux.db/id evicted-doc)]])
-              @(db/submit-tx tx-log [[:crux.tx/put after-evict-doc]]))]
-
-        (consume-topics tx-consume-opts doc-consume-opts)
-
-        (t/testing "querying transacted data"
-          (t/is (= non-evicted-doc (api/entity (api/db node) (:crux.db/id non-evicted-doc))))
-          (t/is (nil? (api/entity (api/db node) (:crux.db/id evicted-doc))))
-          (t/is (= after-evict-doc (api/entity (api/db node) (:crux.db/id after-evict-doc)))))
-
-        (t/testing "re-indexing the same transactions after doc compaction"
-          (binding [fk/*consumer-options* {"max.poll.records" "1"}]
-            (fk/with-kafka-client
-              (fn []
-                (fkv/with-kv-store
-                  (fn []
-                    (let [object-store (os/->KvObjectStore *kv*)
-                          indexer (tx/->KvIndexer object-store *kv* tx-log (bus/->EventBus (atom #{})) nil)
-                          tx-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                                              :k :crux.tx-log/consumer-state})
-                          doc-offsets (kc/map->IndexedOffsets {:indexer indexer
-                                                               :k :crux.doc-log/consumer-state})
-                          tx-consume-opts {:indexer indexer
-                                           :offsets tx-offsets
-                                           :pending-txs-state (atom [])
-                                           :tx-topic tx-topic}
-                          doc-consume-opts {:indexer indexer
-                                            :offsets doc-offsets
-                                            :doc-topic doc-topic}]
-                      (kc/subscribe-from-stored-offsets tx-offsets fk/*consumer* [tx-topic])
-                      (kc/subscribe-from-stored-offsets doc-offsets fk/*consumer2* [doc-topic])
-                      (consume-topics tx-consume-opts doc-consume-opts)
-
-                      ;; delete the object that would have been compacted away
-                      (db/delete-objects object-store [evicted-doc-hash])
-
-                      (t/testing "querying transacted data"
-                        (t/is (= non-evicted-doc (api/entity (api/db node) (:crux.db/id non-evicted-doc))))
-                        (t/is (nil? (api/entity (api/db node) (:crux.db/id evicted-doc))))
-                        (t/is (= after-evict-doc (api/entity (api/db node) (:crux.db/id after-evict-doc))))))))))))))))
+              (t/testing "no new txes or docs"
+                (t/is (= 3 (count (docs-on-topic "compacted-doc-topic"))))
+                (t/is (= 3 (count (txes-on-topic))))))))))))

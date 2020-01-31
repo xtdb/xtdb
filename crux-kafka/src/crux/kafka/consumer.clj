@@ -4,6 +4,7 @@
             [crux.status :as status])
   (:import crux.kafka.nippy.NippyDeserializer
            java.io.Closeable
+           java.time.Duration
            [java.util List Map]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            org.apache.kafka.common.TopicPartition))
@@ -23,7 +24,15 @@
   (read-offsets [this])
   (store-offsets [this offsets]))
 
-(defrecord IndexedOffsets [indexer k]
+(defrecord TxOffset [indexer]
+  Offsets
+  (read-offsets [this]
+    {:next-offset (inc (get (db/read-index-meta indexer :crux.tx/latest-completed-tx) :crux.tx/tx-id 0))})
+
+  ;; no-op - this is stored by the indexer itself
+  (store-offsets [this offsets]))
+
+(defrecord ConsumerOffsets [indexer k]
   Offsets
   (read-offsets [this]
     (db/read-index-meta indexer k))
@@ -96,10 +105,52 @@
     (reset! running? false)
     (.join worker-thread)))
 
+(defn consume
+  [{:keys [offsets indexer timeout topic ^KafkaConsumer consumer index-fn]
+    :or {timeout 5000}}]
+  (let [records (.poll consumer (Duration/ofMillis timeout))
+        records (vec (.records records (str topic)))]
+    (index-fn records)
+    (when-let [records (seq records)]
+      (update-stored-consumer-state offsets consumer records))
+    (count records)))
+
+(defn consume-and-block
+  [{:keys [offsets indexer pending-records-state timeout topic ^KafkaConsumer consumer accept-fn index-fn]
+    :or {timeout 5000}}]
+  (assert (and accept-fn index-fn))
+  (let [topic-partition (TopicPartition. topic 0)
+        _ (when (and (.contains (.paused consumer) topic-partition)
+                     (empty? @pending-records-state))
+            (log/debug "Resuming" topic)
+            (.resume consumer [topic-partition]))
+        records (.poll consumer (Duration/ofMillis timeout))
+        records (vec (.records records (str topic)))
+        pending-records (swap! pending-records-state into records)
+        records (->> pending-records
+                     (take-while (fn [^ConsumerRecord record]
+                                   (let [ready? (accept-fn record)]
+                                     (when-not ready?
+                                       (when-not (.contains (.paused consumer) topic-partition)
+                                         (log/debug "Pausing" topic)
+                                         (.pause consumer [topic-partition]))
+                                       (log/info "Paused" topic "pending:" (count pending-records)))
+                                     ready?)))
+                     (vec))]
+
+    (index-fn records)
+
+    (update-stored-consumer-state offsets consumer records)
+    (swap! pending-records-state (comp vec (partial drop (count records))))
+
+    (count records)))
+
 (defn start-indexing-consumer
   ^java.io.Closeable
-  [consumer-config offsets topic index-fn]
-  (let [running? (atom true)
+  [{:keys [indexer offsets kafka-config group-id topic accept-fn index-fn]}]
+  (let [consumer-config (merge {"group.id" group-id} kafka-config)
+        running? (atom true)
+        pending-records (atom [])
         worker-thread
         (doto
             (Thread. ^Runnable (fn []
@@ -107,7 +158,16 @@
                                    (subscribe-from-stored-offsets offsets consumer [topic])
                                    (while @running?
                                      (try
-                                       (index-fn consumer)
+                                       (let [opts {:indexer indexer
+                                                   :consumer consumer
+                                                   :topic topic
+                                                   :offsets offsets
+                                                   :timeout 1000
+                                                   :index-fn index-fn}]
+                                         (if accept-fn
+                                           (consume-and-block (merge opts {:pending-records-state pending-records
+                                                                           :accept-fn accept-fn}))
+                                           (consume opts)))
                                        (catch Exception e
                                          (log/error e "Error while consuming and indexing from Kafka:")
                                          (Thread/sleep 500))))))
