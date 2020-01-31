@@ -7,7 +7,7 @@
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-metrics"
    "crux-test"
-   "crux-uberjar"
+   "crux-cli"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -32,6 +32,7 @@
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
                  [juxt/crux-bench "derived-from-git"]
+                 [juxt/crux-cli "derived-from-git"]
 
                  ;; Håkan
                  [org.ejml/ejml-dsparse "0.38" :exclusions [com.google.code.findbugs/jsr305]]
@@ -57,7 +58,6 @@
                "crux-jdbc/test"
                "crux-http-client/test"
                "crux-http-server/test"
-               "crux-uberjar/test"
                "crux-test/test"]
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"]

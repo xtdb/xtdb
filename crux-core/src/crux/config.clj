@@ -1,6 +1,7 @@
 (ns crux.config
   (:require [clojure.spec.alpha :as s]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.edn :as edn])
   (:import java.util.Properties
            (java.time Duration)))
 
@@ -30,8 +31,15 @@
 (s/def ::required? boolean?)
 
 (defn load-properties [f]
-  (let [props (Properties.)]
-    (.load props (io/reader f))
+  (with-open [rdr (io/reader f)]
+    (let [props (Properties.)]
+      (.load props rdr)
+      (into {}
+            (for [[k v] props]
+              [(keyword k) v])))))
+
+(defn load-edn [f]
+  (with-open [rdr (io/reader f)]
     (into {}
-          (for [[k v] props]
+          (for [[k v] (edn/read-string (slurp rdr))]
             [(keyword k) v]))))
