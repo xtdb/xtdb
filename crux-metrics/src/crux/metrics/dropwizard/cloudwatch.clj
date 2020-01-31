@@ -1,5 +1,5 @@
-(ns crux.dropwizard.cloudwatch
-  (:require crux.dropwizard)
+(ns crux.metrics.dropwizard.cloudwatch
+  (:require crux.metrics.dropwizard)
   (:import [io.github.azagniotov.metrics.reporter.cloudwatch CloudWatchReporter]
            [java.io Closeable]
            [software.amazon.awssdk.services.cloudwatch CloudWatchAsyncClient]
@@ -15,7 +15,7 @@
                  (.credentialsProvider (DefaultCredentialsProvider/create))
                  .build)]
     ;; Might need seperate cwacs for regions
-    (-> (cond-> (CloudWatchReporter/forRegistry reg cwac "crux.dropwizard.cloudwatch")
+    (-> (cond-> (CloudWatchReporter/forRegistry reg cwac "crux.metrics.dropwizard.cloudwatch")
           jvm-metrics? .withJvmMetrics
           dry-run? .withDryRun)
         (.withGlobalDimensions (into-array String ["crux.node=metrics"]))

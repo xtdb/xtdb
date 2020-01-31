@@ -2,11 +2,11 @@
   (:require [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.kv-store :as kv-metrics]
             [crux.metrics.query :as query-metrics]
-            [crux.dropwizard :as dropwizard]
-            [crux.dropwizard.jmx :as jmx]
-            [crux.dropwizard.console :as console]
-            [crux.dropwizard.csv :as csv]
-            [crux.dropwizard.cloudwatch :as cloudwatch]))
+            [crux.metrics.dropwizard :as dropwizard]
+            [crux.metrics.dropwizard.jmx :as jmx]
+            [crux.metrics.dropwizard.console :as console]
+            [crux.metrics.dropwizard.csv :as csv]
+            [crux.metrics.dropwizard.cloudwatch :as cloudwatch]))
 
 (def registry
   {::registry {:start-fn (fn [deps _]
@@ -46,7 +46,7 @@
 
 (def cloudwatch-reporter
   {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]}
-                                         {:crux.dropwizard.cloudwatch/keys
+                                         {:crux.metrics.dropwizard.cloudwatch/keys
                                           [seconds length unit]
                                           :as args}]
                                       (let [cw-rep (cloudwatch/report registry args)]
