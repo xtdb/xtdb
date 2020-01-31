@@ -87,6 +87,9 @@ Resources:
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
 
+                # Put metric data in cloudwatch
+                - 'cloudwatch:PutMetricData'
+
                 # Allow the ECS tasks to get secret values from the secrets manager
                 - 'secretsmanager:GetSecretValue'
               Resource: '*'
