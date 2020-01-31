@@ -1006,10 +1006,17 @@
     (t/is (= #{[:ivan]} (api/q (api/db *api*) '{:find [i]
                                                 :where [[i :age age]
                                                         [(<= 20 age)]]})))
-
     (t/is (= #{[:petr]} (api/q (api/db *api*) '{:find [i]
                                                 :where [[i :age age]
-                                                        [(>= 20 age)]]})))))
+                                                        [(>= 20 age)]]})))
+
+    (t/testing "Range inversion edge cases, #612"
+      (t/is (= #{[:ivan]} (api/q (api/db *api*) '{:find [i]
+                                                  :where [[i :age age]
+                                                          [(<= 21 age)]]})))
+      (t/is (= #{} (api/q (api/db *api*) '{:find [i]
+                                           :where [[i :age age]
+                                                   [(> 18 age)]]}))))))
 
 (t/deftest test-mutiple-values
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan"}

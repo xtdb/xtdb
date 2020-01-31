@@ -146,10 +146,10 @@
                                           >= (comp not neg? compare)
                                           = =})
 
-(def ^:private range->inverse-range '{< >=
-                                      <= >
-                                      > <=
-                                      >= <
+(def ^:private range->inverse-range '{< >
+                                      <= >=
+                                      > <
+                                      >= <=
                                       = =})
 
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
