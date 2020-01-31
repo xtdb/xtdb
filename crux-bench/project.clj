@@ -5,6 +5,7 @@
                  [juxt/crux-kafka "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-rocksdb "derived-from-git"]
+                 [juxt/crux-metrics "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
