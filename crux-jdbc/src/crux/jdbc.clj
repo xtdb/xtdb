@@ -8,6 +8,7 @@
             [crux.index :as idx]
             [crux.node :as n]
             [crux.tx :as tx]
+            [crux.topology :as t]
             crux.tx.consumer
             [crux.tx.polling :as p]
             [next.jdbc :as jdbc]
@@ -187,5 +188,4 @@
                                             :deps [:crux.node/indexer ::ds]}
                       :crux.node/tx-log {:start-fn start-tx-log
                                          :deps [::ds]}
-                      :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
-                                                        :deps [:crux.node/tx-log]}}))
+                      :crux.node/document-store (t/refer-module :crux.node/tx-log)}))

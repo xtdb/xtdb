@@ -1,10 +1,9 @@
 (ns crux.standalone
-  (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.node :as n]
-            [crux.topology :as topo]
+            [crux.topology :as t]
             [crux.tx.polling :as p])
   (:import java.io.Closeable))
 
@@ -70,5 +69,4 @@
                                 :deps [::event-log-kv :crux.node/indexer]}
           :crux.node/tx-log {:start-fn start-moberg-event-log
                              :deps [::event-log-kv]}
-          :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
-                                     :deps [:crux.node/tx-log]}}))
+          :crux.node/document-store (t/refer-module :crux.node/tx-log)}))

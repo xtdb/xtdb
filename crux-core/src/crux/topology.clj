@@ -115,3 +115,7 @@
                               (throw t)))]
       [started-modules (fn []
                          (close-topology @started-order))])))
+
+(defn refer-module [k]
+  {:start-fn (fn [deps _] (deps k))
+   :deps [k]})

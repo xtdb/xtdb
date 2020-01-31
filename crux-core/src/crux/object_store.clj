@@ -10,7 +10,7 @@
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
            org.agrona.io.DirectBufferInputStream))
 
-(defn- keep-non-evicted-doc
+(defn keep-non-evicted-doc
   [doc]
   (when-not (i/evicted-doc? doc)
     doc))
