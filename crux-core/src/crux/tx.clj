@@ -405,6 +405,13 @@
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
 
+  (ensure-docs-indexed [this content-hashes]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (->> content-hashes
+           (db/get-objects object-store snapshot)
+           (remove (fn [[content-hash doc]] (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)))
+           (db/index-docs this))))
+
   (docs-indexed? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (and (db/known-keys? object-store snapshot content-hashes)

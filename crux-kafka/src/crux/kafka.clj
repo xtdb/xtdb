@@ -179,9 +179,10 @@
                                          (str :crux.tx/docs))
                             (.value)
                             (nippy/fast-thaw))
+
+        _ (db/ensure-docs-indexed indexer content-hashes)
         ready? (db/docs-indexed? indexer content-hashes)
-        {:crux.tx/keys [tx-time
-                        tx-id]} (tx-record->tx-log-entry tx-record)]
+        {:crux.tx/keys [tx-time tx-id]} (tx-record->tx-log-entry tx-record)]
     (if ready?
       (log/info "Ready for indexing of tx" tx-id (cio/pr-edn-str tx-time))
       (log/info "Delaying indexing of tx" tx-id (cio/pr-edn-str tx-time)))
@@ -209,13 +210,13 @@
    :args default-options})
 
 (defn index-documents
-  [indexer records]
-  (db/index-docs indexer (->> records
-                              (into {} (map (fn [^ConsumerRecord record]
-                                              [(c/new-id (.key record)) (.value record)]))))))
+  [object-store records]
+  (db/put-objects object-store (->> records
+                                    (into {} (map (fn [^ConsumerRecord record]
+                                                    [(c/new-id (.key record)) (.value record)]))))))
 
 (def doc-indexing-consumer
-  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]}
+  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer crux.node/object-store]}
                   {::keys [doc-topic doc-partitions group-id] :as options}]
                (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
                (kc/start-indexing-consumer {:indexer indexer
@@ -223,8 +224,8 @@
                                             :kafka-config (derive-kafka-config options)
                                             :group-id group-id
                                             :topic doc-topic
-                                            :index-fn (partial index-documents indexer)}))
-   :deps [:crux.node/indexer ::admin-client]
+                                            :index-fn (partial index-documents object-store)}))
+   :deps [:crux.node/indexer :crux.node/object-store ::admin-client]
    :args default-options})
 
 (defn index-documents-from-txes
