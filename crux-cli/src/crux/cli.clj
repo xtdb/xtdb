@@ -23,7 +23,7 @@
 
    ["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
     :parse-fn io/file
-    :parse-fn [#(.exists ^File %) "Properties file doesn't exist"]]
+    :validate [#(.exists ^File %) "Properties file doesn't exist"]]
 
    ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
     :default nil
