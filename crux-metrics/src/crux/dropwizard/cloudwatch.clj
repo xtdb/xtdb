@@ -3,20 +3,17 @@
   (:import [io.github.azagniotov.metrics.reporter.cloudwatch CloudWatchReporter]
            [java.io Closeable]
            [software.amazon.awssdk.services.cloudwatch CloudWatchAsyncClient]
-           [software.amazon.awssdk.regions Region]
-           ;; TODO what creds do i use???
-           [software.amazon.awssdk.auth.credentials AnonymousCredentialsProvider]
+           [software.amazon.awssdk.regions.providers DefaultAwsRegionProviderChain]
+           [software.amazon.awssdk.auth.credentials DefaultCredentialsProvider]
            [java.util.concurrent TimeUnit]
            [com.codahale.metrics MetricRegistry MetricFilter]))
 
-;; Does not throw an exception with an invalid region, beware
-;; Could add some sort of identifier for global dimensions
 (defn ^CloudWatchReporter report
-  [^MetricRegistry reg {::keys [regions dry-run? jvm-metrics?] :as args}]
+  [^MetricRegistry reg {::keys [region dry-run? jvm-metrics?] :as args}]
   (let [cwac (-> (CloudWatchAsyncClient/builder)
-                 (.credentialsProvider (AnonymousCredentialsProvider/create))
-                 ((fn [c] (reduce #(.region %1 (Region/of %2)) c regions)))
-                 (.build))]
+                 (.region (.getRegion (new DefaultAwsRegionProviderChain)))
+                 (.credentialsProvider (DefaultCredentialsProvider/create))
+                 .build)]
     ;; Might need seperate cwacs for regions
     (-> (cond-> (CloudWatchReporter/forRegistry reg cwac "crux.dropwizard.cloudwatch")
           jvm-metrics? .withJvmMetrics
