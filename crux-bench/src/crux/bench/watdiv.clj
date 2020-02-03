@@ -402,20 +402,28 @@
                          completed-queue (java.util.concurrent.LinkedBlockingQueue. ^Long (* 10 num-threads))
                          job-features (mapv (fn [_]
                                               (.submit
-                                                pool
-                                                ^Runnable
-                                                (fn run-jobs []
-                                                  (when-let [{:keys [q]} (if @all-jobs-submitted
-                                                                           (.poll job-queue)
-                                                                           (.take job-queue))]
-                                                    (try
-                                                      {:result-count
-                                                       (log/error (crux/q
-                                                                    (crux/db node)
-                                                                    (sparql/sparql->datalog q)))}
-                                                      (catch java.util.concurrent.TimeoutException t
-                                                        {:error t}))
-                                                    (recur)))))
+                                               pool
+                                               ^Runnable
+                                               (fn run-jobs []
+                                                 (when-let [{:keys [idx q]} (if @all-jobs-submitted
+                                                                              (.poll job-queue)
+                                                                              (.take job-queue))]
+                                                   (let [start-time (System/currentTimeMillis)
+                                                         result
+                                                         (try
+                                                           {:result-count
+                                                            (count
+                                                             (crux/q
+                                                              (crux/db node)
+                                                              (sparql/sparql->datalog q)))}
+                                                           (catch java.util.concurrent.TimeoutException t
+                                                             {:error t}))]
+                                                     (.put completed-queue
+                                                           (merge
+                                                            {:query-index idx
+                                                             :time-taken-ms (- (System/currentTimeMillis) start-time)}
+                                                            result)))
+                                                   (recur)))))
                                             (range num-threads))]
                      (try
                        (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
@@ -427,6 +435,7 @@
                        (reset! all-jobs-submitted true)
                        (doseq [^java.util.concurrent.Future f job-features] (.get f))
                        (reset! all-jobs-completed true)
+                       {:queries (.toArray completed-queue)}
                        (catch InterruptedException e
                          (.shutdownNow pool)
                          (throw e))))))
