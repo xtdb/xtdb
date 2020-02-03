@@ -409,6 +409,7 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (->> content-hashes
            (db/get-objects object-store snapshot)
+           ;; TODO arguably don't need this line anymore (arguably)
            (remove (fn [[content-hash doc]] (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)))
            (db/index-docs this))))
 
