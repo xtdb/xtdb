@@ -19,26 +19,18 @@
                :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}}})
 
 (def jmx-reporter
-  {::jmx-reporter {:start-fn (fn [{::keys [registry]} {::keys [jmx-reporter-opts]}]
-                               (doto (jmx/reporter registry
-                                                   (merge {:domain "crux.metrics"}
-                                                          jmx-reporter-opts))
-                                 jmx/start))
+  {::jmx-reporter {:start-fn (fn [{::keys [registry]} args]
+                               (jmx/start-reporter registry args))
                    :deps #{::registry}}})
 
 (def console-reporter
-  {::console-reporter {:start-fn (fn [{::keys [registry]} {::keys [console-reporter-opts console-reporter-rate]}]
-                                   (doto (console/reporter registry (merge {} console-reporter-opts))
-                                     (console/start (or console-reporter-rate 1))))
+  {::console-reporter {:start-fn (fn [{::keys [registry]} args]
+                                   (console/start-reporter registry args))
                        :deps #{::registry}}})
 
 (def csv-reporter
-  {::csv-reporter {:start-fn (fn [{::keys [registry]} {::keys [csv-reporter-opts csv-reporter-file csv-reporter-rate]}]
-                               (doto (csv/reporter registry
-                                                   (or csv-reporter-file "/tmp/csv_reporter")
-                                                   (merge {}
-                                                          csv-reporter-opts))
-                                 (csv/start (or csv-reporter-rate 1))))
+  {::csv-reporter {:start-fn (fn [{::keys [registry]} args]
+                               (csv/start-reporter registry args))
                    :deps #{::registry}}})
 
 ;; TODO a decision for consistency, should args be a flat map in the config, or

@@ -1,5 +1,6 @@
 (ns crux.metrics.dropwizard
-  (:import (com.codahale.metrics MetricRegistry Timer Timer$Context Gauge Metered Meter)
+  (:import [com.codahale.metrics MetricRegistry Timer Timer$Context Gauge Metered Meter ScheduledReporter]
+           [java.io Closeable]
            clojure.lang.IFn))
 
 ;;;; Registry
@@ -45,3 +46,18 @@
 
 (defn meter-count [^Metered t]
   (.getCount t))
+
+;; Reporters
+
+(defn stop-reporter
+  [^ScheduledReporter r]
+  (.stop r))
+
+(defn start-reporter
+  [^ScheduledReporter r ^long seconds]
+  (let [reporter (.start r seconds)]
+    (reify Closeable
+      (close [this]
+        (.stop reporter)))))
+
+
