@@ -369,56 +369,6 @@
     @(d/transact conn datomic-watdiv-schema)
     (map->DatomicBackend {:conn conn})))
 
-(defrecord CruxBackend [crux]
-  WatdivBackend
-  (backend-info [this]
-    (let [ingest-stats (crux/entity (crux/db crux) ::watdiv-ingestion-status)]
-      (merge
-        {:backend :crux}
-        (select-keys ingest-stats [:watdiv/ingest-start-time
-                                   :watdiv/kafka-ingest-time
-                                   :watdiv/ingest-time])
-        (select-keys (crux/status crux) [:crux.version/version
-                                         :crux.version/revision
-                                         :crux.kv/kv-store]))))
-
-  (execute-with-timeout [this datalog]
-    (let [db (crux/db crux)]
-      (with-open [snapshot (crux/new-snapshot db)]
-        (let [query-future (future (count (crux/q db snapshot datalog)))]
-          (or (deref query-future query-timeout-ms nil)
-              (do (future-cancel query-future)
-                  (throw (IllegalStateException. "Query timed out."))))))))
-
-  (ingest-watdiv-data [this resource]
-    (when-not (:done? (crux/entity (crux/db crux) ::watdiv-ingestion-status))
-      (let [time-before (Date.)
-            {:keys [entity-count]} (with-open [in (io/input-stream (io/resource resource))]
-                                     (rdf/submit-ntriples (:tx-log crux) in 1000))]
-        (assert (= 521585 entity-count))
-        (let [kafka-ingest-done (Date.)
-              {:keys [crux.tx/tx-time]}
-              (crux/submit-tx
-                crux
-                [[:crux.tx/put
-                  {:crux.db/id ::watdiv-ingestion-status :done? false}]])]
-          (crux/db crux tx-time tx-time) ;; block until indexed
-          (crux/db
-            crux (Date.)
-            (:crux.tx/tx-time
-             (crux/submit-tx
-               crux
-               [[:crux.tx/put
-                 {:crux.db/id ::watdiv-ingestion-status
-                  :watdiv/ingest-start-time time-before
-                  :watdiv/kafka-ingest-time (- (.getTime kafka-ingest-done) (.getTime time-before))
-                  :watdiv/ingest-time (- (.getTime (Date.)) (.getTime time-before))
-                  :done? true}]]))))))))
-
-(defmethod start-watdiv-runner :crux
-  [_ {:keys [crux]}]
-  (map->CruxBackend {:crux crux}))
-
 (defrecord WatdivRunner [running-future]
   Closeable
   (close [_]
@@ -431,118 +381,13 @@
    "watdiv-stress-100/test.3.desc" "watdiv-stress-100/test.3.sparql"
    "watdiv-stress-100/test.4.desc" "watdiv-stress-100/test.4.sparql"})
 
-(defn execute-stress-test
-  [backend tests-run out-file num-tests ^Long num-threads]
-  (let [all-jobs-submitted (atom false)
-        all-jobs-completed (atom false)
-        pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
-        job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
-        completed-queue (java.util.concurrent.LinkedBlockingQueue. ^Long (* 10 num-threads))
-        writer-future (.submit
-                        pool
-                        ^Runnable
-                        (fn write-result-thread []
-                          (with-open [out (io/writer out-file)]
-                            (.write out "{\n")
-                            (.write out (str ":test-time " (cio/pr-edn-str (System/currentTimeMillis)) "\n"))
-                            (.write out (str ":backend-info " (cio/pr-edn-str (backend-info backend)) "\n"))
-                            (.write out (str ":num-tests " (cio/pr-edn-str num-tests) "\n"))
-                            (.write out (str ":num-threads " (cio/pr-edn-str num-threads) "\n"))
-                            (.write out (str ":tests " "\n"))
-                            (.write out "[\n")
-                            (loop []
-                              (when-let [{:keys [idx q error results time]} (if @all-jobs-completed
-                                                                              (.poll completed-queue)
-                                                                              (.take completed-queue))]
-                                (.write out "{")
-                                (.write out (str ":idx " (cio/pr-edn-str idx) "\n"))
-                                (.write out (str ":query " (cio/pr-edn-str q) "\n"))
-                                (if error
-                                  (.write out (str ":error " (cio/pr-edn-str (str error)) "\n"))
-                                  (.write out (str ":backend-results " results "\n")))
-                                (.write out (str ":time " (cio/pr-edn-str time)))
-                                (.write out "}\n")
-                                (.flush out)
-                                (recur)))
-                            (.write out "]}"))))
-
-        job-features (vec (for [i (range num-threads)]
-                            (.submit
-                              pool
-                              ^Runnable
-                              (fn run-jobs []
-                                (when-let [{:keys [idx q] :as job} (if @all-jobs-submitted
-                                                                     (.poll job-queue)
-                                                                     (.take job-queue))]
-                                  (let [start-time (System/currentTimeMillis)
-                                        result
-                                        (try
-                                          {:results (execute-with-timeout backend (sparql/sparql->datalog q))}
-                                          (catch java.util.concurrent.TimeoutException t
-                                            {:error t})
-                                          (catch IllegalStateException t
-                                            {:error t})
-                                          (catch Throwable t
-                                            (log/error t "unkown error running watdiv tests")
-                                            ;; datomic wrapps the error multiple times
-                                            ;; doing this to get the cause exception!
-                                            (when-not (instance? java.util.concurrent.TimeoutException
-                                                                 (.getCause (.getCause (.getCause t))))
-                                              (throw t))))]
-                                    (.put completed-queue
-                                          (merge
-                                            job result
-                                            {:time (- (System/currentTimeMillis) start-time)}))
-                                    (recur)))))))]
-    (try
-      (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
-                  sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))]
-        (doseq [[idx [d q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                                 (take (or num-tests 100))
-                                 (map-indexed vector))]
-          (.put job-queue {:idx idx :q q})))
-      (reset! all-jobs-submitted true)
-      (doseq [^java.util.concurrent.Future f job-features] (.get f))
-      (reset! all-jobs-completed true)
-      (.get writer-future)
-
-      (catch InterruptedException e
-        (.shutdownNow pool)
-        (throw e)))))
-
-(defn run-watdiv-test
-  [backend num-tests num-threads]
-  (let [status (atom nil)
-        tests-run (atom 0)
-        out-file (io/file (format "watdiv_%s.edn" (System/currentTimeMillis)))]
-    (map->WatdivRunner
-      {:tests-run tests-run
-       :out-file out-file
-       :num-tests num-tests
-       :num-threads num-threads
-       :backend backend
-       :running-future
-       (future
-         (try
-           (ingest-watdiv-data backend "watdiv/data/watdiv.10M.nt")
-           (execute-stress-test backend tests-run out-file num-tests num-threads)
-           (catch Throwable t
-             (log/error t "watdiv testrun failed")
-             (reset! status :benchmark-failed)
-             false)))})))
-
-(defn start-and-run
-  [backend-name node num-tests num-threads]
-  (let [backend (start-watdiv-runner backend-name node)]
-    (run-watdiv-test backend num-tests num-threads)))
-
 ;; above is old code =====
 
 (defn ingest-crux
   [node]
   (bench/run-bench :ingest
                    (let [{:keys [last-tx entity-count]}
-                         (with-open [in (io/input-stream (io/resource "watdiv.10.nt"))]
+                         (with-open [in (io/input-stream (io/resource "watdiv.10M.nt"))]
                            (rdf/submit-ntriples (:tx-log node) in 1000))]
                      (crux/await-tx node @last-tx)
                      {:entity-count entity-count})))
@@ -565,9 +410,9 @@
                                                                            (.take job-queue))]
                                                     (try
                                                       {:result-count
-                                                       (count (crux/q
-                                                                (crux/db node)
-                                                                (sparql/sparql->datalog q)))}
+                                                       (log/error (crux/q
+                                                                    (crux/db node)
+                                                                    (sparql/sparql->datalog q)))}
                                                       (catch java.util.concurrent.TimeoutException t
                                                         {:error t}))
                                                     (recur)))))

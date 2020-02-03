@@ -10,8 +10,8 @@
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                bench/crux-version bench/commit-hash))
   (bench/with-node [node]
-    ;(devices/run-devices-bench node)
-    ;(weather/run-weather-bench node)
+    (devices/run-devices-bench node)
+    (weather/run-weather-bench node)
     (watdiv/run-watdiv-bench node {:thread-count 1 :test-count 2})))
 
 
