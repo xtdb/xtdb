@@ -542,7 +542,7 @@
   [node]
   (bench/run-bench :ingest
                    (let [{:keys [last-tx entity-count]}
-                         (with-open [in (io/input-stream (io/resource "watdiv.10M.nt"))]
+                         (with-open [in (io/input-stream (io/resource "watdiv.10.nt"))]
                            (rdf/submit-ntriples (:tx-log node) in 1000))]
                      (crux/await-tx node @last-tx)
                      {:entity-count entity-count})))
@@ -550,53 +550,41 @@
 (defn execute-stress-test-crux
   [node num-tests ^Long num-threads]
   (bench/run-bench :stress-test
-    (let [all-jobs-submitted (atom false)
-        all-jobs-completed (atom false)
-        pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
-        job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
-        completed-queue (java.util.concurrent.LinkedBlockingQueue. ^Long (* 10 num-threads))
-        writer-future (.submit
-                        pool
-                        ^Runnable
-                        (fn write-result-thread []
-                          (loop []
-                            (when (if @all-jobs-completed
-                                    (.poll completed-queue)
-                                    (.take completed-queue))
-                              (recur)))))
-
-        job-features (mapv (fn [_]
-                             (.submit
-                               pool
-                               ^Runnable
-                               (fn run-jobs []
-                                 (when-let [{:keys [q]} (if @all-jobs-submitted
-                                                          (.poll job-queue)
-                                                          (.take job-queue))]
-                                   (try
-                                     {:result-count
-                                      (count (crux/q
-                                               (crux/db node)
-                                               (sparql/sparql->datalog q)))}
-                                     (catch java.util.concurrent.TimeoutException t
-                                       {:error t}))
-                                   (recur)))))
-                           (range num-threads))]
-    (try
-      (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
-                  sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
-        (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                                 (take (or num-tests 100))
-                                 (map-indexed vector))]
-          (.put job-queue {:idx idx :q q})))
-      (reset! all-jobs-submitted true)
-      (doseq [^java.util.concurrent.Future f job-features] (.get f))
-      (reset! all-jobs-completed true)
-      (.get writer-future)
-
-      (catch InterruptedException e
-        (.shutdownNow pool)
-        (throw e))))))
+                   (let [all-jobs-submitted (atom false)
+                         all-jobs-completed (atom false)
+                         pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
+                         job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
+                         completed-queue (java.util.concurrent.LinkedBlockingQueue. ^Long (* 10 num-threads))
+                         job-features (mapv (fn [_]
+                                              (.submit
+                                                pool
+                                                ^Runnable
+                                                (fn run-jobs []
+                                                  (when-let [{:keys [q]} (if @all-jobs-submitted
+                                                                           (.poll job-queue)
+                                                                           (.take job-queue))]
+                                                    (try
+                                                      {:result-count
+                                                       (count (crux/q
+                                                                (crux/db node)
+                                                                (sparql/sparql->datalog q)))}
+                                                      (catch java.util.concurrent.TimeoutException t
+                                                        {:error t}))
+                                                    (recur)))))
+                                            (range num-threads))]
+                     (try
+                       (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
+                                   sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
+                         (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
+                                                  (take (or num-tests 100))
+                                                  (map-indexed vector))]
+                           (.put job-queue {:idx idx :q q})))
+                       (reset! all-jobs-submitted true)
+                       (doseq [^java.util.concurrent.Future f job-features] (.get f))
+                       (reset! all-jobs-completed true)
+                       (catch InterruptedException e
+                         (.shutdownNow pool)
+                         (throw e))))))
 
 (defn run-watdiv-bench
   [node {:keys [test-count thread-count]}]
