@@ -49,6 +49,7 @@
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
 
     (api/q (api/db *api*) {:find ['e] :where [['e :crux.db/id '_]]})
+    (Thread/sleep 100)
 
     (.close ^Closeable bus)
 
