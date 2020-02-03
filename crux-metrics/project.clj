@@ -7,6 +7,8 @@
                  [juxt/crux-core "derived-from-git"]
                  [io.dropwizard.metrics/metrics-core "4.1.2"]
                  [io.dropwizard.metrics/metrics-jmx "4.1.2"]
-                 [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]]
+                 [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
+                 [org.dhatim/dropwizard-prometheus "2.2.0"]
+                 [io.prometheus/simpleclient_pushgateway "0.8.1"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware])
