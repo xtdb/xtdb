@@ -9,6 +9,8 @@
                  [juxt/crux-test "derived-from-git"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
+                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
+
                  [clj-http "3.10.0" :exclusions [org.apache.httpcomponents/httpclient]]
                  [org.apache.httpcomponents/httpclient "4.5.9"]
                  

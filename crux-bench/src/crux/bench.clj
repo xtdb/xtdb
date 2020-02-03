@@ -23,13 +23,13 @@
 (def ^:dynamic ^:private *!bench-results*)
 
 (defn run-bench* [bench-type f]
-  (log/infof "running bench '%s/%s'..." *bench-ns* bench-type)
+  (log/infof "running bench '%s/%s'..." *bench-ns* (name bench-type))
 
   (let [start-time-ms (System/currentTimeMillis)
         ret (try
               (f)
               (catch Exception e
-                (log/warnf e "error running bench '%s/%s'" *bench-ns* bench-type)
+                (log/warnf e "error running bench '%s/%s'" *bench-ns* (name bench-type))
                 {:error (.getMessage e)}))
 
         res (merge (when (map? ret) ret)
