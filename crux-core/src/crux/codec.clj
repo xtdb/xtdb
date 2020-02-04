@@ -20,7 +20,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 6)
+(def ^:const index-version 5)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -60,7 +60,7 @@
 (def ^:const ^:private failed-tx-id-index-id 5)
 
 ; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
-(def ^:const ^:private index-version-index-id 5)
+(def ^:const ^:private index-version-index-id 6)
 
 ; second bitemp index [also reverse]
 ; z combines vt and tt
