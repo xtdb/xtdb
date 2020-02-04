@@ -6,7 +6,8 @@
             [crux.metrics.dropwizard.jmx :as jmx]
             [crux.metrics.dropwizard.console :as console]
             [crux.metrics.dropwizard.csv :as csv]
-            [crux.metrics.dropwizard.cloudwatch :as cloudwatch])
+            [crux.metrics.dropwizard.cloudwatch :as cloudwatch]
+            [crux.metrics.dropwizard.prometheus :as promethues])
   (:import [java.time Duration]
            [java.util.concurrent TimeUnit]))
 
@@ -87,6 +88,17 @@
                                  ::cloudwatch/dimensions {:doc "Add global dimensions to metrics"
                                                           :required? false
                                                           :crux.config/type :crux.config/string-map}}}})
+
+(def promethues-reporter
+  {::prometheus-reporter {:start-fn (fn [{::keys [registry]}
+                                         {:crux.metrics.dropwizard.prometheus/keys
+                                          [seconds length unit]
+                                          :as args}]
+                                      (let [pr-rep (promethues/report registry args)]
+                                        (if (and length unit)
+                                          (promethues/start pr-rep length unit)
+                                          (promethues/start pr-rep (or seconds 1)))))
+                          :deps #{::registry}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))
