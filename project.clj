@@ -34,12 +34,6 @@
                  [juxt/crux-bench "derived-from-git"]
                  [juxt/crux-cli "derived-from-git"]
 
-                 ;; Håkan
-                 [org.ejml/ejml-dsparse "0.38" :exclusions [com.google.code.findbugs/jsr305]]
-
-                 ;; Matrix
-                 [org.roaringbitmap/RoaringBitmap "0.8.11"]
-
                  [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
 
