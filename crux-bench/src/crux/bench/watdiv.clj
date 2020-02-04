@@ -379,6 +379,8 @@
   (close [_]
     (future-cancel running-future)))
 
+;; above is old code =====
+
 (def watdiv-tests
   {"watdiv-stress-100/warmup.1.desc" "watdiv-stress-100/warmup.sparql"
    "watdiv-stress-100/test.1.desc" "watdiv-stress-100/test.1.sparql"
@@ -386,7 +388,12 @@
    "watdiv-stress-100/test.3.desc" "watdiv-stress-100/test.3.sparql"
    "watdiv-stress-100/test.4.desc" "watdiv-stress-100/test.4.sparql"})
 
-;; above is old code =====
+(def query-timeout-ms 30000)
+
+(def watdiv-input-file (io/resource "watdiv.10M.nt"))
+
+(defn output-to-file [out output]
+  (spit out (str output "\n") :append true))
 
 ;; rdf bench ===
 
@@ -401,49 +408,48 @@
         (.shutDown db)
         (cio/delete-dir db-dir)))))
 
-(defn load-rdf-into-sail [^RepositoryConnection conn resource]
+(defn load-rdf-into-sail [^RepositoryConnection conn]
   (bench/run-bench :ingest-rdf
-                   (with-open [in (io/input-stream (io/resource resource))]
-                     (->> (partition-all rdf/*ntriples-log-size* (line-seq (io/reader in)))
-                          (reduce (fn [n chunk]
-                                    (log/debug "submitted" n)
-                                    (.add conn (StringReader. (string/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
-                                    (+ n (count chunk)))
-                                  0)))))
+    (with-open [in (io/input-stream watdiv-input-file)]
+      {:entity-count
+       (->> (partition-all rdf/*ntriples-log-size* (line-seq (io/reader in)))
+            (reduce (fn [n chunk]
+                      (.add conn (StringReader. (string/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
+                      (+ n (count chunk)))
+                    0))})))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (doto (.prepareTupleQuery conn q)
-                              (.setMaxExecutionTime 30)))]
+                              (.setMaxExecutionTime (quot query-timeout-ms 1000))))]
     (set ((fn step []
             (when (.hasNext tq)
               (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
                           (.next tq))
                     (lazy-seq (step)))))))))
 
-(defn execute-stress-test-rdf [conn test-count]
+(defn execute-stress-test-rdf [conn num-tests]
   (bench/run-bench :stress-test-rdf
                    (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
                                sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
                      (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                                              (take (or test-count 100))
+                                              (take num-tests)
                                               (map-indexed vector))]
                        (let [start-time (System/currentTimeMillis)
                              result (try
                                       {:result-count (count (execute-sparql conn q))}
-                                      true
                                       (catch Throwable t
-                                        {:query-error (cio/pr-edn-str (str t))}))
+                                        {:query-error (str t)}))
                              output (merge {:query-index idx
                                             :time-taken-ms (- (System/currentTimeMillis) start-time)}
                                            result)]
-                         (spit "out.edn" output) output))) ))
+                         (output-to-file "watdiv-rdf.edn" output))))))
 
 
 (defn run-watdiv-bench-rdf [{test-count :test-count}]
   (with-sail-repository
     (fn [conn]
       (bench/with-bench-ns :watdiv
-        (load-rdf-into-sail conn "watdiv.10M.nt")
+        (load-rdf-into-sail conn)
         (execute-stress-test-rdf conn test-count)))))
 
 ;; crux bench ===
@@ -452,7 +458,7 @@
   [node]
   (bench/run-bench :ingest
                    (let [{:keys [last-tx entity-count]}
-                         (with-open [in (io/input-stream (io/resource "watdiv.10M.nt"))]
+                         (with-open [in (io/input-stream watdiv-input-file)]
                            (rdf/submit-ntriples node in 1000))]
                      (crux/await-tx node last-tx)
                      {:entity-count entity-count})))
@@ -482,19 +488,18 @@
                                                               (crux/db node)
                                                               (sparql/sparql->datalog q)))}
                                                            (catch java.util.concurrent.TimeoutException t
-                                                             {:error t}))]
-                                                     (.put completed-queue
-                                                           (merge
-                                                            {:query-index idx
-                                                             :time-taken-ms (- (System/currentTimeMillis) start-time)}
-                                                            result)))
+                                                             {:error (.getMessage t)}))
+                                                         output (merge {:query-index idx
+                                                                        :time-taken-ms (- (System/currentTimeMillis) start-time)}
+                                                                       result)]
+                                                     (output-to-file "watdiv-crux.edn" output))
                                                    (recur)))))
                                             (range num-threads))]
                      (try
                        (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
                                    sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
                          (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                                                  (take (or num-tests 100))
+                                                  (take num-tests)
                                                   (map-indexed vector))]
                            (.put job-queue {:idx idx :q q})))
                        (reset! all-jobs-submitted true)
