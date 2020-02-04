@@ -38,7 +38,6 @@
                          all-jobs-completed (atom false)
                          pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
                          job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
-                         completed-queue (java.util.concurrent.LinkedBlockingQueue. ^Long (* 10 num-threads))
                          job-features (mapv (fn [_]
                                               (.submit
                                                pool
@@ -69,6 +68,7 @@
                        (reset! all-jobs-submitted true)
                        (doseq [^java.util.concurrent.Future f job-features] (.get f))
                        (reset! all-jobs-completed true)
+                       (.shutdownNow pool)
                        (catch InterruptedException e
                          (.shutdownNow pool)
                          (throw e))))))
