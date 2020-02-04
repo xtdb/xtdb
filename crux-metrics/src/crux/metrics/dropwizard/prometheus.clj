@@ -1,9 +1,9 @@
 (ns crux.metrics.dropwizard.prometheus
-  (:require [crux.metrics.dropwizard :as dropwizard])
   (:import [org.dhatim.dropwizard.prometheus PrometheusReporter]
            [io.prometheus.client.exporter PushGateway]
            [java.util.concurrent TimeUnit]
-           [java.io Closeable]))
+           [java.io Closeable]
+           [com.codahale.metrics MetricRegistry]))
 
 (defn reporter ^PrometheusReporter
 
