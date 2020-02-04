@@ -52,8 +52,7 @@
                                           [duration]
                                           :as args}]
                                       (let [cw-rep (cloudwatch/report registry args)]
-                                        (if (and length unit)
-                                          (cloudwatch/start cw-rep (Duration/parse duration)))))
+                                        (cloudwatch/start cw-rep (Duration/parse duration))))
                           :deps #{::registry}
                           :args {:crux.metrics.dropwizard.cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
                                                                              :required? false
