@@ -6,7 +6,8 @@
             [crux.metrics.dropwizard.jmx :as jmx]
             [crux.metrics.dropwizard.console :as console]
             [crux.metrics.dropwizard.csv :as csv]
-            [crux.metrics.dropwizard.cloudwatch :as cloudwatch]))
+            [crux.metrics.dropwizard.cloudwatch :as cloudwatch])
+  (:import [java.time Duration]))
 
 (def registry
   {::registry {:start-fn (fn [deps _]
@@ -21,6 +22,15 @@
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} args]
                                (jmx/start-reporter registry args))
+                   :args {:crux.metrics.dropwizard.jmx/domain {:doc "Add custom domain"
+                                                               :required? false
+                                                               :crux.config/type :crux.config/string-vector}
+                          :crux.metrics.dropwizard.jmx/rate-unit {:doc "Set rate unit"
+                                                                  :required? false
+                                                                  :crux.config/type :crux.config/string}
+                          :crux.metrics.dropwizard.jmx/duration-unit {:doc "Set duration unit"
+                                                                      :required? false
+                                                                      :crux.config/type :crux.config/string}}
                    :deps #{::registry}}})
 
 (def console-reporter
@@ -39,13 +49,27 @@
 (def cloudwatch-reporter
   {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]}
                                          {:crux.metrics.dropwizard.cloudwatch/keys
-                                          [seconds length unit]
+                                          [duration]
                                           :as args}]
                                       (let [cw-rep (cloudwatch/report registry args)]
                                         (if (and length unit)
-                                          (cloudwatch/start cw-rep length unit)
-                                          (cloudwatch/start cw-rep (or seconds 1)))))
-                          :deps #{::registry}}})
+                                          (cloudwatch/start cw-rep (Duration/parse duration)))))
+                          :deps #{::registry}
+                          :args {:crux.metrics.dropwizard.cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
+                                                                             :required? false
+                                                                             :crux.config/type :crux.config/string}
+                                 :crux.metrics.dropwizard.cloudwatch/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
+                                                                               :default "PT1S"
+                                                                               :crux.config/type :crux.config/string}
+                                 :crux.metrics.dropwizard.cloudwatch/dry-run? {:doc "When true, the reporter prints to console instead of uploading to cw"
+                                                                               :required? false
+                                                                               :crux.config/type :crux.config/boolean}
+                                 :crux.metrics.dropwizard.cloudwatch/jvm-metrics? {:doc "When true, include jvm metrics for upload"
+                                                                                   :required? false
+                                                                                   :crux.config/type :crux.config/boolean}
+                                 :crux.metrics.dropwizard.cloudwatch/dimensions {:doc "Add global dimensions to metrics"
+                                                                                 :required? false
+                                                                                 :crux.config/type :crux.config/string-vector}}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))

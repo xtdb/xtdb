@@ -1,29 +1,23 @@
 (ns crux.metrics.dropwizard.jmx
   (:import [java.io Closeable]
+           [java.util.concurrent TimeUnit]
            [com.codahale.metrics MetricRegistry]
            [com.codahale.metrics.jmx JmxReporter]))
+(TimeUnit/valueOf (.toUpperCase "seconds"))
 
 (defn reporter ^JmxReporter
   [^MetricRegistry reg {::keys [domain rate-unit duration-unit]}]
   (.build
     (cond-> (JmxReporter/forRegistry reg)
       domain (.inDomain domain)
-      rate-unit (.convertRatesTo rate-unit)
-      duration-unit (.convertDurationsTo duration-unit))))
-
-(defn stop
-  "Stop reporting metrics via JMX"
-  [^JmxReporter r]
-  (.stop ^JmxReporter r))
-
-(defn start
-  "Report all metrics via JMX"
-  [^JmxReporter r]
-  (let [reporter (.start ^JmxReporter r)]
-    (reify Closeable
-      (close [this]
-        (stop reporter)))))
+      rate-unit (.convertRatesTo (TimeUnit/valueOf (.toUpperCase rate-unit)))
+      duration-unit (.convertDurationsTo (TimeUnit/valueOf (.toUpperCase duration-unit))))))
 
 (defn start-reporter
+  "Report all metrics via JMX"
   [registry args]
-  (start (reporter registry args)))
+  (let [reporter (reporter registry args)]
+    (reify Closeable
+      (close [this]
+        (.stop reporter)))))
+

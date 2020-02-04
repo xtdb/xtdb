@@ -49,10 +49,6 @@
 
 ;; Reporters
 
-(defn stop-reporter
-  [^ScheduledReporter r]
-  (.stop r))
-
 (defn start-reporter
   [^ScheduledReporter r ^long seconds]
   (let [reporter (.start r seconds)]
