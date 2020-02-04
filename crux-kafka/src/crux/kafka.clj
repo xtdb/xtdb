@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [crux.kv :as kv]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
@@ -174,14 +175,14 @@
    ::kafka-properties-map {:doc "Used for supplying Kafka connection properties to the underlying Kafka API."
                            :crux.config/type [map? identity]}})
 
-(defn accept-txes? [indexer ^ConsumerRecord tx-record]
+(defn accept-txes? [object-store kv-store ^ConsumerRecord tx-record]
   (let [content-hashes (->> (.lastHeader (.headers tx-record)
                                          (str :crux.tx/docs))
                             (.value)
                             (nippy/fast-thaw))
-
-        _ (db/ensure-docs-indexed indexer content-hashes)
-        ready? (db/docs-indexed? indexer content-hashes)
+        docs (with-open [snapshot (kv/new-snapshot kv-store)]
+               (db/get-objects object-store snapshot content-hashes))
+        ready? (every? docs content-hashes)
         {:crux.tx/keys [tx-time tx-id]} (tx-record->tx-log-entry tx-record)]
     (if ready?
       (log/info "Ready for indexing of tx" tx-id (cio/pr-edn-str tx-time))
@@ -195,7 +196,7 @@
       (db/index-tx indexer (select-keys record [:crux.tx/tx-time :crux.tx/tx-id]) tx-events))))
 
 (def tx-indexing-consumer
-  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]}
+  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer crux.node/object-store crux.node/kv-store]}
                   {::keys [tx-topic group-id] :as options}]
                (ensure-topic-exists admin-client tx-topic tx-topic-config 1 options)
                (ensure-tx-topic-has-single-partition admin-client tx-topic)
@@ -204,9 +205,9 @@
                                             :kafka-config (derive-kafka-config options)
                                             :group-id group-id
                                             :topic tx-topic
-                                            :accept-fn (partial accept-txes? indexer)
+                                            :accept-fn (partial accept-txes? object-store kv-store)
                                             :index-fn (partial index-txes indexer)}))
-   :deps [:crux.node/indexer ::admin-client]
+   :deps [:crux.node/indexer :crux.node/object-store :crux.node/kv-store ::admin-client]
    :args default-options})
 
 (defn index-documents

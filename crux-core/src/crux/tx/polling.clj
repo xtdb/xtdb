@@ -8,8 +8,8 @@
            crux.tx.consumer.Message
            java.io.Closeable))
 
-(defn- polling-consumer [running? indexer event-log-consumer {:keys [idle-sleep-ms]
-                                                              :or {idle-sleep-ms 10}}]
+(defn- polling-consumer [running? indexer object-store event-log-consumer {:keys [idle-sleep-ms]
+                                                                           :or {idle-sleep-ms 10}}]
   (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
     (db/store-index-meta
      indexer
@@ -21,9 +21,9 @@
                         {doc-msgs :docs, tx-msgs :txs} (->> msgs (group-by #(:crux.tx/sub-topic (.headers ^Message %))))]
 
                     (when (seq doc-msgs)
-                      (db/index-docs indexer (->> doc-msgs
-                                                  (into {} (map (fn [^Message m]
-                                                                  [(c/new-id (.key m)) (.body m)]))))))
+                      (db/put-objects object-store (->> doc-msgs
+                                                        (into {} (map (fn [^Message m]
+                                                                        [(c/new-id (.key m)) (.body m)]))))))
 
                     (doseq [^Message tx-msg tx-msgs]
                       (let [tx {:crux.tx/tx-time (.message-time tx-msg)
@@ -41,10 +41,10 @@
       (when idle?
         (Thread/sleep idle-sleep-ms)))))
 
-(defn start-event-log-consumer ^java.io.Closeable [indexer event-log-consumer]
+(defn start-event-log-consumer ^java.io.Closeable [indexer object-store event-log-consumer]
   (let [running? (atom true)
         worker-thread (doto (Thread. #(try
-                                        (polling-consumer running? indexer event-log-consumer {})
+                                        (polling-consumer running? indexer object-store event-log-consumer {})
                                         (catch Throwable t
                                           (log/fatal t "Event log consumer threw exception, consumption has stopped:")))
                                      "crux.tx.event-log-consumer-thread")

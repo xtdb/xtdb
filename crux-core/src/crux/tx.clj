@@ -162,6 +162,12 @@
      (.tx-id etx))
     (c/->id-buffer (.content-hash etx))]])
 
+(defmulti docs-to-index (fn [[op]] op))
+
+(defmethod docs-to-index :crux.tx/put [[_ _ v _ _]] [(c/new-id v)])
+(defmethod docs-to-index :crux.tx/cas [[_ _ _ new-v _]] [(c/new-id new-v)])
+(defmethod docs-to-index :default [_] nil)
+
 (defmulti index-tx-event
   (fn [[op :as tx-event] tx deps]
     op))
@@ -198,11 +204,11 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [indexer] :as deps}]
-  ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
-  ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [object-store kv-store] :as deps}]
   {:pre-commit-fn #(let [content-hash (c/new-id v)
-                         correct-state? (db/docs-indexed? indexer [content-hash])]
+                         correct-state? (boolean
+                                         (with-open [snapshot (kv/new-snapshot kv-store)]
+                                           (db/get-single-object object-store snapshot content-hash)))]
                      (when-not correct-state?
                        (log/error "Put, incorrect doc state for:" content-hash "tx id:" (:crux.tx/tx-id tx)))
                      correct-state?)
@@ -365,6 +371,12 @@
     (bus/send bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
 
     (with-open [snapshot (kv/new-snapshot kv-store)]
+      (let [content-hashes (mapcat docs-to-index tx-events)]
+        (->> content-hashes
+             (db/get-objects object-store snapshot)
+             (remove (fn [[content-hash doc]] (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)))
+             (db/index-docs this)))
+
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
         (let [deps {:object-store object-store
                     :kv-store kv-store
@@ -404,25 +416,6 @@
 
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
-
-  (ensure-docs-indexed [this content-hashes]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (->> content-hashes
-           (db/get-objects object-store snapshot)
-           ;; TODO arguably don't need this line anymore (arguably)
-           (remove (fn [[content-hash doc]] (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)))
-           (db/index-docs this))))
-
-  (docs-indexed? [_ content-hashes]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (and (db/known-keys? object-store snapshot content-hashes)
-           (let [docs (db/get-objects object-store snapshot content-hashes)]
-             (every? (fn [content-hash]
-                       (if-let [doc (get docs content-hash)]
-                         (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)
-                         ;; We can assume the doc is evicted:
-                         true))
-                     content-hashes)))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))

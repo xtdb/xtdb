@@ -37,9 +37,9 @@
                  :crux.kv/check-and-store-index-version false}]
     (topo/start-component event-log-kv-store nil options)))
 
-(defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
+(defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer crux.node/object-store]} _]
   (when event-log-kv
-    (p/start-event-log-consumer indexer
+    (p/start-event-log-consumer indexer object-store
                                 (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv
                                                                      :batch-size 100}))))
 
@@ -67,7 +67,7 @@
                                    {:doc "Duration in millis between sync-ing the event-log to the K/V store."
                                     :crux.config/type :crux.config/nat-int}}}
           ::event-log-consumer {:start-fn start-event-log-consumer
-                                :deps [::event-log-kv :crux.node/indexer]}
+                                :deps [::event-log-kv :crux.node/indexer :crux.node/object-store]}
           :crux.node/tx-log {:start-fn start-moberg-event-log
                              :deps [::event-log-kv]}
           :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)

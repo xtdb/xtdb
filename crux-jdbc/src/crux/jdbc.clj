@@ -172,8 +172,8 @@
 (defn- start-tx-log [{::keys [ds]} {::keys [dbtype]}]
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
-(defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {::keys [dbtype]}]
-  (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
+(defn- start-event-log-consumer [{:keys [crux.node/indexer crux.node/object-store crux.jdbc/ds]} {::keys [dbtype]}]
+  (p/start-event-log-consumer indexer object-store (JDBCEventLogConsumer. ds dbtype)))
 
 (def topology (merge n/base-topology
                      {::ds {:start-fn start-jdbc-ds
@@ -184,7 +184,7 @@
                                              :required? true
                                              :crux.config/type :crux.config/string}}}
                       ::event-log-consumer {:start-fn start-event-log-consumer
-                                            :deps [:crux.node/indexer ::ds]}
+                                            :deps [:crux.node/indexer :crux.node/object-store ::ds]}
                       :crux.node/tx-log {:start-fn start-tx-log
                                          :deps [::ds]}
                       :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
