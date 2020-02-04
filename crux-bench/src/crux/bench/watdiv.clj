@@ -7,10 +7,15 @@
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
             [datomic.api :as d]
-            [crux.io :as cio])
-  (:import [java.io Closeable File]
-           java.time.Duration
-           java.util.Date))
+            [crux.io :as cio]
+            [clojure.string :as string])
+  (:import [java.io Closeable File StringReader]
+           java.util.Date
+           org.eclipse.rdf4j.query.Binding
+           org.eclipse.rdf4j.repository.RepositoryConnection
+           org.eclipse.rdf4j.repository.sail.SailRepository
+           org.eclipse.rdf4j.rio.RDFFormat
+           org.eclipse.rdf4j.sail.nativerdf.NativeStore))
 
 (def supported-backends
   [:crux])
@@ -383,6 +388,66 @@
 
 ;; above is old code =====
 
+;; rdf bench ===
+
+(defn with-sail-repository [f]
+  (let [db-dir (str (cio/create-tmpdir "sail-store"))
+        db (SailRepository. (NativeStore. (io/file db-dir)))]
+    (try
+      (.initialize db)
+      (with-open [conn (.getConnection db)]
+        (f conn))
+      (finally
+        (.shutDown db)
+        (cio/delete-dir db-dir)))))
+
+(defn load-rdf-into-sail [^RepositoryConnection conn resource]
+  (bench/run-bench :ingest-rdf
+                   (with-open [in (io/input-stream (io/resource resource))]
+                     (->> (partition-all rdf/*ntriples-log-size* (line-seq (io/reader in)))
+                          (reduce (fn [n chunk]
+                                    (log/debug "submitted" n)
+                                    (.add conn (StringReader. (string/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
+                                    (+ n (count chunk)))
+                                  0)))))
+
+(defn execute-sparql [^RepositoryConnection conn q]
+  (with-open [tq (.evaluate (doto (.prepareTupleQuery conn q)
+                              (.setMaxExecutionTime 30)))]
+    (set ((fn step []
+            (when (.hasNext tq)
+              (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
+                          (.next tq))
+                    (lazy-seq (step)))))))))
+
+(defn execute-stress-test-rdf [conn test-count]
+  (bench/run-bench :stress-test-rdf
+                   (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
+                               sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
+                     (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
+                                              (take (or test-count 100))
+                                              (map-indexed vector))]
+                       (let [start-time (System/currentTimeMillis)
+                             result (try
+                                      {:result-count (count (execute-sparql conn q))}
+                                      true
+                                      (catch Throwable t
+                                        {:query-error (cio/pr-edn-str (str t))}))
+                             output (merge {:query-index idx
+                                            :time-taken-ms (- (System/currentTimeMillis) start-time)}
+                                           result)]
+                         (spit "out.edn" output) output))) ))
+
+
+(defn run-watdiv-bench-rdf [{test-count :test-count}]
+  (with-sail-repository
+    (fn [conn]
+      (bench/with-bench-ns :watdiv
+        (load-rdf-into-sail conn "watdiv.10M.nt")
+        (execute-stress-test-rdf conn test-count)))))
+
+;; crux bench ===
+
 (defn ingest-crux
   [node]
   (bench/run-bench :ingest
@@ -440,7 +505,7 @@
                          (.shutdownNow pool)
                          (throw e))))))
 
-(defn run-watdiv-bench
+(defn run-watdiv-bench-crux
   [node {:keys [test-count thread-count]}]
   (bench/with-bench-ns :watdiv
     (ingest-crux node)

@@ -9,12 +9,18 @@
                  [juxt/crux-test "derived-from-git"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
+                 [clj-http "3.10.0" :exclusions [org.apache.httpcomponents/httpclient]]
+
                  [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
 
-                 [clj-http "3.10.0" :exclusions [org.apache.httpcomponents/httpclient]]
+                 ;; rdf
+
+                 [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0" :exclusions [commons-codec]]
+                 [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
+
+                 ;; Dependency resolution
                  [org.apache.httpcomponents/httpclient "4.5.9"]
-                 
-                 ;; Dependancy resolution
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]]

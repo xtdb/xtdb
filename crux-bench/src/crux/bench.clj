@@ -99,3 +99,4 @@
 
 (defmacro with-node [[node-binding] & body]
   `(with-node* (fn [~node-binding] ~@body)))
+
