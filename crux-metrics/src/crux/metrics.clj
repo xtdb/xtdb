@@ -91,14 +91,18 @@
 
 (def promethues-reporter
   {::prometheus-reporter {:start-fn (fn [{::keys [registry]}
-                                         {:crux.metrics.dropwizard.prometheus/keys
-                                          [seconds length unit]
-                                          :as args}]
-                                      (let [pr-rep (promethues/report registry args)]
-                                        (if (and length unit)
-                                          (promethues/start pr-rep length unit)
-                                          (promethues/start pr-rep (or seconds 1)))))
-                          :deps #{::registry}}})
+                                         {:crux.metrics.dropwizard.prometheus/keys [duration] :as args}]
+                                      (promethues/start-reporter registry args))
+                          :deps #{::registry}
+                          :args {:crux.metrics.dropwizard.prometheus/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
+                                                                               :default "PT1S"
+                                                                               :crux.config/type :crux.config/string}
+                                 :crux.metrics.dropwizard.prometheus/prefix {:doc "Prefix all metrics with this string"
+                                                                             :required? false
+                                                                             :crux.config/type :crux.config/string}
+                                 :crux.metrics.dropwizard.prometheus/pushgateway {:doc "Address of the promethues server"
+                                                                                  :required? true
+                                                                                  :crux.config/type :crux.config/string}}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))
