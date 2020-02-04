@@ -11,7 +11,8 @@
             [clojure.set :as set]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.db :as db])
+            [crux.db :as db]
+            [crux.api :as crux])
   (:import java.io.StringReader
            java.net.URLDecoder
            javax.xml.datatype.DatatypeConstants
@@ -203,7 +204,7 @@
 
 (def ^:dynamic *ntriples-log-size* 100000)
 
-(defn submit-ntriples [tx-log in tx-size]
+(defn submit-ntriples [node in tx-size]
   (->> (ntriples-seq in)
        (statements->maps)
        (map #(use-default-language % *default-language*))
@@ -214,7 +215,7 @@
                  (let [tx-ops (vec (for [entity entities]
                                      [:crux.tx/put entity]))]
                    {:entity-count (+ entity-count (count entities))
-                    :last-tx (db/submit-tx tx-log tx-ops)}))
+                    :last-tx (crux/submit-tx node tx-ops)}))
 
                {:entity-count 0})))
 
