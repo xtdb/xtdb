@@ -13,7 +13,4 @@
   (bench/with-node [node]
     (devices/run-devices-bench node)
     (weather/run-weather-bench node)
-    (watdiv/run-watdiv-bench-crux node {:thread-count 1 :test-count 2}))
-  (watdiv/run-watdiv-bench-rdf 2))
-
-
+    (watdiv/run-watdiv-bench-crux node {:thread-count 1 :test-count 100})))
