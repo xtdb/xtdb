@@ -453,8 +453,8 @@
   (bench/run-bench :ingest
                    (let [{:keys [last-tx entity-count]}
                          (with-open [in (io/input-stream (io/resource "watdiv.10M.nt"))]
-                           (rdf/submit-ntriples (:tx-log node) in 1000))]
-                     (crux/await-tx node @last-tx)
+                           (rdf/submit-ntriples node in 1000))]
+                     (crux/await-tx node last-tx)
                      {:entity-count entity-count})))
 
 (defn execute-stress-test-crux
