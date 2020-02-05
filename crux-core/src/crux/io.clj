@@ -11,7 +11,7 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Comparator Date IdentityHashMap PriorityQueue Properties Spliterator Spliterators]
+           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
            [java.util.stream Stream StreamSupport]
            [java.util.concurrent ThreadFactory]
            java.util.concurrent.locks.StampedLock
@@ -255,11 +255,7 @@
       Iterable (iterator [_] (.iterator sq))
       Closeable (close [_] (.close stream)))))
 
-(def ^:private spliterator-characteristics
-  (bit-or Spliterator/IMMUTABLE Spliterator/NONNULL))
-
 (defn ^Stream seq->stream [^Iterable sq & closeables]
-  (-> (.iterator sq)
-      (Spliterators/spliteratorUnknownSize ^int spliterator-characteristics)
+  (-> (.spliterator sq)
       (StreamSupport/stream false)
       (doto (.onClose (fn [] (run! #(.close ^Closeable %) closeables))))))

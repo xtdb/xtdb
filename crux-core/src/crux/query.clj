@@ -19,8 +19,7 @@
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
            (java.io Closeable)
-           (java.util Comparator UUID Spliterators Spliterator)
-           (java.util.stream Stream StreamSupport)
+           (java.util Comparator UUID)
            org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
