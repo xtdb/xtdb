@@ -11,9 +11,11 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
+           [java.util Comparator Date IdentityHashMap PriorityQueue Properties Spliterator Spliterators]
+           [java.util.stream Stream StreamSupport]
            [java.util.concurrent ThreadFactory]
-           java.util.concurrent.locks.StampedLock))
+           java.util.concurrent.locks.StampedLock
+           [clojure.lang IPending Seqable Sequential LazySeq]))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -243,3 +245,21 @@
         (doto (Thread. r)
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
+
+(defn stream->closeable-seq [^Stream stream]
+  (let [^LazySeq sq (-> stream .iterator iterator-seq)]
+    (reify
+      Sequential
+      Seqable (seq [_] sq)
+      IPending (isRealized [_] (.isRealized sq))
+      Iterable (iterator [_] (.iterator sq))
+      Closeable (close [_] (.close stream)))))
+
+(def ^:private spliterator-characteristics
+  (bit-or Spliterator/IMMUTABLE Spliterator/NONNULL))
+
+(defn ^Stream seq->stream [^Iterable sq & closeables]
+  (-> (.iterator sq)
+      (Spliterators/spliteratorUnknownSize ^int spliterator-characteristics)
+      (StreamSupport/stream false)
+      (doto (.onClose (fn [] (run! #(.close ^Closeable %) closeables))))))

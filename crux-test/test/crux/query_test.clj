@@ -2667,12 +2667,14 @@
     (t/is (not (api/entity db :a)))
     (t/is (api/entity (api/db *api*) :a))
 
-    (with-open [snapshot (api/new-snapshot db)]
-      (t/is (empty? (api/q db snapshot '{:find [x] :where [[x :arbitrary-key _]]}))))
+    (with-open [db (api/open-read-tx db)
+                res (api/open-q db '{:find [x] :where [[x :arbitrary-key _]]})]
+      (t/is (empty? res)))
 
     (let [db (api/db *api*)]
-      (with-open [snapshot (api/new-snapshot db)]
-        (t/is (first (api/q db snapshot '{:find [x] :where [[x :crux.db/id _]]})))))))
+      (with-open [db (api/open-read-tx db)
+                  res (api/open-q db '{:find [x] :where [[x :crux.db/id _]]})]
+        (t/is (first res))))))
 
 (t/deftest test-can-use-cons-in-query-377
   (f/transact! *api* [{:crux.db/id :issue-377-test :name "TestName"}])
@@ -2746,24 +2748,25 @@
           #"Spec assertion failed"
           (= #{[:id]} (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]})))))
 
-(t/deftest test-entity-snapshot-520
-  (let [ivan {:crux.db/id :ivan}
+(t/deftest test-entity-read-tx-speedup-520
+  (let [acceptable-read-tx-speedup 1.4
+        ivan {:crux.db/id :ivan}
         _ (f/transact! *api* [ivan])
         db (api/db *api*)]
-    (with-open [snapshot (api/new-snapshot db)]
-      (t/is (= (api/entity db :ivan) (api/entity db snapshot :ivan) ivan))
+    (with-open [read-tx (api/open-read-tx db)]
+      (t/is (= (api/entity db :ivan) (api/entity read-tx :ivan) ivan))
       (let [n 1000
-            acceptable-snapshot-speedup 1.4
-            factors (->> #(let [db-hit-ns-start (System/nanoTime)]
-                            (t/is (= ivan (api/entity db :ivan)))
-                            (let [db-hit-ns (- (System/nanoTime) db-hit-ns-start)
-                                  snapshot-hit-ns-start (System/nanoTime)]
-                              (t/is (= ivan (api/entity db snapshot :ivan)))
-                              (let [snapshot-hit-ns (- (System/nanoTime) snapshot-hit-ns-start)]
-                                (double (/ db-hit-ns
-                                           snapshot-hit-ns)))))
+            factors (->> #(let [db-hit-ns-start (System/nanoTime)
+                                _ (api/entity db :ivan)
+                                db-hit-ns (- (System/nanoTime) db-hit-ns-start)
+
+                                read-tx-hit-ns-start (System/nanoTime)
+                                _ (api/entity read-tx :ivan)
+                                read-tx-hit-ns (- (System/nanoTime) read-tx-hit-ns-start)]
+
+                            (double (/ db-hit-ns read-tx-hit-ns)))
                          (repeatedly n))]
-        (t/is (>= (/ (reduce + factors) n) acceptable-snapshot-speedup))))))
+        (t/is (>= (/ (reduce + factors) n) acceptable-read-tx-speedup))))))
 
 (t/deftest test-greater-than-range-predicate-545
   (t/is (empty?

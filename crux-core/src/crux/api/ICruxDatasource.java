@@ -6,13 +6,17 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import clojure.lang.Keyword;
 
 /**
  * Represents the database as of a specific valid and
  * transaction time.
  */
-public interface ICruxDatasource {
+public interface ICruxDatasource extends Closeable {
+
+    public ICruxDatasource openReadTx();
+
     /**
      * Returns the document map for an entity.
      *
@@ -20,15 +24,6 @@ public interface ICruxDatasource {
      * @return    the entity document map.
      */
     public Map<Keyword,Object> entity(Object eid);
-
-    /**
-     * Returns the document map for an entity using an existing snapshot.
-     *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param eid an object that can be coerced into an entity id.
-     * @return    the entity document map.
-     */
-    public Map<Keyword,Object> entity(Closeable snapshot, Object eid);
 
     /**
      * Returns the transaction details for an entity. Details
@@ -40,54 +35,40 @@ public interface ICruxDatasource {
     public Map<Keyword,?> entityTx(Object eid);
 
     /**
-     * Returns a new snapshot allowing for lazy query results in a
-     * try-with-resources block using {@link #q(Closeable snapshot,
-     * Object query)}. Can also be used for {@link
-     * #historyAscending(Closeable snapshot, Object eid)} and {@link
-     * #historyDescending(Closeable snapshot, Object eid)}
+     * Queries the db.
      *
-     * @return an implementation specific snapshot
+     * @param query the query in map, vector or string form.
+     * @return      a collection of result tuples.
      */
-    public Closeable newSnapshot();
+    public Collection<List<?>> q(Object query);
 
     /**
      * Queries the db.
      *
      * @param query the query in map, vector or string form.
-     * @return      a set or vector of result tuples.
+     * @return      a stream of result tuples.
      */
-    public Collection<List<?>> q(Object query);
-
-    /**
-     * Queries the db lazily.
-     *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param query    the query in map, vector or string form.
-     * @return         a lazy sequence of result tuples.
-     */
-    public Iterable<List<?>> q(Closeable snapshot, Object query);
+    public Stream<List<?>> openQ(Object query);
 
     /**
      * Retrieves entity history lazily in chronological order from and
      * including the valid time of the db while respecting
      * transaction time. Includes the documents.
      *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         a lazy sequence of history.
+     * @param eid an object that can be coerced into an entity id.
+     * @return    a stream of history.
      */
-    public Iterable<Map<Keyword,?>> historyAscending(Closeable snapshot, Object eid);
+    public Stream<Map<Keyword,?>> openHistoryAscending(Object eid);
 
     /**
      * Retrieves entity history lazily in reverse chronological order
      * from and including the valid time of the db while respecting
      * transaction time. Includes the documents.
      *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         a lazy sequence of history.
+     * @param eid an object that can be coerced into an entity id.
+     * @return    a stream of history.
      */
-    public Iterable<Map<Keyword,?>> historyDescending(Closeable snapshot, Object eid);
+    public Stream<Map<Keyword,?>> openHistoryDescending(Object eid);
 
     /**
      * The valid time of this db.

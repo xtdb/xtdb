@@ -3,12 +3,14 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
+            [crux.io :as cio]
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
             ICruxAsyncIngestAPI ICruxDatasource ITxLog]
            java.io.Closeable
            java.util.Date
-           java.time.Duration))
+           java.time.Duration
+           (java.util.stream Stream)))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 (s/def :crux.db/evicted? boolean?)
@@ -234,13 +236,15 @@
   (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
     (.openTxLog this from-tx-id with-ops?)))
 
+;; TODO docs
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
   transaction time."
 
-  (entity
-    [db eid]
-    [db snapshot eid]
+  (open-read-tx ^java.io.Closeable [db]
+    "TODO")
+
+  (entity [db eid]
     "queries a document map for an entity.
   eid is an object which can be coerced into an entity id.
   returns the entity document map.")
@@ -250,32 +254,19 @@
   include tx-id and tx-time.
   eid is an object that can be coerced into an entity id.")
 
-  (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation specific snapshot allowing for lazy query results in a
-  try-with-resources block using (q db  snapshot  query)}.
-  Can also be used for
-  (history-ascending db snapshot  eid) and
-  (history-descending db snapshot  eid)
-  returns an implementation specific snapshot")
-
-  (q
-    [db query]
-    [db snapshot query]
+  (q [db query]
     "q[uery] a Crux db.
-  query param is a datalog query in map, vector or string form.
-  First signature will evaluate eagerly and will return a set or vector
-  of result tuples.
-  Second signature accepts a db snapshot, see `new-snapshot`.
-  Evaluates *lazily* consequently returns lazy sequence of result tuples.")
+  query param is a datalog query in map, vector or string form.")
 
-  (history-ascending
-    [db snapshot eid]
+  (open-q ^java.io.Closeable [db query]
+    "TODO")
+
+  (open-history-ascending ^java.io.Closeable [db eid]
     "Retrieves entity history lazily in chronological order
   from and including the valid time of the db while respecting
   transaction time. Includes the documents.")
 
-  (history-descending
-    [db snapshot eid]
+  (open-history-descending ^java.io.Closeable [db eid]
     "Retrieves entity history lazily in reverse chronological order
   from and including the valid time of the db while respecting
   transaction time. Includes the documents.")
@@ -292,36 +283,19 @@
 
 (extend-protocol PCruxDatasource
   ICruxDatasource
-  (entity
-    ([this eid]
-     (.entity this eid))
-    ([this snapshot eid]
-     (.entity this snapshot eid)))
+  (open-read-tx [this] (.openReadTx this))
 
-  (entity-tx [this eid]
-    (.entityTx this eid))
+  (entity [this eid] (.entity this eid))
+  (entity-tx [this eid] (.entityTx this eid))
 
-  (new-snapshot [this]
-    (.newSnapshot this))
+  (q [this query] (.q this query))
+  (open-q [this query] (cio/stream->closeable-seq (.openQ this query)))
 
-  (q
-    ([this query]
-     (.q this query))
-    ([this snapshot query]
-     (.q this snapshot query)))
+  (open-history-ascending [this eid] (cio/stream->closeable-seq (.openHistoryAscending this eid)))
+  (open-history-descending [this eid] (cio/stream->closeable-seq (.openHistoryDescending this eid)))
 
-  (history-ascending [this snapshot eid]
-    (.historyAscending this snapshot eid))
-
-  (history-descending [this snapshot eid]
-    (.historyDescending this snapshot eid))
-
-  (valid-time
-    [this]
-    (.validTime this))
-
-  (transaction-time [this]
-    (.transactionTime this)))
+  (valid-time [this] (.validTime this))
+  (transaction-time [this] (.transactionTime this)))
 
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."

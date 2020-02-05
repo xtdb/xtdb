@@ -16,10 +16,11 @@
            crux.api.ICruxDatasource
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
-           java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
-           java.util.UUID
+           (java.io Closeable)
+           (java.util Comparator UUID Spliterators Spliterator)
+           (java.util.stream Stream StreamSupport)
            org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
@@ -1095,43 +1096,7 @@
               (assoc-in [:q-conformed :args] args)))
       conformed-query)))
 
-;; TODO: Move future here to a bounded thread pool.
-(defn q
-  ([{:keys [kv] :as db} ^ConformedQuery conformed-q]
-   (let [start-time (System/currentTimeMillis)
-         q (.q-normalized conformed-q)
-         query-future (future
-                        (try
-                          (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
-                            (let [result-coll-fn (if (:order-by q)
-                                                   (comp vec distinct)
-                                                   set)
-                                  result (result-coll-fn (crux.query/q db snapshot conformed-q))]
-                              (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-                              (log/debug :query-result-size (count result))
-                              result))
-                          (catch ExceptionInfo e
-                            e)
-                          (catch IllegalArgumentException e
-                            e)
-                          (catch InterruptedException e
-                            e)
-                          (catch Throwable t
-                            (log/error t "Exception caught while executing query.")
-                            t)))
-         result (or (try
-                      (deref query-future (or (:timeout q) default-query-timeout) nil)
-                      (catch InterruptedException e
-                        (future-cancel query-future)
-                        (throw e)))
-                    (do (when-not (future-cancel query-future)
-                          (throw (IllegalStateException. "Could not cancel query.")))
-                        (throw (TimeoutException. "Query timed out."))))]
-     (if (instance? Throwable result)
-       (throw result)
-       result)))
-
-  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot ^ConformedQuery conformed-q]
+(defn open-q [{:keys [object-store kv valid-time transact-time snapshot] :as db} ^ConformedQuery conformed-q]
    (let [q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
@@ -1169,79 +1134,114 @@
          order-by (cio/external-sort (order-by-comparator find order-by))
          (or offset limit) dedupe
          offset (drop offset)
-         limit (take limit))))))
+         limit (take limit)))))
 
-(defn entity-tx
-  ([{:keys [kv] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity-tx snapshot db eid)))
-  ([snapshot {:keys [valid-time transact-time] :as db} eid]
-   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time)))))
+;; TODO: Move future here to a bounded thread pool.
+(defn q [{:keys [kv snapshot] :as db} ^ConformedQuery conformed-q]
+  (let [start-time (System/currentTimeMillis)
+        q (.q-normalized conformed-q)
+        query-future (future
+                       (try
+                         (let [result-coll-fn (if (:order-by q)
+                                                (comp vec distinct)
+                                                set)
+                               result (result-coll-fn (open-q db conformed-q))]
+                           (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+                           (log/debug :query-result-size (count result))
+                           result)
+                         (catch ExceptionInfo e
+                           e)
+                         (catch IllegalArgumentException e
+                           e)
+                         (catch InterruptedException e
+                           e)
+                         (catch Throwable t
+                           (log/error t "Exception caught while executing query.")
+                           t)))
+        result (or (try
+                     (deref query-future (or (:timeout q) default-query-timeout) nil)
+                     (catch InterruptedException e
+                       (future-cancel query-future)
+                       (throw e)))
+                   (do (when-not (future-cancel query-future)
+                         (throw (IllegalStateException. "Could not cancel query.")))
+                       (throw (TimeoutException. "Query timed out."))))]
+    (if (instance? Throwable result)
+      (throw result)
+      result)))
 
-(defn entity
-  ([{:keys [kv object-store] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity db snapshot eid)))
-  ([{:keys [kv object-store] :as db} snapshot eid]
-   (let [entity-tx (entity-tx snapshot db eid)]
-     (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
+(defn entity-tx [{:keys [snapshot valid-time transact-time] :as db} eid]
+  (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time))))
+
+(defn entity [{:keys [object-store snapshot] :as db} eid]
+  (db/get-single-object object-store snapshot (:crux.db/content-hash (entity-tx db eid))))
 
 (defrecord QueryDatasource [kv object-store bus
                             query-cache conform-cache
-                            valid-time transact-time entity-as-of-idx]
+                            valid-time transact-time
+                            snapshot entity-as-of-idx]
   ICruxDatasource
-  (entity [this eid]
-    (entity this eid))
+  (openReadTx [this]
+    (assoc this
+      :snapshot (if snapshot
+                  (lru/new-cached-snapshot snapshot false)
+                  (lru/new-cached-snapshot (kv/new-snapshot kv) true))))
 
-  (entity [this snapshot eid]
-    (entity this snapshot eid))
+  (entity [this eid]
+    (with-open [read-tx (.openReadTx this)]
+      (entity read-tx eid)))
 
   (entityTx [this eid]
-    (entity-tx this eid))
-
-  (newSnapshot [this]
-    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
+    (with-open [read-tx (.openReadTx this)]
+      (entity-tx read-tx eid)))
 
   (q [this query]
-    (let [conformed-query (normalize-and-conform-query conform-cache query)
-          query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
-      (when bus
-        (bus/send bus {:crux.bus/event-type ::submitted-query
-                       ::query safe-query
-                       ::query-id query-id}))
-      (let [ret (q this conformed-query)]
+    (with-open [read-tx (.openReadTx this)]
+      (let [conformed-query (normalize-and-conform-query conform-cache query)
+            query-id (str (UUID/randomUUID))
+            safe-query (-> conformed-query .q-normalized (dissoc :args))]
         (when bus
-          (bus/send bus {:crux.bus/event-type ::completed-query
+          (bus/send bus {:crux.bus/event-type ::submitted-query
                          ::query safe-query
                          ::query-id query-id}))
-        ret)))
+        (let [ret (q read-tx conformed-query)]
+          (when bus
+            (bus/send bus {:crux.bus/event-type ::completed-query
+                           ::query safe-query
+                           ::query-id query-id}))
+          ret))))
 
-  (q [this snapshot query]
-    ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
-    ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (q this snapshot (normalize-and-conform-query conform-cache query)))
+  (openQ [this query]
+    ;; TODO this doesn't report query metrics because a naive timer would include any user processing time
+    (let [{:keys [snapshot] :as read-tx} (.openReadTx this)]
+      (-> (q read-tx (normalize-and-conform-query conform-cache query))
+          (cio/seq->stream read-tx))))
 
-  (historyAscending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+  (openHistoryAscending [this eid]
+    (let [{:keys [snapshot] :as read-tx} (.openReadTx this)]
+      (-> (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
+            (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx))))
+          (cio/seq->stream read-tx))))
 
-  (historyDescending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-descending snapshot eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+  (openHistoryDescending [this eid]
+    (let [{:keys [snapshot] :as read-tx} (.openReadTx this)]
+      (-> (for [^EntityTx entity-tx (idx/entity-history-seq-descending snapshot eid valid-time transact-time)]
+            (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx))))
+          (cio/seq->stream read-tx))))
 
   (validTime [_]
     valid-time)
 
   (transactionTime [_]
-    transact-time))
+    transact-time)
+
+  Closeable
+  (close [_]
+    (when snapshot (.close ^Closeable snapshot))))
 
 (defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
-  (->QueryDatasource kv
-                     object-store
-                     bus
-                     (lru/get-named-cache kv ::query-cache)
-                     (lru/get-named-cache kv ::conform-cache)
-                     valid-time
-                     transact-time
-                     nil))
+  (map->QueryDatasource {:kv kv, :object-store object-store, :bus bus
+                         :query-cache (lru/get-named-cache kv ::query-cache)
+                         :conform-cache (lru/get-named-cache kv ::conform-cache)
+                         :valid-time valid-time
+                         :transact-time transact-time}))

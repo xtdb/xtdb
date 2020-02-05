@@ -111,41 +111,35 @@
     (api-request-sync (str url "/entity-tx")
                       (assoc (as-of-map this) :eid eid)))
 
-  (newSnapshot [this]
-    (->RemoteApiStream (atom [])))
-
   (q [this q]
     (api-request-sync (str url "/query")
                       (assoc (as-of-map this)
                              :query (q/normalize-query q))))
 
-  (q [this snapshot q]
+  (openQ [this q]
     (let [in (api-request-sync (str url "/query-stream")
                                (assoc (as-of-map this)
                                       :query (q/normalize-query q))
                                {:as :stream})]
-      (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in)))
+      (-> (edn-list->lazy-seq in)
+          (cio/seq->stream in))))
 
-  (historyAscending [this snapshot eid]
+  (openHistoryAscending [this eid]
     (let [in (api-request-sync (str url "/history-ascending")
                                (assoc (as-of-map this) :eid eid)
                                {:as :stream})]
-      (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in)))
+      (-> (edn-list->lazy-seq in)
+          (cio/seq->stream in))))
 
-  (historyDescending [this snapshot eid]
+  (openHistoryDescending [this eid]
     (let [in (api-request-sync (str url "/history-descending")
                                (assoc (as-of-map this) :eid eid)
                                {:as :stream})]
-      (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in)))
+      (-> (edn-list->lazy-seq in)
+          (cio/seq->stream in))))
 
-  (validTime [_]
-    valid-time)
-
-  (transactionTime [_]
-    transact-time))
+  (validTime [_] valid-time)
+  (transactionTime [_] transact-time))
 
 (defrecord RemoteApiClient [url]
   ICruxAPI

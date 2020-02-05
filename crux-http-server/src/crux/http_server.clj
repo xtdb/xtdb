@@ -16,7 +16,8 @@
             [ring.middleware.params :as p]
             [ring.util.io :as rio]
             [ring.util.request :as req]
-            [ring.util.time :as rt])
+            [ring.util.time :as rt]
+            [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException ITxLog]
            [java.io Closeable IOException]
            java.time.Duration
@@ -76,7 +77,7 @@
 ;; Services
 
 (defn- status [^ICruxAPI crux-node]
-  (let [status-map (.status crux-node)]
+  (let [status-map (api/status crux-node)]
     (if (or (not (contains? status-map :crux.zk/zk-active?))
             (:crux.zk/zk-active? status-map))
       (success-response status-map)
@@ -86,8 +87,7 @@
 
 (defn- document [^ICruxAPI crux-node request]
   (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
-    (success-response
-     (.document crux-node (c/new-id content-hash)))))
+    (success-response (api/document crux-node (c/new-id content-hash)))))
 
 (defn- stringify-keys [m]
   (persistent!
@@ -102,12 +102,12 @@
         content-hashes-set (body->edn request)
         ids-set (set (map c/new-id content-hashes-set))]
     (success-response
-      (cond-> (.documents crux-node ids-set)
+      (cond-> (api/documents crux-node ids-set)
               (not preserve-ids?) stringify-keys))))
 
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
-        history (.history crux-node (c/new-id eid))]
+        history (api/history crux-node (c/new-id eid))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
@@ -119,7 +119,7 @@
 
 (defn- history-range [^ICruxAPI crux-node request]
   (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
-        history (.historyRange crux-node (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
+        history (api/history-range crux-node (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
         last-modified (:crux.tx/tx-time (last history))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (last history))))))
@@ -127,24 +127,24 @@
 (defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
     (and valid-time transact-time)
-    (.db crux-node valid-time transact-time)
+    (api/db crux-node valid-time transact-time)
 
     valid-time
-    (.db crux-node valid-time)
+    (api/db crux-node valid-time)
 
     ;; TODO: This could also be an error, depending how you see it,
     ;; not supported via the Java API itself.
     transact-time
-    (.db crux-node (cio/next-monotonic-date) transact-time)
+    (api/db crux-node (cio/next-monotonic-date) transact-time)
 
     :else
-    (.db crux-node)))
+    (api/db crux-node)))
 
-(defn- streamed-edn-response [^Closeable ctx edn]
+(defn- streamed-edn-response [^Closeable edn]
   (try
     (->> (rio/piped-input-stream
           (fn [out]
-            (with-open [ctx ctx
+            (with-open [edn edn
                         out (io/writer out)]
               (.write out "(")
               (doseq [x edn]
@@ -152,7 +152,7 @@
               (.write out ")"))))
          (response 200 {"Content-Type" "application/edn"}))
     (catch Throwable t
-      (.close ctx)
+      (.close edn)
       (throw t))))
 
 (def ^:private date? (partial instance? Date))
@@ -169,17 +169,14 @@
 (defn- query [^ICruxAPI crux-node request]
   (let [query-map (s/assert ::query-map (body->edn request))
         db (db-for-request crux-node query-map)]
-    (-> (success-response
-         (.q db (:query query-map)))
-        (add-last-modified (.transactionTime db)))))
+    (-> (success-response (api/q db (:query query-map)))
+        (add-last-modified (api/transaction-time db)))))
 
 (defn- query-stream [^ICruxAPI crux-node request]
   (let [query-map (s/assert ::query-map (body->edn request))
-        db (db-for-request crux-node query-map)
-        snapshot (.newSnapshot db)
-        result (.q db snapshot (:query query-map))]
-    (-> (streamed-edn-response snapshot result)
-        (add-last-modified (.transactionTime db)))))
+        db (db-for-request crux-node query-map)]
+    (-> (streamed-edn-response (api/open-q db (:query query-map)))
+        (add-last-modified (api/transaction-time db)))))
 
 (s/def ::eid c/valid-id?)
 (s/def ::entity-map (s/and #(set/superset? #{:eid :valid-time :transact-time} (keys %))
@@ -191,36 +188,30 @@
 (defn- entity [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
         db (db-for-request crux-node body)
-        {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
-    (-> (success-response (.entity db eid))
+        {:keys [crux.tx/tx-time] :as entity-tx} (api/entity-tx db eid)]
+    (-> (success-response (api/entity db eid))
         (add-last-modified tx-time))))
 
 (defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
         db (db-for-request crux-node body)
-        {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
+        {:keys [crux.tx/tx-time] :as entity-tx} (api/entity-tx db eid)]
     (-> (success-response entity-tx)
         (add-last-modified tx-time))))
 
 (defn- history-ascending [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
-        db (db-for-request crux-node body)
-        snapshot (.newSnapshot db)
-        history (.historyAscending db snapshot (c/new-id eid))]
-    (-> (streamed-edn-response snapshot history)
-        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
+  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))]
+    (-> (streamed-edn-response (api/open-history-ascending (db-for-request crux-node body) eid))
+        (add-last-modified (:crux.tx/tx-time (api/latest-completed-tx crux-node))))))
 
 (defn- history-descending [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
-        db (db-for-request crux-node body)
-        snapshot (.newSnapshot db)
-        history (.historyDescending db snapshot (c/new-id eid))]
-    (-> (streamed-edn-response snapshot history)
-        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
+  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))]
+    (-> (streamed-edn-response (api/open-history-descending (db-for-request crux-node body) eid))
+        (add-last-modified (:crux.tx/tx-time (api/latest-completed-tx crux-node))))))
 
 (defn- transact [^ICruxAPI crux-node request]
   (let [tx-ops (body->edn request)
-        {:keys [crux.tx/tx-time] :as submitted-tx} (.submitTx crux-node tx-ops)]
+        {:keys [crux.tx/tx-time] :as submitted-tx} (api/submit-tx crux-node tx-ops)]
     (-> (success-response submitted-tx)
         (assoc :status 202)
         (add-last-modified tx-time))))
@@ -230,9 +221,9 @@
   (let [with-ops? (Boolean/parseBoolean (get-in request [:query-params "with-ops"]))
         from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
                             (Long/parseLong))
-        ^ITxLog result (.openTxLog crux-node from-tx-id with-ops?)]
+        ^ITxLog result (api/open-tx-log crux-node from-tx-id with-ops?)]
     (-> (streamed-edn-response result (iterator-seq result))
-        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
+        (add-last-modified (:crux.tx/tx-time (api/latest-completed-tx crux-node))))))
 
 (defn- sync-handler [^ICruxAPI crux-node request]
   (let [timeout (some->> (get-in request [:query-params "timeout"])
@@ -242,8 +233,8 @@
         transaction-time (some->> (get-in request [:query-params "transactionTime"])
                                   (cio/parse-rfc3339-or-millis-date))]
     (let [last-modified (if transaction-time
-                          (.awaitTxTime crux-node transaction-time timeout)
-                          (.sync crux-node timeout))]
+                          (api/await-tx-time crux-node transaction-time timeout)
+                          (api/sync crux-node timeout))]
       (-> (success-response last-modified)
           (add-last-modified last-modified)))))
 
@@ -253,7 +244,7 @@
                          (Duration/ofMillis))
         tx-time (some->> (get-in request [:query-params "tx-time"])
                          (cio/parse-rfc3339-or-millis-date))]
-    (let [last-modified (.awaitTxTime crux-node tx-time timeout)]
+    (let [last-modified (api/await-tx-time crux-node tx-time timeout)]
       (-> (success-response last-modified)
           (add-last-modified last-modified)))))
 
@@ -263,26 +254,26 @@
                          (Duration/ofMillis))
         tx-id (-> (get-in request [:query-params "tx-id"])
                   (Long/parseLong))]
-    (let [{:keys [crux.tx/tx-time] :as tx} (.awaitTx crux-node {:crux.tx/tx-id tx-id} timeout)]
+    (let [{:keys [crux.tx/tx-time] :as tx} (api/await-tx crux-node {:crux.tx/tx-id tx-id} timeout)]
       (-> (success-response tx)
           (add-last-modified tx-time)))))
 
 (defn- attribute-stats [^ICruxAPI crux-node]
-  (success-response (.attributeStats crux-node)))
+  (success-response (api/attribute-stats crux-node)))
 
 (defn- tx-committed? [^ICruxAPI crux-node request]
   (try
     (let [tx-id (-> (get-in request [:query-params "tx-id"])
                     (Long/parseLong))]
-      (success-response (.hasTxCommitted crux-node {:crux.tx/tx-id tx-id})))
+      (success-response (api/tx-committed? crux-node {:crux.tx/tx-id tx-id})))
     (catch NodeOutOfSyncException e
       (exception-response 400 e))))
 
 (defn latest-completed-tx [^ICruxAPI crux-node]
-  (success-response (.latestCompletedTx crux-node)))
+  (success-response (api/latest-completed-tx crux-node)))
 
 (defn latest-submitted-tx [^ICruxAPI crux-node]
-  (success-response (.latestSubmittedTx crux-node)))
+  (success-response (api/latest-submitted-tx crux-node)))
 
 (def ^:private sparql-available?
   (try ; you can change it back to require when clojure.core fixes it to be thread-safe
