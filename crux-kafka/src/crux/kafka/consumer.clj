@@ -103,30 +103,18 @@
   [{:keys [offsets indexer pending-records-state timeout topic ^KafkaConsumer consumer accept-fn index-fn]
     :or {timeout 5000}}]
   (assert (and accept-fn index-fn))
-  (let [topic-partition (TopicPartition. topic 0)
-        _ (when (and (.contains (.paused consumer) topic-partition)
-                     (empty? @pending-records-state))
-            (log/debug "Resuming" topic)
-            (.resume consumer [topic-partition]))
-        records (.poll consumer (Duration/ofMillis timeout))
-        records (vec (.records records (str topic)))
-        pending-records (swap! pending-records-state into records)
-        records (->> pending-records
-                     (take-while (fn [^ConsumerRecord record]
-                                   (let [ready? (accept-fn record)]
-                                     (when-not ready?
-                                       (when-not (.contains (.paused consumer) topic-partition)
-                                         (log/debug "Pausing" topic)
-                                         (.pause consumer [topic-partition]))
-                                       (log/info "Paused" topic "pending:" (count pending-records)))
-                                     ready?)))
+  (let [_ (when (empty @pending-records-state)
+            (reset! pending-records-state (let [records (.poll consumer (Duration/ofMillis timeout))]
+                                            (vec (.records records (str topic))))))
+        records (->> @pending-records-state
+                     (take-while accept-fn)
                      (vec))]
 
     (index-fn records)
-
     (update-stored-consumer-state offsets consumer records)
     (swap! pending-records-state (comp vec (partial drop (count records))))
-
+    (when (seq @pending-records-state)
+      (log/debug "Blocked processing" (count pending-records-state) topic "records"))
     (count records)))
 
 (defn start-indexing-consumer
