@@ -1,7 +1,7 @@
 (ns crux.kafka.consumer
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
-            [crux.status :as status])
+            [crux.tx.consumer :as tc])
   (:import crux.kafka.nippy.NippyDeserializer
            java.io.Closeable
            java.time.Duration
@@ -133,31 +133,22 @@
   ^java.io.Closeable
   [{:keys [indexer offsets kafka-config group-id topic accept-fn index-fn]}]
   (let [consumer-config (merge {"group.id" group-id} kafka-config)
-        running? (atom true)
-        pending-records (atom [])
-        worker-thread
-        (doto
-            (Thread. ^Runnable (fn []
-                                 (with-open [consumer (create-consumer consumer-config)]
-                                   (subscribe-from-stored-offsets offsets consumer [topic])
-                                   (while @running?
-                                     (try
-                                       (let [opts {:indexer indexer
-                                                   :consumer consumer
-                                                   :topic topic
-                                                   :offsets offsets
-                                                   :timeout 1000
-                                                   :index-fn index-fn}]
-                                         (if accept-fn
-                                           (consume-and-block (merge opts {:pending-records-state pending-records
-                                                                           :accept-fn accept-fn}))
-                                           (consume opts)))
-                                       (catch Exception e
-                                         (log/error e "Error while consuming and indexing from Kafka:")
-                                         (Thread/sleep 500))))))
-                     "crux.kafka.indexing-consumer-thread")
-            (.start))]
-    (reify Closeable
-      (close [_]
-        (reset! running? false)
-        (.join worker-thread)))))
+        pending-records (atom [])]
+    (tc/start-indexing-consumer (fn [running?]
+                                  (with-open [consumer (create-consumer consumer-config)]
+                                    (subscribe-from-stored-offsets offsets consumer [topic])
+                                    (while @running?
+                                      (try
+                                        (let [opts {:indexer indexer
+                                                    :consumer consumer
+                                                    :topic topic
+                                                    :offsets offsets
+                                                    :timeout 1000
+                                                    :index-fn index-fn}]
+                                          (if accept-fn
+                                            (consume-and-block (merge opts {:pending-records-state pending-records
+                                                                            :accept-fn accept-fn}))
+                                            (consume opts)))
+                                        (catch Exception e
+                                          (log/error e "Error while consuming and indexing from Kafka:")
+                                          (Thread/sleep 500)))))))))
