@@ -25,4 +25,5 @@
     (when (:datomic options)
       (watdiv/run-watdiv-bench-datomic {:thread-count 1 :test-count 100}))
     (when (:rdf4j options)
-      (watdiv/run-watdiv-bench-rdf {:thread-count 1 :test-count 100}))))
+      (watdiv/run-watdiv-bench-rdf {:thread-count 1 :test-count 100}))
+    (shutdown-agents)))

@@ -1,0 +1,102 @@
+{:entity-count 10916457 :bench-ns "watdiv" :bench-type "ingest-rdf" :time-taken-ms 263694 :sail-version "3.0.0"}
+{:num-tests 100 :num-threads 1 :bench-ns "watdiv" :bench-type "stress-test-rdf" :time-taken-ms 268244 :sail-version "3.0.0"}
+{:query-index 0, :time-taken-ms 75, :result-count 0}
+{:query-index 1, :time-taken-ms 2, :result-count 0}
+{:query-index 2, :time-taken-ms 161, :result-count 18}
+{:query-index 3, :time-taken-ms 64, :result-count 56}
+{:query-index 4, :time-taken-ms 58, :result-count 53}
+{:query-index 5, :time-taken-ms 30002, :error "Query evaluation took too long"}
+{:query-index 6, :time-taken-ms 153, :result-count 0}
+{:query-index 7, :time-taken-ms 80, :result-count 0}
+{:query-index 8, :time-taken-ms 714, :result-count 309}
+{:query-index 9, :time-taken-ms 9, :result-count 7}
+{:query-index 10, :time-taken-ms 17321, :result-count 1359390}
+{:query-index 11, :time-taken-ms 1240, :result-count 28378}
+{:query-index 12, :time-taken-ms 40, :result-count 116}
+{:query-index 13, :time-taken-ms 36, :result-count 9909}
+{:query-index 14, :time-taken-ms 28, :result-count 2982}
+{:query-index 15, :time-taken-ms 29, :result-count 15}
+{:query-index 16, :time-taken-ms 42, :result-count 11}
+{:query-index 17, :time-taken-ms 19, :result-count 103}
+{:query-index 18, :time-taken-ms 30002, :error "Query evaluation took too long"}
+{:query-index 19, :time-taken-ms 3, :result-count 36}
+{:query-index 20, :time-taken-ms 4369, :result-count 0}
+{:query-index 21, :time-taken-ms 216, :result-count 36526}
+{:query-index 22, :time-taken-ms 35, :result-count 44}
+{:query-index 23, :time-taken-ms 10, :result-count 10}
+{:query-index 24, :time-taken-ms 90, :result-count 245}
+{:query-index 25, :time-taken-ms 16, :result-count 65}
+{:query-index 26, :time-taken-ms 15, :result-count 648}
+{:query-index 27, :time-taken-ms 5, :result-count 44}
+{:query-index 28, :time-taken-ms 90, :result-count 2451}
+{:query-index 29, :time-taken-ms 1, :result-count 0}
+{:query-index 30, :time-taken-ms 96, :result-count 3934}
+{:query-index 31, :time-taken-ms 181, :result-count 0}
+{:query-index 32, :time-taken-ms 17049, :result-count 1359390}
+{:query-index 33, :time-taken-ms 101, :result-count 23274}
+{:query-index 34, :time-taken-ms 3237, :result-count 243150}
+{:query-index 35, :time-taken-ms 30002, :error "Query evaluation took too long"}
+{:query-index 36, :time-taken-ms 7, :result-count 11}
+{:query-index 37, :time-taken-ms 698, :result-count 309}
+{:query-index 38, :time-taken-ms 47, :result-count 6}
+{:query-index 39, :time-taken-ms 30001, :error "Query evaluation took too long"}
+{:query-index 40, :time-taken-ms 4, :result-count 15}
+{:query-index 41, :time-taken-ms 39, :result-count 1770}
+{:query-index 42, :time-taken-ms 1, :result-count 0}
+{:query-index 43, :time-taken-ms 93, :result-count 649}
+{:query-index 44, :time-taken-ms 35, :result-count 9321}
+{:query-index 45, :time-taken-ms 35, :result-count 401}
+{:query-index 46, :time-taken-ms 39, :result-count 124}
+{:query-index 47, :time-taken-ms 1, :result-count 0}
+{:query-index 48, :time-taken-ms 237, :result-count 1}
+{:query-index 49, :time-taken-ms 4, :result-count 11}
+{:query-index 50, :time-taken-ms 2, :result-count 5}
+{:query-index 51, :time-taken-ms 20, :result-count 71}
+{:query-index 52, :time-taken-ms 127, :result-count 0}
+{:query-index 53, :time-taken-ms 44, :result-count 1741}
+{:query-index 54, :time-taken-ms 10, :result-count 0}
+{:query-index 55, :time-taken-ms 736, :result-count 481}
+{:query-index 56, :time-taken-ms 242, :result-count 3663}
+{:query-index 57, :time-taken-ms 30001, :error "Query evaluation took too long"}
+{:query-index 58, :time-taken-ms 384, :result-count 0}
+{:query-index 59, :time-taken-ms 28, :result-count 2275}
+{:query-index 60, :time-taken-ms 9, :result-count 1}
+{:query-index 61, :time-taken-ms 18, :result-count 61}
+{:query-index 62, :time-taken-ms 2, :result-count 59}
+{:query-index 63, :time-taken-ms 1, :result-count 3}
+{:query-index 64, :time-taken-ms 38, :result-count 80}
+{:query-index 65, :time-taken-ms 0, :result-count 0}
+{:query-index 66, :time-taken-ms 1, :result-count 0}
+{:query-index 67, :time-taken-ms 30001, :error "Query evaluation took too long"}
+{:query-index 68, :time-taken-ms 4, :result-count 2}
+{:query-index 69, :time-taken-ms 30001, :error "Query evaluation took too long"}
+{:query-index 70, :time-taken-ms 66, :result-count 27}
+{:query-index 71, :time-taken-ms 843, :result-count 0}
+{:query-index 72, :time-taken-ms 17, :result-count 4}
+{:query-index 73, :time-taken-ms 1065, :result-count 29862}
+{:query-index 74, :time-taken-ms 36, :result-count 14}
+{:query-index 75, :time-taken-ms 15, :result-count 26}
+{:query-index 76, :time-taken-ms 75, :result-count 223}
+{:query-index 77, :time-taken-ms 421, :result-count 22370}
+{:query-index 78, :time-taken-ms 21, :result-count 573}
+{:query-index 79, :time-taken-ms 7, :result-count 24}
+{:query-index 80, :time-taken-ms 1, :result-count 0}
+{:query-index 81, :time-taken-ms 1, :result-count 35}
+{:query-index 82, :time-taken-ms 2, :result-count 56}
+{:query-index 83, :time-taken-ms 5, :result-count 63}
+{:query-index 84, :time-taken-ms 1, :result-count 1}
+{:query-index 85, :time-taken-ms 254, :result-count 9798}
+{:query-index 86, :time-taken-ms 1, :result-count 0}
+{:query-index 87, :time-taken-ms 0, :result-count 21}
+{:query-index 88, :time-taken-ms 1, :result-count 21}
+{:query-index 89, :time-taken-ms 2, :result-count 59}
+{:query-index 90, :time-taken-ms 1, :result-count 0}
+{:query-index 91, :time-taken-ms 6716, :result-count 117}
+{:query-index 92, :time-taken-ms 117, :result-count 415}
+{:query-index 93, :time-taken-ms 1, :result-count 0}
+{:query-index 94, :time-taken-ms 25, :result-count 312}
+{:query-index 95, :time-taken-ms 2, :result-count 3}
+{:query-index 96, :time-taken-ms 3, :result-count 7}
+{:query-index 97, :time-taken-ms 3, :result-count 21}
+{:query-index 98, :time-taken-ms 12, :result-count 779}
+{:query-index 99, :time-taken-ms 3, :result-count 3}
