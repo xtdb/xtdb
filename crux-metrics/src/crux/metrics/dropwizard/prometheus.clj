@@ -1,10 +1,16 @@
 (ns crux.metrics.dropwizard.prometheus
+  (:require [crux.metrics.dropwizard :as dropwizard]
+            [iapetos.core :as prometheus]
+            [iapetos.export :as export]
+            [iapetos.collector.jvm :as jvm]
+            [iapetos.standalone :as server])
   (:import [org.dhatim.dropwizard.prometheus PrometheusReporter]
            [io.prometheus.client.exporter PushGateway]
            [java.util.concurrent TimeUnit]
            [java.time Duration]
            [java.io Closeable]
-           [com.codahale.metrics MetricRegistry]))
+           [com.codahale.metrics MetricRegistry]
+           [io.prometheus.client.dropwizard DropwizardExports]))
 
 (defn reporter ^PrometheusReporter
 
@@ -22,3 +28,22 @@
   (reify Closeable
     (close [this]
       (.stop reporter))))
+
+(defn prometheus-registry ^iapetos.registry.IapetosRegistry
+
+  [^MetricRegistry registry {::keys [jvm-metrics?]}]
+  (cond-> (-> (prometheus/collector-registry)
+              (prometheus/register (DropwizardExports. registry)))
+    jvm-metrics? (jvm/initialize)))
+
+(defn server
+
+  [^iapetos.registry.IapetosRegistry prometheus-registry {::keys [server-port]}]
+  (server/metrics-server prometheus-registry {:port server-port}))
+
+(defn start-exporter
+  
+  [registry args]
+  (-> registry
+      (prometheus-registry args)
+      (server args)))

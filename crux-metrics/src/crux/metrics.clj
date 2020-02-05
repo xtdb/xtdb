@@ -7,7 +7,7 @@
             [crux.metrics.dropwizard.console :as console]
             [crux.metrics.dropwizard.csv :as csv]
             [crux.metrics.dropwizard.cloudwatch :as cloudwatch]
-            [crux.metrics.dropwizard.prometheus :as promethues])
+            [crux.metrics.dropwizard.prometheus :as prometheus])
   (:import [java.time Duration]
            [java.util.concurrent TimeUnit]))
 
@@ -89,10 +89,10 @@
                                                           :required? false
                                                           :crux.config/type :crux.config/string-map}}}})
 
-(def promethues-reporter
+(def prometheus-reporter
   {::prometheus-reporter {:start-fn (fn [{::keys [registry]}
                                          {:crux.metrics.dropwizard.prometheus/keys [duration] :as args}]
-                                      (promethues/start-reporter registry args))
+                                      (prometheus/start-reporter registry args))
                           :deps #{::registry}
                           :args {:crux.metrics.dropwizard.prometheus/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
                                                                                :default "PT1S"
@@ -100,9 +100,21 @@
                                  :crux.metrics.dropwizard.prometheus/prefix {:doc "Prefix all metrics with this string"
                                                                              :required? false
                                                                              :crux.config/type :crux.config/string}
-                                 :crux.metrics.dropwizard.prometheus/pushgateway {:doc "Address of the promethues server"
+                                 :crux.metrics.dropwizard.prometheus/pushgateway {:doc "Address of the prometheus server"
                                                                                   :required? true
+
                                                                                   :crux.config/type :crux.config/string}}}})
+
+(def prometheus-exporter
+  {::prometheus-exporter {:start-fn (fn [{::keys [registry]} args]
+                                      (prometheus/start-exporter registry args))
+                          :deps #{::registry}
+                          :args {:crux.metrics.dropwizard.prometheus/port {:doc "Port for prometheus exporter server"
+                                                                           :default 8080
+                                                                           :crux.config/type :crux.config/int}
+                                 :crux.metrics.dropwizard.prometheus/jvm-metrics? {:doc "Dictates if jvm metrics are exported"
+                                                                                   :default false
+                                                                                   :crux.config/type :crux.config/boolean}}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))
