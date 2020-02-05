@@ -120,3 +120,5 @@
 (def with-console (merge registry console-reporter))
 (def with-csv (merge registry csv-reporter))
 (def with-cloudwatch (merge registry cloudwatch-reporter))
+(def with-prometheus-reporter (merge registry prometheus-reporter))
+(def with-prometheus-exporter (merge registry prometheus-exporter))

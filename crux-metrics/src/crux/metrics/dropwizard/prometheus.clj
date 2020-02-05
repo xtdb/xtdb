@@ -1,7 +1,6 @@
 (ns crux.metrics.dropwizard.prometheus
   (:require [crux.metrics.dropwizard :as dropwizard]
             [iapetos.core :as prometheus]
-            [iapetos.export :as export]
             [iapetos.collector.jvm :as jvm]
             [iapetos.standalone :as server])
   (:import [org.dhatim.dropwizard.prometheus PrometheusReporter]
@@ -39,7 +38,7 @@
 (defn server
 
   [^iapetos.registry.IapetosRegistry prometheus-registry {::keys [server-port]}]
-  (server/metrics-server prometheus-registry {:port server-port}))
+  (server/metrics-server prometheus-registry {:port (or server-port 8080)}))
 
 (defn start-exporter
   
