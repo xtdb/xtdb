@@ -50,7 +50,7 @@
                                                          result
                                                          (try
                                                            {:result-count (count (query-fn conn q))}
-                                                           (catch java.util.concurrent.TimeoutException t
+                                                           (catch Throwable t
                                                              {:error (.getMessage t)}))
                                                          output (merge {:query-index idx
                                                                         :time-taken-ms (- (System/currentTimeMillis) start-time)}
@@ -69,6 +69,7 @@
                        (doseq [^java.util.concurrent.Future f job-features] (.get f))
                        (reset! all-jobs-completed true)
                        (.shutdownNow pool)
+                       {:num-tests num-tests :num-threads num-threads}
                        (catch InterruptedException e
                          (.shutdownNow pool)
                          (throw e))))))
