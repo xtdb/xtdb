@@ -3,7 +3,8 @@
             [crux.kafka :as k]
             [crux.topology :as topo]
             [crux.node :as n]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.io :as cio])
   (:import crux.api.ICruxAsyncIngestAPI
            java.io.Closeable))
 
@@ -16,10 +17,11 @@
   (submitTx [this tx-ops]
     @(.submitTxAsync this tx-ops))
 
-  (openTxLog ^crux.api.ITxLog [_ from-tx-id with-ops?]
+  (openTxLog [_ from-tx-id with-ops?]
     (when with-ops?
       (throw (IllegalArgumentException. "with-ops? not supported")))
-    (db/open-tx-log tx-log from-tx-id))
+    (let [tx-log (db/open-tx-log tx-log from-tx-id)]
+      (cio/seq->stream tx-log tx-log)))
 
   Closeable
   (close [_]

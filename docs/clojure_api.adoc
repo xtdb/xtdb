@@ -142,16 +142,14 @@ toc::[]
 
 [source,clj]
 ----
-(open-tx-log ^ITxLog [this from-tx-id with-ops?]
+(open-tx-log ^Closeable [this from-tx-id with-ops?]
   "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another
   Crux instance.
   from-tx-id      optional transaction id to start from.
   with-ops?       should the operations with documents be included?
-  Returns an iterator of the TxLog.")
-  (attribute-stats [node]
-    "Returns frequencies of indexed attributes")
+  Returns a closeable seq of the TxLog.")
 ----
 
 === attribute-stats

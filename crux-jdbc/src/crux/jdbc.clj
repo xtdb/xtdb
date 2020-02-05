@@ -13,7 +13,8 @@
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.io :as cio])
   (:import com.zaxxer.hikari.HikariDataSource
            crux.tx.consumer.Message
            java.io.Closeable
@@ -117,12 +118,10 @@
           (catch Throwable t
             (log/error t "Exception occured reading event log")))
         (.put q -1))
-      (db/->closeable-tx-log-iterator
-       #(reset! running? false)
-       ((fn step []
-          (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
-            (when (not= -1 x)
-              (cons x (step)))))))))
+
+      (cio/->closeable-seq (->> (repeatedly #(.poll q 5000 TimeUnit/MILLISECONDS))
+                                (take-while (every-pred some? #(not= -1 %))))
+                           (reify Closeable (close [_] (reset! running? false))))))
 
   (latest-submitted-tx [this]
     (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]

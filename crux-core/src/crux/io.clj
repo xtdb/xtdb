@@ -4,7 +4,8 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
+  (:import [java.io Closeable Closeable DataInputStream DataOutputStream File IOException Reader]
+           (java.lang AutoCloseable)
            [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
            [java.nio.file Files FileVisitResult SimpleFileVisitor]
@@ -15,7 +16,7 @@
            [java.util.stream Stream StreamSupport]
            [java.util.concurrent ThreadFactory]
            java.util.concurrent.locks.StampedLock
-           [clojure.lang IPending Seqable Sequential LazySeq]))
+           [clojure.lang Seqable IPending ISeq Sequential]))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -113,7 +114,7 @@
     (.isDirectory f) (apply + (map folder-size (.listFiles f)))
     :else (.length f)))
 
-(defn try-close [^Closeable c]
+(defn try-close [^AutoCloseable c]
   (try
     (some-> c (.close))
     (catch Throwable t
@@ -246,16 +247,32 @@
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
 
+(defn ->closeable-seq [^Seqable sq & closeables]
+  (reify
+    Sequential
+
+    Closeable
+    (close [_] (run! try-close closeables))
+
+    IPending
+    (isRealized [_] (.isRealized ^IPending sq))
+
+    ISeq
+    (first [_] (first sq))
+    (next [_] (next sq))
+    (more [_] (clojure.lang.RT/more sq))
+    (cons [_ o] (cons o sq))
+    (count [_] (count sq))
+    (empty [_] (empty sq))
+    (equiv [_ o] (= sq o))
+    (seq [_] (seq sq))))
+
 (defn stream->closeable-seq [^Stream stream]
-  (let [^LazySeq sq (-> stream .iterator iterator-seq)]
-    (reify
-      Sequential
-      Seqable (seq [_] sq)
-      IPending (isRealized [_] (.isRealized sq))
-      Iterable (iterator [_] (.iterator sq))
-      Closeable (close [_] (.close stream)))))
+  (->closeable-seq (-> stream .iterator iterator-seq) stream))
 
 (defn ^Stream seq->stream [^Iterable sq & closeables]
   (-> (.spliterator sq)
       (StreamSupport/stream false)
-      (doto (.onClose (fn [] (run! #(.close ^Closeable %) closeables))))))
+      (doto (.onClose (fn [] (-> closeables
+                                 (cond-> (instance? AutoCloseable sq) (cons sq))
+                                 (->> (run! try-close))))))))

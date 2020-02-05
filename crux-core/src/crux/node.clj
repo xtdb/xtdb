@@ -17,7 +17,7 @@
             [crux.topology :as topo]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
@@ -37,6 +37,15 @@
 (defn- ensure-node-open [{:keys [closed?]}]
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
+
+(defn- failed-tx? [{:keys [crux.tx/tx-id]} snapshot]
+  (boolean (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))
+
+(defn- with-tx-ops [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry} snapshot object-store]
+  (-> tx-log-entry
+      (dissoc :crux.tx.event/tx-events)
+      (assoc :crux.api/tx-ops (->> tx-events
+                                   (mapv #(tx/tx-event->tx-op % snapshot object-store))))))
 
 (defrecord CruxNode [kv-store tx-log document-store indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
@@ -119,28 +128,16 @@
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
-  (openTxLog ^ITxLog [this from-tx-id with-ops?]
+  (openTxLog [this from-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-log-iterator (db/open-tx-log tx-log from-tx-id)
-            snapshot (kv/new-snapshot kv-store)
-            tx-log (-> (iterator-seq tx-log-iterator)
-                       (->> (filter
-                             #(nil?
-                               (kv/get-value snapshot
-                                             (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))))
-                       (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
-                                                            crux.tx.event/tx-events] :as tx-log-entry}]
-                                                 (-> tx-log-entry
-                                                     (dissoc :crux.tx.event/tx-events)
-                                                     (assoc :crux.api/tx-ops
-                                                            (->> tx-events
-                                                                 (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
-
-        (db/->closeable-tx-log-iterator (fn []
-                                          (.close snapshot)
-                                          (.close tx-log-iterator))
-                                        tx-log))))
+      (let [tx-log (db/open-tx-log tx-log from-tx-id)
+            snapshot (kv/new-snapshot kv-store)]
+        (cio/seq->stream (-> tx-log
+                             (->> (remove #(failed-tx? % snapshot)))
+                             (cond->> with-ops? (map #(with-tx-ops % snapshot object-store))))
+                         snapshot
+                         tx-log))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]

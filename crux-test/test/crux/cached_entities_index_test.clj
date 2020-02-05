@@ -22,7 +22,7 @@
     (let [db (api/db *api*)
           d (java.util.Date.)]
       (t/is (api/entity db :currency.id/eur))
-      (with-open [snapshot (api/new-snapshot db)
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
                   i (kv/new-iterator snapshot)]
         (let [idx-raw (idx/new-entity-as-of-index i d d)
               idx-in-cache (lru/new-cached-index idx-raw 100)

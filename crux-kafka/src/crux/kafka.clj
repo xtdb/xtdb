@@ -112,18 +112,20 @@
             :crux.tx/tx-time (Date. (.timestamp record-meta))})))))
 
   (open-tx-log [this from-tx-id]
-    (let [tx-topic-consumer ^KafkaConsumer (kc/create-consumer (assoc kafka-config "enable.auto.commit" "false"))
-          tx-topic-partition (TopicPartition. tx-topic 0)]
-      (.assign tx-topic-consumer [tx-topic-partition])
+    (let [tx-topic-partition (TopicPartition. tx-topic 0)
+          ^KafkaConsumer tx-topic-consumer (doto (kc/create-consumer (assoc kafka-config
+                                                                       "enable.auto.commit" "false"))
+                                             (.assign [tx-topic-partition]))]
+
       (if from-tx-id
         (.seek tx-topic-consumer tx-topic-partition (long from-tx-id))
         (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer)))
-      (db/->closeable-tx-log-iterator
-       #(.close tx-topic-consumer)
-       ((fn step []
-           (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
-             (concat (map tx-record->tx-log-entry records)
-                     (step))))))))
+
+      (cio/->closeable-seq (->> (repeatedly #(.poll tx-topic-consumer (Duration/ofMillis 1000)))
+                                (take-while not-empty)
+                                (apply concat)
+                                (map tx-record->tx-log-entry))
+                           tx-topic-consumer)))
 
   (latest-submitted-tx [this]
     (let [tx-tp (TopicPartition. tx-topic 0)

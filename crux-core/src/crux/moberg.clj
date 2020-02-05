@@ -222,16 +222,15 @@
   (open-tx-log [this from-tx-id]
     (let [snapshot (kv/new-snapshot event-log-kv)
           i (kv/new-iterator snapshot)]
-      (db/->closeable-tx-log-iterator
-       #(.close ^Closeable snapshot)
+      (cio/->closeable-seq
        (when-let [m (seek-message i ::event-log from-tx-id)]
-         (for [^Message m (->> (repeatedly #(next-message i ::event-log))
-                               (take-while identity)
-                               (cons m))
+         (for [^Message m (cons m (->> (repeatedly #(next-message i ::event-log))
+                                       (take-while some?)))
                :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
            {:crux.tx.event/tx-events (.body m)
             :crux.tx/tx-id (.message-id m)
-            :crux.tx/tx-time (.message-time m)})))))
+            :crux.tx/tx-time (.message-time m)}))
+       snapshot)))
 
   (latest-submitted-tx [_]
     (let [end-offset (end-message-id-offset event-log-kv ::event-log)]
