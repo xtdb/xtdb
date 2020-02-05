@@ -39,7 +39,7 @@
                     :crux-commit commit-hash
                     :crux-version crux-version})]
 
-    (log/infof "finished bench '%s/%s'." *bench-ns* bench-type)
+    (log/infof "finished bench '%s/%s'." *bench-ns* (name bench-type))
 
     (swap! *!bench-results* conj res)
     res))
@@ -99,4 +99,3 @@
 
 (defmacro with-node [[node-binding] & body]
   `(with-node* (fn [~node-binding] ~@body)))
-

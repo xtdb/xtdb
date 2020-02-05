@@ -2,9 +2,7 @@
   (:require [crux.bench :as bench]
             [crux.bench.ts-weather :as weather]
             [crux.bench.ts-devices :as devices]
-            [crux.bench.watdiv :as watdiv]
             [clj-http.client :as client]
-            [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
             [crux.bench.watdiv :as watdiv]))
 
