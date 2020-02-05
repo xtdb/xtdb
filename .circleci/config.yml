@@ -4,11 +4,51 @@
 #
 orbs:
   aws-ecr: circleci/aws-ecr@6.7.0
-  go: circleci/go@0.2.0
-  docker: circleci/docker@0.5.20
-
-
-
+  crux:
+    orbs:
+      go: circleci/go@0.2.0
+      docker: circleci/docker@0.5.20
+    commands:
+      deploy-artifacts:
+        parameters:
+          crux-settings-file:
+            type: string
+          deps-file:
+            type: string
+          artifact-name:
+            type: string
+        steps:
+          - go/install
+          - docker/install-docker
+          - setup_remote_docker:
+              docker_layer_caching: true
+          - run:
+              command: |
+                go get -u github.com/tcnksm/ghr
+                echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
+          - run:
+              command: |
+                cd crux-build
+                DEPS_EDN=<<parameters.deps-file>> CRUX_EDN=<<parameters.crux-settings-file>> ./build-tar.sh
+                cd crux-builder/clj-uberjar/
+                UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
+                ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" <<parameters.artifact-name>>.jar
+                cd ../docker/
+                IMAGE_NAME=danmason/<<parameters.artifact-name>> IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
+                echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                docker push "danmason/<<parameters.artifact-name>>:${CIRCLE_TAG}"
+      deploy-tar:
+        steps:
+          - go/install
+          - run:
+              command: |
+                go get -u github.com/tcnksm/ghr
+                echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
+          - run:
+              command: |
+                cd crux-build
+                ./build-tar.sh
+                ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-builder.tar.gz
 
 version: 2.1
 jobs:
@@ -87,7 +127,7 @@ jobs:
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
 
-  create-tarball:
+  create-artifacts:
     docker:
       - image: circleci/clojure:openjdk-11-tools-deps-1.10.1.483
     working_directory: ~/crux
@@ -95,26 +135,11 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
-      - go/install
-      - docker/install-docker
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - run:
-          command: |
-            go get -u github.com/tcnksm/ghr
-            echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
-      - run:
-          command: |
-            cd crux-build
-            ./build-tar.sh
-            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-builder.tar.gz
-            cd crux-builder/clj-uberjar/
-            UBERJAR_NAME=crux-standalone.jar ./build-uberjar.sh
-            ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-standalone.jar
-            cd ../docker/
-            IMAGE_NAME=danmason/crux-standalone IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
-            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-            docker push "danmason/crux-standalone:${CIRCLE_TAG}"
+      - crux/deploy-tar
+      - crux/deploy-artifacts:
+          crux-settings-file: "crux.edn"
+          deps-file: "deps.edn"
+          artifact-name: "crux-standalone"
 
 workflows:
   version: 2.1
@@ -135,7 +160,7 @@ workflows:
              only: /.*/
            branches:
              ignore: /.*/
-      - create-tarball:
+      - create-artifacts:
           requires:
             - build
           filters:
