@@ -133,22 +133,26 @@
   ^java.io.Closeable
   [{:keys [indexer offsets kafka-config group-id topic accept-fn index-fn]}]
   (let [consumer-config (merge {"group.id" group-id} kafka-config)
-        pending-records (atom [])]
-    (tc/start-indexing-consumer (fn [running?]
-                                  (with-open [consumer (create-consumer consumer-config)]
-                                    (subscribe-from-stored-offsets offsets consumer [topic])
-                                    (while @running?
-                                      (try
-                                        (let [opts {:indexer indexer
-                                                    :consumer consumer
-                                                    :topic topic
-                                                    :offsets offsets
-                                                    :timeout 1000
-                                                    :index-fn index-fn}]
-                                          (if accept-fn
-                                            (consume-and-block (merge opts {:pending-records-state pending-records
-                                                                            :accept-fn accept-fn}))
-                                            (consume opts)))
-                                        (catch Exception e
-                                          (log/error e "Error while consuming and indexing from Kafka:")
-                                          (Thread/sleep 500)))))))))
+        pending-records (atom [])
+        consumer (create-consumer consumer-config)
+        _ (subscribe-from-stored-offsets offsets consumer [topic])
+        index-fn (fn []
+                   (try
+                     (let [opts {:indexer indexer
+                                 :consumer consumer
+                                 :topic topic
+                                 :offsets offsets
+                                 :timeout 1000
+                                 :index-fn index-fn}]
+                       (if accept-fn
+                         (consume-and-block (merge opts {:pending-records-state pending-records
+                                                         :accept-fn accept-fn}))
+                         (consume opts)))
+                     (catch Exception e
+                       (log/error e "Error while consuming and indexing from Kafka:")
+                       (Thread/sleep 500))))
+        t (tc/start-indexing-consumer {:index-fn index-fn})]
+    (reify Closeable
+      (close [_]
+        (.close t)
+        (.close consumer)))))
