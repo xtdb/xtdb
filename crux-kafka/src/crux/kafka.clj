@@ -9,7 +9,8 @@
             [crux.kafka.consumer :as kc]
             [crux.node :as n]
             [crux.tx :as tx]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.status :as status])
   (:import crux.db.DocumentStore
            crux.kafka.nippy.NippySerializer
            java.io.Closeable
@@ -129,7 +130,17 @@
     (let [tx-tp (TopicPartition. tx-topic 0)
           end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
       (when (pos? end-offset)
-        {:crux.tx/tx-id (dec end-offset)}))))
+        {:crux.tx/tx-id (dec end-offset)})))
+
+  status/Status
+  (status-map [_]
+    {:crux.zk/zk-active?
+     (try
+       (with-open [^KafkaConsumer consumer (kc/create-consumer (assoc kafka-config {"default.api.timeout.ms" (int 1000)}))]
+         (boolean (.listTopics consumer)))
+       (catch Exception e
+         (log/debug e "Could not list Kafka topics:")
+         false))}))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer, doc-topic]
   Closeable

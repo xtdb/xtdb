@@ -90,22 +90,6 @@
                   (prune-consumer-state offsets consumer partitions)
                   (seek-to-stored-offsets offsets consumer partitions)))))
 
-(defrecord IndexingConsumer [running? ^Thread worker-thread consumer-config]
-  status/Status
-  (status-map [_]
-    {:crux.zk/zk-active?
-     (try
-       (with-open [^KafkaConsumer consumer (create-consumer (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
-         (boolean (.listTopics consumer)))
-       (catch Exception e
-         (log/debug e "Could not list Kafka topics:")
-         false))})
-
-  Closeable
-  (close [_]
-    (reset! running? false)
-    (.join worker-thread)))
-
 (defn consume
   [{:keys [offsets indexer timeout topic ^KafkaConsumer consumer index-fn]
     :or {timeout 5000}}]
@@ -173,6 +157,7 @@
                                          (Thread/sleep 500))))))
                      "crux.kafka.indexing-consumer-thread")
             (.start))]
-    (map->IndexingConsumer {:running? running?
-                            :consumer-config consumer-config
-                            :worker-thread worker-thread})))
+    (reify Closeable
+      (close [_]
+        (reset! running? false)
+        (.join worker-thread)))))
