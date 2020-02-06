@@ -334,6 +334,7 @@ You can start up a *HTTP server* on a node by including
 ----
 include::./src/docs/examples.clj[tags=start-standalone-http-server]
 ----
+
 [#config-start-remote-client]
 === Using a Remote API Client
 [#config-remote-client-dependency]
@@ -381,3 +382,130 @@ backup and restore] functionality should be relied on to provide safe
 durability. The standalone mode's backup and restore operations can
 instead be used for creating operational snapshots of a node's indexes
 for scaling purposes.
+
+[#config-metrics]
+== Using metrics
+
+Crux can display metrics through a variety of interfaces. Internally, it uses
+https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
+all the metrics and then passes the registry around to reporters to display the
+data in a suitable application.
+
+Crux currently supports the following outputs
+* console `stdout`
+* csv file
+* jmx
+* prometheus (reporter & exporter)
+* cloudwatch metrics
+
+[#config-metrics-console]
+=== Console
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-console]
+                 ...
+                 })
+----
+
+.Console metrics arguments
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Field|Property|Description
+|`:crux.metrics.dropwizard.console/rate-unit`|`time-unit`| Unit which rates are displayed
+|`:crux.metrics.dropwizard.console/duration-unit`|`time-unit`| Unit which durations are displayed
+|===
+
+[#config-metrics-csv]
+=== CSV
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-csv]
+                 ...
+                 })
+----
+
+.CSV metrics arguments
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Field|Property|Required|Description
+|`:crux.metrics.dropwizard.csv/rate-unit`|`time-unit`|`false`| Unit which rates are displayed
+|`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
+|===
+
+[#config-metrics-jmx]
+=== JMX
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-jmx]
+                 ...
+                 })
+----
+
+.JMX metrics arguments
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Field|Property|Description
+|`:crux.metrics.dropwizard.jmx/domain`|`string`| Change metrics domain group
+|`:crux.metrics.dropwizard.jmx/rate-unit`|`time-unit`| Unit which rates are displayed
+|`:crux.metrics.dropwizard.jmx/duration-unit`|`time-unit`| Unit which durations are displayed
+|===
+
+
+[#config-metrics-prometheus]
+=== Prometheus
+
+[#config-metrics-prometheus-exporter]
+==== Exporter
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-prometheus-exporter]
+                 ...
+                 })
+----
+
+.Prometheus exporter metrics arguments
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Field|Property|Description
+|`:crux.metrics.dropwizard.prometheus/server-port`|`int`| Desired port number for prometheus client server. Defaults to `8080`
+|`:crux.metrics.dropwizard.prometheus/jvm-metrics?`|`boolean`| If `true` jvm metrics are included in the metrics dump
+|===
+
+[#config-metrics-prometheus-reporter]
+==== Reporter
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-prometheus-reporter]
+                 ...
+                 })
+----
+
+.Prometheus reporter metrics arguments
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Field|Property|Description
+|`:crux.metrics.dropwizard.prometheus/duration`|`string`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
+|`:crux.metrics.dropwizard.prometheus/prefix`|`string`| Prefix all metric titles with this string
+|`:crux.metrics.dropwizard.prometheus/pushgateway`|`string`| Address of the prometheus server. This field is required
+|===
+
+[#config-metrics-cloudwatch]
+=== Cloudwatch metrics
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-cloudwatch]
+                 ...
+                 })
+----
