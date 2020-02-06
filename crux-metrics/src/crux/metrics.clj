@@ -47,28 +47,25 @@
 ;; contained in a arg themself
 
 (def cloudwatch-reporter
-  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]}
-                                         {:crux.metrics.dropwizard.cloudwatch/keys
-                                          [duration]
-                                          :as args}]
+  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} {::cloudwatch/keys [duration] :as args}]
                                       (let [cw-rep (cloudwatch/report registry args)]
-                                        (cloudwatch/start cw-rep (Duration/parse duration))))
+                                        (cloudwatch/start cw-rep duration)))
                           :deps #{::registry}
-                          :args {:crux.metrics.dropwizard.cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
-                                                                             :required? false
-                                                                             :crux.config/type :crux.config/string}
-                                 :crux.metrics.dropwizard.cloudwatch/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
-                                                                               :default "PT1S"
-                                                                               :crux.config/type :crux.config/string}
-                                 :crux.metrics.dropwizard.cloudwatch/dry-run? {:doc "When true, the reporter prints to console instead of uploading to cw"
-                                                                               :required? false
-                                                                               :crux.config/type :crux.config/boolean}
-                                 :crux.metrics.dropwizard.cloudwatch/jvm-metrics? {:doc "When true, include jvm metrics for upload"
-                                                                                   :required? false
-                                                                                   :crux.config/type :crux.config/boolean}
-                                 :crux.metrics.dropwizard.cloudwatch/dimensions {:doc "Add global dimensions to metrics"
-                                                                                 :required? false
-                                                                                 :crux.config/type :crux.config/string-map}}}})
+                          :args {::cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
+                                                      :required? false
+                                                      :crux.config/type :crux.config/string}
+                                 ::cloudwatch/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
+                                                        :default (Duration/ofSeconds 1)
+                                                        :crux.config/type :crux.config/duration}
+                                 ::cloudwatch/dry-run? {:doc "When true, the reporter prints to console instead of uploading to cw"
+                                                        :required? false
+                                                        :crux.config/type :crux.config/boolean}
+                                 ::cloudwatch/jvm-metrics? {:doc "When true, include jvm metrics for upload"
+                                                            :required? false
+                                                            :crux.config/type :crux.config/boolean}
+                                 ::cloudwatch/dimensions {:doc "Add global dimensions to metrics"
+                                                          :required? false
+                                                          :crux.config/type :crux.config/string-map}}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))
