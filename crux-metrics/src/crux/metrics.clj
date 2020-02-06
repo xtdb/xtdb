@@ -24,7 +24,7 @@
                                (jmx/start-reporter registry args))
                    :args {:crux.metrics.dropwizard.jmx/domain {:doc "Add custom domain"
                                                                :required? false
-                                                               :crux.config/type :crux.config/string-vector}
+                                                               :crux.config/type :crux.config/string}
                           :crux.metrics.dropwizard.jmx/rate-unit {:doc "Set rate unit"
                                                                   :required? false
                                                                   :crux.config/type :crux.config/string}

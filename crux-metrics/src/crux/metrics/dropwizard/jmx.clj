@@ -7,11 +7,11 @@
 
 (defn reporter ^JmxReporter
   [^MetricRegistry reg {::keys [domain rate-unit duration-unit]}]
-  (.build
-    (cond-> (JmxReporter/forRegistry reg)
-      domain (.inDomain domain)
-      rate-unit (.convertRatesTo (TimeUnit/valueOf (.toUpperCase rate-unit)))
-      duration-unit (.convertDurationsTo (TimeUnit/valueOf (.toUpperCase duration-unit))))))
+  (-> (JmxReporter/forRegistry reg)
+      (cond-> domain (.inDomain domain)
+              rate-unit (.convertRatesTo (TimeUnit/valueOf (.toUpperCase rate-unit)))
+              duration-unit (.convertDurationsTo (TimeUnit/valueOf (.toUpperCase duration-unit))))
+      .build))
 
 (defn start-reporter
   "Report all metrics via JMX"
@@ -20,4 +20,3 @@
     (reify Closeable
       (close [this]
         (.stop reporter)))))
-
