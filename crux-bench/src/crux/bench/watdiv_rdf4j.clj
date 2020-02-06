@@ -61,4 +61,4 @@
          thread-count)))))
 
 (defn -main []
-  (run-watdiv-bench {:thread-count 1 :test-count 10}))
+  (run-watdiv-bench {:thread-count 1 :test-count 100}))

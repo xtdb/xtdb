@@ -34,45 +34,45 @@
 (defn execute-stress-test
   [conn query-fn test-name num-tests ^Long num-threads]
   (bench/run-bench (keyword test-name)
-                   (let [all-jobs-submitted (atom false)
-                         all-jobs-completed (atom false)
-                         pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
-                         job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
-                         job-features (mapv (fn [_]
-                                              (.submit
-                                               pool
-                                               ^Runnable
-                                               (fn run-jobs []
-                                                 (when-let [{:keys [idx q]} (if @all-jobs-submitted
-                                                                              (.poll job-queue)
-                                                                              (.take job-queue))]
-                                                   (let [start-time (System/currentTimeMillis)
-                                                         result
-                                                         (try
-                                                           {:result-count (count (query-fn conn q))}
-                                                           (catch Throwable t
-                                                             {:error (.getMessage t)}))
-                                                         output (merge {:query-index idx
-                                                                        :time-taken-ms (- (System/currentTimeMillis) start-time)}
-                                                                       result)]
-                                                     (output-to-file (str test-name ".edn") output))
-                                                   (recur)))))
-                                            (range num-threads))]
-                     (try
-                       (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
-                                   sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
-                         (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                                                  (take num-tests)
-                                                  (map-indexed vector))]
-                           (.put job-queue {:idx idx :q q})))
-                       (reset! all-jobs-submitted true)
-                       (doseq [^java.util.concurrent.Future f job-features] (.get f))
-                       (reset! all-jobs-completed true)
-                       (.shutdownNow pool)
-                       {:num-tests num-tests :num-threads num-threads}
-                       (catch InterruptedException e
-                         (.shutdownNow pool)
-                         (throw e))))))
+    (let [all-jobs-submitted (atom false)
+          all-jobs-completed (atom false)
+          pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
+          job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
+          job-features (mapv (fn [_]
+                               (.submit
+                                pool
+                                ^Runnable
+                                (fn run-jobs []
+                                  (when-let [{:keys [idx q]} (if @all-jobs-submitted
+                                                               (.poll job-queue)
+                                                               (.take job-queue))]
+                                    (let [start-time (System/currentTimeMillis)
+                                          result
+                                          (try
+                                            {:result-count (count (query-fn conn q))}
+                                            (catch Throwable t
+                                              {:error (.getMessage t)}))
+                                          output (merge {:query-index idx
+                                                         :time-taken-ms (- (System/currentTimeMillis) start-time)}
+                                                        result)]
+                                      (output-to-file (str test-name ".edn") output))
+                                    (recur)))))
+                             (range num-threads))]
+      (try
+        (with-open [desc-in (io/reader (io/resource "watdiv-stress-100/test.1.desc"))
+                    sparql-in (io/reader (io/resource "watdiv-stress-100/test.1.sparql"))]
+          (doseq [[idx [_ q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
+                                   (take num-tests)
+                                   (map-indexed vector))]
+            (.put job-queue {:idx idx :q q})))
+        (reset! all-jobs-submitted true)
+        (doseq [^java.util.concurrent.Future f job-features] (.get f))
+        (reset! all-jobs-completed true)
+        (.shutdownNow pool)
+        {:num-tests num-tests :num-threads num-threads}
+        (catch InterruptedException e
+          (.shutdownNow pool)
+          (throw e))))))
 
 (defn ingest-crux
   [node]
