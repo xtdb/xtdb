@@ -42,17 +42,28 @@
                           (.next tq))
                     (lazy-seq (step)))))))))
 
-(defn run-watdiv-bench [{:keys [test-count thread-count]}]
+(defn run-watdiv-bench [{:keys [test-count] :as opts}]
   (with-sail-repository
     (fn [conn]
-      (bench/with-bench-ns :watdiv
+      (bench/with-bench-ns :watdiv-rdf
         (load-rdf-into-sail conn)
-        (watdiv/execute-stress-test
-         conn
-         (fn [conn q] (execute-sparql conn q))
-         "stress-test-rdf"
-         test-count
-         thread-count)))))
+        (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
+          (fn [queries]
+            (-> queries
+                (cond->> test-count (take test-count))
+                (->> (bench/with-thread-pool opts
+                       (fn [{:keys [idx q]}]
+                         (bench/run-bench (format "query-%d" idx)
+                                          {:result-count (count (execute-sparql conn q))
+                                           :query-idx idx})))))))))))
+
+(comment
+  (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]
+    (bench/save-to-file (io/file "rdf4j-results.edn")
+                        (->> (run-watdiv-bench {:test-count 10})
+                             (filter :query-idx)
+                             (map #(select-keys % [:query-idx :result-count :time-taken-ms]))
+                             (sort-by :query-idx)))))
 
 (defn -main []
-  (run-watdiv-bench {:thread-count 1 :test-count 100}))
+  (run-watdiv-bench {:test-count 100}))

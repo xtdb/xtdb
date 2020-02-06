@@ -5,7 +5,8 @@
             [crux.index :as idx]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
-            [datomic.api :as d]))
+            [datomic.api :as d])
+  (:import (java.io Closeable)))
 
 (def datomic-tx-size 100)
 
@@ -305,7 +306,7 @@
     (try
         (d/delete-database uri)
         (d/create-database uri)
-        (with-open [conn (d/connect uri)]
+        (with-open [conn ^Closeable (d/connect uri)]
           @(d/transact conn datomic-watdiv-schema)
           (f conn))
         (finally
@@ -330,19 +331,22 @@
                        (+ n (count entities))))
                    0)))))
 
-(defn run-watdiv-bench [{:keys [test-count thread-count]}]
+(defn run-watdiv-bench [{:keys [test-count] :as opts}]
   (with-datomic
     (fn [conn]
-      (bench/with-bench-ns :watdiv
+      (bench/with-bench-ns :watdiv-datomic
         (load-rdf-into-datomic conn)
-        (watdiv/execute-stress-test
-         conn
-         (fn [conn q] (d/query {:query (sparql/sparql->datalog q)
-                                :timeout watdiv/query-timeout-ms
-                                :args [(d/db conn)]}))
-         "stress-test-datomic"
-         test-count
-         thread-count)))))
+        (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
+          (fn [queries]
+            (-> queries
+                (cond->> test-count (take test-count))
+                (->> (bench/with-thread-pool opts
+                       (fn [{:keys [idx q]}]
+                         (bench/run-bench (format "query-%d" idx)
+                                          {:result-count (count (d/query {:query (sparql/sparql->datalog q)
+                                                                          :timeout watdiv/query-timeout-ms
+                                                                          :args [(d/db conn)]}))
+                                           :query-idx idx})))))))))))
 
 (defn -main []
-  (run-watdiv-bench {:thread-count 1 :test-count 100}))
+  (run-watdiv-bench {:test-count 100}))

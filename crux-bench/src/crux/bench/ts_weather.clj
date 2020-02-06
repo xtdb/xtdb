@@ -342,7 +342,8 @@
 
 (defn run-weather-bench [node]
   (bench/with-bench-ns :ts-weather
-    (submit-ts-weather-data node)
-    (test-last-10-readings node)
-    (test-last-10-readings-from-outside-locations node)
-    (test-hourly-average-min-max-temperatures-for-field-locations node)))
+    (bench/with-crux-dimensions
+      (submit-ts-weather-data node)
+      (test-last-10-readings node)
+      (test-last-10-readings-from-outside-locations node)
+      (test-hourly-average-min-max-temperatures-for-field-locations node))))

@@ -8,7 +8,8 @@
             [clojure.java.shell :as shell]
             [clojure.string :as string]
             [clj-http.client :as client]
-            [crux.fixtures :as f]))
+            [crux.fixtures :as f])
+  (:import (java.util.concurrent Executors ExecutorService)))
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -20,31 +21,47 @@
       (get (cio/load-properties in) "version"))))
 
 (def ^:dynamic ^:private *bench-ns*)
+(def ^:dynamic ^:private *bench-dimensions* {})
 (def ^:dynamic ^:private *!bench-results*)
 
-(defn run-bench* [bench-type f]
-  (log/infof "running bench '%s/%s'..." *bench-ns* (name bench-type))
+(defn with-dimensions* [dims f]
+  (binding [*bench-dimensions* (merge *bench-dimensions* dims)]
+    (f)))
 
+(defmacro with-dimensions [dims & body]
+  `(with-dimensions* ~dims (fn [] ~@body)))
+
+(defmacro with-crux-dimensions [& body]
+  `(with-dimensions {:crux-version crux-version, :crux-commit commit-hash}
+     ~@body))
+
+(defn with-timing* [f]
   (let [start-time-ms (System/currentTimeMillis)
         ret (try
               (f)
               (catch Exception e
-                (log/warnf e "error running bench '%s/%s'" *bench-ns* (name bench-type))
-                {:error (.getMessage e)}))
+                {:error e}))]
+    (merge (when (map? ret) ret)
+           {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
+
+(defmacro with-timing [& body]
+  `(with-timing* (fn [] ~@body)))
+
+(defn run-bench* [bench-type f]
+  (log/infof "running bench '%s/%s'..." *bench-ns* (name bench-type))
+
+  (let [ret (with-timing (f))
 
         res (merge (when (map? ret) ret)
-                   {:bench-ns *bench-ns*
-                    :bench-type bench-type
-                    :time-taken-ms (- (System/currentTimeMillis) start-time-ms)
-                    :crux-commit commit-hash
-                    :crux-version crux-version})]
+                   *bench-dimensions*
+                   {:bench-type bench-type})]
 
     (log/infof "finished bench '%s/%s'." *bench-ns* (name bench-type))
 
     (swap! *!bench-results* conj res)
     res))
 
-(defmacro ^{:style/indent 1} run-bench [bench-type & body]
+(defmacro run-bench {:style/indent 1} [bench-type & body]
   `(run-bench* ~bench-type (fn [] ~@body)))
 
 (defn post-to-slack [message]
@@ -77,7 +94,8 @@
                              *bench-ns*
                              (->> results
                                   (map ->slack-message)
-                                  (string/join "\n\n")))))))
+                                  (string/join "\n\n"))))
+      results)))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
@@ -99,3 +117,27 @@
 
 (defmacro with-node [[node-binding] & body]
   `(with-node* (fn [~node-binding] ~@body)))
+
+(def ^:private num-processors
+  (.availableProcessors (Runtime/getRuntime)))
+
+(defn with-thread-pool [{:keys [num-threads], :or {num-threads num-processors}} f args]
+  (let [^ExecutorService pool (Executors/newFixedThreadPool num-threads)]
+    (with-dimensions {:num-threads num-threads}
+      (try
+        (let [futures (->> (for [arg args]
+                             (let [bindings (get-thread-bindings)]
+                               (.submit pool
+                                        ^Callable (fn []
+                                                    (with-bindings* bindings f arg)))))
+                           doall)]
+
+          (mapv deref futures))
+
+        (finally
+          (.shutdownNow pool))))))
+
+(defn save-to-file [file results]
+  (with-open [w (io/writer file)]
+    (doseq [res results]
+      (.write w (prn-str res)))))
