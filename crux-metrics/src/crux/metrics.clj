@@ -62,9 +62,6 @@
                                                :default TimeUnit/MILLISECONDS
                                                :crux.config/type :crux.config/time-unit}}}})
 
-;; TODO a decision for consistency, should args be a flat map in the config, or
-;; contained in a arg themself
-
 (def cloudwatch-reporter
   {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} {::cloudwatch/keys [duration] :as args}]
                                       (let [cw-rep (cloudwatch/report registry args)]
