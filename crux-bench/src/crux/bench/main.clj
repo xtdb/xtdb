@@ -4,7 +4,7 @@
             [crux.bench.ts-devices :as devices]
             [clj-http.client :as client]
             [clojure.tools.cli :as cli]
-            [crux.bench.watdiv :as watdiv]))
+            [crux.bench.watdiv-crux :as watdiv-crux]))
 
 (defn -main []
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
@@ -12,5 +12,5 @@
   (bench/with-node [node]
     (devices/run-devices-bench node)
     (weather/run-weather-bench node)
-    (watdiv/run-watdiv-bench-crux node {:test-count 100}))
+    (watdiv-crux/run-watdiv-bench-crux node {:test-count 100}))
   (shutdown-agents))
