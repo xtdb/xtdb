@@ -1,17 +1,11 @@
 (ns crux.bench.watdiv-rdf4j
   (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
-            [crux.bench :as bench]
-            [crux.api :as crux]
-            [crux.index :as idx]
-            [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
-            [datomic.api :as d]
-            [crux.io :as cio]
             [clojure.string :as string]
-            [crux.bench.watdiv :as watdiv])
-  (:import [java.io Closeable File StringReader]
-           java.util.Date
+            [crux.bench :as bench]
+            [crux.bench.watdiv :as watdiv]
+            [crux.io :as cio]
+            [crux.rdf :as rdf])
+  (:import java.io.StringReader
            org.eclipse.rdf4j.query.Binding
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.repository.sail.SailRepository

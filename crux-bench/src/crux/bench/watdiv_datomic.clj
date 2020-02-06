@@ -1,22 +1,11 @@
 (ns crux.bench.watdiv-datomic
   (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
             [crux.bench :as bench]
-            [crux.api :as crux]
+            [crux.bench.watdiv :as watdiv]
             [crux.index :as idx]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
-            [datomic.api :as d]
-            [crux.io :as cio]
-            [clojure.string :as string]
-            [crux.bench.watdiv :as watdiv])
-  (:import [java.io Closeable File StringReader]
-           java.util.Date
-           org.eclipse.rdf4j.query.Binding
-           org.eclipse.rdf4j.repository.RepositoryConnection
-           org.eclipse.rdf4j.repository.sail.SailRepository
-           org.eclipse.rdf4j.rio.RDFFormat
-           org.eclipse.rdf4j.sail.nativerdf.NativeStore))
+            [datomic.api :as d]))
 
 (def datomic-tx-size 100)
 

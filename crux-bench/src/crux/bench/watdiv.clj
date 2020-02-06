@@ -1,21 +1,9 @@
 (ns crux.bench.watdiv
   (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
-            [crux.bench :as bench]
             [crux.api :as crux]
-            [crux.index :as idx]
+            [crux.bench :as bench]
             [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
-            [datomic.api :as d]
-            [crux.io :as cio]
-            [clojure.string :as string])
-  (:import [java.io Closeable File StringReader]
-           java.util.Date
-           org.eclipse.rdf4j.query.Binding
-           org.eclipse.rdf4j.repository.RepositoryConnection
-           org.eclipse.rdf4j.repository.sail.SailRepository
-           org.eclipse.rdf4j.rio.RDFFormat
-           org.eclipse.rdf4j.sail.nativerdf.NativeStore))
+            [crux.sparql :as sparql]))
 
 (defn output-to-file [out output]
   (spit out (str output "\n") :append true))
