@@ -72,12 +72,18 @@
                  {:body (json/write-str {:text message})
                   :content-type :json})))
 
-(defn ->slack-message [{bench-time :time-taken-ms :as bench-map}]
-  (->> (for [[k v] (-> bench-map
-                       (assoc :time-taken (java.time.Duration/ofMillis bench-time))
-                       (dissoc :bench-ns :crux-commit :crux-version :time-taken-ms))]
-         (format "*%s*: %s" (name k) v))
-       (string/join "\n")))
+(defn- result->slack-message [{:keys [time-taken-ms bench-type] :as bench-map}]
+  (format "*%s* (%s): %s"
+          (name bench-type)
+          (java.time.Duration/ofMillis time-taken-ms)
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
+
+(defn results->slack-message [results bench-ns]
+  (format "*%s*\n========\n%s\n"
+          bench-ns
+          (->> results
+               (map result->slack-message)
+               (string/join "\n"))))
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
@@ -90,11 +96,6 @@
 
     (let [results @*!bench-results*]
       (run! (comp println json/write-str) results)
-      (post-to-slack (format "*%s*\n========\n%s\n"
-                             *bench-ns*
-                             (->> results
-                                  (map ->slack-message)
-                                  (string/join "\n\n"))))
       results)))
 
 (defmacro with-bench-ns [bench-ns & body]
