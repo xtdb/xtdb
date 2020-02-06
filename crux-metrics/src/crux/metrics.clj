@@ -91,34 +91,33 @@
 
 (def prometheus-reporter
   {::prometheus-reporter {:start-fn (fn [{::keys [registry]}
-                                         {:crux.metrics.dropwizard.prometheus/keys [duration] :as args}]
+                                         {::prometheus/keys [duration] :as args}]
                                       (prometheus/start-reporter registry args))
                           :deps #{::registry}
-                          :args {:crux.metrics.dropwizard.prometheus/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
-                                                                               :default "PT1S"
-                                                                               :crux.config/type :crux.config/string}
-                                 :crux.metrics.dropwizard.prometheus/prefix {:doc "Prefix all metrics with this string"
-                                                                             :required? false
-                                                                             :crux.config/type :crux.config/string}
-                                 :crux.metrics.dropwizard.prometheus/pushgateway {:doc "Address of the prometheus server"
-                                                                                  :required? true
+                          :args {::prometheus/report-frequency {:doc "Frequency of reporting metrics"
+                                                                :default (Duration/ofSeconds 1)
+                                                                :crux.config/type :crux.config/duration}
+                                 ::prometheus/prefix {:doc "Prefix all metrics with this string"
+                                                      :required? false
+                                                      :crux.config/type :crux.config/string}
+                                 ::prometheus/push-gateway {:doc "Address of the prometheus server"
+                                                            :required? true
+                                                            :crux.config/type :crux.config/string}}}})
 
-                                                                                  :crux.config/type :crux.config/string}}}})
-
-(def prometheus-exporter
-  {::prometheus-exporter {:start-fn (fn [{::keys [registry]} args]
-                                      (prometheus/start-exporter registry args))
-                          :deps #{::registry}
-                          :args {:crux.metrics.dropwizard.prometheus/port {:doc "Port for prometheus exporter server"
-                                                                           :default 8080
-                                                                           :crux.config/type :crux.config/int}
-                                 :crux.metrics.dropwizard.prometheus/jvm-metrics? {:doc "Dictates if jvm metrics are exported"
-                                                                                   :default false
-                                                                                   :crux.config/type :crux.config/boolean}}}})
+(def prometheus-http-exporter
+  {::prometheus-http-exporter {:start-fn (fn [{::keys [registry]} args]
+                                           (prometheus/start-http-exporter registry args))
+                               :deps #{::registry}
+                               :args {::prometheus/port {:doc "Port for prometheus exporter server"
+                                                         :default 8080
+                                                         :crux.config/type :crux.config/int}
+                                      ::prometheus/jvm-metrics? {:doc "Dictates if jvm metrics are exported"
+                                                                 :default false
+                                                                 :crux.config/type :crux.config/boolean}}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))
 (def with-csv (merge registry csv-reporter))
 (def with-cloudwatch (merge registry cloudwatch-reporter))
 (def with-prometheus-reporter (merge registry prometheus-reporter))
-(def with-prometheus-exporter (merge registry prometheus-exporter))
+(def with-prometheus-http-exporter (merge registry prometheus-http-exporter))
