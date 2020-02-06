@@ -12,5 +12,5 @@
   (bench/with-node [node]
     (devices/run-devices-bench node)
     (weather/run-weather-bench node)
-    (watdiv-crux/run-watdiv-bench-crux node {:test-count 100}))
+    (watdiv-crux/run-watdiv-bench node {:test-count 100}))
   (shutdown-agents))

@@ -14,17 +14,28 @@
                      (crux/await-tx node last-tx)
                      {:entity-count entity-count})))
 
-(defn run-watdiv-bench-crux [node {:keys [test-count] :as opts}]
+(defn parse-results [resource]
+  (with-open [rdr (io/reader resource)]
+    (->> (line-seq rdr)
+         (map read-string)
+         (filter :result-count)
+         (map (juxt :query-idx identity))
+         (into {}))))
+
+(defn run-watdiv-bench [node {:keys [test-count] :as opts}]
   (bench/with-bench-ns :watdiv-crux
     (bench/with-crux-dimensions
       (ingest-crux node)
 
-      (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
-        (fn [queries]
-          (-> queries
-              (cond->> test-count (take test-count))
-              (->> (bench/with-thread-pool opts
-                     (fn [{:keys [idx q]}]
-                       (bench/run-bench (format "query-%d" idx)
-                         {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))
-                          :query-idx idx}))))))))))
+      (let [rdf4j-results (some-> (io/resource "rdf4j-results.edn") parse-results)]
+        (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
+          (fn [queries]
+            (-> queries
+                (cond->> test-count (take test-count))
+                (->> (bench/with-thread-pool opts
+                       (fn [{:keys [idx q]}]
+                         (bench/run-bench (format "query-%d" idx)
+                           {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))
+                            :query-idx idx
+                            :rdf4j-time-taken-ms (get-in rdf4j-results [idx :time-taken-ms])
+                            :rdf4j-result-count (get-in rdf4j-results [idx :result-count])})))))))))))

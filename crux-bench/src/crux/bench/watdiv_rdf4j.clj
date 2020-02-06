@@ -62,7 +62,6 @@
     (bench/save-to-file (io/file "rdf4j-results.edn")
                         (->> (run-watdiv-bench {:test-count 10})
                              (filter :query-idx)
-                             (map #(select-keys % [:query-idx :result-count :time-taken-ms]))
                              (sort-by :query-idx)))))
 
 (defn -main []
