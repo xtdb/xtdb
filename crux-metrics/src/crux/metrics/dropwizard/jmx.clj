@@ -3,14 +3,13 @@
            [java.util.concurrent TimeUnit]
            [com.codahale.metrics MetricRegistry]
            [com.codahale.metrics.jmx JmxReporter]))
-(TimeUnit/valueOf (.toUpperCase "seconds"))
 
 (defn reporter ^JmxReporter
-  [^MetricRegistry reg {::keys [domain rate-unit duration-unit]}]
+  [^MetricRegistry reg {::keys [domain ^TimeUnit rate-unit ^TimeUnit duration-unit]}]
   (-> (JmxReporter/forRegistry reg)
       (cond-> domain (.inDomain domain)
-              rate-unit (.convertRatesTo (TimeUnit/valueOf (.toUpperCase rate-unit)))
-              duration-unit (.convertDurationsTo (TimeUnit/valueOf (.toUpperCase duration-unit))))
+              rate-unit (.convertRatesTo rate-unit)
+              duration-unit (.convertDurationsTo duration-unit))
       .build))
 
 (defn start-reporter

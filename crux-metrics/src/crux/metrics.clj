@@ -7,7 +7,8 @@
             [crux.metrics.dropwizard.console :as console]
             [crux.metrics.dropwizard.csv :as csv]
             [crux.metrics.dropwizard.cloudwatch :as cloudwatch])
-  (:import [java.time Duration]))
+  (:import [java.time Duration]
+           [java.util.concurrent TimeUnit]))
 
 (def registry
   {::registry {:start-fn (fn [deps _]
@@ -27,10 +28,12 @@
                                                                :crux.config/type :crux.config/string}
                           :crux.metrics.dropwizard.jmx/rate-unit {:doc "Set rate unit"
                                                                   :required? false
-                                                                  :crux.config/type :crux.config/string}
+                                                                  :default TimeUnit/SECONDS
+                                                                  :crux.config/type :crux.config/time-unit}
                           :crux.metrics.dropwizard.jmx/duration-unit {:doc "Set duration unit"
                                                                       :required? false
-                                                                      :crux.config/type :crux.config/string}}
+                                                                      :default TimeUnit/MILLISECONDS
+                                                                      :crux.config/type :crux.config/time-unit}}
                    :deps #{::registry}}})
 
 (def console-reporter
