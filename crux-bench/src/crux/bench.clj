@@ -100,8 +100,6 @@
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
-(def ^:dynamic *node*)
-
 (defn with-node* [f]
   (f/with-tmp-dir "dev-storage" [data-dir]
     (with-open [embedded-kafka (ek/start-embedded-kafka
