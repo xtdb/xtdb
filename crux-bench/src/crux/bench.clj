@@ -126,10 +126,8 @@
     (with-dimensions {:num-threads num-threads}
       (try
         (let [futures (->> (for [arg args]
-                             (let [bindings (get-thread-bindings)]
-                               (.submit pool
-                                        ^Callable (fn []
-                                                    (with-bindings* bindings f arg)))))
+                             (let [^Callable job (bound-fn [] (f arg))]
+                               (.submit pool job)))
                            doall)]
 
           (mapv deref futures))
