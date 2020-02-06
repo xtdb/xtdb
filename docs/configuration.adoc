@@ -461,12 +461,12 @@ Crux currently supports the following outputs
 === Prometheus
 
 [#config-metrics-prometheus-exporter]
-==== Exporter
+==== HTTP-Exporter
 
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-prometheus-exporter]
+                                      'crux.metrics/with-prometheus-http-exporter]
                  ...
                  })
 ----
@@ -475,7 +475,7 @@ Crux currently supports the following outputs
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Description
-|`:crux.metrics.dropwizard.prometheus/server-port`|`int`| Desired port number for prometheus client server. Defaults to `8080`
+|`:crux.metrics.dropwizard.prometheus/port`|`int`| Desired port number for prometheus client server. Defaults to `8080`
 |`:crux.metrics.dropwizard.prometheus/jvm-metrics?`|`boolean`| If `true` jvm metrics are included in the metrics dump
 |===
 
@@ -494,7 +494,7 @@ Crux currently supports the following outputs
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Description
-|`:crux.metrics.dropwizard.prometheus/duration`|`string`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
+|`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
 |`:crux.metrics.dropwizard.prometheus/prefix`|`string`| Prefix all metric titles with this string
 |`:crux.metrics.dropwizard.prometheus/pushgateway`|`string`| Address of the prometheus server. This field is required
 |===
@@ -509,3 +509,13 @@ Crux currently supports the following outputs
                  ...
                  })
 ----
+
+.Cloudwatch metrics arguments
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Field|Property|Description
+|`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time between metrics push
+|`:crux.metrics.dropwizard.prometheus/dry-run?`|`boolean`| When `true` the reporter outputs to `cloujure.logging/log*`
+|`:crux.metrics.dropwizard.prometheus/jmv-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
+|`:crux.metrics.dropwizard.prometheus/jmv-dimensions`|`string-map`| Add dimensions to pushed metrics
+|===
