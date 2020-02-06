@@ -11,9 +11,9 @@ orbs:
     commands:
       deploy-artifacts:
         parameters:
-          crux-settings-file:
+          crux-edn:
             type: string
-          deps-file:
+          deps-edn:
             type: string
           artifact-name:
             type: string
@@ -26,17 +26,19 @@ orbs:
               command: |
                 go get -u github.com/tcnksm/ghr
                 echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
+
           - run:
               command: |
+                export IMAGE_NAME=juxt/<<parameters.artifact-name>>
                 cd crux-build
-                DEPS_EDN=<<parameters.deps-file>> CRUX_EDN=<<parameters.crux-settings-file>> ./build-tar.sh
+                DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
                 cd crux-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
                 ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" <<parameters.artifact-name>>.jar
                 cd ../docker/
-                IMAGE_NAME=danmason/<<parameters.artifact-name>> IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
+                IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                docker push "danmason/<<parameters.artifact-name>>:${CIRCLE_TAG}"
+                docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
       deploy-tar:
         steps:
           - go/install
@@ -137,8 +139,8 @@ jobs:
           at: ~/
       - crux/deploy-tar
       - crux/deploy-artifacts:
-          crux-settings-file: "crux.edn"
-          deps-file: "deps.edn"
+          crux-edn: "crux.edn"
+          deps-edn: "deps.edn"
           artifact-name: "crux-standalone"
 
 workflows:
