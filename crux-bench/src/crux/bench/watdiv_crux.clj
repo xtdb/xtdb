@@ -34,8 +34,8 @@
                 (cond->> test-count (take test-count))
                 (->> (bench/with-thread-pool opts
                        (fn [{:keys [idx q]}]
-                         (bench/run-bench (format "query-%d" idx)
-                           {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))
-                            :query-idx idx
-                            :rdf4j-time-taken-ms (get-in rdf4j-results [idx :time-taken-ms])
-                            :rdf4j-result-count (get-in rdf4j-results [idx :result-count])})))))))))))
+                         (bench/with-dimensions {:rdf4j-time-taken-ms (get-in rdf4j-results [idx :time-taken-ms])
+                                                 :rdf4j-result-count (get-in rdf4j-results [idx :result-count])
+                                                 :query-idx idx}
+                           (bench/run-bench (format "query-%d" idx)
+                             {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))}))))))))))))

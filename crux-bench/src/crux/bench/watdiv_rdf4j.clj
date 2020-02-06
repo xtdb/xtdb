@@ -53,9 +53,9 @@
                 (cond->> test-count (take test-count))
                 (->> (bench/with-thread-pool opts
                        (fn [{:keys [idx q]}]
-                         (bench/run-bench (format "query-%d" idx)
-                                          {:result-count (count (execute-sparql conn q))
-                                           :query-idx idx})))))))))))
+                         (bench/with-dimensions {:query-idx idx}
+                           (bench/run-bench (format "query-%d" idx)
+                                            {:result-count (count (execute-sparql conn q))}))))))))))))
 
 (comment
   (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]

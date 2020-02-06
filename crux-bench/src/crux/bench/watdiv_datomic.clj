@@ -342,11 +342,11 @@
                 (cond->> test-count (take test-count))
                 (->> (bench/with-thread-pool opts
                        (fn [{:keys [idx q]}]
-                         (bench/run-bench (format "query-%d" idx)
-                                          {:result-count (count (d/query {:query (sparql/sparql->datalog q)
-                                                                          :timeout watdiv/query-timeout-ms
-                                                                          :args [(d/db conn)]}))
-                                           :query-idx idx})))))))))))
+                         (bench/with-dimensions {:query-idx idx}
+                           (bench/run-bench (format "query-%d" idx)
+                                            {:result-count (count (d/query {:query (sparql/sparql->datalog q)
+                                                                            :timeout watdiv/query-timeout-ms
+                                                                            :args [(d/db conn)]}))}))))))))))))
 
 (defn -main []
   (run-watdiv-bench {:test-count 100}))
