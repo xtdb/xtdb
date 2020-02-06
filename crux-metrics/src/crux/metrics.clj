@@ -63,9 +63,8 @@
                                                :crux.config/type :crux.config/time-unit}}}})
 
 (def cloudwatch-reporter
-  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} {::cloudwatch/keys [duration] :as args}]
-                                      (let [cw-rep (cloudwatch/report registry args)]
-                                        (cloudwatch/start cw-rep duration)))
+  {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} args]
+                                      (cloudwatch/start-reporter registry args))
                           :deps #{::registry}
                           :args {::cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
                                                       :required? false
