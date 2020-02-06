@@ -395,11 +395,13 @@ Crux currently supports the following outputs
 * console `stdout`
 * csv file
 * jmx
-* prometheus (reporter & exporter)
+* prometheus (reporter & http exporter)
 * cloudwatch metrics
 
 [#config-metrics-console]
 === Console
+
+This component logs metrics to `sysout` at regular intervals.
 
 [source,clj]
 ----
@@ -413,6 +415,7 @@ Crux currently supports the following outputs
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Description
+|`:crux.metrics.dropwizard.console/report-rate`|`int`| Time in seconds between each output
 |`:crux.metrics.dropwizard.console/rate-unit`|`time-unit`| Unit which rates are displayed
 |`:crux.metrics.dropwizard.console/duration-unit`|`time-unit`| Unit which durations are displayed
 |===
@@ -420,10 +423,14 @@ Crux currently supports the following outputs
 [#config-metrics-csv]
 === CSV
 
+This component logs metrics to a csv file at regular intervals. Only filename
+is required.
+
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-csv]
+                 :crux.metrics.dropwizard.csv/file-name "out.csv"
                  ...
                  })
 ----
@@ -432,12 +439,16 @@ Crux currently supports the following outputs
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Required|Description
+|`:crux.metrics.dropwizard.csv/file-name`|`string`| Output file location
+|`:crux.metrics.dropwizard.csv/report-rate`|`int`| Time in seconds between each output
 |`:crux.metrics.dropwizard.csv/rate-unit`|`time-unit`|`false`| Unit which rates are displayed
 |`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
 |===
 
 [#config-metrics-jmx]
 === JMX
+
+Provides JMX mbeans output.
 
 [source,clj]
 ----
@@ -463,6 +474,10 @@ Crux currently supports the following outputs
 [#config-metrics-prometheus-exporter]
 ==== HTTP-Exporter
 
+The prometheus http exporter starts a standalone server hosting prometheus
+metrics by default at http://localhost:8080/metrics. The port can be changed
+with an argument, and jvm metrics can be included in the dump.
+
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
@@ -482,10 +497,14 @@ Crux currently supports the following outputs
 [#config-metrics-prometheus-reporter]
 ==== Reporter
 
+This component pushes prometheus metrics to a specified `pushgateway` at
+regular durations (by default 1 second).
+
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-prometheus-reporter]
+                 :crux.metric.dropwizard.prometheus/pushgateway "localhost:9090"
                  ...
                  })
 ----
@@ -494,13 +513,19 @@ Crux currently supports the following outputs
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Description
+|`:crux.metrics.dropwizard.prometheus/pushgateway`|`string`| Address of the prometheus server. This field is required
 |`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
 |`:crux.metrics.dropwizard.prometheus/prefix`|`string`| Prefix all metric titles with this string
-|`:crux.metrics.dropwizard.prometheus/pushgateway`|`string`| Address of the prometheus server. This field is required
 |===
 
 [#config-metrics-cloudwatch]
 === Cloudwatch metrics
+
+Pushes metrics to cloudwatch. This is indented to be used with a crux node
+running inside a EBS/Fargate instance. It attempts to get the relevant
+credentials through system variables.
+Crux uses this in its aws benchmarking system which can be found
+https://github.com/juxt/crux/tree/master/crux-bench[here].
 
 [source,clj]
 ----
@@ -517,5 +542,18 @@ Crux currently supports the following outputs
 |`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time between metrics push
 |`:crux.metrics.dropwizard.prometheus/dry-run?`|`boolean`| When `true` the reporter outputs to `cloujure.logging/log*`
 |`:crux.metrics.dropwizard.prometheus/jmv-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
-|`:crux.metrics.dropwizard.prometheus/jmv-dimensions`|`string-map`| Add dimensions to pushed metrics
+|`:crux.metrics.dropwizard.prometheus/jmv-dimensions`|`string-map`| Should jvm metrics be included in the pushed metrics?
+|`:crux.metrics.dropwizard.prometheus/region`|`string`| cloudwatch region for uploading metrics. Not required inside a EBS/Fargate instance but needed for local testing.
 |===
+
+[#config-metrics-cloudwatch-tips]
+==== Tips for running
+
+To upload metrics to cloudwatch locally the desired region needs to be
+specified with `:crux.metrics.dropwizard.prometheus/region`, and your aws
+credentials at `~/.aws/credentials` need to be visible (If ran in docker, mount
+these as a volume).
+
+When ran on aws if using cloudformation the node needs to have the permission
+`'cloudwatch:PutMetricData'`. For a example see Crux's benchmarking system
+https://github.com/juxt/crux/tree/master/crux-bench[here].
