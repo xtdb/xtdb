@@ -19,7 +19,9 @@
     (-> (CloudWatchReporter/forRegistry reg cwac "crux.metrics.dropwizard.cloudwatch")
         (cond-> jvm-metrics? .withJvmMetrics
                 dry-run? .withDryRun
-                dimensions (.withGlobalDimensions (into-array String dimensions)) )
+                dimensions (.withGlobalDimensions (->> dimensions
+                                                       (map (fn [[k v]] (format "%s=%s" k v)))
+                                                       (into-array String))))
         .build)))
 
 (defn start

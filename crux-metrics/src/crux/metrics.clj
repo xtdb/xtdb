@@ -68,7 +68,7 @@
                                                                                    :crux.config/type :crux.config/boolean}
                                  :crux.metrics.dropwizard.cloudwatch/dimensions {:doc "Add global dimensions to metrics"
                                                                                  :required? false
-                                                                                 :crux.config/type :crux.config/string-vector}}}})
+                                                                                 :crux.config/type :crux.config/string-map}}}})
 
 (def with-jmx (merge registry jmx-reporter))
 (def with-console (merge registry console-reporter))

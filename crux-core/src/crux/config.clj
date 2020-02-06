@@ -13,7 +13,8 @@
    ::nat-int [nat-int? (fn [x]
                          (or (and (string? x) (Long/parseLong x)) x))]
    ::string [string? identity]
-   ::string-vector [(fn [sv] (and (vec sv) (every? string? sv))) identity]
+   ;; TODO string-map for properties files
+   ::string-map [(fn [m] (s/valid? (s/map-of string? string?) m)) identity]
    ::module [(fn [m] (s/valid? :crux.topology/module m))
              (fn [m] (s/conform :crux.topology/module m))]
    ::duration [#(instance? Duration %)
