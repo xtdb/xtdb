@@ -23,28 +23,44 @@
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} args]
                                (jmx/start-reporter registry args))
-                   :args {:crux.metrics.dropwizard.jmx/domain {:doc "Add custom domain"
-                                                               :required? false
-                                                               :crux.config/type :crux.config/string}
-                          :crux.metrics.dropwizard.jmx/rate-unit {:doc "Set rate unit"
-                                                                  :required? false
-                                                                  :default TimeUnit/SECONDS
-                                                                  :crux.config/type :crux.config/time-unit}
-                          :crux.metrics.dropwizard.jmx/duration-unit {:doc "Set duration unit"
-                                                                      :required? false
-                                                                      :default TimeUnit/MILLISECONDS
-                                                                      :crux.config/type :crux.config/time-unit}}
+                   :args {::jmx/domain {:doc "Add custom domain"
+                                        :required? false
+                                        :crux.config/type :crux.config/string}
+                          ::jmx/rate-unit {:doc "Set rate unit"
+                                           :required? false
+                                           :default TimeUnit/SECONDS
+                                           :crux.config/type :crux.config/time-unit}
+                          ::jmx/duration-unit {:doc "Set duration unit"
+                                               :required? false
+                                               :default TimeUnit/MILLISECONDS
+                                               :crux.config/type :crux.config/time-unit}}
                    :deps #{::registry}}})
 
 (def console-reporter
   {::console-reporter {:start-fn (fn [{::keys [registry]} args]
                                    (console/start-reporter registry args))
-                       :deps #{::registry}}})
+                       :deps #{::registry}
+                       :args {::console/rate-unit {:doc "Set rate unit"
+                                                   :required? false
+                                                   :default TimeUnit/SECONDS
+                                                   :crux.config/type :crux.config/time-unit}
+                              ::console/duration-unit {:doc "Set duration unit"
+                                                       :required? false
+                                                       :default TimeUnit/MILLISECONDS
+                                                       :crux.config/type :crux.config/time-unit}}}})
 
 (def csv-reporter
   {::csv-reporter {:start-fn (fn [{::keys [registry]} args]
                                (csv/start-reporter registry args))
-                   :deps #{::registry}}})
+                   :deps #{::registry}
+                   :args {::csv/rate-unit {:doc "Set rate unit"
+                                           :required? false
+                                           :default TimeUnit/SECONDS
+                                           :crux.config/type :crux.config/time-unit}
+                          ::csv/duration-unit {:doc "Set duration unit"
+                                               :required? false
+                                               :default TimeUnit/MILLISECONDS
+                                               :crux.config/type :crux.config/time-unit}}}})
 
 ;; TODO a decision for consistency, should args be a flat map in the config, or
 ;; contained in a arg themself
