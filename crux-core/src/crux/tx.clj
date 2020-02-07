@@ -311,7 +311,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store tx-log document-store bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store document-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -369,7 +369,6 @@
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
         (let [deps {:object-store object-store
                     :kv-store kv-store
-                    :tx-log tx-log
                     :document-store document-store
                     :indexer this
                     :snapshot snapshot}
@@ -430,10 +429,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log document-store bus]} args]
-               (->KvIndexer object-store kv-store tx-log document-store bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store document-store bus]} args]
+               (->KvIndexer object-store kv-store document-store bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/document-store :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/document-store :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]
