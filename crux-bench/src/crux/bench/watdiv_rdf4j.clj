@@ -65,4 +65,9 @@
                              (sort-by :query-idx)))))
 
 (defn -main []
-  (run-watdiv-bench {:test-count 100}))
+  (let [output-file (io/file "rdf4j-results.edn")]
+    (bench/save-to-file output-file
+                        (->> (run-watdiv-bench {:test-count 100})
+                             (filter :query-idx)
+                             (sort-by :query-idx)))
+    (bench/save-to-s3 {:database "rdf4j" :version "3.0.0"} output-file)))

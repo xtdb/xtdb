@@ -8,7 +8,8 @@
             [clojure.java.shell :as shell]
             [clojure.string :as string]
             [clj-http.client :as client]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [amazonica.aws.s3 :as s3])
   (:import (java.util.concurrent Executors ExecutorService)))
 
 (def commit-hash
@@ -138,3 +139,20 @@
   (with-open [w (io/writer file)]
     (doseq [res results]
       (.write w (prn-str res)))))
+
+(defn- generate-s3-filename [database version]
+  (let [formatted-date (->> (java.util.Date.)
+                            (.format (java.text.SimpleDateFormat. "yyyyMMdd-HHmmss")))]
+    (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
+
+(defn save-to-s3 [{:keys [database version]} file]
+  (s3/put-object
+   :bucket-name "crux-bench"
+   :key (generate-s3-filename database version)
+   :file file))
+
+(defn load-from-s3 [key]
+  (-> (s3/get-object
+       :bucket-name "crux-bench"
+       :key key)
+      :input-stream))

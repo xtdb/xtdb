@@ -349,4 +349,9 @@
                                                                             :args [(d/db conn)]}))}))))))))))))
 
 (defn -main []
-  (run-watdiv-bench {:test-count 100}))
+  (let [output-file (io/file "datomic-results.edn")]
+    (bench/save-to-file output-file
+                        (->> (run-watdiv-bench {:test-count 100})
+                             (filter :query-idx)
+                             (sort-by :query-idx)))
+    (bench/save-to-s3 {:database "datomic" :version "0.9.5697"} output-file)))
