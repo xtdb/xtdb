@@ -1,4 +1,4 @@
-(ns crux.rocksdb-microbench
+(ns crux.bench.rocksdb-microbench-test
   (:require [crux.bench.ts-weather :as ts-weather]
             [clojure.test :as t]
             [crux.api :as api]
