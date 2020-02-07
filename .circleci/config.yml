@@ -162,9 +162,18 @@ workflows:
              only: /.*/
            branches:
              ignore: /.*/
-      - create-artifacts:
+      - hold:
+          type: approval
           requires:
             - build
+          filters:
+           tags:
+             only: /.*/
+           branches:
+             ignore: /.*/
+      - create-artifacts:
+          requires:
+            - hold
           filters:
             tags:
               only: /.*/
