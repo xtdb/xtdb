@@ -1,13 +1,15 @@
 # crux-metrics
 
 This module provides some components that can expose metrics about a node in
-various different ways. Currenly only ingest metrics have been implemented,
-although this is in active development.
+various different ways. Currenly only ingest and querymetrics have been
+implemented, although this is in active development.
 See cards https://github.com/juxt/crux/issues?q=is%3Aissue+is%3Aopen+label%3Aprod-monitoring-384
+
+Full docs [here](https://opencrux.com/docs#config-metrics)
 
 ## Dropwizard metrics
 
-We provide 3 different ways to expose metics using dropwizard (or rather `metrics-clojure`).
+We provide 5 different ways to expose metics using dropwizard (or rather `metrics-clojure`).
 
 https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 
