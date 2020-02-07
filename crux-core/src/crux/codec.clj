@@ -13,7 +13,8 @@
            [java.nio ByteOrder ByteBuffer]
            [java.util Arrays Date Map UUID]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
-           org.agrona.concurrent.UnsafeBuffer))
+           org.agrona.concurrent.UnsafeBuffer
+           crux.api.alpha.CruxId))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -418,6 +419,17 @@
  :crux.codec/edn-id
  [data-input]
  (id-edn-reader (nippy/thaw-from-in! data-input)))
+
+(nippy/extend-freeze
+ CruxId
+ :crux.alpha.api/crux-id
+ [^CruxId x data-output]
+ (nippy/freeze-to-out! data-output (.toEdn x)))
+
+(nippy/extend-thaw
+ :crux.alpha.api/crux-id
+ [data-input]
+ (CruxId/cruxId (nippy/thaw-from-in! data-input)))
 
 (defn valid-id? [x]
   (try

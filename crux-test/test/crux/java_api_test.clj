@@ -76,7 +76,7 @@
 
 (t/deftest test-can-freeze-cruxid
   (f/with-tmp-dir "data" [data-dir]
-    (t/testing "Can create, put and query document with a CruxId in it"
+    (t/testing "Can create, put and get a document with a CruxId in it"
       (let [node (-> (StandaloneTopology/standaloneTopology)
                      (.withDbDir (str (io/file data-dir "db-dir-1")))
                      (.withEventLogDir (str (io/file data-dir "eventlog-1")))
@@ -90,6 +90,9 @@
 
           (let [putOp (PutOperation/putOp doc)]
             (.submitTx node (apif/vec->array-list [putOp]))
-            (Thread/sleep 300)))
+            (Thread/sleep 300))
+
+          (let [returned-doc (.entity (.db node) id)]
+            (t/is :test-id2 (.toEdn (.get returned-doc "Key")))))
 
         (.close node)))))

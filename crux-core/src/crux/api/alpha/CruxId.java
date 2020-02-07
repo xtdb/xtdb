@@ -33,7 +33,7 @@ public class CruxId {
         return new CruxId(obj);
     }
 
-    protected Object toEdn() {
+    public Object toEdn() {
         return id;
     }
 }
