@@ -51,7 +51,11 @@
                                                        org.ow2.asm/asm-util]]
 
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
-                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
+                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
+
+                 ;; fixing 'confusing dependencies'
+                 [com.fasterxml.jackson.core/jackson-core "2.10.0"]]
+
   :jvm-opts ["-server" "-Xmx8g"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
