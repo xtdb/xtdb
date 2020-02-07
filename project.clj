@@ -34,7 +34,7 @@
                  [juxt/crux-bench "derived-from-git"]
                  [juxt/crux-cli "derived-from-git"]
 
-                 [org.apache.kafka/connect-api "2.4.0" :scope "provided"]
+                 [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
 
                  [integrant "0.8.0"]
