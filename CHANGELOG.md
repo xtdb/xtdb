@@ -11,6 +11,7 @@
 ### Bug fixes
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
 * [#507](https://github.com/juxt/crux/issues/507): ranges in rules revert to a predicate if neither argument is a logic var
+* [#637](https://github.com/juxt/crux/pull/637): allow usage of CruxIds within Documents in the Java alpha API.
 
 ### New Features
 * [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
