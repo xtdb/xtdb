@@ -2,6 +2,7 @@
 **/.rebel_readline_history
 **/.nrepl-port
 **/target/*/**
+target
 **/log/*
 !**/target/*/.gitkeep
 data

@@ -1,0 +1,3 @@
+{:frontend-port 5000
+ :embed-crux false
+ :crux-http-server-port 8080}

@@ -6,9 +6,10 @@
             [clojure.tools.logging :as log]
             [crux-ui-server.pages :as pages]
             [clojure.java.io :as io]
-            [clojure.string :as s])
+            [clojure.string :as s]
+            [clojure.edn :as edn])
 ; (:gen-class)
-  (:import (java.io Closeable)))
+  (:import (java.io Closeable File PushbackReader IOException FileNotFoundException)))
 
 (defonce closables (atom {}))
 
@@ -99,17 +100,45 @@
     w-parsed))
 
 (assert
-  (= {:frontend-port 5000, :embed-crux false, :crux-http-server-port 8080}
+  (= {:frontend-port 5000,
+      :embed-crux false,
+      :crux-http-server-port 8080}
      (parse-args
        {"--frontend-port"         "5000"
         "--embed-crux"            "false"
         "--crux-http-server-port" "8080"})))
 
+(defn load-edn
+  "Load edn from an io/reader source (filename or io/resource)."
+  [source]
+  (try
+    (with-open [r (io/reader source)]
+      (edn/read (PushbackReader. r)))
+    (catch IOException e
+      (printf "Couldn't open '%s': %s\n" source (.getMessage e)))
+    (catch RuntimeException e
+      (printf "Error parsing edn file '%s': %s\n" source (.getMessage e)))))
+
+(def ^:private default-conf-name "crux-console-conf.edn")
+
+(defn- try-load-conf [^String user-conf-filename]
+  (if (and user-conf-filename
+           (not (.exists (io/as-file user-conf-filename))))
+    (throw (FileNotFoundException. (str "file " user-conf-filename " not found"))))
+  (let [conf-file-name (or user-conf-filename default-conf-name)
+        file ^File (io/as-file conf-file-name)]
+    (when (.exists file)
+      (println "loading conf from " user-conf-filename)
+      (load-edn file))))
+
 (defn- calc-conf [args]
-  (merge {:frontend-port 5000
-          :embed-crux false
-          :crux-http-server-port 8080}
-         (parse-args args)))
+  (let [conf-filename (get args "--conf-file")
+        args (dissoc args "--conf-file")]
+    (merge {:frontend-port 5000
+            :embed-crux false
+            :crux-http-server-port 8080}
+           (try-load-conf conf-filename)
+           (parse-args args))))
 
 (defn- start-servers [{:keys [frontend-port embed-crux] :as conf}]
   (swap! closables assoc :frontend (http/start-server handler {:port frontend-port}))
@@ -118,8 +147,9 @@
 
 (defn -main
   "Accepted args
-   --frontend-port 5000
-   --embed-crux false
+   --frontend-port         5000
+   --conf-file             crux-console-conf.edn
+   --embed-crux            false
    --crux-http-server-port 8080"
   [& {:as args}]
   (.addShutdownHook (Runtime/getRuntime) (Thread. #'stop-servers))
