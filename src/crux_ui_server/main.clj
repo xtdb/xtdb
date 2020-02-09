@@ -2,16 +2,15 @@
   "Routing and bootstrapping"
   (:require [aleph.http :as http]
             [bidi.bidi :as bidi]
-            [crux.http-server]
-            [crux.api]
+            [crux-ui-server.crux-auto-start :as crux-auto-start]
             [clojure.tools.logging :as log]
             [crux-ui-server.pages :as pages]
             [clojure.java.io :as io]
             [clojure.string :as s])
-  (:gen-class)
+; (:gen-class)
   (:import (java.io Closeable)))
 
-(defonce closables (atom nil))
+(defonce closables (atom {}))
 
 (def routes
   [""
@@ -80,36 +79,50 @@
    :body "Not implemented"})
 
 (defn stop-servers []
-  (when-let [closables' @closables]
+  (when-let [closables' (not-empty @closables)]
     (println "stopping console server")
-    (doseq [^Closeable closable closables']
+    (doseq [^Closeable closable (vals closables')]
       (.close closable))
-    (reset! closables nil)))
+    (reset! closables {})))
 
-(def node-opts
-  {:crux.node/topology :crux.standalone/topology
-   :crux.standalone/event-log-dir "data/eventlog-1"
-   :crux.kv/kv-backend :crux.kv.rocksdb/kv
-   :crux.kv/db-dir "data/db-dir-1"})
 
-(def http-opts
-  {:server-port 8080
-   :cors-access-control
-   [:access-control-allow-origin [#".*"]
-    :access-control-allow-headers ["X-Requested-With"
-                                   "Content-Type"
-                                   "Cache-Control"
-                                   "Origin"
-                                   "Accept"
-                                   "Authorization"
-                                   "X-Custom-Header"]
-    :access-control-allow-methods [:get :options :head :post]]})
+(defn- fix-key [[k v]]
+  [(cond-> k
+     (and (string? k) (.startsWith k "--"))
+     (subs 2))
+   v])
 
-(defn -main []
-  (let [runtime (Runtime/getRuntime)]
-    (.addShutdownHook runtime (Thread. #'stop-servers)))
-  (println "starting console server")
-  (let [node (crux.api/start-node node-opts)
-        crux-http-server (crux.http-server/start-http-server node http-opts)
-        console-http-server (http/start-server handler {:port 5000})]
-    (reset! closables [node crux-http-server console-http-server])))
+(defn- parse-args [args-map]
+  (let [w-norm-keys (into {} (map fix-key args-map))
+        w-kw-keys (into {} (map (fn [[k v]] [(keyword k) v]) w-norm-keys))
+        w-parsed (into {} (map (fn [[k v]] [k (cond-> v (string? v) read-string)]) w-kw-keys))]
+    w-parsed))
+
+(assert
+  (= {:frontend-port 5000, :embed-crux false, :crux-http-server-port 8080}
+     (parse-args
+       {"--frontend-port"         "5000"
+        "--embed-crux"            "false"
+        "--crux-http-server-port" "8080"})))
+
+(defn- calc-conf [args]
+  (merge {:frontend-port 5000
+          :embed-crux false
+          :crux-http-server-port 8080}
+         (parse-args args)))
+
+(defn- start-servers [{:keys [frontend-port embed-crux] :as conf}]
+  (swap! closables assoc :frontend (http/start-server handler {:port frontend-port}))
+  (if embed-crux
+    (swap! closables merge (crux-auto-start/try-start-servers conf))))
+
+(defn -main
+  "Accepted args
+   --frontend-port 5000
+   --embed-crux false
+   --crux-http-server-port 8080"
+  [& {:as args}]
+  (.addShutdownHook (Runtime/getRuntime) (Thread. #'stop-servers))
+  (let [conf (calc-conf args)]
+    (println (str "starting console server w conf: \n" (pr-str conf)))
+    (start-servers conf)))

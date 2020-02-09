@@ -5,18 +5,26 @@
      [aleph                        "0.4.6"]
      [bidi                         "2.1.6"]
      [hiccup                       "1.0.5"]
-     [juxt/crux-uberjar            "19.09-1.5.0-alpha"]
      [page-renderer                "0.4.2"]]
 
   :min-lein-version "2.9.1"
   :main crux-ui-server.main
-  :aot  [crux-ui-server.main]
+ ;:aot  [crux-ui-server.main]
   :uberjar-name "crux-console.jar"
   :source-paths ["src" "test" "node_modules"]
   :resource-paths ["resources"]
 
   :profiles
-  {:dev {:main dev :repl-options {:init-ns dev}}
+  {:dev
+   {;:main dev
+    ;:repl-options {:init-ns dev}
+    :dependencies
+    [[nrepl/nrepl "0.6.0"]]}
+   :crux-jars
+   {:dependencies
+    [[juxt/crux-core            "20.01-1.6.2-alpha"]
+     [juxt/crux-rocksdb         "20.01-1.6.2-alpha"]
+     [juxt/crux-http-server     "20.01-1.6.2-alpha"]]}
    :shadow-cljs ; also see package.json deps
    {:dependencies
     [[org.clojure/clojurescript    "1.10.520"]
