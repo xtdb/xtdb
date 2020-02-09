@@ -35,13 +35,13 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 [source,clj]
 ----
 (require '[crux.api :as crux]
-	 '[crux.http-server :as srv])
+         '[crux.http-server :as srv])
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
   (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.http-server/module]
                     :crux.kafka/bootstrap-servers "localhost:9092"
-		                :crux.http-server/port 3000}))
+                    :crux.http-server/port 3000}))
 ----
 
 == Sink Connector

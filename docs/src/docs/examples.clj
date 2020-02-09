@@ -12,7 +12,7 @@
 
 ;; tag::start-standalone-node[]
 (defn start-standalone-node ^crux.api.ICruxAPI [storage-dir]
-  (crux/start-node {:crux.node/topology 'crux.standalone/topology
+  (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
                     :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
