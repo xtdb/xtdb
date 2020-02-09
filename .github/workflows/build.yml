@@ -1,0 +1,46 @@
+name: build
+
+on: push
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Run linter
+        uses: DeLaGuardo/clojure-lint-action@v1
+        with:
+          clj-kondo-args: --lint src
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v1
+
+      - name: Setup java
+        uses: actions/setup-java@v1
+        with:
+          java-version: '13'
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@2.0
+        with:
+          tools-deps: latest
+
+      - name: Cache clojure deps
+        uses: actions/cache@v1
+        with:
+          path: ~/.m2/repository
+          key: clojure-${{ hashFiles('**/deps.edn') }}
+          restore-keys: |
+            clojure-
+
+      - name: Run clean
+        run: make clean
+
+      - name: Run build
+        run: make jar

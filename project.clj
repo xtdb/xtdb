@@ -9,8 +9,8 @@
 
   :min-lein-version "2.9.1"
   :main crux-ui-server.main
- ;:aot  [crux-ui-server.main]
-  :uberjar-name "crux-console.jar"
+  :aot  [crux-ui-server.main]
+  :uberjar-name "crux-console-skimmed.jar"
   :source-paths ["src" "test" "node_modules"]
   :resource-paths ["resources"]
 
@@ -21,7 +21,9 @@
     :dependencies
     [[nrepl/nrepl "0.6.0"]]}
    :crux-jars
-   {:dependencies
+   {:uberjar-name "crux-console.jar"
+    :auto-clean false
+    :dependencies
     [[juxt/crux-core            "20.01-1.6.2-alpha"]
      [juxt/crux-rocksdb         "20.01-1.6.2-alpha"]
      [juxt/crux-http-server     "20.01-1.6.2-alpha"]]}

@@ -8,3 +8,6 @@ build:
 
 build-perf:
 	node_modules/.bin/shadow-cljs release app-perf
+
+jar:
+	lein with-profile base:crux-jars uberjar

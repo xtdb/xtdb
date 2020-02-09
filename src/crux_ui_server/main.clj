@@ -8,7 +8,7 @@
             [clojure.java.io :as io]
             [clojure.string :as s]
             [clojure.edn :as edn])
-; (:gen-class)
+  (:gen-class)
   (:import (java.io Closeable File PushbackReader IOException FileNotFoundException)))
 
 (defonce closables (atom {}))
