@@ -41,7 +41,13 @@ jobs:
       - name: Run clean
         run: make clean
 
-      - name: Run build
+      - name: install node modules
+        run: make install
+
+      - name: build web
+        run: make build
+
+      - name: build uberjar
         run: make jar
 
       - name: upload skimmed jar
@@ -49,3 +55,9 @@ jobs:
         with:
           name: crux-console-skimmed.jar
           path: target/crux-console-skimmed.jar
+
+      - name: upload the jar with crux
+        uses: actions/upload-artifact@v1
+        with:
+          name: crux-console.jar
+          path: target/crux-console.jar
