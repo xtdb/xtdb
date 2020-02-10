@@ -13,29 +13,36 @@
 
 (defonce closables (atom {}))
 
-(def routes
-  [""
+(defonce routes (atom nil))
+
+(defn calc-routes [routes-prefix]
+  [routes-prefix
    [["" ::home]
     ["/" ::home]
-    ["/query-perf" ::query-perf]
-    ["/service-worker-for-console.js" ::service-worker-for-console]
-    ["/console"
+    ["/app"
      {"" ::console
       "/output" ::console
       ["/output/" :rd/out-tab] ::console
       ["/" :rd/tab] ::console}]
+    ["/query-perf" ::query-perf]
+    ["/service-worker-for-console.js" ::service-worker-for-console]
     ["/static/"
      {true ::static}]
     [true ::not-found]]])
 
+(comment
+  (bidi/match-route @routes "/console")
+  (bidi/match-route @routes "/console/app")
+  (reset! routes (calc-routes "/console")))
+
 
 (defmulti handler
   (fn [{:keys [uri] :as req}]
-    (some-> (bidi/match-route routes uri) :handler)))
+    (some-> (bidi/match-route @routes uri) :handler)))
 
 (defmethod handler ::home [req]
   {:status 301
-   :headers {"location" "/console"}})
+   :headers {"location" (bidi/path-for @routes ::console)}})
 
 (defmethod handler ::console [req]
   {:status 200
@@ -58,7 +65,8 @@
     :else "text/plain"))
 
 (defmethod handler ::static [{:keys [uri] :as req}]
-  (let [relative-uri (s/replace uri #"^/" "")
+  (let [relative-uri (s/replace uri (re-pattern (str "^" @pages/routes-prefix)) "")
+        relative-uri (s/replace relative-uri #"^/" "")
         resource (io/resource relative-uri)]
     (if resource
       (let [stream (io/input-stream resource)
@@ -133,9 +141,10 @@
 
 (defn- calc-conf [args]
   (let [conf-filename (get args "--conf-file")
-        args (dissoc args "--conf-file")]
-    (merge {:frontend-port 5000
-            :embed-crux false
+        args          (dissoc args "--conf-file")]
+    (merge {:frontend-port         5000
+            :embed-crux            false
+            :routes-prefix         "/console"
             :crux-http-server-port 8080}
            (try-load-conf conf-filename)
            (parse-args args))))
@@ -154,5 +163,7 @@
   [& {:as args}]
   (.addShutdownHook (Runtime/getRuntime) (Thread. #'stop-servers))
   (let [conf (calc-conf args)]
+    (reset! routes (calc-routes (:routes-prefix conf)))
+    (reset! pages/routes-prefix (:routes-prefix conf))
     (println (str "starting console server w conf: \n" (pr-str conf)))
     (start-servers conf)))
