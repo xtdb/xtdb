@@ -41,7 +41,7 @@
         ret (try
               (f)
               (catch Exception e
-                {:error e}))]
+                {:error (.getMessage e)}))]
     (merge (when (map? ret) ret)
            {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
 
