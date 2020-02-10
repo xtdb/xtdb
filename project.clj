@@ -12,15 +12,13 @@
   :aot  [crux-ui-server.main]
   :uberjar-name "crux-console-skimmed.jar"
   :omit-sources true
-  :source-paths ["src" "test" "node_modules"]
   :resource-paths ["resources"]
 
   :profiles
   {:dev
-   {;:main dev
-    ;:repl-options {:init-ns dev}
-    :dependencies
-    [[nrepl/nrepl "0.6.0"]]}
+   {:main dev :repl-options {:init-ns dev}
+    :source-paths ["src" "test" "node_modules"]
+    :dependencies [[nrepl/nrepl "0.6.0"]]}
    :crux-jars
    {:uberjar-name "crux-console.jar"
     :auto-clean false
