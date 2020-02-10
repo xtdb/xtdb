@@ -90,8 +90,7 @@
                                  {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
                                   :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                                   :crux.kafka.embedded/kafka-port 9092})
-                node (api/start-node {:crux.node/topology ['crux.kafka/topology
-                                                           'crux.metrics/with-cloudwatch]
+                node (api/start-node {:crux.node/topology '[crux.kafka/topology]
                                       :crux.node/kv-store 'crux.kv.rocksdb/kv
                                       :crux.kafka/bootstrap-servers "localhost:9092"
                                       :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))
