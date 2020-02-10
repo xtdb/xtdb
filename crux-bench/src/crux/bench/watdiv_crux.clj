@@ -37,7 +37,7 @@
      :rdf4j-time-taken (->> crux-correct (map :rdf4j-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}))
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]
-  (let [rdf4j-results (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200207-113401Z.edn") parse-results)
+  (let [rdf4j-results (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200210-163208Z.edn") parse-results)
         watdiv-results
         (bench/with-bench-ns :watdiv-crux
           (bench/with-crux-dimensions
