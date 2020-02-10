@@ -13,7 +13,10 @@
 * [#507](https://github.com/juxt/crux/issues/507): ranges in rules revert to a predicate if neither argument is a logic var
 
 ### New Features
+* [#625](https://github.com/juxt/crux/issues/625): Metrics can be displayed to a prometheus server
+* [#597](https://github.com/juxt/crux/issues/597): Metrics can be now analysed in cloudwatch
 * [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
+* [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
 * [#492](https://github.com/juxt/crux/issues/492): Adding metrics to expose local disk usage
 
 ## 20.01-1.6.2-alpha
