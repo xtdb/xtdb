@@ -98,6 +98,27 @@ Resources:
                 - 's3:GetObject'
               Resource: '*'
 
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS tasks to upload/download from s3
+                - 's3:PutObject'
+                - 's3:GetObject'
+              Resource: '*'
+
   BenchBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -114,6 +135,8 @@ Resources:
       Family: 'crux-bench'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["ECSTaskRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
@@ -132,6 +155,36 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
+  BenchTaskLatest:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - ECRRepository
+      - LogGroup
+    Properties:
+      Cpu: '2 vCPU'
+      Memory: '4GB'
+      Family: 'crux-bench-latest'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["ECSTaskRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'bench-container'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
+          Essential: true
+          Secrets:
+            - Name: "SLACK_URL"
+              ValueFrom:
+                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
 
   TaskSchedulerRole:
      Type: AWS::IAM::Role
