@@ -43,3 +43,9 @@ jobs:
 
       - name: Run build
         run: make jar
+
+      - name: upload skimmed jar
+        uses: actions/upload-artifact@v1
+        with:
+          name: crux-console-skimmed.jar
+          path: target/crux-console-skimmed.jar
