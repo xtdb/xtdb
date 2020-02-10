@@ -1,4 +1,7 @@
-all: install build
+all: clean install build jar
+
+clean:
+	rm -rf target
 
 install:
 	yarn install
