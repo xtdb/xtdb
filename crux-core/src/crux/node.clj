@@ -177,7 +177,7 @@
       (ensure-node-open this)
       (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
 
-      (when (satisfies? tx-log backup/INodeBackup)
+      (when (satisfies? backup/INodeBackup tx-log)
         (backup/write-checkpoint tx-log opts))))
 
   Closeable
