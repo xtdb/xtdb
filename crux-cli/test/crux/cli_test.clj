@@ -70,6 +70,7 @@
                                         "timeout" "30s"
                                         "lein" "run" "crux.cli"
                                         "-x" (pr-str opts)))
+                      (redirectErrorStream true)
                       (directory (-> crux-cli-edn
                                      (io/as-file)
                                      (.getParentFile)
@@ -78,10 +79,9 @@
                       start)]
       (try
         (with-open [out (io/reader (.getInputStream process))]
-          (or (t/is (->> (line-seq out)
-                         (map #(doto % println))
-                         (filter #(str/includes? % "org.eclipse.jetty.server.Server - Started"))
-                         first))
-              (println (slurp (.getErrorStream process)))))
+          (t/is (->> (line-seq out)
+                     (map #(doto % println))
+                     (filter #(str/includes? % "org.eclipse.jetty.server.Server - Started"))
+                     first)))
         (finally
           (.destroy process))))))
