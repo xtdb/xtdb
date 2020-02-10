@@ -1,5 +1,4 @@
 (ns crux.metrics.dropwizard.cloudwatch
-  (:require crux.metrics.dropwizard)
   (:import [io.github.azagniotov.metrics.reporter.cloudwatch CloudWatchReporter]
            [java.io Closeable]
            [software.amazon.awssdk.services.cloudwatch CloudWatchAsyncClient CloudWatchAsyncClientBuilder]
