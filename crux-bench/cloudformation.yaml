@@ -92,8 +92,16 @@ Resources:
 
                 # Allow the ECS tasks to get secret values from the secrets manager
                 - 'secretsmanager:GetSecretValue'
+
+                # Allow the ECS tasks to upload/download from s3
+                - 's3:PutObject'
+                - 's3:GetObject'
               Resource: '*'
 
+  BenchBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 'crux-bench'
 
   BenchTask:
     Type: AWS::ECS::TaskDefinition
