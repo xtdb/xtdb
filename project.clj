@@ -11,6 +11,7 @@
   :main crux-ui-server.main
   :aot  [crux-ui-server.main]
   :uberjar-name "crux-console-skimmed.jar"
+  :omit-sources true
   :source-paths ["src" "test" "node_modules"]
   :resource-paths ["resources"]
 
