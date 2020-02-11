@@ -40,19 +40,6 @@
                  [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0" :exclusions [commons-codec]]
                  [criterium "0.4.5"]
 
-                 ;; Watdiv:
-                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop commons-codec]]
-                 [org.neo4j/neo4j "3.5.8" :exclusions [com.github.ben-manes.caffeine/caffeine
-                                                       com.github.luben/zstd-jni
-                                                       io.netty/netty-all
-                                                       org.ow2.asm/asm
-                                                       org.ow2.asm/asm-analysis
-                                                       org.ow2.asm/asm-tree
-                                                       org.ow2.asm/asm-util]]
-
-                 [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
-                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
-
                  ;; dependency conflict resolution
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
@@ -61,7 +48,7 @@
                  [io.netty/netty-codec-http "4.1.45.Final"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :jvm-opts ["-server" "-Xmx8g"]
+  :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
   :pedantic? :warn)

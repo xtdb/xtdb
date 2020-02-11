@@ -22,4 +22,5 @@
     <logger name="crux.tx" level="WARN" />
     <logger name="org.apache.kafka" level="ERROR" />
     <logger name="org.apache.zookeeper" level="ERROR" />
+    <logger name="kafka" level="ERROR" />
 </configuration>

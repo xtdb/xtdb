@@ -8,11 +8,14 @@
             [clojure.java.shell :as shell]
             [clojure.string :as string]
             [clj-http.client :as client]
-            [crux.fixtures :as f]))
+            [crux.fixtures :as f])
+  (:import (java.util.concurrent Executors ExecutorService)
+           (software.amazon.awssdk.services.s3 S3Client)
+           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
+           (software.amazon.awssdk.core.sync RequestBody)))
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
-
 
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
@@ -20,31 +23,47 @@
       (get (cio/load-properties in) "version"))))
 
 (def ^:dynamic ^:private *bench-ns*)
+(def ^:dynamic ^:private *bench-dimensions* {})
 (def ^:dynamic ^:private *!bench-results*)
 
-(defn run-bench* [bench-type f]
-  (log/infof "running bench '%s/%s'..." *bench-ns* bench-type)
+(defn with-dimensions* [dims f]
+  (binding [*bench-dimensions* (merge *bench-dimensions* dims)]
+    (f)))
 
+(defmacro with-dimensions [dims & body]
+  `(with-dimensions* ~dims (fn [] ~@body)))
+
+(defmacro with-crux-dimensions [& body]
+  `(with-dimensions {:crux-version crux-version, :crux-commit commit-hash}
+     ~@body))
+
+(defn with-timing* [f]
   (let [start-time-ms (System/currentTimeMillis)
         ret (try
               (f)
               (catch Exception e
-                (log/warnf e "error running bench '%s/%s'" *bench-ns* bench-type)
-                {:error (.getMessage e)}))
+                {:error (.getMessage e)}))]
+    (merge (when (map? ret) ret)
+           {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
+
+(defmacro with-timing [& body]
+  `(with-timing* (fn [] ~@body)))
+
+(defn run-bench* [bench-type f]
+  (log/infof "running bench '%s/%s'..." *bench-ns* (name bench-type))
+
+  (let [ret (with-timing (f))
 
         res (merge (when (map? ret) ret)
-                   {:bench-ns *bench-ns*
-                    :bench-type bench-type
-                    :time-taken-ms (- (System/currentTimeMillis) start-time-ms)
-                    :crux-commit commit-hash
-                    :crux-version crux-version})]
+                   *bench-dimensions*
+                   {:bench-type bench-type})]
 
-    (log/infof "finished bench '%s/%s'." *bench-ns* bench-type)
+    (log/infof "finished bench '%s/%s'." *bench-ns* (name bench-type))
 
     (swap! *!bench-results* conj res)
     res))
 
-(defmacro ^{:style/indent 1} run-bench [bench-type & body]
+(defmacro run-bench {:style/indent 1} [bench-type & body]
   `(run-bench* ~bench-type (fn [] ~@body)))
 
 (defn post-to-slack [message]
@@ -55,12 +74,18 @@
                  {:body (json/write-str {:text message})
                   :content-type :json})))
 
-(defn ->slack-message [{bench-time :time-taken-ms :as bench-map}]
-  (->> (for [[k v] (-> bench-map
-                       (assoc :time-taken (java.time.Duration/ofMillis bench-time))
-                       (dissoc :bench-ns :crux-commit :crux-version :time-taken-ms))]
-         (format "*%s*: %s" (name k) v))
-       (string/join "\n")))
+(defn- result->slack-message [{:keys [time-taken-ms bench-type] :as bench-map}]
+  (format "*%s* (%s): `%s`"
+          (name bench-type)
+          (java.time.Duration/ofMillis time-taken-ms)
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
+
+(defn results->slack-message [results bench-ns]
+  (format "*%s*\n========\n%s\n"
+          bench-ns
+          (->> results
+               (map result->slack-message)
+               (string/join "\n"))))
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
@@ -73,16 +98,10 @@
 
     (let [results @*!bench-results*]
       (run! (comp println json/write-str) results)
-      (post-to-slack (format "*%s*\n========\n%s\n"
-                             *bench-ns*
-                             (->> results
-                                  (map ->slack-message)
-                                  (string/join "\n\n")))))))
+      results)))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
-
-(def ^:dynamic *node*)
 
 (defn with-node* [f]
   (f/with-tmp-dir "dev-storage" [data-dir]
@@ -99,3 +118,45 @@
 
 (defmacro with-node [[node-binding] & body]
   `(with-node* (fn [~node-binding] ~@body)))
+
+(def ^:private num-processors
+  (.availableProcessors (Runtime/getRuntime)))
+
+(defn with-thread-pool [{:keys [num-threads], :or {num-threads num-processors}} f args]
+  (let [^ExecutorService pool (Executors/newFixedThreadPool num-threads)]
+    (with-dimensions {:num-threads num-threads}
+      (try
+        (let [futures (->> (for [arg args]
+                             (let [^Callable job (bound-fn [] (f arg))]
+                               (.submit pool job)))
+                           doall)]
+
+          (mapv deref futures))
+
+        (finally
+          (.shutdownNow pool))))))
+
+(defn save-to-file [file results]
+  (with-open [w (io/writer file)]
+    (doseq [res results]
+      (.write w (prn-str res)))))
+
+(defn- generate-s3-filename [database version]
+  (let [formatted-date (->> (java.util.Date.)
+                            (.format (java.text.SimpleDateFormat. "yyyyMMdd-HHmmss")))]
+    (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
+
+(defn save-to-s3 [{:keys [database version]} file]
+  (.putObject (S3Client/create)
+              (-> (PutObjectRequest/builder)
+                  (.bucket "crux-bench")
+                  (.key (generate-s3-filename database version))
+                  (.build))
+              (RequestBody/fromFile file)))
+
+(defn load-from-s3 [key]
+  (.getObject (S3Client/create)
+              (-> (GetObjectRequest/builder)
+                  (.bucket "crux-bench")
+                  (.key key)
+                  (.build))))

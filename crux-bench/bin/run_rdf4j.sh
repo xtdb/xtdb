@@ -2,6 +2,7 @@
 aws ecs run-task\
  --task-definition crux-bench-latest\
  --cluster crux-bench\
+ --overrides "{\"containerOverrides\": [{\"name\":\"bench-container\",\"command\":[\"crux.bench.watdiv-rdf4j\"]}]}"\
  --launch-type FARGATE\
  --count 1\
  --network-configuration \
