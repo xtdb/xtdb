@@ -37,7 +37,7 @@ orbs:
                 ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" <<parameters.artifact-name>>.jar
 
           - store_artifacts:
-              path: ~/crux/crux-build/crux-builder/clj-uberjar/
+              path: "~/crux/crux-build/crux-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
               destination: "<<parameters.artifact-name>>.jar"
 
           - run:
@@ -59,7 +59,7 @@ orbs:
                 ./build-tar.sh
                 ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-builder.tar.gz
           - store_artifacts:
-              path: ~/crux/crux-bench/
+              path: ~/crux/crux-build/crux-builder.tar.gz
               destination: crux-builder.tar.gz
 
 version: 2.1
