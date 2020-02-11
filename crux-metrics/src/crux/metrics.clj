@@ -51,13 +51,20 @@
                               ::console/duration-unit {:doc "Set duration unit"
                                                        :required? false
                                                        :default TimeUnit/MILLISECONDS
-                                                       :crux.config/type :crux.config/time-unit}}}})
+                                                       :crux.config/type :crux.config/time-unit}
+                              ::console/report-rate {:doc "Set report rate in seconds"
+                                                     :default 1
+                                                     :required? false
+                                                     :crux.config/type :crux.config/int}}}})
 
 (def csv-reporter
   {::csv-reporter {:start-fn (fn [{::keys [registry]} args]
                                (csv/start-reporter registry args))
                    :deps #{::registry}
-                   :args {::csv/report-frequency {:doc "Frequency of reporting metrics"
+                   :args {::csv/file-name {:doc "Output file name"
+                                           :required? true
+                                           :crux.config/type :crux.config/string}
+                          ::csv/report-frequency {:doc "Frequency of reporting metrics"
                                                   :default (Duration/ofSeconds 1)
                                                   :crux.config/type :crux.config/duration}
                           ::csv/rate-unit {:doc "Set rate unit"

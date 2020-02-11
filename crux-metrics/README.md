@@ -1,13 +1,15 @@
 # crux-metrics
 
 This module provides some components that can expose metrics about a node in
-various different ways. Currenly only ingest metrics have been implemented,
-although this is in active development.
+various different ways. Currenly only ingest and query-metrics have been
+implemented, although this is in active development.
 See cards https://github.com/juxt/crux/issues?q=is%3Aissue+is%3Aopen+label%3Aprod-monitoring-384
+
+Full docs [here](https://opencrux.com/docs#config-metrics)
 
 ## Dropwizard metrics
 
-We provide 3 different ways to expose metics using dropwizard (or rather `metrics-clojure`).
+We provide 5 different ways to expose metics using dropwizard (or rather `metrics-clojure`).
 
 https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 
@@ -16,9 +18,10 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-console]
-                                     ;; optional args
-                                     :crux.metrics/console-reporter-opts {}
-                                     :crux.metrics/console-reporter-rate 1})
+                 ;; optional args
+                 :crux.metrics.dropwizard.console/report-frequency "PT1S"
+                 :crux.metrics.dropwizard.console/rate-unit "seconds"
+                 :crux.metrics.dropwizard.console/duration-unit "hours"})
 ```
 
 ### CSV
@@ -26,10 +29,11 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-csv]
-                                     ;; optional args
-                                     :crux.metrics/csv-reporter-opts {}
-                                     :crux.metrics/csv-reporter-file "/tmp/csv_reporter"
-                                     :crux.metrics/csv-reporter-rate 1})
+                 :crux.metrics.dropwizard.csv/file-name "out.csv"
+                 ;; optional args
+                 :crux.metrics.dropwizard.csv/report-frequency "PT1S"
+                 :crux.metrics.dropwizard.csv/rate-unit "seconds"
+                 :crux.metrics.dropwizard.csv/duration-unit "hours"})
 ```
 
 ### JMX
@@ -37,8 +41,44 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-jmx]
-                                     ;; optional args
-                                     :crux.metrics/jmx-reporter-opts {}})
+                 ;; optional args
+                 :crux.metrics.dropwizard.jmx/domain "prod-node"
+                 :crux.metrics.dropwizard.jmx/rate-unit "seconds"
+                 :crux.metrics.dropwizard.jmx/duration-unit "hours"})
 ```
 
+### Prometheus
 
+#### HTTP exporter
+
+```
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-prometheus-https-exporter]
+                 ;; optional args
+                 :crux.metrics.dropwizard.prometheus/port 8080
+                 :crux.metrics.dropwizard.prometheus/jvm-metrics? false)}
+```
+
+#### Reporter
+
+```
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-prometheus-reporter]
+                 :crux.metrics.dropwizard.prometheus/push-gateway "localhost:9090"
+                 ;; optional args
+                 :crux.metrics.dropwizard.prometheus/report-frequency "PT1S"
+                 :crux.metrics.dropwizard.prometheus/prefix "prod-node")}
+```
+
+### Cloudwatch
+
+```
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.metrics/with-cloudwatch]
+                 ;; optional args
+                 :crux.metrics.dropwizard.prometheus/report-frequency "PT1S"
+                 :crux.metrics.dropwizard.prometheus/dry-run? false
+                 :crux.metrics.dropwizard.prometheus/jvm-metrics? false
+                 :crux.metrics.dropwizard.prometheus/jvm-dimensions {"foo" "bar"}
+                 :crux.metrics.dropwizard.prometheus/region "eu-west-2"
+```
