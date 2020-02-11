@@ -7,16 +7,17 @@
 (def routes-prefix (atom ""))
 
 (defn console-assets-frame [^String routes-prefix]
-  {:title "Crux Console"
-   :lang "en"
-   :theme-color "hsl(32, 91%, 54%)"
-   :og-image (str routes-prefix "/static/img/crux-logo.svg")
-   :link-apple-icon (str routes-prefix "/static/img/cube-on-white-192.png")
+  {:title                    "Crux Console"
+   :lang                     "en"
+   :theme-color              "hsl(32, 91%, 54%)"
+   :og-image                 (str routes-prefix "/static/img/crux-logo.svg")
+   :link-apple-icon          (str routes-prefix "/static/img/cube-on-white-192.png")
    :link-apple-startup-image (str routes-prefix "/static/img/cube-on-white-512.png")
-   :link-image-src (str routes-prefix "/static/img/cube-on-white-512.png")
-   :service-worker (str routes-prefix "/service-worker-for-console.js")
-   :favicon        (str routes-prefix "/static/img/cube-on-white-120.png")
-   :sw-default-url (str routes-prefix "/app")
+   :link-image-src           (str routes-prefix "/static/img/cube-on-white-512.png")
+   :service-worker           (str routes-prefix "/service-worker-for-console.js")
+   :favicon                  (str routes-prefix "/static/img/cube-on-white-120.png")
+   :doc-attrs                {:data-routing-prefix routes-prefix}
+   :sw-default-url           (str routes-prefix "/app")
    :stylesheet-async
    [(str routes-prefix "/static/styles/reset.css")
     (str routes-prefix "/static/styles/react-input-range.css")

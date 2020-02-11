@@ -1,6 +1,5 @@
 (ns crux-ui-server.crux-auto-start)
 
-
 (def ^:private node-opts
   {:crux.node/topology :crux.standalone/topology
    :crux.standalone/event-log-dir "data/eventlog-1"
@@ -11,15 +10,10 @@
   {:server-port 8080
    :cors-access-control
    [:access-control-allow-origin [#".*"]
-    :access-control-allow-headers ["X-Requested-With"
-                                   "Content-Type"
-                                   "Cache-Control"
-                                   "Origin"
-                                   "Accept"
-                                   "Authorization"
-                                   "X-Custom-Header"]
+    :access-control-allow-headers
+    ["X-Requested-With" "X-Custom-Header" "Content-Type" "Cache-Control"
+     "Origin" "Accept" "Authorization"]
     :access-control-allow-methods [:get :options :head :post]]})
-
 
 (defn try-start-servers [{:keys [embed-crux crux-http-server-port]}]
   (try
