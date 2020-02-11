@@ -48,7 +48,7 @@
                  [io.netty/netty-codec-http "4.1.45.Final"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :jvm-opts ["-server" "-Xmx8g"]
+  :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
   :pedantic? :warn)
