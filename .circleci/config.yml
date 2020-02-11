@@ -35,7 +35,14 @@ orbs:
                 cd crux-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
                 ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" <<parameters.artifact-name>>.jar
-                cd ../docker/
+
+          - store_artifacts:
+              path: ~/crux/crux-build/crux-builder/clj-uberjar/
+              destination: "<<parameters.artifact-name>>.jar"
+
+          - run:
+              command: |
+                cd crux-build/crux-builder/docker/
                 IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                 docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
@@ -51,6 +58,9 @@ orbs:
                 cd crux-build
                 ./build-tar.sh
                 ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-builder.tar.gz
+          - store_artifacts:
+              path: ~/crux/crux-bench/
+              destination: crux-builder.tar.gz
 
 version: 2.1
 jobs:
