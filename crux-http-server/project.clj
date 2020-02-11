@@ -5,8 +5,8 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [juxt/crux-core "derived-from-git"]
-                 [ring/ring-core "1.7.1"]
-                 [ring/ring-jetty-adapter "1.7.1"]
+                 [ring/ring-core "1.8.0"]
+                 [ring/ring-jetty-adapter "1.8.0"]
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
