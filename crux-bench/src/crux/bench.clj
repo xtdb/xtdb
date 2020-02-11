@@ -74,7 +74,7 @@
                   :content-type :json})))
 
 (defn- result->slack-message [{:keys [time-taken-ms bench-type] :as bench-map}]
-  (format "*%s* (%s): %s"
+  (format "*%s* (%s): `%s`"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
