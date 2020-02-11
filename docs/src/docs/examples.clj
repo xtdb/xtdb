@@ -17,7 +17,9 @@
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
                     :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
                     :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
-(def node (start-standalone-node "crux-store"))
+
+(comment ; which can be used as
+  (def node (start-standalone-node "crux-store")))
 ;; end::start-standalone-node[]
 
 (defn close-node [^java.io.Closeable node]
