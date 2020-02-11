@@ -1,9 +1,5 @@
 (ns crux.metrics.dropwizard
-  (:import (com.codahale.metrics MetricRegistry
-                                 Timer Timer$Context
-                                 Gauge
-                                 Metered
-                                 Meter)
+  (:import (com.codahale.metrics MetricRegistry Timer Timer$Context Gauge Metered Meter)
            clojure.lang.IFn))
 
 ;;;; Registry
@@ -49,5 +45,3 @@
 
 (defn meter-count [^Metered t]
   (.getCount t))
-
-

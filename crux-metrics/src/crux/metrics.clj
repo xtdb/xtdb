@@ -40,7 +40,10 @@
   {::console-reporter {:start-fn (fn [{::keys [registry]} args]
                                    (console/start-reporter registry args))
                        :deps #{::registry}
-                       :args {::console/rate-unit {:doc "Set rate unit"
+                       :args {::console/report-frequency {:doc "Frequency of reporting metrics"
+                                                          :default (Duration/ofSeconds 1)
+                                                          :crux.config/type :crux.config/duration}
+                              ::console/rate-unit {:doc "Set rate unit"
                                                    :required? false
                                                    :default TimeUnit/SECONDS
                                                    :crux.config/type :crux.config/time-unit}
@@ -53,7 +56,10 @@
   {::csv-reporter {:start-fn (fn [{::keys [registry]} args]
                                (csv/start-reporter registry args))
                    :deps #{::registry}
-                   :args {::csv/rate-unit {:doc "Set rate unit"
+                   :args {::csv/report-frequency {:doc "Frequency of reporting metrics"
+                                                  :default (Duration/ofSeconds 1)
+                                                  :crux.config/type :crux.config/duration}
+                          ::csv/rate-unit {:doc "Set rate unit"
                                            :required? false
                                            :default TimeUnit/SECONDS
                                            :crux.config/type :crux.config/time-unit}
@@ -69,9 +75,9 @@
                           :args {::cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
                                                       :required? false
                                                       :crux.config/type :crux.config/string}
-                                 ::cloudwatch/duration {:doc "Duration rate of metrics push in ISO-8601 standard"
-                                                        :default (Duration/ofSeconds 1)
-                                                        :crux.config/type :crux.config/duration}
+                                 ::cloudwatch/report-frequency {:doc "Frequency of reporting metrics"
+                                                                :default (Duration/ofSeconds 1)
+                                                                :crux.config/type :crux.config/duration}
                                  ::cloudwatch/dry-run? {:doc "When true, the reporter prints to console instead of uploading to cw"
                                                         :required? false
                                                         :crux.config/type :crux.config/boolean}
