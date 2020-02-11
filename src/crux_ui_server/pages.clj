@@ -3,7 +3,6 @@
             [page-renderer.api :as pr]
             [clojure.java.io :as io]))
 
-(def id #uuid "50005565-299f-4c08-86d0-b1919bf4b7a9")
 (def routes-prefix (atom ""))
 
 (defn console-assets-frame [^String routes-prefix]

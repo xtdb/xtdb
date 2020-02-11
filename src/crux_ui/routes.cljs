@@ -6,8 +6,12 @@
             [crux-ui.functions :as f]
             [medley.core :as m]))
 
+(def prefix
+  (or (not-empty (dom/jsget js/document.documentElement "dataset" "routingPrefix"))
+      "/console"))
+
 (def ^:private routes
-  ["/console"
+  [prefix
    {"" :rd/query-ui
 
     "/output"
@@ -50,29 +54,6 @@
   (let [path (apply path-for route-vector)
         query-str (query-map->str query-map)]
     (str path "?" query-str)))
-
-
-
-(comment
-  (bidi/match-route routes "/console")
-  (bidi/match-route routes "/console/settings")
-  (bidi/match-route routes "/console/settings/network")
-
-  (match-route "/console/output/network")
-  (path-for :rd/settings)
-
-  (bidi/path-for routes :rd/query-ui-output-tab :r/output-tab "network")
-
-  (path-for-tab :db.ui.output-tab/attr-stats)
-
-  (query-str->map "wewe=wee&333=33&eeqq=33&a[]=3&a[]=6")
-  (query-str->map js/location.search)
-  (query-str->map "a=b%2Cc%2Cb")
-  (query-str->map "a=%5B1%2C2%2C3%5D")
-  (url-for :rd/query-ui {:rd/query (pr-str '{:find [e p] :where []})})
-  (query-map->str
-    {:rd/query
-     (js/JSON.stringify (clj->js [1 2 3]))}))
 
 
 (defn- calc-route-data-from-location []

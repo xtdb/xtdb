@@ -6,7 +6,5 @@
 (main/-main)
 
 (comment
-
   (io/resource "/static/crux-ui/compiled/main.js")
-
   (main/handler {:uri "/static/crux-ui/compiled/main.js"}))

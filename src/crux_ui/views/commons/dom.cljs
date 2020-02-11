@@ -1,13 +1,12 @@
 (ns crux-ui.views.commons.dom
   (:require [clojure.string :as s]
             [cljs.reader :as reader]
-            [crux-ui.functions :as f]
             [reagent.core :as r]
+            [crux-ui.functions :as f]
             [crux-ui.views.commons.keycodes :as kc]))
 
 (def window js/window)
 (def doc js/document)
-(def day-millis (* 86400 1000))
 (def str->id js/parseInt)
 
 (defn- gid [id] (.getElementById js/document id))
