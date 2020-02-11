@@ -28,6 +28,7 @@
                  [juxt/crux-kafka-connect "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
+                 [juxt/crux-metrics "derived-from-git"]
                  [juxt/crux-http-server "derived-from-git" :exclusions [commons-codec]]
                  [juxt/crux-rdf "derived-from-git"]
                  [juxt/crux-test "derived-from-git"]
@@ -38,7 +39,15 @@
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
 
                  [integrant "0.8.0"]
-                 [integrant/repl "0.3.1"]]
+                 [integrant/repl "0.3.1"]
+
+                 ;; dependency conflict resolution
+                 [com.fasterxml.jackson.core/jackson-core "2.10.2"]
+                 [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
+                 [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
+                 [io.netty/netty-transport "4.1.45.Final"]
+                 [io.netty/netty-codec-http "4.1.45.Final"]
+                 [org.reactivestreams/reactive-streams "1.0.3"]]
 
   :source-paths ["dev"]
 

@@ -53,8 +53,13 @@
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
                  [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
 
-                 ;; fixing 'confusing dependencies'
-                 [com.fasterxml.jackson.core/jackson-core "2.10.0"]]
+                 ;; dependency conflict resolution
+                 [com.fasterxml.jackson.core/jackson-core "2.10.2"]
+                 [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
+                 [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
+                 [io.netty/netty-transport "4.1.45.Final"]
+                 [io.netty/netty-codec-http "4.1.45.Final"]
+                 [org.reactivestreams/reactive-streams "1.0.3"]]
 
   :jvm-opts ["-server" "-Xmx8g"]
   :middleware [leiningen.project-version/middleware]
