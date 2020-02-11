@@ -19,7 +19,7 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-console]
                  ;; optional args
-                 :crux.metrics.dropwizard.console/report-rate 1
+                 :crux.metrics.dropwizard.console/report-frequency "PT1S"
                  :crux.metrics.dropwizard.console/rate-unit "seconds"
                  :crux.metrics.dropwizard.console/duration-unit "hours"})
 ```
@@ -31,7 +31,7 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
                                       'crux.metrics/with-csv]
                  :crux.metrics.dropwizard.csv/file-name "out.csv"
                  ;; optional args
-                 :crux.metrics.dropwizard.csv/report-rate 1
+                 :crux.metrics.dropwizard.csv/report-frequency "PT1S"
                  :crux.metrics.dropwizard.csv/rate-unit "seconds"
                  :crux.metrics.dropwizard.csv/duration-unit "hours"})
 ```
@@ -66,7 +66,7 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
                                       'crux.metrics/with-prometheus-reporter]
                  :crux.metrics.dropwizard.prometheus/push-gateway "localhost:9090"
                  ;; optional args
-                 :crux.metrics.dropwizard.prometheus/duration "PT1S"
+                 :crux.metrics.dropwizard.prometheus/report-frequency "PT1S"
                  :crux.metrics.dropwizard.prometheus/prefix "prod-node")}
 ```
 
@@ -76,7 +76,7 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-cloudwatch]
                  ;; optional args
-                 :crux.metrics.dropwizard.prometheus/duration "PT1S"
+                 :crux.metrics.dropwizard.prometheus/report-frequency "PT1S"
                  :crux.metrics.dropwizard.prometheus/dry-run? false
                  :crux.metrics.dropwizard.prometheus/jvm-metrics? false
                  :crux.metrics.dropwizard.prometheus/jvm-dimensions {"foo" "bar"}
