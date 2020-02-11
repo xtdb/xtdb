@@ -384,7 +384,7 @@ instead be used for creating operational snapshots of a node's indexes
 for scaling purposes.
 
 [#config-metrics]
-== Using metrics
+== Monitoring
 
 Crux can display metrics through a variety of interfaces. Internally, it uses
 https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
@@ -392,11 +392,11 @@ all the metrics and then passes the registry around to reporters to display the
 data in a suitable application.
 
 Crux currently supports the following outputs
-* console `stdout`
-* csv file
-* jmx
-* prometheus (reporter & http exporter)
-* cloudwatch metrics
+* Console `stdout`
+* Csv file
+* https://en.wikipedia.org/wiki/Java_Management_Extensions[JMX]
+* https://prometheus.io/docs/introduction/overview/[Prometheus] (reporter & http exporter)
+* https://docs.aws.amazon.com/cloudwatch/index.html[AWS Cloudwatch metrics]
 
 [#config-metrics-console]
 === Console
@@ -519,9 +519,9 @@ regular durations (by default 1 second).
 |===
 
 [#config-metrics-cloudwatch]
-=== Cloudwatch metrics
+=== AWS Cloudwatch metrics
 
-Pushes metrics to cloudwatch. This is indented to be used with a crux node
+Pushes metrics to Cloudwatch. This is indented to be used with a crux node
 running inside a EBS/Fargate instance. It attempts to get the relevant
 credentials through system variables.
 Crux uses this in its aws benchmarking system which can be found
@@ -543,13 +543,13 @@ https://github.com/juxt/crux/tree/master/crux-bench[here].
 |`:crux.metrics.dropwizard.prometheus/dry-run?`|`boolean`| When `true` the reporter outputs to `cloujure.logging/log*`
 |`:crux.metrics.dropwizard.prometheus/jmv-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
 |`:crux.metrics.dropwizard.prometheus/jmv-dimensions`|`string-map`| Should jvm metrics be included in the pushed metrics?
-|`:crux.metrics.dropwizard.prometheus/region`|`string`| cloudwatch region for uploading metrics. Not required inside a EBS/Fargate instance but needed for local testing.
+|`:crux.metrics.dropwizard.prometheus/region`|`string`| Cloudwatch region for uploading metrics. Not required inside a EBS/Fargate instance but needed for local testing.
 |===
 
 [#config-metrics-cloudwatch-tips]
 ==== Tips for running
 
-To upload metrics to cloudwatch locally the desired region needs to be
+To upload metrics to Cloudwatch locally the desired region needs to be
 specified with `:crux.metrics.dropwizard.prometheus/region`, and your aws
 credentials at `~/.aws/credentials` need to be visible (If ran in docker, mount
 these as a volume).
