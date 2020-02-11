@@ -13,7 +13,7 @@
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  [clj-http "3.10.0" :exclusions [org.apache.httpcomponents/httpclient commons-codec]]
-                 [amazonica "0.3.152" :exclusions [commons-codec com.google.guava/guava]]
+                 [software.amazon.awssdk/s3 "2.10.61"]
 
                  [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
 
