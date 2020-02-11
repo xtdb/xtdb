@@ -1,4 +1,4 @@
-(defproject juxt/crux-bench "derived-from-git"
+(defproject juxt/crux-bench-watdiv "derived-from-git"
   :description "A example standalone webservice with crux"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
@@ -9,6 +9,7 @@
                  [juxt/crux-rocksdb "derived-from-git"]
                  [yada "1.3.0-alpha10"]
                  [hiccup "2.0.0-alpha2"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0" :exclusions [commons-codec]]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.3"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.3"]
                  [ch.qos.logback/logback-classic "1.2.3"]
