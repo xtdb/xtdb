@@ -64,7 +64,7 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-prometheus-reporter]
-                 :crux.metrics.dropwizard.prometheus/pushgateway "localhost:9090"
+                 :crux.metrics.dropwizard.prometheus/push-gateway "localhost:9090"
                  ;; optional args
                  :crux.metrics.dropwizard.prometheus/duration "PT1S"
                  :crux.metrics.dropwizard.prometheus/prefix "prod-node")}
@@ -78,7 +78,7 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
                  ;; optional args
                  :crux.metrics.dropwizard.prometheus/duration "PT1S"
                  :crux.metrics.dropwizard.prometheus/dry-run? false
-                 :crux.metrics.dropwizard.prometheus/jmv-metrics? false
-                 :crux.metrics.dropwizard.prometheus/jmv-dimensions {"foo" "bar"}
+                 :crux.metrics.dropwizard.prometheus/jvm-metrics? false
+                 :crux.metrics.dropwizard.prometheus/jvm-dimensions {"foo" "bar"}
                  :crux.metrics.dropwizard.prometheus/region "eu-west-2"
 ```
