@@ -6,6 +6,8 @@
   (let [event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
       (apif/with-opts {:crux.node/topology '[crux.standalone/topology]
+                       :crux.node/kv-store 'crux.kv.rocksdb/kv
+                       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
                        :crux.standalone/event-log-dir event-log-dir}
         f)
       (finally
