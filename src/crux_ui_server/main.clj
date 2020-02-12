@@ -7,12 +7,14 @@
             [crux-ui-server.pages :as pages]
             [clojure.java.io :as io]
             [clojure.string :as s]
-            [clojure.edn :as edn])
+            [clojure.edn :as edn]
+            [clojure.pprint :as pprint])
   (:gen-class)
   (:import (java.io Closeable File PushbackReader IOException FileNotFoundException)))
 
 (defonce closables (atom {}))
 
+(defonce config (atom nil))
 (defonce routes (atom nil))
 
 (defn calc-routes [routes-prefix]
@@ -48,12 +50,12 @@
 (defmethod handler ::console [req]
   {:status 200
    :headers {"content-type" "text/html"}
-   :body (pages/gen-console-page req)})
+   :body (pages/gen-console-page req @config)})
 
 (defmethod handler ::service-worker-for-console [req]
   {:status 200
    :headers {"content-type" "text/javascript"}
-   :body (pages/gen-service-worker req)})
+   :body (pages/gen-service-worker req @config)})
 
 (defn uri->mime-type [uri]
   (cond
@@ -84,9 +86,8 @@
 
 (defmethod handler :default [req]
   {:status 200
-  ;:headers {"content-type" "text/plain"}
-   :headers {"location" "/console"}
-   :body "Not implemented"})
+   :headers {"content-type" "text/plain"}
+   :body "Default handler : Not implemented"})
 
 (defn stop-servers []
   (when-let [closables' (not-empty @closables)]
@@ -165,6 +166,9 @@
   (.addShutdownHook (Runtime/getRuntime) (Thread. #'stop-servers))
   (let [conf (calc-conf args)]
     (reset! routes (calc-routes (:routes-prefix conf)))
+    (reset! config conf)
     (reset! pages/routes-prefix (:routes-prefix conf))
-    (println (str "starting console server w conf: \n" (pr-str conf)))
+    (println
+      (str "starting console server w conf: \n"
+           (with-out-str (pprint/pprint conf))))
     (start-servers conf)))

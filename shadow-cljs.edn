@@ -20,14 +20,14 @@
    :modules {:main {:init-fn crux-ui.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :compiler-options {:optimizations :advanced}
-   :asset-path "/static/crux-ui/compiled"}
+   :asset-path "/console/static/crux-ui/compiled"}
 
   :app-perf
   {:target :browser
    :modules {:main-perf {:init-fn crux-ui.main-perf/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :compiler-options {:optimizations :advanced}
-   :asset-path "/static/crux-ui/compiled"}
+   :asset-path "/console/static/crux-ui/compiled"}
 
 
   :test
@@ -43,7 +43,7 @@
   {:target :browser
    :modules {:main {:init-fn crux-ui.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
-   :asset-path "/static/crux-ui/compiled"
+   :asset-path "/console/static/crux-ui/compiled"
    :compiler-options {:closure-warnings {:global-this :off}
                       :closure-defines  {re-frame.trace.trace-enabled? true}
                       :optimizations :none}

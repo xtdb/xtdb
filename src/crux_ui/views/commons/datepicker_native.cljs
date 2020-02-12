@@ -49,8 +49,8 @@
           :letter-spacing :0.09em
           :color :gray}]
         ["> .native-date-time-picker__input"
-         {:line-height :32px
-          }]]))])
+         {:line-height :32px}]]))])
+
 
 
 (defn picker
