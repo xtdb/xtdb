@@ -36,6 +36,13 @@ location /crux {
 }
 ```
 
+### Command line flags
+--frontend-port  5000
+--embed-crux     false
+--conf-file      crux-console-conf.edn
+--crux-http-port 8080
+
+
 ## How to build or develop
 
 ### Prerequisites

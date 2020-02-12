@@ -8,6 +8,7 @@
    :console/embed-crux         false
    :console/routes-prefix      "/console"
    :console/crux-node-url-base "localhost:8080/crux"
+   :console/hide-features      #{:features/attribute-history}
    :console/crux-http-port     8080})
 
 (defn load-edn
@@ -50,8 +51,8 @@
       :console/embed-crux     false,
       :console/crux-http-port 8080}
      (parse-args
-       {"--frontend-port"         "5000"
-        "--embed-crux"            "false"
+       {"--frontend-port"  "5000"
+        "--embed-crux"     "false"
         "--crux-http-port" "8080"})))
 
 (defn calc-conf [args]

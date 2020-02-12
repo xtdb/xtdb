@@ -69,7 +69,6 @@
     :else "text/plain"))
 
 (defmethod handler ::static [{:keys [uri] :as req}]
-  (println ::static uri)
   (let [relative-uri (s/replace uri (re-pattern (str "^" @pages/routes-prefix)) "")
         relative-uri (s/replace relative-uri #"^/" "")
         resource (io/resource relative-uri)]
@@ -79,7 +78,7 @@
         {:status 200
          :headers {"content-type" mime-type}
          :body stream})
-      (log/warn "No resouce for" uri))))
+      (log/warn "No resource for" uri))))
 
 (defmethod handler ::not-found [req]
   {:status 200

@@ -1,5 +1,10 @@
 {:console/frontend-port      5000
+
  :console/embed-crux         false
+ ; set to true, if you want the console to start a Crux node for you
+ ; meaning you should use the crux-console.jar
+
  :console/routes-prefix      "/console"
+ :console/hide-features      #{:features/attribute-history}
  :console/crux-node-url-base "localhost:8080/crux"
  :console/crux-http-port     8080}
