@@ -13,13 +13,17 @@
 
 (def registry
   {::registry {:start-fn (fn [deps _]
-                           ;; When more metrics are added we can pass a
-                           ;; registry around
                            (doto (dropwizard/new-registry)
                              (indexer-metrics/assign-listeners deps)
                              (kv-metrics/assign-listeners deps)
                              (query-metrics/assign-listeners deps)))
                :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}}})
+
+(def add-rocksdb
+  {::rocksdb-metrics {:start-fn (fn [deps _]
+                                  (def deps deps)
+                                  (rocksdb/assign-gauges deps))
+                      :deps #{:crux.metrics/registry :crux.node/kv-store}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} args]
@@ -35,7 +39,7 @@
                                                :required? false
                                                :default TimeUnit/MILLISECONDS
                                                :crux.config/type :crux.config/time-unit}}
-                   :deps #{::registry}}})
+                   :deps #{::registry ::rocksdb-metrics}}})
 
 (def console-reporter
   {::console-reporter {:start-fn (fn [{::keys [registry]} args]
@@ -60,7 +64,7 @@
 (def csv-reporter
   {::csv-reporter {:start-fn (fn [{::keys [registry]} args]
                                (csv/start-reporter registry args))
-                   :deps #{::registry}
+                   :deps #{::registry ::rocksdb-metrics}
                    :args {::csv/file-name {:doc "Output file name"
                                            :required? true
                                            :crux.config/type :crux.config/string}
@@ -79,7 +83,7 @@
 (def cloudwatch-reporter
   {::cloudwatch-reporter {:start-fn (fn [{::keys [registry]} args]
                                       (cloudwatch/start-reporter registry args))
-                          :deps #{::registry}
+                          :deps #{::registry ::rocksdb-metrics}
                           :args {::cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
                                                       :required? false
                                                       :crux.config/type :crux.config/string}
@@ -107,7 +111,7 @@
   {::prometheus-reporter {:start-fn (fn [{::keys [registry]}
                                          args]
                                       (prometheus/start-reporter registry args))
-                          :deps #{::registry}
+                          :deps #{::registry ::rocksdb-metrics}
                           :args {::prometheus/report-frequency {:doc "Frequency of reporting metrics"
                                                                 :default (Duration/ofSeconds 1)
                                                                 :crux.config/type :crux.config/duration}
@@ -121,7 +125,7 @@
 (def prometheus-http-exporter
   {::prometheus-http-exporter {:start-fn (fn [{::keys [registry]} args]
                                            (prometheus/start-http-exporter registry args))
-                               :deps #{::registry}
+                               :deps #{::registry ::rocksdb-metrics}
                                :args {::prometheus/port {:doc "Port for prometheus exporter server"
                                                          :default 8080
                                                          :crux.config/type :crux.config/int}
