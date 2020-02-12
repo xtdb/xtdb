@@ -168,8 +168,8 @@
   (sync [this]
     (api/map->BitemporalInstant {:crux.tx/tx-time (.sync this nil)}))
 
-  (sync [this timeout]
-    (when-let [tx (db/latest-submitted-tx (:tx-log this))]
+  (sync [{::keys [tx-log] :as this} timeout]
+    (when-let [tx (db/latest-submitted-tx tx-log)]
       (-> (api/await-tx this tx nil)
           :crux.tx/tx-time)))
 

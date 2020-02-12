@@ -273,9 +273,10 @@
 
   (let [fn-id (c/new-id k)
         db (q/->query-api {::node/kv-store kv-store
-                           ::node/object-store  object-store
+                           ::node/object-store object-store
                            ::db/valid-time tx-time
-                           ::tx-time tx-time})
+                           ::tx-time tx-time
+                           :kv-snapshot snapshot})
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)

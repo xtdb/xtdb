@@ -39,13 +39,13 @@
         valid-time #inst "2018-05-21"
         {:crux.tx/keys [tx-time tx-id]}
         (fapi/submit+await-tx [[:crux.tx/put picasso valid-time]])
-        expected-entities [(c/map->EntityTx {:eid          picasso-eid
+        expected-entities [(c/map->EntityTx {:eid picasso-eid
                                              :content-hash content-hash
-                                             :vt           valid-time
-                                             :tt           tx-time
-                                             :tx-id        tx-id})]]
+                                             :vt valid-time
+                                             :tt tx-time
+                                             :tx-id tx-id})]]
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
       (t/testing "can see entity at transact and valid time"
         (t/is (= expected-entities
                  (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
@@ -79,7 +79,7 @@
              new-tx-id   :crux.tx/tx-id}
             (fapi/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
@@ -102,7 +102,7 @@
              new-tx-id   :crux.tx/tx-id}
             (fapi/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
@@ -131,7 +131,7 @@
                  new-tx-id   :crux.tx/tx-id}
                 (fapi/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+            (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
               (t/is (= [(c/map->EntityTx {:eid          picasso-eid
                                           :content-hash new-content-hash
                                           :vt           new-valid-time
@@ -153,7 +153,7 @@
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
                 (fapi/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
-            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+            (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
               (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] valid-time new-tx-time)
@@ -161,7 +161,7 @@
                                    :tx-id)))))))))
 
     (t/testing "can retrieve history of entity"
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+      (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
         (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
           (t/is (= 5 (count (map :content-hash picasso-history))))
           (with-open [i (kv/new-iterator snapshot)]
@@ -184,7 +184,7 @@
 
         (api/await-tx *api* cas-failure-tx (Duration/ofMillis 1000))
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id picasso)
                                       :vt picasso-tx-time
@@ -196,7 +196,7 @@
       (let [new-picasso (assoc picasso :new? true)
             {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (fapi/submit+await-tx [[:crux.tx/cas picasso new-picasso]])]
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id new-picasso)
                                       :vt new-tx-time
@@ -213,7 +213,7 @@
     (let [ivan {:crux.db/id :ivan, :value 12}
           {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (fapi/submit+await-tx [[:crux.tx/cas nil ivan]])]
 
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+      (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
                                     :content-hash (c/new-id ivan)
                                     :vt ivan-tx-time
@@ -225,12 +225,12 @@
   (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
         {evict-tx-time :crux.tx/tx-time} (fapi/submit+await-tx [[:crux.tx/evict picasso-id]])]
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
       (let [picasso-history (idx/entity-history snapshot picasso-id)]
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
-          (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history)))))))))
+          (t/is (empty? (db/get-objects (::n/object-store *api*) snapshot (keep :content-hash picasso-history)))))))))
 
 (t/deftest test-handles-legacy-evict-events
   (let [{put-tx-time ::tx/tx-time, put-tx-id ::tx/tx-id} (fapi/submit+await-tx [[:crux.tx/put picasso #inst "2018-05-21"]])
@@ -238,7 +238,7 @@
         evict-tx-time #inst "2018-05-22"
         evict-tx-id (inc put-tx-id)
 
-        index-evict! #(db/index-tx (:indexer *api*)
+        index-evict! #(db/index-tx (::n/indexer *api*)
                                    {:crux.tx/tx-time evict-tx-time
                                     :crux.tx/tx-id evict-tx-id}
                                    [[:crux.tx/evict picasso-id #inst "2018-05-23"]])]
@@ -251,8 +251,8 @@
                               (index-evict!))))
 
     (t/testing "no docs evicted yet"
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/is (seq (db/get-objects (:object-store *api*) snapshot
+      (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
+        (t/is (seq (db/get-objects (::n/object-store *api*) snapshot
                                    (->> (idx/entity-history snapshot picasso-id)
                                         (keep :content-hash)))))))
 
@@ -263,8 +263,8 @@
     (Thread/sleep 500)
 
     (t/testing "eviction removes docs"
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot
+      (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
+        (t/is (empty? (db/get-objects (::n/object-store *api*) snapshot
                                       (->> (idx/entity-history snapshot picasso-id)
                                            (keep :content-hash)))))))))
 
@@ -273,13 +273,13 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
-    (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
+    (db/index-docs (::n/indexer *api*) {(c/new-id ivan1) ivan1
                                      (c/new-id ivan2) ivan2})
 
-    (db/index-tx (:indexer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
-    (db/index-tx (:indexer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 2} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
+    (db/index-tx (::n/indexer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
+    (db/index-tx (::n/indexer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 2} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
                 (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
                (idx/entity-history snapshot (c/new-id :ivan))))
@@ -295,23 +295,23 @@
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (db/submit-docs (:tx-log *api*) [[content-hash picasso]])
+    (db/submit-docs (::n/tx-log *api*) [[content-hash picasso]])
 
     (Thread/sleep 1000)
 
-    (t/is (db/docs-indexed? (:indexer *api*) [content-hash]))
+    (t/is (db/docs-indexed? (::n/indexer *api*) [content-hash]))
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
       (t/is (= {content-hash picasso}
-               (db/get-objects (:object-store *api*) snapshot [content-hash])))
+               (db/get-objects (::n/object-store *api*) snapshot [content-hash])))
 
       (t/testing "non existent docs are ignored"
         (t/is (= {content-hash picasso}
-                 (db/get-objects (:object-store *api*)
+                 (db/get-objects (::n/object-store *api*)
                                  snapshot
                                  [content-hash
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot [])))))))
+        (t/is (empty? (db/get-objects (::n/object-store *api*) snapshot [])))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
@@ -327,7 +327,7 @@
 
                          (api/await-tx *api* last-tx nil)
 
-                         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+                         (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
                            (t/is (= (for [[vt tx-idx value] history]
                                       [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
                                                                                            (assoc ivan :value value)))])
@@ -430,7 +430,7 @@
         tx (fapi/submit+await-tx (for [n (range number-of-versions)]
                                    [:crux.tx/put (assoc ivan :version n) (Date. (+ (.getTime start-valid-time) (inc (long n))))]))]
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [snapshot (kv/new-snapshot (::n/kv-store *api*))]
       (let [baseline-time (let [start-time (System/nanoTime)
                                 valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
@@ -467,7 +467,7 @@
         (fapi/submit+await-tx [[:crux.tx/put tx2-ivan tx2-valid-time]
                                [:crux.tx/put tx2-petr tx2-valid-time]])]
 
-    (with-open [log-iterator (db/open-tx-log (:tx-log *api*) nil)]
+    (with-open [log-iterator (db/open-tx-log (::n/tx-log *api*) nil)]
       (let [log (iterator-seq log-iterator)]
         (t/is (not (realized? log)))
         (t/is (= [{:crux.tx/tx-id tx1-id
@@ -601,7 +601,8 @@
               (let [submitted-tx (fapi/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
                 (t/is (nil? (latest-exception)))
                 (t/is (= {:crux.db/id :tx-metadata
-                          :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
+                          :crux.tx/current-tx (-> (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                                                  (assoc :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]]))}
                          (api/entity (api/db *api*) :tx-metadata)))))))))))
 
 (t/deftest tx-log-evict-454 []
@@ -690,7 +691,7 @@
                                                                   #inst "2020-01-01"
                                                                   (:crux.tx/tx-time last-tx))
                                 (map (fn [{:keys [content-hash vt]}]
-                                       [vt (:v (db/get-single-object (:object-store *api*) snapshot content-hash))]))))]
+                                       [vt (:v (db/get-single-object (::n/object-store *api*) snapshot content-hash))]))))]
         ;; transaction functions, asserts both still apply at the start of the transaction
         (t/is (= [[#inst "2020-01-08" 8]
                   [#inst "2020-01-09" 9]
@@ -738,7 +739,8 @@
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
-          submitted-tx (fapi/submit+await-tx [[:crux.tx/put doc-1] [:crux.tx/put doc-2]])]
+          submitted-tx (-> (fapi/submit+await-tx [[:crux.tx/put doc-1] [:crux.tx/put doc-2]])
+                           (select-keys [::tx/tx-time ::tx/tx-id]))]
 
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
