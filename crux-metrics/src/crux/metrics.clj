@@ -7,23 +7,35 @@
             [crux.metrics.dropwizard.console :as console]
             [crux.metrics.dropwizard.csv :as csv]
             [crux.metrics.dropwizard.cloudwatch :as cloudwatch]
+            [crux.metrics.rocksdb :as rocksdb]
             [crux.metrics.dropwizard.prometheus :as prometheus])
   (:import [java.time Duration]
            [java.util.concurrent TimeUnit]))
 
 (def registry
-  {::registry {:start-fn (fn [deps _]
+  {::registry {:start-fn (fn [deps {::keys [with-indexer-metrics?
+                                            with-kv-metrics?
+                                            with-query-metrics?
+                                            with-rocksdb-metrics?]}]
                            (doto (dropwizard/new-registry)
-                             (indexer-metrics/assign-listeners deps)
-                             (kv-metrics/assign-listeners deps)
-                             (query-metrics/assign-listeners deps)))
-               :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}}})
-
-(def add-rocksdb
-  {::rocksdb-metrics {:start-fn (fn [deps _]
-                                  (def deps deps)
-                                  (rocksdb/assign-gauges deps))
-                      :deps #{:crux.metrics/registry :crux.node/kv-store}}})
+                             (cond->
+                               with-indexer-metrics? (indexer-metrics/assign-listeners deps)
+                               with-kv-metrics? (kv-metrics/assign-listeners deps)
+                               with-query-metrics? (query-metrics/assign-listeners deps)
+                               with-rocksdb-metrics? (rocksdb/assign-gauges deps))))
+               :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}
+               :args {::with-indexer-metrics? {:doc "Include metrics on the indexer"
+                                               :default true
+                                               :crux.config/type :crux.config/boolean}
+                      ::with-kv-metrics? {:doc "Include metrics on the kv store"
+                                          :default true
+                                          :crux.config/type :crux.config/boolean}
+                      ::with-query-metrics? {:doc "Include metrics on queries"
+                                             :default true
+                                             :crux.config/type :crux.config/boolean}
+                      ::with-rocksdb-metrics? {:doc "Include metrics on rocksdb"
+                                               :default false
+                                               :crux.config/type :crux.config/boolean}}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} args]
