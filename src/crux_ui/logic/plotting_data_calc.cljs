@@ -2,6 +2,9 @@
 
 ; See https://plot.ly/javascript/line-and-scatter/ for docs
 
+(defn auto-name [v]
+  (cond-> v (keyword? v) name))
+
 (defn- attr-info-str
   [attr-key
    {:keys
@@ -10,14 +13,14 @@
      crux.tx/tx-time
      crux.tx/tx-id]
     :as simple-history-entry}]
-  (str (name attr-key) ": " (get simple-history-entry attr-key) "<br>"
+  (str (auto-name attr-key) ": " (get simple-history-entry attr-key) "<br>"
        "vt: " valid-time "<br>"
        "tt: " tx-time "<br>"
        "tx-id: " tx-id "<br>"
        "hash: " content-hash))
 
 (defn calc-plotly-trace--attr [attr-key eid simple-history]
-  {:name (name eid)
+  {:name (auto-name eid)
    :type "scatter"
    :text (map (partial attr-info-str attr-key) simple-history)
    :x (map :crux.db/valid-time simple-history)
@@ -31,7 +34,7 @@
        "tx-id" tx-id))
 
 (defn calc-plotly-trace--tx-scatter [eid txes]
-  {:name (name eid)
+  {:name (auto-name eid)
    :mode "markers"
    :type "scatter"
    :text (map tx-info-str txes)

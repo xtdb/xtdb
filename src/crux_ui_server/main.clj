@@ -41,6 +41,7 @@
 
 (defmulti handler
   (fn [{:keys [uri] :as req}]
+    (println ::uri uri)
     (some-> (bidi/match-route @routes uri) :handler)))
 
 (defmethod handler ::home [req]
