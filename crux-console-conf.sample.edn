@@ -1,3 +1,5 @@
-{:frontend-port 5000
- :embed-crux false
- :crux-http-server-port 8080}
+{:console/frontend-port      5000
+ :console/embed-crux         false
+ :console/routes-prefix      "/console"
+ :console/crux-node-url-base "localhost:8080/crux"
+ :console/crux-http-port     8080}

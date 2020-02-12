@@ -7,8 +7,8 @@
 (def routes-prefix (atom ""))
 
 (defn console-assets-frame [^IPersistentMap config]
-  (let [routes-prefix (:routes-prefix config)
-        port          (:crux-http-server-port config)]
+  (let [routes-prefix (:console/routes-prefix config)
+        port          (:console/crux-http-port config)]
     {:title                    "Crux Console"
      :lang                     "en"
      :theme-color              "hsl(32, 91%, 54%)"

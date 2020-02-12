@@ -3,14 +3,14 @@
   (:require [aleph.http :as http]
             [bidi.bidi :as bidi]
             [crux-ui-server.crux-auto-start :as crux-auto-start]
+            [crux-ui-server.config :as config]
             [clojure.tools.logging :as log]
             [crux-ui-server.pages :as pages]
             [clojure.java.io :as io]
             [clojure.string :as s]
-            [clojure.edn :as edn]
             [clojure.pprint :as pprint])
   (:gen-class)
-  (:import (java.io Closeable File PushbackReader IOException FileNotFoundException)))
+  (:import (java.io Closeable)))
 
 (defonce closables (atom {}))
 
@@ -98,61 +98,7 @@
     (reset! closables {})))
 
 
-(defn- fix-key [[k v]]
-  [(cond-> k
-     (and (string? k) (.startsWith k "--"))
-     (subs 2))
-   v])
-
-(defn- parse-args [args-map]
-  (let [w-norm-keys (into {} (map fix-key args-map))
-        w-kw-keys (into {} (map (fn [[k v]] [(keyword k) v]) w-norm-keys))
-        w-parsed (into {} (map (fn [[k v]] [k (cond-> v (string? v) read-string)]) w-kw-keys))]
-    w-parsed))
-
-(assert
-  (= {:frontend-port 5000,
-      :embed-crux false,
-      :crux-http-server-port 8080}
-     (parse-args
-       {"--frontend-port"         "5000"
-        "--embed-crux"            "false"
-        "--crux-http-server-port" "8080"})))
-
-(defn load-edn
-  "Load edn from an io/reader source (filename or io/resource)."
-  [source]
-  (try
-    (with-open [r (io/reader source)]
-      (edn/read (PushbackReader. r)))
-    (catch IOException e
-      (printf "Couldn't open '%s': %s\n" source (.getMessage e)))
-    (catch RuntimeException e
-      (printf "Error parsing edn file '%s': %s\n" source (.getMessage e)))))
-
-(def ^:private default-conf-name "crux-console-conf.edn")
-
-(defn- try-load-conf [^String user-conf-filename]
-  (if (and user-conf-filename
-           (not (.exists (io/as-file user-conf-filename))))
-    (throw (FileNotFoundException. (str "file " user-conf-filename " not found"))))
-  (let [conf-file-name (or user-conf-filename default-conf-name)
-        file ^File (io/as-file conf-file-name)]
-    (when (.exists file)
-      (println "loading conf from " user-conf-filename)
-      (load-edn file))))
-
-(defn- calc-conf [args]
-  (let [conf-filename (get args "--conf-file")
-        args          (dissoc args "--conf-file")]
-    (merge {:frontend-port         5000
-            :embed-crux            false
-            :routes-prefix         "/console"
-            :crux-http-server-port 8080}
-           (try-load-conf conf-filename)
-           (parse-args args))))
-
-(defn- start-servers [{:keys [frontend-port embed-crux] :as conf}]
+(defn- start-servers [{:keys [console/frontend-port console/embed-crux] :as conf}]
   (swap! closables assoc :frontend (http/start-server handler {:port frontend-port}))
   (if embed-crux
     (swap! closables merge (crux-auto-start/try-start-servers conf))))
@@ -165,10 +111,10 @@
    --crux-http-server-port 8080"
   [& {:as args}]
   (.addShutdownHook (Runtime/getRuntime) (Thread. #'stop-servers))
-  (let [conf (calc-conf args)]
-    (reset! routes (calc-routes (:routes-prefix conf)))
+  (let [conf (config/calc-conf args)]
+    (reset! routes (calc-routes (:console/routes-prefix conf)))
     (reset! config conf)
-    (reset! pages/routes-prefix (:routes-prefix conf))
+    (reset! pages/routes-prefix (:console/routes-prefix conf))
     (println
       (str "starting console server w conf: \n"
            (with-out-str (pprint/pprint conf))))

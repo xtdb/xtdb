@@ -15,12 +15,12 @@
      "Origin" "Accept" "Authorization"]
     :access-control-allow-methods [:get :options :head :post]]})
 
-(defn try-start-servers [{:keys [embed-crux crux-http-server-port]}]
+(defn try-start-servers [{:keys [console/embed-crux console/crux-http-port]}]
   (try
     (let [start-node (requiring-resolve 'crux.api/start-node)
           start-http-server (requiring-resolve 'crux.http-server/start-http-server)
           node (start-node node-opts)
-          http-opts (assoc http-opts :server-port crux-http-server-port)
+          http-opts (assoc http-opts :server-port crux-http-port)
           crux-http-server (start-http-server node http-opts)]
       {:crux-node node
        :crux-http-server crux-http-server})
