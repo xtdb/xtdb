@@ -138,7 +138,10 @@
   "Provides API access to Crux."
 
   (at [node] [node bitemp-inst] [node bitemp-inst timeout])
-  (open-snapshot-at [node] [node bitemp-inst] [node bitemp-inst timeout])
+  (open-snapshot-at
+    ^crux.api.ISnapshot [node]
+    ^crux.api.ISnapshot [node bitemp-inst]
+    ^crux.api.ISnapshot [node bitemp-inst timeout])
 
   (db
     [node]
@@ -218,17 +221,23 @@
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes"))
 
+(defn- ->bitemp-inst [maybe-inst]
+  (cond
+    (instance? IBitemporalInstant maybe-inst) maybe-inst
+    (map? maybe-inst) (map->BitemporalInstant maybe-inst)
+    :else maybe-inst))
+
 (extend-protocol PCruxNode
   ICruxAPI
   (at
     ([this] (.at this))
-    ([this bitemp-inst] (.at this bitemp-inst))
-    ([this bitemp-inst timeout] (.at this bitemp-inst timeout)))
+    ([this bitemp-inst] (.at this (->bitemp-inst bitemp-inst)))
+    ([this bitemp-inst timeout] (.at this (->bitemp-inst bitemp-inst) timeout)))
 
   (open-snapshot-at
     ([this] (.openSnapshotAt this))
-    ([this bitemp-inst] (.openSnapshotAt this bitemp-inst))
-    ([this bitemp-inst timeout] (.openSnapshotAt this bitemp-inst timeout)))
+    ([this bitemp-inst] (.openSnapshotAt this (->bitemp-inst bitemp-inst)))
+    ([this bitemp-inst timeout] (.openSnapshotAt this (->bitemp-inst bitemp-inst) timeout)))
 
   (db
     ([this] (.db this))
