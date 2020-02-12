@@ -83,7 +83,11 @@
   qa/try-parse-edn-string)
 
 (defn scalar? [v]
-  (or (string? v) (number? v) (keyword? v)))
+  (or (string? v)
+      (uuid? v)
+      (boolean? v)
+      (number? v)
+      (keyword? v)))
 
 (defmulti make-tree
   (fn [m]
@@ -128,21 +132,6 @@
 ; (make-tree [0 011])
 
 ; (sequential? [0 12 3])
-
-
-
-(rf/reg-sub
-  :subs.query/result-tree
-  :<- [:subs.query/result]
-  (fn [result]
-    (try
-      (if (< (count result) 2)
-        {:title "results"
-         :children (make-tree (first result))}
-        {:title "results"
-         :children (make-tree result)})
-      (catch js/Error e
-        {:title "Failed to produce a tree"}))))
 
 (rf/reg-sub
   :subs.query/result-count
@@ -211,6 +200,22 @@
         (if (:full-results? q-info)
           (map first q-res)
           (map #(zipmap attr-vec %) q-res))))))
+
+(rf/reg-sub
+  :subs.query/result-tree
+  :<- [:subs.query/results-maps]
+  (fn [result]
+    (try
+      (if (< (count result) 2)
+        {:title "Result"
+         :children (make-tree (first result))}
+        {:title "Results"
+         :children (make-tree result)})
+      (catch js/Error e
+        {:title "Failed to produce a tree"}))))
+
+(comment
+  (make-tree @(rf/subscribe [:subs.query/results-maps])))
 
 (rf/reg-sub
   :subs.query/results-table
