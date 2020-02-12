@@ -2,7 +2,7 @@
   (:require [crux.bus :as bus]
             [crux.metrics.dropwizard :as dropwizard]))
 
-(defn assign-query-timer
+(defn assign-listeners
   [registry {:crux.node/keys [bus]}]
   (let [!timer-store (atom {})
         query-timer (dropwizard/timer registry ["query" "timer"])]
@@ -14,8 +14,5 @@
               (fn [event]
                 (dropwizard/stop (get @!timer-store (:crux.query/query-id event)))
                 (swap! !timer-store dissoc (:crux.query/query-id event))))
-    query-timer))
-
-(defn assign-listeners
-  [registry deps]
-  {:query-timer (assign-query-timer registry deps)})
+    {:query-timer query-timer
+     :current-query-count (dropwizard/gauge registry ["query" "current-count"] (fn [] (count @!timer-store)))}))
