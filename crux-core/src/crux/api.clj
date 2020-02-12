@@ -50,7 +50,7 @@
 (s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defn- conform-tx-ops  [tx-ops]
+(defn- conform-tx-ops [tx-ops]
   (->> tx-ops
        (mapv
         (fn [tx-op]
@@ -62,7 +62,8 @@
 (defrecord BitemporalInstant []
   IBitemporalInstant
   (validTime [this] (:crux.db/valid-time this))
-  (transactionTime [this] (:crux.tx/tx-time this)))
+  (transactionTime [this] (:crux.tx/tx-time this))
+  (transactionId [this] (:crux.tx/tx-id this)))
 
 (defprotocol PReadDocumentsAPI
   (document [this content-hash]

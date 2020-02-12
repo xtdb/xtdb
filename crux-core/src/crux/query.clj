@@ -1209,6 +1209,11 @@
   (historyAscending [this eid] (history-ascending this eid))
   (historyDescending [this eid] (history-descending this eid))
 
+  IBitemporalInstant
+  (validTime [{::db/keys [valid-time]}] valid-time)
+  (transactionTime [{::tx/keys [tx-time]}] tx-time)
+  (transactionId [{::tx/keys [tx-id]}] tx-id)
+
   Closeable
   (close [_] (.close kv-snapshot)))
 
@@ -1258,6 +1263,7 @@
   IBitemporalInstant
   (validTime [{::db/keys [valid-time]}] valid-time)
   (transactionTime [{::tx/keys [tx-time]}] tx-time)
+  (transactionId [{::tx/keys [tx-id]}] tx-id)
 
   ;; HACK backwards compatibility
   ICruxDatasource

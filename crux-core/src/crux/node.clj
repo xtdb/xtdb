@@ -48,8 +48,12 @@
    (cio/with-read-lock lock
      (ensure-node-open this)
      (let [latest-tx (.latestCompletedTx this)
-           bitemp-inst (-> {::db/valid-time (or (.validTime bitemp-inst) (Date.))
-                            ::tx/tx-time (or (.transactionTime bitemp-inst) (::tx/tx-time latest-tx))}
+           tx-time (.transactionTime bitemp-inst)
+           tx-id (.transactionId bitemp-inst)
+           bitemp-inst (-> (merge {::db/valid-time (or (.validTime bitemp-inst) (Date.))}
+                                  (if (or tx-time tx-id)
+                                    {::tx/tx-time tx-time, ::tx/tx-id tx-id}
+                                    latest-tx))
                            (api/map->BitemporalInstant))
            _ (tx/await-tx indexer bitemp-inst timeout)]
 
@@ -172,8 +176,8 @@
   (awaitTxTime [{::keys [indexer] :as this} tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
-          :crux.tx/tx-time)))
+      (-> (tx/await-tx indexer {::tx/tx-time tx-time} (or timeout (:crux.tx-log/await-tx-timeout options)))
+          ::tx/tx-time)))
 
   (awaitTx [{::keys [indexer] :as this} submitted-tx timeout]
     (cio/with-read-lock lock

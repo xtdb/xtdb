@@ -441,26 +441,15 @@
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
    :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/document-store :crux.node/object-store :crux.node/bus]})
 
-(defn await-tx [indexer {::keys [tx-id] :as tx} timeout]
+(defn await-tx [indexer {::keys [tx-id tx-time] :as tx} timeout]
   (let [seen-tx (atom nil)]
     (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
                            (reset! seen-tx latest-completed-tx)
                            (or (nil? latest-completed-tx)
-                               (pos? (compare tx-id (:crux.tx/tx-id latest-completed-tx)))))
+                               (and tx-id (pos? (compare tx-id (:crux.tx/tx-id latest-completed-tx))))
+                               (and tx-time (pos? (compare tx-time (:crux.tx/tx-time latest-completed-tx))))))
                         timeout)
       @seen-tx
       (throw (TimeoutException.
               (str "Timed out waiting for: " (cio/pr-edn-str tx)
-                   " index has: " (cio/pr-edn-str @seen-tx)))))))
-
-(defn await-tx-time [indexer tx-time timeout]
-  (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
-                           (reset! seen-tx latest-completed-tx)
-                           (or (nil? latest-completed-tx)
-                               (pos? (compare tx-time (:crux.tx/tx-time latest-completed-tx)))))
-                        timeout)
-      @seen-tx
-      (throw (TimeoutException.
-              (str "Timed out waiting for: " (cio/pr-edn-str tx-time)
                    " index has: " (cio/pr-edn-str @seen-tx)))))))
