@@ -51,7 +51,7 @@
          {::event-log-kv {:start-fn start-event-log-kv
                           :args {::event-log-kv-store
                                  {:doc "Key/Value store to use for standalone event-log persistence."
-                                  :default 'crux.kv.rocksdb/kv
+                                  :default 'crux.kv.memdb/kv
                                   :crux.config/type :crux.config/module}
                                  ::event-log-dir
                                  {:doc "Directory used to store the event-log and used for backup/restore."

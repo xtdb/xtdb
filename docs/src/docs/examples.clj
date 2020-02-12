@@ -13,9 +13,7 @@
 ;; tag::start-standalone-node[]
 (defn start-standalone-node ^crux.api.ICruxAPI [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
-                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
                     :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
 
 (comment ; which can be used as
@@ -31,9 +29,7 @@
 ;; tag::start-standalone-http-node[]
 (defn start-standalone-http-node [port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
                     :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))
                     :crux.http-server/port port}))
 ;; end::start-standalone-http-node[]

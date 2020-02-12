@@ -50,7 +50,7 @@ for the other topologies, `crux.node`:
 [#table-conversion%header,cols="d,d"]
 |===
 |Property|Default Value
-|`:crux.node/kv-store`|*`'crux.kv.rocksdb/kv`*
+|`:crux.node/kv-store`|*`'crux.kv.memdb/kv`*
 |`:crux.node/object-store`|*`'crux.object-store/kv-object-store`*
 |===
 
@@ -81,7 +81,7 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,a
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Property|Description|Default Value
-|`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.rocksdb/kv*
+|`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.memdb/kv*
 |`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/eventlog-1"`|
 |`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *false*
 |===
@@ -95,7 +95,7 @@ include::./deps.edn[tags=CruxDep]
 [#standalone-start]
 *Getting started*
 
-The following code creates a node which runs completely within memory (with both the event-log store and db store using `crux.kv.memdb/kv`):
+The following code creates a default `crux.standalone` node which runs completely within memory (with both the event-log store and db store using `crux.kv.memdb/kv`):
 [source,clj]
 ----
 include::./src/docs/examples.clj[tags=include-crux-api]
@@ -113,8 +113,8 @@ include::./src/docs/examples.clj[tags=close-node]
 [#config-rocksdb]
 == RocksDB
 
-RocksDB is used, by default, as Crux's primary store (in place of the in memory kv store in the example above).
-In order to use RocksDB within crux, however, you must first add RocksDB as a project dependency:
+RocksDB is often used as Crux's primary store (in place of the in-memory kv store in the example above).
+In order to use RocksDB within Crux, however, you must first add RocksDB as a project dependency:
 
 [#rocksdep]
 *Project Dependency*
