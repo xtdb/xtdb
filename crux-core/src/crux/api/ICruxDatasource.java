@@ -12,6 +12,7 @@ import clojure.lang.Keyword;
  * Represents the database as of a specific valid and
  * transaction time.
  */
+@Deprecated
 public interface ICruxDatasource {
     /**
      * Returns the document map for an entity.

@@ -16,7 +16,8 @@
             [crux.fixtures.api :as fapi]
             [crux.fixtures.doc-store :as ds]
             [crux.db :as db]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.tx :as tx])
   (:import crux.api.NodeOutOfSyncException
            java.util.Date
            java.time.Duration
@@ -33,10 +34,7 @@
   (t/testing "JDBC Node"
     ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Remote API"
-    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
-                       fapi/with-node
-                       fh/with-http-client])
-     f))
+    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server fapi/with-node fh/with-http-client]) f))
   (t/testing "Kafka and Remote Doc Store"
     ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
 
@@ -61,9 +59,9 @@
 (t/deftest test-can-use-crux-ids
   (let [id #crux/id :https://adam.com
         doc {:crux.db/id id, :name "Adam"}
-        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.awaitTx *api* submitted-tx nil)
-    (t/is (.entity (.db *api*) id))))
+        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+
+    (t/is (-> (api/at *api* submitted-tx) (api/entity id)))))
 
 (t/deftest test-single-id
   (let [valid-time (Date.)
@@ -100,7 +98,7 @@
 
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
-        (t/is (= submitted-tx (:crux.tx/latest-completed-tx status-map))))
+        (t/is (= submitted-tx (.latestCompletedTx *api*))))
 
       (t/testing "query"
         (t/is (= #{[:ivan]} (.q (.db *api*)
@@ -159,10 +157,10 @@
         (let [entity-tx (.entityTx (.db *api*) :ivan)
               ivan {:crux.db/id :ivan :name "Ivan"}
               ivan-crux-id (c/new-id ivan)]
-          (t/is (= (merge submitted-tx
-                          {:crux.db/id           (str (c/new-id :ivan))
-                           :crux.db/content-hash (str ivan-crux-id)
-                           :crux.db/valid-time   valid-time})
+          (t/is (= (merge (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                          {::db/id (str (c/new-id :ivan))
+                           ::db/content-hash (str ivan-crux-id)
+                           ::db/valid-time valid-time})
                    entity-tx))
           (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
           (t/is (= {ivan-crux-id ivan} (.documents *api* #{(:crux.db/content-hash entity-tx)})))
@@ -176,8 +174,8 @@
         (with-open [tx-log-iterator (.openTxLog *api* nil false)]
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
-            (t/is (= [(assoc submitted-tx
-                             :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+            (t/is (= [(merge (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                             {:crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]]})]
                      result))
             (t/is (realized? result))))
 
@@ -185,8 +183,8 @@
           (with-open [tx-log-iterator (.openTxLog *api* nil true)]
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (not (realized? result)))
-              (t/is (= [(assoc submitted-tx
-                               :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+              (t/is (= [(merge (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                               {:crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]]})]
                        result))
               (t/is (realized? result)))))
 
@@ -256,8 +254,8 @@
       (t/is (false? (.hasTxCommitted *api* version-2-submitted-tx)))
       (with-open [tx-log-iterator (.openTxLog *api* nil false)]
         (let [result (iterator-seq tx-log-iterator)]
-          (t/is (= [(assoc submitted-tx
-                           :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+          (t/is (= [(merge (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                           {:crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]]})]
                    result))))
 
       (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]

@@ -4,8 +4,8 @@
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [clojure.tools.logging :as log])
-  (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ITxLog]
+  (:import (crux.api Crux ICruxAPI IQueryAPI IReadDocumentsAPI ICruxDatasource
+                     IBitemporalInstant ICruxIngestAPI ICruxAsyncIngestAPI)
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -59,8 +59,87 @@
            tx-op)))
        (mapv vec)))
 
+(defrecord BitemporalInstant []
+  IBitemporalInstant
+  (validTime [this] (:crux.db/valid-time this))
+  (transactionTime [this] (:crux.tx/tx-time this)))
+
+(defprotocol PReadDocumentsAPI
+  (document [this content-hash]
+    "Reads a document from the document store based on its
+  content hash.")
+
+  (documents [this content-hashes]
+    "Reads the set of documents from the document store based on their
+  respective content hashes. Returns a map content-hash->document"))
+
+(extend-protocol PReadDocumentsAPI
+  IReadDocumentsAPI
+  (document [this content-hash] (.document this content-hash))
+  (documents [this content-hash-set] (.documents this content-hash-set)))
+
+(defprotocol PQueryAPI
+  (query [db query]
+    "TODO")
+
+  (entity
+    [db eid]
+    ^:deprecated [db kv-snapshot eid]
+    "queries a document map for an entity.
+  eid is an object which can be coerced into an entity id.
+  returns the entity document map.")
+
+  (entity-tx [db eid]
+    "returns the transaction details for an entity. Details
+  include tx-id and tx-time.
+  eid is an object that can be coerced into an entity id.")
+
+  (history-ascending
+    [db eid]
+    ^:deprecated [db kv-snapshot eid]
+    "Retrieves entity history lazily in chronological order
+  from and including the valid time of the db while respecting
+  transaction time. Includes the documents.")
+
+  (history-descending
+    [db eid]
+    ^:deprecated [db kv-snapshot eid]
+    "Retrieves entity history lazily in reverse chronological order
+  from and including the valid time of the db while respecting
+  transaction time. Includes the documents."))
+
+(extend-protocol PQueryAPI
+  IQueryAPI
+  (query [this query] (.query this query))
+  (entity
+    ([this eid] (.entity this eid))
+    ;; HACK backward compatibility
+    ([this kv-snapshot eid] (.entity ^ICruxDatasource this kv-snapshot eid)))
+
+  (entity-tx [this eid] (.entityTx this eid))
+  (history-ascending [this eid] (.historyAscending this eid))
+  (history-descending [this eid] (.historyDescending this eid)))
+
+;; HACK temporarily including this so that users can still call old arities on ICruxDatasources
+(extend-protocol PQueryAPI
+  ICruxDatasource
+  (query [this query] (.q this query))
+
+  (entity
+    ([this eid] (.entity this eid))
+    ([this kv-snapshot eid] (.entity this kv-snapshot eid)))
+
+  (entity-tx [this eid] (.entityTx this eid))
+
+  (history-ascending [this kv-snapshot eid] (.historyAscending this kv-snapshot eid))
+  (history-descending [this kv-snapshot eid] (.historyDescending this kv-snapshot eid)))
+
 (defprotocol PCruxNode
   "Provides API access to Crux."
+
+  (at [node] [node bitemp-inst] [node bitemp-inst timeout])
+  (open-snapshot-at [node] [node bitemp-inst] [node bitemp-inst timeout])
+
   (db
     [node]
     [node ^Date valid-time]
@@ -74,14 +153,6 @@
   as of the valid time and the latest transaction time indexed at or before
   the specified transaction time. Non-blocking. The index may not yet
   contain a transaction with the specified transaction time.")
-
-  (document [node content-hash]
-    "Reads a document from the document store based on its
-  content hash.")
-
-  (documents [node content-hashes-set]
-    "Reads the set of documents from the document store based on their
-  respective content hashes. Returns a map content-hash->document")
 
   (history [node eid]
     "Returns the transaction history of an entity, in reverse
@@ -147,6 +218,97 @@
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes"))
 
+(extend-protocol PCruxNode
+  ICruxAPI
+  (at
+    ([this] (.at this))
+    ([this bitemp-inst] (.at this bitemp-inst))
+    ([this bitemp-inst timeout] (.at this bitemp-inst timeout)))
+
+  (open-snapshot-at
+    ([this] (.openSnapshotAt this))
+    ([this bitemp-inst] (.openSnapshotAt this bitemp-inst))
+    ([this bitemp-inst timeout] (.openSnapshotAt this bitemp-inst timeout)))
+
+  (db
+    ([this] (.db this))
+    ([this ^Date valid-time] (.db this valid-time))
+    ([this ^Date valid-time ^Date transaction-time] (.db this valid-time transaction-time)))
+
+  (history [this eid] (.history this eid))
+
+  (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
+
+  (status [this] (.status this))
+  (tx-committed? [this submitted-tx] (.hasTxCommitted this submitted-tx))
+
+  (sync
+    ([this] (.sync this))
+    ([this timeout] (.sync this timeout))
+    ([this tx-time timeout]
+     (defonce warn-on-deprecated-sync
+       (log/warn "(sync node tx-time <timeout?>) is deprecated, "
+                 "replace with either (at node {:crux.tx/tx-time tx-time} <timeout?>) "
+                 "or, preferably, (at node tx <timeout?>)"))
+     (.awaitTxTime this tx-time timeout)))
+
+  (await-tx
+    ([this submitted-tx] (await-tx this submitted-tx nil))
+    ([this submitted-tx timeout] (.awaitTx this submitted-tx timeout)))
+
+  (await-tx-time
+    ([this tx-time] (await-tx-time this tx-time nil))
+    ([this tx-time timeout] (.awaitTxTime this tx-time timeout)))
+
+  (latest-completed-tx [node] (.latestCompletedTx node))
+  (latest-submitted-tx [node] (.latestSubmittedTx node))
+
+  (attribute-stats [this] (.attributeStats this)))
+
+(defprotocol ^:deprecated PCruxDatasource
+  "Represents the database as of a specific valid and
+  transaction time."
+
+  (new-snapshot ^java.io.Closeable [db]
+     "Returns a new implementation specific snapshot allowing for lazy query results in a
+  try-with-resources block using (q db snapshot query)}.
+  Can also be used for
+  (history-ascending db snapshot  eid) and
+  (history-descending db snapshot  eid)
+  returns an implementation specific snapshot")
+
+  (q
+    [db query]
+    [db snapshot query]
+    "q[uery] a Crux db.
+  query param is a datalog query in map, vector or string form.
+  First signature will evaluate eagerly and will return a set or vector
+  of result tuples.
+  Second signature accepts a db snapshot, see `new-snapshot`.
+  Evaluates *lazily* consequently returns lazy sequence of result tuples.")
+
+  (valid-time [db]
+    "returns the valid time of the db.
+  If valid time wasn't specified at the moment of the db value retrieval
+  then valid time will be time of the latest transaction.")
+
+  (transaction-time [db]
+    "returns the time of the latest transaction applied to this db value.
+  If a tx time was specified when db value was acquired then returns
+  the specified time."))
+
+(extend-protocol PCruxDatasource
+  ICruxDatasource
+  (new-snapshot [this] (.newSnapshot this))
+
+  (q
+    ([this query] (.q this query))
+    ([this snapshot query] (.q this snapshot query)))
+
+  (valid-time [this] (.validTime this))
+  (transaction-time [this] (.transactionTime this)))
+
 (defprotocol PCruxIngestClient
   "Provides API access to Crux ingestion."
   (submit-tx [node tx-ops]
@@ -166,162 +328,10 @@
 
   Returns an iterator of the TxLog"))
 
-(extend-protocol PCruxNode
-  ICruxAPI
-  (db
-    ([this]
-     (.db this))
-    ([this ^Date valid-time]
-     (.db this valid-time))
-    ([this ^Date valid-time ^Date transaction-time]
-     (.db this valid-time transaction-time)))
-
-  (document [this content-hash]
-    (.document this content-hash))
-
-  (documents [this content-hash-set]
-    (.documents this content-hash-set))
-
-  (history [this eid]
-    (.history this eid))
-
-  (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
-
-  (status [this]
-    (.status this))
-
-  (tx-committed? [this submitted-tx]
-    (.hasTxCommitted this submitted-tx))
-
-  (sync
-    ([this]
-     (.sync this nil))
-    ([this timeout]
-     (.sync this timeout))
-
-    ([this tx-time timeout]
-     (defonce warn-on-deprecated-sync
-       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-     (.awaitTxTime this tx-time timeout)))
-
-  (await-tx
-    ([this submitted-tx]
-     (await-tx this submitted-tx nil))
-    ([this submitted-tx timeout]
-     (.awaitTx this submitted-tx timeout)))
-
-  (await-tx-time
-    ([this tx-time]
-     (await-tx-time this tx-time nil))
-    ([this tx-time timeout]
-     (.awaitTxTime this tx-time timeout)))
-
-  (latest-completed-tx [node]
-    (.latestCompletedTx node))
-
-  (latest-submitted-tx [node]
-    (.latestSubmittedTx node))
-
-  (attribute-stats [this]
-    (.attributeStats this)))
-
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
-  (submit-tx [this tx-ops]
-    (.submitTx this (conform-tx-ops tx-ops)))
-
-  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?]
-    (.openTxLog this from-tx-id with-ops?)))
-
-(defprotocol PCruxDatasource
-  "Represents the database as of a specific valid and
-  transaction time."
-
-  (entity
-    [db eid]
-    [db snapshot eid]
-    "queries a document map for an entity.
-  eid is an object which can be coerced into an entity id.
-  returns the entity document map.")
-
-  (entity-tx [db eid]
-    "returns the transaction details for an entity. Details
-  include tx-id and tx-time.
-  eid is an object that can be coerced into an entity id.")
-
-  (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation specific snapshot allowing for lazy query results in a
-  try-with-resources block using (q db  snapshot  query)}.
-  Can also be used for
-  (history-ascending db snapshot  eid) and
-  (history-descending db snapshot  eid)
-  returns an implementation specific snapshot")
-
-  (q
-    [db query]
-    [db snapshot query]
-    "q[uery] a Crux db.
-  query param is a datalog query in map, vector or string form.
-  First signature will evaluate eagerly and will return a set or vector
-  of result tuples.
-  Second signature accepts a db snapshot, see `new-snapshot`.
-  Evaluates *lazily* consequently returns lazy sequence of result tuples.")
-
-  (history-ascending
-    [db snapshot eid]
-    "Retrieves entity history lazily in chronological order
-  from and including the valid time of the db while respecting
-  transaction time. Includes the documents.")
-
-  (history-descending
-    [db snapshot eid]
-    "Retrieves entity history lazily in reverse chronological order
-  from and including the valid time of the db while respecting
-  transaction time. Includes the documents.")
-
-  (valid-time [db]
-    "returns the valid time of the db.
-  If valid time wasn't specified at the moment of the db value retrieval
-  then valid time will be time of the latest transaction.")
-
-  (transaction-time [db]
-    "returns the time of the latest transaction applied to this db value.
-  If a tx time was specified when db value was acquired then returns
-  the specified time."))
-
-(extend-protocol PCruxDatasource
-  ICruxDatasource
-  (entity
-    ([this eid]
-     (.entity this eid))
-    ([this snapshot eid]
-     (.entity this snapshot eid)))
-
-  (entity-tx [this eid]
-    (.entityTx this eid))
-
-  (new-snapshot [this]
-    (.newSnapshot this))
-
-  (q
-    ([this query]
-     (.q this query))
-    ([this snapshot query]
-     (.q this snapshot query)))
-
-  (history-ascending [this snapshot eid]
-    (.historyAscending this snapshot eid))
-
-  (history-descending [this snapshot eid]
-    (.historyDescending this snapshot eid))
-
-  (valid-time
-    [this]
-    (.validTime this))
-
-  (transaction-time [this]
-    (.transactionTime this)))
+  (submit-tx [this tx-ops] (.submitTx this (conform-tx-ops tx-ops)))
+  (open-tx-log ^crux.api.ITxLog [this from-tx-id with-ops?] (.openTxLog this from-tx-id with-ops?)))
 
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."
@@ -333,11 +343,10 @@
 
 (extend-protocol PCruxAsyncIngestClient
   ICruxAsyncIngestAPI
-  (submit-tx-async [this tx-ops]
-    (.submitTxAsync this (conform-tx-ops tx-ops))))
+  (submit-tx-async [this tx-ops] (.submitTxAsync this (conform-tx-ops tx-ops))))
 
 (defn start-node
-  "NOTE: requires any dependendies on the classpath that the Crux modules may need.
+  "NOTE: requires any dependencies on the classpath that the Crux modules may need.
 
   options {:crux.node/topology 'crux.standalone/topology}
 

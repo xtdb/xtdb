@@ -13,14 +13,20 @@
             [crux.memory :as mem]
             [crux.bus :as bus])
   (:import clojure.lang.ExceptionInfo
-           crux.api.ICruxDatasource
+           (crux.api ISnapshot IFixedInstantQueryAPI IBitemporalInstant ICruxDatasource)
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
+           (java.io Closeable)
            java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
            java.util.UUID
            org.agrona.ExpandableDirectByteBuffer))
+
+(create-ns 'crux.tx)
+(alias 'tx 'crux.tx)
+(create-ns 'crux.node)
+(alias 'node 'crux.node)
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -580,7 +586,7 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn pred-constraint [snapshot {::node/keys [object-store]} idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
                                       (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results arg))
@@ -603,9 +609,9 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [::db/valid-time ::tx/tx-time] :as db} {:keys [e a v] :as clause} args]
   (let [entity (get (first args) e)]
-    (when (idx/or-known-triple-fast-path snapshot entity a v valid-time transact-time)
+    (when (idx/or-known-triple-fast-path snapshot entity a v valid-time tx-time)
       [])))
 
 (defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
@@ -640,7 +646,7 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn or-constraint [snapshot {::node/keys [object-store] :as db} idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
                                 (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var)))
@@ -701,7 +707,7 @@
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
-         (fn unification-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn unification-constraint [snapshot {::node/keys [object-store] :as db} idx-id->idx join-keys join-results]
            (let [values (for [arg args]
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
@@ -725,7 +731,7 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn not-constraint [snapshot {::node/keys [object-store] :as db} idx-id->idx join-keys join-results]
            (with-open [snapshot (lru/new-cached-snapshot snapshot false)]
              (let [args (when (seq not-vars)
                           [(->> (for [var not-vars]
@@ -1058,7 +1064,7 @@
    (let [{:keys [where args rules]} (s/conform ::query q)]
      (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
-(defn- build-full-results [{:keys [object-store entity-as-of-idx]} snapshot bound-result-tuple]
+(defn- build-full-results [{:keys [::node/object-store entity-as-of-idx]} snapshot bound-result-tuple]
   (vec (for [^BoundResult bound-result bound-result-tuple
              :let [value (.value bound-result)]]
          (if-let [entity-tx (and (c/valid-id? value)
@@ -1074,7 +1080,7 @@
 
 (defrecord ConformedQuery [q-normalized q-conformed])
 
-(defn- normalize-and-conform-query ^ConformedQuery [conform-cache q]
+(defn- normalize-and-conform-query ^crux.query.ConformedQuery [conform-cache q]
   (let [{:keys [args] :as q} (try
                                (normalize-query q)
                                (catch Exception e
@@ -1097,16 +1103,15 @@
 
 ;; TODO: Move future here to a bounded thread pool.
 (defn q
-  ([{:keys [kv] :as db} ^ConformedQuery conformed-q]
+  ([{:keys [::node/kv-store conform-cache] :as query-api} query]
    (let [start-time (System/currentTimeMillis)
-         q (.q-normalized conformed-q)
          query-future (future
                         (try
-                          (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
-                            (let [result-coll-fn (if (:order-by q)
+                          (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)]
+                            (let [result-coll-fn (if (:order-by query)
                                                    (comp vec distinct)
                                                    set)
-                                  result (result-coll-fn (crux.query/q db snapshot conformed-q))]
+                                  result (result-coll-fn (q query-api snapshot query))]
                               (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                               (log/debug :query-result-size (count result))
                               result))
@@ -1120,7 +1125,7 @@
                             (log/error t "Exception caught while executing query.")
                             t)))
          result (or (try
-                      (deref query-future (or (:timeout q) default-query-timeout) nil)
+                      (deref query-future (or (:timeout query) default-query-timeout) nil)
                       (catch InterruptedException e
                         (future-cancel query-future)
                         (throw e)))
@@ -1131,23 +1136,24 @@
        (throw result)
        result)))
 
-  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot ^ConformedQuery conformed-q]
-   (let [q (.q-normalized conformed-q)
-         q-conformed (.q-conformed conformed-q)
-         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-         stats (idx/read-meta kv :crux.kv/stats)]
-     (log/debug :query (cio/pr-edn-str (-> q
-                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
+  ([{:keys [::node/object-store ::node/kv-store ::db/valid-time ::tx/tx-time conform-cache] :as query-api} snapshot query]
+   (let [query (normalize-and-conform-query conform-cache query)
+         normalized-query (.q-normalized query)
+         conformed-query (.q-conformed query)
+         {:keys [find where args rules offset limit order-by full-results?]} conformed-query
+         stats (idx/read-meta kv-store :crux.kv/stats)]
+     (log/debug :query (cio/pr-edn-str (-> normalized-query
+                                           (assoc :arg-keys (mapv (comp set keys) (:args normalized-query)))
                                            (dissoc :args))))
      (validate-args args)
-     (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time)
+     (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time tx-time)
                               *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
 
            rule-name->rules (rule-name->rules rules)
 
-           db (assoc db :entity-as-of-idx entity-as-of-idx)
+           query-api (assoc query-api :entity-as-of-idx entity-as-of-idx)
            {:keys [n-ary-join
-                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
+                   var->bindings]} (build-sub-query snapshot query-api where args rule-name->rules stats)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
@@ -1164,84 +1170,107 @@
                       :let [bound-result-tuple (for [var find]
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (if full-results?
-                    (build-full-results db snapshot bound-result-tuple)
+                    (build-full-results query-api snapshot bound-result-tuple)
                     (mapv #(.value ^BoundResult %) bound-result-tuple)))
          order-by (cio/external-sort (order-by-comparator find order-by))
          (or offset limit) dedupe
          offset (drop offset)
          limit (take limit))))))
 
-(defn entity-tx
-  ([{:keys [kv] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity-tx snapshot db eid)))
-  ([snapshot {:keys [valid-time transact-time] :as db} eid]
-   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time)))))
+(defn entity-tx [{:keys [::db/valid-time ::tx/tx-time kv-snapshot]} eid]
+  (-> (idx/entities-at kv-snapshot [eid] valid-time tx-time) first c/entity-tx->edn))
 
-(defn entity
-  ([{:keys [kv object-store] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity db snapshot eid)))
-  ([{:keys [kv object-store] :as db} snapshot eid]
-   (let [entity-tx (entity-tx snapshot db eid)]
-     (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
+(defn entity [{:keys [::node/object-store kv-snapshot] :as deps} eid]
+  (let [{:keys [::db/content-hash]} (entity-tx deps eid)]
+    (db/get-single-object object-store kv-snapshot content-hash)))
 
-(defrecord QueryDatasource [kv object-store bus
-                            query-cache conform-cache
-                            valid-time transact-time entity-as-of-idx]
-  ICruxDatasource
+(defn- with-doc [^EntityTx entity-tx, {:keys [kv-snapshot ::node/kv-store ::node/object-store]}]
+  (assoc entity-tx
+    ::db/doc (db/get-single-object object-store kv-snapshot (.content-hash entity-tx))))
+
+(defn history-ascending [{:keys [kv-snapshot ::db/valid-time ::tx/tx-time] :as deps} eid]
+  (->> (idx/entity-history-seq-ascending kv-snapshot eid valid-time tx-time)
+       (map #(with-doc % deps))))
+
+(defn history-descending [{:keys [kv-snapshot ::db/valid-time ::tx/tx-time] :as deps} eid]
+  (->> (idx/entity-history-seq-descending kv-snapshot eid valid-time tx-time)
+       (map #(with-doc % deps))))
+
+(defrecord Snapshot [^Closeable kv-snapshot conform-cache]
+  ISnapshot
+
+  IFixedInstantQueryAPI
+  (entity [this eid] (entity this eid))
+  (entityTx [this eid] (entity-tx this eid))
+
+  (query [this query]
+    (q this kv-snapshot query))
+
+  (historyAscending [this eid] (history-ascending this eid))
+  (historyDescending [this eid] (history-descending this eid))
+
+  Closeable
+  (close [_] (.close kv-snapshot)))
+
+(defn ->snapshot ^crux.api.ISnapshot [{::node/keys [kv-store] :as deps}]
+  (map->Snapshot (assoc deps :kv-snapshot (kv/new-snapshot kv-store))))
+
+(defrecord FixedInstQueryAPI [conform-cache query-cache]
+  IFixedInstantQueryAPI
   (entity [this eid]
-    (entity this eid))
-
-  (entity [this snapshot eid]
-    (entity this snapshot eid))
+    (with-open [snapshot (->snapshot this)]
+      (.entity snapshot eid)))
 
   (entityTx [this eid]
-    (entity-tx this eid))
+    (with-open [snapshot (->snapshot this)]
+      (.entityTx snapshot eid)))
 
-  (newSnapshot [this]
-    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
-
-  (q [this query]
-    (let [conformed-query (normalize-and-conform-query conform-cache query)
-          query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
+  (query [{::node/keys [bus] :as this} query]
+    ;; TODO these bus messages should be sent within the snapshot
+    ;; but we don't know when that query's completed (because it's lazy)
+    ;; so, for now, it's here
+    (let [safe-query (-> (normalize-and-conform-query conform-cache query)
+                         .q-normalized
+                         (dissoc :args))
+          query-id (str (UUID/randomUUID))]
       (when bus
         (bus/send bus {:crux.bus/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (let [ret (q this conformed-query)]
+
+      ;; TODO ideally this would call through to ->snapshot, same as the others
+      ;; but the eager version has different thread behaviour atm
+      (let [ret (q this query)]
         (when bus
           (bus/send bus {:crux.bus/event-type ::completed-query
                          ::query safe-query
                          ::query-id query-id}))
         ret)))
 
-  (q [this snapshot query]
-    ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
-    ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (q this snapshot (normalize-and-conform-query conform-cache query)))
+  (historyAscending [this eid]
+    (with-open [snapshot (->snapshot this)]
+      (vec (.historyAscending snapshot eid))))
 
-  (historyAscending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+  (historyDescending [this eid]
+    (with-open [snapshot (->snapshot this)]
+      (vec (.historyDescending snapshot eid))))
 
-  (historyDescending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-descending snapshot eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+  IBitemporalInstant
+  (validTime [{::db/keys [valid-time]}] valid-time)
+  (transactionTime [{::tx/keys [tx-time]}] tx-time)
 
-  (validTime [_]
-    valid-time)
+  ;; HACK backwards compatibility
+  ICruxDatasource
+  (entity [this kv-snapshot eid] (entity (assoc this :kv-snapshot kv-snapshot) eid))
 
-  (transactionTime [_]
-    transact-time))
+  (newSnapshot [{::node/keys [kv-store]}] (lru/new-cached-snapshot (kv/new-snapshot kv-store) true))
 
-(defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
-  (->QueryDatasource kv
-                     object-store
-                     bus
-                     (lru/get-named-cache kv ::query-cache)
-                     (lru/get-named-cache kv ::conform-cache)
-                     valid-time
-                     transact-time
-                     nil))
+  (q [this query] (.query this query))
+  (q [this snapshot query] (q this snapshot query))
+
+  (historyAscending [this kv-snapshot eid] (history-ascending (assoc this :kv-snapshot kv-snapshot) eid))
+  (historyDescending [this kv-snapshot eid] (history-descending (assoc this :kv-snapshot kv-snapshot) eid)))
+
+(defn ->query-api [{:keys [::node/kv-store] :as deps}]
+  (map->FixedInstQueryAPI (merge deps {:query-cache (lru/get-named-cache kv-store ::query-cache)
+                                       :conform-cache (lru/get-named-cache kv-store ::conform-cache)})))

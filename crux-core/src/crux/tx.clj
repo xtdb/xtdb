@@ -22,6 +22,9 @@
            [java.util.concurrent ExecutorService Executors TimeoutException TimeUnit]
            java.util.Date))
 
+(create-ns 'crux.node)
+(alias 'node 'crux.node)
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private date? (partial instance? Date))
@@ -269,7 +272,10 @@
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db kv-store object-store nil tx-time tx-time)
+        db (q/->query-api {::node/kv-store kv-store
+                           ::node/object-store  object-store
+                           ::db/valid-time tx-time
+                           ::tx-time tx-time})
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)

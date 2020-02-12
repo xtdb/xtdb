@@ -8,16 +8,28 @@ import java.time.Duration;
 import java.util.Set;
 import clojure.lang.Keyword;
 
+// TODO rename to ICruxNode?
 /**
  *  Provides API access to Crux.
  */
-public interface ICruxAPI extends ICruxIngestAPI, Closeable {
+public interface ICruxAPI extends ICruxIngestAPI, IQueryAPI, IReadDocumentsAPI, Closeable {
+    // TODO doc
+    public IFixedInstantQueryAPI at();
+    public IFixedInstantQueryAPI at(IBitemporalInstant inst);
+    public IFixedInstantQueryAPI at(IBitemporalInstant inst, Duration timeout);
+
+    // TODO doc
+    public ISnapshot openSnapshotAt();
+    public ISnapshot openSnapshotAt(IBitemporalInstant inst);
+    public ISnapshot openSnapshotAt(IBitemporalInstant inst, Duration timeout);
+
     /**
      * Returns a db as of now. Will return the latest consistent
      * snapshot of the db currently known. Does not block.
      *
      * @return the database.
      */
+    @Deprecated
     public ICruxDatasource db();
 
     /**
@@ -28,6 +40,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param validTime    the valid time.
      * @return             the database.
      */
+    @Deprecated
     public ICruxDatasource db(Date validTime);
 
     /**
@@ -38,27 +51,9 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param transactionTime the transaction time.
      * @return                the database.
      */
+    @Deprecated
     public ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
-    /**
-     *  Reads a document from the document store based on its
-     *  content hash.
-     *
-     * @param contentHash an object that can be coerced into a content
-     * hash.
-     * @return            the document map.
-     */
-    public Map<Keyword, Object> document(Object contentHash);
-
-    /**
-     *  Reads a document from the document store based on its
-     *  content hash.
-     *
-     * @param contentHashSet a set of objects that can be coerced into a content
-     * hashes.
-     * @return            a map from hashable objects to the corresponding documents.
-     */
-    public Map<String,Map<Keyword,?>> documents(Set<?> contentHashSet);
 
     /**
      * Returns the transaction history of an entity, in reverse
@@ -68,8 +63,8 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the transaction history.
      */
+    // TODO elaborate about corrections contents
     public List<Map<Keyword,Object>> history(Object eid);
-    // todo elaborate about corrections contents
 
     /**
      * Returns the transaction history of an entity, ordered by valid
@@ -87,8 +82,8 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param transactionTimeEnd   the start transaction time or null, inclusive.
      * @return                     the transaction history.
      */
+    // TODO elaborate
     public List<Map<Keyword,?>> historyRange(Object eid, Date validTimeStart, Date transactionTimeStart, Date validTimeEnd, Date transactionTimeEnd);
-    // todo elaborate
 
     /**
      * Returns the status of this node as a map.
@@ -96,18 +91,27 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return the status map.
      */
     public Map<Keyword,?> status();
-    // TODO elaborate
-
 
     /**
      * Checks if a submitted tx was successfully committed.
      *
-     * @param submittedTx must be a map returned from {@link
-     * #submitTx(List txOps)}.
+     * @param submittedTx must be a map returned from {@link #submitTx(List txOps)}.
      * @return true if the submitted transaction was committed, false if it was not committed.
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
     public boolean hasTxCommitted(Map<Keyword,?> submittedTx) throws NodeOutOfSyncException;
+
+
+    /**
+     * Blocks until the node has caught up indexing to the latest tx available
+     * at the time this method is called. Will throw an exception on timeout.
+     * The returned date is the latest transaction time indexed by this node.
+     * This can be used as the second parameter in {@link #db(Date validTime, Date transactionTime)}
+     * for consistent reads.
+     *
+     * @return the latest known transaction time.
+     */
+    public IBitemporalInstant sync();
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
@@ -119,10 +123,11 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction time.
      */
+    // TODO I'd like to return IBitemporalInstant from here, that'd be a breaking change
     public Date sync(Duration timeout);
 
     /**
-     * @deprecated see {@link #awaitTxTime}
+     * @deprecated see {@link #at}
      */
     @Deprecated
     public Date sync(Date txTime, Duration timeout);
@@ -136,6 +141,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction time.
      */
+    @Deprecated
     public Date awaitTxTime(Date txTime, Duration timeout);
 
     /**
@@ -147,6 +153,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction.
      */
+    @Deprecated
     public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
 
 
