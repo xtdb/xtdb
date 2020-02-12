@@ -69,6 +69,7 @@
     :else "text/plain"))
 
 (defmethod handler ::static [{:keys [uri] :as req}]
+  (println ::static uri)
   (let [relative-uri (s/replace uri (re-pattern (str "^" @pages/routes-prefix)) "")
         relative-uri (s/replace relative-uri #"^/" "")
         resource (io/resource relative-uri)]
@@ -97,11 +98,11 @@
       (.close closable))
     (reset! closables {})))
 
-
 (defn- start-servers [{:keys [console/frontend-port console/embed-crux] :as conf}]
   (swap! closables assoc :frontend (http/start-server handler {:port frontend-port}))
   (if embed-crux
     (swap! closables merge (crux-auto-start/try-start-servers conf))))
+
 
 (defn -main
   "Accepted args

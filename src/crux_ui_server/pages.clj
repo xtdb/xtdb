@@ -6,9 +6,9 @@
 
 (def routes-prefix (atom ""))
 
-(defn console-assets-frame [^IPersistentMap config]
-  (let [routes-prefix (:console/routes-prefix config)
-        port          (:console/crux-http-port config)]
+(defn console-assets-frame ^IPersistentMap
+  [^IPersistentMap config]
+  (let [routes-prefix (:console/routes-prefix config)]
     {:title                    "Crux Console"
      :lang                     "en"
      :theme-color              "hsl(32, 91%, 54%)"
@@ -18,23 +18,24 @@
      :link-image-src           (str routes-prefix "/static/img/cube-on-white-512.png")
      :service-worker           (str routes-prefix "/service-worker-for-console.js")
      :favicon                  (str routes-prefix "/static/img/cube-on-white-120.png")
-     :doc-attrs                {:data-routes-prefix routes-prefix
-                                :data-crux-http-port (str port)}
+     :doc-attrs                {:data-routes-prefix  routes-prefix
+                                :data-crux-base-url  (:console/crux-node-url-base config)
+                                :data-crux-http-port (str (:console/crux-http-port config))}
      :sw-default-url           (str routes-prefix "/app")
      :stylesheet-async
-     [(str routes-prefix "/static/styles/reset.css")
-      (str routes-prefix "/static/styles/react-input-range.css")
-      (str routes-prefix "/static/styles/react-ui-tree.css")
-      (str routes-prefix "/static/styles/codemirror.css")
-      (str routes-prefix "/static/styles/monokai.css")
-      (str routes-prefix "/static/styles/eclipse.css")]
-     :script   (str routes-prefix "/static/crux-ui/compiled/main.js")
-     :manifest (str routes-prefix "/static/manifest-console.json")
+                               [(str routes-prefix "/static/styles/reset.css")
+                                (str routes-prefix "/static/styles/react-input-range.css")
+                                (str routes-prefix "/static/styles/react-ui-tree.css")
+                                (str routes-prefix "/static/styles/codemirror.css")
+                                (str routes-prefix "/static/styles/monokai.css")
+                                (str routes-prefix "/static/styles/eclipse.css")]
+     :script                   (str routes-prefix "/static/crux-ui/compiled/main.js")
+     :manifest                 (str routes-prefix "/static/manifest-console.json")
      :head-tags
-     [[:style#_stylefy-constant-styles_]
-      [:style#_stylefy-styles_]
-      [:meta {:name "google" :content "notranslate"}]]
-     :body [:body [:div#app preloader/root]]}))
+                               [[:style#_stylefy-constant-styles_]
+                                [:style#_stylefy-styles_]
+                                [:meta {:name "google" :content "notranslate"}]]
+     :body                     [:body [:div#app preloader/root]]}))
 
 (defn gen-console-page [req config]
   (pr/render-page (console-assets-frame config)))

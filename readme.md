@@ -1,6 +1,6 @@
 # Crux Console
 
-Console is a webapp that gives allows you to query Crux and see data from different perpectives.
+Console is a web app that gives allows you to query Crux and see data from different perpectives.
 ![Screenshot of Crux Console](./resources/screenshot-1.png)
 
 It can be used as a standalone analytics tool or as an educational tool.
@@ -8,7 +8,7 @@ It can be used as a standalone analytics tool or as an educational tool.
 ## Educational use
 Console comes with a set of example queries but you can make it load your own
 set by providing a url param `examples-gist=gist-raw-url`, like
-[console.crux.cloud/console?examples-gist=https://gist.githubusercontent.com/spacegangster/b68f72e3c81524a71af1f3033ea7507e/raw/5fb55fe8e766245a3338f6e5c508ffbbe824900f/examples.edn](http://console.crux.cloud/console?examples-gist=https://gist.githubusercontent.com/spacegangster/b68f72e3c81524a71af1f3033ea7507e/raw/5fb55fe8e766245a3338f6e5c508ffbbe824900f/examples.edn)
+[here](http://console.crux.cloud/console?examples-gist=https://gist.githubusercontent.com/spacegangster/b68f72e3c81524a71af1f3033ea7507e/raw/5fb55fe8e766245a3338f6e5c508ffbbe824900f/examples.edn)
 This way Console will import this file.
 Important note : link must point to raw gist content.
 Preset queries example:
@@ -20,6 +20,21 @@ Preset queries example:
   :query [[:crux.tx/put {:crux.db/id 33 :title "Company 3"}]]}]
 ```
 
+## Deployment scenarios
+Can be used as an analytics tool
+For nginx – the following redirects may be used
+
+```
+# in a server block
+location /console {                                                                                                                                            
+        # don't forget about at least basic auth
+        proxy_pass http://localhost:5000;                                                                                                                      
+}                                                                                                                                                              
+location /crux {                                                                                                                                               
+        rewrite ^(/crux)(/.*)$ $2 break;                                                                                                                       
+        proxy_pass http://localhost:4889/;
+}
+```
 
 ## How to build or develop
 

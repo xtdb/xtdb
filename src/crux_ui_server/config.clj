@@ -4,11 +4,11 @@
   (:import (java.io FileNotFoundException PushbackReader IOException File)))
 
 (def ^:private defaults
-  {:console/frontend-port  5000
-   :console/embed-crux     false
-   :console/routes-prefix  "/console"
-   :console/crux-node-url-base  "localhost:8080/crux"
-   :console/crux-http-port 8080})
+  {:console/frontend-port      5000
+   :console/embed-crux         false
+   :console/routes-prefix      "/console"
+   :console/crux-node-url-base "localhost:8080/crux"
+   :console/crux-http-port     8080})
 
 (defn load-edn
   "Load edn from an io/reader source (filename or io/resource)."

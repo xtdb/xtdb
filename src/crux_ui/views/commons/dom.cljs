@@ -13,10 +13,12 @@
 (defn- calc-initial-host []
   (let [hs js/location.hostname
         doc js/document.documentElement
+        conf-base-url (not-empty (jsget doc "dataset" "cruxBaseUrl"))
         conf-port (not-empty (jsget doc "dataset" "cruxHttpPort"))]
-    (case hs
+    (or conf-base-url
+        (case hs
           "localhost" (str "localhost" (if conf-port (str ":" conf-port)))
-          (str hs "/crux"))))
+          (str hs "/crux")))))
 
 (defn- get-routes-prefix []
   (not-empty (jsget js/document.documentElement "dataset" "routesPrefix")))

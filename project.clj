@@ -5,7 +5,7 @@
      [aleph                        "0.4.6"]
      [bidi                         "2.1.6"]
      [hiccup                       "1.0.5"]
-     [page-renderer                "0.4.2"]]
+     [page-renderer                "0.4.4"]]
 
   :min-lein-version "2.9.1"
   :main crux-ui-server.main
