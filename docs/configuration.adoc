@@ -391,7 +391,8 @@ https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
 all the metrics and then passes the registry around to reporters to display the
 data in a suitable application.
 
-Crux currently supports the following outputs
+Crux currently supports the following outputs:
+
 * Console `stdout`
 * Csv file
 * https://en.wikipedia.org/wiki/Java_Management_Extensions[JMX]
@@ -415,7 +416,7 @@ This component logs metrics to `sysout` at regular intervals.
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Description
-|`:crux.metrics.dropwizard.console/report-rate`|`int`| Time in seconds between each output
+|`:crux.metrics.dropwizard.console/report-frequency`|`int`| Interval in seconds between output dump
 |`:crux.metrics.dropwizard.console/rate-unit`|`time-unit`| Unit which rates are displayed
 |`:crux.metrics.dropwizard.console/duration-unit`|`time-unit`| Unit which durations are displayed
 |===
@@ -440,7 +441,7 @@ is required.
 |===
 |Field|Property|Required|Description
 |`:crux.metrics.dropwizard.csv/file-name`|`string`| Output file location
-|`:crux.metrics.dropwizard.csv/report-rate`|`int`| Time in seconds between each output
+|`:crux.metrics.dropwizard.csv/report-frequency`|`int`| Interval in seconds between file write
 |`:crux.metrics.dropwizard.csv/rate-unit`|`time-unit`|`false`| Unit which rates are displayed
 |`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
 |===
@@ -513,8 +514,8 @@ regular durations (by default 1 second).
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Field|Property|Description
-|`:crux.metrics.dropwizard.prometheus/pushgateway`|`string`| Address of the prometheus server. This field is required
-|`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
+|`:crux.metrics.dropwizard.prometheus/push-gateway`|`string`| Address of the prometheus server. This field is required
+|`:crux.metrics.dropwizard.prometheus/report-frequency`|`duration`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
 |`:crux.metrics.dropwizard.prometheus/prefix`|`string`| Prefix all metric titles with this string
 |===
 
