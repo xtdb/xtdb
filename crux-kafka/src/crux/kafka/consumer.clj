@@ -49,21 +49,22 @@
         (.seek consumer partition (long offset))
         (.seekToBeginning consumer [partition])))))
 
-(defn update-stored-consumer-state [offsets ^KafkaConsumer consumer records]
-  (let [partition->records (group-by (fn [^ConsumerRecord r]
-                                       (TopicPartition. (.topic r)
-                                                        (.partition r))) records)
-        partitions (vec (keys partition->records))
-        stored-consumer-state (or (read-offsets offsets) {})
-        consumer-state (->> (for [^TopicPartition partition partitions
-                                  :let [^ConsumerRecord last-record-in-batch (->> (get partition->records partition)
-                                                                                  (sort-by #(.offset ^ConsumerRecord %))
-                                                                                  (last))
-                                        next-offset (inc (.offset last-record-in-batch))]]
-                              [(topic-partition-meta-key partition)
-                               {:next-offset next-offset}])
-                            (into stored-consumer-state))]
-    (store-offsets offsets consumer-state)))
+(defn- update-stored-consumer-state [offsets ^KafkaConsumer consumer records]
+  (when (seq records)
+    (let [partition->records (group-by (fn [^ConsumerRecord r]
+                                         (TopicPartition. (.topic r)
+                                                          (.partition r))) records)
+          partitions (vec (keys partition->records))
+          stored-consumer-state (or (read-offsets offsets) {})
+          consumer-state (->> (for [^TopicPartition partition partitions
+                                    :let [^ConsumerRecord last-record-in-batch (->> (get partition->records partition)
+                                                                                    (sort-by #(.offset ^ConsumerRecord %))
+                                                                                    (last))
+                                          next-offset (inc (.offset last-record-in-batch))]]
+                                [(topic-partition-meta-key partition)
+                                 {:next-offset next-offset}])
+                              (into stored-consumer-state))]
+      (store-offsets offsets consumer-state))))
 
 (defn- prune-consumer-state [offsets ^KafkaConsumer consumer partitions]
   (let [consumer-state (read-offsets offsets)]
@@ -111,8 +112,7 @@
   (let [records (.poll consumer (Duration/ofMillis timeout))
         records (vec (.records records (str topic)))]
     (index-fn records)
-    (when-let [records (seq records)]
-      (update-stored-consumer-state offsets consumer records))
+    (update-stored-consumer-state offsets consumer records)
     (count records)))
 
 (defn consume-and-block
