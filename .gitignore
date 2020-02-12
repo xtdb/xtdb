@@ -6,6 +6,7 @@ target
 **/log/*
 !**/target/*/.gitkeep
 data
+crux-console-conf.edn
 resources/static/crux-ui/compiled
 resources/static/crux-ui/test
 node_modules

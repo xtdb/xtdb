@@ -8,13 +8,20 @@
 (def window js/window)
 (def doc js/document)
 (def str->id js/parseInt)
+(def jsget goog.object/getValueByKeys)
 
-(defn- gid [id] (.getElementById js/document id))
+(defn- calc-initial-host []
+  (let [hs js/location.hostname
+        doc js/document.documentElement
+        conf-port (not-empty (jsget doc "dataset" "cruxHttpPort"))]
+    (case hs
+          "localhost" (str "localhost" (if conf-port (str ":" conf-port)))
+          (str hs "/crux"))))
+
+(defn- gid [id] (js/document.getElementById id))
 
 (defn get-body-width []
-  (.-width (.getBoundingClientRect (.-body js/document))))
-
-(def jsget goog.object/getValueByKeys)
+  (.-width (.getBoundingClientRect js/document.body)))
 
 (defn evt->keycode-kw [react-evt]
   (kc/kc->kw (^js .-keyCode react-evt)))

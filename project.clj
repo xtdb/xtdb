@@ -1,6 +1,6 @@
 (defproject crux-console "derived-from-git"
   :dependencies
-    [[org.clojure/clojure          "1.10.0"]
+    [[org.clojure/clojure          "1.10.1"]
      ; 1.10.1 doesn't work with this aleph
      [aleph                        "0.4.6"]
      [bidi                         "2.1.6"]
@@ -17,7 +17,7 @@
   :profiles
   {:dev
    {:main dev :repl-options {:init-ns dev}
-    :source-paths ["src" "test" "node_modules"]
+    :source-paths ["src" "test" #_"node_modules"]
     :dependencies [[nrepl/nrepl "0.6.0"]]}
    :crux-jars
    {:uberjar-name "crux-console.jar"
