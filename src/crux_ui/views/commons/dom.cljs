@@ -18,6 +18,9 @@
           "localhost" (str "localhost" (if conf-port (str ":" conf-port)))
           (str hs "/crux"))))
 
+(defn- get-routes-prefix []
+  (not-empty (jsget js/document.documentElement "dataset" "routesPrefix")))
+
 (defn- gid [id] (js/document.getElementById id))
 
 (defn get-body-width []

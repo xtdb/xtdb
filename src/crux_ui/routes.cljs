@@ -7,11 +7,12 @@
             [medley.core :as m]))
 
 (def prefix
-  (or (not-empty (dom/jsget js/document.documentElement "dataset" "routingPrefix"))
-      "/console"))
+  (str (or (dom/get-routes-prefix) "/console")))
+
+(def app-routes-base (str prefix "/app"))
 
 (def ^:private routes
-  [prefix
+  [app-routes-base
    {"" :rd/query-ui
 
     "/output"
@@ -33,7 +34,6 @@
             (get-in route [:r/route-params :r/output-tab])
             (update-in [:r/route-params :r/output-tab]
                        #(keyword "db.ui.output-tab" %)))))
-
 
 (def ^:private path-for (partial bidi/path-for routes))
 
@@ -69,10 +69,11 @@
         route-params (-> (:r/route-params route-data)
                          (m/update-existing :r/output-tab name))
         route-params (vec (flatten (into [handler-id] route-params)))]
-    (println :route-params route-params)
+    (prn ::route-params route-params)
     (url-for route-params {:rd/query crux-query-str})))
 
-; (calc-query-url "wewew")
+(comment
+  (calc-query-url (calc-route-data-from-location) "{:find [e]}"))
 
 (defn- push-query [crux-query-str]
   (js/history.pushState nil "Crux Console : user query" (calc-query-url (calc-route-data-from-location) crux-query-str)))

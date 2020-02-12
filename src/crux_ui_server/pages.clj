@@ -18,7 +18,7 @@
      :link-image-src           (str routes-prefix "/static/img/cube-on-white-512.png")
      :service-worker           (str routes-prefix "/service-worker-for-console.js")
      :favicon                  (str routes-prefix "/static/img/cube-on-white-120.png")
-     :doc-attrs                {:data-routing-prefix routes-prefix
+     :doc-attrs                {:data-routes-prefix routes-prefix
                                 :data-crux-http-port (str port)}
      :sw-default-url           (str routes-prefix "/app")
      :stylesheet-async

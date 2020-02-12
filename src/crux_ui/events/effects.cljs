@@ -4,7 +4,8 @@
             [crux-ui.routes :as routes]
             [crux-ui-lib.http-functions :as hf]
             [promesa.core :as p]
-            [crux-ui.cookies :as c]))
+            [crux-ui.cookies :as c]
+            [crux-ui.logging :as log]))
 
 (rf/reg-fx
   :fx/query-exec
@@ -40,9 +41,12 @@
 (rf/reg-fx
   :fx/push-query-into-url
   (fn [^js/String query]
-    (println :push-query query)
+    (prn ::push-query query)
     (if (and query (< (.-length query) 2000))
-      (routes/push-query query))))
+      (try
+        (routes/push-query query)
+        (catch js/Error e
+          (log/warn "failed to push query"))))))
 
 (rf/reg-fx
   :fx.sys/set-cookie
