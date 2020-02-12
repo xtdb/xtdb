@@ -10,9 +10,12 @@ Full docs [here](https://opencrux.com/docs#config-metrics)
 
 ## Dropwizard metrics
 
-We provide 5 different ways to expose metrics using [dropwizard metrics](https://metrics.dropwizard.io/4.1.2/).
+[Dropwizard metrics](https://metrics.dropwizard.io/4.1.2/) are used to store and display metrics.
 
-https://metrics-clojure.readthedocs.io/en/latest/reporting.html
+rocksdb metrics can be included by setting
+`:crux.metrics/with-rocksdb-metrics?` to true in the node configuration
+
+The following 5 components can be used to display these.
 
 ### Console
 
