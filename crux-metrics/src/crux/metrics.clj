@@ -83,7 +83,7 @@
                           :args {::cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
                                                       :required? false
                                                       :crux.config/type :crux.config/string}
-                                 ::cloudwatch/report-frequency {:doc "Frequency of reporting metrics"
+                                 ::cloudwatch/report-frequency {:doc "Frequency of reporting metrics on a dry run"
                                                                 :default (Duration/ofSeconds 1)
                                                                 :crux.config/type :crux.config/duration}
                                  ::cloudwatch/dry-run? {:doc "When true, the reporter prints to console instead of uploading to cw"
@@ -94,11 +94,20 @@
                                                             :crux.config/type :crux.config/boolean}
                                  ::cloudwatch/dimensions {:doc "Add global dimensions to metrics"
                                                           :required? false
-                                                          :crux.config/type :crux.config/string-map}}}})
+                                                          :crux.config/type :crux.config/string-map}
+                                 ::cloudwatch/high-resolution? {:doc "Increase the push reat from 1 minute to 1 second"
+                                                                :default false
+                                                                :crux.config/type :crux.config/boolean}
+                                 ::cloudwatch/include-metrics {:doc "A list of metrics to whitelist"
+                                                               :required? false
+                                                               :crux.config/type :crux.config/string-list}
+                                 ::cloudwatch/exclude-metrics {:doc "A list of metrics to blacklist"
+                                                               :required? false
+                                                               :crux.config/type :crux.config/string-list}}}})
 
 (def prometheus-reporter
   {::prometheus-reporter {:start-fn (fn [{::keys [registry]}
-                                         {::prometheus/keys [duration] :as args}]
+                                         args]
                                       (prometheus/start-reporter registry args))
                           :deps #{::registry}
                           :args {::prometheus/report-frequency {:doc "Frequency of reporting metrics"

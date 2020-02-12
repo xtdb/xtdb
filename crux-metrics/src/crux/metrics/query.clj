@@ -15,4 +15,6 @@
                 (dropwizard/stop (get @!timer-store (:crux.query/query-id event)))
                 (swap! !timer-store dissoc (:crux.query/query-id event))))
     {:query-timer query-timer
-     :current-query-count (dropwizard/gauge registry ["query" "current-count"] (fn [] (count @!timer-store)))}))
+     :current-query-count (dropwizard/gauge registry
+                                            ["query" "currently-running"]
+                                            (fn [] (count @!timer-store)))}))

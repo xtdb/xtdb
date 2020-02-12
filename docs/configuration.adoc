@@ -545,6 +545,8 @@ https://github.com/juxt/crux/tree/master/crux-bench[here].
 |`:crux.metrics.dropwizard.prometheus/jmv-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
 |`:crux.metrics.dropwizard.prometheus/jmv-dimensions`|`string-map`| Should jvm metrics be included in the pushed metrics?
 |`:crux.metrics.dropwizard.prometheus/region`|`string`| Cloudwatch region for uploading metrics. Not required inside a EBS/Fargate instance but needed for local testing.
+|`:crux.metrics.dropwizard.prometheus/exclude-metrics`|`string-list`| A list of strings for a gauge black list. This filters out any metrics that are listed.
+|`:crux.metrics.dropwizard.prometheus/include-metrics`|`string-list`| A list of strings for a gauge white list. This filters out any metrics that are not listed. If `exclude-metrics` is also include, this overrides that option.
 |===
 
 [#config-metrics-cloudwatch-tips]
