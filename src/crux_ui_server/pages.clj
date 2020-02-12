@@ -34,7 +34,7 @@
                                 (str routes-prefix "/static/styles/monokai.css")
                                 (str routes-prefix "/static/styles/eclipse.css")]
      :script                   (str routes-prefix "/static/crux-ui/compiled/main.js")
-     :manifest                 (str routes-prefix "/static/manifest-console.json")
+     :manifest                 (str routes-prefix "/manifest.json")
      :head-tags
                                [[:style#_stylefy-constant-styles_]
                                 [:style#_stylefy-styles_]

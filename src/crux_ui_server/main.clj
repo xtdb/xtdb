@@ -4,6 +4,7 @@
             [bidi.bidi :as bidi]
             [crux-ui-server.crux-auto-start :as crux-auto-start]
             [crux-ui-server.config :as config]
+            [crux-ui-server.generate-web-manifest :as manifest]
             [clojure.tools.logging :as log]
             [crux-ui-server.pages :as pages]
             [clojure.java.io :as io]
@@ -28,6 +29,7 @@
       ["/" :rd/tab] ::console}]
     ["/query-perf" ::query-perf]
     ["/service-worker-for-console.js" ::service-worker-for-console]
+    ["/manifest.json" ::web-app-manifest]
     ["/static/"
      {true ::static}]
     [true ::not-found]]])
@@ -57,6 +59,11 @@
   {:status 200
    :headers {"content-type" "text/javascript"}
    :body (pages/gen-service-worker req @config)})
+
+(defmethod handler ::web-app-manifest [req]
+  {:status 200
+   :headers {"content-type" "application/json"}
+   :body (manifest/generate-str @config)})
 
 (defn uri->mime-type [uri]
   (cond
