@@ -25,10 +25,10 @@
   ;; end::LMDBDeps[]
 
   ;; tag::HTTPDeps[]
-  juxt/crux-http-server {:mvn/version "19.12-1.6.1-alpha"}
+  juxt/crux-http-server {:mvn/version "20.01-1.6.2-alpha"}
   ;; end::HTTPDeps[]
 
   ;; tag::HTTPClientDeps[]
-  juxt/crux-http-client {:mvn/version "19.12-1.6.1-alpha"}
+  juxt/crux-http-client {:mvn/version "20.12-1.6.2-alpha"}
   ;; end::HTTPClientDeps[]
   }}
