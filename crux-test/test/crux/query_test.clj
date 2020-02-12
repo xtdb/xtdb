@@ -442,14 +442,6 @@
                                 {:name "Ivan" :last-name "Ivannotov"}
                                 {:name "Bob" :last-name "Controlguy"}]))
 
-  ;; Here for dev reasons, delete when appropiate
-  (t/is (= '[[:triple {:e e :a :name :v name}]
-             [:triple {:e e :a :name :v "Ivan"}]
-             [:or [[:term [:triple {:e e :a :last-name :v "Ivanov"}]]]]]
-           (s/conform :crux.query/where '[[e :name name]
-                                          [e :name "Ivan"]
-                                          (or [e :last-name "Ivanov"])])))
-
   (t/testing "Or works as expected"
     (t/is (= 3 (count (api/q (api/db *api*) '{:find [e]
                                               :where [[e :name name]
