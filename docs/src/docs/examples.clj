@@ -59,6 +59,7 @@
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.rocksdb/kv
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
+                    :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
                     :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
 ;; end::start-standalone-with-rocks[]
 

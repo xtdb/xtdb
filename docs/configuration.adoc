@@ -332,7 +332,7 @@ You can start up a *HTTP server* on a node by including
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-standalone-http-server]
+include::./src/docs/examples.clj[tags=start-standalone-http-node]
 ----
 
 [#config-start-remote-client]
