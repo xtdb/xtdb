@@ -91,8 +91,7 @@
                   (seek-to-stored-offsets offsets consumer partitions)))))
 
 (defn consume
-  [{:keys [offsets indexer timeout topic ^KafkaConsumer consumer index-fn]
-    :or {timeout 5000}}]
+  [{:keys [offsets indexer timeout topic ^KafkaConsumer consumer index-fn]}]
   (let [records (.poll consumer (Duration/ofMillis timeout))
         records (vec (.records records (str topic)))]
     (index-fn records)
@@ -100,16 +99,13 @@
     (count records)))
 
 (defn consume-and-block
-  [{:keys [offsets indexer pending-records-state timeout topic ^KafkaConsumer consumer accept-fn index-fn]
-    :or {timeout 5000}}]
-  (assert (and accept-fn index-fn))
+  [{:keys [offsets indexer pending-records-state timeout topic ^KafkaConsumer consumer accept-fn index-fn]}]
   (let [_ (when (empty @pending-records-state)
             (reset! pending-records-state (let [records (.poll consumer (Duration/ofMillis timeout))]
                                             (vec (.records records (str topic))))))
         records (->> @pending-records-state
                      (take-while accept-fn)
                      (vec))]
-
     (index-fn records)
     (update-stored-consumer-state offsets consumer records)
     (swap! pending-records-state (comp vec (partial drop (count records))))
