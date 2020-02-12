@@ -137,11 +137,9 @@
 
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (doseq [f (->> (for [[content-hash doc] id-and-docs]
-                     (->> (ProducerRecord. doc-topic content-hash doc)
-                          (.send producer)))
-                   (doall))]
-      @f)
+    (doseq [[content-hash doc] id-and-docs]
+      (->> (ProducerRecord. doc-topic content-hash doc)
+           (.send producer)))
     (.flush producer)))
 
 (defn- group-name []
