@@ -179,7 +179,7 @@
     (let [email (-> (SendEmailRequest.)
                     (.withDestination
                      (-> (Destination.)
-                         (.withToAddresses ["dan@juxt.pro"])))
+                         (.withToAddresses ["crux-bench@juxt.pro"])))
                     (.withMessage
                      (-> (Message.)
                          (.withBody
@@ -190,7 +190,7 @@
                          (.withSubject (-> (Content.)
                                              (.withCharset "UTF-8")
                                              (.withData (str "Bench Results -" (name bench-name)))))))
-                    (.withSource "dan@juxt.pro"))]
+                    (.withSource "crux-bench@juxt.pro"))]
       (-> (AmazonSimpleEmailServiceClientBuilder/standard)
           (.withRegion "eu-west-1")
           (.build)
