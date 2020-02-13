@@ -9,7 +9,7 @@
   (:import java.io.Closeable
            clojure.lang.MapEntry
            [org.rocksdb Checkpoint CompressionType FlushOptions LRUCache Options ReadOptions
-            RocksDB RocksIterator BlockBasedTableConfig WriteBatch WriteOptions]))
+            RocksDB RocksIterator BlockBasedTableConfig WriteBatch WriteOptions Statistics]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -68,9 +68,13 @@
 
 (defrecord RocksKv [db-dir]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir crux.kv/sync? ^Options crux.kv.rocksdb/db-options crux.kv.rocksdb/disable-wal?] :as options}]
+  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.rocksdb/disable-wal?
+                      crux.kv.rocksdb/metrics?
+                      ^Options crux.kv.rocksdb/db-options] :as options}]
     (RocksDB/loadLibrary)
-    (let [opts (doto (or db-options (Options.))
+    (let [stats (when metrics? (Statistics.))
+          opts (doto (or db-options (Options.))
+                 (cond-> metrics? (.setStatistics stats))
                  (.setCompressionType CompressionType/LZ4_COMPRESSION)
                  (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
                  (.setCreateIfMissing true))
@@ -89,6 +93,7 @@
              :db-dir db-dir
              :db db
              :options opts
+             :stats stats
              :write-options write-opts)))
 
   (new-snapshot [{:keys [^RocksDB db]}]
@@ -143,7 +148,9 @@
   {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
                (lru/start-kv-store (map->RocksKv {:db-dir db-dir}) options))
    :args (-> lru/options
-             (assoc ::db-options {:doc "RocksDB Options"
+             (assoc ::metrics? {:doc "Enable RocksDB metrics"
+                                :crux.config/type :crux.config/boolean}
+                    ::db-options {:doc "RocksDB Options"
                                   :crux.config/type [#(instance? Options %) identity]}
                     ::disable-wal? {:doc "Disable Write Ahead Log"
                                     :crux.config/type :crux.config/boolean})
