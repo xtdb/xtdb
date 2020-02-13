@@ -21,7 +21,7 @@
 
 (defn start-reporter
   [^MetricRegistry reg {::keys [region dry-run? jvm-metrics? dimensions
-                                report-frequency high-resolution? ignore-rules]
+                                dry-run-report-frequency high-resolution? ignore-rules]
                         :as opts}]
 
   (let [cw-client (-> (CloudWatchAsyncClient/builder)
@@ -42,4 +42,4 @@
                                                        (into-array String))))
         (.withMeterUnitSentToCW)
         (.build)
-        (doto (.start (.toMillis ^Duration report-frequency) TimeUnit/MILLISECONDS)))))
+        (doto (.start (.toMillis ^Duration dry-run-report-frequency) TimeUnit/MILLISECONDS)))))

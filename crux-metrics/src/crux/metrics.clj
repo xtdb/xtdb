@@ -83,9 +83,9 @@
                           :args {::cloudwatch/region {:doc "Region for uploading metrics. Tries to get it using api. If this fails, you will need to specify region."
                                                       :required? false
                                                       :crux.config/type :crux.config/string}
-                                 ::cloudwatch/report-frequency {:doc "Frequency of reporting metrics on a dry run"
-                                                                :default (Duration/ofSeconds 1)
-                                                                :crux.config/type :crux.config/duration}
+                                 ::cloudwatch/dry-run-report-frequency {:doc "Frequency of reporting metrics on a dry run"
+                                                                        :default (Duration/ofSeconds 1)
+                                                                        :crux.config/type :crux.config/duration}
                                  ::cloudwatch/dry-run? {:doc "When true, the reporter prints to console instead of uploading to cw"
                                                         :required? false
                                                         :crux.config/type :crux.config/boolean}
