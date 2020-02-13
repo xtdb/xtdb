@@ -394,7 +394,7 @@ data in a suitable application.
 Crux currently supports the following outputs:
 
 * Console `stdout`
-* Csv file
+* CSV file
 * https://en.wikipedia.org/wiki/Java_Management_Extensions[JMX]
 * https://prometheus.io/docs/introduction/overview/[Prometheus] (reporter & http exporter)
 * https://docs.aws.amazon.com/cloudwatch/index.html[AWS Cloudwatch metrics]
@@ -542,11 +542,10 @@ https://github.com/juxt/crux/tree/master/crux-bench[here].
 |Field|Property|Description
 |`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time between metrics push
 |`:crux.metrics.dropwizard.prometheus/dry-run?`|`boolean`| When `true` the reporter outputs to `cloujure.logging/log*`
-|`:crux.metrics.dropwizard.prometheus/jmv-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
-|`:crux.metrics.dropwizard.prometheus/jmv-dimensions`|`string-map`| Should jvm metrics be included in the pushed metrics?
+|`:crux.metrics.dropwizard.prometheus/jvm-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
+|`:crux.metrics.dropwizard.prometheus/jvm-dimensions`|`string-map`| Should jvm metrics be included in the pushed metrics?
 |`:crux.metrics.dropwizard.prometheus/region`|`string`| Cloudwatch region for uploading metrics. Not required inside a EBS/Fargate instance but needed for local testing.
-|`:crux.metrics.dropwizard.prometheus/exclude-metrics`|`string-list`| A list of strings for a gauge black list. This filters out any metrics that are listed.
-|`:crux.metrics.dropwizard.prometheus/include-metrics`|`string-list`| A list of strings for a gauge white list. This filters out any metrics that are not listed. If `exclude-metrics` is also include, this overrides that option.
+|`:crux.metrics.dropwizard.prometheus/ignore-rules`|`string-list`| A list of strings to ignore specific metrics, in gitignore format. e.g. `["crux.tx" "!crux.tx.ingest"]` would ignore crux.tx.*, except crux.tx.ingest
 |===
 
 [#config-metrics-cloudwatch-tips]

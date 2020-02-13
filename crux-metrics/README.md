@@ -77,11 +77,10 @@ https://metrics-clojure.readthedocs.io/en/latest/reporting.html
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics/with-cloudwatch]
                  ;; optional args
-                 :crux.metrics.dropwizard.cloudwatch/report-frequency "PT1S"
+                 :crux.metrics.dropwizard.cloudwatch/dry-run-report-frequency "PT1S"
                  :crux.metrics.dropwizard.cloudwatch/dry-run? false
                  :crux.metrics.dropwizard.cloudwatch/jvm-metrics? false
                  :crux.metrics.dropwizard.cloudwatch/jvm-dimensions {"foo" "bar"}
                  :crux.metrics.dropwizard.cloudwatch/region "eu-west-2"
-                 :crux.metrics.dropwizard.cloudwatch/exclude-metrics ["crux.query.currently-running"]
-                 :crux.metrics.dropwizard.cloudwatch/include-metrics ["crux.query.currently-running"]})
+                 :crux.metrics.dropwizard.cloudwatch/ignore-rules ["crux.tx" "!crux.tx.ingest"]})
 ```
