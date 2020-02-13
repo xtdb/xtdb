@@ -12,7 +12,8 @@
   (:import (java.util.concurrent Executors ExecutorService)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
-           (software.amazon.awssdk.core.sync RequestBody)))
+           (software.amazon.awssdk.core.sync RequestBody)
+           (software.amazon.awssdk.core.exception SdkClientException)))
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -148,16 +149,22 @@
     (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
 
 (defn save-to-s3 [{:keys [database version]} file]
-  (.putObject (S3Client/create)
-              (-> (PutObjectRequest/builder)
-                  (.bucket "crux-bench")
-                  (.key (generate-s3-filename database version))
-                  (.build))
-              (RequestBody/fromFile file)))
+
+  (try (.putObject (S3Client/create)
+                   (-> (PutObjectRequest/builder)
+                       (.bucket "crux-bench")
+                       (.key (generate-s3-filename database version))
+                       (.build))
+                   (RequestBody/fromFile file))
+       (catch SdkClientException e
+         "AWS credentials not found! Results file not saved.")))
 
 (defn load-from-s3 [key]
-  (.getObject (S3Client/create)
-              (-> (GetObjectRequest/builder)
-                  (.bucket "crux-bench")
-                  (.key key)
-                  (.build))))
+  (try
+    (.getObject (S3Client/create)
+                (-> (GetObjectRequest/builder)
+                    (.bucket "crux-bench")
+                    (.key key)
+                    (.build)))
+    (catch SdkClientException e
+      (log/info (format "AWS credentials not found! File %s not loaded" key)))))
