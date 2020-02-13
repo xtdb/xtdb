@@ -13,7 +13,7 @@
 
                  [clj-http "3.10.0"]
                  [software.amazon.awssdk/s3 "2.10.61"]
-
+                 [com.amazonaws/aws-java-sdk-ses "1.11.720"]
                  [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
 
                  ;; rdf

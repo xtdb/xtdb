@@ -13,7 +13,12 @@
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
+<<<<<<< HEAD
            (software.amazon.awssdk.core.exception SdkClientException)))
+=======
+           (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClientBuilder)
+           (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)))
+>>>>>>> Add 'send-email-via-ses' function
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -168,3 +173,28 @@
                     (.build)))
     (catch SdkClientException e
       (log/info (format "AWS credentials not found! File %s not loaded" key)))))
+
+(defn send-email-via-ses [message]
+  (try
+    (let [email (-> (SendEmailRequest.)
+                    (.withDestination
+                     (-> (Destination.)
+                         (.withToAddresses ["dan@juxt.pro"])))
+                    (.withMessage
+                     (-> (Message.)
+                         (.withBody
+                          (-> (Body.)
+                              (.withText (-> (Content.)
+                                             (.withCharset "UTF-8")
+                                             (.withData message)))))
+                         (.withSubject (-> (Content.)
+                                             (.withCharset "UTF-8")
+                                             (.withData "Bench Results")))))
+                    (.withSource "dan@juxt.pro"))]
+      (-> (AmazonSimpleEmailServiceClientBuilder/standard)
+          (.withRegion "eu-west-1")
+          (.build)
+          (.sendEmail email)))
+
+    (catch Exception e
+      (log/info "Email failed to send! Error: " e))))
