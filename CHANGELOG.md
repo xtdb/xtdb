@@ -15,6 +15,11 @@
 
 ### New Features
 * [#466](https://github.com/juxt/crux/issues/466): Splitting `sync`'s various arities into `(sync node <timeout>)`, `(await-tx-time node tx-time <timeout>)` and `(await-tx node tx <timeout>)` (`(sync node tx-time <timeout>)` is deprecated and will be removed in a subsequent release).
+* [#625](https://github.com/juxt/crux/issues/625): Metrics can be displayed to a prometheus server
+* [#597](https://github.com/juxt/crux/issues/597): Metrics can be now analysed in cloudwatch
+* [#496](https://github.com/juxt/crux/issues/496): Adding rocksdb metrics
+* [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
+* [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
 * [#492](https://github.com/juxt/crux/issues/492): Adding metrics to expose local disk usage
 * [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
 * [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics

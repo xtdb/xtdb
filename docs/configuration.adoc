@@ -391,6 +391,20 @@ https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
 all the metrics and then passes the registry around to reporters to display the
 data in a suitable application.
 
+By default `indexer`, `kv-store`, and `query` metrics are included. It is also
+possible to add `rocksdb` metrics when it is being used. These arguments can be
+used whenever any of the topologies to display metrics are included.
+
+.Registry arguments
+[#table-conversion%header,cols="d,d,d,d"]
+|===
+|Field|Property|Default|Description
+|`:crux.metrics/with-indexer-metrics?`|`boolean`|`true`| Includes indexer metrics in the metrics registry
+|`:crux.metrics/with-kv-metrics?`|`boolean`|`true`| Includes kv-store metrics in the metrics registry
+|`:crux.metrics/with-query-metrics?`|`boolean`|`true`| Includes query metrics in the metrics registry
+|`:crux.metrics/with-rocksdb-metrics?`|`boolean`|`false`| Includes rocksdb metrics in the metrics registry
+|===
+
 Crux currently supports the following outputs:
 
 * Console `stdout`
