@@ -95,15 +95,13 @@
                                  ::cloudwatch/dimensions {:doc "Add global dimensions to metrics"
                                                           :required? false
                                                           :crux.config/type :crux.config/string-map}
-                                 ::cloudwatch/high-resolution? {:doc "Increase the push reat from 1 minute to 1 second"
+                                 ::cloudwatch/high-resolution? {:doc "Increase the push rate from 1 minute to 1 second"
                                                                 :default false
                                                                 :crux.config/type :crux.config/boolean}
-                                 ::cloudwatch/include-metrics {:doc "A list of metrics to whitelist"
-                                                               :required? false
-                                                               :crux.config/type :crux.config/string-list}
-                                 ::cloudwatch/exclude-metrics {:doc "A list of metrics to blacklist"
-                                                               :required? false
-                                                               :crux.config/type :crux.config/string-list}}}})
+                                 ::cloudwatch/ignore-rules {:doc "An ordered list of ignore rules for metrics, using gitignore syntax. e.g.
+[\"crux.tx\" \"!crux.tx.ingest-rate\"] -> exclude crux.tx.*, but keep crux.tx.ingest-rate"
+                                                            :required? false
+                                                            :crux.config/type :crux.config/string-list}}}})
 
 (def prometheus-reporter
   {::prometheus-reporter {:start-fn (fn [{::keys [registry]}

@@ -8,10 +8,21 @@
            [java.time Duration]
            [com.codahale.metrics MetricRegistry MetricFilter]))
 
+(defn- include-metric? [metric-name ignore-rules]
+  (reduce (fn [include? ignore-rule]
+            (let [[_ prefix body] (re-matches #"(!)?(.+)" ignore-rule)]
+              (if (or (= "*" body)
+                      (= metric-name body)
+                      (string/starts-with? metric-name (str body ".")))
+                (= prefix "!")
+                include?)))
+          true
+          ignore-rules))
+
 (defn start-reporter
   [^MetricRegistry reg {::keys [region dry-run? jvm-metrics? dimensions
-                                report-frequency include-metrics
-                                exclude-metrics high-resolution?]}]
+                                report-frequency high-resolution? ignore-rules]
+                        :as opts}]
 
   (let [cw-client (-> (CloudWatchAsyncClient/builder)
                       (cond-> region ^CloudWatchAsyncClientBuilder (.region (Region/of region)))
@@ -21,16 +32,11 @@
         (cond-> jvm-metrics? .withJvmMetrics
                 dry-run? .withDryRun
                 high-resolution? .withHighResolution
-                exclude-metrics (.filter (reify MetricFilter
-                                           (matches [_ metric-name _]
-                                             (every?
-                                               #(not (string/includes? metric-name %))
-                                               exclude-metrics))))
-                include-metrics (.filter (reify MetricFilter
-                                           (matches [_ metric-name _]
-                                             (some?
-                                               #(string/includes? metric-name %)
-                                               include-metrics))))
+
+                (seq ignore-rules) (.filter (reify MetricFilter
+                                              (matches [_ metric-name _]
+                                                (include-metric? metric-name ignore-rules))))
+
                 dimensions (.withGlobalDimensions (->> dimensions
                                                        (map (fn [[k v]] (format "%s=%s" k v)))
                                                        (into-array String))))
