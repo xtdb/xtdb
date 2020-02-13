@@ -254,4 +254,6 @@
           (test-busiest-devices node)
           (test-min-max-battery-level-per-hour node)))
 
-      (doto (-> (bench/results->slack-message :ts-devices) bench/post-to-slack))))
+      (doto (-> (bench/results->slack-message :ts-devices)
+                (doto (bench/post-to-slack))
+                (bench/send-email-via-ses)))))
