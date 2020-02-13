@@ -7,18 +7,18 @@
   (let [t (topo/options->topology {:crux.node/topology ['crux.jdbc/topology]
                                    :crux.node/kv-store :crux.kv.rocksdb/kv})]
 
-    (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
+    (t/is (= (-> @(requiring-resolve 'crux.jdbc/topology) :crux.node/tx-log)
              (-> t :crux.node/tx-log)))
     (t/is (= (s/conform ::topo/component crux.kv.rocksdb/kv)
              (-> t :crux.node/kv-store))))
 
   (t/testing "override module in topology"
     (let [t (topo/options->topology {:crux.node/topology ['crux.jdbc/topology]
-                                     :crux.node/kv-store :crux.kv.memdb/kv})]
+                                     :crux.node/kv-store 'crux.kv.memdb/kv})]
 
       (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
                (-> t :crux.node/tx-log)))
-      (t/is (= (s/conform ::topo/component crux.kv.memdb/kv)
+      (t/is (= (s/conform ::topo/component @(requiring-resolve 'crux.kv.memdb/kv))
                (-> t :crux.node/kv-store))))))
 
 (t/deftest test-option-parsing
