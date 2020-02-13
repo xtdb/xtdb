@@ -30,7 +30,7 @@
                                            (matches [_ metric-name _]
                                              (some?
                                                #(string/includes? metric-name %)
-                                               exclude-metrics))))
+                                               include-metrics))))
                 dimensions (.withGlobalDimensions (->> dimensions
                                                        (map (fn [[k v]] (format "%s=%s" k v)))
                                                        (into-array String))))
