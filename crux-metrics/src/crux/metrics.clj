@@ -69,11 +69,7 @@
                               ::console/duration-unit {:doc "Set duration unit"
                                                        :required? false
                                                        :default TimeUnit/MILLISECONDS
-                                                       :crux.config/type :crux.config/time-unit}
-                              ::console/report-rate {:doc "Set report rate in seconds"
-                                                     :default 1
-                                                     :required? false
-                                                     :crux.config/type :crux.config/int}}}})
+                                                       :crux.config/type :crux.config/time-unit}}}})
 
 (def csv-reporter
   {::csv-reporter {:start-fn (fn [{::keys [registry]} args]
