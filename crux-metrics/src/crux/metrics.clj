@@ -17,12 +17,11 @@
                                             with-kv-metrics?
                                             with-query-metrics?
                                             with-rocksdb-metrics?]}]
-                           (doto (dropwizard/new-registry)
-                             (cond->
-                               with-indexer-metrics? (indexer-metrics/assign-listeners deps)
-                               with-kv-metrics? (kv-metrics/assign-listeners deps)
-                               with-query-metrics? (query-metrics/assign-listeners deps)
-                               with-rocksdb-metrics? (rocksdb/assign-gauges deps))))
+                           (cond-> (dropwizard/new-registry)
+                               with-indexer-metrics? (doto (indexer-metrics/assign-listeners deps))
+                               with-kv-metrics? (doto (kv-metrics/assign-listeners deps))
+                               with-query-metrics? (doto (query-metrics/assign-listeners deps))
+                               with-rocksdb-metrics? (doto (rocksdb/assign-gauges deps))))
                :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}
                :args {::with-indexer-metrics? {:doc "Include metrics on the indexer"
                                                :default true

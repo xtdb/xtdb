@@ -84,6 +84,6 @@
              :total-keys-in #'crux.metrics.rocksdb/total-keys-in
              :num-snapshots #'crux.metrics.rocksdb/num-snapshots})
 
-(defn assign-gauges [{:keys [crux.metrics/registry crux.node/kv-store]}]
+(defn assign-gauges [registry {:keys [crux.node/kv-store]}]
   (run! (fn [[k v]]
           (dropwizard/gauge registry ["rocksdb" (name k)] #(v (:db (:kv kv-store))))) gauges))
