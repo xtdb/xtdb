@@ -174,7 +174,7 @@
     (catch SdkClientException e
       (log/info (format "AWS credentials not found! File %s not loaded" key)))))
 
-(defn send-email-via-ses [message]
+(defn send-email-via-ses [message bench-name]
   (try
     (let [email (-> (SendEmailRequest.)
                     (.withDestination
@@ -189,7 +189,7 @@
                                              (.withData message)))))
                          (.withSubject (-> (Content.)
                                              (.withCharset "UTF-8")
-                                             (.withData "Bench Results")))))
+                                             (.withData (str "Bench Results -" (name bench-name)))))))
                     (.withSource "dan@juxt.pro"))]
       (-> (AmazonSimpleEmailServiceClientBuilder/standard)
           (.withRegion "eu-west-1")

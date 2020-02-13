@@ -58,7 +58,7 @@
     (-> [(first watdiv-results) (->query-result (rest watdiv-results))]
         (bench/results->slack-message :watdiv-crux)
         (doto (bench/post-to-slack))
-        (bench/send-email-via-ses))
+        (bench/send-email-via-ses :watdiv-crux))
 
     watdiv-results))
 

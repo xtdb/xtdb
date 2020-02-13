@@ -23,6 +23,7 @@
 
                  ;; Dependency resolution
                  [commons-codec "1.12"]
+                 [joda-time "2.9.9"]
                  [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
                  [org.slf4j/jul-to-slf4j "1.7.25"]
                  [org.slf4j/log4j-over-slf4j "1.7.25"]

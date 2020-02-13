@@ -256,4 +256,4 @@
 
       (doto (-> (bench/results->slack-message :ts-devices)
                 (doto (bench/post-to-slack))
-                (bench/send-email-via-ses)))))
+                (bench/send-email-via-ses :ts-devices)))))
