@@ -57,8 +57,10 @@
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k c]
-                       (let [c (s/conform ::component c)]
-                         (reduce (fn [g d] (dep/depend g k d)) g (:deps c))))
+                       (let [{:keys [deps before]} (s/conform ::component c)]
+                         (-> g
+                             (as-> g (reduce (fn [g d] (dep/depend g k d)) g deps))
+                             (as-> g (reduce (fn [g b] (dep/depend g b k)) g before)))))
                      (dep/graph)
                      system)
         dep-order (dep/topo-sort g)

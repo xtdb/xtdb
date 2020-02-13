@@ -61,7 +61,27 @@
     (close-fn)
     (t/is (= [:a :b] @stopped)))
 
-  (t/testing "With Exception"
+  (t/testing "with before"
+    (let [started (atom [])
+          stopped (atom [])
+          [topo close-fn] (topo/start-topology
+                           {:crux.node/topology
+                            {:a {:start-fn (fn [_ _]
+                                             (swap! started conj :a)
+                                             (reify java.io.Closeable
+                                               (close [_]
+                                                 (swap! stopped conj :a))))}
+                             :b {:before #{:a}
+                                 :start-fn (fn [_ _]
+                                             (swap! started conj :b)
+                                             (reify java.io.Closeable
+                                               (close [_]
+                                                 (swap! stopped conj :b))))}}})]
+      (t/is (= [:b :a] @started))
+      (close-fn)
+      (t/is (= [:a :b] @stopped))))
+
+  (t/testing "with exception"
     (let [started (atom [])
           stopped (atom [])]
       (try
