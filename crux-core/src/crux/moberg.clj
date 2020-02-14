@@ -242,30 +242,20 @@
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
     (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
 
-(defrecord MobergEventLogContext [^Closeable snapshot ^Closeable i]
-  Closeable
-  (close [_]
-    (.close i)
-    (.close snapshot)))
+(defn- lazy-event-seq [next-offset i]
+  (letfn [(more-events []
+            (lazy-seq
+             (when-let [m (next-message i ::event-log)]
+               (cons m (more-events)))))]
+    (lazy-seq
+     (when-let [m (seek-message i ::event-log next-offset)]
+       (cons m (more-events))))))
 
 (defrecord MobergEventLogConsumer [event-log-kv batch-size]
   crux.tx.consumer/PolledEventLog
-
-  (new-event-log-context [this]
-    (let [snapshot (kv/new-snapshot event-log-kv)]
-      (MobergEventLogContext. snapshot (kv/new-iterator snapshot))))
-
-  (next-events [this {:keys [i] :as context} next-offset]
-    (letfn [(more-events []
-              (lazy-seq
-               (when-let [m (next-message i ::event-log)]
-                 (cons m (more-events)))))]
-
-      (->> (lazy-seq
-            (when-let [m (seek-message i ::event-log next-offset)]
-              (cons m (more-events))))
-
-           (take (long batch-size)))))
-
-  (end-offset [this]
-    (end-message-id-offset event-log-kv ::event-log)))
+  (next-events [this next-offset]
+    (with-open [snapshot (kv/new-snapshot event-log-kv)
+                i (kv/new-iterator snapshot)]
+      (->> (lazy-event-seq next-offset i)
+           (take (long batch-size))
+           (into [])))))

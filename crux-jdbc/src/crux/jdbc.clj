@@ -140,19 +140,11 @@
 
 (defrecord JDBCEventLogConsumer [ds dbtype]
   crux.tx.consumer/PolledEventLog
-
-  (new-event-log-context [this]
-    (reify Closeable
-      (close [_])))
-
-  (next-events [this context next-offset]
+  (next-events [this next-offset]
     (mapv (partial event-result->message dbtype)
           (jdbc/execute! ds
                          ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
-                         {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps})))
-
-  (end-offset [this]
-    (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
+                         {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps}))))
 
 (defn conform-next-jdbc-properties [m]
   (into {} (->> m
