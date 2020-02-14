@@ -38,9 +38,8 @@
 
 (defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
   (when event-log-kv
-    (tc/start-indexing-consumer {:indexer indexer
-                                 :queue (moberg/map->MobergQueue {:event-log-kv event-log-kv
-                                                                  :batch-size 100})})))
+    (tc/start-indexing-consumer indexer (moberg/map->MobergQueue {:event-log-kv event-log-kv
+                                                                  :batch-size 100}))))
 
 (defn- start-moberg-event-log [{::keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))

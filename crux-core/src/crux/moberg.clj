@@ -253,4 +253,4 @@
                 i (kv/new-iterator snapshot)]
       (->> (lazy-event-seq offset i)
            (take (long batch-size))
-           (into [])))))
+           (doall)))))

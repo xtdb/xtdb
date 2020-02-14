@@ -91,10 +91,8 @@
 
 (defn start-indexing-consumer
   ^java.io.Closeable
-  [{:keys [indexer offsets kafka-config group-id topic accept-fn index-fn]}]
-  (let [consumer-config (merge {"group.id" group-id} kafka-config)
-        pending-records (atom [])
-        consumer (create-consumer consumer-config)
+  [{:keys [ offsets kafka-config group-id topic accept-fn index-fn]}]
+  (let [consumer (create-consumer (merge {"group.id" group-id} kafka-config))
         _ (subscribe-from-stored-offsets offsets consumer [topic])
         t (tc/start-consumer {:queue (map->KafkaQueue {:consumer consumer
                                                        :topic topic
