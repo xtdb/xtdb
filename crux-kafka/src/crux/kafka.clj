@@ -8,9 +8,10 @@
             [crux.io :as cio]
             [crux.kafka.consumer :as kc]
             [crux.node :as n]
+            [crux.status :as status]
             [crux.tx :as tx]
-            [taoensso.nippy :as nippy]
-            [crux.status :as status])
+            [crux.tx.consumer :as tc]
+            [taoensso.nippy :as nippy])
   (:import crux.db.DocumentStore
            crux.kafka.nippy.NippySerializer
            java.io.Closeable
@@ -228,7 +229,7 @@
                   {::keys [doc-topic doc-partitions group-id] :as options}]
                (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
                (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets (kc/->ConsumerOffsets indexer :crux.tx-log/consumer-state)
+                                            :offsets (tc/->IndexedOffsets indexer :crux.tx-log/consumer-state)
                                             :kafka-config (derive-kafka-config options)
                                             :group-id group-id
                                             :topic doc-topic
@@ -250,7 +251,7 @@
   {:start-fn (fn [{:keys [crux.node/indexer crux.node/document-store]}
                   {::keys [tx-topic doc-group-id] :as options}]
                (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets (kc/->ConsumerOffsets indexer :crux.tx-log/consumer-state)
+                                            :offsets (tc/->IndexedOffsets indexer :crux.tx-log/consumer-state)
                                             :kafka-config (derive-kafka-config options)
                                             :group-id doc-group-id
                                             :topic tx-topic

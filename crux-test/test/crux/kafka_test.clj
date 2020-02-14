@@ -8,6 +8,7 @@
             [crux.fixtures.kv :as kvf]
             [crux.kafka :as k]
             [crux.kafka.consumer :as kc]
+            [crux.tx.consumer :as tc]
             [crux.rdf :as rdf]
             [crux.tx :as tx])
   (:import java.time.Duration
@@ -19,7 +20,7 @@
 
 (defn- poll-topic [offsets topic]
   (with-open [tx-consumer ^KafkaConsumer (fk/with-consumer)]
-    (let [tx-offsets (kc/map->ConsumerOffsets {:indexer (:indexer *api*) :k offsets})]
+    (let [tx-offsets (tc/map->IndexedOffsets {:indexer (:indexer *api*) :k offsets})]
       (kc/subscribe-from-stored-offsets tx-offsets tx-consumer [topic]))
     (doall (map (juxt #(.key ^ConsumerRecord %) #(.value ^ConsumerRecord %))
                 (.poll tx-consumer (Duration/ofMillis 10000))))))
