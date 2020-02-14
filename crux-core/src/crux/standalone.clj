@@ -1,11 +1,10 @@
 (ns crux.standalone
-  (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.node :as n]
             [crux.topology :as topo]
-            [crux.tx.polling :as p])
+            [crux.tx.consumer :as tc])
   (:import java.io.Closeable))
 
 (defn- start-event-log-fsync ^java.io.Closeable [{::keys [event-log-kv]}
@@ -39,9 +38,9 @@
 
 (defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
   (when event-log-kv
-    (p/start-event-log-consumer indexer
-                                (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv
-                                                                     :batch-size 100}))))
+    (tc/start-indexing-consumer {:indexer indexer
+                                 :queue (moberg/map->MobergQueue {:event-log-kv event-log-kv
+                                                                  :batch-size 100})})))
 
 (defn- start-moberg-event-log [{::keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))

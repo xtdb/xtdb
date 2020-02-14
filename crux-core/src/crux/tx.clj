@@ -1,26 +1,22 @@
 (ns crux.tx
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.codec :as c]
-            [crux.backup :as backup]
+            crux.api
             [crux.bus :as bus]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
-            [clojure.java.io :as io]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.status :as status]
-            [crux.tx.polling :as p]
-            crux.api
-            crux.tx.event
             [crux.query :as q]
             [taoensso.nippy :as nippy]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [crux.status :as status]
+            crux.tx.event)
   (:import [crux.codec EntityTx EntityValueContentHash]
-           crux.tx.consumer.Message
            java.io.Closeable
-           [java.util.concurrent ExecutorService Executors TimeoutException TimeUnit]
+           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
            java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)

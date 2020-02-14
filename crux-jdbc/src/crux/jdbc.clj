@@ -1,22 +1,17 @@
 (ns crux.jdbc
   (:require [clojure.core.reducers :as r]
-            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            crux.api
-            [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.node :as n]
             [crux.tx :as tx]
-            crux.tx.consumer
-            [crux.tx.polling :as p]
+            [crux.tx.consumer :as tc]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
             [taoensso.nippy :as nippy])
   (:import com.zaxxer.hikari.HikariDataSource
            crux.tx.consumer.Message
-           java.io.Closeable
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
 
@@ -139,11 +134,11 @@
             {:crux.tx/sub-topic (keyword (:topic result))}))
 
 (defrecord JDBCEventLogConsumer [ds dbtype]
-  crux.tx.consumer/PolledEventLog
-  (next-events [this next-offset]
+  tc/OffsetBasedQueue
+  (next-events-from-offset [this offset]
     (mapv (partial event-result->message dbtype)
           (jdbc/execute! ds
-                         ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
+                         ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" offset]
                          {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps}))))
 
 (defn conform-next-jdbc-properties [m]
@@ -165,7 +160,7 @@
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
 (defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {::keys [dbtype]}]
-  (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
+  (tc/start-indexing-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
 
 (def topology (merge n/base-topology
                      {::ds {:start-fn start-jdbc-ds

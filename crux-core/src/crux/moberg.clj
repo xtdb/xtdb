@@ -1,29 +1,24 @@
 (ns crux.moberg
-  (:require [crux.codec :as c]
-            [crux.memory :as mem]
-            [crux.kv :as kv]
-            [clojure.spec.alpha :as s]
-            [crux.db :as db]
-            [clojure.java.io :as io]
-            [crux.tx :as tx]
+  (:require [clojure.java.io :as io]
             [crux.backup :as backup]
-            [crux.api :as api]
-            [taoensso.nippy :as nippy]
-            [crux.tx.polling :as p]
-            [clojure.tools.logging :as log]
+            [crux.codec :as c]
+            [crux.db :as db]
+            [crux.io :as cio]
+            [crux.kv :as kv]
+            [crux.memory :as mem]
+            [crux.tx :as tx]
             [crux.moberg.types]
-            [crux.tx.consumer]
-            [crux.io :as cio])
-  (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
-           org.agrona.io.DirectBufferInputStream
-           crux.api.NonMonotonicTimeException
+            [crux.tx.consumer :as tc]
+            [taoensso.nippy :as nippy])
+  (:import crux.api.NonMonotonicTimeException
+           [crux.moberg.types CompactKVsAndKey SentMessage]
            crux.tx.consumer.Message
-           crux.moberg.types.CompactKVsAndKey
-           crux.moberg.types.SentMessage
-           java.util.function.Supplier
            [java.io Closeable DataInputStream DataOutput]
            java.nio.ByteOrder
-           [java.util Date Iterator]))
+           java.util.Date
+           java.util.function.Supplier
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           org.agrona.io.DirectBufferInputStream))
 
 ;; Based on
 ;; https://github.com/facebook/rocksdb/wiki/Implement-Queue-Service-Using-RocksDB
@@ -251,11 +246,11 @@
      (when-let [m (seek-message i ::event-log next-offset)]
        (cons m (more-events))))))
 
-(defrecord MobergEventLogConsumer [event-log-kv batch-size]
-  crux.tx.consumer/PolledEventLog
-  (next-events [this next-offset]
+(defrecord MobergQueue [event-log-kv batch-size]
+  tc/OffsetBasedQueue
+  (next-events-from-offset [this offset]
     (with-open [snapshot (kv/new-snapshot event-log-kv)
                 i (kv/new-iterator snapshot)]
-      (->> (lazy-event-seq next-offset i)
+      (->> (lazy-event-seq offset i)
            (take (long batch-size))
            (into [])))))
