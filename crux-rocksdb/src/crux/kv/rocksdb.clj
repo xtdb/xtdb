@@ -8,8 +8,10 @@
             [crux.memory :as mem])
   (:import java.io.Closeable
            clojure.lang.MapEntry
-           [org.rocksdb Checkpoint CompressionType FlushOptions LRUCache Options ReadOptions
-            RocksDB RocksIterator BlockBasedTableConfig WriteBatch WriteOptions Statistics]))
+           (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
+                        Options ReadOptions RocksDB RocksIterator
+                        BlockBasedTableConfig WriteBatch WriteOptions
+                        Statistics StatsLevel)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -72,7 +74,7 @@
                       crux.kv.rocksdb/metrics?
                       ^Options crux.kv.rocksdb/db-options] :as options}]
     (RocksDB/loadLibrary)
-    (let [stats (when metrics? (Statistics.))
+    (let [stats (when metrics? (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
           opts (doto (or db-options (Options.))
                  (cond-> metrics? (.setStatistics stats))
                  (.setCompressionType CompressionType/LZ4_COMPRESSION)
