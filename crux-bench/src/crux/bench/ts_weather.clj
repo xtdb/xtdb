@@ -348,6 +348,4 @@
           (test-last-10-readings-from-outside-locations node)
           (test-hourly-average-min-max-temperatures-for-field-locations node)))
 
-      (doto (-> (bench/results->slack-message :ts-weather)
-                (doto (bench/post-to-slack))
-                (bench/send-email-via-ses :ts-weather)))))
+      (doto (-> (bench/results->slack-message :ts-weather) bench/post-to-slack))))
