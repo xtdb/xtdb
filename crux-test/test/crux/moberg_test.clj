@@ -3,13 +3,17 @@
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
+            [crux.api :as crux]
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.fixtures.kv-only :as fkv :refer [*kv* *kv-module*]]
+            [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.status :as status]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.fixtures.standalone :as fs]
+            [clojure.java.io :as io])
   (:import crux.api.NonMonotonicTimeException))
 
 (t/use-fixtures :each fkv/with-each-kv-store-implementation fkv/without-kv-index-version fkv/with-kv-store f/with-silent-test-check)
@@ -174,3 +178,39 @@
          (dotimes [n n]
            (moberg/next-message i :my-topic)))))
     (t/is true)))
+
+(defmacro ^:private with-moberg-node [moberg-dir & body]
+  `(fapi/with-opts {:crux.node/topology '[crux.standalone/topology]
+                    :crux.standalone/event-log-dir (str (io/file ~moberg-dir "event-log"))
+                    :crux.kv/db-dir (str (io/file ~moberg-dir (str (gensym 'db))))}
+     (fn []
+       (fapi/with-node
+         (fn []
+           ~@body)))))
+
+(t/deftest test-compaction-consumption-error-653
+  (f/with-tmp-dir "moberg" [moberg-dir]
+    (let [last-tx (with-moberg-node (io/file moberg-dir)
+                    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]
+                                           [:crux.tx/put {:crux.db/id :baz}]])
+                    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :bar}]])
+                    (let [last-tx (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])]
+                      (t/is (= #{[:foo] [:bar] [:baz]}
+                               (crux/q (crux/db *api*)
+                                       '{:find [e], :where [[e :crux.db/id _]]})))
+                      last-tx))]
+
+      (with-moberg-node (io/file moberg-dir)
+        (crux/await-tx *api* last-tx)
+        (t/is (= #{[:foo] [:bar] [:baz]}
+                 (crux/q (crux/db *api*)
+                         '{:find [e], :where [[e :crux.db/id _]]}))))
+
+      (with-redefs [moberg/map->MobergEventLogConsumer (comp moberg/map->MobergEventLogConsumer
+                                                             (fn [opts]
+                                                               (merge opts {:batch-size 1})))]
+        (with-moberg-node (io/file moberg-dir)
+          (crux/await-tx *api* last-tx)
+          (t/is (= #{[:foo] [:bar] [:baz]}
+                   (crux/q (crux/db *api*)
+                           '{:find [e], :where [[e :crux.db/id _]]}))))))))
