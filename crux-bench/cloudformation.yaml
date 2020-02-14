@@ -87,9 +87,6 @@ Resources:
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
 
-                # Put metric data in cloudwatch
-                - 'cloudwatch:PutMetricData'
-
                 # Allow the ECS tasks to get secret values from the secrets manager
                 - 'secretsmanager:GetSecretValue'
 
@@ -117,6 +114,10 @@ Resources:
                 # Allow the ECS tasks to upload/download from s3
                 - 's3:PutObject'
                 - 's3:GetObject'
+
+                # Put metric data in cloudwatch
+                - 'cloudwatch:PutMetricData'
+
               Resource: '*'
 
   BenchBucket:
