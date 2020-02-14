@@ -148,9 +148,7 @@
   {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
                (lru/start-kv-store (map->RocksKv {:db-dir db-dir}) options))
    :args (-> lru/options
-             (assoc ::metrics? {:doc "Enable RocksDB metrics"
-                                :crux.config/type :crux.config/boolean}
-                    ::db-options {:doc "RocksDB Options"
+             (assoc ::db-options {:doc "RocksDB Options"
                                   :crux.config/type [#(instance? Options %) identity]}
                     ::disable-wal? {:doc "Disable Write Ahead Log"
                                     :crux.config/type :crux.config/boolean})

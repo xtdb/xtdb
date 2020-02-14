@@ -7,7 +7,6 @@
             [crux.metrics.dropwizard.console :as console]
             [crux.metrics.dropwizard.csv :as csv]
             [crux.metrics.dropwizard.cloudwatch :as cloudwatch]
-            [crux.metrics.rocksdb :as rocksdb]
             [crux.metrics.dropwizard.prometheus :as prometheus])
   (:import [java.time Duration]
            [java.util.concurrent TimeUnit]))
@@ -15,13 +14,11 @@
 (def registry
   {::registry {:start-fn (fn [deps {::keys [with-indexer-metrics?
                                             with-kv-metrics?
-                                            with-query-metrics?
-                                            with-rocksdb-metrics?]}]
+                                            with-query-metrics?]}]
                            (cond-> (dropwizard/new-registry)
                                with-indexer-metrics? (doto (indexer-metrics/assign-listeners deps))
                                with-kv-metrics? (doto (kv-metrics/assign-listeners deps))
-                               with-query-metrics? (doto (query-metrics/assign-listeners deps))
-                               with-rocksdb-metrics? (doto (rocksdb/assign-gauges deps))))
+                               with-query-metrics? (doto (query-metrics/assign-listeners deps))))
                :deps #{:crux.node/node :crux.node/indexer :crux.node/bus :crux.node/kv-store}
                :args {::with-indexer-metrics? {:doc "Include metrics on the indexer"
                                                :default true
@@ -31,13 +28,11 @@
                                           :crux.config/type :crux.config/boolean}
                       ::with-query-metrics? {:doc "Include metrics on queries"
                                              :default true
-                                             :crux.config/type :crux.config/boolean}
-                      ::with-rocksdb-metrics? {:doc "Include metrics on rocksdb"
-                                               :default false
-                                               :crux.config/type :crux.config/boolean}}}
+                                             :crux.config/type :crux.config/boolean}}}
 
    ;; virtual component that metrics can hook into with `:before` to ensure they're included in reporters
-   ::all-metrics-loaded {:start-fn (fn [_ _])}})
+   ::all-metrics-loaded {:start-fn (fn [_ _])
+                         :deps #{::registry}}})
 
 (def jmx-reporter
   {::jmx-reporter {:start-fn (fn [{::keys [registry]} args]

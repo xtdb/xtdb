@@ -137,6 +137,10 @@ You can create a node with custom RocksDB options by passing extra keywords in t
 * `:crux.kv.rocksdb/disable-wal?`, which takes a boolean (if true, disables the *write ahead log*)
 * `:crux.kv.rocksdb/db-options`, which takes a RocksDB 'Options' object (see more https://javadoc.io/doc/org.rocksdb/rocksdbjni/6.2.2/org/rocksdb/Options.html[here], from the *RocksDB javadocs*)
 
+To include rocksdb metrics in monitoring `:crux.kv.rocksdb/metrics?` should be
+set as `true` and `crux.kv.rocksdb.metrics/metrics-module` needs to be required
+as a topology.
+
 == LMDB
 
 An alternative to RocksDB, LMDB provides faster queries in exchange for a slower ingest rate.
@@ -402,8 +406,20 @@ used whenever any of the topologies to display metrics are included.
 |`:crux.metrics/with-indexer-metrics?`|`boolean`|`true`| Includes indexer metrics in the metrics registry
 |`:crux.metrics/with-kv-metrics?`|`boolean`|`true`| Includes kv-store metrics in the metrics registry
 |`:crux.metrics/with-query-metrics?`|`boolean`|`true`| Includes query metrics in the metrics registry
-|`:crux.metrics/with-rocksdb-metrics?`|`boolean`|`false`| Includes rocksdb metrics in the metrics registry
 |===
+
+To include rocksdb metrics in monitoring `:crux.kv.rocksdb/metrics?` should be
+set as `true` and `crux.kv.rocksdb.metrics/metrics-module` needs to be required
+as a topology.
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.kv.rocksdb.metrics/metrics-modlue
+                                      ...]
+                 :crux.kv.rocksdb/metrics? true
+                 ...})
+----
 
 Crux currently supports the following outputs:
 
