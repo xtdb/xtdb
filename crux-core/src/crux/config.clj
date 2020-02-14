@@ -17,6 +17,7 @@
    ::string [string? identity]
    ;; TODO string-map for properties files
    ::string-map [(fn [m] (s/valid? (s/map-of string? string?) m)) identity]
+   ::string-list [(fn [m] (s/valid? (s/coll-of string?) m)) identity]
    ::module [(fn [m] (s/valid? :crux.topology/module m))
              (fn [m] (s/conform :crux.topology/module m))]
    ::duration [#(instance? Duration %)
