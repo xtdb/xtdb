@@ -132,7 +132,7 @@ Resources:
       - LogGroup
     Properties:
       Cpu: '2 vCPU'
-      Memory: '4GB'
+      Memory: '7GB'
       Family: 'crux-bench'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
@@ -163,7 +163,7 @@ Resources:
       - LogGroup
     Properties:
       Cpu: '2 vCPU'
-      Memory: '4GB'
+      Memory: '7GB'
       Family: 'crux-bench-latest'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
