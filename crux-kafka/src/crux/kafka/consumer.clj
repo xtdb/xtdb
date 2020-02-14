@@ -100,7 +100,7 @@
 
 (defn consume-and-block
   [{:keys [offsets indexer pending-records-state timeout topic ^KafkaConsumer consumer accept-fn index-fn]}]
-  (let [_ (when (empty @pending-records-state)
+  (let [_ (when (empty? @pending-records-state)
             (reset! pending-records-state (let [records (.poll consumer (Duration/ofMillis timeout))]
                                             (vec (.records records (str topic))))))
         records (->> @pending-records-state
