@@ -40,6 +40,5 @@
                 dimensions (.withGlobalDimensions (->> dimensions
                                                        (map (fn [[k v]] (format "%s=%s" k v)))
                                                        (into-array String))))
-        (.withMeterUnitSentToCW)
         (.build)
         (doto (.start (.toMillis ^Duration dry-run-report-frequency) TimeUnit/MILLISECONDS)))))
