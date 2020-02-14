@@ -22,14 +22,14 @@
   (next-events [this])
   (mark-processed [this records]))
 
-(defn consume
+(defn- consume
   [{:keys [queue index-fn]}]
   (let [records (next-events queue)]
     (index-fn records)
     (mark-processed queue records)
-    (count records)))
+    (empty? records)))
 
-(defn consume-and-block
+(defn- consume-and-block
   [{:keys [queue pending-records-state accept-fn index-fn]}]
   (let [_ (when (empty? @pending-records-state)
             (reset! pending-records-state (next-events queue)))
@@ -41,12 +41,13 @@
     (swap! pending-records-state (comp vec (partial drop (count records))))
     (when (seq @pending-records-state)
       (log/debug "Blocked processing" (count pending-records-state) "records"))
-    (count records)))
+    (empty? records)))
 
 (defn start-consumer
   ^java.io.Closeable
   [{:keys [idle-sleep-ms queue accept-fn index-fn]}]
   (let [running? (atom true)
+        pending-records (atom [])
         worker-thread
         (doto
             (Thread. ^Runnable (fn []
@@ -55,7 +56,7 @@
                                      (let [opts {:queue queue
                                                  :index-fn index-fn}
                                            idle? (if accept-fn
-                                                   (consume-and-block (merge opts {:pending-records-state (atom [])
+                                                   (consume-and-block (merge opts {:pending-records-state pending-records
                                                                                    :accept-fn accept-fn}))
                                                    (consume opts))]
                                        (when (and idle-sleep-ms idle?)
@@ -97,12 +98,11 @@
     (doseq [^Message tx-msg tx-msgs]
       (let [tx {:crux.tx/tx-time (.message-time tx-msg)
                 :crux.tx/tx-id (.message-id tx-msg)}]
-        (db/index-tx indexer tx (.body tx-msg))))
-    (not (empty? records))))
+        (db/index-tx indexer tx (.body tx-msg))))))
 
 (defn start-indexing-consumer
   ^java.io.Closeable
-  [{:keys [indexer queue]}]
-  (start-consumer {:queue queue
+  [indexer queue]
+  (start-consumer {:queue (offsets-based-queue indexer queue)
                    :index-fn (partial index-records indexer)
                    :idle-sleep-ms 10}))

@@ -133,7 +133,7 @@
             (:event_key result)
             {:crux.tx/sub-topic (keyword (:topic result))}))
 
-(defrecord JDBCEventLogConsumer [ds dbtype]
+(defrecord JDBCQueue [ds dbtype]
   tc/OffsetBasedQueue
   (next-events-from-offset [this offset]
     (mapv (partial event-result->message dbtype)
@@ -160,7 +160,7 @@
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
 (defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {::keys [dbtype]}]
-  (tc/start-indexing-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
+  (tc/start-indexing-consumer indexer (JDBCQueue. ds dbtype)))
 
 (def topology (merge n/base-topology
                      {::ds {:start-fn start-jdbc-ds
