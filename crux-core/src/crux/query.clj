@@ -1184,7 +1184,8 @@
      (entity db snapshot eid)))
   ([{:keys [kv object-store] :as db} snapshot eid]
    (let [entity-tx (entity-tx snapshot db eid)]
-     (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
+     (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
+         idx/keep-non-evicted-doc))))
 
 (defrecord QueryDatasource [kv object-store bus
                             query-cache conform-cache

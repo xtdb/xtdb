@@ -336,7 +336,8 @@
 
           docs-to-remove (when (seq docs-to-evict)
                            (with-open [snapshot (kv/new-snapshot kv-store)]
-                             (let [existing-docs (db/get-objects object-store snapshot (keys docs-to-evict))]
+                             (let [existing-docs (->> (db/get-objects object-store snapshot (keys docs-to-evict))
+                                                      (remove (comp idx/evicted-doc? val)))]
                                (->> existing-docs
                                     (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
                                     (idx/delete-doc-idx-keys kv-store))
@@ -410,10 +411,9 @@
       (and (db/known-keys? object-store snapshot content-hashes)
            (let [docs (db/get-objects object-store snapshot content-hashes)]
              (every? (fn [content-hash]
-                       (if-let [doc (get docs content-hash)]
-                         (idx/doc-indexed? snapshot (:crux.db/id doc) content-hash)
-                         ;; We can assume the doc is evicted:
-                         true))
+                       (let [{eid ::db/id, :as doc} (get docs content-hash)]
+                         (or (idx/evicted-doc? doc)
+                             (idx/doc-indexed? snapshot eid content-hash))))
                      content-hashes)))))
 
   (store-index-meta [_ k v]

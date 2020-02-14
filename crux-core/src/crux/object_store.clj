@@ -10,11 +10,6 @@
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
            org.agrona.io.DirectBufferInputStream))
 
-(defn- keep-non-evicted-doc
-  [doc]
-  (when-not (i/evicted-doc? doc)
-    doc))
-
 (defrecord KvObjectStore [kv]
   db/ObjectStore
   (get-single-object [this snapshot k]
@@ -23,17 +18,14 @@
       (some->> (kv/get-value snapshot seek-k)
                (DirectBufferInputStream.)
                (DataInputStream.)
-               (nippy/thaw-from-in!)
-               (keep-non-evicted-doc))))
+               (nippy/thaw-from-in!))))
 
   (get-objects [this snapshot ks]
     (->> (for [k ks
                :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
                      v (kv/get-value snapshot seek-k)]
-               :when v
-               :let [doc (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))]
-               :when (keep-non-evicted-doc doc)]
-           [k doc])
+               :when v]
+           [k (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))])
          (into {})))
 
   (known-keys? [this snapshot ks]
@@ -59,8 +51,7 @@
         (with-open [in (FileInputStream. doc-file)]
           (some->> in
                    (DataInputStream.)
-                   (nippy/thaw-from-in!)
-                   (keep-non-evicted-doc))))))
+                   (nippy/thaw-from-in!))))))
 
   (get-objects [this _ ks]
     (->> (for [k ks

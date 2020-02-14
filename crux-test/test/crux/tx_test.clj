@@ -230,7 +230,9 @@
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
-          (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history)))))))))
+          (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))
+                             vals
+                             (remove idx/evicted-doc?)))))))))
 
 (t/deftest test-handles-legacy-evict-events
   (let [{put-tx-time ::tx/tx-time, put-tx-id ::tx/tx-id} (fapi/submit+await-tx [[:crux.tx/put picasso #inst "2018-05-21"]])
@@ -252,9 +254,11 @@
 
     (t/testing "no docs evicted yet"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/is (seq (db/get-objects (:object-store *api*) snapshot
-                                   (->> (idx/entity-history snapshot picasso-id)
-                                        (keep :content-hash)))))))
+        (t/is (seq (->> (db/get-objects (:object-store *api*) snapshot
+                                        (->> (idx/entity-history snapshot picasso-id)
+                                             (keep :content-hash)))
+                        vals
+                        (remove idx/evicted-doc?))))))
 
     (binding [tx/*evict-all-on-legacy-time-ranges?* true]
       (index-evict!))
@@ -264,9 +268,11 @@
 
     (t/testing "eviction removes docs"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot
-                                      (->> (idx/entity-history snapshot picasso-id)
-                                           (keep :content-hash)))))))))
+        (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot
+                                           (->> (idx/entity-history snapshot picasso-id)
+                                                (keep :content-hash)))
+                           vals
+                           (remove idx/evicted-doc?))))))))
 
 (t/deftest test-multiple-txs-in-same-ms-441
   (let [ivan {:crux.db/id :ivan}

@@ -64,13 +64,15 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (kv/new-snapshot kv-store)]
-        (db/get-single-object object-store snapshot (c/new-id content-hash)))))
+        (-> (db/get-single-object object-store snapshot (c/new-id content-hash))
+            (idx/keep-non-evicted-doc)))))
 
   (documents [this content-hash-set]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (kv/new-snapshot kv-store)]
-        (db/get-objects object-store snapshot (map c/new-id content-hash-set)))))
+        (->> (db/get-objects object-store snapshot (map c/new-id content-hash-set))
+             (into {} (remove (comp idx/evicted-doc? val)))))))
 
   (history [this eid]
     (cio/with-read-lock lock
