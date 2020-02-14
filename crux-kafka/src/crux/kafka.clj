@@ -122,9 +122,9 @@
       (db/->closeable-tx-log-iterator
        #(.close tx-topic-consumer)
        ((fn step []
-           (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
-             (concat (map tx-record->tx-log-entry records)
-                     (step))))))))
+          (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
+            (concat (map tx-record->tx-log-entry records)
+                    (step))))))))
 
   (latest-submitted-tx [this]
     (let [tx-tp (TopicPartition. tx-topic 0)
@@ -136,8 +136,7 @@
   (status-map [_]
     {:crux.zk/zk-active?
      (try
-       (with-open [^KafkaConsumer consumer (kc/create-consumer (assoc kafka-config {"default.api.timeout.ms" (int 1000)}))]
-         (boolean (.listTopics consumer)))
+       (boolean (.listTopics latest-submitted-tx-consumer))
        (catch Exception e
          (log/debug e "Could not list Kafka topics:")
          false))}))
