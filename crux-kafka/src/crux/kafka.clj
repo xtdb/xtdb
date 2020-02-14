@@ -189,9 +189,8 @@
                                          (str :crux.tx/docs))
                             (.value)
                             (nippy/fast-thaw))
-        ready? (db/docs-indexed? indexer content-hashes)
-        {:crux.tx/keys [tx-time
-                        tx-id]} (tx-record->tx-log-entry tx-record)]
+        ready? (empty? (db/missing-docs indexer content-hashes))
+        {:crux.tx/keys [tx-time tx-id]} (tx-record->tx-log-entry tx-record)]
     (if ready?
       (log/info "Ready for indexing of tx" tx-id (cio/pr-edn-str tx-time))
       (log/info "Delaying indexing of tx" tx-id (cio/pr-edn-str tx-time)))

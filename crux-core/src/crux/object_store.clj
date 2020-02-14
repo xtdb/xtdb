@@ -10,6 +10,12 @@
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
            org.agrona.io.DirectBufferInputStream))
 
+(defn <-nippy-buffer [buf]
+  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+
+(defn ->nippy-buffer [v]
+  (mem/->off-heap (nippy/fast-freeze v)))
+
 (defrecord KvObjectStore [kv]
   db/ObjectStore
   (get-single-object [this snapshot k]
@@ -23,21 +29,20 @@
   (get-objects [this snapshot ks]
     (->> (for [k ks
                :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
-                     v (kv/get-value snapshot seek-k)]
-               :when v]
-           [k (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))])
+                     doc (some-> (kv/get-value snapshot seek-k) <-nippy-buffer)]
+               :when doc]
+           [k doc])
          (into {})))
 
-  (known-keys? [this snapshot ks]
-    (every?
-      (fn [k]
-        (kv/get-value snapshot (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))))
-      ks))
+  (missing-keys [this snapshot ks]
+    (->> ks
+         (into #{} (remove (fn [k]
+                             (kv/get-value snapshot (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))))))))
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
                    [(c/encode-doc-key-to nil (c/->id-buffer k))
-                    (mem/->off-heap (nippy/fast-freeze v))])))
+                    (->nippy-buffer v)])))
 
   Closeable
   (close [_]))
@@ -66,13 +71,10 @@
       (with-open [out (DataOutputStream. (FileOutputStream. (io/file dir doc-key)))]
         (nippy/freeze-to-out! out v))))
 
-  (known-keys? [this snapshot ks]
-    (every?
-      (fn [k]
-        (let [doc-key (str (c/new-id k))
-              doc-file (io/file dir doc-key)]
-          (.exists doc-file)))
-      ks))
+  (missing-keys [this snapshot ks]
+    (->> ks
+         (into #{} (remove (fn [k]
+                             (.exists (io/file dir (str (c/new-id k)))))))))
 
   Closeable
   (close [_]))
@@ -94,8 +96,8 @@
            [k v])
          (into {})))
 
-  (known-keys? [this snapshot ks]
-    (db/known-keys? object-store snapshot ks))
+  (missing-keys [this snapshot ks]
+    (db/missing-keys object-store snapshot ks))
 
   (put-objects [this kvs]
     (db/put-objects

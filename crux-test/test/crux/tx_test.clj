@@ -303,13 +303,13 @@
 
     (db/submit-docs (:tx-log *api*) [[content-hash picasso]])
 
-    (Thread/sleep 1000)
+    (Thread/sleep 500)
 
-    (t/is (db/docs-indexed? (:indexer *api*) [content-hash]))
+    (t/is (empty? (db/missing-docs (:indexer *api*) #{content-hash})))
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= {content-hash picasso}
-               (db/get-objects (:object-store *api*) snapshot [content-hash])))
+               (db/get-objects (:object-store *api*) snapshot #{content-hash})))
 
       (t/testing "non existent docs are ignored"
         (t/is (= {content-hash picasso}
@@ -317,7 +317,7 @@
                                  snapshot
                                  [content-hash
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot [])))))))
+        (t/is (empty? (db/get-objects (:object-store *api*) snapshot #{})))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
