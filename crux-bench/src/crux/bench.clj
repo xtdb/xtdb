@@ -187,7 +187,7 @@
                          (.withSubject (-> (Content.)
                                              (.withCharset "UTF-8")
                                              (.withData (str "Bench Results"))))))
-                    (.withSource "dan@juxt.pro"))]
+                    (.withSource "crux-bench@juxt.pro"))]
       (-> (AmazonSimpleEmailServiceClientBuilder/standard)
           (.withRegion "eu-west-1")
           (.build)
