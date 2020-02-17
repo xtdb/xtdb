@@ -151,15 +151,15 @@
     (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
 
 (defn save-to-s3 [{:keys [database version]} file]
-
-  (try (.putObject (S3Client/create)
-                   (-> (PutObjectRequest/builder)
-                       (.bucket "crux-bench")
-                       (.key (generate-s3-filename database version))
-                       (.build))
-                   (RequestBody/fromFile file))
-       (catch SdkClientException e
-         "AWS credentials not found! Results file not saved.")))
+  (try
+    (.putObject (S3Client/create)
+                (-> (PutObjectRequest/builder)
+                    (.bucket "crux-bench")
+                    (.key (generate-s3-filename database version))
+                    (.build))
+                (RequestBody/fromFile file))
+    (catch SdkClientException e
+      "AWS credentials not found! Results file not saved.")))
 
 (defn load-from-s3 [key]
   (try
@@ -169,21 +169,19 @@
                     (.key key)
                     (.build)))
     (catch SdkClientException e
-      (log/info (format "AWS credentials not found! File %s not loaded" key)))))
+      (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
 
 (defn send-email-via-ses [message]
   (try
     (let [email (-> (SendEmailRequest.)
-                    (.withDestination
-                     (-> (Destination.)
-                         (.withToAddresses ["crux-bench@juxt.pro"])))
+                    (.withDestination (-> (Destination.)
+                                          (.withToAddresses ["crux-bench@juxt.pro"])))
                     (.withMessage
                      (-> (Message.)
-                         (.withBody
-                          (-> (Body.)
-                              (.withText (-> (Content.)
-                                             (.withCharset "UTF-8")
-                                             (.withData message)))))
+                         (.withBody (-> (Body.)
+                                        (.withText (-> (Content.)
+                                                       (.withCharset "UTF-8")
+                                                       (.withData message)))))
                          (.withSubject (-> (Content.)
                                              (.withCharset "UTF-8")
                                              (.withData (str "Bench Results"))))))
@@ -194,4 +192,4 @@
           (.sendEmail email)))
 
     (catch Exception e
-      (log/info "Email failed to send! Error: " e))))
+      (log/warn "Email failed to send! Error: " e))))
