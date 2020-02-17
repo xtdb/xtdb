@@ -301,7 +301,8 @@
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (db/submit-docs (:tx-log *api*) [[content-hash picasso]])
+    (db/submit-docs (:document-store *api*) [[content-hash picasso]])
+    (db/index-docs (:indexer *api*) {content-hash picasso})
 
     (Thread/sleep 500)
 
