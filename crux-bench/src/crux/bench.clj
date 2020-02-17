@@ -13,7 +13,9 @@
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
-           (software.amazon.awssdk.core.exception SdkClientException)))
+           (software.amazon.awssdk.core.exception SdkClientException)
+           (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClientBuilder)
+           (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)))
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -149,15 +151,15 @@
     (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
 
 (defn save-to-s3 [{:keys [database version]} file]
-
-  (try (.putObject (S3Client/create)
-                   (-> (PutObjectRequest/builder)
-                       (.bucket "crux-bench")
-                       (.key (generate-s3-filename database version))
-                       (.build))
-                   (RequestBody/fromFile file))
-       (catch SdkClientException e
-         "AWS credentials not found! Results file not saved.")))
+  (try
+    (.putObject (S3Client/create)
+                (-> (PutObjectRequest/builder)
+                    (.bucket "crux-bench")
+                    (.key (generate-s3-filename database version))
+                    (.build))
+                (RequestBody/fromFile file))
+    (catch SdkClientException e
+      "AWS credentials not found! Results file not saved.")))
 
 (defn load-from-s3 [key]
   (try
@@ -167,4 +169,27 @@
                     (.key key)
                     (.build)))
     (catch SdkClientException e
-      (log/info (format "AWS credentials not found! File %s not loaded" key)))))
+      (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
+
+(defn send-email-via-ses [message]
+  (try
+    (let [email (-> (SendEmailRequest.)
+                    (.withDestination (-> (Destination.)
+                                          (.withToAddresses ["crux-bench@juxt.pro"])))
+                    (.withMessage
+                     (-> (Message.)
+                         (.withBody (-> (Body.)
+                                        (.withText (-> (Content.)
+                                                       (.withCharset "UTF-8")
+                                                       (.withData message)))))
+                         (.withSubject (-> (Content.)
+                                             (.withCharset "UTF-8")
+                                             (.withData (str "Bench Results"))))))
+                    (.withSource "crux-bench@juxt.pro"))]
+      (-> (AmazonSimpleEmailServiceClientBuilder/standard)
+          (.withRegion "eu-west-1")
+          (.build)
+          (.sendEmail email)))
+
+    (catch Exception e
+      (log/warn "Email failed to send! Error: " e))))
