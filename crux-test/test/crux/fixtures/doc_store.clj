@@ -26,5 +26,6 @@
 
 (defn with-remote-doc-store-opts [f]
   (apif/with-opts {:crux.node/document-store 'crux.fixtures.doc-store/document-store
-                   :crux.kafka/doc-indexing-consumer 'crux.kafka/doc-indexing-from-tx-topic-consumer}
+                   :crux.kafka/doc-consumer 'crux.kafka/tx-doc-consumer
+                   :crux.kafka/doc-indexing-consumer 'crux.kafka/tx-doc-indexing-consumer}
     f))

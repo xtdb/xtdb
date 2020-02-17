@@ -160,7 +160,9 @@
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
 (defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {::keys [dbtype]}]
-  (tc/start-indexing-consumer indexer (JDBCQueue. ds dbtype)))
+  (tc/start-indexing-consumer {:queue (tc/offsets-based-queue indexer (JDBCQueue. ds dbtype))
+                               :index-fn (partial tc/index-records indexer)
+                               :idle-sleep-ms 10}))
 
 (def topology (merge n/base-topology
                      {::ds {:start-fn start-jdbc-ds

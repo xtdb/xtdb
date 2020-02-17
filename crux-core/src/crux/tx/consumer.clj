@@ -6,18 +6,6 @@
   (:import java.util.Date
            java.io.Closeable))
 
-(defprotocol Offsets
-  (read-offsets [this])
-  (store-offsets [this offsets]))
-
-(defrecord IndexedOffsets [indexer k]
-  Offsets
-  (read-offsets [this]
-    (db/read-index-meta indexer k))
-  (store-offsets [this offsets]
-    (log/debug "Consumer state:" k (cio/pr-edn-str offsets))
-    (db/store-index-meta indexer k offsets)))
-
 (defprotocol Queue
   (next-events [this])
   (mark-processed [this records]))
@@ -43,7 +31,7 @@
       (log/debug "Blocked processing" (count pending-records-state) "records"))
     (empty? records)))
 
-(defn start-consumer
+(defn start-indexing-consumer
   ^java.io.Closeable
   [{:keys [idle-sleep-ms queue accept-fn index-fn]}]
   (let [running? (atom true)
@@ -69,6 +57,18 @@
       (close [_]
         (reset! running? false)
         (.join worker-thread)))))
+
+(defprotocol Offsets
+  (read-offsets [this])
+  (store-offsets [this offsets]))
+
+(defrecord IndexedOffsets [indexer k]
+  Offsets
+  (read-offsets [this]
+    (db/read-index-meta indexer k))
+  (store-offsets [this offsets]
+    (log/debug "Consumer state:" k (cio/pr-edn-str offsets))
+    (db/store-index-meta indexer k offsets)))
 
 (deftype Message [body topic ^long message-id ^Date message-time key headers])
 
@@ -99,10 +99,3 @@
       (let [tx {:crux.tx/tx-time (.message-time tx-msg)
                 :crux.tx/tx-id (.message-id tx-msg)}]
         (db/index-tx indexer tx (.body tx-msg))))))
-
-(defn start-indexing-consumer
-  ^java.io.Closeable
-  [indexer queue]
-  (start-consumer {:queue (offsets-based-queue indexer queue)
-                   :index-fn (partial index-records indexer)
-                   :idle-sleep-ms 10}))
