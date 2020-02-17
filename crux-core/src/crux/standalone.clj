@@ -47,8 +47,8 @@
                      (reduced nil))))))))
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
-                  {:keys [^ExecutorService tx-executor ^ExecutorService tx-indexer indexer kv-store] :as deps}]
-  (when (.isShutdown tx-executor)
+                  {:keys [^ExecutorService tx-submit-executor ^ExecutorService tx-indexer-executor indexer kv-store] :as deps}]
+  (when (.isShutdown tx-submit-executor)
     (deliver !submitted-tx ::closed))
 
   (let [tx-time (Date.)
@@ -60,20 +60,21 @@
 
     (deliver !submitted-tx next-tx)
 
-    (.submit tx-indexer ^Runnable #(index-txs deps))))
+    (.submit tx-indexer-executor ^Runnable #(index-txs deps))))
 
-(defrecord StandaloneTxLog [^ExecutorService tx-executor
-                            ^ExecutorService tx-indexer
+(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor
+                            ^ExecutorService tx-indexer-executor
                             indexer kv-store object-store]
   db/TxLog
   (submit-tx [this tx-ops]
-    (when (.isShutdown tx-executor)
+    (when (.isShutdown tx-submit-executor)
       (throw (IllegalStateException. "TxLog is closed.")))
 
     (let [!submitted-tx (promise)]
-      (.submit tx-executor ^Runnable #(submit-tx {:!submitted-tx !submitted-tx
-                                                  :tx-events (mapv tx/tx-op->tx-event tx-ops)}
-                                                 this))
+      (.submit tx-submit-executor
+               ^Runnable #(submit-tx {:!submitted-tx !submitted-tx
+                                      :tx-events (mapv tx/tx-op->tx-event tx-ops)}
+                                     this))
       (delay
         (let [submitted-tx @!submitted-tx]
           (when (= ::closed submitted-tx)
@@ -91,30 +92,34 @@
   Closeable
   (close [_]
     (try
-      (.shutdown tx-executor)
+      (.shutdown tx-submit-executor)
       (catch Exception e
-        (log/warn e "Error shutting down tx-executor")))
+        (log/warn e "Error shutting down tx-submit-executor")))
 
     (try
-      (.shutdownNow tx-indexer)
+      (.shutdownNow tx-indexer-executor)
       (catch Exception e
-        (log/warn e "Error shutting down tx-indexer")))
+        (log/warn e "Error shutting down tx-indexer-executor")))
 
-    (or (.awaitTermination tx-executor 5 TimeUnit/SECONDS)
-        (log/warn "waited 5s for tx-executor to exit, no dice."))
+    (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
+        (log/warn "waited 5s for tx-submit-executor to exit, no dice."))
 
-    (or (.awaitTermination tx-indexer 5 TimeUnit/SECONDS)
-        (log/warn "waited 5s for tx-indexer to exit, no dice."))))
+    (or (.awaitTermination tx-indexer-executor 5 TimeUnit/SECONDS)
+        (log/warn "waited 5s for tx-indexer-executor to exit, no dice."))))
 
 (defn- ->tx-log [{::n/keys [indexer kv-store object-store]}]
-  ;; TODO replay log if we restart the node
-  (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "standalone-tx-log"))
-                     (ThreadPoolExecutor. 1 1
-                                          100 TimeUnit/MILLISECONDS
-                                          (ArrayBlockingQueue. 1)
-                                          (cio/thread-factory "standalone-tx-indexer")
-                                          (ThreadPoolExecutor$DiscardPolicy.))
-                     indexer kv-store object-store))
+  (let [tx-submit-executor (Executors/newSingleThreadExecutor (cio/thread-factory "standalone-tx-log"))
+        tx-indexer-executor (ThreadPoolExecutor. 1 1
+                                                 100 TimeUnit/MILLISECONDS
+                                                 (ArrayBlockingQueue. 1)
+                                                 (cio/thread-factory "standalone-tx-indexer")
+                                                 (ThreadPoolExecutor$DiscardPolicy.))
+        tx-log (->StandaloneTxLog tx-submit-executor tx-indexer-executor indexer kv-store object-store)]
+
+    ;; when we restart the standalone node, we want it to start indexing straightaway if it's behind
+    (.submit tx-indexer-executor ^Runnable #(index-txs tx-log))
+
+    tx-log))
 
 (defrecord StandaloneDocumentStore [kv-store object-store]
   db/DocumentStore
