@@ -66,22 +66,17 @@ version: 2.1
 jobs:
   build:
     docker:
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
       - image: circleci/clojure:lein-2.9.1
-
 
     working_directory: ~/crux
 
     environment:
       LEIN_ROOT: "true"
-      # Customize the JVM maximum heap limit
       JVM_OPTS: -Xmx3200m
 
     steps:
       - checkout
 
-      # Download and cache dependencies
       - restore_cache:
           keys:
           - v1-dependencies-{{ checksum "project.clj" }}
@@ -105,8 +100,6 @@ jobs:
 
   deploy:
     docker:
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
       - image: circleci/clojure:lein-2.9.1
 
     working_directory: ~/crux
