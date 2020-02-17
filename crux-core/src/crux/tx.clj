@@ -15,7 +15,8 @@
             crux.api
             crux.tx.event
             [crux.query :as q]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [clojure.set :as set])
   (:import [crux.codec EntityTx EntityValueContentHash]
            crux.tx.consumer.Message
            java.io.Closeable
@@ -202,7 +203,7 @@
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn #(let [content-hash (c/new-id v)
-                         correct-state? (db/docs-indexed? indexer [content-hash])]
+                         correct-state? (empty? (db/missing-docs indexer #{content-hash}))]
                      (when-not correct-state?
                        (log/error "Put, incorrect doc state for:" content-hash "tx id:" (:crux.tx/tx-id tx)))
                      correct-state?)
@@ -311,7 +312,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store tx-log document-store bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store document-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -369,7 +370,6 @@
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
         (let [deps {:object-store object-store
                     :kv-store kv-store
-                    :tx-log tx-log
                     :document-store document-store
                     :indexer this
                     :snapshot snapshot}
@@ -406,15 +406,14 @@
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
 
-  (docs-indexed? [_ content-hashes]
+  (missing-docs [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (and (db/known-keys? object-store snapshot content-hashes)
-           (let [docs (db/get-objects object-store snapshot content-hashes)]
-             (every? (fn [content-hash]
-                       (let [{eid ::db/id, :as doc} (get docs content-hash)]
-                         (or (idx/evicted-doc? doc)
-                             (idx/doc-indexed? snapshot eid content-hash))))
-                     content-hashes)))))
+      (let [docs (db/get-objects object-store snapshot content-hashes)]
+        (->> content-hashes
+             (into #{} (remove (fn [content-hash]
+                                 (when-let [{eid ::db/id, :as doc} (get docs content-hash)]
+                                   (or (idx/evicted-doc? doc)
+                                       (idx/doc-indexed? snapshot eid content-hash))))))))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
@@ -430,10 +429,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store tx-log document-store bus]} args]
-               (->KvIndexer object-store kv-store tx-log document-store bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store document-store bus]} args]
+               (->KvIndexer object-store kv-store document-store bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/tx-log :crux.node/document-store :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/document-store :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]
