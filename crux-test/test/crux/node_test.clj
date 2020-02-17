@@ -8,7 +8,8 @@
             [crux.node :as n]
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            crux.standalone)
   (:import java.util.Date
            crux.api.Crux
            (java.util HashMap)
@@ -67,20 +68,6 @@
                              :crux.db/db-dir (str (io/file data-dir "db"))))]
       (t/is (instance? crux.standalone.StandaloneTxLog (-> n :tx-log)))
       (t/is (= (Duration/ofSeconds 20) (-> n :options :crux.tx-log/await-tx-timeout))))))
-
-(t/deftest test-conflicting-standalone-props
-  (f/with-tmp-dir "data" [data-dir]
-    (try
-      (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                              :crux.kv/kv-store :crux.kv.memdb/kv
-                              :crux.kv/db-dir (str (io/file data-dir "db"))
-                              :crux.standalone/event-log-sync-interval-ms 1000
-                              :crux.standalone/event-log-sync? true
-                              :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
-                              :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
-        (t/is false))
-      (catch java.lang.AssertionError e
-        (t/is true)))))
 
 (t/deftest topology-resolution-from-java
   (f/with-tmp-dir "data" [data-dir]
