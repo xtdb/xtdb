@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.config :as cc]
             [crux.io :as cio]
-            [crux.moberg]
             crux.jdbc
             crux.kv.memdb
             crux.kv.rocksdb
@@ -10,8 +9,7 @@
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
             [clojure.java.io :as io])
-  (:import crux.moberg.MobergTxLog
-           java.util.Date
+  (:import java.util.Date
            crux.api.Crux
            (java.util HashMap)
            (clojure.lang Keyword)
@@ -60,17 +58,14 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                             :crux.kv/kv-store :crux.kv.memdb/kv
-                            :crux.kv/db-dir (str (io/file data-dir "db"))
-                            :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
-                            :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
+                            :crux.kv/db-dir (str (io/file data-dir "db"))})]
       (t/is n))))
 
 (t/deftest test-properties-file-to-node
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-                             :crux.db/db-dir (str (io/file data-dir "db"))
-                             :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
-      (t/is (instance? MobergTxLog (-> n :tx-log)))
+                             :crux.db/db-dir (str (io/file data-dir "db"))))]
+      (t/is (instance? crux.standalone.StandaloneTxLog (-> n :tx-log)))
       (t/is (= (Duration/ofSeconds 20) (-> n :options :crux.tx-log/await-tx-timeout))))))
 
 (t/deftest test-conflicting-standalone-props

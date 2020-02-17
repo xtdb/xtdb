@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.standalone]
             [crux.fixtures.standalone :as fs]
-            [crux.moberg]
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*] :as fapi]
             [crux.fixtures.kv :as kvf]
@@ -20,7 +19,6 @@
   (:import crux.api.NodeOutOfSyncException
            java.util.Date
            java.time.Duration
-           crux.moberg.MobergTxLog
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))

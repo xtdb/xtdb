@@ -1,74 +1,121 @@
 (ns crux.standalone
-  (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
+            [crux.db :as db]
             [crux.kv :as kv]
-            [crux.moberg :as moberg]
+            [crux.object-store :as os]
             [crux.node :as n]
-            [crux.topology :as topo]
-            [crux.tx.polling :as p])
-  (:import java.io.Closeable))
+            [crux.tx :as tx]
+            [crux.codec :as c]
+            [crux.io :as cio]
+            [crux.index :as idx])
+  (:import (java.io Closeable)
+           (java.util Date)
+           (java.util.concurrent ArrayBlockingQueue
+                                 ExecutorService Executors TimeUnit
+                                 ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy)))
 
-(defn- start-event-log-fsync ^java.io.Closeable [{::keys [event-log-kv]}
-                                                 {::keys [event-log-sync-interval-ms
-                                                          event-log-sync?]}]
-  (assert (not (and event-log-sync? event-log-sync-interval-ms))
-          "Cannot specify both event-log-sync-interval and event-log-sync")
-  (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
-  (let [running? (atom true)
-        fsync-thread (when event-log-sync-interval-ms
-                       (doto (Thread. #(while @running?
-                                         (try
-                                           (Thread/sleep event-log-sync-interval-ms)
-                                           (kv/fsync event-log-kv)
-                                           (catch Throwable t
-                                             (log/error t "Event log fsync threw exception:"))))
-                                      "crux.tx.event-log-fsync-thread")
-                         (.start)))]
-    (reify Closeable
-      (close [_]
-        (reset! running? false)
-        (some-> fsync-thread (.join))))))
+(defn- index-txs [{:keys [indexer kv-store object-store]}]
+  (with-open [snapshot (kv/new-snapshot kv-store)
+              iterator (kv/new-iterator snapshot)]
+    (let [tx (db/read-index-meta indexer ::tx/latest-completed-tx)
+          k (kv/seek iterator (c/encode-tx-event-key-to nil (or tx {::tx/tx-id 0, ::tx/tx-time (Date.)})))
+          k (if tx (kv/next iterator) k)]
+      (loop [k k]
+        (when (c/tx-event-key? k)
+          (let [tx-events (os/<-nippy-buffer (kv/value iterator))
+                doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
+            (when-let [missing-docs (not-empty (db/missing-docs indexer doc-hashes))]
+              (db/index-docs indexer (->> (db/get-objects object-store snapshot missing-docs)
+                                          (into {} (map (juxt (comp c/new-id key) val))))))
 
-(defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv-store
-                                     crux.standalone/event-log-dir
-                                     crux.standalone/event-log-sync?]}]
-  (let [options {:crux.kv/db-dir event-log-dir
-                 :crux.kv/sync? event-log-sync?
-                 :crux.kv/check-and-store-index-version false}]
-    (topo/start-component event-log-kv-store nil options)))
+            (db/index-tx indexer (c/decode-tx-event-key-from k) tx-events))
 
-(defn- start-event-log-consumer [{:keys [crux.standalone/event-log-kv crux.node/indexer]} _]
-  (when event-log-kv
-    (p/start-event-log-consumer indexer
-                                (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv
-                                                                     :batch-size 100}))))
+          (when-not (Thread/interrupted)
+            (recur (kv/next iterator))))))))
 
-(defn- start-moberg-event-log [{::keys [event-log-kv]} _]
-  (moberg/->MobergTxLog event-log-kv))
+(defn- submit-tx [{:keys [!submitted-tx tx-events]}
+                  {:keys [^ExecutorService tx-executor ^ExecutorService tx-indexer indexer kv-store] :as deps}]
+  (when (.isShutdown tx-executor)
+    (deliver !submitted-tx ::closed))
+
+  (let [tx-time (Date.)
+        tx-id (inc (or (db/read-index-meta indexer ::latest-submitted-tx-id) -1))
+        next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
+    (kv/store kv-store [[(c/encode-tx-event-key-to nil next-tx)
+                         (os/->nippy-buffer tx-events)]
+                        (idx/meta-kv ::latest-submitted-tx-id tx-id)])
+
+    (deliver !submitted-tx next-tx)
+
+    (.submit tx-indexer ^Runnable #(index-txs deps))))
+
+(defrecord StandaloneTxLog [^ExecutorService tx-executor
+                            ^ExecutorService tx-indexer
+                            indexer kv-store object-store]
+  db/TxLog
+  (submit-tx [this tx-ops]
+    (when (.isShutdown tx-executor)
+      (throw (IllegalStateException. "TxLog is closed.")))
+
+    (let [!submitted-tx (promise)]
+      (.submit tx-executor ^Runnable #(submit-tx {:!submitted-tx !submitted-tx
+                                                  :tx-events (mapv tx/tx-op->tx-event tx-ops)}
+                                                 this))
+      (delay
+        (let [submitted-tx @!submitted-tx]
+          (when (= ::closed submitted-tx)
+            (throw (IllegalStateException. "TxLog is closed.")))
+
+          submitted-tx))))
+
+  (latest-submitted-tx [this]
+    (when-let [tx-id (db/read-index-meta indexer ::latest-submitted-tx-id)]
+      {::tx/tx-id tx-id}))
+
+  Closeable
+  (close [_]
+    (try
+      (.shutdown tx-executor)
+      (catch Exception e
+        (log/warn e "Error shutting down tx-executor")))
+
+    (try
+      (.shutdownNow tx-indexer)
+      (catch Exception e
+        (log/warn e "Error shutting down tx-indexer")))
+
+    (or (.awaitTermination tx-executor 5 TimeUnit/SECONDS)
+        (log/warn "waited 5s for tx-executor to exit, no dice."))
+
+    (or (.awaitTermination tx-indexer 5 TimeUnit/SECONDS)
+        (log/warn "waited 5s for tx-indexer to exit, no dice."))))
+
+(defn- ->tx-log [{::n/keys [indexer kv-store object-store]}]
+  ;; TODO replay log if we restart the node
+  (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "standalone-tx-log"))
+                     (ThreadPoolExecutor. 1 1
+                                          100 TimeUnit/MILLISECONDS
+                                          (ArrayBlockingQueue. 1)
+                                          (cio/thread-factory "standalone-tx-indexer")
+                                          (ThreadPoolExecutor$DiscardPolicy.))
+                     indexer kv-store object-store))
+
+(defrecord StandaloneDocumentStore [kv-store object-store]
+  db/DocumentStore
+  (submit-docs [this id-and-docs]
+    (db/put-objects object-store id-and-docs))
+
+  (fetch-docs [this ids]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (db/get-objects object-store snapshot ids))))
+
+(defn- ->document-store [{::n/keys [kv-store object-store]}]
+  (->StandaloneDocumentStore kv-store object-store))
 
 (def topology
   (merge n/base-topology
-         {::event-log-kv {:start-fn start-event-log-kv
-                          :args {::event-log-kv-store
-                                 {:doc "Key/Value store to use for standalone event-log persistence."
-                                  :default 'crux.kv.rocksdb/kv
-                                  :crux.config/type :crux.config/module}
-                                 ::event-log-dir
-                                 {:doc "Directory used to store the event-log and used for backup/restore."
-                                  :required? true
-                                  :crux.config/type :crux.config/string}
-                                 ::event-log-sync?
-                                 {:doc "Sync the event-log backed KV store to disk after every write."
-                                  :default false
-                                  :crux.config/type :crux.config/boolean}}}
-          ::event-log-sync {:start-fn start-event-log-fsync
-                            :deps [::event-log-kv]
-                            :args {::event-log-sync-interval-ms
-                                   {:doc "Duration in millis between sync-ing the event-log to the K/V store."
-                                    :crux.config/type :crux.config/nat-int}}}
-          ::event-log-consumer {:start-fn start-event-log-consumer
-                                :deps [::event-log-kv :crux.node/indexer]}
-          :crux.node/tx-log {:start-fn start-moberg-event-log
-                             :deps [::event-log-kv]}
-          :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
-                                     :deps [:crux.node/tx-log]}}))
+         {:crux.node/tx-log {:start-fn (fn [deps args] (->tx-log deps))
+                             :deps [::n/indexer ::n/kv-store ::n/object-store]}
+
+          :crux.node/document-store {:start-fn (fn [deps args] (->document-store deps))
+                                     :deps [::n/kv-store ::n/object-store]}}))

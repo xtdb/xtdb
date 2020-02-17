@@ -74,6 +74,9 @@
                     arg)))
       (->> (s/assert :crux.tx.event/tx-event)))))
 
+(defn tx-event->doc-hashes [tx-event]
+  (keep (s/conform :crux.tx.event/tx-event tx-event) [:doc :old-doc :new-doc :args-doc]))
+
 (defn tx-event->tx-op [[op id & args] snapshot object-store]
   (doto (into [op]
               (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
