@@ -10,7 +10,6 @@
     (with-open [system
                 (crux/start-node ; it has clustering out-of-the-box though
                  {:crux.node/topology 'crux.standalone/topology
-                  :crux.standalone/event-log-dir (str (io/file data-dir "eventlog-1"))
                   :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
       ;; Close rocksDB node so it does not interfere
 
@@ -20,9 +19,7 @@
                 (crux/start-node
                  {:crux.node/topology 'crux.standalone/topology
                   :crux.node/kv-store 'crux.kv.memdb/kv
-                  :crux.standalone/event-log-dir (str (io/file data-dir "eventlog-1"))
-                  :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))
-                  :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv})]
+                  :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
 
       (t/is system)
 

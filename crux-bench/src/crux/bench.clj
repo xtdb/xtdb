@@ -116,8 +116,7 @@
                                                             crux.metrics/with-cloudwatch]
                                       :crux.node/kv-store 'crux.kv.rocksdb/kv
                                       :crux.kafka/bootstrap-servers "localhost:9092"
-                                      :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))
-                                      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog-1"))})]
+                                      :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
       (f node))))
 
 (defmacro with-node [[node-binding] & body]

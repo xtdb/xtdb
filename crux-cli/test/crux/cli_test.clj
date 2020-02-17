@@ -61,7 +61,6 @@
 (t/deftest test-cli-can-start
   (f/with-tmp-dir "cli" [cli-dir]
     (let [opts {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-                :crux.standalone/event-log-dir (str (io/file cli-dir "event-log"))
                 :crux.http-server/port (cio/free-port)
                 :crux.node/kv-store 'crux.kv.memdb/kv
                 :crux.kv/db-dir (str (io/file cli-dir "db-dir"))}

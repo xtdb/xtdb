@@ -20,8 +20,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (try
       (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                        :crux.kv/db-dir (str (io/file data-dir "db"))
-                        :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))})]
+                        :crux.kv/db-dir (str (io/file data-dir "db"))})]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -75,9 +74,6 @@
           (doto (HashMap.)
             (.put :crux.node/topology 'crux.standalone/topology)
             (.put :crux.node/kv-store 'crux.kv.memdb/kv)
-            (.put :crux.kv/db-dir (str (io/file data-dir "db")))
-            (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
-            (.put :crux.standalone/event-log-dir (str (io/file data-dir "eventlog")))
             (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
           memdb-node (Crux/startNode mem-db-node-options)]
       (t/is memdb-node)
