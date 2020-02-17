@@ -210,8 +210,7 @@
                (ensure-tx-topic-has-single-partition admin-client tx-topic)
                (kc/start-indexing-consumer {:indexer indexer
                                             :offsets (kc/->TxOffset indexer)
-                                            :kafka-config (derive-kafka-config options)
-                                            :group-id group-id
+                                            :kafka-config (merge {"group.id" group-id} (derive-kafka-config options))
                                             :topic tx-topic
                                             :accept-fn (partial accept-txes? indexer)
                                             :index-fn (partial index-txes indexer)}))
@@ -230,8 +229,7 @@
                (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
                (kc/start-indexing-consumer {:indexer indexer
                                             :offsets (tc/->IndexedOffsets indexer :crux.tx-log/consumer-state)
-                                            :kafka-config (derive-kafka-config options)
-                                            :group-id group-id
+                                            :kafka-config (merge {"group.id" group-id} (derive-kafka-config options))
                                             :topic doc-topic
                                             :index-fn (partial index-documents indexer)}))
    :deps [:crux.node/indexer ::admin-client]
@@ -252,8 +250,7 @@
                   {::keys [tx-topic doc-group-id] :as options}]
                (kc/start-indexing-consumer {:indexer indexer
                                             :offsets (tc/->IndexedOffsets indexer :crux.tx-log/consumer-state)
-                                            :kafka-config (derive-kafka-config options)
-                                            :group-id doc-group-id
+                                            :kafka-config (merge {"group.id" doc-group-id} (derive-kafka-config options))
                                             :topic tx-topic
                                             :index-fn (partial index-documents-from-txes indexer document-store)}))
    :deps [:crux.node/indexer :crux.node/document-store ::tx-indexing-consumer]
