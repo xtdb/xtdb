@@ -219,14 +219,17 @@
               (Thread/sleep 500))
 
             (let [stats (.attributeStats *api*)]
-              (t/is (= 0 (:name stats))))))
+              (t/is (= 0 (:name stats))))))))))
 
-        (t/testing "Add back evicted document"
-          (assert (not (.entity (.db *api*) :ivan)))
-          (let [valid-time (Date.)
-                submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-            (t/is (.awaitTx *api* submitted-tx nil))
-            (t/is (.entity (.db *api*) :ivan))))))))
+(t/deftest test-adding-back-evicted-document
+  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (t/is (api/entity (api/db *api*) :foo))
+
+  (fapi/submit+await-tx [[:crux.tx/evict :foo]])
+  (t/is (nil? (api/entity (api/db *api*) :foo)))
+
+  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (t/is (api/entity (api/db *api*) :foo)))
 
 (t/deftest test-document-bug-123
   (let [version-1-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1}]])]
