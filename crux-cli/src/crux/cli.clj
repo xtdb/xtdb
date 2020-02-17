@@ -13,7 +13,7 @@
   {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
    :crux.kv/db-dir "db-dir"
    :crux.standalone/event-log-dir "event-log"
-   :crux.standalone/kv-store 'crux.kv.memdb/kv
+   :crux.node/kv-store 'crux.kv.memdb/kv
    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv})
 
 (defn- if-it-exists [^File f]
