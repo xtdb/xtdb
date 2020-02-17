@@ -12,8 +12,7 @@ Full docs [here](https://opencrux.com/docs#config-metrics)
 
 [Dropwizard metrics](https://metrics.dropwizard.io/4.1.2/) are used to store and display metrics.
 
-rocksdb metrics can be included by setting
-`:crux.metrics/with-rocksdb-metrics?` to true in the node configuration
+rocksdb metrics can be also included by using the module `'crux.kv.rocksdb/kv-store-with-metrics`
 
 The following 5 components can be used to display these.
 

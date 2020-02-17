@@ -8,6 +8,7 @@
 * [#555](https://github.com/juxt/crux/issues/555): Removes `submitted-tx-updated-entity?` and `submitted-tx-corrected-entity?` from the API, replacing them with a new function, `tx-committed?`.
 * [#556](https://github.com/juxt/crux/issues/556): Removes `new-tx-log-context` and `tx-log` from the API, replacing them with `open-tx-log`.
 * [#619](https://github.com/juxt/crux/issues/619): Standalone topology uses memdb (not persisted by default), removes RocksDB dependency from crux-core. See https://opencrux.com/docs#config-rocksdb for details about how to configure RocksDB
+* [#496](https://github.com/juxt/crux/issues/496): Adding rocksdb metrics. The `kv-store` is now set as a module inside the topology vector.
 
 ### Bug fixes
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
@@ -17,7 +18,6 @@
 * [#466](https://github.com/juxt/crux/issues/466): Splitting `sync`'s various arities into `(sync node <timeout>)`, `(await-tx-time node tx-time <timeout>)` and `(await-tx node tx <timeout>)` (`(sync node tx-time <timeout>)` is deprecated and will be removed in a subsequent release).
 * [#625](https://github.com/juxt/crux/issues/625): Metrics can be displayed to a prometheus server
 * [#597](https://github.com/juxt/crux/issues/597): Metrics can be now analysed in cloudwatch
-* [#496](https://github.com/juxt/crux/issues/496): Adding rocksdb metrics
 * [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
 * [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
 * [#492](https://github.com/juxt/crux/issues/492): Adding metrics to expose local disk usage

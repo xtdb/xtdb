@@ -153,5 +153,15 @@
              (assoc ::db-options {:doc "RocksDB Options"
                                   :crux.config/type [#(instance? Options %) identity]}
                     ::disable-wal? {:doc "Disable Write Ahead Log"
-                                    :crux.config/type :crux.config/boolean})
+                                    :crux.config/type :crux.config/boolean}
+                    ::metrics? {:doc "Enable RocksDB metrics"
+                                :default false
+                                :crux.config/type :crux.config/boolean})
              (update ::kv/db-dir assoc :required? true, :default "data"))})
+
+(def kv-store {:crux.node/kv-store kv})
+
+(def kv-store-with-metrics {:crux.node/kv-store (update-in kv [:args ::metrics? :default] not)
+                            :crux.metrics/registry 'crux.metrics/registry-module
+                            :crux.metrics/all-metrics-loaded 'crux.metrics/all-metrics-loaded
+                            ::metrics 'crux.kv.rocksdb.metrics/metrics-module})

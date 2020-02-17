@@ -54,8 +54,7 @@
 (def index-dir "data/db-dir")
 
 (def crux-options
-  {:crux.node/topology 'crux.kafka/topology
-   :crux.node/kv-store 'crux.kv.rocksdb/kv
+  {:crux.node/topology ['crux.kafka/topology crux.kv.rocksdb/kv-store]
    :crux.kafka/bootstrap-servers "localhost:9092"
    :crux.kv/db-dir index-dir
    :server-port 8080})

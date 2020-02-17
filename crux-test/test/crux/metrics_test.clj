@@ -5,7 +5,6 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.metrics.indexer :as indexer-metrics]
-            [crux.metrics.kv-store :as kv-store-metrics]
             [crux.metrics.query :as query-metrics]
             [crux.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
@@ -28,15 +27,6 @@
       (t/is (= 1 (dropwizard/meter-count (:docs-ingest-meter mets))))
       (t/is (zero? (dropwizard/value (:tx-id-lag mets))))
       (t/is (= 1 (dropwizard/meter-count (:tx-ingest-timer mets)))))))
-
-(t/deftest test-kv-store-metrics
-  (let [{:crux.node/keys [kv-store]} (:crux.node/topology (meta *api*))
-        registry (dropwizard/new-registry)
-        mets (kv-store-metrics/assign-listeners registry #:crux.node{:kv-store kv-store})]
-
-    (t/testing "initial kv-store values"
-      (t/is (dropwizard/value (:estimate-num-keys mets)))
-      (t/is (dropwizard/value (:kv-size-mb mets))))))
 
 (t/deftest test-query-metrics
   (let [{:crux.node/keys [bus]} (:crux.node/topology (meta *api*))

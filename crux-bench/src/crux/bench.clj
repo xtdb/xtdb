@@ -111,48 +111,48 @@
 
   {#_"standalone-lmdb"
    #_{:crux.node/topology '[crux.standalone/topology
-                            crux.metrics/with-cloudwatch]
-      :crux.node/kv-store 'crux.kv.lmdb/kv
+                            crux.metrics/with-cloudwatch
+                            crux.kv.lmdb/kv-store]
       :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
       :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))}
 
    #_"standalone-rocksdb"
    #_{:crux.node/topology '[crux.standalone/topology
-                            crux.metrics/with-cloudwatch]
-      :crux.node/kv-store 'crux.kv.rocksdb/kv
+                            crux.metrics/with-cloudwatch
+                            crux.kv.rocksdb/kv-store]
       :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv}
 
    #_"standalone-memdb"
    #_{:crux.node/topology '[crux.standalone/topology
-                            crux.metrics/with-cloudwatch]
-      :crux.node/kv-store 'crux.kv.memdb/kv
+                            crux.metrics/with-cloudwatch
+                            crux.kv.memdb/kv-store]
       :crux.kv/db-dir (str (io/file data-dir "kv/memdb"))
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/memdb"))
       :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}
 
    #_"standalone-memdb-rocksdb"
    #_{:crux.node/topology '[crux.standalone/topology
-                            crux.metrics/with-cloudwatch]
-      :crux.node/kv-store 'crux.kv.memdb/kv
+                            crux.metrics/with-cloudwatch
+                            crux.kv.memdb/kv-store]
       :crux.kv/db-dir (str (io/file data-dir "kv/memdb"))
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv}
 
    #_"standalone-rocksdb-memdb"
    #_{:crux.node/topology '[crux.standalone/topology
-                          crux.metrics/with-cloudwatch]
-    :crux.node/kv-store 'crux.kv.rocksdb/kv
-    :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
-    :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/memdb"))
-    :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv}
+                            crux.metrics/with-cloudwatch
+                            crux.kv.rocksdb/kv-store]
+      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
+      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/memdb"))
+      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv}
 
    "kafka-rocksdb"
    {:crux.node/topology '[crux.kafka/topology
-                          crux.metrics/with-cloudwatch]
-    :crux.node/kv-store 'crux.kv.rocksdb/kv
+                          crux.metrics/with-cloudwatch
+                          crux.kv.rocksdb/kv-store]
     :crux.kafka/bootstrap-servers "localhost:9092"
     :crux.kafka/doc-topic "kafka-rocksdb-doc"
     :crux.kafka/tx-topic "kafka-rocksdb-tx"
@@ -160,8 +160,8 @@
 
    #_"kafka-lmdb"
    #_{:crux.node/topology '[crux.kafka/topology
-                            crux.metrics/with-cloudwatch]
-      :crux.node/kv-store 'crux.kv.lmdb/kv
+                            crux.metrics/with-cloudwatch
+                            crux.kv.lmdb/kv-store]
       :crux.kafka/bootstrap-servers "localhost:9092"
       :crux.kafka/doc-topic "kafka-lmdb-doc"
       :crux.kafka/tx-topic "kafka-lmdb-tx"
@@ -169,8 +169,8 @@
 
    #_"kafka-mem"
    #_{:crux.node/topology '[crux.kafka/topology
-                            crux.metrics/with-cloudwatch]
-      :crux.node/kv-store 'crux.kv.memdb/kv
+                            crux.metrics/with-cloudwatch
+                            crux.kv.memdb/kv-store]
       :crux.kafka/bootstrap-servers "localhost:9092"
       :crux.kafka/doc-topic "kafka-mem-doc"
       :crux.kafka/tx-topic "kafka-mem-tx"

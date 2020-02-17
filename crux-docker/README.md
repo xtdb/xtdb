@@ -30,8 +30,8 @@ within **crux.edn**. For example, you can change the KvStore of the node to Rock
 `:crux/node-opts`:
 
 ```clojure
-{:crux/node-opts {:crux.node/topology ['crux.standalone/topology]
-                  :crux.node/kv-store 'crux.kv.rocksdb/kv
+{:crux/node-opts {:crux.node/topology ['crux.standalone/topology
+                                       'crux.kv.rocksdb/kv-store]
                   :crux.kv/db-dir "/var/lib/crux/db"
                   :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
                   :crux.standalone/event-log-dir "/var/lib/crux/events"}

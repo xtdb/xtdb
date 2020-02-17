@@ -11,8 +11,8 @@
 
 (defn with-rocksdb-node* [f]
   (f/with-tmp-dir "dev-storage" [data-dir]
-    (with-open [node (api/start-node {:crux.node/topology '[crux.standalone/topology]
-                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
+    (with-open [node (api/start-node {:crux.node/topology '[crux.standalone/topology
+                                                            crux.kv.rocksdb/kv-store]
                                       :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
       (f node))))
 
