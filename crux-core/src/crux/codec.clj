@@ -694,7 +694,9 @@
     (doto b
       (.putByte 0 tx-events-index-id)
       (.putLong index-id-size tx-id ByteOrder/BIG_ENDIAN)
-      (.putLong (+ index-id-size Long/BYTES) (date->reverse-time-ms tx-time) ByteOrder/BIG_ENDIAN))))
+      (.putLong (+ index-id-size Long/BYTES)
+                (date->reverse-time-ms (or tx-time (Date.)))
+                ByteOrder/BIG_ENDIAN))))
 
 (defn tx-event-key? [^DirectBuffer k]
   (= tx-events-index-id (.getByte k 0)))

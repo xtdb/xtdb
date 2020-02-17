@@ -8,30 +8,43 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.index :as idx])
-  (:import (java.io Closeable)
+  (:import (crux.api ITxLog)
+           (java.io Closeable)
            (java.util Date)
            (java.util.concurrent ArrayBlockingQueue
                                  ExecutorService Executors TimeUnit
                                  ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy)))
 
-(defn- index-txs [{:keys [indexer kv-store object-store]}]
-  (with-open [snapshot (kv/new-snapshot kv-store)
-              iterator (kv/new-iterator snapshot)]
-    (let [tx (db/read-index-meta indexer ::tx/latest-completed-tx)
-          k (kv/seek iterator (c/encode-tx-event-key-to nil (or tx {::tx/tx-id 0, ::tx/tx-time (Date.)})))
-          k (if tx (kv/next iterator) k)]
-      (loop [k k]
-        (when (c/tx-event-key? k)
-          (let [tx-events (os/<-nippy-buffer (kv/value iterator))
-                doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
-            (when-let [missing-docs (not-empty (db/missing-docs indexer doc-hashes))]
-              (db/index-docs indexer (->> (db/get-objects object-store snapshot missing-docs)
-                                          (into {} (map (juxt (comp c/new-id key) val))))))
+(defn- open-tx-log ^crux.api.ITxLog [{:keys [indexer kv-store object-store]} from-tx-id]
+  (let [snapshot (kv/new-snapshot kv-store)
+        iterator (kv/new-iterator snapshot)]
+    (letfn [(tx-log [k]
+              (lazy-seq
+                (when (some-> k c/tx-event-key?)
+                  (cons (assoc (c/decode-tx-event-key-from k)
+                          :crux.tx.event/tx-events (os/<-nippy-buffer (kv/value iterator)))
+                        (tx-log (kv/next iterator))))))]
 
-            (db/index-tx indexer (c/decode-tx-event-key-from k) tx-events))
+      (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or from-tx-id 0)}))]
+        (->> (when k (tx-log (if from-tx-id (kv/next iterator) k)))
+             (db/->closeable-tx-log-iterator (fn []
+                                               (cio/try-close iterator)
+                                               (cio/try-close snapshot))))))))
 
-          (when-not (Thread/interrupted)
-            (recur (kv/next iterator))))))))
+(defn- index-txs [{:keys [indexer kv-store object-store] :as deps}]
+  (with-open [tx-log (open-tx-log deps (::tx/tx-id (db/read-index-meta indexer ::tx/latest-completed-tx)))
+              snapshot (kv/new-snapshot kv-store)]
+    (->> (iterator-seq tx-log)
+         (run! (fn [{:keys [crux.tx.event/tx-events] :as tx}]
+                 (let [doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
+                   (when-let [missing-docs (not-empty (db/missing-docs indexer doc-hashes))]
+                     (db/index-docs indexer (->> (db/get-objects object-store snapshot missing-docs)
+                                                 (into {} (map (juxt (comp c/new-id key) val))))))
+
+                   (db/index-tx indexer (select-keys tx [::tx/tx-time ::tx/tx-id]) tx-events)
+
+                   (when (Thread/interrupted)
+                     (reduced nil))))))))
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
                   {:keys [^ExecutorService tx-executor ^ExecutorService tx-indexer indexer kv-store] :as deps}]
@@ -71,6 +84,9 @@
   (latest-submitted-tx [this]
     (when-let [tx-id (db/read-index-meta indexer ::latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
+
+  (open-tx-log [this from-tx-id]
+    (open-tx-log this from-tx-id))
 
   Closeable
   (close [_]
