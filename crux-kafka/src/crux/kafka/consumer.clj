@@ -39,7 +39,7 @@
         (.seek consumer partition (long offset))
         (.seekToBeginning consumer [partition])))))
 
-(defn- update-stored-consumer-state [offsets ^KafkaConsumer consumer records]
+(defn update-stored-consumer-state [offsets ^KafkaConsumer consumer records]
   (when (seq records)
     (let [partition->records (group-by (fn [^ConsumerRecord r]
                                          (TopicPartition. (.topic r)
@@ -79,28 +79,3 @@
                   (log/info "Partitions assigned:" (str partitions))
                   (prune-consumer-state offsets consumer partitions)
                   (seek-to-stored-offsets offsets consumer partitions)))))
-
-(defrecord KafkaQueue [^KafkaConsumer consumer topic timeout offsets]
-  tc/Queue
-  (next-events [this]
-    (let [records (.poll consumer (Duration/ofMillis timeout))]
-      (vec (.records records (str topic)))))
-
-  (mark-processed [this records]
-    (update-stored-consumer-state offsets consumer records)))
-
-(defn start-indexing-consumer
-  ^java.io.Closeable
-  [{:keys [ offsets kafka-config topic accept-fn index-fn]}]
-  (let [consumer (create-consumer kafka-config)
-        _ (subscribe-from-stored-offsets offsets consumer [topic])
-        t (tc/start-consumer {:queue (map->KafkaQueue {:consumer consumer
-                                                       :topic topic
-                                                       :timeout 1000
-                                                       :offsets offsets})
-                              :accept-fn accept-fn
-                              :index-fn index-fn})]
-    (reify Closeable
-      (close [_]
-        (.close t)
-        (.close consumer)))))
