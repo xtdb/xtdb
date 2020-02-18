@@ -2782,3 +2782,23 @@
                     :where [[e :offset offset]
                             [(= e :foo)]]
                     :limit 1})))))
+
+(t/deftest test-queries-return-distinct-results-631
+  (f/transact! *api* [{:crux.db/id :ii :name "Ivan" :last-name "Ivanov", :age 20}
+                      {:crux.db/id :pp :name "Petr" :last-name "Petrov", :age 20}
+                      {:crux.db/id :ip :name "Ivan" :last-name "Petrov", :age 25}
+                      {:crux.db/id :pi :name "Petr" :last-name "Ivanov", :age 30}])
+
+  (let [db (api/db *api*)]
+    (t/testing "eager query with order-by returns set of results"
+      (t/is (= #{[30] [25] [20]}
+               (api/q db '{:find [a] :where [[_ :age a]]}))))
+
+    (t/testing "query with order-by returns distinct results"
+      (t/is (= [[30] [25] [20]]
+               (api/q db '{:find [a] :where [[_ :age a]], :order-by [[a :desc]]}))))
+
+    (t/testing "lazy query returns distinct results"
+      (with-open [snapshot (api/new-snapshot db)]
+        (t/is (= [[20] [25] [30]]
+                 (sort (api/q db snapshot '{:find [a] :where [[_ :age a]]}))))))))
