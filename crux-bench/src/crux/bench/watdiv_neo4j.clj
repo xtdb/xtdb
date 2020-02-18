@@ -102,7 +102,6 @@
                                                          (reify Function
                                                            (apply [_ iri]
                                                              (RelationshipType/withName (str iri))))))]
-
       (with-open [tx (.beginTx graph-db)]
         (-> (.schema tx)
             (.indexFor entity-label)
@@ -110,25 +109,25 @@
             (.create))
         (.commit tx))
 
-      (with-open [in (io/input-stream watdiv/watdiv-input-file)
-                  tx (.beginTx graph-db)]
+      (with-open [in (io/input-stream watdiv/watdiv-input-file)]
         (->> (rdf/ntriples-seq in)
              (map rdf/rdf->clj)
              (map #(rdf/use-default-language % rdf/*default-language*))
              (partition-all neo4j-tx-size)
              (reduce (fn [^long n statements]
-                       (doseq [[s p o] statements]
-                         (let [s-node (doto ^Node (get-or-create-node s tx)
-                                        (.setProperty (str :crux.db/id) (str s)))]
-                           (if (keyword? o)
-                             (let [o-node (doto ^Node (get-or-create-node o tx)
-                                            (.setProperty (str :crux.db/id) (str o)))
-                                   p-rel (doto (.createRelationshipTo s-node o-node (get-or-create-relationship p))
-                                           (.setProperty (str :crux.db/id) (str p)))])
-                             (.setProperty s-node (str p) o))))
+                       (with-open [tx (.beginTx graph-db)]
+                         (doseq [[s p o] statements]
+                           (let [s-node (doto ^Node (get-or-create-node s tx)
+                                          (.setProperty (str :crux.db/id) (str s)))]
+                             (if (keyword? o)
+                               (let [o-node (doto ^Node (get-or-create-node o tx)
+                                              (.setProperty (str :crux.db/id) (str o)))
+                                     p-rel (doto (.createRelationshipTo s-node o-node (get-or-create-relationship p))
+                                             (.setProperty (str :crux.db/id) (str p)))])
+                               (.setProperty s-node (str p) o))))
+                          (.commit tx))
                        (+ n (count statements)))
-                     0))
-        (.commit tx))
+                     0)))
 
       (with-open [tx (.beginTx graph-db)]
         (-> (.schema tx)
