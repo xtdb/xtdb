@@ -267,24 +267,18 @@
 ;; end::query-with-pred-1-r[]
 )
 
-(defn query-example-lazy [node]
+(defn query-example-lazy [node prn]
   ;; tag::lazy-query[]
 (with-open [snapshot (crux.api/new-snapshot (crux/db node))]
-  (crux/q
-   (crux/db node)
-   snapshot
-   '{:find [p1]
-     :where [[p1 :name n]
-             [p1 :last-name n]
-             [p1 :name "Smith"]]}))
+  (doseq [tuple (crux/q (crux/db node)
+                        snapshot
+                        '{:find [p1]
+                          :where [[p1 :name n]
+                                  [p1 :last-name n]
+                                  [p1 :name "Smith"]]})]
+    (prn tuple)))
   ;; end::lazy-query[]
   )
-
-#_(comment
-;; tag::lazy-query-r[]
-([:smith])
-;; end::lazy-query-r[]
-)
 
 (defn query-example-at-time-setup [node]
  (crux/submit-tx
