@@ -9,7 +9,8 @@
             [crux.io :as cio]
             [crux.index :as idx]
             [crux.lru :as lru]
-            [crux.topology :as topo])
+            [crux.topology :as topo]
+            [clojure.set :as set])
   (:import (crux.api ITxLog)
            (java.io Closeable)
            (java.util Date)
@@ -143,6 +144,13 @@
                          :default 'crux.kv.memdb/kv
                          :crux.config/type :crux.config/module}
 
+   ::event-log-dir {:doc "The directory to persist the standalone event log to"
+                    :crux.config/type :crux.config/string}
+
+   ::event-log-sync? {:doc "Sync the event-log backed KV store to disk after every write."
+                      :default false
+                      :crux.config/type :crux.config/boolean}
+
    ::event-log-object-store {:doc "The object store to use for the standalone event log"
                              :default 'crux.object-store/kv-object-store
                              :crux.config/type :crux.config/module}})
@@ -154,7 +162,10 @@
     (cio/try-close object-store)))
 
 (defn ->event-log [deps {::keys [event-log-kv-store event-log-object-store] :as args}]
-  (let [kv-store (topo/start-component event-log-kv-store {} args)
+  (let [args (-> args
+                 (set/rename-keys {::event-log-dir :crux.kv/db-dir
+                                   ::event-log-sync? :crux.kv/sync?}))
+        kv-store (topo/start-component event-log-kv-store {} args)
         object-store (topo/start-component event-log-object-store {::n/kv-store kv-store} args)]
     (->EventLog kv-store object-store)))
 
