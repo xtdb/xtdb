@@ -22,7 +22,7 @@
   (let [db-dir (cio/create-tmpdir "neo4j")
         data-dir (io/file db-dir "data")
         db-manager (-> (DatabaseManagementServiceBuilder. data-dir)
-               (.build))]
+                       (.build))]
     (try
       (f (.database db-manager "neo4j"))
       (finally
@@ -110,34 +110,34 @@
             (.create))
         (.commit tx))
 
-      (with-open [in (io/input-stream watdiv/watdiv-input-file)]
+      (with-open [in (io/input-stream watdiv/watdiv-input-file)
+                  tx (.beginTx graph-db)]
         (->> (rdf/ntriples-seq in)
              (map rdf/rdf->clj)
              (map #(rdf/use-default-language % rdf/*default-language*))
              (partition-all neo4j-tx-size)
              (reduce (fn [^long n statements]
-                       (with-open [tx (.beginTx graph-db)]
-                         (doseq [[s p o] statements]
-                           (let [s-node (doto ^Node (get-or-create-node s tx)
-                                          (.setProperty (str :crux.db/id) (str s)))]
-                             (if (keyword? o)
-                               (let [o-node (doto ^Node (get-or-create-node o tx)
-                                              (.setProperty (str :crux.db/id) (str o)))
-                                     p-rel (doto (.createRelationshipTo s-node o-node (get-or-create-relationship p))
-                                             (.setProperty (str :crux.db/id) (str p)))])
-                               (.setProperty s-node (str p) o))))
-                         (.commit tx))
+                       (doseq [[s p o] statements]
+                         (let [s-node (doto ^Node (get-or-create-node s tx)
+                                        (.setProperty (str :crux.db/id) (str s)))]
+                           (if (keyword? o)
+                             (let [o-node (doto ^Node (get-or-create-node o tx)
+                                            (.setProperty (str :crux.db/id) (str o)))
+                                   p-rel (doto (.createRelationshipTo s-node o-node (get-or-create-relationship p))
+                                           (.setProperty (str :crux.db/id) (str p)))])
+                             (.setProperty s-node (str p) o))))
                        (+ n (count statements)))
-                     0)))
+                     0))
+        (.commit tx))
 
       (with-open [tx (.beginTx graph-db)]
         (-> (.schema tx)
-            (.awaitIndexesOnline neo4j-index-timeout-ms TimeUnit/MILLISECONDS))))))
+            (.awaitIndexesOnline neo4j-index-timeout-ms TimeUnit/MILLISECONDS))
+        (.commit tx)))))
 
 (defn run-watdiv-bench [{:keys [test-count] :as opts}]
   (with-neo4j
     (fn [conn]
-      (prn "hello")
       (bench/with-bench-ns :watdiv-neo4j
         (load-rdf-into-neo4j conn)
         (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
