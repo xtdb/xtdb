@@ -7,7 +7,9 @@
             [crux.tx :as tx]
             [crux.codec :as c]
             [crux.io :as cio]
-            [crux.index :as idx])
+            [crux.index :as idx]
+            [crux.lru :as lru]
+            [crux.topology :as topo])
   (:import (crux.api ITxLog)
            (java.io Closeable)
            (java.util Date)
@@ -15,8 +17,8 @@
                                  ExecutorService Executors TimeUnit
                                  ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy)))
 
-(defn- open-tx-log ^crux.api.ITxLog [{:keys [indexer kv-store object-store]} from-tx-id]
-  (let [snapshot (kv/new-snapshot kv-store)
+(defn- open-tx-log ^crux.api.ITxLog [{:keys [event-log-kv-store]} from-tx-id]
+  (let [snapshot (kv/new-snapshot event-log-kv-store)
         iterator (kv/new-iterator snapshot)]
     (letfn [(tx-log [k]
               (lazy-seq
@@ -31,15 +33,14 @@
                                                (cio/try-close iterator)
                                                (cio/try-close snapshot))))))))
 
-(defn- index-txs [{:keys [indexer kv-store object-store] :as deps}]
+(defn- index-txs [{:keys [indexer kv-store object-store document-store] :as deps}]
   (with-open [tx-log (open-tx-log deps (::tx/tx-id (db/read-index-meta indexer ::tx/latest-completed-tx)))
               snapshot (kv/new-snapshot kv-store)]
     (->> (iterator-seq tx-log)
          (run! (fn [{:keys [crux.tx.event/tx-events] :as tx}]
                  (let [doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
-                   (when-let [missing-docs (not-empty (db/missing-docs indexer doc-hashes))]
-                     (db/index-docs indexer (->> (db/get-objects object-store snapshot missing-docs)
-                                                 (into {} (map (juxt (comp c/new-id key) val))))))
+                   (db/index-docs indexer (->> (db/fetch-docs document-store doc-hashes)
+                                               (into {} (map (juxt (comp c/new-id key) val)))))
 
                    (db/index-tx indexer (select-keys tx [::tx/tx-time ::tx/tx-id]) tx-events)
 
@@ -47,16 +48,18 @@
                      (reduced nil))))))))
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
-                  {:keys [^ExecutorService tx-submit-executor ^ExecutorService tx-indexer-executor indexer kv-store] :as deps}]
+                  {:keys [^ExecutorService tx-submit-executor ^ExecutorService tx-indexer-executor
+                          indexer event-log-kv-store]
+                   :as deps}]
   (when (.isShutdown tx-submit-executor)
     (deliver !submitted-tx ::closed))
 
   (let [tx-time (Date.)
-        tx-id (inc (or (db/read-index-meta indexer ::latest-submitted-tx-id) -1))
+        tx-id (inc (or (idx/read-meta event-log-kv-store ::latest-submitted-tx-id) -1))
         next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
-    (kv/store kv-store [[(c/encode-tx-event-key-to nil next-tx)
-                         (os/->nippy-buffer tx-events)]
-                        (idx/meta-kv ::latest-submitted-tx-id tx-id)])
+    (kv/store event-log-kv-store [[(c/encode-tx-event-key-to nil next-tx)
+                                   (os/->nippy-buffer tx-events)]
+                                  (idx/meta-kv ::latest-submitted-tx-id tx-id)])
 
     (deliver !submitted-tx next-tx)
 
@@ -64,7 +67,8 @@
 
 (defrecord StandaloneTxLog [^ExecutorService tx-submit-executor
                             ^ExecutorService tx-indexer-executor
-                            indexer kv-store object-store]
+                            indexer kv-store object-store document-store
+                            event-log-kv-store]
   db/TxLog
   (submit-tx [this tx-ops]
     (when (.isShutdown tx-submit-executor)
@@ -83,7 +87,7 @@
           submitted-tx))))
 
   (latest-submitted-tx [this]
-    (when-let [tx-id (db/read-index-meta indexer ::latest-submitted-tx-id)]
+    (when-let [tx-id (idx/read-meta event-log-kv-store ::latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
 
   (open-tx-log [this from-tx-id]
@@ -107,36 +111,58 @@
     (or (.awaitTermination tx-indexer-executor 5 TimeUnit/SECONDS)
         (log/warn "waited 5s for tx-indexer-executor to exit, no dice."))))
 
-(defn- ->tx-log [{::n/keys [indexer kv-store object-store]}]
+(defn- ->tx-log [{:keys [::n/indexer ::n/kv-store ::n/object-store ::n/document-store ::event-log]} _]
   (let [tx-submit-executor (Executors/newSingleThreadExecutor (cio/thread-factory "standalone-tx-log"))
         tx-indexer-executor (ThreadPoolExecutor. 1 1
                                                  100 TimeUnit/MILLISECONDS
                                                  (ArrayBlockingQueue. 1)
                                                  (cio/thread-factory "standalone-tx-indexer")
                                                  (ThreadPoolExecutor$DiscardPolicy.))
-        tx-log (->StandaloneTxLog tx-submit-executor tx-indexer-executor indexer kv-store object-store)]
+        tx-log (->StandaloneTxLog tx-submit-executor tx-indexer-executor
+                                  indexer kv-store object-store document-store (:kv-store event-log))]
 
     ;; when we restart the standalone node, we want it to start indexing straightaway if it's behind
     (.submit tx-indexer-executor ^Runnable #(index-txs tx-log))
 
     tx-log))
 
-(defrecord StandaloneDocumentStore [kv-store object-store]
+(defrecord StandaloneDocumentStore [event-log-kv-store event-log-object-store]
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (db/put-objects object-store id-and-docs))
+    (db/put-objects event-log-object-store id-and-docs))
 
   (fetch-docs [this ids]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (db/get-objects object-store snapshot ids))))
+    (with-open [snapshot (kv/new-snapshot event-log-kv-store)]
+      (db/get-objects event-log-object-store snapshot ids))))
 
-(defn- ->document-store [{::n/keys [kv-store object-store]}]
+(defn- ->document-store [{{:keys [kv-store object-store]} ::event-log} _]
   (->StandaloneDocumentStore kv-store object-store))
+
+(def ^:private event-log-args
+  {::event-log-kv-store {:doc "The KV store to use for the standalone event log"
+                         :default 'crux.kv.memdb/kv
+                         :crux.config/type :crux.config/module}
+
+   ::event-log-object-store {:doc "The object store to use for the standalone event log"
+                             :default 'crux.object-store/kv-object-store
+                             :crux.config/type :crux.config/module}})
+
+(defrecord EventLog [kv-store object-store]
+  Closeable
+  (close [_]
+    (cio/try-close kv-store)
+    (cio/try-close object-store)))
+
+(defn ->event-log [deps {::keys [event-log-kv-store event-log-object-store] :as args}]
+  (let [kv-store (topo/start-component event-log-kv-store {} args)
+        object-store (topo/start-component event-log-object-store {::n/kv-store kv-store} args)]
+    (->EventLog kv-store object-store)))
 
 (def topology
   (merge n/base-topology
-         {:crux.node/tx-log {:start-fn (fn [deps args] (->tx-log deps))
-                             :deps [::n/indexer ::n/kv-store ::n/object-store]}
-
-          :crux.node/document-store {:start-fn (fn [deps args] (->document-store deps))
-                                     :deps [::n/kv-store ::n/object-store]}}))
+         {::event-log {:start-fn ->event-log
+                       :args event-log-args}
+          ::n/tx-log {:start-fn ->tx-log
+                      :deps [::n/indexer ::n/kv-store ::n/object-store ::n/document-store ::event-log]}
+          ::n/document-store {:start-fn ->document-store
+                              :deps [::event-log]}}))
