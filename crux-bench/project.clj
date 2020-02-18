@@ -5,6 +5,7 @@
                  [juxt/crux-kafka "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-rocksdb "derived-from-git"]
+                 [juxt/crux-lmdb "derived-from-git"]
                  [juxt/crux-metrics "derived-from-git"]
                  [juxt/crux-test "derived-from-git" :exclusions [org.apache.commons/commons-lang3
                                                                  org.slf4j/jcl-over-slf4j

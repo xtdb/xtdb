@@ -7,11 +7,7 @@
             [clojure.java.io :as io]
             [clojure.string :as string]
             [clj-http.client :as client]
-            [crux.fixtures :as f]
-            [crux.bench :as bench]
-            [crux.bench.ts-weather :as weather]
-            [crux.bench.ts-devices :as devices]
-            [crux.bench.watdiv-crux :as watdiv-crux] )
+            [crux.fixtures :as f])
   (:import (java.util.concurrent Executors ExecutorService)
            (java.io Closeable)
            (software.amazon.awssdk.services.s3 S3Client)
@@ -33,8 +29,10 @@
 (def ^:dynamic ^:private *bench-dimensions* {})
 (def ^:dynamic ^:private *!bench-results*)
 
+(def !crux-node-type (atom ""))
+
 (defn with-dimensions* [dims f]
-  (binding [*bench-dimensions* (merge *bench-dimensions* dims)]
+  (binding [*bench-dimensions* (merge *bench-dimensions* dims {:crux-node-type @!crux-node-type})]
     (f)))
 
 (defmacro with-dimensions [dims & body]
@@ -99,7 +97,6 @@
 
   (binding [*bench-ns* bench-ns
             *!bench-results* (atom [])]
-    (tap> f)
     (f)
 
     (log/infof "finished bench-ns '%s'." bench-ns)
@@ -115,22 +112,25 @@
   (give [this]))
 
 (defn nodes [data-dir] {"standalone-lmdb"
-                        #(let [node (api/start-node {:crux.node/topology :crux.standalone/topology
+                        #(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
+                                                                           crux.metrics/with-jmx]
                                                      :crux.node/kv-store 'crux.kv.lmdb/kv
-                                                     :crux.kv/db-dir (str (io/file data-dir "lmdb"))
-                                                     :crux.standalone/event-log-dir (str (io/file data-dir "lmdb"))
-                                                     :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv})]
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
+                                                     :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))})]
                            (reify GetNode
                              (give [_]
                                node)
                              Closeable
                              (close [_]
                                (.close node))))
+
                         "standalone-rocksdb"
-                        #(let [node (api/start-node {:crux.node/topology :crux.standalone/topology
+                        #(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
+                                                                           crux.metrics/with-jmx]
                                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
-                                                     :crux.kv/db-dir (str (io/file data-dir "rocksdb"))
-                                                     :crux.standalone/event-log-dir (str (io/file data-dir "rocksdb"))
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
                                                      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})]
                            (reify GetNode
                              (give [_]
@@ -145,10 +145,10 @@
                                                  :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                                                  :crux.kafka.embedded/kafka-port 9092})
                                node (api/start-node {:crux.node/topology '[crux.kafka/topology
-                                                                           crux.metrics/with-cloudwatch]
+                                                                           crux.metrics/with-jmx]
                                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
                                                      :crux.kafka/bootstrap-servers "localhost:9092"
-                                                     :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})]
                            (reify
                              GetNode
                              (give [_]
@@ -163,10 +163,10 @@
                                                  :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                                                  :crux.kafka.embedded/kafka-port 9092})
                                node (api/start-node {:crux.node/topology '[crux.kafka/topology
-                                                                           crux.metrics/with-cloudwatch]
+                                                                           crux.metrics/with-jmx]
                                                      :crux.node/kv-store 'crux.kv.lmdb/kv
                                                      :crux.kafka/bootstrap-servers "localhost:9092"
-                                                     :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})]
                            (reify
                              GetNode
                              (give [_]
@@ -174,11 +174,14 @@
                              Closeable
                              (close [_]
                                (.close node)
-                               (.close embedded-kafka))))})
+                               (.close embedded-kafka))))
+                        })
 
 (defn with-nodes* [f]
   (f/with-tmp-dir "dev-storage" [data-dir]
     (run! (fn [[k v]] (with-open [node (v)]
+                        (reset! !crux-node-type k)
+                        (log/infof "Running bench on %s node." k)
                         (post-to-slack (str "running on node: " k))
                         (f (give node))))
           (nodes data-dir))))
