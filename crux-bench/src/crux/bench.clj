@@ -5,11 +5,15 @@
             [clojure.data.json :as json]
             [clojure.tools.logging :as log]
             [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
             [clojure.string :as string]
             [clj-http.client :as client]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.bench :as bench]
+            [crux.bench.ts-weather :as weather]
+            [crux.bench.ts-devices :as devices]
+            [crux.bench.watdiv-crux :as watdiv-crux] )
   (:import (java.util.concurrent Executors ExecutorService)
+           (java.io Closeable)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
@@ -95,6 +99,7 @@
 
   (binding [*bench-ns* bench-ns
             *!bench-results* (atom [])]
+    (tap> f)
     (f)
 
     (log/infof "finished bench-ns '%s'." bench-ns)
@@ -106,21 +111,80 @@
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
-(defn with-node* [f]
-  (f/with-tmp-dir "dev-storage" [data-dir]
-    (with-open [embedded-kafka (ek/start-embedded-kafka
-                                 {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
-                                  :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
-                                  :crux.kafka.embedded/kafka-port 9092})
-                node (api/start-node {:crux.node/topology '[crux.kafka/topology
-                                                            crux.metrics/with-cloudwatch]
-                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
-                                      :crux.kafka/bootstrap-servers "localhost:9092"
-                                      :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
-      (f node))))
+(defprotocol GetNode
+  (give [this]))
 
-(defmacro with-node [[node-binding] & body]
-  `(with-node* (fn [~node-binding] ~@body)))
+(defn nodes [data-dir] {"standalone-lmdb"
+                        #(let [node (api/start-node {:crux.node/topology :crux.standalone/topology
+                                                     :crux.node/kv-store 'crux.kv.lmdb/kv
+                                                     :crux.kv/db-dir (str (io/file data-dir "lmdb"))
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "lmdb"))
+                                                     :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv})]
+                           (reify GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node))))
+                        "standalone-rocksdb"
+                        #(let [node (api/start-node {:crux.node/topology :crux.standalone/topology
+                                                     :crux.node/kv-store 'crux.kv.rocksdb/kv
+                                                     :crux.kv/db-dir (str (io/file data-dir "rocksdb"))
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "rocksdb"))
+                                                     :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})]
+                           (reify GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node))))
+
+                        "kafka-rocksdb"
+                        #(let [embedded-kafka (ek/start-embedded-kafka
+                                                {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                                                 :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                                                 :crux.kafka.embedded/kafka-port 9092})
+                               node (api/start-node {:crux.node/topology '[crux.kafka/topology
+                                                                           crux.metrics/with-cloudwatch]
+                                                     :crux.node/kv-store 'crux.kv.rocksdb/kv
+                                                     :crux.kafka/bootstrap-servers "localhost:9092"
+                                                     :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
+                           (reify
+                             GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node)
+                               (.close embedded-kafka))))
+                        "kafka-lmdb"
+                        #(let [embedded-kafka (ek/start-embedded-kafka
+                                                {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                                                 :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                                                 :crux.kafka.embedded/kafka-port 9092})
+                               node (api/start-node {:crux.node/topology '[crux.kafka/topology
+                                                                           crux.metrics/with-cloudwatch]
+                                                     :crux.node/kv-store 'crux.kv.lmdb/kv
+                                                     :crux.kafka/bootstrap-servers "localhost:9092"
+                                                     :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
+                           (reify
+                             GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node)
+                               (.close embedded-kafka))))})
+
+(defn with-nodes* [f]
+  (f/with-tmp-dir "dev-storage" [data-dir]
+    (run! (fn [[k v]] (with-open [node (v)]
+                        (post-to-slack (str "running on node: " k))
+                        (f (give node))))
+          (nodes data-dir))))
+
+(defmacro with-nodes [[node-binding] & body]
+  `(with-nodes* (fn [~node-binding] ~@body)))
 
 (def ^:private num-processors
   (.availableProcessors (Runtime/getRuntime)))
