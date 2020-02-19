@@ -113,7 +113,7 @@
 
 (defn nodes [data-dir] {;"standalone-lmdb"
                         ;#(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
-                        ;                                                   crux.metrics/with-jmx]
+                        ;                                                   crux.metrics/with-cloudwatch]
                         ;                             :crux.node/kv-store 'crux.kv.lmdb/kv
                         ;                             :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
                         ;                             :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
@@ -127,10 +127,51 @@
 
                         "standalone-rocksdb"
                         #(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
-                                                                           crux.metrics/with-jmx]
+                                                                           crux.metrics/with-cloudwatch]
                                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
                                                      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
                                                      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
+                                                     :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})]
+                           (reify GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node))))
+
+                        "standalone-memdb"
+                        #(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
+                                                                           crux.metrics/with-cloudwatch]
+                                                     :crux.node/kv-store 'crux.kv.memdb/kv
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/memdb"))
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/memdb"))
+                                                     :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv})]
+                           (reify GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node))))
+
+                        "standalone-memdb-rocksdb"
+                        #(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
+                                                                           crux.metrics/with-cloudwatch]
+                                                     :crux.node/kv-store 'crux.kv.memdb/kv
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/memdb"))
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
+                                                     :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})]
+                           (reify GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node))))
+                        "standalone-rocksdb-memdb"
+                        #(let [node (api/start-node {:crux.node/topology '[crux.standalone/topology
+                                                                           crux.metrics/with-cloudwatch]
+                                                     :crux.node/kv-store 'crux.kv.rocksdb/kv
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
+                                                     :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/memdb"))
                                                      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})]
                            (reify GetNode
                              (give [_]
@@ -145,7 +186,7 @@
                                                  :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                                                  :crux.kafka.embedded/kafka-port 9092})
                                node (api/start-node {:crux.node/topology '[crux.kafka/topology
-                                                                           crux.metrics/with-jmx]
+                                                                           crux.metrics/with-cloudwatch]
                                                      :crux.node/kv-store 'crux.kv.rocksdb/kv
                                                      :crux.kafka/bootstrap-servers "localhost:9092"
                                                      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})]
@@ -163,7 +204,7 @@
                         ;                         :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                         ;                         :crux.kafka.embedded/kafka-port 9092})
                         ;       node (api/start-node {:crux.node/topology '[crux.kafka/topology
-                        ;                                                   crux.metrics/with-jmx]
+                        ;                                                   crux.metrics/with-cloudwatch]
                         ;                             :crux.node/kv-store 'crux.kv.lmdb/kv
                         ;                             :crux.kafka/bootstrap-servers "localhost:9092"
                         ;                             :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})]
@@ -171,11 +212,29 @@
                         ;     GetNode
                         ;     (give [_]
                         ;       node)
-                        ;     Closeable
-                        ;     (close [_]
-                        ;       (.close node)
-                        ;       (.close embedded-kafka))))
-                        })
+;     Closeable
+;     (close [_]
+;       (.close node)
+;       (.close embedded-kafka))))
+
+                        "kafka-mem"
+                        #(let [embedded-kafka (ek/start-embedded-kafka
+                                                {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                                                 :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                                                 :crux.kafka.embedded/kafka-port 9092})
+                               node (api/start-node {:crux.node/topology '[crux.kafka/topology
+                                                                           crux.metrics/with-cloudwatch]
+                                                     :crux.node/kv-store 'crux.kv.memdb/kv
+                                                     :crux.kafka/bootstrap-servers "localhost:9092"
+                                                     :crux.kv/db-dir (str (io/file data-dir "kv/memdb"))})] ;;db-dir not used, but required
+                           (reify
+                             GetNode
+                             (give [_]
+                               node)
+                             Closeable
+                             (close [_]
+                               (.close node)
+                               (.close embedded-kafka))))})
 
 (defn with-nodes* [f]
   (f/with-tmp-dir "dev-storage" [data-dir]
