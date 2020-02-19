@@ -48,7 +48,6 @@
 ;; tag::start-cluster-node[]
 (defn start-cluster [kafka-port]
   (crux/start-node {:crux.node/topology '[crux.kafka/topology]
-                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)}))
 ;; end::start-cluster-node[]
 

@@ -1,3 +1,2 @@
 {:crux.node/topology [crux.standalone/topology crux.http-server/module]
- :crux.http-server/port 3000
- :crux.node/kv-store crux.kv.memdb/kv}
+ :crux.http-server/port 3000}

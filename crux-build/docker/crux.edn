@@ -1,4 +1,6 @@
 {:crux.node/topology [crux.standalone/topology crux.http-server/module]
  :crux.http-server/port 3000
- :crux.node/kv-store crux.kv.memdb/kv
- :crux.kv/db-dir "/var/lib/crux/db"}
+ :crux.node/kv-store crux.kv.rocksdb/kv
+ :crux.kv/db-dir "/var/lib/crux/db"
+ :crux.standalone/event-log-kv-store crux.kv.rocksdb/kv
+ :crux.standalone/event-log-dir "/var/lib/crux/event-log"}

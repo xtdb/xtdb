@@ -145,10 +145,11 @@
                          :crux.config/type :crux.config/module}
 
    ::event-log-dir {:doc "The directory to persist the standalone event log to"
+                    :required? false
                     :crux.config/type :crux.config/string}
 
    ::event-log-sync? {:doc "Sync the event-log backed KV store to disk after every write."
-                      :default false
+                      :default true
                       :crux.config/type :crux.config/boolean}
 
    ::event-log-object-store {:doc "The object store to use for the standalone event log"

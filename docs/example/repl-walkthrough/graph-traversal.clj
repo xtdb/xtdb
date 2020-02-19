@@ -54,14 +54,10 @@
                                      :roleInGroup/name}
                                    (keys n))))))
 
-; this standalone configuration is the easiest way to try Crux, no Kafka needed
-(def crux-options
-  {:crux.node/topology 'crux.standalone/topology
-   :crux.node/kv-store 'crux.kv.memdb/kv ; in-memory, see docs for LMDB/RocksDB storage
-   :crux.kv/db-dir "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
 
-
-(def node (crux/start-node crux-options))
+;; this standalone configuration is the easiest way to try Crux, no Kafka needed
+(def node
+  (crux/start-node {:crux.node/topology 'crux.standalone/topology}))
 
 (crux/submit-tx
   node

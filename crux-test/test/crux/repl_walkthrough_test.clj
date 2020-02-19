@@ -2,19 +2,12 @@
   (:require [crux.api :as crux]
             [clojure.pprint :as pp]
             [clojure.test :as t]
-            [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.fixtures.standalone :as fs])
   (:import (crux.api ICruxAPI)))
 
-(t/use-fixtures :each
-  (fn [f]
-    (f/with-tmp-dir "data" [data-dir]
-      (fapi/with-opts {:crux.node/topology 'crux.standalone/topology
-                       :crux.node/kv-store 'crux.kv.memdb/kv
-                       :crux.kv/db-dir (str (io/file data-dir "db-dir"))}
-        f)))
-  fapi/with-node)
+(t/use-fixtures :each fs/with-standalone-node fapi/with-node)
 
 (def nodes
   (for [n [{:user/name :User1, :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
