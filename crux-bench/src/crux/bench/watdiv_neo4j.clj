@@ -84,55 +84,46 @@
               result (.execute tx q)]
     (vec (iterator-seq result))))
 
+(def entity-label (Label/label "Entity"))
+
+(defn upsert-node [tx id]
+  (let [id-str (str id)]
+    (or (.findNode tx entity-label (str :crux.db/id) id-str)
+        (doto (.createNode tx (into-array [entity-label]))
+          (.setProperty (str :crux.db/id) id-str)))))
+
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db]
   (bench/run-bench :ingest-neo4j
-    (let [iri->node (HashMap.)
-          entity-label (Label/label "Entity")
-          labels (into-array [entity-label])
-          get-or-create-node (fn [iri tx]
-                               (.computeIfAbsent iri->node
-                                                 iri
-                                                 (reify Function
-                                                   (apply [_ _]
-                                                     (.createNode tx labels)))))
-          iri->relationship (HashMap.)
-          get-or-create-relationship (fn [iri]
-                                       (.computeIfAbsent iri->relationship
-                                                         iri
-                                                         (reify Function
-                                                           (apply [_ iri]
-                                                             (RelationshipType/withName (str iri))))))]
-      (with-open [tx (.beginTx graph-db)]
-        (-> (.schema tx)
-            (.indexFor entity-label)
-            (.on (str :crux.db/id))
-            (.create))
-        (.commit tx))
+    (with-open [tx (.beginTx graph-db)]
+      (-> (.schema tx)
+          (.indexFor entity-label)
+          (.on (str :crux.db/id))
+          (.create))
+      (.commit tx))
 
-      (with-open [in (io/input-stream watdiv/watdiv-input-file)]
-        (->> (rdf/ntriples-seq in)
-             (map rdf/rdf->clj)
-             (map #(rdf/use-default-language % rdf/*default-language*))
-             (partition-all neo4j-tx-size)
-             (reduce (fn [^long n statements]
-                       (with-open [tx (.beginTx graph-db)]
-                         (doseq [[s p o] statements]
-                           (let [s-node (doto ^Node (get-or-create-node s tx)
-                                          (.setProperty (str :crux.db/id) (str s)))]
-                             (if (keyword? o)
-                               (let [o-node (doto ^Node (get-or-create-node o tx)
-                                              (.setProperty (str :crux.db/id) (str o)))
-                                     p-rel (doto (.createRelationshipTo s-node o-node (get-or-create-relationship p))
-                                             (.setProperty (str :crux.db/id) (str p)))])
-                               (.setProperty s-node (str p) o))))
-                          (.commit tx))
-                       (+ n (count statements)))
-                     0)))
+    (with-open [in (io/input-stream watdiv/watdiv-input-file)]
+      (->> (rdf/ntriples-seq in)
+           (map rdf/rdf->clj)
+           (map #(rdf/use-default-language % rdf/*default-language*))
+           (partition-all neo4j-tx-size)
+           (reduce (fn [^long n statements]
+                     (with-open [tx (.beginTx graph-db)]
+                       (doseq [[s p o] statements]
+                         (let [s-node (upsert-node tx s)]
+                           (if (keyword? o)
+                             (let [o-node (upsert-node tx o)
+                                   p-rel (doto (.createRelationshipTo s-node o-node
+                                                                      (RelationshipType/withName (str p)))
+                                           (.setProperty (str :crux.db/id) (str p)))])
+                             (.setProperty s-node (str p) o))))
+                       (.commit tx)
+                       (+ n (count statements))))
+                   0)))
 
-      (with-open [tx (.beginTx graph-db)]
-        (-> (.schema tx)
-            (.awaitIndexesOnline neo4j-index-timeout-ms TimeUnit/MILLISECONDS))
-        (.commit tx)))))
+    (with-open [tx (.beginTx graph-db)]
+      (-> (.schema tx)
+          (.awaitIndexesOnline neo4j-index-timeout-ms TimeUnit/MILLISECONDS))
+      (.commit tx))))
 
 (defn run-watdiv-bench [{:keys [test-count] :as opts}]
   (with-neo4j
