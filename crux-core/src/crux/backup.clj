@@ -34,25 +34,36 @@
   (log/info "skipping download from backend"))
 
 (defn restore
-  [{:keys [db-dir backup-dir] :as node-options}]
+  [{:keys [event-log-dir db-dir backup-dir] :as node-options}]
  ;(s/assert ::node-options node-options)
-  (if (some-> db-dir io/file .exists)
+  (if (or (some-> event-log-dir io/file .exists) (some-> db-dir io/file .exists))
     (log/info "found existing data dirs, restore aborted")
     (let [^File checkpoint-directory (io/file backup-dir)]
       (log/infof "no data : attempting restore from backup" (.getPath checkpoint-directory))
       (sh "mkdir" "-p" (.getPath (io/file checkpoint-directory)))
-      (let [db-dir-resp (when db-dir
-                          (sh "mkdir" "-p" (.getParent (io/file db-dir)))
-                          (sh "cp" "-r"
-                              (.getPath (io/file checkpoint-directory "kv-store"))
-                              (.getPath (io/file db-dir))))
-            dbd-good? (= 0 (:exit db-dir-resp))]
-        (if dbd-good?
+      (let [db-dir-resp
+              (when db-dir
+                (sh "mkdir" "-p" (.getParent (io/file db-dir)))
+                (sh "cp" "-r"
+                    (.getPath (io/file checkpoint-directory "kv-store"))
+                    (.getPath (io/file db-dir))))
+            el-dir-resp
+              (when event-log-dir
+                (sh "mkdir" "-p" (.getParent (io/file event-log-dir)))
+                (sh "cp" "-r"
+                    (.getPath (io/file checkpoint-directory "event-log-kv-store"))
+                    (.getPath (io/file event-log-dir))))
+            dbd-good?     (= 0 (:exit db-dir-resp))
+            eld-good? (= 0 (:exit el-dir-resp))]
+        (if (and dbd-good? eld-good?)
           (log/info "restore successful")
           (log/info "restore had issues"
                     db-dir-resp
-                    (when-not dbd-good?
-                      "; db-dir not written")))))))
+                    (if-not dbd-good?
+                      "; db-dir not written")
+                    el-dir-resp
+                    (if-not dbd-good?
+                      "; evt-dir not written")))))))
 
 (defn backup
   [{:keys [backup-dir] :as node-options} crux-node]
@@ -67,9 +78,10 @@
       (log/infof "checkpoint written for crux backup: %s" (.getPath checkpoint-directory)))))
 
 (defn check-and-restore
-  [{:keys [db-dir] :as node-options ::keys [checkpoint-directory]}]
+  [{:keys [event-log-dir db-dir] :as node-options ::keys [checkpoint-directory]}]
   (s/assert ::node-options-w-backend node-options)
-  (when-not (some-> db-dir io/file .exists)
+  (when-not (or (some-> event-log-dir io/file .exists)
+                (some-> db-dir io/file .exists))
     (let [^File checkpoint-directory (io/file checkpoint-directory)]
       (log/infof "no data attempting restore from backup" (.getPath checkpoint-directory))
       (sh "mkdir" "-p" (.getPath (io/file checkpoint-directory)))
@@ -80,6 +92,12 @@
         (sh "mv"
             (.getPath (io/file checkpoint-directory "kv-store"))
             (.getPath (io/file db-dir))))
+
+      (when event-log-dir
+        (sh "mkdir" "-p" (.getParent (io/file event-log-dir)))
+        (sh "mv"
+            (.getPath (io/file checkpoint-directory "event-log-kv-store"))
+            (.getPath (io/file event-log-dir))))
 
       (crux-io/delete-dir checkpoint-directory))))
 
@@ -96,7 +114,9 @@
       (crux-io/delete-dir checkpoint-directory))))
 
 (comment
-  (kv/backup kv-store (io/file checkpoint-dir "kv-store")))
+  (kv/backup kv-store (io/file checkpoint-dir "kv-store"))
+  (when event-log-kv-store
+    (kv/backup event-log-kv-store (io/file checkpoint-dir "event-log-kv-store"))))
 
 (defmethod upload-to-backend ::sh
   [{::keys [^File checkpoint-directory sh-backup-script]}]

@@ -5,6 +5,7 @@
 (defn -main []
   (println "restore script")
   (backup/restore
-    {:db-dir "data/db-dir-1"
-     :backup-dir "checkpoint"})
+    {:event-log-dir  "data/eventlog-1"
+     :db-dir         "data/db-dir-1"
+     :backup-dir     "checkpoint"})
   (System/exit 0))
