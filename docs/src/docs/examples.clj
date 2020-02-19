@@ -13,10 +13,7 @@
 ;; tag::start-standalone-node[]
 (defn start-standalone-node ^crux.api.ICruxAPI [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
-                    :crux.node/kv-store 'crux.kv.memdb/kv
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
-                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
 
 (comment ; which can be used as
   (def node (start-standalone-node "crux-store")))
@@ -31,10 +28,7 @@
 ;; tag::start-standalone-http-node[]
 (defn start-standalone-http-node [port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv
-                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))
                     :crux.http-server/port port}))
 ;; end::start-standalone-http-node[]
 
@@ -54,7 +48,6 @@
 ;; tag::start-cluster-node[]
 (defn start-cluster [kafka-port]
   (crux/start-node {:crux.node/topology '[crux.kafka/topology]
-                    :crux.node/kv-store 'crux.kv.memdb/kv
                     :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)}))
 ;; end::start-cluster-node[]
 
@@ -62,17 +55,14 @@
 (defn start-rocks-node [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.rocksdb/kv
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))}))
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
 ;; end::start-standalone-with-rocks[]
 
 ;; tag::start-standalone-with-lmdb[]
 (defn start-lmdb-node [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
                     :crux.node/kv-store 'crux.kv.lmdb/kv
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.standalone/event-log-dir (str (io/file storage-dir "event-log"))
-                    :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv}))
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
 ;; end::start-standalone-with-lmdb[]
 
 ;; tag::start-jdbc-node[]

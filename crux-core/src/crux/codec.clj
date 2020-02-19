@@ -67,6 +67,8 @@
 ; used when a lookup by the first index fails
 (def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
 
+;; used in standalone TxLog
+(def ^:const ^:private tx-events-index-id 8)
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
@@ -686,3 +688,21 @@
 
 (defn decode-index-version-value-from ^long [^MutableDirectBuffer b]
   (.getLong b 0 ByteOrder/BIG_ENDIAN))
+
+(defn encode-tx-event-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b, {:crux.tx/keys [tx-id tx-time]}]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size Long/BYTES Long/BYTES)))]
+    (doto b
+      (.putByte 0 tx-events-index-id)
+      (.putLong index-id-size tx-id ByteOrder/BIG_ENDIAN)
+      (.putLong (+ index-id-size Long/BYTES)
+                (date->reverse-time-ms (or tx-time (Date.)))
+                ByteOrder/BIG_ENDIAN))))
+
+(defn tx-event-key? [^DirectBuffer k]
+  (= tx-events-index-id (.getByte k 0)))
+
+(defn decode-tx-event-key-from [^DirectBuffer k]
+  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (assert (tx-event-key? k))
+  {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
+   :crux.tx/tx-time (reverse-time-ms->date (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})

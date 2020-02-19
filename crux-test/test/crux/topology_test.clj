@@ -4,7 +4,8 @@
             [clojure.test :as t]))
 
 (t/deftest test-properties-to-topology
-  (let [t (topo/options->topology {:crux.node/topology ['crux.jdbc/topology]})]
+  (let [t (topo/options->topology {:crux.node/topology ['crux.jdbc/topology]
+                                   :crux.node/kv-store :crux.kv.rocksdb/kv})]
 
     (t/is (= (-> crux.jdbc/topology :crux.node/tx-log)
              (-> t :crux.node/tx-log)))

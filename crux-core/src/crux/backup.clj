@@ -12,7 +12,7 @@
 
 (s/def ::node-options
   (s/keys :req-un [:crux.kv/db-dir]
-          :gen    [:backup-dir]
+          :gen [:backup-dir]
           :opt-un [:crux.standalone/event-log-dir]))
 
 (s/def ::node-options-w-backend

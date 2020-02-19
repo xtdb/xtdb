@@ -20,7 +20,8 @@
            [java.time Duration]
            [crux.api ITxLog]))
 
-(t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir fapi/with-node f/with-silent-test-check)
+;; FIXME using Rocks because the default memdb fails, see note in the tx-fn defmethod of `tx/index-tx-event`
+(t/use-fixtures :each fs/with-standalone-node fkv/with-rocksdb fkv/with-kv-dir fapi/with-node f/with-silent-test-check)
 
 (def picasso-id :http://dbpedia.org/resource/Pablo_Picasso)
 (def picasso-eid (c/new-id picasso-id))
@@ -301,7 +302,8 @@
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (db/submit-docs (:tx-log *api*) [[content-hash picasso]])
+    (db/submit-docs (:document-store *api*) [[content-hash picasso]])
+    (db/index-docs (:indexer *api*) {content-hash picasso})
 
     (Thread/sleep 500)
 
@@ -560,55 +562,51 @@
                                                                                              :age
                                                                                              dec]}]])
                 (t/is (nil? (latest-exception)))
-                (t/is (= v3-ivan (api/entity (api/db *api*) :ivan)))))
+                (t/is (= v3-ivan (api/entity (api/db *api*) :ivan))))))
 
-            (t/testing "function ops can return other function ops"
-              (let [returns-fn {:crux.db/id :returns-fn
-                                :crux.db.fn/body
-                                '(fn [db]
-                                   '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :upcase-ivans-name
-                                                                        :crux.db.fn/args [:ivan
-                                                                                          :name
-                                                                                          clojure.string/upper-case]}]])}]
-                (fapi/submit+await-tx [[:crux.tx/put returns-fn]])
-                (fapi/submit+await-tx [[:crux.tx/fn :returns-fn]])
-                (t/is (nil? (latest-exception)))
-                (t/is (= v4-ivan (api/entity (api/db *api*) :ivan)))))
+          (t/testing "function ops can return other function ops"
+            (let [returns-fn {:crux.db/id :returns-fn
+                              :crux.db.fn/body
+                              '(fn [db]
+                                 '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :upcase-ivans-name
+                                                                      :crux.db.fn/args [:ivan
+                                                                                        :name
+                                                                                        clojure.string/upper-case]}]])}]
+              (fapi/submit+await-tx [[:crux.tx/put returns-fn]])
+              (fapi/submit+await-tx [[:crux.tx/fn :returns-fn]])
+              (t/is (nil? (latest-exception)))
+              (t/is (= v4-ivan (api/entity (api/db *api*) :ivan)))))
 
-            (t/testing "repeated 'merge' operation behaves correctly"
-              (let [v5-ivan (merge {:height 180}
-                                   {:hair-style "short"}
-                                   v4-ivan
-                                   {:mass 60})
-                    merge-fn {:crux.db/id :merge-fn
-                                :crux.db.fn/body
-                                '(fn [db eid m]
-                                   [[:crux.tx/put (merge (crux.api/entity db eid) m)]])}
-                    merge-1 '{:crux.db/id :merge-1
-                                 :crux.db.fn/args [:ivan
-                                                   {:mass 60
-                                                    :hair-style "short"}]}
-                    merge-2 '{:crux.db/id :merge-2
-                                 :crux.db.fn/args [:ivan
-                                                   {:height 180}]}]
-                (fapi/submit+await-tx [[:crux.tx/put merge-fn]])
-                (fapi/submit+await-tx [[:crux.tx/fn :merge-fn merge-1]])
-                (fapi/submit+await-tx [[:crux.tx/fn :merge-fn merge-2]])
-                (t/is (nil? (latest-exception)))
-                (t/is (= v5-ivan (api/entity (api/db *api*) :ivan)))))
+          (t/testing "repeated 'merge' operation behaves correctly"
+            (let [v5-ivan (merge v4-ivan
+                                 {:height 180
+                                  :hair-style "short"
+                                  :mass 60})
+                  merge-fn {:crux.db/id :merge-fn
+                            :crux.db.fn/body '(fn [db eid m]
+                                                [[:crux.tx/put (merge (crux.api/entity db eid) m)]])}
+                  merge-1 '{:crux.db/id :merge-1
+                            :crux.db.fn/args [:ivan {:mass 60, :hair-style "short"}]}
+                  merge-2 '{:crux.db/id :merge-2
+                            :crux.db.fn/args [:ivan {:height 180}]}]
+              (fapi/submit+await-tx [[:crux.tx/put merge-fn]])
+              (fapi/submit+await-tx [[:crux.tx/fn :merge-fn merge-1]])
+              (fapi/submit+await-tx [[:crux.tx/fn :merge-fn merge-2]])
+              (t/is (nil? (latest-exception)))
+              (t/is (= v5-ivan (api/entity (api/db *api*) :ivan)))))
 
-            (t/testing "can access current transaction as dynamic var"
-              (fapi/submit+await-tx
-                              [[:crux.tx/put
-                                {:crux.db/id :tx-metadata-fn
-                                 :crux.db.fn/body
-                                 '(fn [db]
-                                    [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx crux.tx/*current-tx*}]])}]])
-              (let [submitted-tx (fapi/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
-                (t/is (nil? (latest-exception)))
-                (t/is (= {:crux.db/id :tx-metadata
-                          :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
-                         (api/entity (api/db *api*) :tx-metadata)))))))))))
+          (t/testing "can access current transaction as dynamic var"
+            (fapi/submit+await-tx
+             [[:crux.tx/put
+               {:crux.db/id :tx-metadata-fn
+                :crux.db.fn/body
+                '(fn [db]
+                   [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx crux.tx/*current-tx*}]])}]])
+            (let [submitted-tx (fapi/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
+              (t/is (nil? (latest-exception)))
+              (t/is (= {:crux.db/id :tx-metadata
+                        :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
+                       (api/entity (api/db *api*) :tx-metadata))))))))))
 
 (t/deftest tx-log-evict-454 []
   (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :to-evict}]])

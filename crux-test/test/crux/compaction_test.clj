@@ -22,21 +22,15 @@
 (t/use-fixtures :each with-prep-for-tests)
 
 (t/deftest test-compaction-leaves-replayable-log
-  (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        opts {:crux.node/topology 'crux.jdbc/topology
+  (let [opts {:crux.node/topology 'crux.jdbc/topology
               :crux.jdbc/dbtype "h2"
-              :crux.jdbc/dbname *db-name*
-              :crux.kv/db-dir db-dir
-              :crux.kv/kv-store "crux.kv.memdb/kv"}]
-    (try
-      (let [api (Crux/startNode opts)
-            tx (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
-        (api/await-tx api tx)
-        (f/transact! api [{:crux.db/id :foo}])
-        (.close api)
+              :crux.jdbc/dbname *db-name*}
+        api (Crux/startNode opts)
+        tx (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
+    (api/await-tx api tx)
+    (f/transact! api [{:crux.db/id :foo}])
+    (.close api)
 
-        (with-open [api2 (Crux/startNode opts)]
-          (api/await-tx api2 tx nil)
-          (t/is (= 2 (count (api/history api2 :foo))))))
-      (finally
-        (cio/delete-dir db-dir)))))
+    (with-open [api2 (Crux/startNode opts)]
+      (api/await-tx api2 tx nil)
+      (t/is (= 2 (count (api/history api2 :foo)))))))

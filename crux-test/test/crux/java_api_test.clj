@@ -13,7 +13,6 @@
     (t/testing "Can create node, transact to node, and query node"
       (let [node (-> (StandaloneTopology/standaloneTopology)
                      (.withDbDir (str (io/file data-dir "db-dir-1")))
-                     (.withEventLogDir (str (io/file data-dir "eventlog-1")))
                      (.startNode))]
 
         (t/testing "Can create node"

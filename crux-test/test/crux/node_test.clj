@@ -2,16 +2,15 @@
   (:require [clojure.test :as t]
             [crux.config :as cc]
             [crux.io :as cio]
-            [crux.moberg]
             crux.jdbc
             crux.kv.memdb
             crux.kv.rocksdb
             [crux.node :as n]
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
-            [clojure.java.io :as io])
-  (:import crux.moberg.MobergTxLog
-           java.util.Date
+            [clojure.java.io :as io]
+            crux.standalone)
+  (:import java.util.Date
            crux.api.Crux
            (java.util HashMap)
            (clojure.lang Keyword)
@@ -21,8 +20,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (try
       (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                        :crux.kv/db-dir (str (io/file data-dir "db"))
-                        :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))})]
+                        :crux.kv/db-dir (str (io/file data-dir "db"))})]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -60,32 +58,15 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
                             :crux.kv/kv-store :crux.kv.memdb/kv
-                            :crux.kv/db-dir (str (io/file data-dir "db"))
-                            :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
-                            :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
+                            :crux.kv/db-dir (str (io/file data-dir "db"))})]
       (t/is n))))
 
 (t/deftest test-properties-file-to-node
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-                             :crux.db/db-dir (str (io/file data-dir "db"))
-                             :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))))]
-      (t/is (instance? MobergTxLog (-> n :tx-log)))
+                             :crux.db/db-dir (str (io/file data-dir "db"))))]
+      (t/is (instance? crux.standalone.StandaloneTxLog (-> n :tx-log)))
       (t/is (= (Duration/ofSeconds 20) (-> n :options :crux.tx-log/await-tx-timeout))))))
-
-(t/deftest test-conflicting-standalone-props
-  (f/with-tmp-dir "data" [data-dir]
-    (try
-      (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                              :crux.kv/kv-store :crux.kv.memdb/kv
-                              :crux.kv/db-dir (str (io/file data-dir "db"))
-                              :crux.standalone/event-log-sync-interval-ms 1000
-                              :crux.standalone/event-log-sync? true
-                              :crux.standalone/event-log-dir (str (io/file data-dir "event-log"))
-                              :crux.standalone/event-log-kv-store :crux.kv.memdb/kv})]
-        (t/is false))
-      (catch java.lang.AssertionError e
-        (t/is true)))))
 
 (t/deftest topology-resolution-from-java
   (f/with-tmp-dir "data" [data-dir]
@@ -93,9 +74,6 @@
           (doto (HashMap.)
             (.put :crux.node/topology 'crux.standalone/topology)
             (.put :crux.node/kv-store 'crux.kv.memdb/kv)
-            (.put :crux.kv/db-dir (str (io/file data-dir "db")))
-            (.put :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv)
-            (.put :crux.standalone/event-log-dir (str (io/file data-dir "eventlog")))
             (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
           memdb-node (Crux/startNode mem-db-node-options)]
       (t/is memdb-node)
