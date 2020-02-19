@@ -142,7 +142,7 @@
 (def ^:private event-log-args
   {::event-log-kv-store {:doc "The KV store to use for the standalone event log"
                          :default 'crux.kv.memdb/kv
-                         :crux.config/type :crux.config/module}
+                         :crux.config/type :crux.topology/module}
 
    ::event-log-dir {:doc "The directory to persist the standalone event log to"
                     :required? false
