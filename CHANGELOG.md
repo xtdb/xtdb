@@ -19,6 +19,7 @@
 * [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
 * [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
 * [#568](https://github.com/juxt/crux/issues/568): You can now supply a vector of modules to `crux.node/topology`
+* [#586](https://github.com/juxt/crux/issues/586): Common artifacts are now deployed on every release, check out the [releases](https://github.com/juxt/crux/releases) page on the repository and the Crux [dockerhub](https://hub.docker.com/u/cruxdockerhub) account.
 * [#596](https://github.com/juxt/crux/issues/596): The HTTP server is now a module, to be included in the `:crux.node/topology` vector. See https://opencrux.com/docs#config-http for more details.
 * [#597](https://github.com/juxt/crux/issues/597): Metrics can be now analysed in cloudwatch
 * [#625](https://github.com/juxt/crux/issues/625): Metrics can be displayed to a prometheus server
