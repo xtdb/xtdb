@@ -8,9 +8,10 @@
             [crux.io :as cio]
             [crux.kafka.consumer :as kc]
             [crux.node :as n]
+            [crux.status :as status]
             [crux.tx :as tx]
-            [taoensso.nippy :as nippy]
-            [crux.status :as status])
+            [crux.tx.consumer :as tc]
+            [taoensso.nippy :as nippy])
   (:import crux.db.DocumentStore
            crux.kafka.nippy.NippySerializer
            java.io.Closeable
@@ -184,6 +185,15 @@
    ::kafka-properties-map {:doc "Used for supplying Kafka connection properties to the underlying Kafka API."
                            :crux.config/type [map? identity]}})
 
+(defrecord KafkaQueue [^KafkaConsumer consumer topic timeout offsets]
+  tc/Queue
+  (next-events [this]
+    (let [records (.poll consumer (Duration/ofMillis timeout))]
+      (vec (.records records (str topic)))))
+
+  (mark-processed [this records]
+    (kc/update-stored-consumer-state offsets consumer records)))
+
 (defn accept-txes? [indexer ^ConsumerRecord tx-record]
   (let [content-hashes (->> (.lastHeader (.headers tx-record)
                                          (str :crux.tx/docs))
@@ -202,19 +212,26 @@
     (let [{:keys [crux.tx.event/tx-events] :as record} (tx-record->tx-log-entry record)]
       (db/index-tx indexer (select-keys record [:crux.tx/tx-time :crux.tx/tx-id]) tx-events))))
 
-(def tx-indexing-consumer
-  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]}
+(def tx-consumer
+  {:start-fn (fn [{:keys [crux.kafka/admin-client]}
                   {::keys [tx-topic group-id] :as options}]
                (ensure-topic-exists admin-client tx-topic tx-topic-config 1 options)
                (ensure-tx-topic-has-single-partition admin-client tx-topic)
-               (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets (kc/->TxOffset indexer)
-                                            :kafka-config (derive-kafka-config options)
-                                            :group-id group-id
-                                            :topic tx-topic
-                                            :accept-fn (partial accept-txes? indexer)
-                                            :index-fn (partial index-txes indexer)}))
-   :deps [:crux.node/indexer ::admin-client]
+               (kc/create-consumer (merge {"group.id" group-id} (derive-kafka-config options))))
+   :deps [::admin-client]
+   :args default-options})
+
+(def tx-indexing-consumer
+  {:start-fn (fn [{:keys [crux.node/indexer ::tx-consumer]} {::keys [tx-topic] :as options}]
+               (let [offsets (kc/->TxOffset indexer)]
+                 (kc/subscribe-from-stored-offsets offsets tx-consumer [tx-topic])
+                 (tc/start-indexing-consumer {:queue (map->KafkaQueue {:consumer tx-consumer
+                                                                       :topic tx-topic
+                                                                       :timeout 1000
+                                                                       :offsets offsets})
+                                              :accept-fn (partial accept-txes? indexer)
+                                              :index-fn (partial index-txes indexer)})))
+   :deps [:crux.node/indexer ::tx-consumer]
    :args default-options})
 
 (defn index-documents
@@ -223,17 +240,24 @@
                               (into {} (map (fn [^ConsumerRecord record]
                                               [(c/new-id (.key record)) (.value record)]))))))
 
-(def doc-indexing-consumer
-  {:start-fn (fn [{:keys [crux.kafka/admin-client crux.node/indexer]}
+(def doc-consumer
+  {:start-fn (fn [{:keys [crux.kafka/admin-client]}
                   {::keys [doc-topic doc-partitions group-id] :as options}]
                (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
-               (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets (kc/->ConsumerOffsets indexer :crux.tx-log/consumer-state)
-                                            :kafka-config (derive-kafka-config options)
-                                            :group-id group-id
-                                            :topic doc-topic
-                                            :index-fn (partial index-documents indexer)}))
-   :deps [:crux.node/indexer ::admin-client]
+               (kc/create-consumer (merge {"group.id" group-id} (derive-kafka-config options))))
+   :deps [::admin-client]
+   :args default-options})
+
+(def doc-indexing-consumer
+  {:start-fn (fn [{:keys [crux.node/indexer ::doc-consumer]} {::keys [doc-topic]}]
+               (let [offsets (tc/->IndexedOffsets indexer :crux.tx-log/consumer-state)]
+                 (kc/subscribe-from-stored-offsets offsets doc-consumer [doc-topic])
+                 (tc/start-indexing-consumer {:queue (map->KafkaQueue {:consumer doc-consumer
+                                                                       :topic doc-topic
+                                                                       :timeout 1000
+                                                                       :offsets offsets})
+                                              :index-fn (partial index-documents indexer)})))
+   :deps [:crux.node/indexer ::admin-client ::doc-consumer]
    :args default-options})
 
 (defn index-documents-from-txes
@@ -246,16 +270,25 @@
       (let [docs (db/fetch-docs document-store content-hashes)]
         (db/index-docs indexer docs)))))
 
-(def doc-indexing-from-tx-topic-consumer
-  {:start-fn (fn [{:keys [crux.node/indexer crux.node/document-store]}
-                  {::keys [tx-topic doc-group-id] :as options}]
-               (kc/start-indexing-consumer {:indexer indexer
-                                            :offsets (kc/->ConsumerOffsets indexer :crux.tx-log/consumer-state)
-                                            :kafka-config (derive-kafka-config options)
-                                            :group-id doc-group-id
-                                            :topic tx-topic
-                                            :index-fn (partial index-documents-from-txes indexer document-store)}))
-   :deps [:crux.node/indexer :crux.node/document-store ::tx-indexing-consumer]
+(def tx-doc-consumer
+  {:start-fn (fn [_ {::keys [doc-group-id] :as options}]
+               (kc/create-consumer (merge {"group.id" doc-group-id} (derive-kafka-config options))))
+   :args (assoc default-options
+                ::doc-group-id {:doc "Kafka client group.id for ingesting documents using tx topic"
+                                :default (str "documents-" (group-name))
+                                :crux.config/type :crux.config/string})})
+
+(def tx-doc-indexing-consumer
+  {:start-fn (fn [{:keys [crux.node/indexer crux.node/document-store ::doc-consumer]}
+                  {::keys [tx-topic] :as options}]
+               (let [offsets (tc/->IndexedOffsets indexer :crux.tx-log/consumer-state)]
+                 (kc/subscribe-from-stored-offsets offsets doc-consumer [tx-topic])
+                 (tc/start-indexing-consumer {:queue (map->KafkaQueue {:consumer doc-consumer
+                                                                       :topic tx-topic
+                                                                       :timeout 1000
+                                                                       :offsets offsets})
+                                              :index-fn (partial index-documents-from-txes indexer document-store)})))
+   :deps [:crux.node/indexer :crux.node/document-store ::tx-indexing-consumer ::doc-consumer]
    :args (assoc default-options
                 ::doc-group-id {:doc "Kafka client group.id for ingesting documents using tx topic"
                                 :default (str "documents-" (group-name))
@@ -302,6 +335,8 @@
           ::admin-client admin-client
           ::admin-wrapper admin-wrapper
           ::producer producer
+          ::tx-consumer tx-consumer
           ::tx-indexing-consumer tx-indexing-consumer
+          ::doc-consumer doc-consumer
           ::doc-indexing-consumer doc-indexing-consumer
           ::latest-submitted-tx-consumer latest-submitted-tx-consumer}))
