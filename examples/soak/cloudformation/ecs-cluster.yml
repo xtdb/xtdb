@@ -41,3 +41,9 @@ Outputs:
     Value: !Ref 'FargateContainerSecurityGroup'
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'FargateContainerSecurityGroup' ] ]
+  ECSClusterARN:
+    Description: The ARN for the ECS cluster
+    Value:
+      Fn::GetAtt: ["ECSCluster", "Arn"]
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ECSClusterARN' ] ]

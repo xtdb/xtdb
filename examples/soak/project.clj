@@ -6,9 +6,11 @@
                  [juxt/crux-rocksdb "derived-from-git"]
                  [juxt/crux-metrics "derived-from-git"]
 
+                 [cheshire "5.10.0"]
                  [clj-http "3.10.0"]
                  [ring "1.8.0"]
                  [software.amazon.awssdk/s3 "2.10.61"]
+
                  ;; deps res
                  [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
                  [org.apache.httpcomponents/httpclient "4.5.9"]]

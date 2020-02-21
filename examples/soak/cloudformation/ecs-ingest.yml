@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  EcsClusterStackName:
+    Type: String
+    Default: soak-ecs-cluster
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'crux-soak-ingest'
+      RetentionInDays: 365
+
+  SoakIngestECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+
+                # Allow the ECS tasks to upload logs to CloudWatch
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+
+                # Allow the ECS tasks to get secret values from the secrets manager
+                - 'secretsmanager:GetSecretValue'
+              Resource: '*'
+
+  SoakIngestCurrentTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - LogGroup
+    Properties:
+      Cpu: '0.5 vCPU'
+      Memory: '2GB'
+      Family: 'crux-soak-ingest-current'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["SoakIngestECSTaskExecutionRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'crux-soak'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
+          PortMappings:
+            - ContainerPort: 8080
+          Command:
+            - "-m"
+            - "crux.soak.ingest"
+            - "current"
+          Secrets:
+            - Name: "SOAK_SECRETS"
+              ValueFrom:
+                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/soak-secrets-OHMj3T"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  SoakIngestForecastTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - LogGroup
+    Properties:
+      Cpu: '0.5 vCPU'
+      Memory: '2GB'
+      Family: 'crux-soak-ingest-forecast'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["SoakIngestECSTaskExecutionRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'crux-soak'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
+          PortMappings:
+            - ContainerPort: 8080
+          Command:
+            - "-m"
+            - "crux.soak.ingest"
+            - "forecast"
+          Secrets:
+            - Name: "SOAK_SECRETS"
+              ValueFrom:
+                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/soak-secrets-OHMj3T"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  SoakTaskSchedulerRole:
+     Type: AWS::IAM::Role
+     Properties:
+       AssumeRolePolicyDocument:
+         Version: "2012-10-17"
+         Statement:
+           - Effect: "Allow"
+             Principal:
+               Service:
+                 - "events.amazonaws.com"
+             Action:
+               - "sts:AssumeRole"
+       Path: /
+       Policies:
+         - PolicyDocument:
+             Statement:
+               - Effect: "Allow"
+                 Condition:
+                   ArnEquals:
+                     ecs:cluster:
+                       - Fn::ImportValue:
+                           !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+                 Action: "ecs:RunTask"
+                 Resource: "*"
+               - Effect: "Allow"
+                 Condition:
+                   ArnEquals:
+                     ecs:cluster:
+                        - Fn::ImportValue:
+                           !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+                 Action:
+                   - "iam:ListInstanceProfiles"
+                   - "iam:ListRoles"
+                   - "iam:PassRole"
+                 Resource: "*"
+           PolicyName: "TaskSchedulerPolicy"
+
+  SoakTaskSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: "crux-soak-scheduler-current"
+      ScheduleExpression: "rate(5 minutes)"
+      State: "ENABLED"
+      Targets:
+        - Id: "crux-soak-ingest-current"
+          RoleArn:
+            Fn::GetAtt: ["SoakTaskSchedulerRole", "Arn"]
+          EcsParameters:
+            LaunchType: "FARGATE"
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: "ENABLED"
+                SecurityGroups:
+                  - "sg-0255e869"
+                Subnets:
+                  - "subnet-5140ba2b"
+            TaskDefinitionArn:
+              Ref: "SoakIngestCurrentTaskDef"
+            TaskCount: 1
+          Arn:
+            Fn::ImportValue:
+              !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+
+  SoakTaskScheduleForecast:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: "crux-soak-scheduler-forecast"
+      ScheduleExpression: "cron(0 0 * * ? *)"
+      State: "ENABLED"
+      Targets:
+        - Id: "crux-soak-ingest-forecast"
+          RoleArn:
+            Fn::GetAtt: ["SoakTaskSchedulerRole", "Arn"]
+          EcsParameters:
+            LaunchType: "FARGATE"
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: "ENABLED"
+                SecurityGroups:
+                  - "sg-0255e869"
+                Subnets:
+                  - "subnet-5140ba2b"
+            TaskDefinitionArn:
+              Ref: "SoakIngestForecastTaskDef"
+            TaskCount: 1
+          Arn:
+            Fn::ImportValue:
+              !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
