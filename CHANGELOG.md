@@ -7,17 +7,22 @@
 ### Breaking changes
 * [#555](https://github.com/juxt/crux/issues/555): Removes `submitted-tx-updated-entity?` and `submitted-tx-corrected-entity?` from the API, replacing them with a new function, `tx-committed?`.
 * [#556](https://github.com/juxt/crux/issues/556): Removes `new-tx-log-context` and `tx-log` from the API, replacing them with `open-tx-log`.
+* [#619](https://github.com/juxt/crux/issues/619): Standalone topology uses memdb (not persisted by default), removes RocksDB dependency from crux-core. See https://opencrux.com/docs#config-rocksdb for details about how to configure RocksDB
 
 ### Bug fixes
 * [#565](https://github.com/juxt/crux/pull/565): query predicate at zero join depth can now stop tuples from being returned
 * [#507](https://github.com/juxt/crux/issues/507): ranges in rules revert to a predicate if neither argument is a logic var
 
 ### New Features
-* [#625](https://github.com/juxt/crux/issues/625): Metrics can be displayed to a prometheus server
-* [#597](https://github.com/juxt/crux/issues/597): Metrics can be now analysed in cloudwatch
-* [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
-* [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
+* [#466](https://github.com/juxt/crux/issues/466): Splitting `sync`'s various arities into `(sync node <timeout>)`, `(await-tx-time node tx-time <timeout>)` and `(await-tx node tx <timeout>)` (`(sync node tx-time <timeout>)` is deprecated and will be removed in a subsequent release).
 * [#492](https://github.com/juxt/crux/issues/492): Adding metrics to expose local disk usage
+* [#494](https://github.com/juxt/crux/issues/494): Adding metrics to expose metrics on how long queries are taking
+* [#495](https://github.com/juxt/crux/issues/495): Adding metrics to expose various indexer ingest metrics
+* [#568](https://github.com/juxt/crux/issues/568): You can now supply a vector of modules to `crux.node/topology`
+* [#586](https://github.com/juxt/crux/issues/586): Common artifacts are now deployed on every release, check out the [releases](https://github.com/juxt/crux/releases) page on the repository and the Crux [dockerhub](https://hub.docker.com/u/cruxdockerhub) account.
+* [#596](https://github.com/juxt/crux/issues/596): The HTTP server is now a module, to be included in the `:crux.node/topology` vector. See https://opencrux.com/docs#config-http for more details.
+* [#597](https://github.com/juxt/crux/issues/597): Metrics can be now analysed in cloudwatch
+* [#625](https://github.com/juxt/crux/issues/625): Metrics can be displayed to a prometheus server
 
 ## 20.01-1.6.2-alpha
 

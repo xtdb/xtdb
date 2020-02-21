@@ -9,7 +9,9 @@
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [clojure.string :as str]
+            [crux.io :as cio])
   (:import com.zaxxer.hikari.HikariDataSource
            crux.tx.consumer.Message
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
@@ -93,31 +95,17 @@
               :crux.tx/tx-time (.time tx)})))
 
   (open-tx-log [this from-tx-id]
-    (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
-          running? (atom true)
-          consumer-f (fn [_ y]
-                       (.put q {:crux.tx/tx-id (int (:event_offset y))
-                                :crux.tx/tx-time (->date dbtype (:tx_time y))
-                                :crux.tx.event/tx-events (->v dbtype (:v y))})
-                       (if @running?
-                         nil
-                         (reduced nil)))]
-      (future
-        (try
-          (r/reduce consumer-f
-                    nil
-                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
-                                   (or from-tx-id 0)]
-                               {:builder-fn jdbcr/as-unqualified-lower-maps}))
-          (catch Throwable t
-            (log/error t "Exception occured reading event log")))
-        (.put q -1))
+    (let [stmt (jdbc/prepare (jdbc/get-connection ds)
+                             ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
+                              (or from-tx-id 0)])
+          rs (.executeQuery stmt)]
       (db/->closeable-tx-log-iterator
-       #(reset! running? false)
-       ((fn step []
-          (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
-            (when (not= -1 x)
-              (cons x (step)))))))))
+       #(run! cio/try-close [rs stmt])
+       (->> (resultset-seq rs)
+            (map (fn [y]
+                   {:crux.tx/tx-id (int (:event_offset y))
+                    :crux.tx/tx-time (->date dbtype (:tx_time y))
+                    :crux.tx.event/tx-events (->v dbtype (:v y))}))))))
 
   (latest-submitted-tx [this]
     (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]

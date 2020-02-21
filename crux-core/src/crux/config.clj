@@ -7,34 +7,43 @@
            (java.time Duration)
            (java.util.concurrent TimeUnit)))
 
-(def property-types
-  {::boolean [boolean? (fn [x]
-                         (or (and (string? x) (Boolean/parseBoolean x)) x))]
-   ::int [int? (fn [x]
-                 (or (and (string? x) (Long/parseLong x)) x))]
-   ::nat-int [nat-int? (fn [x]
-                         (or (and (string? x) (Long/parseLong x)) x))]
-   ::string [string? identity]
-   ;; TODO string-map for properties files
-   ::string-map [(fn [m] (s/valid? (s/map-of string? string?) m)) identity]
-   ::string-list [(fn [m] (s/valid? (s/coll-of string?) m)) identity]
-   ::module [(fn [m] (s/valid? :crux.topology/module m))
-             (fn [m] (s/conform :crux.topology/module m))]
-   ::duration [#(instance? Duration %)
-               (fn [d]
-                 (cond
-                   (instance? Duration d) d
-                   (nat-int? d) (Duration/ofMillis d)
-                   (string? d) (Duration/parse d)))]
-   ::time-unit [#(instance? TimeUnit %)
-                (fn [t]
-                  (cond
-                    (instance? TimeUnit t) t
-                    (string? t) (TimeUnit/valueOf (str/upper-case t))))]})
+(s/def ::boolean
+  (s/and (s/conformer (fn [x] (cond (boolean? x) x, (string? x) (Boolean/parseBoolean x), :else x)))
+         boolean?))
+
+(s/def ::string string?)
+
+(s/def ::int
+  (s/and (s/conformer (fn [x] (cond (int? x) x, (string? x) (Integer/parseInt x), :else x)))
+         int?))
+
+(s/def ::nat-int
+  (s/and (s/conformer (fn [x] (cond (nat-int? x) x, (string? x) (Integer/parseInt x), :else x)))
+         nat-int?))
+
+(s/def ::string-map (s/map-of string? string?))
+(s/def ::string-list (s/coll-of string?))
+
+(s/def ::duration
+  (s/and (s/conformer (fn [d]
+                        (cond
+                          (instance? Duration d) d
+                          (nat-int? d) (Duration/ofMillis d)
+                          (string? d) (Duration/parse d))))
+         #(instance? Duration %)))
+
+(s/def ::time-unit
+  (s/and (s/conformer (fn [t]
+                        (cond
+                          (instance? TimeUnit t) t
+                          (string? t) (TimeUnit/valueOf (str/upper-case t)))))
+         #(instance? TimeUnit %)))
 
 (s/def ::type
-  (s/and (s/conformer (fn [x] (or (property-types x) x)))
-         (fn [x] (and (vector? x) (-> x first fn?) (some-> x second fn?)))))
+  (s/conformer (fn [t]
+                 (if (or (s/get-spec t) (s/spec? t))
+                   t
+                   any?))))
 
 (s/def ::doc string?)
 (s/def ::default any?)

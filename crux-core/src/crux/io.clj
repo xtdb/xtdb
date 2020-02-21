@@ -120,6 +120,9 @@
 (defn wait-while [p ^Duration timeout]
   (let [timeout-at (some-> timeout .toMillis (+ (System/currentTimeMillis)))]
     (loop []
+      (when (Thread/interrupted)
+        (throw (InterruptedException.)))
+
       (if (p)
         (do (Thread/sleep 100)
             (if (and timeout-at (>= (System/currentTimeMillis) timeout-at))

@@ -70,6 +70,9 @@
                     arg)))
       (->> (s/assert :crux.tx.event/tx-event)))))
 
+(defn tx-event->doc-hashes [tx-event]
+  (keep (s/conform :crux.tx.event/tx-event tx-event) [:doc :old-doc :new-doc :args-doc]))
+
 (defn tx-event->tx-op [[op id & args] snapshot object-store]
   (doto (into [op]
               (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
@@ -280,6 +283,13 @@
                       ;; these nested docs never go to the doc topic,
                       ;; it's slightly less of an issue. It's done
                       ;; this way to support nested fns.
+
+                      ;; FIXME I have a theory that this is broken - running the tx-test with memdb fails,
+                      ;; Rocks passes.
+                      ;; Theory is that, when the tx-fn returns another tx-fn, we index the doc here,
+                      ;; but when we go to index the tx-event, below, we then try to read the docs out of the
+                      ;; same KV snapshot - which shouldn't return the doc indexed after the snapshot was taken.
+                      ;; In Rocks, it does, in memdb (correctly, IMO) it doesn't, but this breaks the test.
                       (db/index-docs indexer (->> arg-docs (into {} (map (juxt c/new-id identity)))))
                       {:docs (vec docs)
                        :ops-result (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]

@@ -70,17 +70,14 @@
 (defn parse-opts [args options]
   (into {}
         (for [[k {:keys [crux.config/type default required?]}] args]
-          (let [[validate-fn parse-fn] (s/conform :crux.config/type type)
-                v (some-> (get options k) parse-fn)
-                v (if (nil? v) default v)]
+          (let [v (get options k default)
+                _ (when (and required? (nil? v))
+                    (throw (IllegalArgumentException. (format "Arg %s required" k))))
+                v (some->> v (s/conform type))]
 
-            (when (and required? (not v))
-              (throw (IllegalArgumentException. (format "Arg %s required" k))))
-
-            (when (and v (not (validate-fn v)))
-              (throw (IllegalArgumentException. (format "Arg %s invalid" k))))
-
-            [k v]))))
+            (if (s/invalid? v)
+              (throw (IllegalArgumentException. (format "Arg %s invalid: %s" k (s/explain-str type v))))
+              [k v])))))
 
 (defn start-component [c started options]
   (s/assert ::component c)

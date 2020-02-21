@@ -59,29 +59,25 @@
   (into-array String strs))
 
 (t/deftest test-cli-can-start
-  (f/with-tmp-dir "cli" [cli-dir]
-    (let [opts {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-                :crux.standalone/event-log-dir (str (io/file cli-dir "event-log"))
-                :crux.http-server/port (cio/free-port)
-                :crux.node/kv-store 'crux.kv.memdb/kv
-                :crux.kv/db-dir (str (io/file cli-dir "db-dir"))}
+  (let [opts {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
+              :crux.http-server/port (cio/free-port)}
 
-          process (.. (ProcessBuilder. (string-array
-                                        "timeout" "30s"
-                                        "lein" "run" "crux.cli"
-                                        "-x" (pr-str opts)))
-                      (redirectErrorStream true)
-                      (directory (-> crux-cli-edn
-                                     (io/as-file)
-                                     (.getParentFile)
-                                     (.getParentFile)
-                                     (.getParentFile)))
-                      start)]
-      (try
-        (with-open [out (io/reader (.getInputStream process))]
-          (t/is (->> (line-seq out)
-                     (map #(doto % println))
-                     (filter #(str/includes? % "org.eclipse.jetty.server.Server - Started"))
-                     first)))
-        (finally
-          (.destroy process))))))
+        process (.. (ProcessBuilder. (string-array
+                                      "timeout" "30s"
+                                      "lein" "run" "crux.cli"
+                                      "-x" (pr-str opts)))
+                    (redirectErrorStream true)
+                    (directory (-> crux-cli-edn
+                                   (io/as-file)
+                                   (.getParentFile)
+                                   (.getParentFile)
+                                   (.getParentFile)))
+                    start)]
+    (try
+      (with-open [out (io/reader (.getInputStream process))]
+        (t/is (->> (line-seq out)
+                   (map #(doto % println))
+                   (filter #(str/includes? % "org.eclipse.jetty.server.Server - Started"))
+                   first)))
+      (finally
+        (.destroy process)))))

@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.standalone]
             [crux.fixtures.standalone :as fs]
-            [crux.moberg]
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*] :as fapi]
             [crux.fixtures.kv :as kvf]
@@ -16,11 +15,11 @@
             [crux.fixtures.api :as fapi]
             [crux.fixtures.doc-store :as ds]
             [crux.db :as db]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.tx :as tx])
   (:import crux.api.NodeOutOfSyncException
            java.util.Date
            java.time.Duration
-           crux.moberg.MobergTxLog
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
@@ -174,28 +173,6 @@
           (t/is (nil? (.document *api* (c/new-id :does-not-exist))))
           (t/is (nil? (.entityTx (.db *api* #inst "1999") :ivan)))))
 
-      (t/testing "tx-log"
-        (with-open [tx-log-iterator (.openTxLog *api* nil false)]
-          (let [result (iterator-seq tx-log-iterator)]
-            (t/is (not (realized? result)))
-            (t/is (= [(assoc submitted-tx
-                             :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
-                     result))
-            (t/is (realized? result))))
-
-        (t/testing "with ops"
-          (with-open [tx-log-iterator (.openTxLog *api* nil true)]
-            (let [result (iterator-seq tx-log-iterator)]
-              (t/is (not (realized? result)))
-              (t/is (= [(assoc submitted-tx
-                               :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-                       result))
-              (t/is (realized? result)))))
-
-        (t/testing "from tx id"
-          (with-open [tx-log-iterator (.openTxLog *api* (inc tx-id) false)]
-            (t/is (empty? (iterator-seq tx-log-iterator))))))
-
       (t/testing "statistics"
         (let [stats (.attributeStats *api*)]
           (t/is (= 1 (:name stats))))
@@ -223,14 +200,17 @@
               (Thread/sleep 500))
 
             (let [stats (.attributeStats *api*)]
-              (t/is (= 0 (:name stats))))))
+              (t/is (= 0 (:name stats))))))))))
 
-        (t/testing "Add back evicted document"
-          (assert (not (.entity (.db *api*) :ivan)))
-          (let [valid-time (Date.)
-                submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-            (t/is (.awaitTx *api* submitted-tx nil))
-            (t/is (.entity (.db *api*) :ivan))))))))
+(t/deftest test-adding-back-evicted-document
+  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (t/is (api/entity (api/db *api*) :foo))
+
+  (fapi/submit+await-tx [[:crux.tx/evict :foo]])
+  (t/is (nil? (api/entity (api/db *api*) :foo)))
+
+  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (t/is (api/entity (api/db *api*) :foo)))
 
 (t/deftest test-document-bug-123
   (let [version-1-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1}]])]
@@ -248,26 +228,47 @@
              (for [content-hash (map :crux.db/content-hash history)]
                (.document *api* content-hash))))))
 
-(t/deftest test-tx-log-skips-failed-transactions
+(t/deftest test-tx-log
   (let [valid-time (Date.)
-        submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-    (.awaitTx *api* submitted-tx nil)
-    (t/is (true? (.hasTxCommitted *api* submitted-tx)))
-    (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
-      (.awaitTx *api* version-2-submitted-tx nil)
-      (t/is (false? (.hasTxCommitted *api* version-2-submitted-tx)))
+        tx1 (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+
+    (t/testing "tx-log"
       (with-open [tx-log-iterator (.openTxLog *api* nil false)]
         (let [result (iterator-seq tx-log-iterator)]
-          (t/is (= [(assoc submitted-tx
-                           :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
-                   result))))
+          (t/is (not (realized? result)))
+          (t/is (= [(assoc tx1
+                      :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                   result))
+          (t/is (realized? result))))
 
-      (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
-        (.awaitTx *api* version-3-submitted-tx nil)
-        (t/is (true? (.hasTxCommitted *api* version-3-submitted-tx)))
-        (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+      (t/testing "with ops"
+        (with-open [tx-log-iterator (.openTxLog *api* nil true)]
           (let [result (iterator-seq tx-log-iterator)]
-            (t/is (= 2 (count result)))))))))
+            (t/is (not (realized? result)))
+            (t/is (= [(assoc tx1
+                        :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+                     result))
+            (t/is (realized? result)))))
+
+      (t/testing "from tx id"
+        (with-open [tx-log-iterator (api/open-tx-log *api* (inc (::tx/tx-id tx1)) false)]
+          (t/is (empty? (iterator-seq tx-log-iterator))))))
+
+    (t/testing "tx log skips failed transactions"
+      (let [tx2 (fapi/submit+await-tx [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
+        (t/is (false? (api/tx-committed? *api* tx2)))
+
+        (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
+          (let [result (iterator-seq tx-log-iterator)]
+            (t/is (= [(assoc tx1
+                        :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                     result))))
+
+        (let [tx3 (fapi/submit+await-tx [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
+          (t/is (true? (api/tx-committed? *api* tx3)))
+          (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
+            (let [result (iterator-seq tx-log-iterator)]
+              (t/is (= 2 (count result))))))))))
 
 (t/deftest test-db-history-api
   (let [version-1-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]]) nil)

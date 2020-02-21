@@ -3,20 +3,11 @@
             [crux.api :as crux]
             [crux.io :as cio]
             [crux.fixtures.api :as fapi :refer [*api*]]
-            [crux.fixtures :as f]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.fixtures.standalone :as fs])
   (:import java.io.Closeable))
 
-(t/use-fixtures :each
-  (fn [f]
-    (f/with-tmp-dir "data" [data-dir]
-      (fapi/with-opts {:crux.node/topology 'crux.standalone/topology
-                       :crux.node/kv-store 'crux.kv.memdb/kv
-                       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog-1"))
-                       :crux.kv/db-dir (str (io/file data-dir "db-dir"))
-                       :crux.standalone/event-log-kv-store 'crux.kv.memdb/kv}
-        f)))
-  fapi/with-node)
+(t/use-fixtures :each fs/with-standalone-node fapi/with-node)
 
 (def manifest
   {:crux.db/id :manifest

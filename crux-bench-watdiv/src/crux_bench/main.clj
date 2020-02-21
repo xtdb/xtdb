@@ -206,7 +206,6 @@
   {:crux.node/topology 'crux.kafka/topology
    :crux.node/kv-store 'crux.kv.rocksdb/kv
    :crux.kafka/bootstrap-servers "kafka-cluster2-kafka-bootstrap.crux:9092"
-   :crux.standalone/event-log-dir log-dir
    :crux.kv/db-dir index-dir
    :crux.kafka/tx-topic "crux-bench-transaction-log"
    :crux.kafka/doc-topic "crux-bench-docs"

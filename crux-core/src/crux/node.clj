@@ -205,7 +205,7 @@
                                          :crux.config/type :crux.config/duration}}})
 
 (def base-topology
-  {::kv-store 'crux.kv.rocksdb/kv
+  {::kv-store 'crux.kv.memdb/kv
    ::object-store 'crux.object-store/kv-object-store
    ::indexer 'crux.tx/kv-indexer
    ::bus 'crux.bus/bus

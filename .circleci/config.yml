@@ -4,27 +4,79 @@
 #
 orbs:
   aws-ecr: circleci/aws-ecr@6.7.0
+  crux:
+    orbs:
+      go: circleci/go@0.2.0
+      docker: circleci/docker@0.5.20
+    commands:
+      deploy-artifacts:
+        parameters:
+          crux-edn:
+            type: string
+          deps-edn:
+            type: string
+          artifact-name:
+            type: string
+        steps:
+          - go/install
+          - docker/install-docker
+          - setup_remote_docker:
+              docker_layer_caching: true
+          - run:
+              command: |
+                go get -u github.com/tcnksm/ghr
+                echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
+
+          - run:
+              command: |
+                export IMAGE_NAME=juxt/<<parameters.artifact-name>>
+                cd crux-build
+                DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
+                cd crux-builder/clj-uberjar/
+                UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
+                ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" <<parameters.artifact-name>>.jar
+
+          - store_artifacts:
+              path: "~/crux/crux-build/crux-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
+              destination: "<<parameters.artifact-name>>.jar"
+
+          - run:
+              command: |
+                cd crux-build/crux-builder/docker/
+                IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
+                echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
+      deploy-tar:
+        steps:
+          - go/install
+          - run:
+              command: |
+                go get -u github.com/tcnksm/ghr
+                echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
+          - run:
+              command: |
+                cd crux-build
+                ./build-tar.sh
+                ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-builder.tar.gz
+          - store_artifacts:
+              path: ~/crux/crux-build/crux-builder.tar.gz
+              destination: crux-builder.tar.gz
 
 version: 2.1
 jobs:
   build:
     docker:
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
       - image: circleci/clojure:lein-2.9.1
-
 
     working_directory: ~/crux
 
     environment:
       LEIN_ROOT: "true"
-      # Customize the JVM maximum heap limit
       JVM_OPTS: -Xmx3200m
 
     steps:
       - checkout
 
-      # Download and cache dependencies
       - restore_cache:
           keys:
           - v1-dependencies-{{ checksum "project.clj" }}
@@ -42,11 +94,12 @@ jobs:
 
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh
+      - persist_to_workspace:
+          root: ~/
+          paths: ./
 
   deploy:
     docker:
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
       - image: circleci/clojure:lein-2.9.1
 
     working_directory: ~/crux
@@ -79,7 +132,19 @@ jobs:
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
 
-
+  create-artifacts:
+    docker:
+      - image: circleci/clojure:openjdk-8-tools-deps-1.10.1.483
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - crux/deploy-tar
+      - crux/deploy-artifacts:
+          crux-edn: "crux.edn"
+          deps-edn: "deps.edn"
+          artifact-name: "crux-standalone"
 
 workflows:
   version: 2.1
@@ -92,3 +157,28 @@ workflows:
           filters:
             branches:
               only: master
+  release:
+    jobs:
+      - build:
+         filters:
+           tags:
+             only: /.*/
+           branches:
+             ignore: /.*/
+      - hold:
+          type: approval
+          requires:
+            - build
+          filters:
+           tags:
+             only: /.*/
+           branches:
+             ignore: /.*/
+      - create-artifacts:
+          requires:
+            - hold
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
