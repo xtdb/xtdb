@@ -26,19 +26,21 @@
            org.eclipse.rdf4j.query.Binding))
 
 (defn- with-each-api-implementation [f]
-  (t/testing "Local API ClusterNode"
-    ((t/join-fixtures [kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "Local API StandaloneNode"
-    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "JDBC Node"
-    ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "Remote API"
-    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
-                       fapi/with-node
-                       fh/with-http-client])
-     f))
-  (t/testing "Kafka and Remote Doc Store"
-    ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
+  ;; (t/testing "Local API ClusterNode"
+  ;;   ((t/join-fixtures [kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
+  ;; (t/testing "Local API StandaloneNode"
+  ;;   ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node]) f))
+  ;; (t/testing "JDBC Node"
+  ;;   ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
+  ;; (t/testing "Remote API"
+  ;;   ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
+  ;;                      fapi/with-node
+  ;;                      fh/with-http-client])
+  ;;    f))
+  ;; (t/testing "Kafka and Remote Doc Store"
+  ;;   ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
+  (t/testing "Document backed Object Store"
+    ((t/join-fixtures [kf/with-cluster-node-opts ds/with-doc-backed-object-store-opts kvf/with-kv-dir fapi/with-node]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)

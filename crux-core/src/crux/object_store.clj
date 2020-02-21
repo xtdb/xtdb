@@ -111,6 +111,23 @@
   Closeable
   (close [_]))
 
+(defrecord DocumentStoreBackedObjectStore [doc-store]
+  db/ObjectStore
+  (get-single-object [this snapshot k]
+    (get (db/fetch-docs doc-store [k]) k))
+
+  (get-objects [this _ ks]
+    (db/fetch-docs doc-store ks))
+
+  (missing-keys [this snapshot ks]
+    (into #{} (remove (db/fetch-docs doc-store ks) ks)))
+
+  (put-objects [this kvs]
+    (throw (UnsupportedOperationException.)))
+
+  Closeable
+  (close [_]))
+
 (def ^:const default-doc-cache-size (* 128 1024))
 
 (def doc-cache-size-opt {:doc "Cache size to use for document store."
@@ -132,3 +149,9 @@
                                    :required? true
                                    :crux.config/type :crux.config/string}
           ::doc-cache-size doc-cache-size-opt}})
+
+(def doc-store-backed-object-store
+  {:start-fn (fn [{:keys [:crux.node/document-store]} {::keys [doc-cache-size]}]
+               (->CachedObjectStore (lru/new-cache doc-cache-size) (->DocumentStoreBackedObjectStore document-store)))
+   :deps [:crux.node/document-store]
+   :args {::doc-cache-size doc-cache-size-opt}})

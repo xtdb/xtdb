@@ -2,7 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.fixtures.api :as apif]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.object-store :as os])
   (:import java.io.Closeable))
 
 (defrecord InMemDocumentStore [docs]
@@ -28,4 +29,10 @@
   (apif/with-opts {:crux.node/document-store 'crux.fixtures.doc-store/document-store
                    :crux.kafka/doc-consumer 'crux.kafka/tx-doc-consumer
                    :crux.kafka/doc-indexing-consumer 'crux.kafka/tx-doc-indexing-consumer}
+    f))
+
+(defn with-doc-backed-object-store-opts [f]
+  (apif/with-opts {:crux.node/object-store 'crux.object-store/doc-store-backed-object-store
+                   :crux.node/document-store 'crux.fixtures.doc-store/document-store
+                   :crux.kafka/doc-indexing-consumer 'crux.kafka/doc-indexing-from-tx-topic-consumer}
     f))
