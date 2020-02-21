@@ -1,167 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: This stack deploys a Fargate cluster that is in a VPC with both
-             public and private subnets. Containers can be deployed into either
-             the public subnets or the private subnets, and there are two load
-             balancers. One is inside the public subnet, which can be used to
-             send traffic to the containers in the private subnet, and one in
-             the private subnet, which can be used for private internal traffic
-             between internal services.
-Mappings:
-  # Hard values for the subnet masks. These masks define
-  # the range of internal IP addresses that can be assigned.
-  # The VPC can have all IP's from 10.0.0.0 to 10.0.255.255
-  # There are four subnets which cover the ranges:
-  #
-  # 10.0.0.0 - 10.0.0.255
-  # 10.0.1.0 - 10.0.1.255
-  # 10.0.2.0 - 10.0.2.255
-  # 10.0.3.0 - 10.0.3.255
-  #
-  # If you need more IP addresses (perhaps you have so many
-  # instances that you run out) then you can customize these
-  # ranges to add more
-  SubnetConfig:
-    VPC:
-      CIDR: '10.0.0.0/16'
-    PublicOne:
-      CIDR: '10.0.0.0/24'
-    PublicTwo:
-      CIDR: '10.0.1.0/24'
-    PrivateOne:
-      CIDR: '10.0.2.0/24'
-    PrivateTwo:
-      CIDR: '10.0.3.0/24'
+Description: This stack starts an example load balanced Fargate task.
+
+Parameters:
+  VpcStackName:
+    Type: String
+    Default: soak-vpc
+    Description: The name of the parent Fargate networking stack that you created. Necessary
+                 to locate and reference resources created by that stack.
+
 Resources:
-  # VPC in which containers will be networked.
-  # It has two public subnets, and two private subnets.
-  # We distribute the subnets across the first two available subnets
-  # for the region, for high availability.
-  VPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      CidrBlock: '10.0.0.0/16'
-
-  # Two public subnets, where containers can have public IP addresses
-  PublicSubnetOne:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: 'eu-west-2a'
-      VpcId: !Ref 'VPC'
-      CidrBlock: '10.0.0.0/24'
-      MapPublicIpOnLaunch: true
-  PublicSubnetTwo:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: 'eu-west-2b'
-      VpcId: !Ref 'VPC'
-      CidrBlock: '10.0.1.0/24'
-      MapPublicIpOnLaunch: true
-
-  # Two private subnets where containers will only have private
-  # IP addresses, and will only be reachable by other members of the
-  # VPC
-  PrivateSubnetOne:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: 'eu-west-2a'
-      VpcId: !Ref 'VPC'
-      CidrBlock: '10.0.2.0/24'
-  PrivateSubnetTwo:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: 'eu-west-2b'
-      VpcId: !Ref 'VPC'
-      CidrBlock: '10.0.3.0/24'
-
-  # Setup networking resources for the public subnets. Containers
-  # in the public subnets have public IP addresses and the routing table
-  # sends network traffic via the internet gateway.
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-  GatewayAttachement:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref 'VPC'
-      InternetGatewayId: !Ref 'InternetGateway'
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref 'VPC'
-  PublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: GatewayAttachement
-    Properties:
-      RouteTableId: !Ref 'PublicRouteTable'
-      DestinationCidrBlock: '0.0.0.0/0'
-      GatewayId: !Ref 'InternetGateway'
-  PublicSubnetOneRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnetOne
-      RouteTableId: !Ref PublicRouteTable
-  PublicSubnetTwoRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnetTwo
-      RouteTableId: !Ref PublicRouteTable
-
-  # Setup networking resources for the private subnets. Containers
-  # in these subnets have only private IP addresses, and must use a NAT
-  # gateway to talk to the internet. We launch two NAT gateways, one for
-  # each private subnet.
-  NatGatewayOneAttachment:
-    Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachement
-    Properties:
-        Domain: vpc
-  NatGatewayTwoAttachment:
-    Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachement
-    Properties:
-        Domain: vpc
-  NatGatewayOne:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NatGatewayOneAttachment.AllocationId
-      SubnetId: !Ref PublicSubnetOne
-  NatGatewayTwo:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NatGatewayTwoAttachment.AllocationId
-      SubnetId: !Ref PublicSubnetTwo
-  PrivateRouteTableOne:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref 'VPC'
-  PrivateRouteOne:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableOne
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGatewayOne
-  PrivateRouteTableOneAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableOne
-      SubnetId: !Ref PrivateSubnetOne
-  PrivateRouteTableTwo:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref 'VPC'
-  PrivateRouteTwo:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableTwo
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGatewayTwo
-  PrivateRouteTableTwoAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableTwo
-      SubnetId: !Ref PrivateSubnetTwo
-
   # ECS Resources
   ECSCluster:
     Type: AWS::ECS::Cluster
@@ -192,21 +39,9 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the Fargate containers
-      VpcId: !Ref 'VPC'
-  EcsSecurityGroupIngressFromPublicALB:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Ingress from the public ALB
-      GroupId: !Ref 'FargateContainerSecurityGroup'
-      IpProtocol: -1
-      SourceSecurityGroupId: !Ref 'PublicLoadBalancerSG'
-  EcsSecurityGroupIngressFromSelf:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Ingress from other containers in the same security group
-      GroupId: !Ref 'FargateContainerSecurityGroup'
-      IpProtocol: -1
-      SourceSecurityGroupId: !Ref 'FargateContainerSecurityGroup'
+      VpcId:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'VpcStackName', 'VPCId']]
 
   # Load balancers for getting traffic to containers.
   # This sample template creates two load balancers:
@@ -225,11 +60,14 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the public facing load balancer
-      VpcId: !Ref 'VPC'
+      VpcId:
+         Fn::ImportValue:
+          !Join [':', [!Ref 'VpcStackName', 'VPCId']]
       SecurityGroupIngress:
           # Allow access to ALB from anywhere on the internet
           - CidrIp: 0.0.0.0/0
             IpProtocol: -1
+
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -240,8 +78,10 @@ Resources:
       Subnets:
         # The load balancer is placed into the public subnets, so that traffic
         # from the internet can reach the load balancer directly via the internet gateway
-        - !Ref PublicSubnetOne
-        - !Ref PublicSubnetTwo
+        - Fn::ImportValue:
+            !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
+        - Fn::ImportValue:
+            !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
       SecurityGroups: [!Ref 'PublicLoadBalancerSG']
 
   PublicLoadBalancerListener:
@@ -349,33 +189,6 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
-  # The service. The service is a resource which allows you to run multiple
-  # copies of a type of task, and gather up their logs and metrics, as well
-  # as monitor the number of running tasks and replace any that have crashed
-  Service:
-    Type: AWS::ECS::Service
-    DependsOn: LoadBalancerRule
-    Properties:
-      ServiceName: 'crux-soak'
-      Cluster: 'crux-soak'
-      LaunchType: FARGATE
-      DeploymentConfiguration:
-        MaximumPercent: 200
-        MinimumHealthyPercent: 75
-      DesiredCount: 0
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          SecurityGroups:
-            - !Ref 'FargateContainerSecurityGroup'
-          Subnets:
-            - !Ref 'PrivateSubnetOne'
-            - !Ref 'PrivateSubnetTwo'
-      TaskDefinition: !Ref 'SoakTask'
-      LoadBalancers:
-        - ContainerName: 'crux-soak'
-          ContainerPort: 8080
-          TargetGroupArn: !Ref 'SoakTargetGroup'
-
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
   # to use the addresses yourself, but most often this target group is just
@@ -394,7 +207,9 @@ Resources:
       Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
-      VpcId: !Ref 'VPC'
+      VpcId:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'VpcStackName', 'VPCId']]
 
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
@@ -408,3 +223,20 @@ Resources:
           Values: ['*']
       ListenerArn: !Ref 'PublicLoadBalancerListener'
       Priority: 1
+
+Outputs:
+  SoakTask:
+    Description: The Soak Task Definition
+    Value: !Ref 'SoakTask'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTask' ] ]
+  SoakTargetGroup:
+    Description: The Soak Target Group
+    Value: !Ref 'SoakTargetGroup'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTargetGroup' ] ]
+  FargateContainerSecurityGroup:
+    Description: The Security Group for the Fargate Containers
+    Value: !Ref 'FargateContainerSecurityGroup'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'FargateContainerSecurityGroup' ] ]

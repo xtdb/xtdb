@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This stack starts a service which uses load balanced fargate tasks.
+
+Parameters:
+  VpcStackName:
+    Type: String
+    Default: soak-vpc
+    Description: The name of the parent Fargate networking stack that you created. Necessary
+                 to locate and reference resources created by that stack.
+  EcsStackName:
+    Type: String
+    Default: soak-ecs
+    Description: The name of the parent Fargate networking stack that you created. Necessary
+                 to locate and reference resources created by that stack.
+
+Resources:
+  # The service. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: 'crux-soak'
+      Cluster: 'crux-soak'
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: 2
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'EcsStackName', 'FargateContainerSecurityGroup']]
+          Subnets:
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'VpcStackName', 'PrivateSubnetOne']]
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'VpcStackName', 'PrivateSubnetTwo']]
+      TaskDefinition:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'EcsStackName', 'SoakTask']]
+      LoadBalancers:
+        - ContainerName: 'crux-soak'
+          ContainerPort: 8080
+          TargetGroupArn:
+             Fn::ImportValue:
+               !Join [':', [!Ref 'EcsStackName', 'SoakTargetGroup']]
