@@ -123,9 +123,9 @@ Resources:
                 !Join [':', [!Ref 'EcsStackName', 'FargateContainerSecurityGroup']]
           Subnets:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'VpcStackName', 'PrivateSubnetOne']]
+                !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
             - Fn::ImportValue:
-                !Join [':', [!Ref 'VpcStackName', 'PrivateSubnetTwo']]
+                !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
       TaskDefinition: !Ref 'SoakTaskDef'
       LoadBalancers:
         - ContainerName: 'crux-soak'
