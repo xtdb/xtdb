@@ -2,10 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: This stack starts a VPC, some public and private subnets, internet/NAT gateways and routing tables.
 
 Resources:
-  # VPC in which containers will be networked.
-  # It has two public subnets, and two private subnets.
-  # We distribute the subnets across the first two available subnets
-  # for the region, for high availability.
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -13,7 +9,6 @@ Resources:
       EnableDnsHostnames: true
       CidrBlock: '10.0.0.0/16'
 
-  # Two public subnets, where containers can have public IP addresses
   PublicSubnetOne:
     Type: AWS::EC2::Subnet
     Properties:
@@ -29,9 +24,6 @@ Resources:
       CidrBlock: '10.0.1.0/24'
       MapPublicIpOnLaunch: true
 
-  # Two private subnets where containers will only have private
-  # IP addresses, and will only be reachable by other members of the
-  # VPC
   PrivateSubnetOne:
     Type: AWS::EC2::Subnet
     Properties:
@@ -45,9 +37,6 @@ Resources:
       VpcId: !Ref 'VPC'
       CidrBlock: '10.0.3.0/24'
 
-  # Setup networking resources for the public subnets. Containers
-  # in the public subnets have public IP addresses and the routing table
-  # sends network traffic via the internet gateway.
   InternetGateway:
     Type: AWS::EC2::InternetGateway
   GatewayAttachement:
@@ -77,10 +66,6 @@ Resources:
       SubnetId: !Ref PublicSubnetTwo
       RouteTableId: !Ref PublicRouteTable
 
-  # Setup networking resources for the private subnets. Containers
-  # in these subnets have only private IP addresses, and must use a NAT
-  # gateway to talk to the internet. We launch two NAT gateways, one for
-  # each private subnet.
   NatGatewayOneAttachment:
     Type: AWS::EC2::EIP
     DependsOn: GatewayAttachement

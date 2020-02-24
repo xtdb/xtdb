@@ -18,23 +18,11 @@ Resources:
         - Name: 'containerInsights'
           Value: 'enabled'
 
-  LogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: 'crux-soak'
-      RetentionInDays: 365
-
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: 'crux-soak'
 
-  # A security group for the containers we will run in Fargate.
-  # Three rules, allowing network traffic from a public facing load
-  # balancer, a private internal load balancer, and from other members
-  # of the security group.
-  #
-  # Remove any of the following ingress rules that are not needed.
   FargateContainerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -43,19 +31,6 @@ Resources:
         Fn::ImportValue:
           !Join [':', [!Ref 'VpcStackName', 'VPCId']]
 
-  # Load balancers for getting traffic to containers.
-  # This sample template creates two load balancers:
-  #
-  # - One public load balancer, hosted in public subnets that is accessible
-  #   to the public, and is intended to route traffic to one or more public
-  #   facing services.
-  # - One private load balancer, hosted in private subnets, that only
-  #   accepts traffic from other containers in the Fargate cluster, and is
-  #   intended for private services that should not be accessed directly
-  #   by the public.
-
-  # A public facing load balancer, this is used for accepting traffic from the public
-  # internet and directing it to public facing microservices
   PublicLoadBalancerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -76,8 +51,6 @@ Resources:
       - Key: idle_timeout.timeout_seconds
         Value: '30'
       Subnets:
-        # The load balancer is placed into the public subnets, so that traffic
-        # from the internet can reach the load balancer directly via the internet gateway
         - Fn::ImportValue:
             !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
         - Fn::ImportValue:
@@ -96,145 +69,12 @@ Resources:
       Port: 80
       Protocol: HTTP
 
-  # This is an IAM role which authorizes ECS to manage resources on your
-  # account on your behalf, such as updating your load balancer with the
-  # details of where your containers are, so that traffic can reach your
-  # containers.
-  ECSRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: [ecs.amazonaws.com]
-          Action: ['sts:AssumeRole']
-      Path: /
-      Policies:
-      - PolicyName: ecs-service
-        PolicyDocument:
-          Statement:
-          - Effect: Allow
-            Action:
-              # Rules which allow ECS to attach network interfaces to instances
-              # on your behalf in order for awsvpc networking mode to work right
-              - 'ec2:AttachNetworkInterface'
-              - 'ec2:CreateNetworkInterface'
-              - 'ec2:CreateNetworkInterfacePermission'
-              - 'ec2:DeleteNetworkInterface'
-              - 'ec2:DeleteNetworkInterfacePermission'
-              - 'ec2:Describe*'
-              - 'ec2:DetachNetworkInterface'
-
-              # Rules which allow ECS to update load balancers on your behalf
-              # with the information sabout how to send traffic to your containers
-              - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
-              - 'elasticloadbalancing:DeregisterTargets'
-              - 'elasticloadbalancing:Describe*'
-              - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
-              - 'elasticloadbalancing:RegisterTargets'
-            Resource: '*'
-
-  # This is a role which is used by the ECS tasks themselves.
-  ECSTaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: [ecs-tasks.amazonaws.com]
-          Action: ['sts:AssumeRole']
-      Path: /
-      Policies:
-        - PolicyName: AmazonECSTaskExecutionRolePolicy
-          PolicyDocument:
-            Statement:
-            - Effect: Allow
-              Action:
-                # Allow the ECS Tasks to download images from ECR
-                - 'ecr:GetAuthorizationToken'
-                - 'ecr:BatchCheckLayerAvailability'
-                - 'ecr:GetDownloadUrlForLayer'
-                - 'ecr:BatchGetImage'
-
-                # Allow the ECS tasks to upload logs to CloudWatch
-                - 'logs:CreateLogStream'
-                - 'logs:PutLogEvents'
-              Resource: '*'
-
-  SoakTask:
-    Type: AWS::ECS::TaskDefinition
-    DependsOn:
-      - ECRRepository
-      - LogGroup
-    Properties:
-      Cpu: '2 vCPU'
-      Memory: '8GB'
-      Family: 'crux-soak'
-      ExecutionRoleArn:
-        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
-      RequiresCompatibilities:
-        - 'FARGATE'
-      NetworkMode: 'awsvpc'
-      ContainerDefinitions:
-        - Name: 'crux-soak'
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
-          PortMappings:
-            - ContainerPort: 8080
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-region: 'eu-west-2'
-              awslogs-group: !Ref LogGroup
-              awslogs-stream-prefix: ecs
-
-  # A target group. This is used for keeping track of all the tasks, and
-  # what IP addresses / port numbers they have. You can query it yourself,
-  # to use the addresses yourself, but most often this target group is just
-  # connected to an application load balancer, or network load balancer, so
-  # it can automatically distribute traffic across all the targets.
-  SoakTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 6
-      HealthCheckPath: /
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      TargetType: ip
-      Name: 'crux-soak'
-      Port: 8080
-      Protocol: HTTP
-      UnhealthyThresholdCount: 2
-      VpcId:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'VpcStackName', 'VPCId']]
-
-  # Create a rule on the load balancer for routing traffic to the target group
-  LoadBalancerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - TargetGroupArn: !Ref 'SoakTargetGroup'
-          Type: 'forward'
-      Conditions:
-        - Field: path-pattern
-          Values: ['*']
-      ListenerArn: !Ref 'PublicLoadBalancerListener'
-      Priority: 1
-
 Outputs:
-  SoakTask:
-    Description: The Soak Task Definition
-    Value: !Ref 'SoakTask'
+  PublicLoadBalancerListener:
+    Description: The Public Load Balancer Listener's ARN
+    Value: !GetAtt 'PublicLoadBalancerListener.Arn'
     Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTask' ] ]
-  SoakTargetGroup:
-    Description: The Soak Target Group
-    Value: !Ref 'SoakTargetGroup'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTargetGroup' ] ]
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicLoadBalancerListener' ] ]
   FargateContainerSecurityGroup:
     Description: The Security Group for the Fargate Containers
     Value: !Ref 'FargateContainerSecurityGroup'

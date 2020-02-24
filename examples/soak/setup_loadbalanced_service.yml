@@ -14,9 +14,98 @@ Parameters:
                  to locate and reference resources created by that stack.
 
 Resources:
-  # The service. The service is a resource which allows you to run multiple
-  # copies of a type of task, and gather up their logs and metrics, as well
-  # as monitor the number of running tasks and replace any that have crashed
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'crux-soak'
+      RetentionInDays: 365
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+
+                # Allow the ECS tasks to upload logs to CloudWatch
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: '*'
+
+  SoakTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - LogGroup
+    Properties:
+      Cpu: '2 vCPU'
+      Memory: '8GB'
+      Family: 'crux-soak'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'crux-soak'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
+          PortMappings:
+            - ContainerPort: 8080
+          Command:
+            - "-m"
+            - "crux.soak.main"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  SoakTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: 'crux-soak'
+      Port: 8080
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+
+  LoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn: !Ref 'SoakTargetGroup'
+          Type: 'forward'
+      Conditions:
+        - Field: path-pattern
+          Values: ['*']
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'EcsStackName', 'PublicLoadBalancerListener']]
+      Priority: 1
+
   Service:
     Type: AWS::ECS::Service
     Properties:
@@ -37,12 +126,8 @@ Resources:
                 !Join [':', [!Ref 'VpcStackName', 'PrivateSubnetOne']]
             - Fn::ImportValue:
                 !Join [':', [!Ref 'VpcStackName', 'PrivateSubnetTwo']]
-      TaskDefinition:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'EcsStackName', 'SoakTask']]
+      TaskDefinition: !Ref 'SoakTaskDef'
       LoadBalancers:
         - ContainerName: 'crux-soak'
           ContainerPort: 8080
-          TargetGroupArn:
-             Fn::ImportValue:
-               !Join [':', [!Ref 'EcsStackName', 'SoakTargetGroup']]
+          TargetGroupArn: !Ref 'SoakTargetGroup'
