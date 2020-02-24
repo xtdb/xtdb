@@ -3,6 +3,7 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.ICruxAPI;
+import crux.api.IBitemporalInstant;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -33,16 +34,13 @@ public class CruxNode implements AutoCloseable {
      * @see TxResult
      */
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(Iterable<TransactionOperation> ops) {
+    public IBitemporalInstant submitTx(Iterable<TransactionOperation> ops) {
         PersistentVector txVector = PersistentVector.create();
         for (TransactionOperation op : ops) {
             txVector = txVector.cons(op.toEdn());
         }
 
-        Map<Keyword,Object> result = node.submitTx(txVector);
-        Date txTime = (Date) result.get(TX_TIME);
-        long txId = (Long) result.get(TX_ID);
-        return txResult(txTime, txId);
+        return node.submitTx(txVector);
     }
 
     /**
@@ -52,7 +50,7 @@ public class CruxNode implements AutoCloseable {
      * @see TxResult
      */
     @SuppressWarnings("unchecked")
-    public TxResult submitTx(TransactionOperation... ops) {
+    public IBitemporalInstant submitTx(TransactionOperation... ops) {
         return submitTx(Arrays.asList(ops));
     }
 

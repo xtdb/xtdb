@@ -711,8 +711,8 @@
 (defn new-or-virtual-index [indexes]
   (->OrVirtualIndex indexes (object-array (count indexes))))
 
-(defn or-known-triple-fast-path [snapshot e a v valid-time transact-time]
-  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] valid-time transact-time)]
+(defn or-known-triple-fast-path [snapshot e a v {:keys [:crux.db/valid-time :crux.tx/tx-time]}]
+  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] valid-time tx-time)]
     (let [version-k (c/encode-aecv-key-to
                      nil
                      a

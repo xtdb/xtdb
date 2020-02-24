@@ -19,6 +19,6 @@
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
-                  "-Werror"
+                  #_"-Werror"
                   "-proc:none"]
   :pedantic? :warn)

@@ -73,14 +73,14 @@
 (defn tx-event->doc-hashes [tx-event]
   (keep (s/conform :crux.tx.event/tx-event tx-event) [:doc :old-doc :new-doc :args-doc]))
 
-(defn tx-event->tx-op [[op id & args] snapshot object-store]
+(defn tx-event->tx-op [[op id & args] kv-snapshot object-store]
   (doto (into [op]
               (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
                         [(c/new-id id)])
 
                       (for [arg args]
                         (or (when (satisfies? c/IdToBuffer arg)
-                              (or (db/get-single-object object-store snapshot arg)
+                              (or (db/get-single-object object-store kv-snapshot arg)
                                   {:crux.db/id (c/new-id id)
                                    :crux.db/evicted? true}))
                             arg))))
@@ -108,23 +108,23 @@
                0 (cons r (merge-histories keyfn compare more-left more-right))
                1 (cons r (merge-histories keyfn compare left more-right)))))))
 
-(defrecord Snapshot+NewETXs [snapshot etxs]
+(defrecord Snapshot+NewETXs [kv-snapshot etxs]
   EntityHistory
   (entity-history-seq-ascending [_ eid valid-time tx-time]
     (merge-histories etx->vt compare
-                     (idx/entity-history-seq-ascending snapshot eid valid-time tx-time)
+                     (idx/entity-history-seq-ascending kv-snapshot eid valid-time tx-time)
                      (->> (get etxs eid)
                           (drop-while (comp neg? #(compare % valid-time) etx->vt)))))
 
   (entity-history-seq-descending [_ eid valid-time tx-time]
     (merge-histories etx->vt #(compare %2 %1)
-                     (idx/entity-history-seq-descending snapshot eid valid-time tx-time)
+                     (idx/entity-history-seq-descending kv-snapshot eid valid-time tx-time)
                      (->> (reverse (get etxs eid))
                           (drop-while (comp pos? #(compare % valid-time) etx->vt)))))
 
   (entity-at [_ eid valid-time tx-time]
     (->> (merge-histories etx->vt #(compare %2 %1)
-                          (some->> (with-open [i (kv/new-iterator snapshot)]
+                          (some->> (with-open [i (kv/new-iterator kv-snapshot)]
                                      (idx/entity-at (idx/new-entity-as-of-index i valid-time tx-time) eid))
                                    vector)
                           (some->> (reverse (get etxs eid))
@@ -134,7 +134,7 @@
          first))
 
   (all-content-hashes [_ eid]
-    (with-open [i (kv/new-iterator snapshot)]
+    (with-open [i (kv/new-iterator kv-snapshot)]
       (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
                       (map c/decode-aecv-key->evc-from)
                       (map #(.content-hash ^EntityValueContentHash %))))
@@ -142,7 +142,7 @@
                       (map #(.content-hash ^EntityTx %)))))))
 
   (with-etxs [_ new-etxs]
-    (->Snapshot+NewETXs snapshot
+    (->Snapshot+NewETXs kv-snapshot
                         (merge-with #(merge-histories etx->vt compare %1 %2)
                                     etxs
                                     (->> new-etxs (group-by #(.eid ^EntityTx %)))))))
@@ -214,7 +214,7 @@
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {:crux.tx/keys [tx-time tx-id] :as tx}
-                                        {:keys [object-store history snapshot] :as deps}]
+                                        {:keys [object-store history kv-snapshot] :as deps}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
@@ -222,9 +222,9 @@
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
                        ;; can't rely on the old content-hashing returning the same hash for the same document
                        (if (or (= (c/new-id content-hash) (c/new-id old-v))
-                               (= (db/get-single-object object-store snapshot (c/new-id content-hash))
-                                  (db/get-single-object object-store snapshot (c/new-id old-v))))
-                         (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
+                               (= (db/get-single-object object-store kv-snapshot (c/new-id content-hash))
+                                  (db/get-single-object object-store kv-snapshot (c/new-id old-v))))
+                         (let [correct-state? (not (nil? (db/get-single-object object-store kv-snapshot (c/new-id new-v))))]
                            (when-not correct-state?
                              (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
                            correct-state?)
@@ -263,15 +263,17 @@
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
-                                       {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
+                                       {::keys [tx-time tx-id] :as tx}
+                                       {:keys [object-store kv-store indexer tx-log kv-snapshot], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db kv-store object-store nil tx-time tx-time)
-        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
-        {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
+        db (q/->db {:kv-store kv-store, :object-store object-store
+                    :kv-snapshot kv-snapshot
+                    :bitemp-inst (db/->bitemp-inst {::db/valid-time tx-time, ::tx-time tx-time, ::tx-id tx-id})})
+        {:crux.db.fn/keys [body] :as fn-doc} (.entity db fn-id)
+        {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store kv-snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)
         fn-result (try
                     (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
@@ -284,11 +286,10 @@
                       ;; it's slightly less of an issue. It's done
                       ;; this way to support nested fns.
 
-                      ;; FIXME I have a theory that this is broken - running the tx-test with memdb fails,
-                      ;; Rocks passes.
+                      ;; FIXME I have a theory that this is broken - running the tx-test with memdb fails, Rocks passes.
                       ;; Theory is that, when the tx-fn returns another tx-fn, we index the doc here,
                       ;; but when we go to index the tx-event, below, we then try to read the docs out of the
-                      ;; same KV snapshot - which shouldn't return the doc indexed after the snapshot was taken.
+                      ;; same KV snapshot - which shouldn't return the doc indexed after the kv-snapshot was taken.
                       ;; In Rocks, it does, in memdb (correctly, IMO) it doesn't, but this breaks the test.
                       (db/index-docs indexer (->> arg-docs (into {} (map (juxt c/new-id identity)))))
                       {:docs (vec docs)
@@ -342,8 +343,8 @@
                    (idx/store-doc-idx-keys kv-store)))
 
           docs-to-remove (when (seq docs-to-evict)
-                           (with-open [snapshot (kv/new-snapshot kv-store)]
-                             (let [existing-docs (->> (db/get-objects object-store snapshot (keys docs-to-evict))
+                           (with-open [kv-snapshot (kv/new-snapshot kv-store)]
+                             (let [existing-docs (->> (db/get-objects object-store kv-snapshot (keys docs-to-evict))
                                                       (remove (comp idx/evicted-doc? val)))]
                                (->> existing-docs
                                     (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
@@ -369,57 +370,58 @@
   (index-tx [this {:crux.tx/keys [tx-time tx-id] :as tx} tx-events]
     (s/assert :crux.tx.event/tx-events tx-events)
 
-    (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
-    (bus/send bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
+    (let [bitemp-inst (db/->bitemp-inst tx)]
+      (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
+      (bus/send bus {::bus/event-type ::indexing-tx, ::submitted-tx bitemp-inst})
 
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
-        (let [deps {:object-store object-store
-                    :kv-store kv-store
-                    :document-store document-store
-                    :indexer this
-                    :snapshot snapshot}
+      (with-open [kv-snapshot (kv/new-snapshot kv-store)]
+        (binding [*current-tx* (assoc bitemp-inst :crux.tx.event/tx-events tx-events)]
+          (let [deps {:object-store object-store
+                      :kv-store kv-store
+                      :document-store document-store
+                      :indexer this
+                      :kv-snapshot kv-snapshot}
 
-              res (reduce (fn [{:keys [history] :as acc} tx-event]
-                            (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc deps :history history))]
-                              (if (and pre-commit-fn (not (pre-commit-fn)))
-                                (reduced ::aborted)
-                                (-> acc
-                                    (update :history with-etxs etxs)
-                                    (update :tombstones merge tombstones)))))
+                res (reduce (fn [{:keys [history] :as acc} tx-event]
+                              (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc deps :history history))]
+                                (if (and pre-commit-fn (not (pre-commit-fn)))
+                                  (reduced ::aborted)
+                                  (-> acc
+                                      (update :history with-etxs etxs)
+                                      (update :tombstones merge tombstones)))))
 
-                          {:history (->Snapshot+NewETXs snapshot {})
-                           :tombstones {}}
+                            {:history (->Snapshot+NewETXs kv-snapshot {})
+                             :tombstones {}}
 
-                          tx-events)
+                            tx-events)
 
-              committed? (not= res ::aborted)]
+                committed? (not= res ::aborted)]
 
-          (if (not= res ::aborted)
-            (do
-              (when-let [tombstones (not-empty (:tombstones res))]
-                (db/index-docs this tombstones)
-                (db/submit-docs document-store tombstones))
+            (if (not= res ::aborted)
+              (do
+                (when-let [tombstones (not-empty (:tombstones res))]
+                  (db/index-docs this tombstones)
+                  (db/submit-docs document-store tombstones))
 
-              (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
-                                            (idx/meta-kv ::latest-completed-tx tx))
-                                      (into (sorted-map-by mem/buffer-comparator)))))
+                (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
+                                              (idx/meta-kv ::latest-completed-tx tx))
+                                        (into (sorted-map-by mem/buffer-comparator)))))
 
-            (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
-                                    [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
+              (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
+                  (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
+                                      [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
-          (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
-          tx))))
+            (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx bitemp-inst, :committed? committed?})
+            tx)))))
 
   (missing-docs [_ content-hashes]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (let [docs (db/get-objects object-store snapshot content-hashes)]
+    (with-open [kv-snapshot (kv/new-snapshot kv-store)]
+      (let [docs (db/get-objects object-store kv-snapshot content-hashes)]
         (->> content-hashes
              (into #{} (remove (fn [content-hash]
                                  (when-let [{eid ::db/id, :as doc} (get docs content-hash)]
                                    (or (idx/evicted-doc? doc)
-                                       (idx/doc-indexed? snapshot eid content-hash))))))))))
+                                       (idx/doc-indexed? kv-snapshot eid content-hash))))))))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))

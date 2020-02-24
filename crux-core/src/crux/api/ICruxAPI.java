@@ -12,12 +12,24 @@ import clojure.lang.Keyword;
  *  Provides API access to Crux.
  */
 public interface ICruxAPI extends ICruxIngestAPI, Closeable {
+    // TODO document
+    public ICruxQueryAPI at();
+    public ICruxQueryAPI at(IBitemporalInstant instant);
+    public ICruxQueryAPI at(IBitemporalInstant instant, Duration timeout);
+
+    // TODO document
+    public ISnapshot openAt();
+    public ISnapshot openAt(IBitemporalInstant instant);
+    public ISnapshot openAt(IBitemporalInstant instant, Duration timeout);
+
+
     /**
      * Returns a db as of now. Will return the latest consistent
      * snapshot of the db currently known. Does not block.
      *
      * @return the database.
      */
+    @Deprecated
     public ICruxDatasource db();
 
     /**
@@ -28,6 +40,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param validTime    the valid time.
      * @return             the database.
      */
+    @Deprecated
     public ICruxDatasource db(Date validTime);
 
     /**
@@ -38,6 +51,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param transactionTime the transaction time.
      * @return                the database.
      */
+    @Deprecated
     public ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
@@ -87,16 +101,16 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param transactionTimeEnd   the start transaction time or null, inclusive.
      * @return                     the transaction history.
      */
+    // TODO elaborate
     public List<Map<Keyword,?>> historyRange(Object eid, Date validTimeStart, Date transactionTimeStart, Date validTimeEnd, Date transactionTimeEnd);
-    // todo elaborate
 
     /**
      * Returns the status of this node as a map.
      *
      * @return the status map.
      */
-    public Map<Keyword,?> status();
     // TODO elaborate
+    public Map<Keyword,?> status();
 
 
     /**
@@ -107,7 +121,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return true if the submitted transaction was committed, false if it was not committed.
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
-    public boolean hasTxCommitted(Map<Keyword,?> submittedTx) throws NodeOutOfSyncException;
+    public boolean hasTxCommitted(IBitemporalInstant submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
@@ -119,6 +133,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction time.
      */
+    @Deprecated
     public Date sync(Duration timeout);
 
     /**
@@ -136,6 +151,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction time.
      */
+    @Deprecated
     public Date awaitTxTime(Date txTime, Duration timeout);
 
     /**
@@ -147,18 +163,19 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction.
      */
+    @Deprecated
     public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
 
 
     /**
        @return the latest transaction to have been indexed by this node.
      */
-    public Map<Keyword, ?> latestCompletedTx();
+    public IBitemporalInstant latestCompletedTx();
 
     /**
        @return the latest transaction to have been submitted to this cluster
     */
-    public Map<Keyword, ?> latestSubmittedTx();
+    public IBitemporalInstant latestSubmittedTx();
 
     /**
      * Return frequencies of indexed attributes.

@@ -9,7 +9,8 @@
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
             [clojure.java.io :as io]
-            crux.standalone)
+            crux.standalone
+            [crux.api :as crux])
   (:import java.util.Date
            crux.api.Crux
            (java.util HashMap)
@@ -88,34 +89,22 @@
       (t/is n)
 
       (let [valid-time (Date.)
-            submitted-tx (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-        (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
-        (t/is (= #{[:ivan]} (.q (.db n)
-                                '{:find [e]
-                                  :where [[e :name "Ivan"]]}))))
-
-      (t/is (= #{[:ivan]} (.q (.db n)
-                              '{:find [e]
-                                :where [[e :name "Ivan"]]})))
+            submitted-tx (crux/submit-tx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+        (t/is (= #{[:ivan]} (crux/q (crux/at n submitted-tx)
+                                    '{:find [e]
+                                      :where [[e :name "Ivan"]]}))))
 
       (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
                                :crux.kv/db-dir (str (io/file data-dir "kv2"))
                                :crux.jdbc/dbtype "h2"
                                :crux.jdbc/dbname (str (io/file data-dir "cruxtest2"))})]
 
-        (t/is (= #{} (.q (.db n2)
-                         '{:find [e]
-                           :where [[e :name "Ivan"]]})))
+        (t/is (= #{} (crux/q (crux/at n2)
+                             '{:find [e]
+                               :where [[e :name "Ivan"]]})))
 
         (let [valid-time (Date.)
-              submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
-          (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
-          (t/is (= #{[:ivan]} (.q (.db n2)
+              submitted-tx (crux/submit-tx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
+          (t/is (= #{[:ivan]} (crux/q (crux/at n2 submitted-tx)
                                   '{:find [e]
-                                    :where [[e :name "Iva"]]}))))
-
-        (t/is n2))
-
-      (t/is (= #{[:ivan]} (.q (.db n)
-                              '{:find [e]
-                                :where [[e :name "Ivan"]]}))))))
+                                    :where [[e :name "Iva"]]}))))))))

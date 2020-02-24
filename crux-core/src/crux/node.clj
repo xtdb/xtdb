@@ -17,10 +17,10 @@
             [crux.topology :as topo]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog]
+  (:import (crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog)
            java.io.Closeable
            java.util.Date
-           [java.util.concurrent Executors]
+           (java.util.concurrent Executors TimeoutException)
            java.util.concurrent.locks.StampedLock))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
@@ -38,14 +38,60 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
+(defn- with-bitemp-inst-defaults [bitemp-inst ^ICruxAPI node]
+  (db/->bitemp-inst (merge (.latestCompletedTx node)
+                           {::db/valid-time (Date.)}
+                           bitemp-inst)))
+
+(defn- await-inst [{::tx/keys [tx-id tx-time] :as bitemp-inst} ^ICruxAPI node timeout]
+  (when (or tx-id tx-time)
+    (let [seen-tx (atom nil)]
+      (or (cio/wait-while #(let [latest-completed-tx (.latestCompletedTx node)]
+                             (reset! seen-tx latest-completed-tx)
+                             (or (nil? latest-completed-tx)
+                                 (and tx-id (pos? (compare tx-id (::tx/tx-id latest-completed-tx))))
+                                 (and tx-time (pos? (compare tx-time (::tx/tx-time latest-completed-tx))))))
+                          timeout)
+          (throw (TimeoutException. (str "Timed out waiting for: " (cio/pr-edn-str bitemp-inst)
+                                         " index has: " (cio/pr-edn-str @seen-tx)))))
+
+      @seen-tx)))
+
 (defrecord CruxNode [kv-store tx-log document-store indexer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
-  (db [this]
-    (.db this nil nil))
+  (at [this] (.at this nil))
+  (at [this bitemp-inst] (.at this bitemp-inst nil))
+  (at [this bitemp-inst timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
 
-  (db [this valid-time]
-    (.db this valid-time nil))
+      (let [bitemp-inst (-> bitemp-inst
+                            (with-bitemp-inst-defaults this)
+                            (doto (await-inst this (or timeout (:crux.tx-log/await-tx-timeout options)))))]
+        (q/->db {:kv-store kv-store
+                 :object-store object-store
+                 :bus bus
+                 :bitemp-inst bitemp-inst}))))
+
+
+  (openAt [this] (.openAt this nil))
+  (openAt [this bitemp-inst] (.openAt this bitemp-inst nil))
+  (openAt [this bitemp-inst timeout]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+
+      (let [bitemp-inst (-> bitemp-inst
+                            (with-bitemp-inst-defaults this)
+                            (doto (await-inst this (or timeout (:crux.tx-log/await-tx-timeout options)))))]
+        (q/->snapshot {:kv-store kv-store
+                       :object-store object-store
+                       :bus bus
+                       :bitemp-inst bitemp-inst}))))
+
+  ;; HACK db for backward compatibility
+  (db [this] (.db this nil nil))
+  (db [this valid-time] (.db this valid-time nil))
 
   (db [this valid-time tx-time]
     (cio/with-read-lock lock
@@ -58,7 +104,8 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db kv-store object-store bus valid-time tx-time))))
+        (.at this (db/->bitemp-inst {::db/valid-time valid-time
+                                     ::tx/tx-time tx-time})))))
 
   (document [this content-hash]
     (cio/with-read-lock lock
@@ -105,20 +152,13 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
-      @(db/submit-tx tx-log tx-ops)))
+      (db/->bitemp-inst @(db/submit-tx tx-log tx-ops))))
 
-  (hasTxCommitted [this {:keys [:tx/tx-id :tx/tx-time] :as submitted-tx}]
+  (hasTxCommitted [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [{latest-tx-id ::tx/tx-id, latest-tx-time ::tx/tx-time} (.latestCompletedTx this)]
-        (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
-          (throw
-           (NodeOutOfSyncException.
-            (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
-            tx-time latest-tx-time))
-          (nil?
-           (kv/get-value (kv/new-snapshot kv-store)
-                         (c/encode-failed-tx-id-key-to nil tx-id)))))))
+      (.at this submitted-tx)
+      (nil? (kv/get-value (kv/new-snapshot kv-store) (c/encode-failed-tx-id-key-to nil tx-id)))))
 
   (openTxLog ^ITxLog [this from-tx-id with-ops?]
     (cio/with-read-lock lock
@@ -143,27 +183,27 @@
                                           (.close tx-log-iterator))
                                         tx-log))))
 
+  (latestCompletedTx [this]
+    (db/->bitemp-inst (db/read-index-meta indexer ::tx/latest-completed-tx)))
+
+  (latestSubmittedTx [this]
+    (db/->bitemp-inst (db/latest-submitted-tx tx-log)))
+
   (sync [this timeout]
-    (when-let [tx (db/latest-submitted-tx (:tx-log this))]
-      (-> (api/await-tx this tx nil)
-          :crux.tx/tx-time)))
+    (when-let [tx (db/latest-submitted-tx tx-log)]
+      (->> (await-inst tx this (or timeout (:crux.tx-log/await-tx-timeout options)))
+           ::tx/tx-time)))
 
   (awaitTxTime [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
-          :crux.tx/tx-time)))
+      (-> (await-inst {::tx/tx-time tx-time} this (or timeout (:crux.tx-log/await-tx-timeout options)))
+          ::tx/tx-time)))
 
   (awaitTx [this submitted-tx timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx indexer submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
-
-  (latestCompletedTx [this]
-    (db/read-index-meta indexer ::tx/latest-completed-tx))
-
-  (latestSubmittedTx [this]
-    (db/latest-submitted-tx tx-log))
+      (await-inst submitted-tx this (or timeout (:crux.tx-log/await-tx-timeout options)))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]

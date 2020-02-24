@@ -39,14 +39,17 @@
               snapshot (kv/new-snapshot kv-store)]
     (->> (iterator-seq tx-log)
          (run! (fn [{:keys [crux.tx.event/tx-events] :as tx}]
-                 (let [doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
-                   (db/index-docs indexer (->> (db/fetch-docs document-store doc-hashes)
-                                               (into {} (map (juxt (comp c/new-id key) val)))))
+                 (try
+                   (let [doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
+                    (db/index-docs indexer (->> (db/fetch-docs document-store doc-hashes)
+                                                (into {} (map (juxt (comp c/new-id key) val)))))
 
-                   (db/index-tx indexer (select-keys tx [::tx/tx-time ::tx/tx-id]) tx-events)
+                    (db/index-tx indexer (select-keys tx [::tx/tx-time ::tx/tx-id]) tx-events)
 
-                   (when (Thread/interrupted)
-                     (reduced nil))))))))
+                    (when (Thread/interrupted)
+                      (reduced nil)))
+                   (catch Exception e
+                     (log/error e))))))))
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
                   {:keys [^ExecutorService tx-submit-executor ^ExecutorService tx-indexer-executor

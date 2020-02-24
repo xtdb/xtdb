@@ -13,9 +13,10 @@
             [crux.memory :as mem]
             [crux.bus :as bus])
   (:import clojure.lang.ExceptionInfo
-           crux.api.ICruxDatasource
+           (crux.api ICruxDatasource ICruxQueryAPI ISnapshot)
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
+           (java.io Closeable)
            java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
@@ -603,9 +604,9 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [bitemp-inst] :as db} {:keys [e a v] :as clause} args]
   (let [entity (get (first args) e)]
-    (when (idx/or-known-triple-fast-path snapshot entity a v valid-time transact-time)
+    (when (idx/or-known-triple-fast-path snapshot entity a v bitemp-inst)
       [])))
 
 (defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
@@ -1072,53 +1073,160 @@
 
 (def ^:dynamic *with-entities-cache?* true)
 
-(defrecord ConformedQuery [q-normalized q-conformed])
+(defrecord ParsedQuery [q-normalized q-conformed])
 
-(defn- normalize-and-conform-query ^ConformedQuery [conform-cache q]
-  (let [{:keys [args] :as q} (try
-                               (normalize-query q)
-                               (catch Exception e
-                                 q))
-        conformed-query (lru/compute-if-absent
-                         conform-cache
-                         (if (map? q)
-                           (dissoc q :args)
-                           q)
-                         identity
-                         (fn [q]
-                           (let [q (normalize-query (s/assert ::query q))]
-                             (->ConformedQuery q (s/conform ::query q)))))]
+(defn- parse-query [conform-cache q]
+  (let [{:keys [args] :as normalized-q} (try
+                                          (normalize-query q)
+                                          (catch Exception e
+                                            q))
+        parsed-query (lru/compute-if-absent conform-cache
+                                            (if (map? normalized-q)
+                                              (dissoc normalized-q :args)
+                                              normalized-q)
+                                            identity
+                                            (fn [q]
+                                              (s/assert ::query q)
+                                              (->ParsedQuery q (s/conform ::query q))))]
     (if args
       (do (s/assert ::args args)
-          (-> conformed-query
+          (-> parsed-query
               (assoc-in [:q-normalized :args] args)
               (assoc-in [:q-conformed :args] args)))
-      conformed-query)))
+      parsed-query)))
 
-;; TODO: Move future here to a bounded thread pool.
-(defn q
-  ([{:keys [kv] :as db} ^ConformedQuery conformed-q]
-   (let [start-time (System/currentTimeMillis)
-         q (.q-normalized conformed-q)
-         query-future (future
-                        (try
-                          (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
-                            (let [result-coll-fn (if (:order-by q) vec set)
-                                  result (result-coll-fn (crux.query/q db snapshot conformed-q))]
-                              (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-                              (log/debug :query-result-size (count result))
-                              result))
-                          (catch ExceptionInfo e
-                            e)
-                          (catch IllegalArgumentException e
-                            e)
-                          (catch InterruptedException e
-                            e)
-                          (catch Throwable t
-                            (log/error t "Exception caught while executing query.")
-                            t)))
+(defn q [{:keys [object-store kv-store bitemp-inst kv-snapshot] :as db} ^ParsedQuery parsed-q]
+  (let [q (.q-normalized parsed-q)
+        q-conformed (.q-conformed parsed-q)
+        {:keys [find where args rules offset limit order-by full-results?]} q-conformed
+        stats (idx/read-meta kv-store :crux.kv/stats)]
+    (log/debug :query (cio/pr-edn-str (-> q
+                                          (assoc :arg-keys (mapv (comp set keys) (:args q)))
+                                          (dissoc :args))))
+    (validate-args args)
+    (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator kv-snapshot)
+                                                               (:crux.db/valid-time bitemp-inst)
+                                                               (:crux.tx/tx-time bitemp-inst))
+                             *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
+
+          rule-name->rules (rule-name->rules rules)
+
+          db (assoc db :entity-as-of-idx entity-as-of-idx)
+          {:keys [n-ary-join
+                  var->bindings]} (build-sub-query kv-snapshot db where args rule-name->rules stats)]
+      (doseq [var find
+              :when (not (contains? var->bindings var))]
+        (throw (IllegalArgumentException.
+                (str "Find refers to unknown variable: " var))))
+      (doseq [{:keys [var]} order-by
+              :when (not (contains? var->bindings var))]
+        (throw (IllegalArgumentException.
+                (str "Order by refers to unknown variable: " var))))
+      (doseq [{:keys [var]} order-by
+              :when (not (some #{var} find))]
+        (throw (IllegalArgumentException.
+                (str "Order by requires a var from :find. unreturned var: " var))))
+      (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
+                     :let [bound-result-tuple (for [var find]
+                                                (bound-result-for-var kv-snapshot object-store var->bindings join-keys join-results var))]]
+                 (if full-results?
+                   (build-full-results db kv-snapshot bound-result-tuple)
+                   (mapv #(.value ^BoundResult %) bound-result-tuple)))
+        true dedupe
+        order-by (cio/external-sort (order-by-comparator find order-by))
+        offset (drop offset)
+        limit (take limit)))))
+
+(defn- entity-tx [{:keys [kv-store kv-snapshot bitemp-inst] :as snapshot} eid]
+  (-> (idx/entities-at kv-snapshot [eid] (:crux.db/valid-time bitemp-inst) (:crux.tx/tx-time bitemp-inst))
+      first
+      c/entity-tx->edn))
+
+(defn- entity [{:keys [kv object-store kv-snapshot] :as snapshot} eid]
+  (let [entity-tx (entity-tx snapshot eid)]
+    (-> (db/get-single-object object-store kv-snapshot (:crux.db/content-hash entity-tx))
+        idx/keep-non-evicted-doc)))
+
+(defn- history-ascending [{:keys [kv-snapshot object-store bitemp-inst] :as snapshot} eid]
+  (for [^EntityTx entity-tx (idx/entity-history-seq-ascending kv-snapshot eid
+                                                              (:crux.db/valid-time bitemp-inst)
+                                                              (:crux.tx/tx-time bitemp-inst))]
+    (-> (c/entity-tx->edn entity-tx)
+        (assoc :crux.db/doc (db/get-single-object object-store kv-snapshot (.content-hash entity-tx))))))
+
+(defn- history-descending [{:keys [kv-snapshot object-store bitemp-inst] :as snapshot} eid]
+  (for [^EntityTx entity-tx (idx/entity-history-seq-descending kv-snapshot eid
+                                                               (:crux.db/valid-time bitemp-inst)
+                                                               (:crux.tx/tx-time bitemp-inst))]
+    (-> (c/entity-tx->edn entity-tx)
+        (assoc :crux.db/doc (db/get-single-object object-store kv-snapshot (.content-hash entity-tx))))))
+
+(defrecord Snapshot [^Closeable kv-snapshot
+                     kv-store object-store bus
+                     query-cache conform-cache
+                     bitemp-inst entity-as-of-idx]
+  ISnapshot
+
+  Closeable
+  (close [_] (.close kv-snapshot))
+
+  ICruxQueryAPI
+  (entity [this eid] (entity this eid))
+  (entityTx [this eid] (entity-tx this eid))
+  (q [this query] (q this (parse-query conform-cache query)))
+  (historyAscending [this eid] (history-ascending this eid))
+  (historyDescending [this eid] (history-descending this eid))
+
+  ;; HACK backwards compatibility
+  ICruxDatasource
+  (entity [this kv-snapshot eid] (entity (assoc this :kv-snapshot kv-snapshot) eid))
+  (q [this kv-snapshot query] (q (assoc this :kv-snapshot kv-snapshot) (parse-query conform-cache query)))
+  (newSnapshot [_] (lru/new-cached-snapshot (kv/new-snapshot kv-store) true))
+  (historyAscending [this kv-snapshot eid] (history-ascending (assoc this :kv-snapshot kv-snapshot) eid))
+  (historyDescending [this kv-snapshot eid] (history-descending (assoc this :kv-snapshot kv-snapshot) eid)))
+
+(defn ->snapshot ^crux.api.ISnapshot [{:keys [kv-store] :as deps}]
+  (map->Snapshot (assoc deps
+                   :kv-snapshot (lru/new-cached-snapshot (kv/new-snapshot kv-store) true))))
+
+(defrecord DB [kv-store object-store bus
+               query-cache conform-cache
+               bitemp-inst entity-as-of-idx]
+  ICruxQueryAPI
+
+  (entity [this eid]
+    (with-open [snapshot (->snapshot this)]
+      (.entity snapshot eid)))
+
+  (entityTx [this eid]
+    (with-open [snapshot (->snapshot this)]
+      (.entityTx snapshot eid)))
+
+  (q [this query]
+    ;; TODO: Move future here to a bounded thread pool.
+    (let [start-time (System/currentTimeMillis)
+          parsed-q ^ParsedQuery (parse-query conform-cache query)
+          query-future (future
+                         (with-open [snapshot (->snapshot this)]
+                           (try
+                             (let [result-coll-fn (if (:order-by (.q-normalized parsed-q))
+                                                    (comp vec distinct)
+                                                    set)
+                                   result (result-coll-fn (.q snapshot query))]
+                               (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+                               (log/debug :query-result-size (count result))
+                               result)
+                             (catch ExceptionInfo e
+                               e)
+                             (catch IllegalArgumentException e
+                               e)
+                             (catch InterruptedException e
+                               e)
+                             (catch Throwable t
+                               (log/error t "Exception caught while executing query.")
+                               t))))
          result (or (try
-                      (deref query-future (or (:timeout q) default-query-timeout) nil)
+                      (deref query-future (or (:timeout query) default-query-timeout) nil)
                       (catch InterruptedException e
                         (future-cancel query-future)
                         (throw e)))
@@ -1129,120 +1237,15 @@
        (throw result)
        result)))
 
-  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot ^ConformedQuery conformed-q]
-   (let [q (.q-normalized conformed-q)
-         q-conformed (.q-conformed conformed-q)
-         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-         stats (idx/read-meta kv :crux.kv/stats)]
-     (log/debug :query (cio/pr-edn-str (-> q
-                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
-                                           (dissoc :args))))
-     (validate-args args)
-     (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time)
-                              *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
-
-           rule-name->rules (rule-name->rules rules)
-
-           db (assoc db :entity-as-of-idx entity-as-of-idx)
-           {:keys [n-ary-join
-                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
-       (doseq [var find
-               :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException.
-                 (str "Find refers to unknown variable: " var))))
-       (doseq [{:keys [var]} order-by
-               :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException.
-                 (str "Order by refers to unknown variable: " var))))
-       (doseq [{:keys [var]} order-by
-               :when (not (some #{var} find))]
-         (throw (IllegalArgumentException.
-                 (str "Order by requires a var from :find. unreturned var: " var))))
-
-       (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
-                      :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
-                  (if full-results?
-                    (build-full-results db snapshot bound-result-tuple)
-                    (mapv #(.value ^BoundResult %) bound-result-tuple)))
-
-         true (dedupe)
-         order-by (cio/external-sort (order-by-comparator find order-by))
-         offset (drop offset)
-         limit (take limit))))))
-
-(defn entity-tx
-  ([{:keys [kv] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity-tx snapshot db eid)))
-  ([snapshot {:keys [valid-time transact-time] :as db} eid]
-   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time)))))
-
-(defn entity
-  ([{:keys [kv object-store] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity db snapshot eid)))
-  ([{:keys [kv object-store] :as db} snapshot eid]
-   (let [entity-tx (entity-tx snapshot db eid)]
-     (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
-         idx/keep-non-evicted-doc))))
-
-(defrecord QueryDatasource [kv object-store bus
-                            query-cache conform-cache
-                            valid-time transact-time entity-as-of-idx]
+  ;; HACK backwards compatibility
   ICruxDatasource
-  (entity [this eid]
-    (entity this eid))
+  (entity [this kv-snapshot eid] (entity (assoc this :kv-snapshot kv-snapshot) eid))
+  (q [this kv-snapshot query] (q (assoc this :kv-snapshot kv-snapshot) (parse-query conform-cache query)))
+  (newSnapshot [_] (lru/new-cached-snapshot (kv/new-snapshot kv-store) true))
+  (historyAscending [this kv-snapshot eid] (history-ascending (assoc this :kv-snapshot kv-snapshot) eid))
+  (historyDescending [this kv-snapshot eid] (history-descending (assoc this :kv-snapshot kv-snapshot) eid)))
 
-  (entity [this snapshot eid]
-    (entity this snapshot eid))
-
-  (entityTx [this eid]
-    (entity-tx this eid))
-
-  (newSnapshot [this]
-    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
-
-  (q [this query]
-    (let [conformed-query (normalize-and-conform-query conform-cache query)
-          query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
-      (when bus
-        (bus/send bus {:crux.bus/event-type ::submitted-query
-                       ::query safe-query
-                       ::query-id query-id}))
-      (let [ret (q this conformed-query)]
-        (when bus
-          (bus/send bus {:crux.bus/event-type ::completed-query
-                         ::query safe-query
-                         ::query-id query-id}))
-        ret)))
-
-  (q [this snapshot query]
-    ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
-    ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (q this snapshot (normalize-and-conform-query conform-cache query)))
-
-  (historyAscending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending snapshot eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
-
-  (historyDescending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-descending snapshot eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
-
-  (validTime [_]
-    valid-time)
-
-  (transactionTime [_]
-    transact-time))
-
-(defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
-  (->QueryDatasource kv
-                     object-store
-                     bus
-                     (lru/get-named-cache kv ::query-cache)
-                     (lru/get-named-cache kv ::conform-cache)
-                     valid-time
-                     transact-time
-                     nil))
+(defn ->db ^crux.api.ICruxQueryAPI [{:keys [kv-store] :as deps}]
+  (map->DB (assoc deps
+             :query-cache (lru/get-named-cache kv-store ::query-cache)
+             :conform-cache (lru/get-named-cache kv-store ::conform-cache))))

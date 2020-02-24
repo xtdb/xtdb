@@ -1,7 +1,7 @@
 (ns crux.db
   (:import java.io.Closeable
            java.util.Iterator
-           crux.api.ITxLog))
+           (crux.api ITxLog IBitemporalInstant)))
 
 ;; tag::Index[]
 (defprotocol Index
@@ -62,3 +62,15 @@
 
 (defn ->closeable-tx-log-iterator [close-fn ^Iterable sq]
   (->CloseableTxLogIterator close-fn (.iterator (lazy-seq sq))))
+
+(defrecord BitemporalInstant []
+  IBitemporalInstant
+  (validTime [{:crux.db/keys [valid-time]}] valid-time)
+  (transactionTime [{:crux.tx/keys [tx-time]}] tx-time)
+  (transactionId [{:crux.tx/keys [tx-id]}] tx-id))
+
+(defn ->bitemp-inst [maybe-inst]
+  (cond
+    (instance? IBitemporalInstant maybe-inst) maybe-inst
+    (map? maybe-inst) (map->BitemporalInstant maybe-inst)
+    :else maybe-inst))
