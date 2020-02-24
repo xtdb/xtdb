@@ -11,7 +11,7 @@
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                bench/crux-version bench/commit-hash))
 
-  (bench/with-node [node]
+  (bench/with-nodes [node]
     (let [devices-results (devices/run-devices-bench node)
           weather-results (weather/run-weather-bench node)
           watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})
