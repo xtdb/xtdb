@@ -50,7 +50,7 @@
   (db [this valid-time tx-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [latest-tx-time (:crux.tx/tx-time (db/read-index-meta indexer :crux.tx/latest-completed-tx))
+      (let [latest-tx-time (:crux.tx/tx-time (.latestCompletedTx this))
             _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
                 (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
                                                         tx-time latest-tx-time)
@@ -107,11 +107,10 @@
       (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
       @(db/submit-tx tx-log tx-ops)))
 
-  (hasTxCommitted [this {:keys [crux.tx/tx-id crux.tx/tx-time] :as submitted-tx}]
+  (hasTxCommitted [this {:keys [:tx/tx-id :tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [{latest-tx-id :crux.tx/tx-id
-             latest-tx-time :crux.tx/tx-time} (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+      (let [{latest-tx-id ::tx/tx-id, latest-tx-time ::tx/tx-time} (.latestCompletedTx this)]
         (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
           (throw
            (NodeOutOfSyncException.

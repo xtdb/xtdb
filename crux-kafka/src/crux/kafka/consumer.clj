@@ -24,7 +24,7 @@
 (defrecord TxOffset [indexer]
   tc/Offsets
   (read-offsets [this]
-    {:next-offset (inc (get (db/read-index-meta indexer :crux.tx/latest-completed-tx) :crux.tx/tx-id 0))})
+    {:next-offset (inc (get (db/latest-completed-tx indexer) :crux.tx/tx-id 0))})
 
   ;; no-op - this is stored by the indexer itself
   (store-offsets [this offsets]))
