@@ -34,5 +34,5 @@
 (defn with-doc-backed-object-store-opts [f]
   (apif/with-opts {:crux.node/object-store 'crux.object-store/doc-store-backed-object-store
                    :crux.node/document-store 'crux.fixtures.doc-store/document-store
-                   :crux.kafka/doc-indexing-consumer 'crux.kafka/doc-indexing-from-tx-topic-consumer}
+                   :crux.kafka/doc-indexing-consumer 'crux.kafka/tx-doc-indexing-consumer}
     f))
