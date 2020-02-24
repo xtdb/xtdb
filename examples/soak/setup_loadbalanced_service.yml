@@ -115,7 +115,7 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
-      DesiredCount: 2
+      DesiredCount: 0
       NetworkConfiguration:
         AwsvpcConfiguration:
           SecurityGroups:
