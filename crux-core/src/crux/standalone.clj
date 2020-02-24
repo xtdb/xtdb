@@ -35,7 +35,7 @@
                                                (cio/try-close snapshot))))))))
 
 (defn- index-txs [{:keys [indexer kv-store object-store document-store] :as deps}]
-  (with-open [tx-log (open-tx-log deps (::tx/tx-id (db/read-index-meta indexer ::tx/latest-completed-tx)))
+  (with-open [tx-log (open-tx-log deps (::tx/tx-id (db/latest-completed-tx indexer)))
               snapshot (kv/new-snapshot kv-store)]
     (->> (iterator-seq tx-log)
          (run! (fn [{:keys [crux.tx.event/tx-events] :as tx}]

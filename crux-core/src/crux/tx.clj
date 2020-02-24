@@ -402,11 +402,11 @@
                 (db/submit-docs document-store tombstones))
 
               (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
-                                            (idx/meta-kv :crux.tx/latest-completed-tx tx))
+                                            (idx/meta-kv ::latest-completed-tx tx))
                                       (into (sorted-map-by mem/buffer-comparator)))))
 
             (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [(idx/meta-kv :crux.tx/latest-completed-tx tx)
+                (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
                                     [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
@@ -427,10 +427,12 @@
   (read-index-meta [_  k]
     (idx/read-meta kv-store k))
 
+  (latest-completed-tx [this]
+    (db/read-index-meta this ::latest-completed-tx))
+
   status/Status
   (status-map [this]
     {:crux.index/index-version (idx/current-index-version kv-store)
-     :crux.tx/latest-completed-tx (db/read-index-meta this :crux.tx/latest-completed-tx)
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
@@ -442,10 +444,10 @@
 
 (defn await-tx [indexer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+    (if (cio/wait-while #(let [latest-completed-tx (db/latest-completed-tx indexer)]
                            (reset! seen-tx latest-completed-tx)
                            (or (nil? latest-completed-tx)
-                               (pos? (compare tx-id (:crux.tx/tx-id latest-completed-tx)))))
+                               (pos? (compare tx-id (::tx-id latest-completed-tx)))))
                         timeout)
       @seen-tx
       (throw (TimeoutException.
@@ -454,10 +456,10 @@
 
 (defn await-tx-time [indexer tx-time timeout]
   (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(let [latest-completed-tx (db/read-index-meta indexer :crux.tx/latest-completed-tx)]
+    (if (cio/wait-while #(let [latest-completed-tx (db/latest-completed-tx indexer)]
                            (reset! seen-tx latest-completed-tx)
                            (or (nil? latest-completed-tx)
-                               (pos? (compare tx-time (:crux.tx/tx-time latest-completed-tx)))))
+                               (pos? (compare tx-time (::tx-time latest-completed-tx)))))
                         timeout)
       @seen-tx
       (throw (TimeoutException.

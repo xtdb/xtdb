@@ -22,7 +22,8 @@
   (index-tx [this tx tx-events])
   (missing-docs [this content-hashes])
   (store-index-meta [this k v])
-  (read-index-meta [this k]))
+  (read-index-meta [this k])
+  (latest-completed-tx [this]))
 ;; end::Indexer[]
 
 ;; tag::TxLog[]

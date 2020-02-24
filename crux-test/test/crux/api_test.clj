@@ -99,7 +99,7 @@
 
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
-        (t/is (= submitted-tx (:crux.tx/latest-completed-tx status-map))))
+        (t/is (= submitted-tx (.latestCompletedTx *api*))))
 
       (t/testing "query"
         (t/is (= #{[:ivan]} (.q (.db *api*)
