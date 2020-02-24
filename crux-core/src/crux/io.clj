@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
+           [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
            [java.nio.file Files FileVisitResult SimpleFileVisitor]
@@ -111,7 +112,7 @@
     (.isDirectory f) (apply + (map folder-size (.listFiles f)))
     :else (.length f)))
 
-(defn try-close [^Closeable c]
+(defn try-close [^AutoCloseable c]
   (try
     (some-> c (.close))
     (catch Throwable t
