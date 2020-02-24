@@ -1,6 +1,6 @@
 # Crux Console
 
-Console is a web app that gives allows you to query Crux and see data from different perpectives.
+Console is a web app that allows you to query Crux and see data from different perpectives.
 ![Screenshot of Crux Console](./resources/screenshot-1.png)
 
 It can be used as a standalone analytics tool or as an educational tool.
