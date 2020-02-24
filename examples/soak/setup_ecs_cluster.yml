@@ -161,6 +161,9 @@ Resources:
                 # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
+
+                # Allow the ECS tasks to get secret values from the secrets manager
+                - 'secretsmanager:GetSecretValue'
               Resource: '*'
 
   SoakTask:
@@ -188,6 +191,16 @@ Resources:
               awslogs-region: 'eu-west-2'
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
+      Secrets:
+        - Name: "CONFLUENT_BROKER"
+          ValueFrom:
+            "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/confluent-broker-7MqdMx"
+        - Name: "CONFLUENT_API_TOKEN"
+          ValueFrom:
+            "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/confluent-api-token-E9B1VY"
+        - Name: "CONFLUENT_API_SECRET"
+          ValueFrom:
+            "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/confluent-secret-cltQqq"
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,

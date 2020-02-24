@@ -15,7 +15,7 @@
 
 (defn -main [& args]
   (with-open [node (api/start-node {:crux.node/topology '[crux.kafka/topology]
-                                    :crux.kafka/bootstrap-servers (System/getenv "CONFLUENT_SERVER")
+                                    :crux.kafka/bootstrap-servers (System/getenv "CONFLUENT_BROKER")
                                     :crux.node/kv-store 'crux.kv.memdb/kv
                                     :crux.kafka/replication-factor 3
                                     :crux.kafka/doc-partitions 6
