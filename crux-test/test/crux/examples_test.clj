@@ -97,7 +97,10 @@
     (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-4 node)))
     (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
     (t/is (= #{[21]} (ex/query-example-with-predicate-1 node)))
-    (t/is (= [:smith] (first (ex/query-example-lazy node))))))
+
+    (let [!results (atom [])]
+      (ex/query-example-lazy node #(swap! !results conj %))
+      (t/is (= [[:smith]] @!results)))))
 
 (t/deftest test-example-time-queries
   (with-open [node (ex/start-standalone-node *storage-dir*)]

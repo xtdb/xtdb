@@ -397,21 +397,16 @@ connected to a given entity via the `:follow` attribute.
 [#queries_lazy_queries]
 == Lazy Queries
 
-The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
-optionally a `snapshot` which is already opened and managed by the caller
-(using `with-open` for example). This version of the call returns a lazy
-sequence of the results, while the other version provides a set. A snapshot can
-be retrieved from a `kv` instance via `crux.api/new-snapshot`. For example, a lazy version of a basic query from the top of this section (using `with-open` to ensure that the snapshot is closed):
+The function `crux.api/q` also has a 3-argument arity (`db`, `snapshot` and `q`)
+that can return results lazily. A snapshot can be retrieved from a `node` via
+`crux.api/new-snapshot` - the snapshot must be closed when no longer used, and
+the query results must be processed while the snapshot is open. For example, a
+lazy version of a basic query from the top of this section (using `with-open` to
+ensure that the snapshot is closed):
 
 [source,clj]
 ----
 include::./src/docs/examples.clj[tags=lazy-query]
-----
-
-This will lazily return:
-[source,clj]
-----
-include::./src/docs/examples.clj[tags=lazy-query-r]
 ----
 
 [#queries_history_api]

@@ -1103,9 +1103,7 @@
          query-future (future
                         (try
                           (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
-                            (let [result-coll-fn (if (:order-by q)
-                                                   (comp vec distinct)
-                                                   set)
+                            (let [result-coll-fn (if (:order-by q) vec set)
                                   result (result-coll-fn (crux.query/q db snapshot conformed-q))]
                               (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                               (log/debug :query-result-size (count result))
@@ -1160,14 +1158,16 @@
                :when (not (some #{var} find))]
          (throw (IllegalArgumentException.
                  (str "Order by requires a var from :find. unreturned var: " var))))
+
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (if full-results?
                     (build-full-results db snapshot bound-result-tuple)
                     (mapv #(.value ^BoundResult %) bound-result-tuple)))
+
+         true (dedupe)
          order-by (cio/external-sort (order-by-comparator find order-by))
-         (or offset limit) dedupe
          offset (drop offset)
          limit (take limit))))))
 
