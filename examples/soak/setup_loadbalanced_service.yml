@@ -52,8 +52,8 @@ Resources:
     DependsOn:
       - LogGroup
     Properties:
-      Cpu: '2 vCPU'
-      Memory: '8GB'
+      Cpu: '0.5 vCPU'
+      Memory: '2GB'
       Family: 'crux-soak'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
