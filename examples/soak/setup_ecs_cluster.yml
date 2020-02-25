@@ -69,10 +69,32 @@ Resources:
       Port: 80
       Protocol: HTTP
 
+  SoakTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: 'crux-soak'
+      Port: 8080
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+
 Outputs:
+  SoakTargetGroup:
+    Description: The Target Group for Soak
+    Value: !Ref 'SoakTargetGroup'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTargetGroup' ] ]
   PublicLoadBalancerListener:
-    Description: The Public Load Balancer Listener's ARN
-    Value: !GetAtt 'PublicLoadBalancerListener.Arn'
+    Description: The Public Load Balancer Listener
+    Value: !Ref 'PublicLoadBalancerListener'
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicLoadBalancerListener' ] ]
   FargateContainerSecurityGroup:
