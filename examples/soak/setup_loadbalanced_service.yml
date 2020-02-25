@@ -97,6 +97,7 @@ Resources:
       ServiceName: 'crux-soak'
       Cluster: 'crux-soak'
       LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 60
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
