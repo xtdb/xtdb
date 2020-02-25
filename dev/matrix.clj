@@ -1,4 +1,5 @@
 (ns matrix
+  #:clojure.tools.namespace.repl{:load false, :unload false}
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.walk :as w]
