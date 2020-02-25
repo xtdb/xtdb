@@ -103,6 +103,7 @@ Resources:
       DesiredCount: 0
       NetworkConfiguration:
         AwsvpcConfiguration:
+          AssignPublicIp: 'ENABLED'
           SecurityGroups:
             - Fn::ImportValue:
                 !Join [':', [!Ref 'EcsStackName', 'FargateContainerSecurityGroup']]
