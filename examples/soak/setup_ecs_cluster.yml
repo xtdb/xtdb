@@ -31,6 +31,14 @@ Resources:
         Fn::ImportValue:
           !Join [':', [!Ref 'VpcStackName', 'VPCId']]
 
+  EcsSecurityGroupIngressFromPublicALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Ingress from the public ALB
+      GroupId: !Ref 'FargateContainerSecurityGroup'
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref 'PublicLoadBalancerSG'
+
   PublicLoadBalancerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
