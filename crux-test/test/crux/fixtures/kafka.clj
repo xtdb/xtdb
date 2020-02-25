@@ -4,7 +4,6 @@
             [crux.fixtures.kv-only :refer [*kv-module*]]
             [crux.io :as cio]
             [crux.kafka :as k]
-            [crux.kafka.consumer :as kc]
             [crux.kafka.embedded :as ek]
             [crux.api :as api]
             [crux.fixtures :as f])
@@ -55,26 +54,21 @@
 
 (def ^:dynamic *consumer-options* {})
 
-(defn ^KafkaConsumer with-consumer []
-  (kc/create-consumer
+(defn ^KafkaConsumer open-consumer []
+  (k/create-consumer
    (merge {"bootstrap.servers" *kafka-bootstrap-servers*
            "group.id" (str (UUID/randomUUID))}
           *consumer-options*)))
 
-(defn ^KafkaProducer with-producer []
-  (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*}))
-
 (defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              consumer (kc/create-consumer
+              consumer (k/create-consumer
                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
                                 "group.id" (str (UUID/randomUUID))}
                                *consumer-options*))]
     (binding [*producer* producer
               *consumer* consumer]
       (f))))
-
-(def ^:dynamic *cluster-node*)
 
 (defn with-cluster-node-opts [f]
   (assert (bound? #'*kafka-bootstrap-servers*))

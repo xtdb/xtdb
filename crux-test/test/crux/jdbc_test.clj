@@ -68,11 +68,11 @@
     (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))
 
     (t/testing "Compaction"
-      (db/submit-docs tx-log [[doc-hash :some-val]])
+      (db/submit-docs doc-store [[doc-hash :some-val]])
       (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 
     (t/testing "Eviction"
-      (db/submit-docs tx-log [[doc-hash {:crux.db/id :some-id :crux.db/evicted? true}]])
+      (db/submit-docs doc-store [[doc-hash {:crux.db/id :some-id :crux.db/evicted? true}]])
       (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
                 {:crux.db/id :some-id :crux.db/evicted? true}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 

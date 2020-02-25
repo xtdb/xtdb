@@ -207,6 +207,7 @@
   {::kv-store 'crux.kv.memdb/kv
    ::object-store 'crux.object-store/kv-object-store
    ::indexer 'crux.tx/kv-indexer
+   ::tx-consumer 'crux.tx.consumer/tx-consumer
    ::bus 'crux.bus/bus
    ::node 'crux.node/node-component})
 

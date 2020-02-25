@@ -1,12 +1,9 @@
 (ns crux.fixtures.jdbc
-  (:require [crux.fixtures.api :as api]
-            [crux.io :as cio]
-            [crux.jdbc :as j]
-            [next.jdbc :as jdbc]
-            [clojure.test :as t]
-            [crux.kafka :as k]
+  (:require [clojure.java.io :as io]
             [crux.fixtures :as f]
-            [clojure.java.io :as io]))
+            [crux.fixtures.api :as api]
+            [crux.jdbc :as j]
+            [next.jdbc :as jdbc]))
 
 (def ^:dynamic *dbtype* nil)
 

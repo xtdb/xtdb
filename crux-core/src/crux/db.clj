@@ -33,6 +33,9 @@
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 
+(defprotocol TxConsumer
+  (consumer-error [this]))
+
 (defprotocol DocumentStore
   (submit-docs [this id-and-docs])
   (fetch-docs [this ids]))
