@@ -21,9 +21,20 @@
                  [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
                  [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0" :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
+                 ;; neo4j
+                 [org.neo4j/neo4j "4.0.0"]
 
                  ;; Dependency resolution
                  [commons-codec "1.12"]
+                 [commons-collections "3.2.2"]
+                 [commons-beanutils "1.9.3"]
+                 [io.netty/netty-all "4.1.43.Final"]
+                 [org.ow2.asm/asm-util "7.2"]
+                 [org.ow2.asm/asm-tree "7.2"]
+                 [com.github.luben/zstd-jni "1.4.3-1"]
+                 [com.google.errorprone/error_prone_annotations "2.3.4"]
+                 [com.github.ben-manes.caffeine/caffeine "2.8.0"]
+                 [org.apache.commons/commons-compress "1.19"]
                  [joda-time "2.9.9"]
                  [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
                  [org.slf4j/jul-to-slf4j "1.7.25"]

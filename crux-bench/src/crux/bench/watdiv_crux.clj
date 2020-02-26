@@ -23,22 +23,44 @@
          (map (juxt :query-idx identity))
          (into {}))))
 
+(def db-query-results
+  {:rdf4j (some->
+            (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200214-174740Z.edn") parse-results)
+   :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200219-114016Z.edn") parse-results)})
+
+(defn get-db-results-at-idx [idx]
+  (into
+   {}
+   (map
+    (fn [db-name]
+      (let [time-taken-ms (get-in db-query-results [db-name idx :time-taken-ms])
+            result-count (get-in db-query-results [db-name idx :result-count])]
+        {db-name {:db-time-taken-ms time-taken-ms
+                  :db-result-count result-count}}))
+    (keys db-query-results))))
+
 (defn ->query-result [watdiv-query-results]
-  (let [both-completed (->> watdiv-query-results (filter (every-pred :rdf4j-result-count :result-count)))
-        crux-correct (->> both-completed (filter #(= (:rdf4j-result-count %) (:result-count %))))
-        correct-idxs (into #{} (map :query-idx) crux-correct)]
+  (into {:bench-type "queries"
+         :time-taken-ms (->> (rest watdiv-query-results) (map :time-taken-ms) (reduce +))}
+        (map
+         (fn [db-name]
+           (let [watdiv-results-with-db (map
+                                         (fn [query-result] (merge query-result (db-name query-result)))
+                                         watdiv-query-results)
+                 both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
+                 crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
+                 correct-idxs (into #{} (map :query-idx) crux-correct)]
+             {db-name
+              {:crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) vec)
+               :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (mapv :query-idx))
 
-    {:bench-type "queries"
-     :crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) vec)
-     :crux-errors (->> watdiv-query-results (filter :rdf4j-result-count) (remove :result-count) (mapv :query-idx))
+               :crux-time-taken (->> crux-correct (map :time-taken-ms) (reduce +) (Duration/ofMillis) (str))
+               :db-time-taken (->> crux-correct (map :db-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}}))
+         (keys db-query-results))))
 
-     :time-taken-ms (->> watdiv-query-results (map :time-taken-ms) (reduce +))
-     :crux-time-taken (->> crux-correct (map :time-taken-ms) (reduce +) (Duration/ofMillis) (str))
-     :rdf4j-time-taken (->> crux-correct (map :rdf4j-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}))
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]
-  (let [rdf4j-results (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200214-174740Z.edn") parse-results)
-        watdiv-results
+  (let [watdiv-results
         (bench/with-bench-ns :watdiv-crux
           (bench/with-crux-dimensions
             (ingest-crux node)
@@ -49,13 +71,12 @@
                     (cond->> test-count (take test-count))
                     (->> (bench/with-thread-pool opts
                            (fn [{:keys [idx q]}]
-                             (bench/with-dimensions {:rdf4j-time-taken-ms (get-in rdf4j-results [idx :time-taken-ms])
-                                                     :rdf4j-result-count (get-in rdf4j-results [idx :result-count])
-                                                     :query-idx idx}
+                             (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
                                (bench/run-bench (format "query-%d" idx)
-                                 {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))}))))))))))]
+                                                {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))}))))))))))]
 
-    (-> [(first watdiv-results) (->query-result (rest watdiv-results))]
+    (-> [(first watdiv-results)
+         (->query-result (rest watdiv-results))]
         (bench/results->slack-message :watdiv-crux)
         (bench/post-to-slack))
 
