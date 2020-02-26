@@ -50,9 +50,13 @@ for the other topologies, `crux.node`:
 [#table-conversion%header,cols="d,d"]
 |===
 |Property|Default Value
-|`:crux.node/kv-store`|*`'crux.kv.memdb/kv`*
 |`:crux.node/object-store`|*`'crux.object-store/kv-object-store`*
 |===
+
+CAUTION: From version `20.01-1.7.0-alpha-SNAPSHOT` the `kv-store` should be
+specified by including an extra module in the node's topology vector. For
+example a `rocksdb` backend looks like `{:crux.node/topology
+'[crux.standalone/topology crux.kv.rocksdb/kv-store]}`
 
 The following set of options are used by KV backend implementations,
 defined within `crux.kv`:
@@ -137,6 +141,9 @@ You can create a node with custom RocksDB options by passing extra keywords in t
 * `:crux.kv.rocksdb/disable-wal?`, which takes a boolean (if true, disables the *write ahead log*)
 * `:crux.kv.rocksdb/db-options`, which takes a RocksDB 'Options' object (see more https://javadoc.io/doc/org.rocksdb/rocksdbjni/6.2.2/org/rocksdb/Options.html[here], from the *RocksDB javadocs*)
 
+To include rocksdb metrics in monitoring `crux.kv.rocksdb/kv-store-with-metrics` should be
+included in the topology map instead of the above.
+
 == LMDB
 
 An alternative to RocksDB, LMDB provides faster queries in exchange for a slower ingest rate.
@@ -149,7 +156,7 @@ An alternative to RocksDB, LMDB provides faster queries in exchange for a slower
 include::./deps.edn[tags=LMDBDeps]
 ----
 
-[#rocks-start]
+[#lmdb-start]
 *Starting a node using LMDB*
 
 [source,clj]
@@ -390,6 +397,30 @@ Crux can display metrics through a variety of interfaces. Internally, it uses
 https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
 all the metrics and then passes the registry around to reporters to display the
 data in a suitable application.
+
+By default `indexer` and `query` metrics are included. It is also
+possible to add `rocksdb` metrics when it is being used. These arguments can be
+used whenever any of the topologies to display metrics are included.
+
+.Registry arguments
+[#table-conversion%header,cols="d,d,d,d"]
+|===
+|Field|Property|Default|Description
+|`:crux.metrics/with-indexer-metrics?`|`boolean`|`true`| Includes indexer metrics in the metrics registry
+|`:crux.metrics/with-query-metrics?`|`boolean`|`true`| Includes query metrics in the metrics registry
+|===
+
+To include rocksdb metrics in monitoring the
+`'crux.kv.rocksdb/kv-store-with-metrics` module should be included in the
+topology map instead of `'crux.kv.rocksdb/kv-store`
+
+[source,clj]
+----
+(api/start-node {:crux.node/topology ['crux.standalone/topology
+                                      'crux.kv.rocksdb/kv-store-with-metrics
+                                      ...]
+                 ...})
+----
 
 Crux currently supports the following outputs:
 

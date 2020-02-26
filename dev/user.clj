@@ -15,7 +15,8 @@
   (.close node))
 
 (def config
-  {:node (merge {:crux.node/topology 'crux.standalone/topology
+  {:node (merge {:crux.node/topology ['crux.standalone/topology
+                                      'crux.kv.rocksdb/kv-store]
                  :crux.kv/db-dir "dev/dev-node/db-dir"
                  :crux.standalone/event-log-dir "dev/dev-node/event-log"
                  :crux.kv/sync? true})})

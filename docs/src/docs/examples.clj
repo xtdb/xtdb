@@ -47,21 +47,21 @@
 
 ;; tag::start-cluster-node[]
 (defn start-cluster [kafka-port]
-  (crux/start-node {:crux.node/topology '[crux.kafka/topology]
+  (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
                     :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)}))
 ;; end::start-cluster-node[]
 
 ;; tag::start-standalone-with-rocks[]
 (defn start-rocks-node [storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology]
-                    :crux.node/kv-store 'crux.kv.rocksdb/kv
+  (crux/start-node {:crux.node/topology '[crux.standalone/topology
+                                          crux.kv.rocksdb/kv-store]
                     :crux.kv/db-dir (str (io/file storage-dir "db"))}))
 ;; end::start-standalone-with-rocks[]
 
 ;; tag::start-standalone-with-lmdb[]
 (defn start-lmdb-node [storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology]
-                    :crux.node/kv-store 'crux.kv.lmdb/kv
+  (crux/start-node {:crux.node/topology '[crux.standalone/topology
+                                          crux.kv.lmdb/kv-store]
                     :crux.kv/db-dir (str (io/file storage-dir "db"))}))
 ;; end::start-standalone-with-lmdb[]
 

@@ -133,3 +133,5 @@
          :args (merge lru/options
                       {::env-flags {:doc "LMDB Flags"
                                     :crux.config/type [any? identity]}})})
+
+(def kv-store {:crux.node/kv-store kv})

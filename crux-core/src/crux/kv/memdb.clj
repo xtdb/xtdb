@@ -118,3 +118,5 @@
                       {::persist-on-close? {:doc "Persist Mem Db on close"
                                             :default false
                                             :crux.config/type :crux.config/boolean}})})
+
+(def kv-store {:crux.node/kv-store kv})

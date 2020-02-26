@@ -320,3 +320,5 @@
                                      :crux.config/type :crux.config/string}
                        ::disable-wal? {:doc "Disable Write Ahead Log"
                                        :crux.config/type :crux.config/boolean}})})
+
+(def kv-store {:crux.node/kv-store kv})

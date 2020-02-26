@@ -149,7 +149,7 @@
                        (set (map second (docs-on-topic "compacted-doc-topic")))))
 
             (t/testing "new node can pick-up"
-              (fapi/with-opts {:crux.node/topology ['crux.kafka/topology]
+              (fapi/with-opts {:crux.node/topology ['crux.kafka/topology 'crux.kv.memdb/kv-store]
                                :crux.kafka/doc-topic "compacted-doc-topic"
                                :crux.kafka/group-id "different-test-group"}
                 (fn []

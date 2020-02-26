@@ -277,3 +277,5 @@
              (assoc ::env-flags {:doc "LMDB Flags"
                                  :crux.config/type :crux.config/nat-int})
              (update ::kv/db-dir assoc :required? true, :default "data"))})
+
+(def kv-store {:crux.node/kv-store kv})

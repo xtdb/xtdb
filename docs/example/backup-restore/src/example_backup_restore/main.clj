@@ -3,8 +3,7 @@
             [crux.backup :as backup]))
 
 (def crux-options
-  {:crux.node/topology 'crux.standalone/topology
-   :crux.node/kv-store 'crux.kv.rocksdb/kv
+  {:crux.node/topology '[crux.standalone/topology crux.kv.rocksdb/kv-store]
    :crux.kv/db-dir "data/db-dir-1"
    :backup-dir "checkpoint"})
 
