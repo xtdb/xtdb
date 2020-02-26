@@ -146,6 +146,16 @@ jobs:
           deps-edn: "deps.edn"
           artifact-name: "crux-standalone"
 
+  create-javadocs:
+    docker:
+      - image: circleci/clojure:lein-2.9.1
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run: javadoc -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
+      - run: javadoc -d crux-alpha-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api.alpha
 workflows:
   version: 2.1
   commit:
@@ -175,6 +185,14 @@ workflows:
            branches:
              ignore: /.*/
       - create-artifacts:
+          requires:
+            - hold
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - create-javadocs:
           requires:
             - hold
           filters:
