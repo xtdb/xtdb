@@ -75,22 +75,6 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
-  LoadBalancerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - TargetGroupArn:
-            Fn::ImportValue:
-              !Join [':', [!Ref 'EcsStackName', 'SoakTargetGroup']]
-          Type: 'forward'
-      Conditions:
-        - Field: path-pattern
-          Values: ['*']
-      ListenerArn:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'EcsStackName', 'PublicLoadBalancerListener']]
-      Priority: 1
-
   Service:
     Type: AWS::ECS::Service
     Properties:
