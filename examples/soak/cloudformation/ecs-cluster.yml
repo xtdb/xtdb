@@ -19,11 +19,6 @@ Resources:
         - Name: 'containerInsights'
           Value: 'enabled'
 
-  ECRRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: 'crux-soak'
-
   FargateContainerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
