@@ -149,12 +149,13 @@
                       {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
                        :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                        :crux.kafka.embedded/kafka-port 9092})]
-      (doseq [[k v] (nodes data-dir)]
-        (with-open [node (api/start-node v)]
-          (log/infof "Running bench on %s node." k)
-          (post-to-slack (str "running on node: " k))
-          (with-dimensions {:crux-node-type k}
-            (f node)))))))
+      (vec
+        (for [[k v] (nodes data-dir)]
+          (with-open [node (api/start-node v)]
+            (log/infof "Running bench on %s node." k)
+            (post-to-slack (str "running on node: " k))
+            (with-dimensions {:crux-node-type k}
+              [k (f node)])))))))
 
 (defmacro with-nodes [[node-binding] & body]
   `(with-nodes* (fn [~node-binding] ~@body)))
