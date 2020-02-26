@@ -154,8 +154,8 @@
           (with-open [node (api/start-node v)]
             (log/infof "Running bench on %s node." k)
             (post-to-slack (str "running on node: " k))
-            (with-dimensions {:crux-node-type k}
-              [k (f node)])))))))
+            [k (with-dimensions {:crux-node-type k}
+                 (f node))]))))))
 
 (defmacro with-nodes [[node-binding] & body]
   `(with-nodes* (fn [~node-binding] ~@body)))
@@ -212,11 +212,11 @@
   (try
     (let [email (-> (SendEmailRequest.)
                     (.withDestination (-> (Destination.)
-                                          (.withToAddresses ["crux-bench@juxt.pro"])))
+                                          (.withToAddresses [(string/replace "crux-bench at juxt.pro" " at " "@")])))
                     (.withMessage
                      (-> (Message.)
                          (.withBody (-> (Body.)
-                                        (.withText (-> (Content.)
+                                        (.withHtml (-> (Content.)
                                                        (.withCharset "UTF-8")
                                                        (.withData message)))))
                          (.withSubject (-> (Content.)

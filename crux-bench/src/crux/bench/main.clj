@@ -14,18 +14,16 @@
   (->> (bench/with-nodes [node]
          (let [devices-results (devices/run-devices-bench node)
                weather-results (weather/run-weather-bench node)
-               watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})
-               result-messages [(bench/results->slack-message devices-results :ts-devices)
-                                (bench/results->slack-message weather-results :ts-weather)
-                                (bench/results->slack-message
-                                  [(first watdiv-results) (watdiv-crux/->query-result (rest watdiv-results))]
-                                  :watdiv-crux)]]))
+               watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
+           [devices-results
+            weather-results
+            [(first watdiv-results) (watdiv-crux/->query-result (rest watdiv-results))]]))
 
        (reduce (fn [acc [node-type result]]
-                 (str (format "<h2>%s</h2>\n" node-type)
-                      (string/join "\n" result)))
-               "<h1>Crux bench results</h1>\n")
-
+                 (str acc
+                      (format "<h2>%s</h2>" node-type)
+                      (string/join (map (fn [r] (string/join (map #(format "<p>%s</p>" %) r))) result))))
+               "<h1>Crux bench results</h1><br>") 
        (bench/send-email-via-ses))
 
   (shutdown-agents))
