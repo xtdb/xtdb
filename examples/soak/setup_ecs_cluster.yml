@@ -100,11 +100,13 @@ Outputs:
     Value: !Ref 'SoakTargetGroup'
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTargetGroup' ] ]
+
   PublicLoadBalancerListener:
     Description: The Public Load Balancer Listener
     Value: !Ref 'PublicLoadBalancerListener'
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicLoadBalancerListener' ] ]
+
   FargateContainerSecurityGroup:
     Description: The Security Group for the Fargate Containers
     Value: !Ref 'FargateContainerSecurityGroup'
