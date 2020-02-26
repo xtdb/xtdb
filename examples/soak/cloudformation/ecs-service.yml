@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VpcStackName:
+    Type: String
+    Default: soak-vpc
+  EcsClusterStackName:
+    Type: String
+    Default: soak-ecs-cluster
+  LbStackName:
+    Type: String
+    Default: soak-lb
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'crux-soak'
+      RetentionInDays: 365
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+
+                # Allow the ECS tasks to upload logs to CloudWatch
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: '*'
+
+  SoakTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - LogGroup
+    Properties:
+      Cpu: '0.5 vCPU'
+      Memory: '2GB'
+      Family: 'crux-soak'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'crux-soak'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
+          PortMappings:
+            - ContainerPort: 8080
+          Command:
+            - "-m"
+            - "crux.soak.main"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-2'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: 'crux-soak'
+      Cluster: 'crux-soak'
+      LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 60
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: 0
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: 'ENABLED'
+          SecurityGroups:
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'EcsClusterStackName', 'FargateContainerSecurityGroup']]
+          Subnets:
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
+      TaskDefinition: !Ref 'SoakTaskDef'
+      LoadBalancers:
+        - ContainerName: 'crux-soak'
+          ContainerPort: 8080
+          TargetGroupArn:
+            Fn::ImportValue: !Join [':', [!Ref 'LbStackName', 'SoakTargetGroup']]
