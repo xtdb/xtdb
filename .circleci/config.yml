@@ -4,6 +4,7 @@
 #
 orbs:
   aws-ecr: circleci/aws-ecr@6.7.0
+  aws-s3: circleci/aws-s3@1.0.15
   crux:
     orbs:
       go: circleci/go@0.2.0
@@ -155,7 +156,17 @@ jobs:
       - attach_workspace:
           at: ~/
       - run: javadoc -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
+      - aws-s3/sync:
+          from: crux-javadoc
+          overwrite: true
+          to: 's3://crux-doc/crux-javadoc'
       - run: javadoc -d crux-alpha-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api.alpha
+      - aws-s3/sync:
+          from: crux-alpha-javadoc
+          overwrite: true
+          to: 's3://crux-doc/crux-alpha-javadoc'
+
+
 workflows:
   version: 2.1
   commit:
