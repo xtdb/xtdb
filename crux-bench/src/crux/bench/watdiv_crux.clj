@@ -75,12 +75,7 @@
                                (bench/run-bench (format "query-%d" idx)
                                                 {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))}))))))))))]
 
-    (-> [(first watdiv-results)
-         (->query-result (rest watdiv-results))]
-        (bench/results->slack-message :watdiv-crux)
-        (bench/post-to-slack))
-
-    watdiv-results))
+    [(first watdiv-results) (->query-result (rest watdiv-results))]))
 
 (comment
   (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]

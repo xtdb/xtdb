@@ -246,12 +246,10 @@
       {:successful? successful?})))
 
 (defn run-devices-bench [node]
-  (-> (bench/with-bench-ns :ts-devices
-        (bench/with-crux-dimensions
-          (submit-ts-devices-data node)
+  (bench/with-bench-ns :ts-devices
+    (bench/with-crux-dimensions
+      (submit-ts-devices-data node)
 
-          (test-battery-readings node)
-          (test-busiest-devices node)
-          (test-min-max-battery-level-per-hour node)))
-
-      (doto (-> (bench/results->slack-message :ts-devices) bench/post-to-slack))))
+      (test-battery-readings node)
+      (test-busiest-devices node)
+      (test-min-max-battery-level-per-hour node))))

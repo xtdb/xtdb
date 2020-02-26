@@ -12,18 +12,23 @@
                                bench/crux-version bench/commit-hash))
 
   (->> (bench/with-nodes [node]
-         (let [devices-results (devices/run-devices-bench node)
-               weather-results (weather/run-weather-bench node)
-               watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
+         (let [devices-results (doto (devices/run-devices-bench node)
+                                 (bench/post-slack-results :ts-devices))
+
+               weather-results (doto (weather/run-weather-bench node)
+                                 (bench/post-slack-results :ts-weather))
+
+               watdiv-results (doto (watdiv-crux/run-watdiv-bench node {:test-count 100})
+                                (bench/post-slack-results :watdiv-crux))]
            [devices-results
             weather-results
-            [(first watdiv-results) (watdiv-crux/->query-result (rest watdiv-results))]]))
+            watdiv-results]))
 
        (reduce (fn [acc [node-type result]]
                  (str acc
                       (format "<h2>%s</h2>" node-type)
                       (string/join (map (fn [r] (string/join (map #(format "<p>%s</p>" %) r))) result))))
-               "<h1>Crux bench results</h1><br>") 
+               "<h1>Crux bench results</h1><br>")
        (bench/send-email-via-ses))
 
   (shutdown-agents))

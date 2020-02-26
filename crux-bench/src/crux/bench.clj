@@ -90,6 +90,9 @@
                (map result->slack-message)
                (string/join "\n"))))
 
+(defn post-slack-results [results test-name]
+  (post-to-slack (result->slack-message results test-name)))
+
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
