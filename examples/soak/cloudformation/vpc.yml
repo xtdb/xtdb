@@ -7,6 +7,9 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
       CidrBlock: '10.0.0.0/16'
+      Tags:
+        - Key: Name
+          Value: crux-soak
 
   PublicSubnetOne:
     Type: AWS::EC2::Subnet
@@ -15,6 +18,9 @@ Resources:
       VpcId: !Ref 'VPC'
       CidrBlock: '10.0.0.0/24'
       MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: crux-soak-a1
 
   PublicSubnetTwo:
     Type: AWS::EC2::Subnet
@@ -23,6 +29,9 @@ Resources:
       VpcId: !Ref 'VPC'
       CidrBlock: '10.0.1.0/24'
       MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: crux-soak-b1
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -37,6 +46,9 @@ Resources:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Name
+          Value: crux-soak-public
 
   PublicRoute:
     Type: AWS::EC2::Route

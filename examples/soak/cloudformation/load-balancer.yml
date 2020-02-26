@@ -28,6 +28,9 @@ Resources:
         - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
         - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
       SecurityGroups: [!Ref 'LoadBalancerSG']
+      Tags:
+        - Key: Name
+          Value: soak-lb
 
   LoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
