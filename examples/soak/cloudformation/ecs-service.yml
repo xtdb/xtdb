@@ -1,17 +1,15 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: This stack starts a service which uses load balanced fargate tasks.
 
 Parameters:
   VpcStackName:
     Type: String
     Default: soak-vpc
-    Description: The name of the parent Fargate networking stack that you created. Necessary
-                 to locate and reference resources created by that stack.
-  EcsStackName:
+  EcsClusterStackName:
     Type: String
-    Default: soak-ecs
-    Description: The name of the parent Fargate networking stack that you created. Necessary
-                 to locate and reference resources created by that stack.
+    Default: soak-ecs-cluster
+  LbStackName:
+    Type: String
+    Default: soak-lb
 
 Resources:
   LogGroup:
@@ -91,7 +89,7 @@ Resources:
           AssignPublicIp: 'ENABLED'
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'EcsStackName', 'FargateContainerSecurityGroup']]
+                !Join [':', [!Ref 'EcsClusterStackName', 'FargateContainerSecurityGroup']]
           Subnets:
             - Fn::ImportValue:
                 !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
@@ -102,5 +100,4 @@ Resources:
         - ContainerName: 'crux-soak'
           ContainerPort: 8080
           TargetGroupArn:
-            Fn::ImportValue:
-              !Join [':', [!Ref 'EcsStackName', 'SoakTargetGroup']]
+            Fn::ImportValue: !Join [':', [!Ref 'LbStackName', 'SoakTargetGroup']]

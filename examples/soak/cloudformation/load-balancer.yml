@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VpcStackName:
+    Type: String
+    Default: soak-vpc
+
+Resources:
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the facing load balancer
+      VpcId:
+         Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+      SecurityGroupIngress:
+        # Allow access to ALB from anywhere on the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets:
+        - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
+        - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
+      SecurityGroups: [!Ref 'LoadBalancerSG']
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref 'SoakTargetGroup'
+          Type: 'forward'
+      LoadBalancerArn: !Ref 'LoadBalancer'
+      Port: 80
+      Protocol: HTTP
+
+  SoakTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: 'crux-soak'
+      Port: 8080
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+
+Outputs:
+  SoakTargetGroup:
+    Value: !Ref 'SoakTargetGroup'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SoakTargetGroup' ] ]
+  LoadBalancerSG:
+    Value: !Ref 'LoadBalancerSG'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancerSG' ] ]
