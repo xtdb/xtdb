@@ -54,6 +54,9 @@ Resources:
       UnhealthyThresholdCount: 2
       VpcId:
         Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '10'
 
 Outputs:
   SoakTargetGroup:
