@@ -2,7 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.fixtures.api :as apif]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.codec :as c])
   (:import java.io.Closeable))
 
 (defrecord InMemDocumentStore [docs]
@@ -19,7 +20,7 @@
   (submit-docs [this id-and-docs]
     (doseq [[content-hash doc] id-and-docs]
       (log/debug "Storing" (cio/pr-edn-str content-hash))
-      (swap! docs assoc content-hash doc))))
+      (swap! docs assoc (c/new-id content-hash) doc))))
 
 (def document-store
   {:start-fn (fn [_ _] (->InMemDocumentStore (atom {})))})
