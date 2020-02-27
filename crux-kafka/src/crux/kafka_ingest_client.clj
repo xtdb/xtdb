@@ -16,10 +16,10 @@
   (submitTx [this tx-ops]
     @(.submitTxAsync this tx-ops))
 
-  (openTxLog ^crux.api.ITxLog [_ from-tx-id with-ops?]
+  (openTxLog ^crux.api.ITxLog [_ after-tx-id with-ops?]
     (when with-ops?
       (throw (IllegalArgumentException. "with-ops? not supported")))
-    (db/open-tx-log tx-log from-tx-id))
+    (db/open-tx-log tx-log after-tx-id))
 
   Closeable
   (close [_]

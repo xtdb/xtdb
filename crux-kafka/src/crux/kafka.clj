@@ -145,8 +145,8 @@
            {::tx/tx-id (.offset record-meta)
             ::tx/tx-time (Date. (.timestamp record-meta))})))))
 
-  (open-tx-log [this from-tx-id]
-    (let [tp-offsets {(TopicPartition. tx-topic 0) from-tx-id}
+  (open-tx-log [this after-tx-id]
+    (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
           consumer (doto (create-consumer kafka-config)
                      (.assign (keys tp-offsets))
                      (seek-consumer tp-offsets))]

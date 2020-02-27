@@ -22,10 +22,10 @@ public interface ICruxIngestAPI extends Closeable {
      * under the :crux.api/tx-ops key to be piped into (submit-tx tx-ops) of another
      * Crux instance.
      *
-     * @param fromTxId         optional transaction id to start from.
+     * @param afterTxId         optional transaction id to start after.
      * @param withOps          should the operations with documents be included?
      * @return                 a lazy sequence of the transaction log.
      */
 
-    public ITxLog openTxLog (Long fromTxId, boolean withOps);
+    public ITxLog openTxLog(Long afterTxId, boolean withOps);
 }

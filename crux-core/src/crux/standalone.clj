@@ -52,7 +52,7 @@
     (when-let [tx-id (idx/read-meta event-log-kv-store ::latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
 
-  (open-tx-log [this from-tx-id]
+  (open-tx-log [this after-tx-id]
     (let [snapshot (kv/new-snapshot event-log-kv-store)
           iterator (kv/new-iterator snapshot)]
       (letfn [(tx-log [k]
@@ -62,8 +62,8 @@
                             :crux.tx.event/tx-events (os/<-nippy-buffer (kv/value iterator)))
                           (tx-log (kv/next iterator))))))]
 
-        (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or from-tx-id 0)}))]
-          (->> (when k (tx-log (if from-tx-id (kv/next iterator) k)))
+        (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
+          (->> (when k (tx-log (if after-tx-id (kv/next iterator) k)))
                (db/->closeable-tx-log-iterator (fn []
                                                  (cio/try-close iterator)
                                                  (cio/try-close snapshot))))))))

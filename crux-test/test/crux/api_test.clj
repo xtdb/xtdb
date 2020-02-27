@@ -186,9 +186,8 @@
         (t/testing "updated"
           (let [valid-time (Date.)
                 submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
-            (.awaitTx *api* submitted-tx nil)
-            (t/is (true? (.hasTxCommitted *api* submitted-tx)))
-            (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil))))
+            (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
+            (t/is (true? (.hasTxCommitted *api* submitted-tx))))
 
           (let [stats (.attributeStats *api*)]
             (t/is (= 2 (:name stats)))))
@@ -257,7 +256,7 @@
             (t/is (realized? result)))))
 
       (t/testing "from tx id"
-        (with-open [tx-log-iterator (api/open-tx-log *api* (inc (::tx/tx-id tx1)) false)]
+        (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
           (t/is (empty? (iterator-seq tx-log-iterator))))))
 
     (t/testing "tx log skips failed transactions"

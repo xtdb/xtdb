@@ -120,10 +120,10 @@
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
-  (openTxLog ^ITxLog [this from-tx-id with-ops?]
+  (openTxLog ^ITxLog [this after-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-log-iterator (db/open-tx-log tx-log from-tx-id)
+      (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
             snapshot (kv/new-snapshot kv-store)
             tx-log (-> (iterator-seq tx-log-iterator)
                        (->> (filter

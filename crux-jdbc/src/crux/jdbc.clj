@@ -106,11 +106,11 @@
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 
-  (open-tx-log [this from-tx-id]
+  (open-tx-log [this after-tx-id]
     (let [conn (jdbc/get-connection ds)
           stmt (jdbc/prepare conn
-                             ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
-                              (or from-tx-id 0)])
+                             ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
+                              (or after-tx-id 0)])
           rs (.executeQuery stmt)]
       (db/->closeable-tx-log-iterator
        #(run! cio/try-close [rs stmt conn])
