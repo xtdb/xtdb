@@ -21,6 +21,3 @@
 (defmethod j/->date :sqlite [dbtype d]
   (assert d)
   (.parse ^SimpleDateFormat (.get sqlite-df-tl) ^String d))
-
-(defmethod j/->pool-options :sqlite [_ options]
-  (assoc options :maximumPoolSize 1))
