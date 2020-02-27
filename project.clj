@@ -1,11 +1,11 @@
 (def modules
   ["crux-core"
    "crux-rdf"
+   "crux-metrics"
    "crux-rocksdb" "crux-lmdb"
    "crux-jdbc"
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
-   "crux-metrics"
    "crux-test"
    "crux-cli"
    "crux-bench"])
