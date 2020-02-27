@@ -4,6 +4,7 @@
 #
 orbs:
   aws-ecr: circleci/aws-ecr@6.7.0
+  aws-s3: circleci/aws-s3@1.0.15
   crux:
     orbs:
       go: circleci/go@0.2.0
@@ -146,6 +147,30 @@ jobs:
           deps-edn: "deps.edn"
           artifact-name: "crux-standalone"
 
+  create-javadocs:
+    docker:
+      - image: circleci/clojure:lein-2.9.1
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run: javadoc -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
+      - aws-s3/sync:
+          arguments: |
+            --acl public-read
+          from: crux-javadoc
+          overwrite: true
+          to: 's3://crux-doc/crux-javadoc/${CIRCLE_TAG}'
+      - run: javadoc -d crux-alpha-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api.alpha
+      - aws-s3/sync:
+          arguments: |
+            --acl public-read
+          from: crux-alpha-javadoc
+          overwrite: true
+          to: 's3://crux-doc/crux-alpha-javadoc/${CIRCLE_TAG}'
+
+
 workflows:
   version: 2.1
   commit:
@@ -175,6 +200,14 @@ workflows:
            branches:
              ignore: /.*/
       - create-artifacts:
+          requires:
+            - hold
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - create-javadocs:
           requires:
             - hold
           filters:
