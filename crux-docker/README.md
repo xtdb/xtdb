@@ -42,9 +42,9 @@ Doing so introduces a dependency to `crux-rocksdb`, which can be added to the do
 
 ```clojure
 {:deps
- {juxt/crux-http-server {:mvn/version "20.01-1.6.2-alpha"}
-  juxt/crux-core {:mvn/version "20.01-1.6.2-alpha"
-  juxt/crux-rocksdb {:mvn/version "20.01-1.6.2-alpha"}}
+ {juxt/crux-http-server {:mvn/version "20.02-1.7.0-alpha"}
+  juxt/crux-core {:mvn/version "20.02-1.7.0-alpha"
+  juxt/crux-rocksdb {:mvn/version "20.02-1.7.0-alpha"}}
  ...}}
 ```
 
