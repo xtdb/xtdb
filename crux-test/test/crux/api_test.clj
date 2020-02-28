@@ -12,7 +12,6 @@
             [crux.rdf :as rdf]
             [crux.api :as api]
             [crux.fixtures.api :as fapi]
-            [crux.fixtures.doc-store :as ds]
             [crux.db :as db]
             [crux.query :as q]
             [crux.tx :as tx]
@@ -40,7 +39,7 @@
                        fh/with-http-client])
      f))
   (t/testing "Kafka and Remote Doc Store"
-    ((t/join-fixtures [ds/with-remote-doc-store-opts fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
+    ((t/join-fixtures [fs/with-standalone-doc-store fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
