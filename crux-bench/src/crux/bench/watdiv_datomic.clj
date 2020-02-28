@@ -300,9 +300,7 @@
          (vec))))
 
 (defn with-datomic [f]
-  (let [uri (str "datomic:free://"
-                 (or (System/getenv "DATOMIC_TRANSACTOR_URI") "datomic")
-                 ":4334/bench?password=password")]
+  (let [uri (str "datomic:mem://bench")]
     (try
         (d/delete-database uri)
         (d/create-database uri)
@@ -354,4 +352,5 @@
                         (->> (run-watdiv-bench {:test-count 100})
                              (filter :query-idx)
                              (sort-by :query-idx)))
-    (bench/save-to-s3 {:database "datomic" :version "0.9.5697"} output-file)))
+    (bench/save-to-s3 {:database "datomic" :version "0.9.5697"} output-file))
+  (shutdown-agents))
