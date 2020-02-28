@@ -12,20 +12,16 @@
                                bench/crux-version bench/commit-hash))
 
   (->> (bench/with-nodes [node]
-         (let [devices-results (doto (devices/run-devices-bench node)
-                                 (bench/post-slack-results :ts-devices))
+         [(doto (devices/run-devices-bench node)
+            (bench/post-slack-results :ts-devices))
 
-               weather-results (doto (weather/run-weather-bench node)
-                                 (bench/post-slack-results :ts-weather))
+          (doto (weather/run-weather-bench node)
+            (bench/post-slack-results :ts-weather))
 
-               raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})
-
-               watdiv-results (doto [(first raw-watdiv-results)
-                                     (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
-                                (bench/post-slack-results :watdiv-crux))]
-           [devices-results
-            weather-results
-            watdiv-results]))
+          (let [raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
+            (doto [(first raw-watdiv-results)
+                   (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
+              (bench/post-slack-results :watdiv-crux)))])
 
        (reduce (fn [acc [node-type result]]
                  (str acc
