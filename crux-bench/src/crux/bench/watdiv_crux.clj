@@ -39,7 +39,7 @@
                   :db-result-count result-count}}))
     (keys db-query-results))))
 
-(defn ->query-result [watdiv-query-results]
+(defn summarise-query-results [watdiv-query-results]
   (into {:bench-type "queries"
          :time-taken-ms (->> (rest watdiv-query-results) (map :time-taken-ms) (reduce +))}
         (map
@@ -55,27 +55,23 @@
                :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (mapv :query-idx))
 
                :crux-time-taken (->> crux-correct (map :time-taken-ms) (reduce +) (Duration/ofMillis) (str))
-               :db-time-taken (->> crux-correct (map :db-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}}))
-         (keys db-query-results))))
-
+               :db-time-taken (->> crux-correct (map :db-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}})))
+        (keys db-query-results)))
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]
-  (let [watdiv-results
-        (bench/with-bench-ns :watdiv-crux
-          (bench/with-crux-dimensions
-            (ingest-crux node)
+  (bench/with-bench-ns :watdiv-crux
+    (bench/with-crux-dimensions
+      (ingest-crux node)
 
-            (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
-              (fn [queries]
-                (-> queries
-                    (cond->> test-count (take test-count))
-                    (->> (bench/with-thread-pool opts
-                           (fn [{:keys [idx q]}]
-                             (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
-                               (bench/run-bench (format "query-%d" idx)
-                                                {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))}))))))))))]
-
-    [(first watdiv-results) (->query-result (rest watdiv-results))]))
+      (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
+        (fn [queries]
+          (-> queries
+              (cond->> test-count (take test-count))
+              (->> (bench/with-thread-pool opts
+                     (fn [{:keys [idx q]}]
+                       (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
+                         (bench/run-bench (format "query-%d" idx)
+                            {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))})))))))))))
 
 (comment
   (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]

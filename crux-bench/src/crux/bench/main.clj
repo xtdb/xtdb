@@ -18,7 +18,10 @@
                weather-results (doto (weather/run-weather-bench node)
                                  (bench/post-slack-results :ts-weather))
 
-               watdiv-results (doto (watdiv-crux/run-watdiv-bench node {:test-count 100})
+               raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})
+
+               watdiv-results (doto [(first raw-watdiv-results)
+                                     (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
                                 (bench/post-slack-results :watdiv-crux))]
            [devices-results
             weather-results
