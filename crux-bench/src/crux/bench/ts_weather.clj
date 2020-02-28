@@ -341,11 +341,9 @@
       {:successful? successful?})))
 
 (defn run-weather-bench [node]
-  (-> (bench/with-bench-ns :ts-weather
-        (bench/with-crux-dimensions
-          (submit-ts-weather-data node)
-          (test-last-10-readings node)
-          (test-last-10-readings-from-outside-locations node)
-          (test-hourly-average-min-max-temperatures-for-field-locations node)))
-
-      (doto (-> (bench/results->slack-message :ts-weather) bench/post-to-slack))))
+  (bench/with-bench-ns :ts-weather
+    (bench/with-crux-dimensions
+      (submit-ts-weather-data node)
+      (test-last-10-readings node)
+      (test-last-10-readings-from-outside-locations node)
+      (test-hourly-average-min-max-temperatures-for-field-locations node))))

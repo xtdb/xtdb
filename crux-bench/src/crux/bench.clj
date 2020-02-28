@@ -90,6 +90,9 @@
                (map result->slack-message)
                (string/join "\n"))))
 
+(defn post-slack-results [results test-name]
+  (post-to-slack (result->slack-message results test-name)))
+
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
@@ -149,12 +152,13 @@
                       {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
                        :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                        :crux.kafka.embedded/kafka-port 9092})]
-      (doseq [[k v] (nodes data-dir)]
-        (with-open [node (api/start-node v)]
-          (log/infof "Running bench on %s node." k)
-          (post-to-slack (str "running on node: " k))
-          (with-dimensions {:crux-node-type k}
-            (f node)))))))
+      (vec
+        (for [[k v] (nodes data-dir)]
+          (with-open [node (api/start-node v)]
+            (with-dimensions {:crux-node-type k}
+              (log/infof "Running bench on %s node." k)
+              (post-to-slack (str "running on node: " k))
+              [k (f node)])))))))
 
 (defmacro with-nodes [[node-binding] & body]
   `(with-nodes* (fn [~node-binding] ~@body)))
@@ -211,11 +215,11 @@
   (try
     (let [email (-> (SendEmailRequest.)
                     (.withDestination (-> (Destination.)
-                                          (.withToAddresses ["crux-bench@juxt.pro"])))
+                                          (.withToAddresses [(string/replace "crux-bench at juxt.pro" " at " "@")])))
                     (.withMessage
                      (-> (Message.)
                          (.withBody (-> (Body.)
-                                        (.withText (-> (Content.)
+                                        (.withHtml (-> (Content.)
                                                        (.withCharset "UTF-8")
                                                        (.withData message)))))
                          (.withSubject (-> (Content.)
