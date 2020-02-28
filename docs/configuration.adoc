@@ -365,11 +365,21 @@ NOTE: The remote client requires valid and transaction time to be specified for 
 [#config-docker]
 == Docker
 
-If you wish to user Crux with Docker (no JVM/JDK/Clojure install required!) we have a few separate images:
+If you wish to use Crux with Docker (no JVM/JDK/Clojure install required!) we have the following:
 
-* https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[*Standalone
-web service example*]: This example web application has an embedded Crux node & HTTP server, showcasing some of the features of *Bitemporality*, *backup/restore* functionality within Crux and allowing experimentation with the <<#rest,*REST API*>>.
-* https://github.com/juxt/crux/tree/master/crux-docker[*Crux HTTP Node*]: An image of a Crux node & HTTP server, useful if you wish to a *freestanding Crux node* accessible over HTTP, only having to use Docker. Allows you to customize the configuration of the node & logging, and optionally opens an _nREPL/pREPL_ port.
+* https://hub.docker.com/r/juxt/crux-standalone[*Crux HTTP Node*]: An image of a standalone Crux node (using a in memory `kv-store` by default) & HTTP server, useful if you wish to a *freestanding Crux node* accessible over HTTP, only having to use Docker.
+
+== Artifacts
+
+Alongside the various images available on https://hub.docker.com/u/juxt[*Dockerhub*], there are a number of artifacts available for getting started quickly with Crux. These can be found on the latest https://github.com/juxt/crux/releases[release] of Crux. Currently, these consist of a number of common configuration *uberjars* and a custom artifact builder.
+
+To create your own custom artifacts for crux, do the following:
+
+* Download and extract the `crux-builder.tar.gz` from the latest release
+* You can build an uberjar using either Clojure's deps.edn or Maven (whichever you're more comfortable with)
+** For Clojure, you can add further Crux dependencies in the deps.edn file, set the node config in crux.edn, and run `build-uberjar.sh`
+** For Maven, it's the same, but dependencies go in pom.xml
+* Additionally, you can build a Docker image using the `build-docker.sh` script in the **docker** directory.
 
 [#config-backup]
 == Backup and Restore
