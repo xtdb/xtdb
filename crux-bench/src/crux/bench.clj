@@ -91,7 +91,7 @@
                (string/join "\n"))))
 
 (defn post-slack-results [results test-name]
-  (post-to-slack (result->slack-message results test-name)))
+  (post-to-slack (results->slack-message results test-name)))
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
