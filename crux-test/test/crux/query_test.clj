@@ -2802,3 +2802,18 @@
       (with-open [snapshot (api/new-snapshot db)]
         (t/is (= [[20] [25] [30]]
                  (sort (api/q db snapshot '{:find [a] :where [[_ :age a]]}))))))))
+
+(t/deftest test-unsorted-args-697
+  (f/transact! *api* [{:crux.db/id :foo-some-bar-nil, :bar nil, :foo true}
+                      {:crux.db/id :foo-nil-bar-some, :bar true, :foo nil}
+                      {:crux.db/id :foo-some-bar-some, :foo true, :bar true}])
+
+  (t/is (= #{[:foo-some-bar-nil] [:foo-nil-bar-some] [:foo-some-bar-some]}
+           (api/q (api/db *api*)
+                  '{:find [e]
+                    :where [[e :foo f]
+                            [e :bar g]]
+
+                    :args [{f true, g true}
+                           {f true, g nil}
+                           {f nil, g true}]}))))

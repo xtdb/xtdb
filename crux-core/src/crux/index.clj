@@ -970,7 +970,7 @@
 
 (defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
   (-> (new-sorted-virtual-index
-       (for [prefix (partition-by first tuples)
+       (for [prefix (vals (group-by first tuples))
              :let [value (ffirst prefix)]]
          [(c/->value-buffer value)
           (RelationNestedIndexState.
