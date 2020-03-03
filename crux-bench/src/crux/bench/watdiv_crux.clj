@@ -26,7 +26,8 @@
 (def db-query-results
   {:rdf4j (some->
             (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200214-174740Z.edn") parse-results)
-   :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200219-114016Z.edn") parse-results)})
+   :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200219-114016Z.edn") parse-results)
+   :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200303-155352Z.edn") parse-results)})
 
 (defn get-db-results-at-idx [idx]
   (into
