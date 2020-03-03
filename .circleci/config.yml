@@ -19,14 +19,9 @@ orbs:
           artifact-name:
             type: string
         steps:
-          - go/install
           - docker/install-docker
           - setup_remote_docker:
               docker_layer_caching: true
-          - run:
-              command: |
-                go get -u github.com/tcnksm/ghr
-                echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
 
           - run:
               command: |
@@ -35,7 +30,6 @@ orbs:
                 DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
                 cd crux-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
-                ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" <<parameters.artifact-name>>.jar
 
           - store_artifacts:
               path: "~/crux/crux-build/crux-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
@@ -49,16 +43,10 @@ orbs:
                 docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
       deploy-tar:
         steps:
-          - go/install
-          - run:
-              command: |
-                go get -u github.com/tcnksm/ghr
-                echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
           - run:
               command: |
                 cd crux-build
                 ./build-tar.sh
-                ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" "${CIRCLE_TAG}" crux-builder.tar.gz
           - store_artifacts:
               path: ~/crux/crux-build/crux-builder.tar.gz
               destination: crux-builder.tar.gz
