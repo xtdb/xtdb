@@ -2817,3 +2817,14 @@
                     :args [{f true, g true}
                            {f true, g nil}
                            {f nil, g true}]}))))
+
+(t/deftest test-binds-args-before-entities
+  (t/is (= ['m 'e]
+           (->> (q/query-plan-for {:find '[e]
+                                   :where '[[e :foo/type "type"]
+                                            [e :foo/id m]]
+                                   :args [{'m 1}]}
+
+                                  {})
+                :vars-in-join-order
+                (filter #{'m 'e})))))

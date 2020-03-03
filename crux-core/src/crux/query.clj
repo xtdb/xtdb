@@ -310,13 +310,14 @@
                                      (if (literal? v)
                                        (get literal->var v)
                                        e))
+                                   arg-vars
                                    (for [{:keys [e v]} literal-clauses]
                                      (if (literal? v)
                                        e
                                        v)))
         self-join-clauses (filter (comp :self-join? meta) triple-clauses)
         self-join-vars (map :v self-join-clauses)
-        join-order (loop [join-order (concat literal-join-order arg-vars self-join-vars)
+        join-order (loop [join-order (concat literal-join-order self-join-vars)
                           clauses (->> triple-clauses
                                        (remove (set self-join-clauses))
                                        (remove (set literal-clauses)))]
