@@ -304,11 +304,15 @@
     (try
         (d/delete-database uri)
         (d/create-database uri)
-        (with-open [conn ^Closeable (d/connect uri)]
-          @(d/transact conn datomic-watdiv-schema)
-          (f conn))
+        (let [conn (d/connect uri)]
+          (try
+            @(d/transact conn datomic-watdiv-schema)
+            (f conn)
+            (finally
+              (d/release conn))))
         (finally
-          (d/delete-database uri)))))
+          (d/delete-database uri)
+          (d/shutdown false)))))
 
 (defn load-rdf-into-datomic [conn]
   (bench/run-bench :ingest-datomic
@@ -353,4 +357,6 @@
                              (filter :query-idx)
                              (sort-by :query-idx)))
     (bench/save-to-s3 {:database "datomic" :version "0.9.5697"} output-file))
-  (shutdown-agents))
+  (shutdown-agents)
+  ;; TODO: Queries with timeouts don't close properly (currently), so this system exit is necessary. Post a fix, it should be removed.
+  (System/exit 0))
