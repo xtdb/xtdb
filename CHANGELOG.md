@@ -1,13 +1,8 @@
 # Changelog
 
-## 20.02-1.7.1-alpha-SNAPSHOT
-### Changes
+## 20.03-1.7.1-alpha
 
-### Breaking changes
-
-### Bug fixes
-
-### New Features
+See the [Github milestone](https://github.com/juxt/crux/milestone/5?closed=1) for the issues included in this release
 
 ## 20.02-1.7.0-alpha
 
