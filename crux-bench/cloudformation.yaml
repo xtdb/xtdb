@@ -133,8 +133,8 @@ Resources:
       - ECRRepository
       - LogGroup
     Properties:
-      Cpu: '2 vCPU'
-      Memory: '8GB'
+      Cpu: '4 vCPU'
+      Memory: '12GB'
       Family: 'crux-bench'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
@@ -144,7 +144,40 @@ Resources:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
+        - Name: 'zookeeper-container'
+          Cpu: 1024
+          Memory: 2048
+          Image: confluentinc/cp-zookeeper:5.3.1
+          Essential: true
+          Environment:
+            - Name: 'ZOOKEEPER_CLIENT_PORT'
+              Value: '2181'
+            - Name: 'ZOOKEEPER_TICK_TIME'
+              Value: '2000'
+          PortMappings:
+            - ContainerPort: 2181
+        - Name: 'broker-container'
+          Cpu: 1024
+          Memory: 2048
+          Image: confluentinc/cp-enterprise-kafka:5.3.1
+          DependsOn:
+            - Condition: 'START'
+              ContainerName: 'zookeeper-container'
+          Essential: true
+          Environment:
+            - Name: 'KAFKA_BROKER_ID'
+              Value: '1'
+            - Name: 'KAFKA_ZOOKEEPER_CONNECT'
+              Value: 'localhost:2181'
+            - Name: 'KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR'
+              Value: 1
+            - Name: 'KAFKA_ADVERTISED_LISTENERS'
+              Value: PLAINTEXT://localhost:9092
+          PortMappings:
+            - ContainerPort: 9092
         - Name: 'bench-container'
+          Cpu: 2048
+          Memory: 8146
           Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:master'
           Essential: true
           Secrets:
@@ -164,8 +197,8 @@ Resources:
       - ECRRepository
       - LogGroup
     Properties:
-      Cpu: '2 vCPU'
-      Memory: '8GB'
+      Cpu: '4 vCPU'
+      Memory: '12GB'
       Family: 'crux-bench-latest'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
@@ -175,8 +208,44 @@ Resources:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
+        - Name: 'zookeeper-container'
+          Cpu: 1024
+          Memory: 2048
+          Image: confluentinc/cp-zookeeper:5.3.1
+          Essential: true
+          Environment:
+            - Name: 'ZOOKEEPER_CLIENT_PORT'
+              Value: '2181'
+            - Name: 'ZOOKEEPER_TICK_TIME'
+              Value: '2000'
+          PortMappings:
+            - ContainerPort: 2181
+        - Name: 'broker-container'
+          Cpu: 1024
+          Memory: 2048
+          Image: confluentinc/cp-enterprise-kafka:5.3.1
+          DependsOn:
+            - Condition: 'START'
+              ContainerName: 'zookeeper-container'
+          Essential: true
+          Environment:
+            - Name: 'KAFKA_BROKER_ID'
+              Value: '1'
+            - Name: 'KAFKA_ZOOKEEPER_CONNECT'
+              Value: 'localhost:2181'
+            - Name: 'KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR'
+              Value: 1
+            - Name: 'KAFKA_ADVERTISED_LISTENERS'
+              Value: PLAINTEXT://localhost:9092
+          PortMappings:
+            - ContainerPort: 9092
         - Name: 'bench-container'
+          Cpu: 2048
+          Memory: 8146
           Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
+          DependsOn:
+            - Condition: 'START'
+              ContainerName: 'broker-container'
           Essential: true
           Secrets:
             - Name: "SLACK_URL"

@@ -127,6 +127,15 @@
       :crux.kafka/tx-topic "kafka-rocksdb-tx"
       :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
 
+   "embedded-kafka-rocksdb"
+   (fn [data-dir]
+     {:crux.node/topology '[crux.kafka/topology
+                            crux.metrics/with-cloudwatch
+                            crux.kv.rocksdb/kv-store]
+      :crux.kafka/bootstrap-servers "localhost:9091"
+      :crux.kafka/doc-topic "kafka-rocksdb-doc"
+      :crux.kafka/tx-topic "kafka-rocksdb-tx"
+      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
    #_"standalone-lmdb"
    #_(fn [data-dir]
        {:crux.node/topology '[crux.standalone/topology
@@ -151,7 +160,7 @@
     (with-open [emb (ek/start-embedded-kafka
                       {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
                        :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
-                       :crux.kafka.embedded/kafka-port 9092})]
+                       :crux.kafka.embedded/kafka-port 9091})]
       (vec
        (for [[node-type ->node] nodes]
          (with-open [node (api/start-node (->node data-dir))]
