@@ -5,18 +5,18 @@
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*] :as fapi]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.kafka :as fk :refer [*ingest-client*]]
+            [crux.fixtures.kafka :as fk]
             crux.jdbc
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.http-server :as fh]
-            [crux.fixtures.kafka :as kf]
             [crux.rdf :as rdf]
             [crux.api :as api]
             [crux.fixtures.api :as fapi]
-            [crux.fixtures.doc-store :as ds]
             [crux.db :as db]
             [crux.query :as q]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.fixtures :as f]
+            [clojure.java.io :as io])
   (:import crux.api.NodeOutOfSyncException
            java.util.Date
            java.time.Duration
@@ -26,23 +26,31 @@
 
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
-    ((t/join-fixtures [kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
+    ((t/join-fixtures [fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Local API StandaloneNode"
     ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "JDBC Node"
+  (t/testing "H2 Node"
     ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
+  (t/testing "SQLite Node"
+    ((t/join-fixtures [#(fj/with-jdbc-node :sqlite %) kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Remote API"
     ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
                        fapi/with-node
                        fh/with-http-client])
      f))
   (t/testing "Kafka and Remote Doc Store"
-    ((t/join-fixtures [ds/with-remote-doc-store-opts kf/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
+    ((t/join-fixtures [fs/with-standalone-doc-store fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f)))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
 
-(declare execute-sparql)
+(defn execute-sparql [^RepositoryConnection conn q]
+  (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
+    (set ((fn step []
+            (when (.hasNext tq)
+              (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
+                          (.next tq))
+                    (lazy-seq (step)))))))))
 
 (t/deftest test-content-hash-invalid
   (let [valid-time (Date.)
@@ -94,7 +102,6 @@
     (let [valid-time (Date.)
           {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
-      (.awaitTx *api* submitted-tx nil)
       (t/is (true? (.hasTxCommitted *api* submitted-tx)))
 
       (let [status-map (.status *api*)]
@@ -178,9 +185,8 @@
         (t/testing "updated"
           (let [valid-time (Date.)
                 submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
-            (.awaitTx *api* submitted-tx nil)
-            (t/is (true? (.hasTxCommitted *api* submitted-tx)))
-            (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil))))
+            (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
+            (t/is (true? (.hasTxCommitted *api* submitted-tx))))
 
           (let [stats (.attributeStats *api*)]
             (t/is (= 2 (:name stats)))))
@@ -249,7 +255,7 @@
             (t/is (realized? result)))))
 
       (t/testing "from tx id"
-        (with-open [tx-log-iterator (api/open-tx-log *api* (inc (::tx/tx-id tx1)) false)]
+        (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
           (t/is (empty? (iterator-seq tx-log-iterator))))))
 
     (t/testing "tx log skips failed transactions"
@@ -334,37 +340,6 @@
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
-
-(t/deftest test-ingest-client
-  (if (and (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
-           (instance? crux.kafka.KafkaDocumentStore (:document-store *api*)))
-    (kf/with-ingest-client
-      (fn []
-        (let [submitted-tx @(.submitTxAsync *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-          (.awaitTx *api* submitted-tx nil)
-          (t/is (true? (.hasTxCommitted *api* submitted-tx)))
-          (t/is (= #{[:ivan]} (.q (.db *api*)
-                                  '{:find [e]
-                                    :where [[e :name "Ivan"]]})))
-
-          (with-open [tx-log-iterator (.openTxLog *ingest-client* nil false)]
-            (let [result (iterator-seq tx-log-iterator)]
-              (t/is (not (realized? result)))
-              (t/is (= [(assoc submitted-tx
-                               :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
-                       result))
-              (t/is (realized? result))))
-
-          (t/is (thrown? IllegalArgumentException (.openTxLog *ingest-client* nil true))))))
-    (t/is true)))
-
-(defn execute-sparql [^RepositoryConnection conn q]
-  (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
-    (set ((fn step []
-            (when (.hasNext tq)
-              (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
-                          (.next tq))
-                    (lazy-seq (step)))))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided
   (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])

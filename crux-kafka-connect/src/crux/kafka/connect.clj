@@ -206,9 +206,9 @@
         tx-log-entry->source-records (case mode
                                        "tx" tx-log-entry->tx-source-records
                                        "doc" tx-log-entry->doc-source-records)
-        from-tx-id (inc (long (or (get source-offset "offset") -1)))]
-    (with-open [tx-log-iterator (.openTxLog api from-tx-id true)]
-      (log/info "source offset:" source-offset "tx-id:" from-tx-id "format:" format "mode:" mode)
+        after-tx-id (some-> (get source-offset "offset") long)]
+    (with-open [tx-log-iterator (.openTxLog api after-tx-id true)]
+      (log/info "source offset:" source-offset "tx-id:" after-tx-id "format:" format "mode:" mode)
       (let [records (->> (iterator-seq tx-log-iterator)
                          (take (Long/parseLong batch-size))
                          (map #(tx-log-entry->source-records source-partition topic formatter %))

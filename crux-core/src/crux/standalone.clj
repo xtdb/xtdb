@@ -1,56 +1,21 @@
 (ns crux.standalone
-  (:require [clojure.tools.logging :as log]
-            [crux.db :as db]
-            [crux.kv :as kv]
-            [crux.object-store :as os]
-            [crux.node :as n]
-            [crux.tx :as tx]
+  (:require [clojure.set :as set]
+            [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.io :as cio]
+            [crux.db :as db]
             [crux.index :as idx]
-            [crux.lru :as lru]
+            [crux.io :as cio]
+            [crux.kv :as kv]
+            [crux.node :as n]
+            [crux.object-store :as os]
             [crux.topology :as topo]
-            [clojure.set :as set])
-  (:import (crux.api ITxLog)
-           (java.io Closeable)
-           (java.util Date)
-           (java.util.concurrent ArrayBlockingQueue
-                                 ExecutorService Executors TimeUnit
-                                 ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy)))
-
-(defn- open-tx-log ^crux.api.ITxLog [{:keys [event-log-kv-store]} from-tx-id]
-  (let [snapshot (kv/new-snapshot event-log-kv-store)
-        iterator (kv/new-iterator snapshot)]
-    (letfn [(tx-log [k]
-              (lazy-seq
-                (when (some-> k c/tx-event-key?)
-                  (cons (assoc (c/decode-tx-event-key-from k)
-                          :crux.tx.event/tx-events (os/<-nippy-buffer (kv/value iterator)))
-                        (tx-log (kv/next iterator))))))]
-
-      (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or from-tx-id 0)}))]
-        (->> (when k (tx-log (if from-tx-id (kv/next iterator) k)))
-             (db/->closeable-tx-log-iterator (fn []
-                                               (cio/try-close iterator)
-                                               (cio/try-close snapshot))))))))
-
-(defn- index-txs [{:keys [indexer kv-store object-store document-store] :as deps}]
-  (with-open [tx-log (open-tx-log deps (::tx/tx-id (db/latest-completed-tx indexer)))
-              snapshot (kv/new-snapshot kv-store)]
-    (->> (iterator-seq tx-log)
-         (run! (fn [{:keys [crux.tx.event/tx-events] :as tx}]
-                 (let [doc-hashes (->> tx-events (into #{} (mapcat tx/tx-event->doc-hashes)))]
-                   (db/index-docs indexer (->> (db/fetch-docs document-store doc-hashes)
-                                               (into {} (map (juxt (comp c/new-id key) val)))))
-
-                   (db/index-tx indexer (select-keys tx [::tx/tx-time ::tx/tx-id]) tx-events)
-
-                   (when (Thread/interrupted)
-                     (reduced nil))))))))
+            [crux.tx :as tx])
+  (:import java.io.Closeable
+           [java.util.concurrent ArrayBlockingQueue Executors ExecutorService ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy TimeUnit]
+           java.util.Date))
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
-                  {:keys [^ExecutorService tx-submit-executor ^ExecutorService tx-indexer-executor
-                          indexer event-log-kv-store]
+                  {:keys [^ExecutorService tx-submit-executor, indexer event-log-kv-store]
                    :as deps}]
   (when (.isShutdown tx-submit-executor)
     (deliver !submitted-tx ::closed))
@@ -62,14 +27,10 @@
                                    (os/->nippy-buffer tx-events)]
                                   (idx/meta-kv ::latest-submitted-tx-id tx-id)])
 
-    (deliver !submitted-tx next-tx)
-
-    (.submit tx-indexer-executor ^Runnable #(index-txs deps))))
+    (deliver !submitted-tx next-tx)))
 
 (defrecord StandaloneTxLog [^ExecutorService tx-submit-executor
-                            ^ExecutorService tx-indexer-executor
-                            indexer kv-store object-store document-store
-                            event-log-kv-store]
+                            indexer event-log-kv-store]
   db/TxLog
   (submit-tx [this tx-ops]
     (when (.isShutdown tx-submit-executor)
@@ -91,8 +52,21 @@
     (when-let [tx-id (idx/read-meta event-log-kv-store ::latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
 
-  (open-tx-log [this from-tx-id]
-    (open-tx-log this from-tx-id))
+  (open-tx-log [this after-tx-id]
+    (let [snapshot (kv/new-snapshot event-log-kv-store)
+          iterator (kv/new-iterator snapshot)]
+      (letfn [(tx-log [k]
+                (lazy-seq
+                  (when (some-> k c/tx-event-key?)
+                    (cons (assoc (c/decode-tx-event-key-from k)
+                            :crux.tx.event/tx-events (os/<-nippy-buffer (kv/value iterator)))
+                          (tx-log (kv/next iterator))))))]
+
+        (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
+          (->> (when k (tx-log (if after-tx-id (kv/next iterator) k)))
+               (db/->closeable-tx-log-iterator (fn []
+                                                 (cio/try-close iterator)
+                                                 (cio/try-close snapshot))))))))
 
   Closeable
   (close [_]
@@ -101,31 +75,12 @@
       (catch Exception e
         (log/warn e "Error shutting down tx-submit-executor")))
 
-    (try
-      (.shutdownNow tx-indexer-executor)
-      (catch Exception e
-        (log/warn e "Error shutting down tx-indexer-executor")))
-
     (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
-        (log/warn "waited 5s for tx-submit-executor to exit, no dice."))
+        (log/warn "waited 5s for tx-submit-executor to exit, no dice."))))
 
-    (or (.awaitTermination tx-indexer-executor 5 TimeUnit/SECONDS)
-        (log/warn "waited 5s for tx-indexer-executor to exit, no dice."))))
-
-(defn- ->tx-log [{:keys [::n/indexer ::n/kv-store ::n/object-store ::n/document-store ::event-log]} _]
-  (let [tx-submit-executor (Executors/newSingleThreadExecutor (cio/thread-factory "standalone-tx-log"))
-        tx-indexer-executor (ThreadPoolExecutor. 1 1
-                                                 100 TimeUnit/MILLISECONDS
-                                                 (ArrayBlockingQueue. 1)
-                                                 (cio/thread-factory "standalone-tx-indexer")
-                                                 (ThreadPoolExecutor$DiscardPolicy.))
-        tx-log (->StandaloneTxLog tx-submit-executor tx-indexer-executor
-                                  indexer kv-store object-store document-store (:kv-store event-log))]
-
-    ;; when we restart the standalone node, we want it to start indexing straightaway if it's behind
-    (.submit tx-indexer-executor ^Runnable #(index-txs tx-log))
-
-    tx-log))
+(defn- ->tx-log [{:keys [::n/indexer ::event-log]} _]
+  (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "crux-standalone-tx-log"))
+                     indexer (:kv-store event-log)))
 
 (defrecord StandaloneDocumentStore [event-log-kv-store event-log-object-store]
   db/DocumentStore

@@ -29,9 +29,12 @@
 ;; tag::TxLog[]
 (defprotocol TxLog
   (submit-tx [this tx-ops])
-  (open-tx-log ^crux.api.ITxLog [this from-tx-id])
+  (open-tx-log ^crux.api.ITxLog [this after-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
+
+(defprotocol TxConsumer
+  (consumer-error [this]))
 
 (defprotocol DocumentStore
   (submit-docs [this id-and-docs])

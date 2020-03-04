@@ -228,9 +228,9 @@
 ;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxAPI crux-node request]
   (let [with-ops? (Boolean/parseBoolean (get-in request [:query-params "with-ops"]))
-        from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
-                            (Long/parseLong))
-        ^ITxLog result (.openTxLog crux-node from-tx-id with-ops?)]
+        after-tx-id (some->> (get-in request [:query-params "after-tx-id"])
+                             (Long/parseLong))
+        ^ITxLog result (.openTxLog crux-node after-tx-id with-ops?)]
     (-> (streamed-edn-response result (iterator-seq result))
         (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 

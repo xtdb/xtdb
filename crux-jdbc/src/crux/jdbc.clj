@@ -1,6 +1,7 @@
 (ns crux.jdbc
   (:require [clojure.core.reducers :as r]
             [clojure.tools.logging :as log]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.node :as n]
@@ -11,9 +12,9 @@
             [next.jdbc.result-set :as jdbcr]
             [taoensso.nippy :as nippy]
             [clojure.string :as str]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.codec :as c])
   (:import com.zaxxer.hikari.HikariDataSource
-           crux.tx.consumer.Message
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
 
@@ -74,7 +75,7 @@
 (defn- evict-docs! [ds k tombstone]
   (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
-(defrecord JdbcTxLog [ds dbtype]
+(defrecord JdbcDocumentStore [ds dbtype]
   db/DocumentStore
   (submit-docs [this id-and-docs]
     (doseq [[id doc] id-and-docs
@@ -87,6 +88,17 @@
           (insert-event! ds id doc "docs")
           (log/infof "Skipping doc insert %s" id)))))
 
+  (fetch-docs [this ids]
+    (->> (for [id-batch (partition-all 100 ids)
+               row (jdbc/execute! ds (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s) AND COMPACTED = 0"
+                                                    (->> (repeat (count ids) "?") (str/join ", ")))]
+                                           (map str ids))
+                                  {:builder-fn jdbcr/as-unqualified-lower-maps})]
+           row)
+         (map (juxt (comp c/new-id :event_key) #(->v dbtype (:v %))))
+         (into {}))))
+
+(defrecord JdbcTxLog [ds dbtype]
   db/TxLog
   (submit-tx [this tx-ops]
     (let [tx-events (map tx/tx-op->tx-event tx-ops)
@@ -94,13 +106,14 @@
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 
-  (open-tx-log [this from-tx-id]
-    (let [stmt (jdbc/prepare (jdbc/get-connection ds)
-                             ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
-                              (or from-tx-id 0)])
+  (open-tx-log [this after-tx-id]
+    (let [conn (jdbc/get-connection ds)
+          stmt (jdbc/prepare conn
+                             ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
+                              (or after-tx-id 0)])
           rs (.executeQuery stmt)]
       (db/->closeable-tx-log-iterator
-       #(run! cio/try-close [rs stmt])
+       #(run! cio/try-close [rs stmt conn])
        (->> (resultset-seq rs)
             (map (fn [y]
                    {:crux.tx/tx-id (int (:event_offset y))
@@ -112,22 +125,6 @@
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
       {:crux.tx/tx-id max-offset})))
-
-(defn- event-result->message [dbtype result]
-  (Message. (->v dbtype (:v result))
-            nil
-            (:event_offset result)
-            (->date dbtype (:tx_time result))
-            (:event_key result)
-            {:crux.tx/sub-topic (keyword (:topic result))}))
-
-(defrecord JDBCQueue [ds dbtype]
-  tc/OffsetBasedQueue
-  (next-events-from-offset [this offset]
-    (mapv (partial event-result->message dbtype)
-          (jdbc/execute! ds
-                         ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" offset]
-                         {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps}))))
 
 (defn conform-next-jdbc-properties [m]
   (into {} (->> m
@@ -144,25 +141,20 @@
       (setup-schema! dbtype ds)
       ds)))
 
-(defn- start-tx-log [{::keys [ds]} {::keys [dbtype]}]
-  (map->JdbcTxLog {:ds ds :dbtype dbtype}))
+(def topology
+  (merge n/base-topology
+         {::ds {:start-fn start-jdbc-ds
+                :args {::dbtype {:doc "Database type"
+                                 :required? true
+                                 :crux.config/type :crux.config/string}
+                       ::dbname {:doc "Database name"
+                                 :required? true
+                                 :crux.config/type :crux.config/string}}}
 
-(defn- start-event-log-consumer [{:keys [crux.node/indexer crux.jdbc/ds]} {::keys [dbtype]}]
-  (tc/start-indexing-consumer {:queue (tc/offsets-based-queue indexer (JDBCQueue. ds dbtype))
-                               :index-fn (partial tc/index-records indexer)
-                               :idle-sleep-ms 10}))
+          ::n/tx-log {:start-fn (fn [{::keys [ds]} {::keys [dbtype]}]
+                                  (->JdbcTxLog ds dbtype))
+                      :deps [::ds]}
 
-(def topology (merge n/base-topology
-                     {::ds {:start-fn start-jdbc-ds
-                            :args {::dbtype {:doc "Database type"
-                                             :required? true
-                                             :crux.config/type :crux.config/string}
-                                   ::dbname {:doc "Database name"
-                                             :required? true
-                                             :crux.config/type :crux.config/string}}}
-                      ::event-log-consumer {:start-fn start-event-log-consumer
-                                            :deps [:crux.node/indexer ::ds]}
-                      :crux.node/tx-log {:start-fn start-tx-log
-                                         :deps [::ds]}
-                      :crux.node/document-store {:start-fn (fn [{:keys [:crux.node/tx-log]} _] tx-log)
-                                                        :deps [:crux.node/tx-log]}}))
+          ::n/document-store {:start-fn (fn [{::keys [ds]} {::keys [dbtype]}]
+                                          (->JdbcDocumentStore ds dbtype))
+                              :deps [::ds]}}))
