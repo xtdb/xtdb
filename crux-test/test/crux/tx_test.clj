@@ -291,11 +291,12 @@
                 (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
                (idx/entity-history snapshot (c/new-id :ivan))))
 
-      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-               (idx/entity-history-seq-descending snapshot (c/new-id :ivan) t t)))
+      (with-open [i (kv/new-iterator snapshot)]
+        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+                 (idx/entity-history-seq-descending i (c/new-id :ivan) t t)))
 
-      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-               (idx/entity-history-seq-ascending snapshot (c/new-id :ivan) t t))))))
+        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+                 (idx/entity-history-seq-ascending i (c/new-id :ivan) t t)))))))
 
 (t/deftest test-can-store-doc
   (let [content-hash (c/new-id picasso)]
@@ -335,12 +336,13 @@
 
                          (api/await-tx *api* last-tx nil)
 
-                         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+                         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
+                                     i (kv/new-iterator snapshot)]
                            (t/is (= (for [[vt tx-idx value] history]
                                       [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
                                                                                            (assoc ivan :value value)))])
 
-                                    (->> (idx/entity-history-seq-ascending snapshot eid first-vt (:crux.tx/tx-time last-tx))
+                                    (->> (idx/entity-history-seq-ascending i eid first-vt (:crux.tx/tx-time last-tx))
                                          (map (juxt :vt :tx-id :content-hash)))))))
 
     ;; pairs
@@ -688,9 +690,10 @@
 
         db (api/db *api*)]
 
-    (with-open [snapshot (api/new-snapshot db)]
+    (with-open [snapshot (api/new-snapshot db)
+                i (kv/new-iterator snapshot)]
       (let [eid->history (fn [eid]
-                           (->> (idx/entity-history-seq-ascending snapshot (c/new-id eid)
+                           (->> (idx/entity-history-seq-ascending i (c/new-id eid)
                                                                   #inst "2020-01-01"
                                                                   (:crux.tx/tx-time last-tx))
                                 (map (fn [{:keys [content-hash vt]}]

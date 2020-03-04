@@ -87,8 +87,8 @@
     (->> (s/assert :crux.api/tx-op))))
 
 (defprotocol EntityHistory
-  (entity-history-seq-ascending [_ eid valid-time tx-time])
-  (entity-history-seq-descending [_ eid valid-time tx-time])
+  (with-entity-history-seq-ascending [_ eid valid-time tx-time f])
+  (with-entity-history-seq-descending [_ eid valid-time tx-time f])
   (all-content-hashes [_ eid])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
@@ -110,17 +110,19 @@
 
 (defrecord Snapshot+NewETXs [snapshot etxs]
   EntityHistory
-  (entity-history-seq-ascending [_ eid valid-time tx-time]
-    (merge-histories etx->vt compare
-                     (idx/entity-history-seq-ascending snapshot eid valid-time tx-time)
-                     (->> (get etxs eid)
-                          (drop-while (comp neg? #(compare % valid-time) etx->vt)))))
+  (with-entity-history-seq-ascending [_ eid valid-time tx-time f]
+    (with-open [i (kv/new-iterator snapshot)]
+      (f (merge-histories etx->vt compare
+                          (idx/entity-history-seq-ascending i eid valid-time tx-time)
+                          (->> (get etxs eid)
+                               (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
-  (entity-history-seq-descending [_ eid valid-time tx-time]
-    (merge-histories etx->vt #(compare %2 %1)
-                     (idx/entity-history-seq-descending snapshot eid valid-time tx-time)
-                     (->> (reverse (get etxs eid))
-                          (drop-while (comp pos? #(compare % valid-time) etx->vt)))))
+  (with-entity-history-seq-descending [_ eid valid-time tx-time f]
+    (with-open [i (kv/new-iterator snapshot)]
+      (f (merge-histories etx->vt #(compare %2 %1)
+                          (idx/entity-history-seq-descending i eid valid-time tx-time)
+                          (->> (reverse (get etxs eid))
+                               (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 
   (entity-at [_ eid valid-time tx-time]
     (->> (merge-histories etx->vt #(compare %2 %1)
@@ -175,26 +177,29 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (let [entity-history (entity-history-seq-descending history eid end-valid-time tx-time)]
-          (concat (->> (cons start-valid-time
+        (with-entity-history-seq-descending history eid end-valid-time tx-time
+          (fn [entity-history]
+            (into (->> (cons start-valid-time
                              (->> (map etx->vt entity-history)
                                   (take-while #(neg? (compare start-valid-time %)))))
                        (remove #{end-valid-time})
-                       (map ->new-entity-tx))
+                       (mapv ->new-entity-tx))
 
                   [(if-let [entity-to-restore ^EntityTx (first entity-history)]
                      (-> entity-to-restore
                          (assoc :vt end-valid-time))
 
-                     (c/->EntityTx eid end-valid-time tx-time tx-id (c/nil-id-buffer)))])))
+                     (c/->EntityTx eid end-valid-time tx-time tx-id (c/nil-id-buffer)))]))))
 
       (->> (cons start-valid-time
                  (when-let [visible-entity (some-> (entity-at history eid start-valid-time tx-time)
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (->> (entity-history-seq-ascending history eid start-valid-time tx-time)
-                        (remove #{start-valid-time})
-                        (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
-                        (mapv etx->vt))))
+                   (with-entity-history-seq-ascending history eid start-valid-time tx-time
+                     (fn [entity-history]
+                       (->> entity-history
+                            (remove #{start-valid-time})
+                            (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
+                            (mapv etx->vt))))))
 
            (map ->new-entity-tx)))))
 
