@@ -9,7 +9,7 @@
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                bench/crux-version bench/commit-hash))
 
-  (let [bench-results (bench/with-nodes [node]
+  (let [bench-results (bench/with-nodes [node bench/nodes]
                         [(doto (devices/run-devices-bench node)
                            (bench/post-slack-results :ts-devices))
 
