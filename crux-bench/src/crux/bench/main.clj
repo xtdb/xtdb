@@ -5,21 +5,25 @@
             [crux.bench.ts-weather :as weather]
             [crux.bench.watdiv-crux :as watdiv-crux]))
 
+(defn post-to-slack [results]
+  (doto results
+    (-> (bench/results->slack-message) (bench/post-to-slack))))
+
 (defn -main []
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                bench/crux-version bench/commit-hash))
 
   (let [bench-results (bench/with-nodes [node bench/nodes]
-                        [(doto (devices/run-devices-bench node)
-                           (bench/post-slack-results :ts-devices))
+                        [(-> (devices/run-devices-bench node)
+                             (doto post-to-slack))
 
-                         (doto (weather/run-weather-bench node)
-                           (bench/post-slack-results :ts-weather))
+                         (-> (weather/run-weather-bench node)
+                             (doto post-to-slack))
 
                          (let [raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
-                           (doto [(first raw-watdiv-results)
-                                  (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
-                             (bench/post-slack-results :watdiv-crux)))])]
+                           (-> [(first raw-watdiv-results)
+                                (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
+                               (doto post-to-slack)))])]
 
     (bench/send-email-via-ses
      (str "<h1>Crux bench results</h1><br>"

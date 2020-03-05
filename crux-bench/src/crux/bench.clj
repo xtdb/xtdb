@@ -83,22 +83,20 @@
           (java.time.Duration/ofMillis time-taken-ms)
           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
 
-(defn results->slack-message [results bench-ns]
+(defn results->slack-message [results]
   (format "*%s*\n========\n%s\n"
-          bench-ns
+          (:bench-ns (first results))
           (->> results
                (map result->slack-message)
                (string/join "\n"))))
-
-(defn post-slack-results [results test-name]
-  (post-to-slack (results->slack-message results test-name)))
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
   (binding [*bench-ns* bench-ns
             *!bench-results* (atom [])]
-    (f)
+    (with-dimensions {:bench-ns bench-ns}
+      (f))
 
     (log/infof "finished bench-ns '%s'." bench-ns)
 
