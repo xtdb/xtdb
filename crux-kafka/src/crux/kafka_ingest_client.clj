@@ -11,7 +11,7 @@
   ICruxAsyncIngestAPI
   (submitTxAsync [_ tx-ops]
     (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
-    (db/submit-tx tx-log tx-ops))
+    (db/submit-tx tx-log (map tx/tx-op->tx-event tx-ops)))
 
   (submitTx [this tx-ops]
     @(.submitTxAsync this tx-ops))
