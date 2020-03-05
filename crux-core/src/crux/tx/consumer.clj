@@ -11,23 +11,29 @@
   (log/info "Started tx-consumer")
   (try
     (while true
-      (with-open [tx-log (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer)))]
-        (doseq [{:keys [crux.tx.event/tx-events] :as tx} (iterator-seq tx-log)
-                :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
-          (db/index-docs indexer (db/fetch-docs document-store
-                                                (->> tx-events
-                                                     (into #{} (comp (mapcat tx/tx-event->doc-hashes)
-                                                                     (map c/new-id))))))
+      (let [consumed-txs? (with-open [tx-log (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer)))]
+                            (let [tx-log (iterator-seq tx-log)
+                                  consumed-txs? (not (empty? tx-log))]
+                              (doseq [{:keys [crux.tx.event/tx-events] :as tx} tx-log
+                                      :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
+                                (db/index-docs indexer (db/fetch-docs document-store
+                                                                      (->> tx-events
+                                                                           (into #{} (comp (mapcat tx/tx-event->doc-hashes)
+                                                                                           (map c/new-id))))))
 
-          (db/index-tx indexer tx tx-events)
+                                (db/index-tx indexer tx tx-events)
 
-          (when (Thread/interrupted)
-            (throw (InterruptedException.)))))
+                                (when (Thread/interrupted)
+                                  (throw (InterruptedException.))))
 
-      (when (Thread/interrupted)
-        (throw (InterruptedException.)))
+                              consumed-txs?))]
 
-      (Thread/sleep (.toMillis poll-sleep-duration)))
+
+        (when (Thread/interrupted)
+          (throw (InterruptedException.)))
+
+        (when-not consumed-txs?
+          (Thread/sleep (.toMillis poll-sleep-duration)))))
 
     (catch InterruptedException e)
     (catch Exception e
