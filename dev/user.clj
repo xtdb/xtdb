@@ -50,3 +50,6 @@
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
 (ir/set-prep! (fn [] standalone-config))
+
+(defn crux-node []
+  (:node system))
