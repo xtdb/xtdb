@@ -332,9 +332,7 @@
 
   db/Indexer
   (index-docs [_ docs]
-    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
-      (throw (IllegalArgumentException.
-              (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
+    (assert (every? :crux.db/id (vals docs)))
 
     (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
