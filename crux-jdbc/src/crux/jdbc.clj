@@ -100,9 +100,8 @@
 
 (defrecord JdbcTxLog [ds dbtype]
   db/TxLog
-  (submit-tx [this tx-ops]
-    (let [tx-events (map tx/tx-op->tx-event tx-ops)
-          ^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "txs"))]
+  (submit-tx [this tx-events]
+    (let [^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "txs"))]
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 

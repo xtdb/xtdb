@@ -32,14 +32,14 @@
 (defrecord StandaloneTxLog [^ExecutorService tx-submit-executor
                             indexer event-log-kv-store]
   db/TxLog
-  (submit-tx [this tx-ops]
+  (submit-tx [this tx-events]
     (when (.isShutdown tx-submit-executor)
       (throw (IllegalStateException. "TxLog is closed.")))
 
     (let [!submitted-tx (promise)]
       (.submit tx-submit-executor
                ^Runnable #(submit-tx {:!submitted-tx !submitted-tx
-                                      :tx-events (mapv tx/tx-op->tx-event tx-ops)}
+                                      :tx-events tx-events}
                                      this))
       (delay
         (let [submitted-tx @!submitted-tx]

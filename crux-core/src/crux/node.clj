@@ -105,7 +105,7 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
-      @(db/submit-tx tx-log tx-ops)))
+      @(db/submit-tx tx-log (map tx/tx-op->tx-event tx-ops))))
 
   (hasTxCommitted [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock

@@ -28,7 +28,7 @@
 
 ;; tag::TxLog[]
 (defprotocol TxLog
-  (submit-tx [this tx-ops])
+  (submit-tx [this tx-events])
   (open-tx-log ^crux.api.ITxLog [this after-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]

@@ -132,10 +132,9 @@
 
 (defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
   db/TxLog
-  (submit-tx [this tx-ops]
+  (submit-tx [this tx-events]
     (try
-      (let [tx-events (map tx/tx-op->tx-event tx-ops)
-            content-hashes (->> (set (map c/new-id (mapcat tx/tx-op->docs tx-ops))))
+      (let [content-hashes (->> (set (map c/new-id (mapcat tx/tx-event->doc-hashes tx-events))))
             tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
                                   (-> (.headers) (.add (str :crux.tx/docs)
                                                        (nippy/fast-freeze content-hashes))))
