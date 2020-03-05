@@ -199,6 +199,18 @@
   (value->buffer [this to]
     (id->buffer this to))
 
+  Map
+  (value->buffer [this to]
+    (id->buffer this to))
+
+  DirectBuffer
+  (value->buffer [this to]
+    (id->buffer this to))
+
+  ByteBuffer
+  (value->buffer [this to]
+    (id->buffer this to))
+
   Object
   (value->buffer [this ^MutableDirectBuffer to]
     (if (satisfies? IdToBuffer this)
