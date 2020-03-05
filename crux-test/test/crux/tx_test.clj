@@ -504,7 +504,7 @@
             update-attribute-fn {:crux.db/id :update-attribute-fn
                                  :crux.db.fn/body
                                  '(fn [db eid k f]
-                                    [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]
+                                    [[:crux.tx/put (update (crux.api/entity db eid) k (eval f))]])}]
         (fapi/submit+await-tx [[:crux.tx/put v1-ivan]
                                [:crux.tx/put update-attribute-fn]])
         (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
@@ -513,9 +513,7 @@
 
         (let [v2-ivan (assoc v1-ivan :age 41)
               inc-ivans-age '{:crux.db/id :inc-ivans-age
-                              :crux.db.fn/args [:ivan
-                                                :age
-                                                inc]}]
+                              :crux.db.fn/args [:ivan :age inc]}]
           (fapi/submit+await-tx [[:crux.tx/fn :update-attribute-fn inc-ivans-age]])
           (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
           (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))

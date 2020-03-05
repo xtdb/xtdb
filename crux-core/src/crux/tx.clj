@@ -278,7 +278,7 @@
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)
         fn-result (try
-                    (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
+                    (let [tx-ops (apply (tx-fn-eval-cache body) db args)
                           _ (when tx-ops (s/assert :crux.api/tx-ops tx-ops))
                           docs (mapcat tx-op->docs tx-ops)
                           {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
