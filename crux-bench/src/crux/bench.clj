@@ -83,22 +83,20 @@
           (java.time.Duration/ofMillis time-taken-ms)
           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
 
-(defn results->slack-message [results bench-ns]
+(defn results->slack-message [results]
   (format "*%s*\n========\n%s\n"
-          bench-ns
+          (:bench-ns (first results))
           (->> results
                (map result->slack-message)
                (string/join "\n"))))
-
-(defn post-slack-results [results test-name]
-  (post-to-slack (results->slack-message results test-name)))
 
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
   (binding [*bench-ns* bench-ns
             *!bench-results* (atom [])]
-    (f)
+    (with-dimensions {:bench-ns bench-ns}
+      (f))
 
     (log/infof "finished bench-ns '%s'." bench-ns)
 
@@ -109,59 +107,61 @@
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
-(defn nodes
-  [data-dir]
-
+(def nodes
   {"standalone-rocksdb"
-   {:crux.node/topology '[crux.standalone/topology
+   (fn [data-dir]
+     {:crux.node/topology '[crux.standalone/topology
                             crux.metrics/with-cloudwatch
                             crux.kv.rocksdb/kv-store]
       :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
-      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv}
+      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
 
    "kafka-rocksdb"
-   {:crux.node/topology '[crux.kafka/topology
-                          crux.metrics/with-cloudwatch
-                          crux.kv.rocksdb/kv-store]
-    :crux.kafka/bootstrap-servers "localhost:9092"
-    :crux.kafka/doc-topic "kafka-rocksdb-doc"
-    :crux.kafka/tx-topic "kafka-rocksdb-tx"
-    :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))}
+   (fn [data-dir]
+     {:crux.node/topology '[crux.kafka/topology
+                            crux.metrics/with-cloudwatch
+                            crux.kv.rocksdb/kv-store]
+      :crux.kafka/bootstrap-servers "localhost:9092"
+      :crux.kafka/doc-topic "kafka-rocksdb-doc"
+      :crux.kafka/tx-topic "kafka-rocksdb-tx"
+      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
 
    #_"standalone-lmdb"
-   #_{:crux.node/topology '[crux.standalone/topology
-                            crux.metrics/with-cloudwatch
-                            crux.kv.lmdb/kv-store]
-      :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
-      :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
-      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))}
+   #_(fn [data-dir]
+       {:crux.node/topology '[crux.standalone/topology
+                              crux.metrics/with-cloudwatch
+                              crux.kv.lmdb/kv-store]
+        :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
+        :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
+        :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))})
 
    #_"kafka-lmdb"
-   #_{:crux.node/topology '[crux.kafka/topology
-                            crux.metrics/with-cloudwatch
-                            crux.kv.lmdb/kv-store]
-      :crux.kafka/bootstrap-servers "localhost:9092"
-      :crux.kafka/doc-topic "kafka-lmdb-doc"
-      :crux.kafka/tx-topic "kafka-lmdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))}})
+   #_(fn [data-dir]
+       {:crux.node/topology '[crux.kafka/topology
+                              crux.metrics/with-cloudwatch
+                              crux.kv.lmdb/kv-store]
+        :crux.kafka/bootstrap-servers "localhost:9092"
+        :crux.kafka/doc-topic "kafka-lmdb-doc"
+        :crux.kafka/tx-topic "kafka-lmdb-tx"
+        :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})})
 
-(defn with-nodes* [f]
+(defn with-nodes* [nodes f]
   (f/with-tmp-dir "dev-storage" [data-dir]
     (with-open [emb (ek/start-embedded-kafka
                       {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
                        :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
                        :crux.kafka.embedded/kafka-port 9092})]
       (vec
-        (for [[k v] (nodes data-dir)]
-          (with-open [node (api/start-node v)]
-            (with-dimensions {:crux-node-type k}
-              (log/infof "Running bench on %s node." k)
-              (post-to-slack (str "running on node: " k))
-              [k (f node)])))))))
+       (for [[node-type ->node] nodes]
+         (with-open [node (api/start-node (->node data-dir))]
+           (with-dimensions {:crux-node-type node-type}
+             (log/infof "Running bench on %s node." node-type)
+             (post-to-slack (str "running on node: " node-type))
+             [node-type (f node)])))))))
 
-(defmacro with-nodes [[node-binding] & body]
-  `(with-nodes* (fn [~node-binding] ~@body)))
+(defmacro with-nodes [[node-binding nodes] & body]
+  `(with-nodes* ~nodes (fn [~node-binding] ~@body)))
 
 (def ^:private num-processors
   (.availableProcessors (Runtime/getRuntime)))
