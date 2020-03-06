@@ -70,8 +70,22 @@
                     arg)))
       (->> (s/assert :crux.tx.event/tx-event)))))
 
+(defn- conform-tx-event [[op & args]]
+  (-> (case op
+        ::put (zipmap [:eid :content-hash :start-valid-time :end-valid-time] args)
+        ::delete (zipmap [:eid :start-valid-time :end-valid-time] args)
+        ::cas (zipmap [:eid :old-content-hash :new-content-hash :valid-time] args)
+        ::evict (let [[eid & args] args
+                      [start-valid-time end-valid-time] (filter inst? args)
+                      [keep-latest? keep-earliest?] (filter boolean? args)]
+                  {:eid eid
+                   :start-valid-time start-valid-time, :end-valid-time end-valid-time
+                   :keep-latest? keep-latest?, :keep-earliest? keep-earliest?})
+        ::fn (zipmap [:fn-eid :args-content-hash] args))
+      (assoc :op op)))
+
 (defn tx-event->doc-hashes [tx-event]
-  (keep (s/conform :crux.tx.event/tx-event tx-event) [:doc :old-doc :new-doc :args-doc]))
+  (keep (conform-tx-event tx-event) [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
 
 (defn tx-event->tx-op [[op id & args] snapshot object-store]
   (doto (into [op]
