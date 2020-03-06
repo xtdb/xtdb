@@ -1,5 +1,9 @@
 # Changelog
 
+## 20.03-1.8.0-alpha
+
+See the [Github milestone](https://github.com/juxt/crux/milestone/6?closed=1) for the issues included in this release
+
 ## 20.03-1.7.1-alpha
 
 See the [Github milestone](https://github.com/juxt/crux/milestone/5?closed=1) for the issues included in this release

@@ -1,34 +1,34 @@
 {:deps
  {
   ;; tag::CruxDep[]
-  juxt/crux-core {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-core {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::CruxDep[]
 
   ;; tag::KafkaClientsDeps[]
-  juxt/crux-kafka {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-kafka {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::KafkaClientsDeps[]
 
   ;; tag::KafkaEmbeddedDeps[]
-  juxt/crux-kafka-embedded {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-kafka-embedded {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::KafkaEmbeddedDeps[]
 
   ;; tag::RocksDeps[]
-  juxt/crux-rocksdb {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-rocksdb {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::RocksDeps[]
 
   ;; tag::JDBCDeps[]
-  juxt/crux-jdbc {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-jdbc {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::JDBCDeps[]
 
   ;; tag::LMDBDeps[]
-  juxt/crux-lmdb {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-lmdb {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::LMDBDeps[]
 
   ;; tag::HTTPDeps[]
-  juxt/crux-http-server {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-http-server {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::HTTPDeps[]
 
   ;; tag::HTTPClientDeps[]
-  juxt/crux-http-client {:mvn/version "20.03-1.7.1-alpha"}
+  juxt/crux-http-client {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::HTTPClientDeps[]
   }}
