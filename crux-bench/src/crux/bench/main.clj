@@ -14,7 +14,7 @@
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                bench/crux-version bench/commit-hash))
 
-  (let [bench-results (concat (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb" "kafka-rocksdb"])]
+  (let [bench-results (concat (bench/with-nodes [node (select-keys bench/nodes ["embedded-kafka-rocksdb"])]
                                 [(-> (sorted-maps/run-sorted-maps-microbench node)
                                      (doto post-to-slack))])
 
