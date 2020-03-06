@@ -56,7 +56,10 @@
 (defn current-resp->put [resp]
   (let [location-name (:name resp)]
     (->put (-> resp
-               (assoc :crux.db/id (str location-name "-current")
+               (assoc :crux.db/id (-> (string/lower-case location-name)
+                                      (string/replace #" " "-")
+                                      (str "-current")
+                                      (keyword))
                       :location-name location-name)
                (select-keys [:crux.db/id :location-name :main :wind :weather]))
            (parse-dt (:dt resp))
@@ -66,7 +69,10 @@
   (let [location-name (get-in resp [:city :name])]
     (for [forecast (:list resp)]
       (->put (-> forecast
-                 (assoc :crux.db/id (str location-name "-forecast")
+                 (assoc :crux.db/id (-> (string/lower-case location-name)
+                                        (string/replace #" " "-")
+                                        (str "-forecast")
+                                        (keyword))
                         :location-name location-name)
                  (select-keys [:crux.db/id :location-name :main :wind :weather]))
              (parse-dt (:dt forecast))
