@@ -123,25 +123,30 @@
   (openTxLog ^ITxLog [this after-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
-            snapshot (kv/new-snapshot kv-store)
-            tx-log (-> (iterator-seq tx-log-iterator)
-                       (->> (filter
-                             #(nil?
-                               (kv/get-value snapshot
-                                             (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))))
-                       (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
-                                                            crux.tx.event/tx-events] :as tx-log-entry}]
-                                                 (-> tx-log-entry
-                                                     (dissoc :crux.tx.event/tx-events)
-                                                     (assoc :crux.api/tx-ops
-                                                            (->> tx-events
-                                                                 (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
+      (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
+            (or (nil? latest-submitted-tx-id)
+                (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
+        (db/->closeable-tx-log-iterator #() [])
 
-        (db/->closeable-tx-log-iterator (fn []
-                                          (.close snapshot)
-                                          (.close tx-log-iterator))
-                                        tx-log))))
+        (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
+              snapshot (kv/new-snapshot kv-store)
+              tx-log (-> (iterator-seq tx-log-iterator)
+                         (->> (filter
+                               #(nil?
+                                 (kv/get-value snapshot
+                                               (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))))
+                         (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
+                                                              crux.tx.event/tx-events] :as tx-log-entry}]
+                                                   (-> tx-log-entry
+                                                       (dissoc :crux.tx.event/tx-events)
+                                                       (assoc :crux.api/tx-ops
+                                                              (->> tx-events
+                                                                   (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
+
+          (db/->closeable-tx-log-iterator (fn []
+                                            (.close snapshot)
+                                            (.close tx-log-iterator))
+                                          tx-log)))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]
