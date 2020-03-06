@@ -4,12 +4,12 @@
             [crux.bench :as bench]))
 
 (defn submit-batches [node]
-  (for [doc-batch (->> (for [n (range 15000)]
+  (for [doc-batch (->> (for [n (range 25000)]
                          [:crux.tx/put {:crux.db/id (keyword (str "doc-" n))
                                         :nested-map {:foo :bar
                                                      :baz :quux
                                                      :doc-idx n}}])
-                       (partition-all 5000))]
+                       (partition-all 1000))]
     (crux/submit-tx node (vec doc-batch))))
 
 (defn run-benches [node [submit-bench-type await-bench-type]]

@@ -7,11 +7,11 @@
             [taoensso.nippy :as nippy]
             [crux.io :as cio]
             [clojure.walk :as walk])
-  (:import [clojure.lang IHashEq Keyword]
+  (:import [clojure.lang IHashEq Keyword APersistentMap APersistentSet]
            [java.io Closeable Writer]
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
-           [java.util Arrays Date Map UUID]
+           [java.util Arrays Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -103,8 +103,47 @@
    (fn []
      (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))))
 
-(defn- sort-maps [o]
-  (->> o (walk/postwalk (fn [o] (cond->> o (instance? Map o) (into (sorted-map)))))))
+(def ^:dynamic ^:private *sort-unordered-colls* false)
+
+(defn- sorted-kv-seq [kvs]
+  (let [kvs (sort-by key kvs)]
+    (reify
+      clojure.lang.Counted
+      (count [_]
+        (count kvs))
+
+      clojure.lang.IKVReduce
+      (kvreduce [_ f init]
+        (loop [[[k v] & more-kvs :as kvs] kvs
+               res init]
+          (if (or (empty? kvs) (reduced? res))
+            res
+            (recur more-kvs (f res k v))))))))
+
+(extend-protocol nippy/IFreezable1
+  Set
+  (-freeze-without-meta! [this out]
+    (if *sort-unordered-colls*
+      (#'nippy/write-counted-coll out @#'nippy/id-sorted-set (sort this))
+      (#'nippy/write-set out this)))
+
+  APersistentSet
+  (-freeze-without-meta! [this out]
+    (if *sort-unordered-colls*
+      (#'nippy/write-counted-coll out @#'nippy/id-sorted-set (sort this))
+      (#'nippy/write-set out this)))
+
+  Map
+  (-freeze-without-meta! [this out]
+    (if *sort-unordered-colls*
+      (#'nippy/write-kvs out @#'nippy/id-sorted-map (sorted-kv-seq this))
+      (#'nippy/write-map out this)))
+
+  APersistentMap
+  (-freeze-without-meta! [this out]
+    (if *sort-unordered-colls*
+      (#'nippy/write-kvs out @#'nippy/id-sorted-map (sorted-kv-seq this))
+      (#'nippy/write-map out this))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
@@ -215,7 +254,8 @@
   (value->buffer [this ^MutableDirectBuffer to]
     (if (satisfies? IdToBuffer this)
       (id->buffer this to)
-      (doto (id-function to (-> this sort-maps nippy/fast-freeze))
+      (doto (id-function to (binding [*sort-unordered-colls* true]
+                              (nippy/fast-freeze this)))
         (.putByte 0 (byte object-value-type-id))))))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
@@ -296,7 +336,8 @@
 
   Map
   (id->buffer [this to]
-    (id-function to (-> this sort-maps nippy/fast-freeze)))
+    (id-function to (binding [*sort-unordered-colls* true]
+                      (nippy/fast-freeze this))))
 
   nil
   (id->buffer [this to]
