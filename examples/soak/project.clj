@@ -6,6 +6,8 @@
                  [juxt/crux-rocksdb "derived-from-git"]
                  [juxt/crux-metrics "derived-from-git"]
 
+                 [bidi "2.1.6"]
+                 [hiccup "2.0.0-alpha2"]
                  [cheshire "5.10.0"]
                  [clj-http "3.10.0"]
                  [ring "1.8.0"]
