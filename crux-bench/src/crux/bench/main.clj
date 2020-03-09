@@ -31,12 +31,6 @@
                                        (doto post-to-slack)))]))]
 
     (bench/send-email-via-ses
-     (str "<h1>Crux bench results</h1><br>"
-          (->> (for [[node-type results] bench-results]
-                 (str (format "<h2>%s</h2>" node-type)
-                      (->> (for [result results]
-                             (format "<p>%s</p>" result))
-                           (string/join))))
-               (string/join)))))
+     (bench/results->email bench-results)))
 
   (shutdown-agents))

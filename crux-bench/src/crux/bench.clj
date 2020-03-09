@@ -90,6 +90,28 @@
                (map result->slack-message)
                (string/join "\n"))))
 
+(defn- result->html [{:keys [time-taken-ms bench-type] :as bench-map}]
+  (format "<p> <b>%s</b> (%s): <code>%s</code></p>"
+          (name bench-type)
+          (java.time.Duration/ofMillis time-taken-ms)
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
+
+(defn- results->html [results]
+  (format "<h3>%s</h3> %s"
+          (:bench-ns (first results))
+          (->> results
+               (map result->html)
+               (string/join " "))))
+
+(defn results->email [bench-results]
+  (str "<h1>Crux bench results</h1>"
+       (->> (for [[node-type results] bench-results]
+              (str (format "<h2>%s</h2>" node-type)
+                   (->> (for [result results]
+                          (results->html result))
+                        (string/join))))
+            (string/join))))
+
 (defn with-bench-ns* [bench-ns f]
   (log/infof "running bench-ns '%s'..." bench-ns)
 
