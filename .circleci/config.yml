@@ -38,7 +38,7 @@ orbs:
           - run:
               command: |
                 cd crux-build/crux-builder/docker/
-                IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
+                IMAGE_NAME="<<parameters.artifact-name>>" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                 docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
       deploy-tar:
