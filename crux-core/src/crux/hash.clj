@@ -32,8 +32,7 @@
     (catch ClassNotFoundException e
       false)))
 
-(declare id-hash)
-(locking #'id-hash
+(locking crux.ByteUtils
   (defonce id-hash
     (if (and (= "SHA1" id-hash-algorithm)
              byte-utils-sha1-enabled?)
