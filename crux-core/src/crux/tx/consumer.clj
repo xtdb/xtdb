@@ -20,18 +20,12 @@
                                                                       (->> tx-events
                                                                            (into #{} (comp (mapcat tx/tx-event->doc-hashes)
                                                                                            (map c/new-id))))))
-
                                 (db/index-tx indexer tx tx-events)
-
                                 (when (Thread/interrupted)
                                   (throw (InterruptedException.))))
-
                               consumed-txs?))]
-
-
         (when (Thread/interrupted)
           (throw (InterruptedException.)))
-
         (when-not consumed-txs?
           (Thread/sleep (.toMillis poll-sleep-duration)))))
 

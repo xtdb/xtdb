@@ -228,22 +228,16 @@
       (with-open [consumer (doto (create-consumer (assoc kafka-config
                                                     "group.id" (or group-id (str (UUID/randomUUID)))))
                              (subscribe-consumer #{doc-topic} tp-offsets))]
-
         (loop [tp-offsets tp-offsets]
           (let [tp-offsets (->> (consumer-seqs consumer (Duration/ofSeconds 1))
                                 (reduce (fn [tp-offsets doc-records]
                                           (db/put-objects object-store (->> doc-records (into {} (map doc-record->id+doc))))
-
                                           (doto (update-doc-offsets tp-offsets doc-records)
                                             (->> (store-doc-offsets kv-store))))
-
                                         tp-offsets))]
-
             (when (Thread/interrupted)
               (throw (InterruptedException.)))
-
             (recur tp-offsets))))
-
       (catch InterruptException e
         (Thread/interrupted))
       (catch InterruptedException e)
