@@ -53,6 +53,5 @@
 (def module
   {::indexer 'crux.tx/kv-indexer
    ::n/indexer {:start-fn (fn [{:keys [::indexer ::n/object-store ::n/kv-store]} args]
-                            (let [!error (atom nil)]
-                              (->CompactingIndexer indexer object-store kv-store)))
+                            (->CompactingIndexer indexer object-store kv-store))
                 :deps [::indexer ::n/object-store ::n/kv-store]}})
