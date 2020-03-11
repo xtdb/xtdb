@@ -9,17 +9,41 @@
 
 (t/use-fixtures :each fs/with-standalone-node kvf/with-kv-dir fapi/with-node)
 
-(t/deftest test-can-use-api-to-access-crux
-  (t/testing "compact away before valid-time watermark"
-    (let [{:crux.tx/keys [tx-time]} (apif/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-2015"} #inst "2015"]
-                                                           [:crux.tx/put {:crux.db/id :ivan :name "Ivan-2016"} #inst "2016"]
+(defn- assert-present [& docs]
+  (doseq [doc docs]
+    (assert (.document *api* (c/new-id doc)) doc)))
+
+(t/deftest test-compact-below-watermark
+  (t/testing "preserve initial document below watermark"
+    (let [{:crux.tx/keys [tx-time]} (apif/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-2015"} #inst "2015"]])]
+      (assert-present {:crux.db/id :ivan :name "Ivan-2015"})
+      (let [db (.db *api*)]
+        (with-open [snapshot (.newSnapshot db)]
+          (cc/compact (:object-store *api*) snapshot :ivan #inst "2017" tx-time)))
+      (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2015"})))))
+
+  (t/testing "compact away below valid-time watermark"
+    (let [{:crux.tx/keys [tx-time]} (apif/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-2016"} #inst "2016"]
                                                            [:crux.tx/put {:crux.db/id :ivan :name "Ivan-2020"} #inst "2020"]])]
-      (assert (and (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2015"}))
-                   (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2016"}))
-                   (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"}))))
+      (assert-present {:crux.db/id :ivan :name "Ivan-2015"}
+                      {:crux.db/id :ivan :name "Ivan-2016"}
+                      {:crux.db/id :ivan :name "Ivan-2020"})
       (let [db (.db *api*)]
         (with-open [snapshot (.newSnapshot db)]
           (cc/compact (:object-store *api*) snapshot :ivan #inst "2017" tx-time)))
       (t/is (not (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2015"}))))
+      (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2016"})))
+      (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"})))))
+
+  (t/testing "do not compact away document that exists above and below watermark"
+    (let [{:crux.tx/keys [tx-time]} (apif/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-2015"} #inst "2015"]
+                                                           [:crux.tx/put {:crux.db/id :ivan :name "Ivan-2015"} #inst "2021"]])]
+      (assert-present {:crux.db/id :ivan :name "Ivan-2015"}
+                      {:crux.db/id :ivan :name "Ivan-2016"}
+                      {:crux.db/id :ivan :name "Ivan-2020"})
+      (let [db (.db *api*)]
+        (with-open [snapshot (.newSnapshot db)]
+          (cc/compact (:object-store *api*) snapshot :ivan #inst "2017" tx-time)))
+      (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2015"})))
       (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2016"})))
       (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"}))))))

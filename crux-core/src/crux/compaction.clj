@@ -9,7 +9,6 @@
            java.time.Duration
            crux.codec.EntityTx))
 
-;; 16, 20
 (defn compact [object-store snapshot eid valid-time tx-time]
   (with-open [i (kv/new-iterator snapshot)]
     ;; These are candidates for killing:
@@ -17,7 +16,6 @@
                                      (rest))]
       (log/info "Pruning" entity-tx)
       (db/delete-objects object-store [(.content-hash entity-tx)]))))
-
 
 ;; Spiked out plumbing:
 
