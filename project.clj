@@ -8,6 +8,7 @@
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-test"
    "crux-cli"
+   "crux-compactor"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"

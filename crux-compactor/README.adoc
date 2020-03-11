@@ -1,0 +1,6 @@
+= crux-compactor
+
+This project contains a utility module for pruning "old" record from node indexes (not the upstream logs) to reduce storage requirements for use-cases where only querying "recent" data at a particular node is required. Compaction is independently configurable for each node.
+
+For tests, run `lein test` within this project directory and see
+`/crux-compactor/test/crux/`.
