@@ -1,7 +1,6 @@
 (ns crux.compaction2-test
   (:require [clojure.test :as t]
             [crux.codec :as c]
-            [crux.node :as n]
             [crux.compaction :as cc]
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
@@ -46,4 +45,10 @@
           (cc/compact (:object-store *api*) snapshot :ivan #inst "2017" tx-time)))
       (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2015"})))
       (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2016"})))
-      (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"}))))))
+      (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"})))))
+
+  (t/testing "handle no data present below watermark"
+    (assert-present {:crux.db/id :ivan :name "Ivan-2015"})
+    (let [db (.db *api*)]
+      (with-open [snapshot (.newSnapshot db)]
+        (cc/compact (:object-store *api*) snapshot :ivan #inst "2000" (:crux.tx/tx-time (.latestCompletedTx *api*)))))))

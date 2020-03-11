@@ -24,8 +24,9 @@
   (with-open [i (kv/new-iterator snapshot)]
     (let [[^EntityTx tx & txes] (idx/entity-history-seq-descending i eid valid-time tx-time)
           old-content-hashes (entity-txes->content-hashes txes)
-          new-content-hashes (with-open [i2 (kv/new-iterator snapshot)]
-                               (entity-txes->content-hashes (idx/entity-history-seq-ascending i2 eid (.vt tx) tx-time)))
+          new-content-hashes (when tx
+                               (with-open [i2 (kv/new-iterator snapshot)]
+                                 (entity-txes->content-hashes (idx/entity-history-seq-ascending i2 eid (.vt tx) tx-time))))
           content-hashes-to-prune (set/difference old-content-hashes new-content-hashes)]
       (log/info "Pruning" content-hashes-to-prune)
       (db/delete-objects object-store content-hashes-to-prune))))
