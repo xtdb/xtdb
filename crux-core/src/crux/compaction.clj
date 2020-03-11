@@ -4,18 +4,31 @@
             [crux.node :as n]
             [crux.tx :as tx]
             [crux.kv :as kv]
-            [crux.index :as idx])
+            [crux.index :as idx]
+            [clojure.set :as set])
   (:import java.io.Closeable
            java.time.Duration
            crux.codec.EntityTx))
 
+;; todo, can be integrated:
+(defn- tx-events->compaction-eids [tx-events]
+  (->> tx-events
+       (filter (comp #{:crux.tx/put :crux.tx/cas} first))
+       (map first)))
+
+(defn- entity-txes->content-hashes [txes]
+  (set (for [^EntityTx entity-tx txes]
+         (.content-hash entity-tx))))
+
 (defn compact [object-store snapshot eid valid-time tx-time]
   (with-open [i (kv/new-iterator snapshot)]
-    ;; These are candidates for killing:
-    (doseq [^EntityTx entity-tx (->> (idx/entity-history-seq-descending i eid valid-time tx-time)
-                                     (rest))]
-      (log/info "Pruning" entity-tx)
-      (db/delete-objects object-store [(.content-hash entity-tx)]))))
+    (let [[^EntityTx tx & txes] (idx/entity-history-seq-descending i eid valid-time tx-time)
+          old-content-hashes (entity-txes->content-hashes txes)
+          new-content-hashes (with-open [i2 (kv/new-iterator snapshot)]
+                               (entity-txes->content-hashes (idx/entity-history-seq-ascending i2 eid (.vt tx) tx-time)))
+          content-hashes-to-prune (set/difference old-content-hashes new-content-hashes)]
+      (log/info "Pruning" content-hashes-to-prune)
+      (db/delete-objects object-store content-hashes-to-prune))))
 
 ;; Spiked out plumbing:
 
