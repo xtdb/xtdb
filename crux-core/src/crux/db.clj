@@ -49,7 +49,8 @@
   (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
   (missing-keys [this snapshot ks])
-  (put-objects [this kvs]))
+  (put-objects [this kvs])
+  (delete-objects [this kvs]))
 ;; end::ObjectStore[]
 
 (defrecord CloseableTxLogIterator [close-fn ^Iterator lazy-seq-iterator]

@@ -1,14 +1,28 @@
-(ns crux.tx.consumer
+(ns crux.compaction
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.node :as n]
             [crux.tx :as tx]
-            [crux.codec :as c])
+            [crux.kv :as kv]
+            [crux.index :as idx])
   (:import java.io.Closeable
-           java.time.Duration))
+           java.time.Duration
+           crux.codec.EntityTx))
 
-(defn- index-tx-log [{:keys [!error], ::n/keys [tx-log indexer document-store]} {::keys [^Duration poll-sleep-duration]}]
-  (log/info "Started tx-consumer")
+;; 16, 20
+(defn compact [object-store snapshot eid valid-time tx-time]
+  (with-open [i (kv/new-iterator snapshot)]
+    ;; These are candidates for killing:
+    (doseq [^EntityTx entity-tx (->> (idx/entity-history-seq-descending i eid valid-time tx-time)
+                                     (rest))]
+      (log/info "Pruning" entity-tx)
+      (db/delete-objects object-store [(.content-hash entity-tx)]))))
+
+
+;; Spiked out plumbing:
+
+(defn- index-tx-log [{:keys [!error] ::n/keys [tx-log indexer document-store]} {::keys [^Duration poll-sleep-duration]}]
+  (log/info "Started compactor")
   (try
     (while true
       (let [consumed-txs? (with-open [tx-log (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer)))]
@@ -16,11 +30,9 @@
                                   consumed-txs? (not (empty? tx-log))]
                               (doseq [{:keys [crux.tx.event/tx-events] :as tx} tx-log
                                       :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
-                                (db/index-docs indexer (db/fetch-docs document-store
-                                                                      (->> tx-events
-                                                                           (into #{} (comp (mapcat tx/tx-event->doc-hashes)
-                                                                                           (map c/new-id))))))
-                                (db/index-tx indexer tx tx-events)
+
+                                ;; What to do here?
+
                                 (when (Thread/interrupted)
                                   (throw (InterruptedException.))))
                               consumed-txs?))]
@@ -28,15 +40,13 @@
           (throw (InterruptedException.)))
         (when-not consumed-txs?
           (Thread/sleep (.toMillis poll-sleep-duration)))))
-
     (catch InterruptedException e)
     (catch Exception e
       (reset! !error e)
-      (log/error e "Error consuming transactions")))
+      (log/error e "Error compacting")))
+  (log/info "Shut down tx-compactor"))
 
-  (log/info "Shut down tx-consumer"))
-
-(defrecord TxConsumer [^Thread executor-thread, !error]
+(defrecord Compactor [^Thread executor-thread, !error]
   db/TxConsumer
   (consumer-error [_] @!error)
   Closeable
@@ -44,14 +54,14 @@
     (.interrupt executor-thread)
     (.join executor-thread)))
 
-(def tx-consumer
+(def compactor
   {:start-fn (fn [deps args]
                (let [!error (atom nil)]
-                 (->TxConsumer (doto (Thread. #(index-tx-log (assoc deps :!error !error) args))
-                                 (.setName "crux-tx-consumer")
-                                 (.start))
-                               !error)))
+                 (->Compactor (doto (Thread. #(index-tx-log (assoc deps :!error !error) args))
+                                (.setName "crux-tx-consumer")
+                                (.start))
+                              !error)))
    :deps [::n/indexer ::n/document-store ::n/tx-log]
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
-                                 :doc "How long to sleep between polling for new transactions"
+                                 :doc "How long to sleep between running compaction"
                                  :crux.config/type :crux.config/duration}}})
