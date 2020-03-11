@@ -28,8 +28,9 @@
                                (with-open [i2 (kv/new-iterator snapshot)]
                                  (entity-txes->content-hashes (idx/entity-history-seq-ascending i2 eid (.vt tx) tx-time))))
           content-hashes-to-prune (set/difference old-content-hashes new-content-hashes)]
-      (log/info "Pruning" content-hashes-to-prune)
-      (db/delete-objects object-store content-hashes-to-prune))))
+      (when (seq content-hashes-to-prune)
+        (log/info "Pruning" content-hashes-to-prune)
+        (db/delete-objects object-store content-hashes-to-prune)))))
 
 ;; Spiked out plumbing:
 
