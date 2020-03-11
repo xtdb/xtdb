@@ -1,4 +1,4 @@
-(defproject juxt/crux-compactor" "derived-from-git"
+(defproject juxt/crux-compactor "derived-from-git"
   :description "Crux Index Compaction Utility"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
