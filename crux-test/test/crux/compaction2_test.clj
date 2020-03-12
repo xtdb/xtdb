@@ -9,8 +9,6 @@
 
 (t/use-fixtures :each fs/with-standalone-node cf/with-compaction kvf/with-kv-dir fapi/with-node)
 
-;; TODO suspect this test of intermittent failure
-
 (t/deftest test-compact-below-watermark
   (with-redefs [cc/valid-time-watermark (fn [_ _] #inst "2017")]
     (t/testing "preserve initial document below watermark"
@@ -20,6 +18,7 @@
     (t/testing "compact away below valid-time watermark"
       (let [{:crux.tx/keys [tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-2016"} #inst "2016"]
                                                              [:crux.tx/put {:crux.db/id :ivan :name "Ivan-2020"} #inst "2020"]])]
+        ;; TODO intermittent, as compaction occurs AFTER last-submitted-tx committed
         (t/is (not (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2015"}))))
         (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2016"})))
         (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"})))))

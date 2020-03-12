@@ -9,7 +9,6 @@
   (:import crux.codec.EntityTx
            java.util.Calendar))
 
-;; todo, can be integrated:
 (defn- tx-events->compaction-eids [tx-events]
   (->> tx-events
        (filter (comp #{:crux.tx/put :crux.tx/cas} first))
@@ -32,8 +31,6 @@
       (when (seq content-hashes-to-prune)
         (log/debug "Pruning" content-hashes-to-prune)
         (db/delete-objects object-store content-hashes-to-prune)))))
-
-;; Just stop - do the eviction
 
 (defn valid-time-watermark [tt-vt-interval-s tx-time]
   (.getTime
