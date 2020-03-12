@@ -6,7 +6,8 @@
             [crux.kv :as kv]
             [crux.node :as n]
             [crux.tx :as tx])
-  (:import crux.codec.EntityTx))
+  (:import crux.codec.EntityTx
+           java.util.Calendar))
 
 ;; todo, can be integrated:
 (defn- tx-events->compaction-eids [tx-events]
@@ -30,19 +31,23 @@
         (log/info "Pruning" content-hashes-to-prune)
         (db/delete-objects object-store content-hashes-to-prune)))))
 
-(def ^:dynamic valid-time-watermark (fn [tx-time] tx-time))
+(defn valid-time-watermark [tt-vt-interval-s tx-time]
+  (.getTime
+   (doto (java.util.Calendar/getInstance)
+     (.setTime tx-time)
+     (.add Calendar/SECOND (- tt-vt-interval-s)))))
 
-(defrecord CompactingIndexer [indexer object-store kv-store]
+(defrecord CompactingIndexer [indexer object-store kv-store tt-vt-interval-s]
   db/Indexer
   (index-docs [this docs]
     (db/index-docs indexer docs))
   (index-tx [this tx tx-events]
     (db/index-tx indexer tx tx-events)
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (doseq [eid (tx-events->compaction-eids tx-events)]
-        (compact object-store snapshot eid (valid-time-watermark (::tx/tx-time tx)) (::tx/tx-time tx)))))
-  (missing-docs [this content-hashes]
-    (db/missing-docs indexer content-hashes))
+      (let [vt-watermark (valid-time-watermark tt-vt-interval-s (::tx/tx-time tx))]
+        (doseq [eid (tx-events->compaction-eids tx-events)]
+          (compact object-store snapshot eid vt-watermark (::tx/tx-time tx))))))
+  (missing-docs [this content-hashes]    (db/missing-docs indexer content-hashes))
   (store-index-meta [this k v]
     (db/store-index-meta indexer k v))
   (read-index-meta [this k]
@@ -50,8 +55,13 @@
   (latest-completed-tx [this]
     (db/latest-completed-tx indexer)))
 
+(def interval-30-days (* 60 60 24 30))
+
 (def module
   {::indexer 'crux.tx/kv-indexer
-   ::n/indexer {:start-fn (fn [{:keys [::indexer ::n/object-store ::n/kv-store]} args]
-                            (->CompactingIndexer indexer object-store kv-store))
-                :deps [::indexer ::n/object-store ::n/kv-store]}})
+   ::n/indexer {:start-fn (fn [{:keys [::indexer ::n/object-store ::n/kv-store]} {:keys [::tt-vt-interval-s]}]
+                            (->CompactingIndexer indexer object-store kv-store tt-vt-interval-s))
+                :deps [::indexer ::n/object-store ::n/kv-store]
+                :args {::tt-vt-interval-s {:doc "Interval in seconds between transaction-time and valid-time watermark"
+                                           :default interval-30-days
+                                           :crux.config/type :crux.config/nat-int}}}})
