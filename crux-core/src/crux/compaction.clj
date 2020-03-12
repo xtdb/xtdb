@@ -21,7 +21,9 @@
 
 (defn compact [object-store snapshot eid valid-time tx-time]
   (with-open [i (kv/new-iterator snapshot)]
-    (let [[^EntityTx tx & txes] (idx/entity-history-seq-descending i eid valid-time tx-time)
+    (let [[^EntityTx tx & txes] (take-while (fn [^EntityTx tx]
+                                              (db/get-single-object object-store snapshot (.content-hash tx)))
+                                            (idx/entity-history-seq-descending i eid valid-time tx-time))
           old-content-hashes (entity-txes->content-hashes txes)
           new-content-hashes (when tx
                                (with-open [i2 (kv/new-iterator snapshot)]
@@ -30,6 +32,8 @@
       (when (seq content-hashes-to-prune)
         (log/debug "Pruning" content-hashes-to-prune)
         (db/delete-objects object-store content-hashes-to-prune)))))
+
+;; Just stop - do the eviction
 
 (defn valid-time-watermark [tt-vt-interval-s tx-time]
   (.getTime

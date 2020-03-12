@@ -60,6 +60,7 @@
 
 ;; 6 4 - no compaction module loaded
 ;; 8 7 - compaction module loaded
+;; 7 4 - compaction + check
 
 ;; 2.5 / 6.5
 ;; next is to microbench around this specific fn? use the a

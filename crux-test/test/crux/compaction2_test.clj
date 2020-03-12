@@ -32,7 +32,7 @@
         (t/is (.document *api* (c/new-id {:crux.db/id :ivan :name "Ivan-2020"})))))))
 
 (t/deftest test-should-compact-using-window-against-tx-time
-  (assert (= 1 (:tt-vt-interval-s (:indexer *api*))))
+  (assert (:tt-vt-interval-s (:indexer *api*)))
   (t/testing "compact away doc below the watermark"
     (let [{:crux.tx/keys [tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-2015"} #inst "2015"]
                                                            [:crux.tx/put {:crux.db/id :ivan :name "Ivan-2016"} #inst "2016"]])]
