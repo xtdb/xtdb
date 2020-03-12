@@ -6,5 +6,5 @@
 (defn with-compaction [f]
   (fapi/with-opts (-> fapi/*opts*
                       (update ::n/topology conj cc/module)
-                      (assoc :crux.compaction/tt-vt-interval-s 1))
+                      (assoc :crux.compaction/tt-vt-interval-s (* 60 60 24)))
     f))

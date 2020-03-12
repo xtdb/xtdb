@@ -28,7 +28,7 @@
                                  (entity-txes->content-hashes (idx/entity-history-seq-ascending i2 eid (.vt tx) tx-time))))
           content-hashes-to-prune (set/difference old-content-hashes new-content-hashes)]
       (when (seq content-hashes-to-prune)
-        (log/info "Pruning" content-hashes-to-prune)
+        (log/debug "Pruning" content-hashes-to-prune)
         (db/delete-objects object-store content-hashes-to-prune)))))
 
 (defn valid-time-watermark [tt-vt-interval-s tx-time]
