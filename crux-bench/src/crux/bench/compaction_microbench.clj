@@ -44,23 +44,15 @@
                     #:crux.kafka.embedded{:zookeeper-data-dir (str (io/file tmp-dir "zk-data"))
                                           :kafka-dir (str (io/file tmp-dir "kafka-data"))
                                           :kafka-log-dir (str (io/file tmp-dir "kafka-log"))})
-                node (crux/start-node {:crux.node/topology ['crux.kafka/topology ;cc/module
-                                                            ]
+                node (crux/start-node {:crux.node/topology ['crux.kafka/topology cc/module]
                                        :crux.node/kv-store 'crux.kv.rocksdb/kv
                                        :crux.kv/db-dir (str (io/file tmp-dir "rocks"))})]
       (bench/with-bench-ns :compaction
         (run-benches node submit-batches [:initial-submits :initial-await]))
 
-      ;; (assert (not (.document node (c/new-id {:crux.db/id :doc-0 :v 1}))))
-      ;; (assert (not (.document node (c/new-id {:crux.db/id :doc-0 :v 18}))))
-      ;; (assert (.document node (c/new-id {:crux.db/id :doc-0 :v 19})))
+      (assert (not (.document node (c/new-id {:crux.db/id :doc-0 :v 1}))))
+      (assert (not (.document node (c/new-id {:crux.db/id :doc-0 :v 18}))))
+      (assert (.document node (c/new-id {:crux.db/id :doc-0 :v 19})))
 
       (bench/with-bench-ns :no-compaction
         (run-benches node submit-batches-no-compaction [:initial-submits :initial-await])))))
-
-;; 6 4 - no compaction module loaded
-;; 8 7 - compaction module loaded
-;; 7 4 - compaction + check
-
-;; 2.5 / 6.5
-;; next is to microbench around this specific fn? use the a
