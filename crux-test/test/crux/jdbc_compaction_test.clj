@@ -1,4 +1,4 @@
-(ns crux.compaction-test
+(ns crux.jdbc-compaction-test
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.fixtures :as f]
