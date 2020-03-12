@@ -18,7 +18,7 @@
   (set (for [^EntityTx entity-tx txes]
          (.content-hash entity-tx))))
 
-(defn compact [object-store snapshot eid valid-time tx-time]
+(defn- compact [object-store kv-store snapshot eid valid-time tx-time]
   (with-open [i (kv/new-iterator snapshot)]
     (let [[^EntityTx tx & txes] (take-while (fn [^EntityTx tx]
                                               (db/get-single-object object-store snapshot (.content-hash tx)))
@@ -30,6 +30,10 @@
           content-hashes-to-prune (set/difference old-content-hashes new-content-hashes)]
       (when (seq content-hashes-to-prune)
         (log/debug "Pruning" content-hashes-to-prune)
+        (->> (for [c content-hashes-to-prune]
+               (idx/doc-idx-keys c (db/get-single-object object-store snapshot c)))
+             (reduce into [])
+             (idx/delete-doc-idx-keys kv-store))
         (db/delete-objects object-store content-hashes-to-prune)))))
 
 (defn valid-time-watermark [tt-vt-interval-s tx-time]
@@ -47,8 +51,9 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (let [vt-watermark (valid-time-watermark tt-vt-interval-s (::tx/tx-time tx))]
         (doseq [eid (tx-events->compaction-eids tx-events)]
-          (compact object-store snapshot eid vt-watermark (::tx/tx-time tx))))))
-  (missing-docs [this content-hashes]    (db/missing-docs indexer content-hashes))
+          (compact object-store kv-store snapshot eid vt-watermark (::tx/tx-time tx))))))
+  (missing-docs [this content-hashes]
+    (db/missing-docs indexer content-hashes))
   (store-index-meta [this k v]
     (db/store-index-meta indexer k v))
   (read-index-meta [this k]
