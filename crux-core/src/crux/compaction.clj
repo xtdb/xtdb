@@ -33,7 +33,7 @@
 
 (defn valid-time-watermark [tt-vt-interval-s tx-time]
   (.getTime
-   (doto (java.util.Calendar/getInstance)
+   (doto (Calendar/getInstance)
      (.setTime tx-time)
      (.add Calendar/SECOND (- tt-vt-interval-s)))))
 
