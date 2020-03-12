@@ -1,4 +1,4 @@
-(ns crux.compaction2-test
+(ns crux.compaction-test
   (:require [clojure.test :as t]
             [crux.codec :as c]
             [crux.compaction :as cc]
