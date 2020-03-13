@@ -93,6 +93,8 @@
   (let [mode (first args)]
     (with-open [node (crux/new-ingest-client {:crux.kafka/bootstrap-servers (get soak-secrets "CONFLUENT_BROKER")
                                               :crux.kafka/replication-factor 3
+                                              :crux.kafka/tx-topic "soak-transaction-log"
+                                              :crux.kafka/doc-topic "soak-docs"
                                               :crux.kafka/doc-partitions 1
                                               :crux.kafka/kafka-properties-map kafka-properties-map})]
       (crux/submit-tx node
