@@ -80,6 +80,13 @@
   (crux/new-api-client (str "http://localhost:" port)))
 ;; end::start-http-client[]
 
+;; tag::start-console-node[]
+(defn start-node-with-console [storage-dir]
+  (crux/start-node
+   {:crux.node/topology ['crux.standalone/topology 'crux.console/module]
+    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
+;; tag::start-console-node[]
+
 (defn example-submit-tx [node]
 ;; tag::submit-tx[]
 (crux/submit-tx

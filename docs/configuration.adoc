@@ -342,6 +342,8 @@ You can start up a *HTTP server* on a node by including
 include::./src/docs/examples.clj[tags=start-standalone-http-node]
 ----
 
+To start up a node with a connected Crux console and HTTP Server:
+
 [#config-start-remote-client]
 === Using a Remote API Client
 [#config-remote-client-dependency]
@@ -361,6 +363,35 @@ include::./src/docs/examples.clj[tags=start-http-client]
 ----
 
 NOTE: The remote client requires valid and transaction time to be specified for all calls to `crux/db`.
+
+[#config-start-console]
+== Console
+Crux offers the Crux console, a web app allowing you to query and submit data to Crux and see data from different perpectives with an easy to use interface.
+
+.Console configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Property|Description|Default Value
+|`:crux.console/console-port`| The port which the console frontend is started on | 5000
+|`:crux.console/routes-prefix` | The console route's prefix | "/console"
+|===
+[#console-dependency]
+*Project Dependency*
+
+[source,clj]
+----
+include::./deps.edn[tags=ConsoleDep]
+----
+[#console-start]
+*Getting started*
+
+The following code creates a default `crux.standalone` running entirely in memory, and starts up a console which can be connected to on `localhost:5000/console`.
+[source,clj]
+----
+include::./src/docs/examples.clj[tags=include-crux-api]
+
+include::./src/docs/examples.clj[tags=start-console-node]
+----
 
 [#config-docker]
 == Docker
