@@ -7,19 +7,22 @@
             [crux.fixtures.standalone :as fs]
             [crux.kv :as kv]
             [crux.fixtures :as f])
-  (:import java.sql.DriverManager))
+  (:import java.sql.DriverManager
+           crux.calcite.CruxSchemaFactory))
 
 (t/use-fixtures :each fs/with-standalone-node kvf/with-kv-dir fapi/with-node)
 
 (t/deftest test-hello-world-query
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                {:crux.db/id :petr :name "Petr" :last-name "Petrov"}]))
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}]))
 
   (t/testing "Can query value by single field"
     (t/is (= #{["Ivan"]} (api/q (api/db *api*) '{:find [name]
                                                  :where [[e :name "Ivan"]
                                                          [e :name name]]}))))
 
-  (let [conn (DriverManager/getConnection "jdbc:calcite:model=src/juxt/calcite_play/model.json")
+  (let [conn (DriverManager/getConnection "jdbc:calcite:model=crux-calcite/resources/model.json")
         stmt (.createStatement conn)]
-    (resultset-seq (.executeQuery stmt "select name from product limit 2"))))
+
+    ;; Matches the hardcoded SW
+    (t/is (= [{:name "Ivan"}] (resultset-seq
+                               (.executeQuery stmt "SELECT PERSON.NAME FROM PERSON"))))))

@@ -5,7 +5,7 @@
         {
             "name": "crux",
             "type": "custom",
-            "factory": "juxt.calcite_play.SchemaFactory",
+            "factory": "crux.calcite.CruxSchemaFactory",
             "operand": {
                 "foo": "bar"
             }
