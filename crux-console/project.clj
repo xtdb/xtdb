@@ -1,11 +1,15 @@
-(defproject crux-console "derived-from-git"
+(defproject juxt/crux-console "derived-from-git"
   :dependencies
-    [[org.clojure/clojure          "1.10.1"]
+    [[org.clojure/clojure "1.10.1"]
      ; 1.10.1 doesn't work with this aleph
-     [aleph                        "0.4.6"]
-     [bidi                         "2.1.6"]
-     [hiccup                       "1.0.5"]
-     [page-renderer                "0.4.4"]]
+     [aleph "0.4.6"]
+     [bidi "2.1.6"]
+     [hiccup "1.0.5"]
+     [page-renderer "0.4.4"]
+     [ring/ring-core "1.8.0"]
+     [ring/ring-jetty-adapter "1.8.0"]
+     [ring/ring-codec "1.1.2"]
+     [ring-cors "0.1.13"]]
 
   :min-lein-version "2.9.1"
   :main crux-ui-server.main
@@ -13,7 +17,7 @@
   :uberjar-name "crux-console-skimmed.jar"
   :omit-sources true
   :resource-paths ["resources"]
-
+  :middleware [leiningen.project-version/middleware]
   :profiles
   {:dev
    {:main dev :repl-options {:init-ns dev}
@@ -23,23 +27,24 @@
    {:uberjar-name "crux-console.jar"
     :auto-clean false
     :dependencies
-    [[juxt/crux-core            "20.01-1.6.2-alpha"]
-     [juxt/crux-rocksdb         "20.01-1.6.2-alpha"]
-     [juxt/crux-http-server     "20.01-1.6.2-alpha"]]}
+    [[juxt/crux-core "derived-from-git"]
+     [juxt/crux-rocksdb "derived-from-git"]
+     [juxt/crux-http-server "derived-from-git"]]}
    :shadow-cljs ; also see package.json deps
    {:dependencies
-    [[org.clojure/clojurescript    "1.10.520"]
-     [reagent                      "0.8.1"]
-     [re-frame                     "0.10.8"]
-     [garden                       "1.3.9"]
-     [medley                       "1.2.0"]
-     [funcool/promesa              "2.0.1"]
-     [org.clojure/tools.logging    "0.5.0"]
-     [com.andrewmcveigh/cljs-time  "0.5.2"]
-     [binaryage/oops               "0.6.4"]
-     [day8.re-frame/test           "0.1.5"]
-     [day8.re-frame/re-frame-10x   "0.3.3"]
-     [thheller/shadow-cljs         "2.8.52"]
+    [[org.clojure/clojurescript "1.10.520"]
+     [org.clojure/tools.reader "1.3.2"]
+     [reagent "0.8.1"]
+     [re-frame "0.10.8"]
+     [garden "1.3.9"]
+     [medley "1.2.0"]
+     [funcool/promesa "2.0.1"]
+     [org.clojure/tools.logging "0.5.0"]
+     [com.andrewmcveigh/cljs-time "0.5.2"]
+     [binaryage/oops "0.6.4"]
+     [day8.re-frame/test "0.1.5"]
+     [day8.re-frame/re-frame-10x "0.3.3"]
+     [thheller/shadow-cljs "2.8.52"]
      [com.google.javascript/closure-compiler-unshaded "v20190819"]
      [org.clojure/google-closure-library "0.0-20190213-2033d5d9"]]}}
 
@@ -93,4 +98,3 @@
    "build-report"
    [["yarn"]
     ["shadow" "run" "shadow.cljs.build-report" "app" "report.html"]]})
-
