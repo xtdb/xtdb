@@ -8,7 +8,8 @@
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-test"
    "crux-cli"
-   "crux-bench"])
+   "crux-bench"
+   "crux-console"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
   :url "https://github.com/juxt/crux"
@@ -34,6 +35,7 @@
                  [juxt/crux-test "derived-from-git"]
                  [juxt/crux-bench "derived-from-git"]
                  [juxt/crux-cli "derived-from-git"]
+                 [juxt/crux-console "derived-from-git"]
 
                  [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
