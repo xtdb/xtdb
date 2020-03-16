@@ -55,7 +55,7 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: circleci/clojure:lein-2.9.1
+      - image: circleci/clojure:lein-2.9.1-node
 
     working_directory: ~/crux
 
@@ -71,6 +71,11 @@ jobs:
           - v1-dependencies-{{ checksum "project.clj" }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
+
+      - run:
+          command: |
+            cd crux-console
+            lein build
 
       - run: lein sub install
       - run: lein deps
@@ -89,7 +94,7 @@ jobs:
 
   deploy:
     docker:
-      - image: circleci/clojure:lein-2.9.1
+      - image: circleci/clojure:lein-2.9.1-node
 
     working_directory: ~/crux
     steps:
@@ -98,6 +103,12 @@ jobs:
             keys:
               - v1-dependencies-{{ checksum "project.clj" }}
               - v1-dependencies-
+
+        - run:
+            command: |
+              cd crux-console
+              lein build
+
         - run: lein sub install
         - run: lein deps
 
