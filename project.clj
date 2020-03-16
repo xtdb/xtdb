@@ -9,6 +9,7 @@
    "crux-test"
    "crux-s3"
    "crux-cli"
+   "crux-calcite"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -33,6 +34,7 @@
    [juxt/crux-metrics "crux-git-version-alpha"]
    [juxt/crux-http-server "crux-git-version-alpha" :exclusions [commons-codec]]
    [juxt/crux-rdf "crux-git-version-alpha"]
+   [juxt/crux-calcite "derived-from-git"]
    [juxt/crux-test "crux-git-version"]
    [juxt/crux-bench "crux-git-version" :exclusions [org.apache.commons/commons-lang3]]
    [juxt/crux-cli "crux-git-version-beta"]
