@@ -1,0 +1,382 @@
+body {
+    width: 980px;
+    margin-left: auto;
+    margin-right: auto;
+    font-family: sans-serif;
+}
+
+a {
+    color: #d67214
+}
+
+fieldset {
+    border: none;
+    padding: 0;
+    margin-bottom: 0.2em;
+}
+
+form {
+    padding-bottom: 1em;
+}
+
+label {
+    font-weight: bold;
+}
+
+input, textarea, select {
+    border: 1px solid grey;
+    border-radius: 3px;
+    background: transparent;
+    margin: 0.2em;
+    padding: 0.2em;
+    outline: none;
+}
+
+textarea:invalid, input:invalid {
+    border: 1px solid darkred;
+}
+
+input[type=submit] {
+    border: 1.5px solid grey;
+    padding-left: 1em;
+    padding-right: 1em;
+    font-size: 80%;
+}
+
+form:invalid input[type=submit].primary {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+input[type=submit]:hover,
+input[type=button]:hover {
+    background: #ddd;
+    border: 1.5px solid black;
+    cursor: pointer;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    padding-bottom: 0.4em;
+    border-bottom: 1px solid lightgrey;
+}
+
+h5, h6 {
+    border-bottom: 1px solid #eee;
+}
+
+h1 small, h2 small, h3 small, h4 small {
+    padding: 0.2em;
+    color: grey;
+    display: block;
+}
+
+label {
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    display: block;
+}
+
+footer {
+    border-top: 1.5px solid grey;
+    margin-top: 5em;
+    padding: 1em;
+    text-align: center;
+}
+
+dl {
+    margin: 0;
+    margin-bottom: 0.2em;
+}
+
+dl dt, dl dd {
+    color: grey;
+    font-size: 80%;
+    display: inline-block;
+    margin: 0;
+    margin-right: 0.2em;
+}
+
+dl dd {
+    color: black;
+    margin-right: 1em;
+}
+
+svg a text {
+    fill: #d67214;
+    text-decoration: underline;
+}
+
+.timetravel svg.timeline-graph {
+    text-anchor: start;
+    width: 100%;
+    font: 10px sans-serif;
+}
+
+.timetravel svg.timeline-graph line {
+    stroke: black;
+    stroke-width: 1.5px;
+}
+
+.timetravel svg.timeline-graph .max-time {
+    text-anchor: end;
+}
+
+.timetravel svg.timeline-graph .bitemp-coordinates {
+    stroke: blue;
+}
+
+.timetravel svg.timeline-graph .time-horizon line {
+    stroke: green;
+}
+
+.timetravel svg.timeline-graph .time-horizon text,
+.timetravel svg.timeline-graph .max-transaction-time text {
+    font-weight: bold;
+    text-decoration: none;
+    visibility: hidden;
+}
+
+.timetravel svg.timeline-graph .max-transaction-time text {
+    text-anchor: end;
+}
+
+.timetravel svg.timeline-graph .time-horizon:hover text,
+.timetravel svg.timeline-graph .max-transaction-time:hover text {
+    visibility: visible;
+}
+
+.timetravel svg.timeline-graph .max-transaction-time line {
+    stroke: darkred;
+    opacity: 0.5;
+}
+
+.timetravel svg.timeline-graph .axis .axis-name {
+    font-weight: bold;
+}
+
+.timetravel svg.timeline-graph .axis .axis-value {
+    font-weight: normal;
+}
+
+.timetravel svg.timeline-graph .axis .axis-line {
+    stroke-width: 3px;
+    stroke: #ddd;
+    cursor: pointer;
+}
+
+.timetravel svg.timeline-graph .timepoint {
+    text-anchor: middle;
+}
+
+.timetravel svg.timeline-graph .timepoint .timepoint-marker {
+    stroke-width: 2px;
+    stroke: #555;
+}
+
+.timetravel svg.timeline-graph a.timepoint text {
+    visibility: hidden;
+    text-decoration: none;
+}
+
+.timetravel svg.timeline-graph a.timepoint:hover text {
+    visibility: visible;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph {
+    max-width: 100%;
+    width: 70%;
+    margin: auto;
+    display: block;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .axis-name {
+    fill: grey;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .axis.vt {
+    text-anchor: start;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .axis.tt {
+    text-anchor: end;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .timepoint .timepoint-marker {
+    stroke: none;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .bitemp-coordinates text {
+    text-anchor: middle;
+    stroke: grey;
+    stroke-width: 0.1;
+    fill: grey;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .bitemp-coordinates rect {
+    fill: grey;
+    stroke: lightgrey;
+    fill-opacity: 0.2;
+}
+
+.timetravel svg.timeline-graph .max-transaction-time text,
+.timetravel svg.timeline-graph .time-horizon text {
+    text-anchor: middle;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .time-horizon rect {
+    fill: green;
+    stroke: green;
+    stroke-width: 1;
+    fill-opacity: 0.1;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .time-arrow {
+    stroke: #ccc;
+    stroke-width: 1;
+    stroke-dasharray: 10, 10;
+}
+
+.comments ul {
+    padding: 0;
+}
+
+.comments li {
+    padding-bottom: 0.5em;
+    list-style: none;
+}
+
+.comments li.comment .comment-meta {
+    display: inline-block;
+    color: grey;
+    font-size: 80%;
+    margin-bottom: 0.2em;
+}
+
+.comments li.comment .comment-meta .version-history,
+.comments li.comment .comment-meta .version-history label,
+.comments li.comment .comment-meta .version-history select {
+    display: inline-block;
+    font-weight: normal;
+    padding: 0;
+    margin: 0;
+    border: 0;
+}
+
+.comments form.edit-comment {
+    position: relative;
+    width: auto;
+    padding-bottom: 0;
+}
+
+.comments form.edit-comment fieldset {
+    margin-bottom: 0;
+}
+
+.comments .edit-comment textarea {
+    background: #f8f8f8;
+    border: 1px solid transparent;
+    cursor: default;
+    resize: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    min-height: 1em;
+}
+
+.comments .edit-comment:hover textarea {
+    border: 1px solid grey;
+    cursor: text;
+    resize: both;
+}
+
+.comments .edit-comment:hover textarea:invalid {
+    border: 1px solid darkred;
+}
+
+.comments .edit-comment .buttons {
+    position: absolute;
+    visibility: hidden;
+    right: 0;
+}
+
+.comments .edit-comment:hover .buttons {
+    visibility: visible;
+}
+
+.add-comment-box fieldset {
+    width: 25em;
+    min-width: 10em;
+}
+
+.add-comment-box input[type=text] {
+    width: 100%;
+    display: block;
+}
+
+.add-comment-box textarea {
+    width: 100%;
+}
+
+.transaction-history table {
+    width: 100%;
+    border-spacing: 0;
+    font-family: monospace;
+    white-space: pre;
+}
+
+.transaction-history table th {
+    text-align: left;
+}
+
+.transaction-history table td {
+    padding-top: 0.5em;
+    vertical-align: top;
+}
+
+.query-editor textarea {
+    width: 100%;
+    min-height: 3em;
+    font-size: 1.5em;
+    font-family: monospace;
+}
+
+.query-editor textarea.invalid {
+    border: 1px solid darkred;
+}
+
+.query-editor .invalid-query-message .edn {
+    color: darkred;
+    font-size: 0.7em;
+}
+
+.query-result table {
+    width: 100%;
+    border-spacing: 0;
+    font-family: monospace;
+    white-space: pre;
+}
+
+.query-result table th {
+    text-align: left;
+}
+
+.query-result table td {
+    padding-top: 0.25em;
+    vertical-align: top;
+}
+
+.status {
+    font-size: 75%;
+}
+
+pre.edn {
+    padding: 1em;
+    border-radius: 4px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+}
+
+.logo-img {
+    padding:1em;
+    max-height:10em;
+}
