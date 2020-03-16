@@ -8,4 +8,10 @@
                  [org.apache.calcite/calcite-core "1.21.0" :exclusions [org.apache.commons/commons-lang3]]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
+  :java-source-paths ["src"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
   :pedantic? :warn)

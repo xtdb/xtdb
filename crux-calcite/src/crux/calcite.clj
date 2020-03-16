@@ -1,11 +1,10 @@
-(ns crux.calcite.schema-factory
-  (:require [crux.api :as crux]
-            [crux.fixtures.api :refer [*api*]]
-            [clojure.string :as string])
+(ns crux.calcite
+  (:require [clojure.string :as string]
+            [crux.api :as crux]
+            [crux.fixtures.api :refer [*api*]])
   (:import org.apache.calcite.rel.type.RelDataTypeFactory
-           org.apache.calcite.sql.type.SqlTypeName
            org.apache.calcite.rex.RexNode
-           org.apache.calcite.DataContext))
+           org.apache.calcite.sql.type.SqlTypeName))
 
 (defn- ->crux-where-clauses
   [schema ^RexNode filter*]
@@ -67,15 +66,11 @@
                 (crux/db *api*)
                 (doto (->crux-query schema filters projects) prn))))))))
 
-(defn -create [this parent-schema name operands]
-  (let [operands (into {} operands)]
-    (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
-      (getTableMap []
-        {"PLANET"
-         (make-table ["NAME" "CLIMATE" "DIAMETER"])
+(defn create-schema [parent-schema name operands]
+  (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
+    (getTableMap []
+      {"PLANET"
+       (make-table ["NAME" "CLIMATE" "DIAMETER"])
 
-         "PERSON"
-         (make-table ["NAME" "HOMEWORLD"])}))))
-
-(defn -toString [this]
-  "Crux Schema Factory")
+       "PERSON"
+       (make-table ["NAME" "HOMEWORLD"])})))
