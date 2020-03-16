@@ -294,7 +294,7 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn- handler [crux-node request]
+(defn handler [crux-node request]
   (condp check-path request
     [#"^/$" [:get]]
     (status crux-node)
