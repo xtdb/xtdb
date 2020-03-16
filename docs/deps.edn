@@ -31,4 +31,8 @@
   ;; tag::HTTPClientDeps[]
   juxt/crux-http-client {:mvn/version "20.03-1.8.0-alpha"}
   ;; end::HTTPClientDeps[]
+
+  ;; tag::ConsoleDep[]
+  juxt/crux-console {:mvn/version "20.03-1.8.0-alpha"}
+  ;; end::ConsoleDep[]
   }}
