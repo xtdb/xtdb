@@ -1,0 +1,14 @@
+{
+    "version": "1.0",
+    "defaultSchema": "crux",
+    "schemas": [
+        {
+            "name": "crux",
+            "type": "custom",
+            "factory": "juxt.calcite_play.SchemaFactory",
+            "operand": {
+                "foo": "bar"
+            }
+        }
+    ]
+}

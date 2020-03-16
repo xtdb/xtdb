@@ -1,0 +1,3 @@
+= crux-calcite
+
+SQL adapter for Crux, built on https://calcite.apache.org/[Apache Calcite].
