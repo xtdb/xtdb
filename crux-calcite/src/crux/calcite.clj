@@ -2,7 +2,9 @@
   (:require [clojure.string :as string]
             [crux.api :as crux]
             [crux.fixtures.api :refer [*api*]])
-  (:import org.apache.calcite.rel.type.RelDataTypeFactory
+  (:import org.apache.calcite.avatica.jdbc.JdbcMeta
+           [org.apache.calcite.avatica.remote Driver LocalService]
+           org.apache.calcite.rel.type.RelDataTypeFactory
            org.apache.calcite.rex.RexNode
            org.apache.calcite.sql.type.SqlTypeName))
 
@@ -31,18 +33,23 @@
         find* (mapv syms projects)]
     {:find find*
      :where (vec
-              (concat
-                (mapcat (partial ->crux-where-clauses schema) filters)
-                ;; Ensure they have all selected columns as attributes
-                (mapv
-                  (fn [project]
-                    ['?e
-                     (let [attr (-> (get schema project) string/lower-case)]
-                       (if (= attr "id")
-                         :crux.db/id
-                         (keyword attr)))
-                     (get syms project)])
-                  projects)))}))
+             (concat
+
+              ;; Where Clauses
+              (mapcat (partial ->crux-where-clauses schema) filters)
+
+              ;; Column names are there as attibutes
+              (doto
+                  (mapv
+                   (fn [project]
+                     ['?e
+                      (let [attr (-> (get schema project) string/lower-case)]
+                        (if (= attr "id")
+                          :crux.db/id
+                          (keyword attr)))
+                      (get syms project)])
+                   projects)
+                  prn)))}))
 
 (defn make-table [schema]
   (let [schema (conj schema "ID")]
@@ -59,6 +66,7 @@
                 (for [field schema]
                   [field (.createSqlType type-factory SqlTypeName/VARCHAR)])))))
       (scan [root filters projects]
+        (println root)
         (org.apache.calcite.linq4j.Linq4j/asEnumerable
          ^java.util.List
          (mapv to-array
@@ -74,3 +82,26 @@
 
        "PERSON"
        (make-table ["NAME" "HOMEWORLD"])})))
+
+;; DataContext
+
+(defn start-server [deps {:keys [::port]}]
+  ;; note, offer port configuration
+  ;; Todo won't work from a JAR file:
+  (let [server (.build (doto (org.apache.calcite.avatica.server.HttpServer$Builder.)
+                         (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:model=crux-calcite/resources/model.json"))
+                                       org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
+                         (.withPort port)))]
+    (.start server)
+    (reify java.io.Closeable
+      (close [this]
+        (.stop server)))))
+
+(def module {::server {:start-fn start-server
+                       :args {::port {:doc "JDBC Server Port"
+                                      :default 1501
+                                      :crux.config/type :crux.config/nat-int}}}})
+
+;; https://github.com/apache/calcite-avatica/blob/master/standalone-server/src/main/java/org/apache/calcite/avatica/standalone/StandaloneServer.java
+;; https://github.com/apache/calcite-avatica/blob/master/core/src/main/java/org/apache/calcite/avatica/remote/LocalService.java
+;; https://github.com/apache/calcite/blob/master/core/src/main/java/org/apache/calcite/DataContext.java

@@ -5,10 +5,14 @@
             [crux.fixtures.kv :as kvf]
             [crux.api :as api]
             [crux.fixtures.standalone :as fs]
+            [crux.calcite :as cal]
             [crux.kv :as kv]
+            [crux.node :as n]
             [crux.fixtures :as f])
   (:import java.sql.DriverManager
            crux.calcite.CruxSchemaFactory))
+
+;; How to wire this all in?
 
 ;; https://github.com/juxt/crux/issues/514
 ;; Aggregations, Joins
@@ -21,15 +25,24 @@
 
 (def ^:dynamic ^java.sql.Connection *conn*)
 (defn- with-jdbc-connection [f]
-  (with-open [conn (DriverManager/getConnection "jdbc:calcite:model=crux-calcite/resources/model.json")]
+  ;;
+  ;;
+  ;; (DriverManager/getConnection "jdbc:calcite:model=crux-calcite/resources/model.json")
+
+  (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")]
     (binding [*conn* conn]
       (f))))
+
+(defn with-calcite-module [f]
+  (fapi/with-opts (-> fapi/*opts*
+                      (update ::n/topology conj cal/module))
+    f))
 
 (defn- query [q]
   (let [stmt (.createStatement *conn*)]
     (->> q (.executeQuery stmt) resultset-seq)))
 
-(t/use-fixtures :each fs/with-standalone-node kvf/with-kv-dir fapi/with-node with-jdbc-connection)
+(t/use-fixtures :each fs/with-standalone-node kvf/with-kv-dir with-calcite-module fapi/with-node with-jdbc-connection)
 
 (t/deftest test-hello-world-query
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}
@@ -47,12 +60,27 @@
     (t/is (= [{:name "Ivan" :homeworld "Earth"}
               {:name "Malcolm" :homeworld "Mars"}]
              (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
-
   ;; TODO Broken for various reasons:
-  (t/testing "multiple columns"
+  (t/testing "wildcard columns"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}
                {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
-             (set (query "SELECT * FROM PERSON"))))))
+             (set (query "SELECT * FROM PERSON")))))
+  (t/testing "unknown column"
+    (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
+                            (query "SELECT NOCNOLUMN FROM PERSON")))))
+
+;; So how we gonna do table?
+;; Store as document #strategy one, table {}
+;; Generate from query? (get the mechanism working first)
+;; Probably easier to put into context
+
+#_(t/deftest test-ordering
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :age 1}
+                                {:crux.db/id :petr :age 2}]))
+
+  (t/is (= [{:id ":ivan"}
+            {:id ":malcolm"}]
+           (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE"))))
 
 ;; Mongo leverage this concept of collections:
    ;; for (String collectionName : mongoDb.listCollectionNames()) {
