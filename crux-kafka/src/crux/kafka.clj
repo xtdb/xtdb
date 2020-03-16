@@ -151,7 +151,7 @@
                      (.assign (keys tp-offsets))
                      (seek-consumer tp-offsets))]
       (db/->closeable-tx-log-iterator #(.close consumer)
-                                      (->> (consumer-seqs consumer (Duration/ofMillis 100))
+                                      (->> (consumer-seqs consumer (Duration/ofSeconds 1))
                                            (mapcat identity)
                                            (map tx-record->tx-log-entry)))))
 
