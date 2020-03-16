@@ -9,7 +9,9 @@
      [ring/ring-core "1.8.0"]
      [ring/ring-jetty-adapter "1.8.0"]
      [ring/ring-codec "1.1.2"]
-     [ring-cors "0.1.13"]]
+     [ring-cors "0.1.13"]
+     [juxt/crux-core "derived-from-git"]
+     [juxt/crux-rocksdb "derived-from-git"]]
 
   :min-lein-version "2.9.1"
   :main crux-ui-server.main
@@ -28,8 +30,7 @@
     :auto-clean false
     :dependencies
     [[juxt/crux-core "derived-from-git"]
-     [juxt/crux-rocksdb "derived-from-git"]
-     [juxt/crux-http-server "derived-from-git"]]}
+     [juxt/crux-rocksdb "derived-from-git"]]}
    :shadow-cljs ; also see package.json deps
    {:dependencies
     [[org.clojure/clojurescript "1.10.520"]
