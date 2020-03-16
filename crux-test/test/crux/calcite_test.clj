@@ -42,7 +42,7 @@
   (let [stmt (.createStatement *conn*)]
     (->> q (.executeQuery stmt) resultset-seq)))
 
-(t/use-fixtures :each fs/with-standalone-node kvf/with-kv-dir with-calcite-module fapi/with-node with-jdbc-connection)
+(t/use-fixtures :each fs/with-standalone-node with-calcite-module kvf/with-kv-dir fapi/with-node with-jdbc-connection)
 
 (t/deftest test-hello-world-query
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}
