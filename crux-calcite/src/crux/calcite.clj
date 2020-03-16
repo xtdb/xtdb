@@ -8,6 +8,8 @@
            org.apache.calcite.rex.RexNode
            org.apache.calcite.sql.type.SqlTypeName))
 
+(defonce !node (atom nil))
+
 (defn- ->crux-where-clauses
   [schema ^RexNode filter*]
   (condp = (.getKind filter*)
@@ -71,7 +73,7 @@
          ^java.util.List
          (mapv to-array
                (crux/q
-                (crux/db *api*)
+                (crux/db @!node)
                 (doto (->crux-query schema filters projects) prn))))))))
 
 (defn create-schema [parent-schema name operands]
@@ -83,11 +85,12 @@
        "PERSON"
        (make-table ["NAME" "HOMEWORLD"])})))
 
-;; DataContext
-
-(defn start-server [deps {:keys [::port]}]
+(defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
+  ;; TODO, find a better approach
+  (reset! !node node)
   ;; note, offer port configuration
   ;; Todo won't work from a JAR file:
+  ;; Pass through the SchemaFactory
   (let [server (.build (doto (org.apache.calcite.avatica.server.HttpServer$Builder.)
                          (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:model=crux-calcite/resources/model.json"))
                                        org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
@@ -100,7 +103,8 @@
 (def module {::server {:start-fn start-server
                        :args {::port {:doc "JDBC Server Port"
                                       :default 1501
-                                      :crux.config/type :crux.config/nat-int}}}})
+                                      :crux.config/type :crux.config/nat-int}}
+                       :deps #{:crux.node/node}}})
 
 ;; https://github.com/apache/calcite-avatica/blob/master/standalone-server/src/main/java/org/apache/calcite/avatica/standalone/StandaloneServer.java
 ;; https://github.com/apache/calcite-avatica/blob/master/core/src/main/java/org/apache/calcite/avatica/remote/LocalService.java
