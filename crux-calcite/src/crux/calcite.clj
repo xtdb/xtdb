@@ -1,5 +1,6 @@
 (ns crux.calcite
   (:require [clojure.string :as string]
+            [crux.codec :as c]
             [crux.api :as crux])
   (:import org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
@@ -26,7 +27,7 @@
     (str (.getValue2 this))))
 
 (defn- ->operands [schema ^RexCall filter*]
-  (map #(operand->v % schema) (.getOperands filter*)))
+  (reverse (sort-by c/valid-id? (map #(operand->v % schema) (.getOperands filter*)))))
 
 (defn- ->crux-where-clauses
   [schema ^RexCall filter*]
