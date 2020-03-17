@@ -1,36 +1,42 @@
 (ns crux.calcite
   (:require [clojure.string :as string]
-            [crux.api :as crux]
-            [crux.fixtures.api :refer [*api*]])
+            [crux.api :as crux])
   (:import org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            org.apache.calcite.rel.type.RelDataTypeFactory
-           org.apache.calcite.rex.RexNode
-           org.apache.calcite.sql.type.SqlTypeName
-           org.apache.calcite.sql.SqlKind))
+           [org.apache.calcite.rex RexCall RexInputRef RexLiteral]
+           org.apache.calcite.sql.SqlKind
+           org.apache.calcite.sql.type.SqlTypeName))
 
 (defonce !node (atom nil))
 
-(defn- operand->crux-attr [schema operand]
-  (let [attr (-> (get schema (.getIndex operand)) string/lower-case)]
-    (if (= attr "id")
-      :crux.db/id
-      (keyword attr))))
+(defprotocol OperandToCruxInput
+  (operand->v [this schema]))
+
+(extend-protocol OperandToCruxInput
+  RexInputRef
+  (operand->v [this schema]
+    (let [attr (-> (get schema (.getIndex this)) string/lower-case)]
+      (if (= attr "id")
+        :crux.db/id
+        (keyword attr))))
+
+  RexLiteral
+  (operand->v [this schema]
+    (str (.getValue2 this))))
+
+(defn- ->operands [schema ^RexCall filter*]
+  (map #(operand->v % schema) (.getOperands filter*)))
 
 (defn- ->crux-where-clauses
-  [schema ^RexNode filter*]
+  [schema ^RexCall filter*]
   (condp = (.getKind filter*)
-    ;; TODO: Assumes left is a column ref and
-    ;; right is a constant, but doesn't enforce
-    ;; that.
     SqlKind/EQUALS
-    (let [left (.. filter* getOperands (get 0))
-          right (.. filter* getOperands (get 1))]
-      [['?e (operand->crux-attr schema left) (str (.getValue2 right))]])
+    (let [[left right] (->operands schema filter*)]
+      [['?e left right]])
     SqlKind/NOT_EQUALS
-    (let [left (.. filter* getOperands (get 0))
-          right (.. filter* getOperands (get 1))]
-      [(list 'not ['?e (operand->crux-attr schema left) (str (.getValue2 right))])])
+    (let [[left right] (->operands schema filter*)]
+      [(list 'not ['?e left right])])
     SqlKind/AND
     (mapcat (partial ->crux-where-clauses schema) (.-operands filter*))))
 
