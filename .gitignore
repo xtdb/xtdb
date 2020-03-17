@@ -1,0 +1,24 @@
+**/.cpcache
+**/.rebel_readline_history
+**/.nrepl-port
+**/target/*/**
+target
+**/log/*
+!**/target/*/.gitkeep
+data
+crux-console-conf.edn
+resources/static/crux-ui/compiled
+resources/static/crux-ui/test
+node_modules
+.shadow-cljs
+ebs/ebs-uber.jar
+ebs/ebs-upload.zip
+
+# pack'd output
+/*.jar
+**/*.jar
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
