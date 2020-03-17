@@ -39,7 +39,9 @@
     (let [[left right] (->operands schema filter*)]
       [(list 'not ['?e left right])])
     SqlKind/AND
-    (mapcat (partial ->crux-where-clauses schema) (.-operands filter*))))
+    (mapcat (partial ->crux-where-clauses schema) (.-operands filter*))
+    SqlKind/OR
+    [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands filter*)))]))
 
 (defn- ->crux-query
   [schema filters projects]
