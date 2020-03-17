@@ -1,0 +1,1 @@
+{:crux.node/topology [crux.standalone/topology 'crux.console/module]}
