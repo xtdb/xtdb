@@ -145,6 +145,10 @@ jobs:
           crux-edn: "crux.edn"
           deps-edn: "deps.edn"
           artifact-name: "crux-standalone"
+      - crux/deploy-artifacts:
+          crux-edn: "crux-console.edn"
+          deps-edn: "console-deps.edn"
+          artifact-name: "crux-console"
 
   create-javadocs:
     docker:
