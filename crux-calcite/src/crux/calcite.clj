@@ -6,9 +6,16 @@
            [org.apache.calcite.avatica.remote Driver LocalService]
            org.apache.calcite.rel.type.RelDataTypeFactory
            org.apache.calcite.rex.RexNode
-           org.apache.calcite.sql.type.SqlTypeName))
+           org.apache.calcite.sql.type.SqlTypeName
+           org.apache.calcite.sql.SqlKind))
 
 (defonce !node (atom nil))
+
+(defn- operand->crux-attr [schema operand]
+  (let [attr (-> (get schema (.getIndex operand)) string/lower-case)]
+    (if (= attr "id")
+      :crux.db/id
+      (keyword attr))))
 
 (defn- ->crux-where-clauses
   [schema ^RexNode filter*]
@@ -16,16 +23,15 @@
     ;; TODO: Assumes left is a column ref and
     ;; right is a constant, but doesn't enforce
     ;; that.
-    org.apache.calcite.sql.SqlKind/EQUALS
+    SqlKind/EQUALS
     (let [left (.. filter* getOperands (get 0))
           right (.. filter* getOperands (get 1))]
-      [['?e
-        (let [attr (-> (get schema (.getIndex left)) string/lower-case)]
-          (if (= attr "id")
-            :crux.db/id
-            (keyword attr)))
-        (str (.getValue2 right))]])
-    org.apache.calcite.sql.SqlKind/AND
+      [['?e (operand->crux-attr schema left) (str (.getValue2 right))]])
+    SqlKind/NOT_EQUALS
+    (let [left (.. filter* getOperands (get 0))
+          right (.. filter* getOperands (get 1))]
+      [(list 'not ['?e (operand->crux-attr schema left) (str (.getValue2 right))])])
+    SqlKind/AND
     (mapcat (partial ->crux-where-clauses schema) (.-operands filter*))))
 
 (defn- ->crux-query
