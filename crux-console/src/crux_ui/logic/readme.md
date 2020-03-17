@@ -1,0 +1,1 @@
+This package is for pure functions of different domains
