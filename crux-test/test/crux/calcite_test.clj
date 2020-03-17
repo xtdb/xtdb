@@ -69,7 +69,9 @@
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
              (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan'"))))
     (t/is (= #{{:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
-             (set (query "SELECT * FROM PERSON WHERE NAME <> 'Ivan'")))))
+             (set (query "SELECT * FROM PERSON WHERE NAME <> 'Ivan'"))))
+    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
+             (set (query "SELECT * FROM PERSON WHERE 'Ivan' = NAME")))))
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
