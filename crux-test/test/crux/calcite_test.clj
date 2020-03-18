@@ -29,7 +29,7 @@
 (t/use-fixtures :each fs/with-standalone-node with-calcite-module kvf/with-kv-dir fapi/with-node with-jdbc-connection)
 
 (t/deftest test-hello-world-query
-  (f/transact! *api* [{:crux.db/id :sql-planet-table-schema
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
                        :crux.sql.table/columns [{:crux.db/attribute :name
                                                  :crux.sql.column/name "name"
@@ -83,11 +83,27 @@
 
   ;; TODO:
   (t/testing "numeric values"
-    (f/transact! *api* (f/people [{:crux.db/id :alex :age 21}])))
+    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                         :crux.sql.table/name "person"
+                         :crux.sql.table/columns [{:crux.db/attribute :name
+                                                   :crux.sql.column/name "name"
+                                                   :crux.sql.column/type :varchar}
+                                                  {:crux.db/attribute :age
+                                                   :crux.sql.column/name "age"
+                                                   :crux.sql.column/type :integer}]}])
+    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}]))
+    (t/testing "use ID"
+      (t/is (= [{:name "Ivan" :age 21}]
+               (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))))
 
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
-                            (query "SELECT NOCNOLUMN FROM PERSON")))))
+                            (query "SELECT NOCNOLUMN FROM PERSON"))))
+
+  ;; What is going on with IDs?
+  #_(t/testing "use ID"
+      (t/is (= [{:name "Ivan"}]
+               (query "SELECT PERSON.NAME FROM PERSON WHERE ID = 'ivan'")))))
 
 ;; So how we gonna do table?
 ;; Store as document #strategy one, table {}
@@ -103,6 +119,7 @@
 ;; Inner maps are ? ignored
 ;; As-of
 ;; Case sensitivity?
+;; Spec for schema document? Better to report errors
 
 #_(t/deftest test-ordering
   (f/transact! *api* (f/people [{:crux.db/id :ivan :age 1}

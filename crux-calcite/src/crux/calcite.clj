@@ -1,8 +1,8 @@
 (ns crux.calcite
   (:require [clojure.string :as string]
-            [crux.codec :as c]
+            [clojure.tools.logging :as log]
             [crux.api :as crux]
-            [clojure.tools.logging :as log])
+            [crux.codec :as c])
   (:import org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            org.apache.calcite.rel.type.RelDataTypeFactory
@@ -22,7 +22,7 @@
 
   RexLiteral
   (operand->v [this schema]
-    (str (.getValue2 this))))
+    (.getValue2 this)))
 
 (defn- ->operands [schema ^RexCall filter*]
   (reverse (sort-by c/valid-id? (map #(operand->v % schema) (.getOperands filter*)))))
@@ -65,7 +65,8 @@
       (throw e))))
 
 (def ^:private column-types {:varchar SqlTypeName/VARCHAR
-                             :keyword SqlTypeName/VARCHAR})
+                             :keyword SqlTypeName/VARCHAR
+                             :integer SqlTypeName/BIGINT})
 
 (defn- make-table [table-schema]
   (let [{:keys [:crux.sql.table/columns] :as table-schema}
