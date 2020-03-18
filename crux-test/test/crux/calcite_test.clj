@@ -6,7 +6,8 @@
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.node :as n])
+            [crux.node :as n]
+            [crux.db :as db])
   (:import java.sql.DriverManager))
 
 ;; https://github.com/juxt/crux/issues/514
@@ -31,7 +32,10 @@
 (t/deftest test-hello-world-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.db/attribute :name
+                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                                                 :crux.sql.column/name "id"
+                                                 :crux.sql.column/type :keyword}
+                                                {:crux.db/attribute :name
                                                  :crux.sql.column/name "name"
                                                  :crux.sql.column/type :varchar}
                                                 {:crux.db/attribute :homeworld
@@ -54,11 +58,24 @@
               {:name "Malcolm" :homeworld "Mars"}]
              (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
 
+  ;; ;; {:crux.db/id :foo}
+  ;; ;; SQL SELECT * FROM FOO WHERE ID = 'foo'
+  ;; ;; SQL SELECT * FROM FOO WHERE ID = ':foo'
+  ;; ;; SQL SELECT (keyword->string ID) FROM FOO WHERE ID = ':foo'
+  ;; ;; 1) how to cope with keywords in the QUERY STRING?
+  ;; ;; 2) how to return the keywords?
+  ;; ;; 3) Not sure about ID ? dmc @ mal did that?
+
   ;; TODO Broken for various reasons:
   (t/testing "wildcard columns"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}
                {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
              (set (query "SELECT * FROM PERSON")))))
+
+  ;; What is going on with IDs?
+  #_(t/testing "use ID"
+      (t/is (= [{:name "Ivan"}]
+               (query "SELECT PERSON.NAME FROM PERSON WHERE ID = 'ivan'"))))
 
   (t/testing "equals operand"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
@@ -81,7 +98,6 @@
                {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
              (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
 
-  ;; TODO:
   (t/testing "numeric values"
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
@@ -91,19 +107,14 @@
                                                   {:crux.db/attribute :age
                                                    :crux.sql.column/name "age"
                                                    :crux.sql.column/type :integer}]}])
-    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}]))
-    (t/testing "use ID"
-      (t/is (= [{:name "Ivan" :age 21}]
-               (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))))
+    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
+                                  {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
+    (t/is (= [{:name "Ivan" :age 21}]
+             (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21"))))
 
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
-                            (query "SELECT NOCNOLUMN FROM PERSON"))))
-
-  ;; What is going on with IDs?
-  #_(t/testing "use ID"
-      (t/is (= [{:name "Ivan"}]
-               (query "SELECT PERSON.NAME FROM PERSON WHERE ID = 'ivan'")))))
+                            (query "SELECT NOCNOLUMN FROM PERSON")))))
 
 ;; So how we gonna do table?
 ;; Store as document #strategy one, table {}
