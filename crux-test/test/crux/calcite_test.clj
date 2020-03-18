@@ -1,16 +1,13 @@
 (ns crux.calcite-test
   (:require [clojure.test :as t]
-            [crux.codec :as c]
+            [crux.api :as api]
+            [crux.calcite :as cal]
+            [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
-            [crux.api :as api]
             [crux.fixtures.standalone :as fs]
-            [crux.calcite :as cal]
-            [crux.kv :as kv]
-            [crux.node :as n]
-            [crux.fixtures :as f])
-  (:import java.sql.DriverManager
-           crux.calcite.CruxSchemaFactory))
+            [crux.node :as n])
+  (:import java.sql.DriverManager))
 
 ;; https://github.com/juxt/crux/issues/514
 
@@ -32,6 +29,14 @@
 (t/use-fixtures :each fs/with-standalone-node with-calcite-module kvf/with-kv-dir fapi/with-node with-jdbc-connection)
 
 (t/deftest test-hello-world-query
+  (f/transact! *api* [{:crux.db/id :sql-planet-table-schema
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/columns [{:crux.db/attribute :name
+                                                 :crux.sql.column/name "name"
+                                                 :crux.sql.column/type :varchar}
+                                                {:crux.db/attribute :homeworld
+                                                 :crux.sql.column/name "homeworld"
+                                                 :crux.sql.column/type :varchar}]}])
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}
                                 {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars"}]))
 
@@ -76,6 +81,10 @@
                {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
              (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
 
+  ;; TODO:
+  (t/testing "numeric values"
+    (f/transact! *api* (f/people [{:crux.db/id :alex :age 21}])))
+
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
@@ -92,6 +101,8 @@
 ;; What do joins mean
 ;; Table could be a datalog rule
 ;; Inner maps are ? ignored
+;; As-of
+;; Case sensitivity?
 
 #_(t/deftest test-ordering
   (f/transact! *api* (f/people [{:crux.db/id :ivan :age 1}

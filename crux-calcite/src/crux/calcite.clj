@@ -1,7 +1,8 @@
 (ns crux.calcite
   (:require [clojure.string :as string]
             [crux.codec :as c]
-            [crux.api :as crux])
+            [crux.api :as crux]
+            [clojure.tools.logging :as log])
   (:import org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            org.apache.calcite.rel.type.RelDataTypeFactory
@@ -17,10 +18,7 @@
 (extend-protocol OperandToCruxInput
   RexInputRef
   (operand->v [this schema]
-    (let [attr (-> (get schema (.getIndex this)) string/lower-case)]
-      (if (= attr "id")
-        :crux.db/id
-        (keyword attr))))
+    (get-in schema [:crux.sql.table/columns (.getIndex this) :crux.db/attribute]))
 
   RexLiteral
   (operand->v [this schema]
@@ -45,60 +43,68 @@
 
 (defn- ->crux-query
   [schema filters projects]
-  (let [projects (or (seq projects) (range (count schema)))
-        syms (mapv gensym schema)
-        find* (mapv syms projects)]
-    {:find find*
-     :where (vec
-             (concat
+  (try
+    (let [{:keys [crux.sql.table/columns]} schema
+          projects (or (seq projects) (range (count schema)))
+          syms (mapv (comp gensym :crux.sql.column/name) columns)
+          find* (mapv syms projects)]
+      {:find find*
+       :where (vec
+               (concat
+                (mapcat (partial ->crux-where-clauses schema) filters)
+                (doto
+                    (mapv
+                     (fn [project]
+                       ['?e
+                        (get-in columns [project :crux.db/attribute])
+                        (get syms project)])
+                     projects)
+                    prn)))})
+    (catch Throwable e
+      (log/error e)
+      (throw e))))
 
-              ;; Where Clauses
-              (mapcat (partial ->crux-where-clauses schema) filters)
+(def ^:private column-types {:varchar SqlTypeName/VARCHAR
+                             :keyword SqlTypeName/VARCHAR})
 
-              ;; Column names are there as attibutes
-              (doto
-                  (mapv
-                   (fn [project]
-                     ['?e
-                      (let [attr (-> (get schema project) string/lower-case)]
-                        (if (= attr "id")
-                          :crux.db/id
-                          (keyword attr)))
-                      (get syms project)])
-                   projects)
-                  prn)))}))
-
-(defn make-table [schema]
-  (let [schema (conj schema "ID")]
+(defn- make-table [table-schema]
+  (let [{:keys [:crux.sql.table/columns] :as table-schema}
+        (update table-schema :crux.sql.table/columns conj {:crux.db/attribute :crux.db/id
+                                                           :crux.sql.column/name "id"
+                                                           :crux.sql.column/type :keyword})]
     (proxy
         [org.apache.calcite.schema.impl.AbstractTable
          org.apache.calcite.schema.ProjectableFilterableTable]
         []
-      (getRowType [^RelDataTypeFactory type-factory]
-        (.createStructType
-         type-factory
-         ^java.util.List
-         (seq
-          (into {}
-                (for [field schema]
-                  [field (.createSqlType type-factory SqlTypeName/VARCHAR)])))))
-      (scan [root filters projects]
-        (println root)
-        (org.apache.calcite.linq4j.Linq4j/asEnumerable
-         ^java.util.List
-         (mapv to-array
-               (crux/q
-                (crux/db @!node)
-                (doto (->crux-query schema filters projects) prn))))))))
+        (getRowType [^RelDataTypeFactory type-factory]
+          (.createStructType
+           type-factory
+           ^java.util.List
+           (seq
+            (into {}
+                  (for [definition columns]
+                    [(string/upper-case (:crux.sql.column/name definition))
+                     (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])))))
+        (scan [root filters projects]
+          (org.apache.calcite.linq4j.Linq4j/asEnumerable
+           ^java.util.List
+           (mapv to-array
+                 (crux/q
+                  (crux/db @!node)
+                  (doto (->crux-query table-schema filters projects) prn))))))))
+
+(defn- lookup-schema [node]
+  (let [db (crux/db node)]
+    (->> (crux/q db '{:find [e]
+                      :where [[e :crux.sql.table/name]]})
+         (map (comp (partial crux/entity db) first)))))
 
 (defn create-schema [parent-schema name operands]
   (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
     (getTableMap []
-      {"PLANET"
-       (make-table ["NAME" "CLIMATE" "DIAMETER"])
-
-       "PERSON"
-       (make-table ["NAME" "HOMEWORLD"])})))
+      (into {}
+            (for [table-schema (lookup-schema @!node)]
+              [(string/upper-case (:crux.sql.table/name table-schema)) (make-table table-schema)])))))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
   ;; TODO, find a better approach
