@@ -45,7 +45,7 @@
   [schema filters projects]
   (try
     (let [{:keys [crux.sql.table/columns]} schema
-          projects (or (seq projects) (range (count schema)))
+          projects (or (seq projects) (range (count columns)))
           syms (mapv (comp gensym :crux.sql.column/name) columns)
           find* (mapv syms projects)]
       {:find find*
@@ -69,10 +69,7 @@
                              :integer SqlTypeName/BIGINT})
 
 (defn- make-table [table-schema]
-  (let [{:keys [:crux.sql.table/columns] :as table-schema}
-        (update table-schema :crux.sql.table/columns conj {:crux.db/attribute :crux.db/id
-                                                           :crux.sql.column/name "id"
-                                                           :crux.sql.column/type :keyword})]
+  (let [{:keys [:crux.sql.table/columns] :as table-schema} table-schema]
     (proxy
         [org.apache.calcite.schema.impl.AbstractTable
          org.apache.calcite.schema.ProjectableFilterableTable]
