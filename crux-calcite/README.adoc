@@ -2,6 +2,30 @@
 
 SQL adapter for Crux, built on https://calcite.apache.org/[Apache Calcite].
 
+== Table Definitions
+
+To define a table, transact a document into Crux:
+
+``` clojure
+{:crux.db/id :crux.sql.schema/person
+ :crux.sql.table/name "person"
+ :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                           :crux.sql.column/name "id"
+                           :crux.sql.column/type :keyword}
+                          {:crux.db/attribute :name
+                           :crux.sql.column/name "name"
+                           :crux.sql.column/type :varchar}
+                          {:crux.db/attribute :homeworld
+                           :crux.sql.column/name "homeworld"
+                           :crux.sql.column/type :varchar}]}
+```
+
+And query `SELECT PERSON.NAME FROM PERSON`.
+
+A SQL table is a schema that maps Crux attributes to SQL table
+columns. Any document in Crux that has attributes matching those
+specified in a table schema could be return via the SQL query.
+
 == Current Limitations
 
 Joins are handled by Calcite rather than Crux, with Calcite running
