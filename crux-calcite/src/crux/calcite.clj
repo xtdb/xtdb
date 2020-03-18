@@ -18,14 +18,23 @@
 (extend-protocol OperandToCruxInput
   RexInputRef
   (operand->v [this schema]
-    (get-in schema [:crux.sql.table/columns (.getIndex this) :crux.db/attribute]))
+    (get-in schema [:crux.sql.table/columns (.getIndex this)]))
+
+  org.apache.calcite.rex.RexCall
+  (operand->v [this schema]
+    (case (str (.-op this))
+      "CRUXID"
+      (keyword (operand->v (first (.-operands this)) schema))))
 
   RexLiteral
   (operand->v [this schema]
     (.getValue2 this)))
 
 (defn- ->operands [schema ^RexCall filter*]
-  (reverse (sort-by c/valid-id? (map #(operand->v % schema) (.getOperands filter*)))))
+  (->> (.getOperands filter*)
+       (map #(operand->v % schema))
+       (sort-by (complement map?))
+       (map #(if (map? %) (:crux.db/attribute %) %))))
 
 (defn- ->crux-where-clauses
   [schema ^RexCall filter*]
@@ -68,6 +77,10 @@
                              :keyword SqlTypeName/VARCHAR
                              :integer SqlTypeName/BIGINT})
 
+(defn- ^java.util.List perform-query [q]
+  (->> (crux/q (crux/db @!node) q)
+       (mapv to-array)))
+
 (defn- make-table [table-schema]
   (let [{:keys [:crux.sql.table/columns] :as table-schema} table-schema]
     (proxy
@@ -85,11 +98,7 @@
                      (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])))))
         (scan [root filters projects]
           (org.apache.calcite.linq4j.Linq4j/asEnumerable
-           ^java.util.List
-           (mapv to-array
-                 (crux/q
-                  (crux/db @!node)
-                  (doto (->crux-query table-schema filters projects) prn))))))))
+           (perform-query (doto (->crux-query table-schema filters projects) prn)))))))
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
