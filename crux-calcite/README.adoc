@@ -1,3 +1,8 @@
 = crux-calcite
 
 SQL adapter for Crux, built on https://calcite.apache.org/[Apache Calcite].
+
+== Current Limitations
+
+Joins are handled by Calcite rather than Crux, with Calcite running
+separate queries and then joining the result-sets together in memory.
