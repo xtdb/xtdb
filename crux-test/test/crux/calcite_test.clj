@@ -106,6 +106,35 @@
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
+(t/deftest test-simple-joins
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                                                 :crux.sql.column/name "id"
+                                                 :crux.sql.column/type :keyword}
+                                                {:crux.db/attribute :name
+                                                 :crux.sql.column/name "name"
+                                                 :crux.sql.column/type :varchar}
+                                                {:crux.db/attribute :planet
+                                                 :crux.sql.column/name "planet"
+                                                 :crux.sql.column/type :varchar}]}
+                      {:crux.db/id :crux.sql.schema/planet
+                       :crux.sql.table/name "planet"
+                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                                                 :crux.sql.column/name "id"
+                                                 :crux.sql.column/type :keyword}
+                                                {:crux.db/attribute :name
+                                                 :crux.sql.column/name "name"
+                                                 :crux.sql.column/type :varchar}
+                                                {:crux.db/attribute :climate
+                                                 :crux.sql.column/name "climate"
+                                                 :crux.sql.column/type :varchar}]}])
+  (f/transact! *api* (f/people [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
+                                {:crux.db/id :planet/earth :name "earth" :climate "Hot"}]))
+  (t/testing "retrieve data"
+    (t/is (= [{:name "Ivan" :planet "earth"}]
+             (query "SELECT PERSON.NAME,PLANET.NAME as PLANET FROM PERSON INNER JOIN PLANET ON PLANET = PLANET.NAME")))))
+
 
 ;; So how we gonna do table?
 ;; Store as document #strategy one, table {}
