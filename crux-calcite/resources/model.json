@@ -6,9 +6,7 @@
             "name": "crux",
             "type": "custom",
             "factory": "crux.calcite.CruxSchemaFactory",
-            "operand": {
-                "foo": "bar"
-            }
+            "functions": [{"name": "CRUXID", "className": "crux.calcite.CruxIdFn"}]
         }
     ]
 }

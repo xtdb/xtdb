@@ -58,24 +58,10 @@
               {:name "Malcolm" :homeworld "Mars"}]
              (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
 
-  ;; ;; {:crux.db/id :foo}
-  ;; ;; SQL SELECT * FROM FOO WHERE ID = 'foo'
-  ;; ;; SQL SELECT * FROM FOO WHERE ID = ':foo'
-  ;; ;; SQL SELECT (keyword->string ID) FROM FOO WHERE ID = ':foo'
-  ;; ;; 1) how to cope with keywords in the QUERY STRING?
-  ;; ;; 2) how to return the keywords?
-  ;; ;; 3) Not sure about ID ? dmc @ mal did that?
-
-  ;; TODO Broken for various reasons:
   (t/testing "wildcard columns"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}
                {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
              (set (query "SELECT * FROM PERSON")))))
-
-  ;; What is going on with IDs?
-  #_(t/testing "use ID"
-      (t/is (= [{:name "Ivan"}]
-               (query "SELECT PERSON.NAME FROM PERSON WHERE ID = 'ivan'"))))
 
   (t/testing "equals operand"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
@@ -98,6 +84,10 @@
                {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
              (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
 
+  (t/testing "namespaced keywords"
+    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan"}]))
+    (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
+
   (t/testing "numeric values"
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
@@ -116,6 +106,7 @@
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
+
 ;; So how we gonna do table?
 ;; Store as document #strategy one, table {}
 ;; Generate from query? (get the mechanism working first)
@@ -131,6 +122,8 @@
 ;; As-of
 ;; Case sensitivity?
 ;; Spec for schema document? Better to report errors
+;; tets for boolean
+;; null
 
 #_(t/deftest test-ordering
   (f/transact! *api* (f/people [{:crux.db/id :ivan :age 1}
