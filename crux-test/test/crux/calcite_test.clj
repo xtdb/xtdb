@@ -2,12 +2,12 @@
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.calcite :as cal]
+            [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.node :as n]
-            [crux.db :as db])
+            [crux.node :as n])
   (:import java.sql.DriverManager))
 
 ;; https://github.com/juxt/crux/issues/514
@@ -135,18 +135,28 @@
     (t/is (= [{:name "Ivan" :planet "earth"}]
              (query "SELECT PERSON.NAME,PLANET.NAME as PLANET FROM PERSON INNER JOIN PLANET ON PLANET = PLANET.NAME")))))
 
-
-;; So how we gonna do table?
-;; Store as document #strategy one, table {}
-;; Generate from query? (get the mechanism working first)
-;; Probably easier to put into context
+(t/deftest test-table-backed-by-query
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                                                 :crux.sql.column/name "id"
+                                                 :crux.sql.column/type :keyword}
+                                                {:crux.db/attribute :name
+                                                 :crux.sql.column/name "name"
+                                                 :crux.sql.column/type :varchar}
+                                                {:crux.db/attribute :planet
+                                                 :crux.sql.column/name "planet"
+                                                 :crux.sql.column/type :varchar}]
+                       :crux.sql.table/query '[[?e :planet "earth"]]}])
+  (f/transact! *api* (f/people [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
+                                {:crux.db/id :person/igor :name "Igor" :planet "not-earth"}]))
+  (t/testing "retrieve data"
+    (t/is (= #{{:id ":person/ivan", :name "Ivan", :planet "earth"}}
+             (set (query "SELECT * FROM PERSON"))))))
 
 ;; Aggregations, Joins
 ;; https://calcite.apache.org/docs/cassandra_adapter.html
-
-;; What is a table? (list of columns & also a grouping of documents (i.e. mongo collections))
 ;; What do joins mean
-;; Table could be a datalog rule
 ;; Inner maps are ? ignored
 ;; As-of
 ;; Case sensitivity?

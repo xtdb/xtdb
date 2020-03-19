@@ -53,7 +53,7 @@
 (defn- ->crux-query
   [schema filters projects]
   (try
-    (let [{:keys [crux.sql.table/columns]} schema
+    (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
           projects (or (seq projects) (range (count columns)))
           syms (mapv (comp gensym :crux.sql.column/name) columns)
           find* (mapv syms projects)]
@@ -61,14 +61,9 @@
        :where (vec
                (concat
                 (mapcat (partial ->crux-where-clauses schema) filters)
-                (doto
-                    (mapv
-                     (fn [project]
-                       ['?e
-                        (get-in columns [project :crux.db/attribute])
-                        (get syms project)])
-                     projects)
-                    prn)))})
+                (mapv (fn [project] ['?e (get-in columns [project :crux.db/attribute]) (get syms project)])
+                      projects)
+                query))})
     (catch Throwable e
       (log/error e)
       (throw e))))
@@ -98,7 +93,7 @@
                      (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])))))
         (scan [root filters projects]
           (org.apache.calcite.linq4j.Linq4j/asEnumerable
-           (perform-query (doto (->crux-query table-schema filters projects) prn)))))))
+           (perform-query (doto (->crux-query table-schema filters projects) log/debug)))))))
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
