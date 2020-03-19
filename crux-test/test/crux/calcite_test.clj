@@ -7,7 +7,8 @@
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.node :as n])
+            [crux.node :as n]
+            [crux.fixtures.api :as apif])
   (:import java.sql.DriverManager))
 
 ;; https://github.com/juxt/crux/issues/514
@@ -43,6 +44,14 @@
                                                  :crux.sql.column/type :varchar}]}])
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}
                                 {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars"}]))
+
+  (t/testing "order by"
+    (t/is (= [{:name "Ivan"}
+              {:name "Malcolm"}]
+             (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME ASC")))
+    (t/is (= [{:name "Malcolm"}
+              {:name "Ivan"}]
+             (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME DESC"))))
 
   (t/testing "Can query value by single field"
     (t/is (= #{["Ivan"]} (api/q (api/db *api*) '{:find [name]
@@ -89,6 +98,7 @@
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
 
   (t/testing "numeric values"
+    (apif/submit+await-tx [[:crux.tx/delete :ivan] [:crux.tx/delete :human/ivan] [:crux.tx/delete :malcolm]])
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
                          :crux.sql.table/columns [{:crux.db/attribute :name
@@ -100,7 +110,14 @@
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
                                   {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
     (t/is (= [{:name "Ivan" :age 21}]
-             (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21"))))
+             (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
+    (t/testing "order by"
+      (t/is (= [{:name "Ivan"}
+                {:name "Malcolm"}]
+               (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE ASC")))
+      (t/is (= [{:name "Malcolm"}
+                {:name "Ivan"}]
+               (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE DESC")))))
 
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
@@ -162,17 +179,5 @@
 ;; Case sensitivity?
 ;; Spec for schema document? Better to report errors
 ;; tets for boolean
+;; distinct
 ;; null
-
-#_(t/deftest test-ordering
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :age 1}
-                                {:crux.db/id :petr :age 2}]))
-
-  (t/is (= [{:id ":ivan"}
-            {:id ":malcolm"}]
-           (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE"))))
-
-;; Mongo leverage this concept of collections:
-   ;; for (String collectionName : mongoDb.listCollectionNames()) {
-   ;;    builder.put(collectionName, new MongoTable(collectionName));
-   ;;  }
