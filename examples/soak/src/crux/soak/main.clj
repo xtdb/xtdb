@@ -7,7 +7,7 @@
             [cheshire.core :as json]
             [clojure.string :as string]
             [clojure.set :as set]
-            [hiccup2.core :as h])
+            [hiccup2.core :refer [html]])
   (:import java.util.Date
            java.time.Duration
            java.text.SimpleDateFormat
@@ -92,26 +92,33 @@
         node (:crux-node req)]
     (resp/response
      (str
-      (h/html
+      (html
        [:header
         [:link {:rel "stylesheet" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
        [:body
-        [:h1 (str location)]
-        [:form {:action "/weather.html"}
-         [:input {:type "hidden" :name "Location" :value location}]
-         (into [:select {:name "Date"}]
-               (map
-                (fn [next-date]
-                  (let [formatted-date (.format date-formatter next-date)]
-                    [':option
-                     {':value (.getTime next-date)
-                      ':selected (when (= formatted-date (.format date-formatter date)) "selected")}
-                     formatted-date]))
+        [:style "body { display: inline-flex; font-family: Helvetica }
+                 #location { text-align: center; width: 300px; padding-right: 30px; }
+                 #current-weather { width: 300px; padding-right: 30px; }
+                 #forecasts { display: inline-flex; }
+                 #forecast { padding-right: 10px; }
+                 #forecast h3 { margin-top: 0px; } "]
+        [:div#location
+         [:h1 (str location)]
+         [:form {:action "/weather.html"}
+          [:input {:type "hidden" :name "Location" :value location}]
+          (into [:select {:name "Date"}]
                 (map
-                 #(Date/from (-> (.toInstant (Date.))
-                                 (.plus (Duration/ofDays %))))
-                 (range 0 5))))
-         [:p [:input {:type "submit" :value "Select Date"}]]]
+                 (fn [next-date]
+                   (let [formatted-date (.format date-formatter next-date)]
+                     [':option
+                      {':value (.getTime next-date)
+                       ':selected (when (= formatted-date (.format date-formatter date)) "selected")}
+                      formatted-date]))
+                 (map
+                  #(Date/from (-> (.toInstant (Date.))
+                                  (.plus (Duration/ofDays %))))
+                  (range 0 5))))
+          [:p [:input {:type "submit" :value "Select Date"}]]]]
         (into
          [:div#current-weather
           [:h2 "Current Weather"]]
@@ -119,29 +126,34 @@
               (api/entity (api/db node date))
               (filter-weather-map)
               (render-weather-map)))
-        (into
-         [:div#forecasts
-          [:h2 "Forecast History"]]
-         (render-forecast
-          (get-forecast node location date)))])))))
+        [:div#weather-forecast
+         [:h2 "Forecast History"]
+         (into
+          [:div#forecasts]
+          (render-forecast
+           (get-forecast node location date)))]])))))
 
 (defn homepage-handler [req]
   (resp/response
    (str
-    (h/html
+    (html
      [:header
-      [:link {:rel "stylesheet" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
+      [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
      [:body
-      [:h1 "Crux Weather Service"]
-      [:h2 "Locations"]
-      [:form {:target "_blank" :action "/weather.html"}
-       [:input {:type "hidden" :name "Date" :value (System/currentTimeMillis)}]
-       [:p
-        (into [:select {:name "Location"}]
-              (map
-               (fn [location] [':option {':value location} location])
-               locations))]
-       [:p [:input {:type "submit" :value "View Location"}]]]]))))
+      [:div#homepage
+       [:style "#homepage { text-align: center; font-family: Helvetica; }
+                h1 { font-size: 3em; }
+                h2 { font-size: 2em; }"]
+       [:h1 "Crux Weather Service"]
+       [:h2 "Locations"]
+       [:form {:target "_blank" :action "/weather.html"}
+        [:input {:type "hidden" :name "Date" :value (System/currentTimeMillis)}]
+        [:p
+         (into [:select {:name "Location"}]
+               (map
+                (fn [location] [':option {':value location} location])
+                locations))]
+        [:p [:input {:type "submit" :value "View Location"}]]]]]))))
 
 (def bidi-handler
   (bidi.ring/make-handler ["" [["/" {"index.html" homepage-handler
