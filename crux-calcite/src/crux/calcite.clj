@@ -90,7 +90,7 @@
          org.apache.calcite.schema.ProjectableFilterableTable]
         []
         (getRowType [^RelDataTypeFactory type-factory]
-          (.createStructType type-factory (row-types table-schema) type-factory))
+          (.createStructType type-factory (row-types table-schema type-factory)))
         (scan [root filters projects]
           (org.apache.calcite.linq4j.Linq4j/asEnumerable
            (perform-query (doto (->crux-query table-schema filters projects) log/debug)))))))
