@@ -37,7 +37,11 @@
   (fn [request]
     (handler (assoc request :crux-node node))))
 
-(defn get-forecast [node location valid-time]
+(defn get-current-weather [node location valid-time]
+  (->> (keyword (str (string/lower-case location) "-current"))
+       (api/entity (api/db node valid-time))))
+
+(defn get-weather-forecast [node location valid-time]
   (let [past-five-days (map
                         #(Date/from (-> (.toInstant valid-time)
                                         (.minus (Duration/ofHours 1))
@@ -75,17 +79,6 @@
    []
    (keys weather-map)))
 
-(defn render-forecast [weather-forecasts]
-  (map
-   (fn [[forecast-date forecast]]
-     (into
-      [:div#forecast
-       [:h3 (.format date-formatter forecast-date)]]
-      (->> forecast
-           filter-weather-map
-           render-weather-map)))
-   weather-forecasts))
-
 (defn weather-handler [req]
   (let [location (get-in req [:query-params "Location"])
         date (some-> (get-in req [:query-params "Date"]) (Long/parseLong) (Date.))
@@ -119,19 +112,27 @@
                                   (.plus (Duration/ofDays %))))
                   (range 0 5))))
           [:p [:input {:type "submit" :value "Select Date"}]]]]
-        (into
-         [:div#current-weather
-          [:h2 "Current Weather"]]
-         (->> (keyword (str (string/lower-case location) "-current"))
-              (api/entity (api/db node date))
-              (filter-weather-map)
-              (render-weather-map)))
+        (when-let [current-weather (get-current-weather node location date)]
+          [:div#current-weather
+           [:h2 "Current Weather"]
+           (into
+            [:div#weather]
+            (->> current-weather
+                 filter-weather-map
+                 render-weather-map))])
         [:div#weather-forecast
          [:h2 "Forecast History"]
          (into
           [:div#forecasts]
-          (render-forecast
-           (get-forecast node location date)))]])))))
+          (map
+           (fn [[forecast-date forecast]]
+             (into
+              [:div#forecast
+               [:h3 (.format date-formatter forecast-date)]]
+              (->> forecast
+                   filter-weather-map
+                   render-weather-map)))
+           (get-weather-forecast node location date)))]])))))
 
 (defn homepage-handler [req]
   (resp/response
