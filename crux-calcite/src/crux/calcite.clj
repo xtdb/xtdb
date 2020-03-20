@@ -128,7 +128,3 @@
                                       :default 1501
                                       :crux.config/type :crux.config/nat-int}}
                        :deps #{:crux.node/node}}})
-
-;; https://github.com/apache/calcite-avatica/blob/master/standalone-server/src/main/java/org/apache/calcite/avatica/standalone/StandaloneServer.java
-;; https://github.com/apache/calcite-avatica/blob/master/core/src/main/java/org/apache/calcite/avatica/remote/LocalService.java
-;; https://github.com/apache/calcite/blob/master/core/src/main/java/org/apache/calcite/DataContext.java
