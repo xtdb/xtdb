@@ -76,21 +76,21 @@
   (->> (crux/q (crux/db @!node) q)
        (mapv to-array)))
 
+(defn- ^java.util.List row-types [{:keys [:crux.sql.table/columns]} ^RelDataTypeFactory type-factory]
+  (->> (for [definition columns]
+         [(string/upper-case (:crux.sql.column/name definition))
+          (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])
+       (into {})
+       (seq)))
+
 (defn- make-table [table-schema]
-  (let [{:keys [:crux.sql.table/columns] :as table-schema} table-schema]
+  (let [table-schema table-schema]
     (proxy
         [org.apache.calcite.schema.impl.AbstractTable
          org.apache.calcite.schema.ProjectableFilterableTable]
         []
         (getRowType [^RelDataTypeFactory type-factory]
-          (.createStructType
-           type-factory
-           ^java.util.List
-           (seq
-            (into {}
-                  (for [definition columns]
-                    [(string/upper-case (:crux.sql.column/name definition))
-                     (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])))))
+          (.createStructType type-factory (row-types table-schema) type-factory))
         (scan [root filters projects]
           (org.apache.calcite.linq4j.Linq4j/asEnumerable
            (perform-query (doto (->crux-query table-schema filters projects) log/debug)))))))
