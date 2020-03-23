@@ -43,6 +43,9 @@ Resources:
                 # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
+
+                # Allow the ECS tasks to get secret values from the secrets manager
+                - 'secretsmanager:GetSecretValue'
               Resource: '*'
 
   SoakTaskDef:
@@ -66,6 +69,10 @@ Resources:
           Command:
             - "-m"
             - "crux.soak.main"
+          Secrets:
+            - Name: "SOAK_SECRETS"
+              ValueFrom:
+                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/soak-secrets-OHMj3T"
           LogConfiguration:
             LogDriver: awslogs
             Options:
