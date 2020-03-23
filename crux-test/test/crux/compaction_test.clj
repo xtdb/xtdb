@@ -1,13 +1,15 @@
 (ns crux.compaction-test
   (:require [clojure.test :as t]
             [crux.codec :as c]
+            [crux.api :as api]
             [crux.compaction :as cc]
             [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.bus :as bf]
             [crux.fixtures.compaction :as cf]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.fixtures.bus :as bf]
-            [crux.kv :as kv]))
+            [crux.kv :as kv])
+  (:import java.util.Calendar))
 
 (t/use-fixtures :each fs/with-standalone-node cf/with-compaction kvf/with-kv-dir fapi/with-node)
 
@@ -71,3 +73,41 @@
       (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan-Now1"}]])
       (bf/wait-for-bus-event! compacted-events 4000)
       (t/is (= 0 (:crux.compaction/compacted-count (first @compacted-events)))))))
+
+(t/deftest test-compact-valid-time-chunks
+  (let [compaction-fn cc/txes-to-compact]
+    (with-redefs [cc/valid-time-watermark (fn [_ _] #inst "2017")
+                  cc/txes-to-compact (fn [_ txes] (compaction-fn 86400 txes))]
+      (let [compacted-events (bf/listen! *api* :crux.compaction/compacted)
+            txes (for [each-day (range 7)
+                       each-hour (range 24)
+                       :let [vt (.getTime
+                                 (doto (Calendar/getInstance)
+                                   (.set Calendar/YEAR 2000)
+                                   (.set Calendar/MONTH 0)
+                                   (.set Calendar/DAY_OF_MONTH (inc each-day))
+                                   (.set Calendar/HOUR_OF_DAY each-hour)))]]
+                   [:crux.tx/put {:crux.db/id :ivan :v {:crux.db/id :ivan :d each-day :h each-hour}} vt])]
+
+        (fapi/submit+await-tx (vec txes))
+        (* 24 7)
+        (bf/wait-for-bus-event! compacted-events 4000)
+        (t/is (= 160 (:crux.compaction/compacted-count (first @compacted-events))))
+        (t/is (= 8 (count (keep #(api/document *api* (:crux.db/content-hash %))
+                                (api/history *api* :ivan)))))
+        #_(t/is (= {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 23}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 22}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 20}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 19}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 17}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 14}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 13}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 11}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 5, :h 23}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 4, :h 23}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 3, :h 23}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 2, :h 23}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 1, :h 23}}
+                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 0, :h 23}}
+                 (keep #(api/document *api* (:crux.db/content-hash %))
+                       (api/history *api* :ivan))))))))
