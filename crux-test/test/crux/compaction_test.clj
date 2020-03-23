@@ -88,26 +88,18 @@
                                    (.set Calendar/DAY_OF_MONTH (inc each-day))
                                    (.set Calendar/HOUR_OF_DAY each-hour)))]]
                    [:crux.tx/put {:crux.db/id :ivan :v {:crux.db/id :ivan :d each-day :h each-hour}} vt])]
-
         (fapi/submit+await-tx (vec txes))
-        (* 24 7)
         (bf/wait-for-bus-event! compacted-events 4000)
         (t/is (= 160 (:crux.compaction/compacted-count (first @compacted-events))))
         (t/is (= 8 (count (keep #(api/document *api* (:crux.db/content-hash %))
                                 (api/history *api* :ivan)))))
-        #_(t/is (= {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 23}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 22}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 20}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 19}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 17}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 14}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 13}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 11}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 5, :h 23}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 4, :h 23}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 3, :h 23}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 2, :h 23}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 1, :h 23}}
-                 {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 0, :h 23}}
+        (t/is (= [{:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 23}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 6, :h 22}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 5, :h 23}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 4, :h 23}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 3, :h 23}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 2, :h 23}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 1, :h 23}}
+                  {:crux.db/id :ivan, :v {:crux.db/id :ivan, :d 0, :h 23}}]
                  (keep #(api/document *api* (:crux.db/content-hash %))
                        (api/history *api* :ivan))))))))

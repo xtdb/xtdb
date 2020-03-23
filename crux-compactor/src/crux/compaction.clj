@@ -14,7 +14,8 @@
 (defn- tx-events->compaction-eids [tx-events]
   (->> tx-events
        (filter (comp #{:crux.tx/put :crux.tx/cas} first))
-       (map second)))
+       (map second)
+       (distinct)))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
