@@ -14,6 +14,7 @@
                  [juxt/crux-http-server "crux-git-version-alpha" :exclusions [commons-codec]]
                  [juxt/crux-metrics "crux-git-version-alpha"]
                  [juxt/crux-rdf "crux-git-version-alpha"]
+                 [juxt/crux-calcite "crux-git-version-alpha"]
 
                  ;; JDBC
                  [com.zaxxer/HikariCP "3.3.1"]
