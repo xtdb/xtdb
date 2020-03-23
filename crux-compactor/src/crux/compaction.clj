@@ -5,7 +5,8 @@
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.node :as n]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.bus :as bus])
   (:import crux.codec.EntityTx
            java.util.Calendar))
 
@@ -18,7 +19,7 @@
   (set (for [^EntityTx entity-tx txes]
          (.content-hash entity-tx))))
 
-(defn- compact [object-store kv-store snapshot eid valid-time tx-time]
+(defn- compact [object-store kv-store bus snapshot eid valid-time tx-time]
   (with-open [i (kv/new-iterator snapshot)]
     (let [[^EntityTx tx & txes] (take-while (fn [^EntityTx tx]
                                               (db/get-single-object object-store snapshot (.content-hash tx)))
@@ -34,7 +35,9 @@
                (idx/doc-idx-keys c (db/get-single-object object-store snapshot c)))
              (reduce into [])
              (idx/delete-doc-idx-keys kv-store))
-        (db/delete-objects object-store content-hashes-to-prune)))))
+        (db/delete-objects object-store content-hashes-to-prune))
+      (bus/send bus {:crux.bus/event-type ::compacted
+                     ::compacted-count (count content-hashes-to-prune)}))))
 
 (defn valid-time-watermark [tt-vt-interval-s tx-time]
   (.getTime
@@ -42,7 +45,7 @@
      (.setTime tx-time)
      (.add Calendar/SECOND (- tt-vt-interval-s)))))
 
-(defrecord CompactingIndexer [indexer object-store kv-store tt-vt-interval-s]
+(defrecord CompactingIndexer [indexer object-store kv-store bus tt-vt-interval-s]
   db/Indexer
   (index-docs [this docs]
     (db/index-docs indexer docs))
@@ -51,7 +54,7 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (let [vt-watermark (valid-time-watermark tt-vt-interval-s (::tx/tx-time tx))]
         (doseq [eid (tx-events->compaction-eids tx-events)]
-          (compact object-store kv-store snapshot eid vt-watermark (::tx/tx-time tx))))))
+          (compact object-store kv-store bus snapshot eid vt-watermark (::tx/tx-time tx))))))
   (missing-docs [this content-hashes]
     (db/missing-docs indexer content-hashes))
   (store-index-meta [this k v]
@@ -65,9 +68,9 @@
 
 (def module
   {::indexer 'crux.tx/kv-indexer
-   ::n/indexer {:start-fn (fn [{:keys [::indexer ::n/object-store ::n/kv-store]} {:keys [::tt-vt-interval-s]}]
-                            (->CompactingIndexer indexer object-store kv-store tt-vt-interval-s))
-                :deps [::indexer ::n/object-store ::n/kv-store]
+   ::n/indexer {:start-fn (fn [{:keys [::indexer ::n/object-store ::n/kv-store ::n/bus]} {:keys [::tt-vt-interval-s]}]
+                            (->CompactingIndexer indexer object-store kv-store bus tt-vt-interval-s))
+                :deps [::indexer ::n/object-store ::n/kv-store ::n/bus]
                 :args {::tt-vt-interval-s {:doc "Interval in seconds between transaction-time and valid-time watermark"
                                            :default interval-30-days
                                            :crux.config/type :crux.config/nat-int}}}})
