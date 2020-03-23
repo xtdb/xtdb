@@ -11,7 +11,7 @@
             [crux.fixtures.api :as apif])
   (:import java.sql.DriverManager))
 
-;; https://github.com/juxt/crux/issues/514
+;; See https://github.com/juxt/crux/issues/514
 
 (def ^:dynamic ^java.sql.Connection *conn*)
 (defn- with-jdbc-connection [f]
@@ -170,14 +170,3 @@
   (t/testing "retrieve data"
     (t/is (= #{{:id ":person/ivan", :name "Ivan", :planet "earth"}}
              (set (query "SELECT * FROM PERSON"))))))
-
-;; Aggregations, Joins
-;; https://calcite.apache.org/docs/cassandra_adapter.html
-;; What do joins mean
-;; Inner maps are ? ignored
-;; As-of
-;; Case sensitivity?
-;; Spec for schema document? Better to report errors
-;; tets for boolean
-;; distinct
-;; null
