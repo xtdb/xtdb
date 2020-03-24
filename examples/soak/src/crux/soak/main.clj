@@ -76,87 +76,107 @@
       v])
    weather-map))
 
-(defn weather-handler [req]
-  (let [location-id (get-in req [:query-params "Location"])
-        date (some-> (get-in req [:query-params "Date"]) (Long/parseLong) (Date.))
-        node (:crux-node req)]
-    (resp/response
-     (str
-      (html
-       [:header
-        [:link {:rel "stylesheet" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
-       [:body
-        [:style "body { display: inline-flex; font-family: Helvetica }
+(defn render-current-weather [current-weather]
+  [:div#current-weather
+   [:h2 "Current Weather"]
+   (into
+    [:div#weather]
+    (->> current-weather
+         filter-weather-map
+         render-weather-map))])
+
+(defn render-weather-forecast [weather-forecast]
+  [:div#weather-forecast
+   [:h2 "Forecast History"]
+   (into
+    [:div#forecasts]
+    (map
+     (fn [[forecast-date forecast]]
+       (into
+        [:div#forecast
+         [:h3 (.format date-formatter forecast-date)]]
+        (->> forecast
+             filter-weather-map
+             render-weather-map)))
+     weather-forecast))])
+
+(defn render-weather-page [{:keys [location-id location-name date
+                                   current-weather weather-forecast]}]
+  (str
+   (html
+    [:header
+     [:link {:rel "stylesheet" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
+    [:body
+     [:style "body { display: inline-flex; font-family: Helvetica }
                  #location { text-align: center; width: 300px; padding-right: 30px; }
                  #current-weather { width: 300px; padding-right: 30px; }
                  #forecasts { display: inline-flex; }
                  #forecast { padding-right: 10px; }
                  #forecast h3 { margin-top: 0px; } "]
-        [:div#location
-         [:h1 (-> (api/entity (api/db node) (keyword (str location-id "-current")))
-                  (:location-name))]
-         [:form {:action "/weather.html"}
-          [:input {:type "hidden" :name "Location" :value location-id}]
-          (into [:select {:name "Date"}]
-                (map
-                 (fn [next-date]
-                   (let [formatted-date (.format date-formatter next-date)]
-                     [:option
-                      {:value (.getTime next-date)
-                       :selected (when (= formatted-date (.format date-formatter date)) "selected")}
-                      formatted-date]))
-                 (map
-                  #(Date/from (-> (.toInstant (Date.))
-                                  (.plus (Duration/ofDays %))))
-                  (range 0 5))))
-          [:p [:input {:type "submit" :value "Select Date"}]]]]
-        (when-let [current-weather (get-current-weather node location-id date)]
-          [:div#current-weather
-           [:h2 "Current Weather"]
-           (into
-            [:div#weather]
-            (->> current-weather
-                 filter-weather-map
-                 render-weather-map))])
-        [:div#weather-forecast
-         [:h2 "Forecast History"]
-         (into
-          [:div#forecasts]
-          (map
-           (fn [[forecast-date forecast]]
-             (into
-              [:div#forecast
-               [:h3 (.format date-formatter forecast-date)]]
-              (->> forecast
-                   filter-weather-map
-                   render-weather-map)))
-           (get-weather-forecast node location-id date)))]])))))
+     [:div#location
+      [:h1 location-name]
+      [:form {:action "/weather.html"}
+       [:input {:type "hidden" :name "Location" :value location-id}]
+       (into [:select {:name "Date"}]
+             (map
+              (fn [next-date]
+                (let [formatted-date (.format date-formatter next-date)]
+                  [:option
+                   {:value (.getTime next-date)
+                    :selected (when (= formatted-date (.format date-formatter date)) "selected")}
+                   formatted-date]))
+              (map
+               #(Date/from (-> (.toInstant (Date.))
+                               (.plus (Duration/ofDays %))))
+               (range 0 5))))
+       [:p [:input {:type "submit" :value "Select Date"}]]]]
+     (when current-weather
+       (render-current-weather current-weather))
+     (render-weather-forecast weather-forecast)])))
 
-(defn homepage-handler [req]
-  (let [node (:crux-node req)]
+(defn weather-handler [req]
+  (let [location-id (get-in req [:query-params "Location"])
+        date (some-> (get-in req [:query-params "Date"]) (Long/parseLong) (Date.))
+        node (:crux-node req)]
     (resp/response
-     (str
-      (html
-       [:header
-        [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
-       [:body
-        [:div#homepage
-         [:style "#homepage { text-align: center; font-family: Helvetica; }
+     (render-weather-page {:location-id location-id
+                           :location-name (-> (api/entity (api/db node) (keyword (str location-id "-current")))
+                                              (:location-name))
+                           :date date
+                           :current-weather (get-current-weather node location-id date)
+                           :weather-forecast (get-weather-forecast node location-id date)}))))
+
+(defn render-homepage [location-names]
+  (str
+   (html
+    [:header
+     [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
+    [:body
+     [:div#homepage
+      [:style "#homepage { text-align: center; font-family: Helvetica; }
                 h1 { font-size: 3em; }
                 h2 { font-size: 2em; }"]
-         [:h1 "Crux Weather Service"]
-         [:h2 "Locations"]
-         [:form {:target "_blank" :action "/weather.html"}
-          [:input {:type "hidden" :name "Date" :value (System/currentTimeMillis)}]
-          [:p
-           (into [:select {:name "Location"}]
-                 (map
-                  (fn [[location-name]] [:option {:value (-> (string/replace location-name #" " "-")
-                                                                      (string/lower-case))}
-                                                  location-name])
-                  (api/q (api/db node) '{:find [l]
-                                         :where [[e :location-name l]]})))]
-          [:p [:input {:type "submit" :value "View Location"}]]]]])))))
+      [:h1 "Crux Weather Service"]
+      [:h2 "Locations"]
+      [:form {:target "_blank" :action "/weather.html"}
+       [:input {:type "hidden" :name "Date" :value (System/currentTimeMillis)}]
+       [:p
+        (into [:select {:name "Location"}]
+              (map
+               (fn [location-name]
+                 [:option {:value (-> (string/replace location-name #" " "-")
+                                      (string/lower-case))}
+                  location-name])
+               location-names))]
+       [:p [:input {:type "submit" :value "View Location"}]]]]])))
+
+(defn homepage-handler [req]
+  (let [node (:crux-node req)
+        location-names (->> (api/q (api/db node) '{:find [l]
+                                                   :where [[e :location-name l]]})
+                            (map first))]
+    (resp/response
+     (render-homepage location-names))))
 
 (def bidi-handler
   (bidi.ring/make-handler ["" [["/" {"index.html" homepage-handler
