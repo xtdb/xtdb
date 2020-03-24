@@ -13,6 +13,9 @@
                  [ring "1.8.0"]
                  [software.amazon.awssdk/s3 "2.10.61"]
 
+                 [integrant "0.8.0"]
+                 [integrant/repl "0.3.1"]
+
                  ;; deps res
                  [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
                  [org.apache.httpcomponents/httpclient "4.5.9"]]

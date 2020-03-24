@@ -7,11 +7,16 @@
             [cheshire.core :as json]
             [clojure.string :as string]
             [clojure.set :as set]
-            [hiccup2.core :refer [html]])
-  (:import java.util.Date
+            [hiccup2.core :refer [html]]
+            [integrant.core :as ig]
+            [integrant.repl :as ir]
+            [clojure.tools.logging :as log])
+  (:import java.io.Closeable
+           java.util.Date
            java.time.Duration
            java.text.SimpleDateFormat
-           crux.api.NodeOutOfSyncException))
+           crux.api.NodeOutOfSyncException
+           org.eclipse.jetty.server.Server))
 
 (def server-id (java.util.UUID/randomUUID))
 
@@ -161,19 +166,36 @@
                                      "weather.html" weather-handler}]
                                [true (bidi.ring/->Redirect 307 homepage-handler)]]]))
 
-(defn -main [& args]
-  (let [node (api/start-node {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
-                              :crux.kafka/bootstrap-servers (get soak-secrets "CONFLUENT_BROKER")
-                              :crux.kafka/tx-topic "soak-transaction-log"
-                              :crux.kafka/doc-topic "soak-docs"
-                              :crux.kafka/kafka-properties-map kafka-properties-map})]
-
-    (prn "Loading Weather Data...")
+(defmethod ig/init-key :soak/crux-node [_ node-opts]
+  (let [node (api/start-node node-opts)]
+    (log/info "Loading Weather Data...")
     (api/sync node)
-    (prn "Weather Data Loaded!")
-    (prn "Starting jetty server...")
-    (jetty/run-jetty (fn [req]
-                       ((-> bidi-handler
-                            (params/wrap-params)
-                            (wrap-node node)) req))
-                     {:port 8080 :join? false})))
+    (log/info "Weather Data Loaded!")
+    node))
+
+(defmethod ig/halt-key! :soak/crux-node [_ ^Closeable node]
+  (.close node))
+
+(defmethod ig/init-key :soak/jetty-server [_ {:keys [crux-node server-opts]}]
+  (log/info "Starting jetty server...")
+  (jetty/run-jetty (-> bidi-handler
+                       (params/wrap-params)
+                       (wrap-node crux-node))
+                   server-opts))
+
+(defmethod ig/halt-key! :soak/jetty-server [_ ^Server server]
+  (.stop server))
+
+(def config
+  {:soak/crux-node {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
+                    :crux.kafka/bootstrap-servers (get soak-secrets "CONFLUENT_BROKER")
+                    :crux.kafka/tx-topic "soak-transaction-log"
+                    :crux.kafka/doc-topic "soak-docs"
+                    :crux.kafka/kafka-properties-map kafka-properties-map}
+   :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
+                       :server-opts {:port 8080
+                                     :join? false}}})
+
+(defn -main [& args]
+  (ir/set-prep! (fn [] config))
+  (ir/go))
