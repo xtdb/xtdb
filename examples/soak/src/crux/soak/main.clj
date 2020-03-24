@@ -19,10 +19,6 @@
            java.util.Date
            org.eclipse.jetty.server.Server))
 
-(defn wrap-node [handler node]
-  (fn [request]
-    (handler (assoc request :crux-node node))))
-
 (defn get-current-weather [node location valid-time]
   (api/entity (api/db node valid-time) (keyword (str location "-current"))))
 
@@ -108,17 +104,17 @@
        (render-current-weather current-weather))
      (render-weather-forecast weather-forecast)])))
 
-(defn weather-handler [req]
+(defn weather-handler [req {:keys [crux-node]}]
   (let [location-id (get-in req [:query-params "Location"])
-        date (some-> (get-in req [:query-params "Date"]) (Long/parseLong) (Date.))
-        node (:crux-node req)]
+        date (some-> (get-in req [:query-params "Date"]) (Long/parseLong) (Date.))]
     (resp/response
      (render-weather-page {:location-id location-id
-                           :location-name (-> (api/entity (api/db node) (keyword (str location-id "-current")))
+                           :location-name (-> (api/entity (api/db crux-node)
+                                                          (keyword (str location-id "-current")))
                                               (:location-name))
                            :date date
-                           :current-weather (get-current-weather node location-id date)
-                           :weather-forecast (get-weather-forecast node location-id date)}))))
+                           :current-weather (get-current-weather crux-node location-id date)
+                           :weather-forecast (get-weather-forecast crux-node location-id date)}))))
 
 (defn render-homepage [location-names]
   (str
@@ -144,18 +140,17 @@
                location-names))]
        [:p [:input {:type "submit" :value "View Location"}]]]]])))
 
-(defn homepage-handler [req]
-  (let [node (:crux-node req)
-        location-names (->> (api/q (api/db node) '{:find [l]
-                                                   :where [[e :location-name l]]})
+(defn homepage-handler [req {:keys [crux-node]}]
+  (let [location-names (->> (api/q (api/db crux-node) '{:find [l]
+                                                        :where [[e :location-name l]]})
                             (map first))]
-    (resp/response
-     (render-homepage location-names))))
+    (resp/response (render-homepage location-names))))
 
-(def bidi-handler
-  (bidi.ring/make-handler ["" [["/" {"index.html" homepage-handler
-                                     "weather.html" weather-handler}]
-                               [true (bidi.ring/->Redirect 307 homepage-handler)]]]))
+(defn bidi-handler [{:keys [crux-node]}]
+  (let [handle-homepage #(homepage-handler % {:crux-node crux-node})]
+    (bidi.ring/make-handler ["" [["/" {"index.html" handle-homepage
+                                       "weather.html" #(weather-handler % {:crux-node crux-node})}]
+                                 [true (bidi.ring/->Redirect 307 handle-homepage)]]])))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
   (let [node (api/start-node node-opts)]
@@ -169,9 +164,8 @@
 
 (defmethod ig/init-key :soak/jetty-server [_ {:keys [crux-node server-opts]}]
   (log/info "Starting jetty server...")
-  (jetty/run-jetty (-> bidi-handler
-                       (params/wrap-params)
-                       (wrap-node crux-node))
+  (jetty/run-jetty (-> (bidi-handler {:crux-node crux-node})
+                       (params/wrap-params))
                    server-opts))
 
 (defmethod ig/halt-key! :soak/jetty-server [_ ^Server server]
