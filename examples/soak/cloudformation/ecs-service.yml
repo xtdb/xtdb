@@ -40,11 +40,26 @@ Resources:
                 - 'ecr:GetDownloadUrlForLayer'
                 - 'ecr:BatchGetImage'
 
-                # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
+              Resource: '*'
 
-                # Allow the ECS tasks to get secret values from the secrets manager
+  SoakTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: SoakTaskRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
                 - 'secretsmanager:GetSecretValue'
               Resource: '*'
 
@@ -58,6 +73,8 @@ Resources:
       Family: 'crux-soak'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["SoakTaskRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
@@ -69,10 +86,6 @@ Resources:
           Command:
             - "-m"
             - "crux.soak.main"
-          Secrets:
-            - Name: "SOAK_SECRETS"
-              ValueFrom:
-                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/soak-secrets-OHMj3T"
           LogConfiguration:
             LogDriver: awslogs
             Options:

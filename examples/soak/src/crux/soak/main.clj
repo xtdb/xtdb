@@ -1,38 +1,23 @@
 (ns crux.soak.main
-  (:require [ring.util.response :as resp]
-            [ring.middleware.params :as params]
-            [bidi.ring]
-            [ring.adapter.jetty :as jetty]
-            [crux.api :as api]
-            [cheshire.core :as json]
-            [clojure.string :as string]
+  (:require bidi.ring
             [clojure.set :as set]
+            [clojure.string :as string]
+            [clojure.tools.logging :as log]
+            [crux.api :as api]
+            [crux.soak.config :as config]
             [hiccup2.core :refer [html]]
             [integrant.core :as ig]
             [integrant.repl :as ir]
-            [clojure.tools.logging :as log])
-  (:import java.io.Closeable
-           java.util.Date
-           java.time.Duration
+            [nomad.config :as n]
+            [ring.adapter.jetty :as jetty]
+            [ring.middleware.params :as params]
+            [ring.util.response :as resp])
+  (:import crux.api.NodeOutOfSyncException
+           java.io.Closeable
            java.text.SimpleDateFormat
-           crux.api.NodeOutOfSyncException
+           java.time.Duration
+           java.util.Date
            org.eclipse.jetty.server.Server))
-
-
-(def soak-secrets
-  (-> (System/getenv "SOAK_SECRETS")
-      (json/decode)))
-
-(def kafka-properties-map
-  {"ssl.endpoint.identification.algorithm" "https"
-   "sasl.mechanism" "PLAIN"
-   "sasl.jaas.config" (str (->> ["org.apache.kafka.common.security.plain.PlainLoginModule"
-                                 "required"
-                                 (format "username=\"%s\"" (get soak-secrets "CONFLUENT_API_TOKEN"))
-                                 (format "password=\"%s\"" (get soak-secrets "CONFLUENT_API_SECRET"))]
-                                (string/join " "))
-                           ";")
-   "security.protocol" "SASL_SSL"})
 
 (defn wrap-node [handler node]
   (fn [request]
@@ -203,16 +188,13 @@
 (defmethod ig/halt-key! :soak/jetty-server [_ ^Server server]
   (.stop server))
 
-(def config
-  {:soak/crux-node {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
-                    :crux.kafka/bootstrap-servers (get soak-secrets "CONFLUENT_BROKER")
-                    :crux.kafka/tx-topic "soak-transaction-log"
-                    :crux.kafka/doc-topic "soak-docs"
-                    :crux.kafka/kafka-properties-map kafka-properties-map}
+(defn config []
+  {:soak/crux-node (merge {:crux.node/topology ['crux.kafka/topology 'crux.kv.rocksdb/kv-store]}
+                          (config/crux-node-config))
    :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
-                       :server-opts {:port 8080
-                                     :join? false}}})
+                       :server-opts {:port 8080, :join? false}}})
 
 (defn -main [& args]
-  (ir/set-prep! (fn [] config))
+  (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
+  (ir/set-prep! config)
   (ir/go))

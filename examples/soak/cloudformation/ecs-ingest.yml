@@ -12,6 +12,25 @@ Resources:
       LogGroupName: 'crux-soak-ingest'
       RetentionInDays: 365
 
+  SoakIngestTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: SoakIngestTaskRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'secretsmanager:GetSecretValue'
+              Resource: '*'
+
   SoakIngestECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -37,9 +56,6 @@ Resources:
                 # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
-
-                # Allow the ECS tasks to get secret values from the secrets manager
-                - 'secretsmanager:GetSecretValue'
               Resource: '*'
 
   SoakIngestCurrentTaskDef:
@@ -52,6 +68,8 @@ Resources:
       Family: 'crux-soak-ingest-current'
       ExecutionRoleArn:
         Fn::GetAtt: ["SoakIngestECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["SoakIngestTaskRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
@@ -64,10 +82,6 @@ Resources:
             - "-m"
             - "crux.soak.ingest"
             - "current"
-          Secrets:
-            - Name: "SOAK_SECRETS"
-              ValueFrom:
-                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/soak-secrets-OHMj3T"
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -97,10 +111,6 @@ Resources:
             - "-m"
             - "crux.soak.ingest"
             - "forecast"
-          Secrets:
-            - Name: "SOAK_SECRETS"
-              ValueFrom:
-                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:soak/soak-secrets-OHMj3T"
           LogConfiguration:
             LogDriver: awslogs
             Options:
