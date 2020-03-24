@@ -476,11 +476,11 @@ is required.
 ----
 
 .CSV metrics arguments
-[#table-conversion%header,cols="d,d,d"]
+[#table-conversion%header,cols="d,d,d,d"]
 |===
 |Field|Property|Required|Description
-|`:crux.metrics.dropwizard.csv/file-name`|`string`| Output file location
-|`:crux.metrics.dropwizard.csv/report-frequency`|`int`| Interval in seconds between file write
+|`:crux.metrics.dropwizard.csv/file-name`|`string`| `true` | Output file location
+|`:crux.metrics.dropwizard.csv/report-frequency`|`int` | `false` | Interval in seconds between file write
 |`:crux.metrics.dropwizard.csv/rate-unit`|`time-unit`|`false`| Unit which rates are displayed
 |`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
 |===
