@@ -5,7 +5,7 @@
 Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
 database.
 
-[quote, Martin Kleppmann (2014)]
+[quote, Martin Kleppmann]
 ____
 What do we have to gain from turning the database inside out? Simpler code,
 better scalability, better robustness, lower latency, and more flexibility for

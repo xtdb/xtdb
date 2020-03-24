@@ -43,7 +43,7 @@ information privacy regulations.
 > better scalability, better robustness, lower latency, and more flexibility for
 > doing interesting things with data.
 >
-> — Martin Kleppmann (2014)
+> — Martin Kleppmann
 
 <img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/img/crux-node-1.svg" width="1000px">
 
