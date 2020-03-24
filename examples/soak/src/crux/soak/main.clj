@@ -15,7 +15,7 @@
   (:import crux.api.NodeOutOfSyncException
            java.io.Closeable
            java.text.SimpleDateFormat
-           java.time.Duration
+           (java.time Duration Instant)
            java.util.Date
            org.eclipse.jetty.server.Server))
 
@@ -27,10 +27,10 @@
   (api/entity (api/db node valid-time) (keyword (str location "-current"))))
 
 (defn get-weather-forecast [node location valid-time]
-  (let [past-five-days (->> (range 0 5)
-                            (map #(Date/from (-> (.toInstant valid-time)
-                                                 (.minus (Duration/ofHours 1))
-                                                 (.minus (Duration/ofDays %))))))]
+  (let [past-five-days (->> (iterate #(.minus ^Instant % (Duration/ofDays 1))
+                                     (.toInstant valid-time))
+                            (take 5)
+                            (map #(Date/from %)))]
     (->> past-five-days
          (keep (fn [transaction-time]
                  (try
@@ -52,44 +52,37 @@
           (assoc :current_weather (:description (first weather)))))))
 
 (defn render-weather-map [weather-map]
-  (map
-   (fn [[k v]]
-     [:p
-      [:b (-> (str (name k) ": ")
-              (string/replace #"_" " ")
-              string/upper-case)]
-      v])
-   weather-map))
+  (for [[k v] weather-map]
+    [:p
+     [:b (-> (str (name k) ": ")
+             (string/replace #"_" " ")
+             string/upper-case)]
+     v]))
 
 (defn render-current-weather [current-weather]
   [:div#current-weather
    [:h2 "Current Weather"]
-   (into
-    [:div#weather]
-    (->> current-weather
-         filter-weather-map
-         render-weather-map))])
+   (into [:div#weather]
+         (->> current-weather
+              filter-weather-map
+              render-weather-map))])
 
 (defn render-weather-forecast [weather-forecast]
   [:div#weather-forecast
    [:h2 "Forecast History"]
-   (into
-    [:div#forecasts]
-    (map
-     (fn [[forecast-date forecast]]
-       (into
-        [:div#forecast
-         [:h3 (.format date-formatter forecast-date)]]
-        (->> forecast
-             filter-weather-map
-             render-weather-map)))
-     weather-forecast))])
+   (into [:div#forecasts]
+         (for [[forecast-date forecast] weather-forecast]
+           (into [:div#forecast
+                  [:h3 (.format date-formatter forecast-date)]]
+                 (->> forecast
+                      filter-weather-map
+                      render-weather-map))))])
 
 (defn render-weather-page [{:keys [location-id location-name date
                                    current-weather weather-forecast]}]
   (str
    (html
-    [:header
+    [:head
      [:link {:rel "stylesheet" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
     [:body
      [:style "body { display: inline-flex; font-family: Helvetica }
@@ -103,17 +96,13 @@
       [:form {:action "/weather.html"}
        [:input {:type "hidden" :name "Location" :value location-id}]
        (into [:select {:name "Date"}]
-             (map
-              (fn [next-date]
-                (let [formatted-date (.format date-formatter next-date)]
-                  [:option
-                   {:value (.getTime next-date)
-                    :selected (when (= formatted-date (.format date-formatter date)) "selected")}
-                   formatted-date]))
-              (map
-               #(Date/from (-> (.toInstant (Date.))
-                               (.plus (Duration/ofDays %))))
-               (range 0 5))))
+             (for [next-date (->> (iterate #(.plus ^Instant % (Duration/ofDays 1)) (.toInstant (Date.)))
+                                  (take 5)
+                                  (map #(Date/from %)))]
+               (let [formatted-date (.format date-formatter next-date)]
+                 [:option {:value (.getTime next-date)
+                           :selected (when (= formatted-date (.format date-formatter date)) "selected")}
+                  formatted-date])))
        [:p [:input {:type "submit" :value "Select Date"}]]]]
      (when current-weather
        (render-current-weather current-weather))
@@ -134,7 +123,7 @@
 (defn render-homepage [location-names]
   (str
    (html
-    [:header
+    [:head
      [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
     [:body
      [:div#homepage
