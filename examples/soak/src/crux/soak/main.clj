@@ -39,27 +39,22 @@
     (handler (assoc request :crux-node node))))
 
 (defn get-current-weather [node location valid-time]
-  (->> (keyword (str location "-current"))
-       (api/entity (api/db node valid-time))))
+  (api/entity (api/db node valid-time) (keyword (str location "-current"))))
 
 (defn get-weather-forecast [node location valid-time]
-  (let [past-five-days (map
-                        #(Date/from (-> (.toInstant valid-time)
-                                        (.minus (Duration/ofHours 1))
-                                        (.minus (Duration/ofDays %))))
-                        (range 0 5))]
-    (remove
-     nil?
-     (map
-      (fn [transaction-time]
-        (try
-          [transaction-time
-           (api/entity
-            (api/db node valid-time transaction-time)
-            (keyword (str location "-forecast")))]
-          (catch NodeOutOfSyncException e
-            nil)))
-      past-five-days))))
+  (let [past-five-days (->> (range 0 5)
+                            (map #(Date/from (-> (.toInstant valid-time)
+                                                 (.minus (Duration/ofHours 1))
+                                                 (.minus (Duration/ofDays %))))))]
+    (->> past-five-days
+         (keep (fn [transaction-time]
+                 (try
+                   [transaction-time
+                    (api/entity
+                     (api/db node valid-time transaction-time)
+                     (keyword (str location "-forecast")))]
+                   (catch NodeOutOfSyncException e
+                     nil)))))))
 
 (def date-formatter (SimpleDateFormat. "dd/MM/yyyy"))
 
@@ -72,13 +67,14 @@
           (assoc :current_weather (:description (first weather)))))))
 
 (defn render-weather-map [weather-map]
-  (reduce
-   (fn [elems key]
-     (conj elems [:p
-                  [:b (string/upper-case (string/replace (str (name key) ": ") #"_" " "))]
-                  (key weather-map)]))
-   []
-   (keys weather-map)))
+  (map
+   (fn [[k v]]
+     [:p
+      [:b (-> (str (name k) ": ")
+              (string/replace #"_" " ")
+              string/upper-case)]
+      v])
+   weather-map))
 
 (defn weather-handler [req]
   (let [location-id (get-in req [:query-params "Location"])
