@@ -165,12 +165,12 @@
      :body (pr-str status)}))
 
 (defn bidi-handler [{:keys [crux-node]}]
-  (bidi.ring/make-handler routes
-                          (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
-                                    :weather #(weather-handler % {:crux-node crux-node})
-                                    :status #(status-handler % {:crux-node crux-node})}
-                                   identity
-                                   (constantly (constantly (resp/not-found "Not found"))))))
+  (br/make-handler routes
+                   (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
+                             :weather #(weather-handler % {:crux-node crux-node})
+                             :status #(status-handler % {:crux-node crux-node})}
+                            identity
+                            (constantly (constantly (resp/not-found "Not found"))))))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
   (let [node (api/start-node node-opts)]
