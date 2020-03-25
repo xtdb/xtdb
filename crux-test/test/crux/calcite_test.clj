@@ -16,7 +16,7 @@
 (def ^:dynamic ^java.sql.Connection *conn*)
 
 (defn- with-calcite-connection [f]
-  (with-open [conn (DriverManager/getConnection "jdbc:calcite:model=crux-calcite/resources/model.json")]
+  (with-open [conn (cal/jdbc-connection)]
     (binding [*conn* conn]
       (f))))
 
