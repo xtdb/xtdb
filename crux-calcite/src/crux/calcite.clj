@@ -109,10 +109,12 @@
             (for [table-schema (lookup-schema @!node)]
               [(string/upper-case (:crux.sql.table/name table-schema)) (make-table table-schema)])))))
 
+(defn- model-properties []
+  (doto (Properties.)
+    (.put "model" (str "inline:" (slurp (clojure.java.io/resource "crux-calcite-model.json"))))))
+
 (defn ^java.sql.Connection jdbc-connection []
-  (let [props (doto (Properties.)
-                (.put "model" (str "inline:" (slurp (clojure.java.io/resource "model.json")))))]
-    (DriverManager/getConnection "jdbc:calcite:" props)))
+  (DriverManager/getConnection "jdbc:calcite:" (model-properties)))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
   ;; TODO, find a better approach
@@ -121,7 +123,7 @@
   ;; Todo won't work from a JAR file:
   ;; Pass through the SchemaFactory
   (let [server (.build (doto (org.apache.calcite.avatica.server.HttpServer$Builder.)
-                         (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:model=crux-calcite/resources/model.json"))
+                         (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:" (model-properties)))
                                        org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
                          (.withPort port)))]
     (.start server)
