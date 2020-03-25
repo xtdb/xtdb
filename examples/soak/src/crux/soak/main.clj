@@ -78,15 +78,9 @@
   (str
    (html
     [:head
-     [:link {:rel "stylesheet" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
-    [:body
-     [:style "body { display: inline-flex; font-family: Helvetica }
-              #location { text-align: center; width: 300px; padding-right: 30px; }
-              #current-weather { width: 300px; padding-right: 30px; }
-              #forecasts { display: inline-flex; }
-              #forecasts .weather-report { padding-right: 10px; }
-              #forecasts h3 { margin-top: 0px; }
-              .bitemp-inst {font-family: monospace}"]
+     [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]
+     [:link {:rel "stylesheet" :type "text/css" :href "resources/style.css"}]]
+    [:body#weather-body
      [:div#location
       [:h1 location-name]
       (let [zdt (ZonedDateTime/ofInstant (.toInstant valid-time) london)]
@@ -132,12 +126,10 @@
   (str
    (html
     [:head
-     [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]]
+     [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]
+     [:link {:rel "stylesheet" :type "text/css" :href "resources/style.css"}]]
     [:body
      [:div#homepage
-      [:style "#homepage { text-align: center; font-family: Helvetica; }
-                h1 { font-size: 3em; }
-                h2 { font-size: 2em; }"]
       [:h1 "Crux Weather Service"]
       [:h2 "Locations"]
       [:form {:target "_blank" :action "/weather.html"}
@@ -159,6 +151,7 @@
   (let [handle-homepage #(homepage-handler % {:crux-node crux-node})]
     (bidi.ring/make-handler ["" [["/" {"index.html" handle-homepage
                                        "weather.html" #(weather-handler % {:crux-node crux-node})}]
+                                 ["/resources" (bidi.ring/->ResourcesMaybe{:prefix "public/"})]
                                  [true (bidi.ring/->Redirect 307 handle-homepage)]]])))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
