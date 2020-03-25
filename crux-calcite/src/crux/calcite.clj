@@ -1,9 +1,10 @@
 (ns crux.calcite
   (:require [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.api :as crux]
-            [crux.codec :as c])
-  (:import org.apache.calcite.avatica.jdbc.JdbcMeta
+            [crux.api :as crux])
+  (:import java.sql.DriverManager
+           java.util.Properties
+           org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            org.apache.calcite.rel.type.RelDataTypeFactory
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral]
@@ -107,6 +108,11 @@
       (into {}
             (for [table-schema (lookup-schema @!node)]
               [(string/upper-case (:crux.sql.table/name table-schema)) (make-table table-schema)])))))
+
+(defn ^java.sql.Connection jdbc-connection []
+  (let [props (doto (Properties.)
+                (.put "model" (str "inline:" (slurp (clojure.java.io/resource "model.json")))))]
+    (DriverManager/getConnection "jdbc:calcite:" props)))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
   ;; TODO, find a better approach
