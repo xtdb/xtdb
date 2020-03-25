@@ -6,7 +6,6 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.soak.config :as config]
-            [crux.io :as cio]
             [hiccup2.core :refer [html]]
             [integrant.core :as ig]
             [integrant.repl :as ir]
@@ -158,7 +157,12 @@
 
 (defn status-handler [req {:keys [crux-node]}]
   (let [status (api/status crux-node)]
-    (resp/content-type (resp/response (cio/pr-edn-str status)) "application/edn")))
+    {:status (if (or (not (contains? status :crux.zk/zk-active?))
+                     (:crux.zk/zk-active? status))
+               200
+               500)
+     :headers {"Content-Type" "application/edn"}
+     :body (pr-str status)}))
 
 (defn bidi-handler [{:keys [crux-node]}]
   (bidi.ring/make-handler routes
