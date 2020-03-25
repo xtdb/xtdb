@@ -111,13 +111,12 @@
                              ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
                               (or after-tx-id 0)])
           rs (.executeQuery stmt)]
-      (db/->closeable-tx-log-iterator
-       #(run! cio/try-close [rs stmt conn])
-       (->> (resultset-seq rs)
-            (map (fn [y]
-                   {:crux.tx/tx-id (int (:event_offset y))
-                    :crux.tx/tx-time (->date dbtype (:tx_time y))
-                    :crux.tx.event/tx-events (->v dbtype (:v y))}))))))
+      (cio/->cursor #(run! cio/try-close [rs stmt conn])
+                    (->> (resultset-seq rs)
+                         (map (fn [y]
+                                {:crux.tx/tx-id (int (:event_offset y))
+                                 :crux.tx/tx-time (->date dbtype (:tx_time y))
+                                 :crux.tx.event/tx-events (->v dbtype (:v y))}))))))
 
   (latest-submitted-tx [this]
     (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]

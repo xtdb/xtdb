@@ -18,8 +18,7 @@
             [crux.io :as cio]
             [taoensso.nippy :as nippy])
   (:import [java.util Date]
-           [java.time Duration]
-           [crux.api ITxLog]))
+           [java.time Duration]))
 
 ;; FIXME using Rocks because the default memdb fails, see note in the tx-fn defmethod of `tx/index-tx-event`
 (t/use-fixtures :each fs/with-standalone-node fkv/with-rocksdb fkv/with-kv-dir fapi/with-node f/with-silent-test-check)

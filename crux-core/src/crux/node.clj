@@ -17,7 +17,7 @@
             [crux.topology :as topo]
             [crux.tx :as tx]
             [crux.bus :as bus])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ITxLog]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            java.io.Closeable
            java.util.Date
            [java.util.concurrent Executors]
@@ -116,13 +116,13 @@
            (kv/get-value (kv/new-snapshot kv-store)
                          (c/encode-failed-tx-id-key-to nil tx-id)))))))
 
-  (openTxLog ^ITxLog [this after-tx-id with-ops?]
+  (openTxLog ^ICursor [this after-tx-id with-ops?]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
             (or (nil? latest-submitted-tx-id)
                 (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
-        (db/->closeable-tx-log-iterator #() [])
+        (cio/->cursor #() [])
 
         (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
               snapshot (kv/new-snapshot kv-store)
@@ -139,10 +139,10 @@
                                                               (->> tx-events
                                                                    (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
 
-          (db/->closeable-tx-log-iterator (fn []
-                                            (.close snapshot)
-                                            (.close tx-log-iterator))
-                                          tx-log)))))
+          (cio/->cursor (fn []
+                          (.close snapshot)
+                          (.close tx-log-iterator))
+                        tx-log)))))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]

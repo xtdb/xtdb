@@ -4,7 +4,8 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
+  (:import [crux.api ICursor]
+           [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
@@ -12,7 +13,7 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
+           [java.util Comparator Date IdentityHashMap Iterator PriorityQueue Properties]
            [java.util.concurrent ThreadFactory]
            java.util.concurrent.locks.StampedLock))
 
@@ -247,3 +248,17 @@
         (doto (Thread. r)
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
+
+(defrecord Cursor [close-fn ^Iterator lazy-seq-iterator]
+  ICursor
+  (next [this]
+    (.next lazy-seq-iterator))
+
+  (hasNext [this]
+    (.hasNext lazy-seq-iterator))
+
+  (close [_]
+    (close-fn)))
+
+(defn ->cursor [close-fn ^Iterable sq]
+  (->Cursor close-fn (.iterator (lazy-seq sq))))

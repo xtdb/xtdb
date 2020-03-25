@@ -149,10 +149,10 @@
           consumer (doto (create-consumer kafka-config)
                      (.assign (keys tp-offsets))
                      (seek-consumer tp-offsets))]
-      (db/->closeable-tx-log-iterator #(.close consumer)
-                                      (->> (consumer-seqs consumer (Duration/ofSeconds 1))
-                                           (mapcat identity)
-                                           (map tx-record->tx-log-entry)))))
+      (cio/->cursor #(.close consumer)
+                    (->> (consumer-seqs consumer (Duration/ofSeconds 1))
+                         (mapcat identity)
+                         (map tx-record->tx-log-entry)))))
 
   (latest-submitted-tx [this]
     (let [tx-tp (TopicPartition. tx-topic 0)

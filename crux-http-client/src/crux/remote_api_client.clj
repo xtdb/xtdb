@@ -209,8 +209,8 @@
                                nil
                                {:method :get
                                 :as :stream})]
-      (db/->closeable-tx-log-iterator #(.close ^Closeable in)
-                                      (edn-list->lazy-seq in))))
+      (cio/->cursor #(.close ^Closeable in)
+                    (edn-list->lazy-seq in))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")
