@@ -760,3 +760,10 @@
     (t/is (false? (cio/wait-while twice-no (Duration/ofMillis 100))))
     (t/is (true? (cio/wait-while twice-no (Duration/ofMillis 400))))
     (t/is (true? (cio/wait-while twice-no nil)))))
+
+(t/deftest await-fails-quickly-738
+  (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "boom!" {})))]
+    (let [!fut (future (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
+      (t/is (thrown-with-msg? Exception #"Transaction consumer aborted"
+                              (deref !fut 1000 ::timeout)))
+      (future-cancel !fut))))

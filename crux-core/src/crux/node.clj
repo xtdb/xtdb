@@ -38,7 +38,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer object-store bus
+(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
@@ -156,13 +156,13 @@
   (awaitTxTime [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
+      (-> (tx/await-tx-time indexer tx-consumer tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
 
   (awaitTx [this submitted-tx timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx indexer submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
+      (tx/await-tx indexer tx-consumer submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
 
   (latestCompletedTx [this]
     (db/latest-completed-tx indexer))
@@ -193,17 +193,18 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer document-store object-store tx-log kv-store bus]} node-opts]
+  {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store bus]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
                                :indexer indexer
+                               :tx-consumer tx-consumer
                                :document-store document-store
                                :object-store object-store
                                :bus bus
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::kv-store ::bus ::document-store ::object-store ::tx-log}
+   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::object-store ::tx-log}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})

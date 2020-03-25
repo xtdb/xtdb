@@ -461,24 +461,28 @@
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
    :deps [:crux.node/kv-store :crux.node/document-store :crux.node/object-store :crux.node/bus]})
 
-(defn await-tx [indexer {::keys [tx-id] :as tx} timeout]
+(defn await-tx [indexer tx-consumer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(let [latest-completed-tx (db/latest-completed-tx indexer)]
-                           (reset! seen-tx latest-completed-tx)
-                           (or (nil? latest-completed-tx)
-                               (pos? (compare tx-id (::tx-id latest-completed-tx)))))
+    (if (cio/wait-while #(if-let [err (db/consumer-error tx-consumer)]
+                           (throw (Exception. "Transaction consumer aborted" err))
+                           (let [latest-completed-tx (db/latest-completed-tx indexer)]
+                             (reset! seen-tx latest-completed-tx)
+                             (or (nil? latest-completed-tx)
+                                 (pos? (compare tx-id (::tx-id latest-completed-tx))))))
                         timeout)
       @seen-tx
       (throw (TimeoutException.
               (str "Timed out waiting for: " (cio/pr-edn-str tx)
                    " index has: " (cio/pr-edn-str @seen-tx)))))))
 
-(defn await-tx-time [indexer tx-time timeout]
+(defn await-tx-time [indexer tx-consumer tx-time timeout]
   (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(let [latest-completed-tx (db/latest-completed-tx indexer)]
-                           (reset! seen-tx latest-completed-tx)
-                           (or (nil? latest-completed-tx)
-                               (pos? (compare tx-time (::tx-time latest-completed-tx)))))
+    (if (cio/wait-while #(if-let [err (db/consumer-error tx-consumer)]
+                           (throw (Exception. "Transaction consumer aborted" err))
+                           (let [latest-completed-tx (db/latest-completed-tx indexer)]
+                             (reset! seen-tx latest-completed-tx)
+                             (or (nil? latest-completed-tx)
+                                 (pos? (compare tx-time (::tx-time latest-completed-tx))))))
                         timeout)
       @seen-tx
       (throw (TimeoutException.
