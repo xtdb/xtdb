@@ -27,6 +27,7 @@
   ["" [["/" {"index.html" :homepage
              "weather.html" :weather}]
        ["/resources" (br/->ResourcesMaybe {:prefix "public"})]
+       ["/status" :status]
        [true (br/->Redirect 307 :homepage)]]])
 
 (defn get-current-weather [node location valid-time]
@@ -154,12 +155,22 @@
                             (map first))]
     (resp/response (render-homepage location-names))))
 
+(defn status-handler [req {:keys [crux-node]}]
+  (let [status (api/status crux-node)]
+    {:status (if (or (not (contains? status :crux.zk/zk-active?))
+                     (:crux.zk/zk-active? status))
+               200
+               500)
+     :headers {"Content-Type" "application/edn"}
+     :body (pr-str status)}))
+
 (defn bidi-handler [{:keys [crux-node]}]
-  (bidi.ring/make-handler routes
-                          (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
-                                    :weather #(weather-handler % {:crux-node crux-node})}
-                                   (fn [handler] (when (ifn? handler) handler))
-                                   (constantly (constantly (resp/not-found "Not found"))))))
+  (br/make-handler routes
+                   (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
+                             :weather #(weather-handler % {:crux-node crux-node})
+                             :status #(status-handler % {:crux-node crux-node})}
+                            identity
+                            (constantly (constantly (resp/not-found "Not found"))))))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
   (let [node (api/start-node node-opts)]
