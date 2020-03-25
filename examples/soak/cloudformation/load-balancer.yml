@@ -32,6 +32,19 @@ Resources:
         - Key: Name
           Value: soak-lb
 
+  SoakRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName:
+          Fn::GetAtt: ["LoadBalancer","DNSName"]
+        EvaluateTargetHealth: false
+        HostedZoneId:
+          Fn::GetAtt: ["LoadBalancer","CanonicalHostedZoneID"]
+      HostedZoneName: 'crux.cloud.'
+      Name: 'soak.crux.cloud'
+      Type: 'A'
+
   LoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
