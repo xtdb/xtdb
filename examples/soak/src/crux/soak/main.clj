@@ -6,6 +6,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.soak.config :as config]
+            [crux.io :as cio]
             [hiccup2.core :refer [html]]
             [integrant.core :as ig]
             [integrant.repl :as ir]
@@ -27,6 +28,7 @@
   ["" [["/" {"index.html" :homepage
              "weather.html" :weather}]
        ["/resources" (br/->ResourcesMaybe {:prefix "public"})]
+       ["/status" :status]
        [true (br/->Redirect 307 :homepage)]]])
 
 (defn get-current-weather [node location valid-time]
@@ -154,10 +156,15 @@
                             (map first))]
     (resp/response (render-homepage location-names))))
 
+(defn status-handler [req {:keys [crux-node]}]
+  (let [status (api/status crux-node)]
+    (resp/content-type (resp/response (cio/pr-edn-str status)) "application/edn")))
+
 (defn bidi-handler [{:keys [crux-node]}]
   (bidi.ring/make-handler routes
                           (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
-                                    :weather #(weather-handler % {:crux-node crux-node})}
+                                    :weather #(weather-handler % {:crux-node crux-node})
+                                    :status #(status-handler % {:crux-node crux-node})}
                                    (fn [handler] (when (ifn? handler) handler))
                                    (constantly (constantly (resp/not-found "Not found"))))))
 
