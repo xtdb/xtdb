@@ -40,9 +40,27 @@ Resources:
                 - 'ecr:GetDownloadUrlForLayer'
                 - 'ecr:BatchGetImage'
 
-                # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
+              Resource: '*'
+
+  SoakTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: SoakTaskRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'secretsmanager:GetSecretValue'
               Resource: '*'
 
   SoakTaskDef:
@@ -55,6 +73,8 @@ Resources:
       Family: 'crux-soak'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["SoakTaskRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
@@ -79,7 +99,7 @@ Resources:
       ServiceName: 'crux-soak'
       Cluster: 'crux-soak'
       LaunchType: FARGATE
-      HealthCheckGracePeriodSeconds: 60
+      HealthCheckGracePeriodSeconds: 600
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75

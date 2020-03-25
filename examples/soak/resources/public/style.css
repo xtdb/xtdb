@@ -1,0 +1,30 @@
+#homepage {
+    text-align: center;
+    font-family: Helvetica;
+}
+
+h1 { font-size: 3em; }
+
+h2 { font-size: 2em; }
+
+#weather-body {
+    display: inline-flex;
+    font-family: Helvetica
+}
+
+#location {
+    text-align: center;
+    width: 300px;
+    padding-right: 30px;
+}
+
+#current-weather {
+    width: 300px;
+    padding-right: 30px;
+}
+
+#forecasts { display: inline-flex; }
+
+#forecast { padding-right: 10px; }
+
+#forecast h3 { margin-top: 0px; }

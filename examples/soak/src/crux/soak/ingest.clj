@@ -1,8 +1,9 @@
 (ns crux.soak.ingest
-  (:require [cheshire.core :as json]
-            [clj-http.client :as http]
+  (:require [clj-http.client :as http]
             [clojure.string :as string]
-            [crux.api :as crux])
+            [crux.api :as crux]
+            [crux.soak.config :as config]
+            [nomad.config :as n])
   (:import java.time.Duration
            java.util.Date))
 
@@ -28,20 +29,16 @@
    "Whaley-Bridge" "2634194",
    "Bristol" "2654675"})
 
-(def soak-secrets
-  (-> (System/getenv "SOAK_SECRETS")
-      (json/decode)))
-
 (defn fetch-current-weather [location-id]
   (-> (http/get "http://api.openweathermap.org/data/2.5/weather"
-                {:query-params {"id" location-id, "appid" (get soak-secrets "WEATHER_API_TOKEN")}
+                {:query-params {"id" location-id, "appid" config/weather-api-token}
                  :accept :json
                  :as :json})
       :body))
 
 (defn fetch-weather-forecast [location-id]
   (-> (http/get "http://api.openweathermap.org/data/2.5/forecast"
-                {:query-params {"id" location-id, "appid" (get soak-secrets "WEATHER_API_TOKEN")}
+                {:query-params {"id" location-id, "appid" config/weather-api-token}
                  :accept :json
                  :as :json})
       :body))
@@ -56,7 +53,10 @@
 (defn current-resp->put [resp]
   (let [location-name (:name resp)]
     (->put (-> resp
-               (assoc :crux.db/id (str location-name "-current")
+               (assoc :crux.db/id (-> (string/lower-case location-name)
+                                      (string/replace #" " "-")
+                                      (str "-current")
+                                      (keyword))
                       :location-name location-name)
                (select-keys [:crux.db/id :location-name :main :wind :weather]))
            (parse-dt (:dt resp))
@@ -66,29 +66,20 @@
   (let [location-name (get-in resp [:city :name])]
     (for [forecast (:list resp)]
       (->put (-> forecast
-                 (assoc :crux.db/id (str location-name "-forecast")
+                 (assoc :crux.db/id (-> (string/lower-case location-name)
+                                        (string/replace #" " "-")
+                                        (str "-forecast")
+                                        (keyword))
                         :location-name location-name)
                  (select-keys [:crux.db/id :location-name :main :wind :weather]))
              (parse-dt (:dt forecast))
              (Duration/ofHours 3)))))
 
-(def kafka-properties-map
-  {"ssl.endpoint.identification.algorithm" "https"
-   "sasl.mechanism" "PLAIN"
-   "sasl.jaas.config" (str (->> ["org.apache.kafka.common.security.plain.PlainLoginModule"
-                                 "required"
-                                 (format "username=\"%s\"" (get soak-secrets "CONFLUENT_API_TOKEN"))
-                                 (format "password=\"%s\"" (get soak-secrets "CONFLUENT_API_SECRET"))]
-                                (string/join " "))
-                           ";")
-   "security.protocol" "SASL_SSL"})
-
 (defn -main [& args]
+  (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
+
   (let [mode (first args)]
-    (with-open [node (crux/new-ingest-client {:crux.kafka/bootstrap-servers (get soak-secrets "CONFLUENT_BROKER")
-                                              :crux.kafka/replication-factor 3
-                                              :crux.kafka/doc-partitions 1
-                                              :crux.kafka/kafka-properties-map kafka-properties-map})]
+    (with-open [node (crux/new-ingest-client (config/crux-node-config))]
       (crux/submit-tx node
                       (case mode
                         "current" (->> (vals locations)
