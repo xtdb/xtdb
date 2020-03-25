@@ -1,5 +1,6 @@
 (ns crux.soak.main
-  (:require bidi.ring
+  (:require [bidi.bidi :as bidi]
+            [bidi.ring :as br]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
@@ -21,6 +22,12 @@
            org.eclipse.jetty.server.Server))
 
 (def london (ZoneId/of "Europe/London"))
+
+(def routes
+  ["" [["/" {"index.html" :homepage
+             "weather.html" :weather}]
+       ["/resources" (br/->ResourcesMaybe {:prefix "public"})]
+       [true (br/->Redirect 307 :homepage)]]])
 
 (defn get-current-weather [node location valid-time]
   (when-let [etx (api/entity-tx (api/db node valid-time) (keyword (str location "-current")))]
@@ -79,12 +86,12 @@
    (html
     [:head
      [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]
-     [:link {:rel "stylesheet" :type "text/css" :href "resources/style.css"}]]
+     [:link {:rel "stylesheet" :type "text/css" :href "/resources/style.css"}]]
     [:body#weather-body
      [:div#location
       [:h1 location-name]
       (let [zdt (ZonedDateTime/ofInstant (.toInstant valid-time) london)]
-        [:form {:action "/weather.html"}
+        [:form {:action (bidi/path-for routes :weather)}
          [:input {:type "hidden" :name "location" :value location-id}]
          [:p [:input {:type "date",
                       :name "date",
@@ -127,7 +134,7 @@
    (html
     [:head
      [:link {:rel "stylesheet" :type "text/css" :href "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css"}]
-     [:link {:rel "stylesheet" :type "text/css" :href "resources/style.css"}]]
+     [:link {:rel "stylesheet" :type "text/css" :href "/resources/style.css"}]]
     [:body
      [:div#homepage
       [:h1 "Crux Weather Service"]
@@ -148,11 +155,11 @@
     (resp/response (render-homepage location-names))))
 
 (defn bidi-handler [{:keys [crux-node]}]
-  (let [handle-homepage #(homepage-handler % {:crux-node crux-node})]
-    (bidi.ring/make-handler ["" [["/" {"index.html" handle-homepage
-                                       "weather.html" #(weather-handler % {:crux-node crux-node})}]
-                                 ["/resources" (bidi.ring/->ResourcesMaybe{:prefix "public/"})]
-                                 [true (bidi.ring/->Redirect 307 handle-homepage)]]])))
+  (bidi.ring/make-handler routes
+                          (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
+                                    :weather #(weather-handler % {:crux-node crux-node})}
+                                   (fn [handler] (when (ifn? handler) handler))
+                                   (constantly (constantly (resp/not-found "Not found"))))))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
   (let [node (api/start-node node-opts)]
