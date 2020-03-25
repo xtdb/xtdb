@@ -169,7 +169,7 @@
                           (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
                                     :weather #(weather-handler % {:crux-node crux-node})
                                     :status #(status-handler % {:crux-node crux-node})}
-                                   (fn [handler] (when (ifn? handler) handler))
+                                   identity
                                    (constantly (constantly (resp/not-found "Not found"))))))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
