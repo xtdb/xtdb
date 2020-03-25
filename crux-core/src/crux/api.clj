@@ -270,6 +270,10 @@
   Second signature accepts a db snapshot, see `new-snapshot`.
   Evaluates *lazily* consequently returns lazy sequence of result tuples.")
 
+  (open-q ^java.io.Closeable [db query]
+    ;; TODO doc
+    )
+
   (history-ascending
     [db snapshot eid]
     "Retrieves entity history lazily in chronological order
@@ -312,18 +316,13 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (history-ascending [this snapshot eid]
-    (.historyAscending this snapshot eid))
+  (open-q [this query] (.openQuery this query))
 
-  (history-descending [this snapshot eid]
-    (.historyDescending this snapshot eid))
+  (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
+  (history-descending [this snapshot eid] (.historyDescending this snapshot eid))
 
-  (valid-time
-    [this]
-    (.validTime this))
-
-  (transaction-time [this]
-    (.transactionTime this)))
+  (valid-time [this] (.validTime this))
+  (transaction-time [this] (.transactionTime this)))
 
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."

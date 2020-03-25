@@ -1209,6 +1209,7 @@
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
   (q [this query]
+    ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
     (let [conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
@@ -1227,6 +1228,24 @@
     ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
     ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
     (q this snapshot (normalize-and-conform-query conform-cache query)))
+
+  (openQuery [this query]
+    (let [snapshot (.newSnapshot this)]
+      (let [conformed-query (normalize-and-conform-query conform-cache query)
+            query-id (str (UUID/randomUUID))
+            safe-query (-> conformed-query .q-normalized (dissoc :args))]
+        (when bus
+          (bus/send bus {:crux.bus/event-type ::submitted-query
+                         ::query safe-query
+                         ::query-id query-id}))
+        (cio/->cursor (fn []
+                                    (.close snapshot)
+                                    (when bus
+                                      (bus/send bus {:crux.bus/event-type ::completed-query
+                                                     ::query safe-query
+                                                     ::query-id query-id})))
+
+                                  (q this snapshot conformed-query)))))
 
   (historyAscending [this snapshot eid]
     ;; TODO this doesn't close the iterator - we'll want to do this when we move to 'openHistoryAscending'

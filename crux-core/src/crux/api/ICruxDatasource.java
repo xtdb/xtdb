@@ -65,7 +65,16 @@ public interface ICruxDatasource {
      * @param query    the query in map, vector or string form.
      * @return         a lazy sequence of result tuples.
      */
+    @Deprecated
     public Iterable<List<?>> q(Closeable snapshot, Object query);
+
+    /**
+     * Queries the db lazily.
+     *
+     * @param query the query in map, vector or string form.
+     * @return      a cursor of result tuples.
+     */
+    public ICursor<List<?>> openQuery(Object query);
 
     /**
      * Retrieves entity history lazily in chronological order from and

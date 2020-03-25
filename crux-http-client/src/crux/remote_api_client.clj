@@ -127,6 +127,14 @@
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
+  (openQuery [this q]
+    (let [in (api-request-sync (str url "/query-stream")
+                               (assoc (as-of-map this)
+                                      :query (q/normalize-query q))
+                               {:as :stream})]
+      (cio/->cursor (fn [] (.close ^Closeable in))
+                    (edn-list->lazy-seq in))))
+
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
                                (assoc (as-of-map this) :eid eid)
