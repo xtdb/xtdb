@@ -14,10 +14,21 @@
 ;; See https://github.com/juxt/crux/issues/514
 
 (def ^:dynamic ^java.sql.Connection *conn*)
-(defn- with-jdbc-connection [f]
+
+(defn- with-calcite-connection [f]
+  (with-open [conn (DriverManager/getConnection "jdbc:calcite:model=crux-calcite/resources/model.json")]
+    (binding [*conn* conn]
+      (f))))
+
+(defn- with-avatica-connection [f]
   (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")]
     (binding [*conn* conn]
       (f))))
+
+(defn- with-each-connection-type [f]
+  (with-calcite-connection f)
+  (t/testing "With Avatica Connection"
+    (with-avatica-connection f)))
 
 (defn with-calcite-module [f]
   (fapi/with-opts (-> fapi/*opts*
@@ -28,7 +39,7 @@
   (let [stmt (.createStatement *conn*)]
     (->> q (.executeQuery stmt) resultset-seq)))
 
-(t/use-fixtures :each fs/with-standalone-node with-calcite-module kvf/with-kv-dir fapi/with-node with-jdbc-connection)
+(t/use-fixtures :each fs/with-standalone-node with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type)
 
 (t/deftest test-hello-world-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
