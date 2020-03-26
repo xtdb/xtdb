@@ -51,9 +51,12 @@
                                                  :crux.sql.column/type :varchar}
                                                 {:crux.db/attribute :homeworld
                                                  :crux.sql.column/name "homeworld"
-                                                 :crux.sql.column/type :varchar}]}])
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}
-                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars"}]))
+                                                 :crux.sql.column/type :varchar}
+                                                {:crux.db/attribute :alive
+                                                 :crux.sql.column/name "alive"
+                                                 :crux.sql.column/type :boolean}]}])
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :alive true}
+                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :alive false}]))
 
   (t/testing "order by"
     (t/is (= [{:name "Ivan"}
@@ -74,33 +77,38 @@
              (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
 
   (t/testing "wildcard columns"
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}
-               {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
+    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan" :alive true}
+               {:name "Malcolm" :homeworld "Mars" :id ":malcolm" :alive false}}
              (set (query "SELECT * FROM PERSON")))))
 
   (t/testing "equals operand"
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
-             (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan'"))))
-    (t/is (= #{{:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
-             (set (query "SELECT * FROM PERSON WHERE NAME <> 'Ivan'"))))
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
-             (set (query "SELECT * FROM PERSON WHERE 'Ivan' = NAME")))))
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan'"))))
+    (t/is (= #{{:name "Malcolm"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME <> 'Ivan'"))))
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME FROM PERSON WHERE 'Ivan' = NAME")))))
 
   (t/testing "in operand"
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
-             (set (query "SELECT * FROM PERSON WHERE NAME in ('Ivan')")))))
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME in ('Ivan')")))))
 
   (t/testing "and"
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}}
-             (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan' AND HOMEWORLD = 'Earth'")))))
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan' AND HOMEWORLD = 'Earth'")))))
 
   (t/testing "or"
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan"}
-               {:name "Malcolm" :homeworld "Mars" :id ":malcolm"}}
-             (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
+    (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
+
+  (t/testing "boolean"
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME FROM PERSON WHERE ALIVE = TRUE"))))
+    (t/is (= #{{:name "Malcolm"}}
+             (set (query "SELECT NAME FROM PERSON WHERE ALIVE = FALSE")))))
 
   (t/testing "namespaced keywords"
-    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth"}]))
+    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
 
   (t/testing "numeric values"
