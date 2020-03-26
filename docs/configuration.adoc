@@ -406,6 +406,14 @@ https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
 all the metrics and then passes the registry around to reporters to display the
 data in a suitable application.
 
+[#config-metrics-dependency]
+*Project Dependency*
+
+[source,clj]
+----
+include::./deps.edn[tags=MetricsDeps]
+----
+
 By default `indexer` and `query` metrics are included. It is also
 possible to add `rocksdb` metrics when it is being used. These arguments can be
 used whenever any of the topologies to display metrics are included.
@@ -470,7 +478,7 @@ is required.
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
                                       'crux.metrics.dropwizard.csv/reporter]
-                 :crux.metrics.dropwizard.csv/file-name "out.csv"
+                 :crux.metrics.dropwizard.csv/file-name "csv-out"
                  ...
                  })
 ----
@@ -479,7 +487,7 @@ is required.
 [#table-conversion%header,cols="d,d,d,d"]
 |===
 |Field|Property|Required|Description
-|`:crux.metrics.dropwizard.csv/file-name`|`string`| `true` | Output file location
+|`:crux.metrics.dropwizard.csv/file-name`|`string`| `true` | Output folder name (must already exist)
 |`:crux.metrics.dropwizard.csv/report-frequency`|`int` | `false` | Interval in seconds between file write
 |`:crux.metrics.dropwizard.csv/rate-unit`|`time-unit`|`false`| Unit which rates are displayed
 |`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
@@ -490,6 +498,16 @@ is required.
 
 Provides JMX mbeans output.
 
+[#config-metrics-jmx-dependencies]
+*Additional Dependencies*
+
+[source,clj]
+----
+include::../project.clj[tags=MetricsJMXDeps]
+----
+
+*Getting Started*
+
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
@@ -497,6 +515,8 @@ Provides JMX mbeans output.
                  ...
                  })
 ----
+
+You will need to add the following dependencies, alongside `crux-metrics`, in your project:
 
 .JMX metrics arguments
 [#table-conversion%header,cols="d,d,d"]
@@ -511,12 +531,24 @@ Provides JMX mbeans output.
 [#config-metrics-prometheus]
 === Prometheus
 
+You will need to add the following dependencies, alongside `crux-metrics`, in your project:
+
+[#config-metrics-prometheus-dependencies]
+*Additional Dependencies*
+
+[source,clj]
+----
+include::../project.clj[tags=MetricsPrometheusDeps]
+----
+
 [#config-metrics-prometheus-exporter]
 ==== HTTP-Exporter
 
 The prometheus http exporter starts a standalone server hosting prometheus
 metrics by default at http://localhost:8080/metrics. The port can be changed
 with an argument, and jvm metrics can be included in the dump.
+
+*Getting Started*
 
 [source,clj]
 ----
@@ -539,6 +571,8 @@ with an argument, and jvm metrics can be included in the dump.
 
 This component pushes prometheus metrics to a specified `pushgateway` at
 regular durations (by default 1 second).
+
+*Getting Started*
 
 [source,clj]
 ----
@@ -566,6 +600,18 @@ running inside a EBS/Fargate instance. It attempts to get the relevant
 credentials through system variables.
 Crux uses this in its aws benchmarking system which can be found
 https://github.com/juxt/crux/tree/master/crux-bench[here].
+
+You will need to add the following dependencies, alongside `crux-metrics`, in your project:
+
+[#config-metrics-cloudwatch-dependencies]
+*Additional Dependencies*
+
+[source,clj]
+----
+include::../project.clj[tags=MetricsCloudwatchDeps]
+----
+
+*Getting Started*
 
 [source,clj]
 ----
