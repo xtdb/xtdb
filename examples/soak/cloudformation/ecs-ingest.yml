@@ -99,6 +99,8 @@ Resources:
       Family: 'crux-soak-ingest-forecast'
       ExecutionRoleArn:
         Fn::GetAtt: ["SoakIngestECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["SoakIngestTaskRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
