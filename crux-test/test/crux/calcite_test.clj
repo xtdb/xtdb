@@ -123,8 +123,22 @@
                                                    :crux.sql.column/type :integer}]}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
                                   {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
+
     (t/is (= [{:name "Ivan" :age 21}]
              (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
+
+    (t/testing "Range"
+      (t/is (= ["Malcolm"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE > 21"))))
+      (t/is (= ["Ivan"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE 23 > AGE"))))
+      (t/is (= #{"Ivan" "Malcolm"}
+               (set (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE >= 21")))))
+      (t/is (= ["Ivan"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE < 22"))))
+      (t/is (= ["Ivan"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE <= 21")))))
+
     (t/testing "order by"
       (t/is (= [{:name "Ivan"}
                 {:name "Malcolm"}]
