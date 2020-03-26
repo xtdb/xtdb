@@ -446,7 +446,7 @@ This component logs metrics to `sysout` at regular intervals.
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-console]
+                                      'crux.metrics.dropwizard.console/reporter]
                  ...
                  })
 ----
@@ -469,7 +469,7 @@ is required.
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-csv]
+                                      'crux.metrics.dropwizard.csv/reporter]
                  :crux.metrics.dropwizard.csv/file-name "out.csv"
                  ...
                  })
@@ -493,7 +493,7 @@ Provides JMX mbeans output.
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-jmx]
+                                      'crux.metrics.dropwizard.jmx/reporter]
                  ...
                  })
 ----
@@ -521,7 +521,7 @@ with an argument, and jvm metrics can be included in the dump.
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-prometheus-http-exporter]
+                                      'crux.metrics.dropwizard.prometheus/http-exporter]
                  ...
                  })
 ----
@@ -543,7 +543,7 @@ regular durations (by default 1 second).
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-prometheus-reporter]
+                                      'crux.metrics.dropwizard.prometheus/reporter]
                  :crux.metric.dropwizard.prometheus/pushgateway "localhost:9090"
                  ...
                  })
@@ -570,7 +570,7 @@ https://github.com/juxt/crux/tree/master/crux-bench[here].
 [source,clj]
 ----
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-cloudwatch]
+                                      'crux.metrics.dropwizard.cloudwatch/reporter]
                  ...
                  })
 ----

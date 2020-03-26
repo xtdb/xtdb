@@ -133,7 +133,7 @@
   {"standalone-rocksdb"
    (fn [data-dir]
      {:crux.node/topology '[crux.standalone/topology
-                            crux.metrics/with-cloudwatch
+                            crux.metrics.dropwizard.cloudwatch/reporter
                             crux.kv.rocksdb/kv-store]
       :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
@@ -142,7 +142,7 @@
    "kafka-rocksdb"
    (fn [data-dir]
      {:crux.node/topology '[crux.kafka/topology
-                            crux.metrics/with-cloudwatch
+                            crux.metrics.dropwizard.cloudwatch/reporter
                             crux.kv.rocksdb/kv-store]
       :crux.kafka/bootstrap-servers "localhost:9092"
       :crux.kafka/doc-topic "kafka-rocksdb-doc"
@@ -152,7 +152,7 @@
    "embedded-kafka-rocksdb"
    (fn [data-dir]
      {:crux.node/topology '[crux.kafka/topology
-                            crux.metrics/with-cloudwatch
+                            crux.metrics.dropwizard.cloudwatch/reporter
                             crux.kv.rocksdb/kv-store]
       :crux.kafka/bootstrap-servers "localhost:9091"
       :crux.kafka/doc-topic "kafka-rocksdb-doc"
@@ -161,7 +161,7 @@
    #_"standalone-lmdb"
    #_(fn [data-dir]
        {:crux.node/topology '[crux.standalone/topology
-                              crux.metrics/with-cloudwatch
+                              crux.metrics.dropwizard.cloudwatch/reporter
                               crux.kv.lmdb/kv-store]
         :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
         :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
@@ -170,7 +170,7 @@
    #_"kafka-lmdb"
    #_(fn [data-dir]
        {:crux.node/topology '[crux.kafka/topology
-                              crux.metrics/with-cloudwatch
+                              crux.metrics.dropwizard.cloudwatch/reporter
                               crux.kv.lmdb/kv-store]
         :crux.kafka/bootstrap-servers "localhost:9092"
         :crux.kafka/doc-topic "kafka-lmdb-doc"
