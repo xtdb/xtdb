@@ -41,8 +41,6 @@
                                        (.with (LocalTime/of 1 0))))
                           (take 5)
                           (map #(Date/from (.toInstant %))))]
-         ;; TODO if there's no report at any day, it'll return the most recent report
-         ;; which might mean two reports from one day :/
          (when-let [db (try
                          (api/db node valid-time tx-time)
                          (catch NodeOutOfSyncException e
@@ -50,7 +48,8 @@
            (when-let [etx (api/entity-tx db (keyword (str location "-forecast")))]
              (merge (api/document node (:crux.db/content-hash etx))
                     (select-keys etx [:crux.db/valid-time :crux.tx/tx-time])))))
-       (remove nil?)))
+       (remove nil?)
+       distinct))
 
 (defn filter-weather-map [{:keys [main wind weather]}]
   (let [filtered-main (-> (set/rename-keys main {:temp :temperature})
