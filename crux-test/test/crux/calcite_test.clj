@@ -109,7 +109,7 @@
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
 
   (t/testing "numeric values"
-    (apif/submit+await-tx [[:crux.tx/delete :ivan] [:crux.tx/delete :human/ivan] [:crux.tx/delete :malcolm]])
+    (apif/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
                          :crux.sql.table/columns [{:crux.db/attribute :name
