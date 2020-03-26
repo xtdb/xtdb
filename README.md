@@ -20,9 +20,6 @@ used to express a comprehensive range of SQL-like join operations as well as
 recursive graph traversals.
 
 Crux has been available as a *Public Alpha* since 19<sup>th</sup> April 2019.
-The Public Alpha period will continue until Crux is released as a Generally
-Available open source software product by JUXT later in 2019.
-
 
 ## CircleCI Build
 
