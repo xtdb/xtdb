@@ -4,6 +4,9 @@ Parameters:
   VpcStackName:
     Type: String
     Default: soak-vpc
+  CertificateARN:
+    Type: String
+    Default: 'arn:aws:acm:eu-west-2:955308952094:certificate/ef07483a-cdfd-4bca-9d4c-900ed408daa4'
 
 Resources:
   LoadBalancerSG:
@@ -45,6 +48,19 @@ Resources:
       Name: 'soak.crux.cloud'
       Type: 'A'
 
+  LoadBalancerHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: 'redirect'
+          RedirectConfig:
+            Port: 443
+            Protocol: HTTPS
+            StatusCode: HTTP_302
+      LoadBalancerArn: !Ref 'LoadBalancer'
+      Port: 80
+      Protocol: HTTP
+
   LoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -52,8 +68,10 @@ Resources:
         - TargetGroupArn: !Ref 'SoakTargetGroup'
           Type: 'forward'
       LoadBalancerArn: !Ref 'LoadBalancer'
-      Port: 80
-      Protocol: HTTP
+      Certificates:
+         - CertificateArn: !Ref CertificateARN
+      Port: 443
+      Protocol: HTTPS
 
   SoakTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
