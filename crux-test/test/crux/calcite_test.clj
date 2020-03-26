@@ -7,8 +7,7 @@
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
-            [crux.node :as n]
-            [crux.fixtures.api :as apif])
+            [crux.node :as n])
   (:import java.sql.DriverManager))
 
 ;; See https://github.com/juxt/crux/issues/514
@@ -64,10 +63,6 @@
               {:name "Ivan"}]
              (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME DESC"))))
 
-  (t/testing "Can query value by single field"
-    (t/is (= #{["Ivan"]} (api/q (api/db *api*) '{:find [name]
-                                                 :where [[e :name "Ivan"]
-                                                         [e :name name]]}))))
   (t/testing "retrieve data"
     (t/is (= [{:name "Ivan"}
               {:name "Malcolm"}]
@@ -105,11 +100,11 @@
              (set (query "SELECT * FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
 
   (t/testing "namespaced keywords"
-    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan"}]))
+    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth"}]))
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
 
   (t/testing "numeric values"
-    (apif/delete-all-entities)
+    (fapi/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
                          :crux.sql.table/columns [{:crux.db/attribute :name
@@ -129,6 +124,21 @@
       (t/is (= [{:name "Malcolm"}
                 {:name "Ivan"}]
                (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE DESC")))))
+
+  (t/testing "equality of columns"
+    (fapi/delete-all-entities)
+    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                         :crux.sql.table/name "person"
+                         :crux.sql.table/columns [{:crux.db/attribute :name
+                                                   :crux.sql.column/name "name"
+                                                   :crux.sql.column/type :varchar}
+                                                  {:crux.db/attribute :surname
+                                                   :crux.sql.column/name "surname"
+                                                   :crux.sql.column/type :varchar}]}])
+    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname "Ivan"}
+                                  {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
+    (t/is (= [{:name "Ivan"}]
+             (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = SURNAME"))))
 
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
