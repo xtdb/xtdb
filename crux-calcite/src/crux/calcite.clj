@@ -41,11 +41,9 @@
   [schema ^RexNode filter*]
   (condp = (.getKind filter*)
     SqlKind/EQUALS
-    (let [[left right] (->operands schema filter*)]
-      [[(list '= left right)]])
+    [[(apply list '= (->operands schema filter*))]]
     SqlKind/NOT_EQUALS
-    (let [[left right] (->operands schema filter*)]
-      [(list 'not [(list '= left right)])])
+    [(list 'not [(apply list '= (->operands schema filter*))])]
     SqlKind/AND
     (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*))
     SqlKind/OR
@@ -55,17 +53,13 @@
     SqlKind/NOT
     [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/GREATER_THAN
-    (let [[left right] (->operands schema filter*)]
-      [[(list '> left right)]])
+    [[(list '> (->operands schema filter*))]]
     SqlKind/GREATER_THAN_OR_EQUAL
-    (let [[left right] (->operands schema filter*)]
-      [[(list '>= left right)]])
+    [[(apply list '>= (->operands schema filter*))]]
     SqlKind/LESS_THAN
-    (let [[left right] (->operands schema filter*)]
-      [[(list '< left right)]])
+    [[(apply list '< (->operands schema filter*))]]
     SqlKind/LESS_THAN_OR_EQUAL
-    (let [[left right] (->operands schema filter*)]
-      [[(list '<= left right)]])))
+    [[(apply list '<= (->operands schema filter*))]]))
 
 (defn- ->crux-query
   [schema filters projects]
