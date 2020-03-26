@@ -24,6 +24,10 @@
                  ;; neo4j
                  [org.neo4j/neo4j "4.0.0"]
 
+                 ;; cloudwatch metrics deps
+                 [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
+                 [software.amazon.awssdk/cloudwatch "2.10.61"]
+
                  ;; Dependency resolution
                  [commons-codec "1.12"]
                  [commons-collections "3.2.2"]
