@@ -53,7 +53,19 @@
     SqlKind/INPUT_REF
     [['?e (:crux.db/attribute (operand->v filter* schema)) true]]
     SqlKind/NOT
-    [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]))
+    [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
+    SqlKind/GREATER_THAN
+    (let [[left right] (->operands schema filter*)]
+      [[(list '> left right)]])
+    SqlKind/GREATER_THAN_OR_EQUAL
+    (let [[left right] (->operands schema filter*)]
+      [[(list '>= left right)]])
+    SqlKind/LESS_THAN
+    (let [[left right] (->operands schema filter*)]
+      [[(list '< left right)]])
+    SqlKind/LESS_THAN_OR_EQUAL
+    (let [[left right] (->operands schema filter*)]
+      [[(list '<= left right)]])))
 
 (defn- ->crux-query
   [schema filters projects]
