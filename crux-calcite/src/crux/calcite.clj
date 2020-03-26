@@ -9,6 +9,7 @@
            org.apache.calcite.rel.type.RelDataTypeFactory
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral]
            org.apache.calcite.sql.SqlKind
+           org.apache.calcite.rex.RexNode
            org.apache.calcite.sql.type.SqlTypeName))
 
 (defonce !node (atom nil))
@@ -37,7 +38,7 @@
        (map #(if (map? %) (::sym %) %))))
 
 (defn- ->crux-where-clauses
-  [schema ^RexCall filter*]
+  [schema ^RexNode filter*]
   (condp = (.getKind filter*)
     SqlKind/EQUALS
     (let [[left right] (->operands schema filter*)]
@@ -46,9 +47,13 @@
     (let [[left right] (->operands schema filter*)]
       [(list 'not [(list '= left right)])])
     SqlKind/AND
-    (mapcat (partial ->crux-where-clauses schema) (.-operands filter*))
+    (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*))
     SqlKind/OR
-    [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands filter*)))]))
+    [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
+    SqlKind/INPUT_REF
+    [['?e (:crux.db/attribute (operand->v filter* schema)) true]]
+    SqlKind/NOT
+    [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]))
 
 (defn- ->crux-query
   [schema filters projects]
@@ -66,7 +71,8 @@
 
 (def ^:private column-types {:varchar SqlTypeName/VARCHAR
                              :keyword SqlTypeName/VARCHAR
-                             :integer SqlTypeName/BIGINT})
+                             :integer SqlTypeName/BIGINT
+                             :boolean SqlTypeName/BOOLEAN})
 
 (defn- ^java.util.List perform-query [q]
   (->> (crux/q (crux/db @!node) q)
