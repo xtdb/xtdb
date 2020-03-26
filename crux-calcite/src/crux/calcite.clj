@@ -34,18 +34,17 @@
 (defn- ->operands [schema ^RexCall filter*]
   (->> (.getOperands filter*)
        (map #(operand->v % schema))
-       (sort-by (complement map?))
-       (map #(if (map? %) (:crux.db/attribute %) %))))
+       (map #(if (map? %) (::sym %) %))))
 
 (defn- ->crux-where-clauses
   [schema ^RexCall filter*]
   (condp = (.getKind filter*)
     SqlKind/EQUALS
     (let [[left right] (->operands schema filter*)]
-      [['?e left right]])
+      [[(list '= left right)]])
     SqlKind/NOT_EQUALS
     (let [[left right] (->operands schema filter*)]
-      [(list 'not ['?e left right])])
+      [(list 'not [(list '= left right)])])
     SqlKind/AND
     (mapcat (partial ->crux-where-clauses schema) (.-operands filter*))
     SqlKind/OR
