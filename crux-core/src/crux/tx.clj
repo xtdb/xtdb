@@ -59,7 +59,7 @@
 
 (defn tx-ops->id-and-docs [tx-ops]
   (if-let [s-error (s/explain-data :crux.api/tx-ops tx-ops)]
-    (throw (ex-info "Spec assertion failed:" s-error))
+    (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
     (map #(vector (str (c/new-id %)) %) (mapcat tx-op->docs tx-ops))))
 
 (defn tx-op->tx-event [tx-op]

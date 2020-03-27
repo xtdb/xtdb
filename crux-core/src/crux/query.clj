@@ -1088,12 +1088,12 @@
                          identity
                          (fn [q]
                            (if-let [s-error (s/explain-data ::query q)]
-                             (throw (ex-info "Spec assertion failed:" s-error))
+                             (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
                              (let [q (normalize-query q)]
                                (->ConformedQuery q (s/conform ::query q))))))]
     (if args
       (if-let [s-error (s/explain-data  ::args args)]
-        (throw (ex-info "Spec assertion failed:" s-error))
+        (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
         (do
           (-> conformed-query
               (assoc-in [:q-normalized :args] args)

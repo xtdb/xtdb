@@ -166,7 +166,7 @@
 
 (defn- check-and-return-body [spec body-edn]
   (if-let [s-error (s/explain-data spec body-edn)]
-    (throw (ex-info "Spec assertion failed:" s-error))
+    (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
     body-edn))
 
 ;; TODO: Potentially require both valid and transaction time sent by
