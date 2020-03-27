@@ -286,9 +286,16 @@
     (URL. s)
     (catch MalformedURLException _)))
 
-(defn attr->buffer [this ^MutableDirectBuffer to]
-  ;; TODO obv shouldn't use hash ;)
-  (.putInt to 0 (hash this) ByteOrder/BIG_ENDIAN)
+(def !attr->attr-id (atom {}))
+
+(defn attr->attr-id [attr]
+  (or (get @!attr->attr-id attr)
+      (-> (swap! !attr->attr-id (fn [attr->attr-id]
+                                  (assoc attr->attr-id attr (count attr->attr-id))))
+          (get attr))))
+
+(defn attr->buffer [attr ^MutableDirectBuffer to]
+  (.putInt to 0 (attr->attr-id attr) ByteOrder/BIG_ENDIAN)
   (mem/limit-buffer to attr-size))
 
 (defn ->attr-buffer ^org.agrona.DirectBuffer [x]
