@@ -60,12 +60,12 @@
     (set! (.value peek-state) value)
     [value :crux.index.binary-placeholder/value]))
 
-(defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer attr ^ValueEntityValuePeekState peek-state]
+(defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer aid ^ValueEntityValuePeekState peek-state]
   db/Index
   (seek-values [this k]
     (when-let [k (->> (c/encode-avec-key-to
                        (.get seek-buffer-tl)
-                       attr
+                       aid
                        (or k c/empty-buffer))
                       (kv/seek i))]
       (attribute-value+placeholder k peek-state)))
@@ -78,11 +78,11 @@
           (attribute-value+placeholder k peek-state))))))
 
 (defn new-doc-attribute-value-entity-value-index [snapshot aid]
-  (let [attr (c/->attr-buffer aid)
-        prefix (c/encode-avec-key-to nil attr)]
-    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ValueEntityValuePeekState. nil nil))))
+  (let [aid (c/->aid-buffer aid)
+        prefix (c/encode-avec-key-to nil aid)]
+    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) aid (ValueEntityValuePeekState. nil nil))))
 
-(defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
+(defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k aid value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   (loop [k current-k]
     (let [limit (- (mem/capacity k) c/id-size)]
       (set! (.peek peek-state) (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
@@ -93,7 +93,7 @@
             (let [eid-buffer (c/->id-buffer (.eid entity-tx))
                   version-k (c/encode-avec-key-to
                              (.get seek-buffer-tl)
-                             attr
+                             aid
                              value
                              eid-buffer
                              (c/->id-buffer (.content-hash entity-tx)))]
@@ -104,41 +104,41 @@
 
 (defrecord ValueAndPrefixIterator [value prefix-iterator])
 
-(defn- attribute-value-value+prefix-iterator ^crux.index.ValueAndPrefixIterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr prefix-eb]
+(defn- attribute-value-value+prefix-iterator ^crux.index.ValueAndPrefixIterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx aid prefix-eb]
   (let [value (.value ^ValueEntityValuePeekState (.peek-state value-entity-value-idx))
-        prefix (c/encode-avec-key-to prefix-eb attr value)]
+        prefix (c/encode-avec-key-to prefix-eb aid value)]
     (ValueAndPrefixIterator. value (new-prefix-kv-iterator i prefix))))
 
-(defrecord DocAttributeValueEntityEntityIndex [snapshot i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
+(defrecord DocAttributeValueEntityEntityIndex [snapshot i ^DirectBuffer aid value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   db/Index
   (seek-values [this k]
     (when (c/valid-id? k)
-      (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
+      (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx aid prefix-eb)
             value (.value value+prefix-iterator)
             i (.prefix-iterator value+prefix-iterator)]
         (when-let [k (->> (c/encode-avec-key-to
                            (.get seek-buffer-tl)
-                           attr
+                           aid
                            value
                            (or k c/empty-buffer))
                           (kv/seek i))]
-          (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
+          (attribute-value-entity-entity+value snapshot i k aid value entity-as-of-idx peek-eb peek-state)))))
 
   (next-values [this]
-    (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
+    (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx aid prefix-eb)
           value (.value value+prefix-iterator)
           i (.prefix-iterator value+prefix-iterator)]
       (when-let [k (some->> (.peek peek-state) (kv/seek i))]
-        (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
+        (attribute-value-entity-entity+value snapshot i k aid value entity-as-of-idx peek-eb peek-state)))))
 
 (defn new-doc-attribute-value-entity-entity-index [snapshot aid value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->attr-buffer aid) value-entity-value-idx entity-as-of-idx
+  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->aid-buffer aid) value-entity-value-idx entity-as-of-idx
                                         (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
                                         (DocAttributeValueEntityEntityIndexState. nil)))
 
 ;; AEV
 
-(defn- attribute-entity+placeholder [k attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
+(defn- attribute-entity+placeholder [k aid entity-as-of-idx ^EntityValueEntityPeekState peek-state]
   (let [eid (.eid (c/decode-aecv-key->evc-from k))
         eid-buffer (c/->id-buffer eid)
         [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
@@ -148,16 +148,16 @@
       [(c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity]
       ::deleted-entity)))
 
-(defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
+(defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer aid entity-as-of-idx ^EntityValueEntityPeekState peek-state]
   db/Index
   (seek-values [this k]
     (when (c/valid-id? k)
       (when-let [k (->> (c/encode-aecv-key-to
                          (.get seek-buffer-tl)
-                         attr
+                         aid
                          (or k c/empty-buffer))
                         (kv/seek i))]
-        (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+        (let [placeholder (attribute-entity+placeholder k aid entity-as-of-idx peek-state)]
           (if (= ::deleted-entity placeholder)
             (db/next-values this)
             placeholder)))))
@@ -167,33 +167,33 @@
       (let [prefix-size (+ c/index-id-size c/aid-size c/id-size)]
         (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                               (kv/seek i))]
-          (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+          (let [placeholder (attribute-entity+placeholder k aid entity-as-of-idx peek-state)]
             (if (= ::deleted-entity placeholder)
               (recur)
               placeholder)))))))
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot aid entity-as-of-idx]
-  (let [attr (c/->attr-buffer aid)
-        prefix (c/encode-aecv-key-to nil attr)]
-    (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
+  (let [aid (c/->aid-buffer aid)
+        prefix (c/encode-aecv-key-to nil aid)]
+    (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) aid entity-as-of-idx
                                           (EntityValueEntityPeekState. nil nil))))
 
 (defrecord EntityTxAndPrefixIterator [entity-tx prefix-iterator])
 
-(defn- attribute-value-entity-tx+prefix-iterator ^crux.index.EntityTxAndPrefixIterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr prefix-eb]
+(defn- attribute-value-entity-tx+prefix-iterator ^crux.index.EntityTxAndPrefixIterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx aid prefix-eb]
   (let [entity-tx ^EntityTx (.entity-tx ^EntityValueEntityPeekState (.peek-state entity-value-entity-idx))
-        prefix (c/encode-aecv-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)) (c/->id-buffer (.content-hash entity-tx)))]
+        prefix (c/encode-aecv-key-to prefix-eb aid (c/->id-buffer (.eid entity-tx)) (c/->id-buffer (.content-hash entity-tx)))]
     (EntityTxAndPrefixIterator. entity-tx (new-prefix-kv-iterator i prefix))))
 
-(defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb]
+(defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer aid entity-value-entity-idx prefix-eb]
   db/Index
   (seek-values [this k]
-    (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
+    (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx aid prefix-eb)
           entity-tx ^EntityTx (.entity-tx entity-tx+prefix-iterator)
           i (.prefix-iterator entity-tx+prefix-iterator)]
       (when-let [k (->> (c/encode-aecv-key-to
                          (.get seek-buffer-tl)
-                         attr
+                         aid
                          (c/->id-buffer (.eid entity-tx))
                          (c/->id-buffer (.content-hash entity-tx))
                          (or k c/empty-buffer))
@@ -202,7 +202,7 @@
          entity-tx])))
 
   (next-values [this]
-    (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
+    (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx aid prefix-eb)
           entity-tx ^EntityTx (.entity-tx entity-tx+prefix-iterator)
           i (.prefix-iterator entity-tx+prefix-iterator)]
       (when-let [k (kv/next i)]
@@ -210,7 +210,7 @@
          entity-tx]))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot aid entity-value-entity-idx]
-  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->attr-buffer aid) entity-value-entity-idx
+  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->aid-buffer aid) entity-value-entity-idx
                                        (ExpandableDirectByteBuffer.)))
 
 ;; Range Constraints
@@ -336,65 +336,6 @@
 (defn update-predicate-stats [kv docs-stats]
   (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
 
-(defrecord AttributeDictionary [!attr->aid]
-  db/AttributeDictionary
-  (attr->aid [_ attr]
-    (get @!attr->aid attr))
-
-  (ensure-attr->aid [_ attr]
-    (or (get @!attr->aid attr)
-        (-> (swap! !attr->aid (fn [attr->aid]
-                                (assoc attr->aid attr (count attr->aid))))
-            (get attr))) ))
-
-(def attr-dict
-  {:start-fn (fn [deps args]
-               (->AttributeDictionary (atom {:crux.db/id 0})))
-   :deps #{}})
-
-(defn doc-idx-keys [attr-dict content-hash doc]
-  (let [id (c/->id-buffer (:crux.db/id doc))
-        content-hash (c/->id-buffer content-hash)]
-    (->> (for [[k v] doc
-               :let [k (c/->attr-buffer (db/ensure-attr->aid attr-dict k))]
-               v (vectorize-value v)
-               :let [v (c/->value-buffer v)]
-               :when (pos? (mem/capacity v))]
-           [(c/encode-avec-key-to nil k v id content-hash)
-            (c/encode-aecv-key-to nil k id content-hash v)])
-         (apply concat))))
-
-(defn store-doc-idx-keys [kv idx-keys]
-  (kv/store kv (for [k idx-keys]
-                 [k c/empty-buffer])))
-
-(defn delete-doc-idx-keys [kv idx-keys]
-  (kv/delete kv idx-keys))
-
-;; Utils
-
-(defn doc-indexed? [snapshot attr-dict eid content-hash]
-  (let [k (c/->attr-buffer (db/attr->aid attr-dict :crux.db/id))
-        eid (c/->id-buffer eid)
-        content-hash (c/->id-buffer content-hash)]
-    (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
-
-(defn current-index-version [kv]
-  (with-open [snapshot (kv/new-snapshot kv)]
-    (some->> (kv/get-value snapshot (c/encode-index-version-key-to nil))
-             (c/decode-index-version-value-from))))
-
-(defn check-and-store-index-version [kv]
-  (if-let [index-version (current-index-version kv)]
-    (when (not= c/index-version index-version)
-      (throw (IndexVersionOutOfSyncException.
-              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
-    (doto kv
-      (kv/store [[(c/encode-index-version-key-to nil)
-                  (c/encode-index-version-value-to nil c/index-version)]])
-      (kv/fsync)))
-  kv)
-
 ;; NOTE: We need to copy the keys and values here, as the originals
 ;; returned by the iterator will (may) get invalidated by the next
 ;; iterator call.
@@ -414,6 +355,75 @@
                     (mem/copy-to-unpooled-buffer (kv/value i))]
                    (mem/copy-to-unpooled-buffer k)) (step f-next f-next))))))
     #(kv/seek i seek-k) #(kv/next i))))
+
+(defrecord AttributeDictionary [kv-store !attr->aid]
+  db/AttributeDictionary
+  (attr->aid [_ attr]
+    (get @!attr->aid attr -1))
+
+  (ensure-attr->aid [_ attr]
+    (or (get @!attr->aid attr)
+        (let [aid (-> (swap! !attr->aid (fn [attr->aid]
+                                          (assoc attr->aid attr (count attr->aid))))
+                      (get attr))]
+          (when (> ^int aid Integer/MAX_VALUE)
+            (throw (ex-info "max attribute count reached" {})))
+
+          (kv/store kv-store [[(c/encode-attr-dict-key attr) (c/->aid-buffer aid)]])
+          aid))))
+
+(def attr-dict
+  {:start-fn (fn [{:crux.node/keys [kv-store]} args]
+               (let [attr->aid (with-open [snapshot (kv/new-snapshot kv-store)
+                                           i (kv/new-iterator snapshot)]
+                                 (->> (all-keys-in-prefix i c/attr-dict-prefix true)
+                                      (into {} (map (juxt (comp c/decode-attr-dict-key-from first)
+                                                          (comp c/<-aid-buffer second))))))]
+                 (->AttributeDictionary kv-store (atom (merge {:crux.db/id 0} attr->aid)))))
+   :deps #{:crux.node/kv-store}})
+
+(defn doc-idx-keys [attr-dict content-hash doc]
+  (let [id (c/->id-buffer (:crux.db/id doc))
+        content-hash (c/->id-buffer content-hash)]
+    (->> (for [[k v] doc
+               :let [k (c/->aid-buffer (db/ensure-attr->aid attr-dict k))]
+               v (vectorize-value v)
+               :let [v (c/->value-buffer v)]
+               :when (pos? (mem/capacity v))]
+           [(c/encode-avec-key-to nil k v id content-hash)
+            (c/encode-aecv-key-to nil k id content-hash v)])
+         (apply concat))))
+
+(defn store-doc-idx-keys [kv idx-keys]
+  (kv/store kv (for [k idx-keys]
+                 [k c/empty-buffer])))
+
+(defn delete-doc-idx-keys [kv idx-keys]
+  (kv/delete kv idx-keys))
+
+;; Utils
+
+(defn doc-indexed? [snapshot attr-dict eid content-hash]
+  (let [k (c/->aid-buffer (db/attr->aid attr-dict :crux.db/id))
+        eid (c/->id-buffer eid)
+        content-hash (c/->id-buffer content-hash)]
+    (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
+
+(defn current-index-version [kv]
+  (with-open [snapshot (kv/new-snapshot kv)]
+    (some->> (kv/get-value snapshot (c/encode-index-version-key-to nil))
+             (c/decode-index-version-value-from))))
+
+(defn check-and-store-index-version [kv]
+  (if-let [index-version (current-index-version kv)]
+    (when (not= c/index-version index-version)
+      (throw (IndexVersionOutOfSyncException.
+              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
+    (doto kv
+      (kv/store [[(c/encode-index-version-key-to nil)
+                  (c/encode-index-version-value-to nil c/index-version)]])
+      (kv/fsync)))
+  kv)
 
 (defn idx->series
   [idx]

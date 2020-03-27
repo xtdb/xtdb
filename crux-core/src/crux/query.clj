@@ -617,7 +617,7 @@
              :let [[[_ clause]] where]]
          [branch-index
           (-> clause
-              (update :a (comp c/->attr-buffer #(db/attr->aid attr-dict %)))
+              (update :a (comp c/->aid-buffer #(db/attr->aid attr-dict %)))
               (update :v c/->value-buffer))])
        (into {})))
 

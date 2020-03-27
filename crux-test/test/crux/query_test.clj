@@ -2755,7 +2755,7 @@
     (with-open [snapshot (api/new-snapshot db)]
       (t/is (= (api/entity db :ivan) (api/entity db snapshot :ivan) ivan))
       (let [n 1000
-            acceptable-snapshot-speedup 1.4
+            acceptable-snapshot-speedup 1.3
             factors (->> #(let [db-hit-ns-start (System/nanoTime)
                                 _ (api/entity db :ivan)
                                 db-hit-ns (- (System/nanoTime) db-hit-ns-start)
