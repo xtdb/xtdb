@@ -78,7 +78,7 @@
           (attribute-value+placeholder k peek-state))))))
 
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
-  (let [attr (c/->id-buffer attr)
+  (let [attr (c/->attr-buffer attr)
         prefix (c/encode-avec-key-to nil attr)]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ValueEntityValuePeekState. nil nil))))
 
@@ -132,7 +132,7 @@
         (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
 
 (defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
+  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->attr-buffer attr) value-entity-value-idx entity-as-of-idx
                                         (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
                                         (DocAttributeValueEntityEntityIndexState. nil)))
 
@@ -164,7 +164,7 @@
 
   (next-values [this]
     (when-let [last-k (.last-k peek-state)]
-      (let [prefix-size (+ c/index-id-size c/id-size c/id-size)]
+      (let [prefix-size (+ c/index-id-size c/aid-size c/id-size)]
         (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                               (kv/seek i))]
           (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
@@ -173,7 +173,7 @@
               placeholder)))))))
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
-  (let [attr (c/->id-buffer attr)
+  (let [attr (c/->attr-buffer attr)
         prefix (c/encode-aecv-key-to nil attr)]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
                                           (EntityValueEntityPeekState. nil nil))))
@@ -210,7 +210,7 @@
          entity-tx]))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
-  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->id-buffer attr) entity-value-entity-idx
+  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->attr-buffer attr) entity-value-entity-idx
                                        (ExpandableDirectByteBuffer.)))
 
 ;; Range Constraints
@@ -340,7 +340,8 @@
   (let [id (c/->id-buffer (:crux.db/id doc))
         content-hash (c/->id-buffer content-hash)]
     (->> (for [[k v] doc
-               :let [k (c/->id-buffer k)]
+               ;; TODO (JH) this'll need the attr dictionary eventually
+               :let [k (c/->attr-buffer k)]
                v (vectorize-value v)
                :let [v (c/->value-buffer v)]
                :when (pos? (mem/capacity v))]
@@ -358,7 +359,7 @@
 ;; Utils
 
 (defn doc-indexed? [snapshot eid content-hash]
-  (let [k (c/->id-buffer :crux.db/id)
+  (let [k (c/->attr-buffer :crux.db/id)
         eid (c/->id-buffer eid)
         content-hash (c/->id-buffer content-hash)]
     (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
