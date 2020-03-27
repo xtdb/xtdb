@@ -170,7 +170,7 @@
                     :when (not (= (c/new-id nil) content-hash))
                     :let [version-k (c/encode-aecv-key-to
                                      nil
-                                     (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                     (c/->aid-buffer (db/attr->aid (:attr-dict *api*) :http://xmlns.com/foaf/0.1/givenName))
                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
                                      (c/->id-buffer content-hash)
                                      (c/->value-buffer "Pablo"))]]

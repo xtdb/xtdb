@@ -48,3 +48,7 @@
   (missing-keys [this snapshot ks])
   (put-objects [this kvs]))
 ;; end::ObjectStore[]
+
+(defprotocol AttributeDictionary
+  (attr->aid [this attr])
+  (ensure-attr->aid [this attr]))

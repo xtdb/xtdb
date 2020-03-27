@@ -286,20 +286,12 @@
     (URL. s)
     (catch MalformedURLException _)))
 
-(def !attr->attr-id (atom {}))
-
-(defn attr->attr-id [attr]
-  (or (get @!attr->attr-id attr)
-      (-> (swap! !attr->attr-id (fn [attr->attr-id]
-                                  (assoc attr->attr-id attr (count attr->attr-id))))
-          (get attr))))
-
-(defn attr->buffer [attr ^MutableDirectBuffer to]
-  (.putInt to 0 (attr->attr-id attr) ByteOrder/BIG_ENDIAN)
+(defn attr->buffer [aid ^MutableDirectBuffer to]
+  (.putInt to 0 aid ByteOrder/BIG_ENDIAN)
   (mem/limit-buffer to attr-size))
 
-(defn ->attr-buffer ^org.agrona.DirectBuffer [x]
-  (attr->buffer x (mem/allocate-unpooled-buffer attr-size)))
+(defn ->attr-buffer ^org.agrona.DirectBuffer [aid]
+  (attr->buffer aid (mem/allocate-unpooled-buffer attr-size)))
 
 (extend-protocol IdToBuffer
   (class (byte-array 0))

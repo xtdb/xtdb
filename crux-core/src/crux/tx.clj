@@ -123,7 +123,7 @@
                0 (cons r (merge-histories keyfn compare more-left more-right))
                1 (cons r (merge-histories keyfn compare left more-right)))))))
 
-(defrecord Snapshot+NewETXs [snapshot etxs]
+(defrecord Snapshot+NewETXs [snapshot attr-dict etxs]
   EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time tx-time f]
     (with-open [i (kv/new-iterator snapshot)]
@@ -152,7 +152,7 @@
 
   (all-content-hashes [_ eid]
     (with-open [i (kv/new-iterator snapshot)]
-      (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
+      (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->aid-buffer (db/attr->aid attr-dict :crux.db/id)) (c/->id-buffer eid)))
                       (map c/decode-aecv-key->evc-from)
                       (map #(.content-hash ^EntityValueContentHash %))))
             (set (->> (get etxs eid)
@@ -160,6 +160,7 @@
 
   (with-etxs [_ new-etxs]
     (->Snapshot+NewETXs snapshot
+                        attr-dict
                         (merge-with #(merge-histories etx->vt compare %1 %2)
                                     etxs
                                     (->> new-etxs (group-by #(.eid ^EntityTx %)))))))
@@ -284,12 +285,12 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
+                                       {:keys [object-store kv-store indexer tx-log attr-dict snapshot], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db kv-store object-store nil tx-time tx-time)
+        db (q/db kv-store object-store attr-dict nil tx-time tx-time)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)
@@ -342,7 +343,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store document-store bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store document-store attr-dict bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -362,7 +363,7 @@
 
           doc-idx-keys (when (seq docs-to-upsert)
                          (->> docs-to-upsert
-                              (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))))
+                              (mapcat (fn [[k doc]] (idx/doc-idx-keys attr-dict k doc)))))
 
           _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))
 
@@ -371,7 +372,7 @@
                              (let [existing-docs (->> (db/get-objects object-store snapshot (keys docs-to-evict))
                                                       (remove (comp idx/evicted-doc? val)))]
                                (->> existing-docs
-                                    (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
+                                    (mapcat (fn [[k doc]] (idx/doc-idx-keys attr-dict k doc)))
                                     (idx/delete-doc-idx-keys kv-store))
 
                                existing-docs)))
@@ -417,7 +418,7 @@
                                     (update :history with-etxs etxs)
                                     (update :tombstones merge tombstones)))))
 
-                          {:history (->Snapshot+NewETXs snapshot {})
+                          {:history (->Snapshot+NewETXs snapshot attr-dict {})
                            :tombstones {}}
 
                           tx-events)
@@ -448,7 +449,7 @@
              (into #{} (remove (fn [content-hash]
                                  (when-let [{eid ::db/id, :as doc} (get docs content-hash)]
                                    (or (idx/evicted-doc? doc)
-                                       (idx/doc-indexed? snapshot eid content-hash))))))))))
+                                       (idx/doc-indexed? snapshot attr-dict eid content-hash))))))))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
@@ -466,10 +467,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store document-store bus]} args]
-               (->KvIndexer object-store kv-store document-store bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store document-store attr-dict bus]} args]
+               (->KvIndexer object-store kv-store document-store attr-dict bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/document-store :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/document-store :crux.node/object-store :crux.node/attr-dict :crux.node/bus]})
 
 (defn await-tx [indexer tx-consumer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]

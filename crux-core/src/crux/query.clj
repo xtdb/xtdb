@@ -272,20 +272,21 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [snapshot {:keys [entity-as-of-idx]} binary-idx vars-in-join-order var->range-constraints]
+(defn- update-binary-index! [snapshot {:keys [attr-dict entity-as-of-idx]} binary-idx vars-in-join-order var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
+        aid (db/attr->aid attr-dict a)
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get var->range-constraints v)
         e-range-constraints (get var->range-constraints e)]
     (if (= (:v names) (first order))
-      (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
-            e-idx (-> (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)
+      (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot aid)
+            e-idx (-> (idx/new-doc-attribute-value-entity-entity-index snapshot aid v-doc-idx entity-as-of-idx)
                       (idx/wrap-with-range-constraints e-range-constraints))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
-      (let [e-doc-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
-            v-idx (-> (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
+      (let [e-doc-idx (idx/new-doc-attribute-entity-value-entity-index snapshot aid entity-as-of-idx)
+            v-idx (-> (idx/new-doc-attribute-entity-value-value-index snapshot aid e-doc-idx)
                       (idx/wrap-with-range-constraints v-range-constraints))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints e-doc-idx e-range-constraints) v-idx)))))
@@ -609,14 +610,14 @@
     (when (idx/or-known-triple-fast-path snapshot entity a v valid-time transact-time)
       [])))
 
-(defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
+(defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [attr-dict or-branches]
   (->> (for [[branch-index {:keys [where
                                    single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
              :when single-e-var-triple?
              :let [[[_ clause]] where]]
          [branch-index
           (-> clause
-              (update :a c/->attr-buffer)
+              (update :a (comp c/->attr-buffer #(db/attr->aid attr-dict %)))
               (update :v c/->value-buffer))])
        (into {})))
 
@@ -630,14 +631,14 @@
 ;; sequence and reuse it, somehow detecting if it loops.
 (defn- build-or-constraints
   [rule-name->rules or-clause+idx-id+or-branches
-   var->bindings vars-in-join-order var->range-constraints stats]
+   var->bindings vars-in-join-order var->range-constraints attr-dict stats]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               has-free-vars? (boolean (seq free-vars))
               {:keys [rule-name]} (meta clause)
               branch-index->single-e-var-triple-fast-path-clause-with-buffers
-              (build-branch-index->single-e-var-triple-fast-path-clause-with-buffers or-branches)]]
+              (build-branch-index->single-e-var-triple-fast-path-clause-with-buffers attr-dict or-branches)]]
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
@@ -866,7 +867,7 @@
        (sort-by (comp var->values-result-index second))
        (into {})))
 
-(defn- compile-sub-query [where arg-vars rule-name->rules stats]
+(defn- compile-sub-query [where arg-vars rule-name->rules attr-dict stats]
   (let [where (expand-rules where rule-name->rules {})
         {triple-clauses :triple
          range-clauses :range
@@ -934,7 +935,8 @@
         not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
         pred-constraints (build-pred-constraints pred-clause+idx-ids var->bindings)
         or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
-                                             var->bindings vars-in-join-order var->range-constraints stats)
+                                             var->bindings vars-in-join-order var->range-constraints
+                                             attr-dict stats)
         depth->constraints (->> (concat unification-constraints
                                         pred-constraints
                                         not-constraints
@@ -965,7 +967,7 @@
             (assoc acc id (idx-fn))))
         {})))
 
-(defn- build-sub-query [snapshot {:keys [query-cache] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [snapshot {:keys [attr-dict query-cache] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
@@ -981,7 +983,7 @@
                               [where arg-vars rule-name->rules]
                               identity
                               (fn [_]
-                                (compile-sub-query where arg-vars rule-name->rules stats)))
+                                (compile-sub-query where arg-vars rule-name->rules attr-dict stats)))
         idx-id->idx (build-idx-id->idx var->joins)
         constrain-result-fn (fn [join-keys join-results]
                               (constrain-join-result-by-constraints snapshot db idx-id->idx depth->constraints join-keys join-results))
@@ -1050,14 +1052,6 @@
                   q)
     :else
     q))
-
-(defn query-plan-for
-  ([q]
-   (query-plan-for q {}))
-  ([q stats]
-   (s/assert ::query q)
-   (let [{:keys [where args rules]} (s/conform ::query q)]
-     (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
 (defn- build-full-results [{:keys [object-store entity-as-of-idx]} snapshot bound-result-tuple]
   (vec (for [^BoundResult bound-result bound-result-tuple
@@ -1192,7 +1186,7 @@
      (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
          idx/keep-non-evicted-doc))))
 
-(defrecord QueryDatasource [kv object-store bus
+(defrecord QueryDatasource [kv object-store attr-dict bus
                             query-cache conform-cache
                             valid-time transact-time entity-as-of-idx]
   ICruxDatasource
@@ -1276,9 +1270,10 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
+(defn db ^crux.api.ICruxDatasource [kv object-store attr-dict bus valid-time transact-time]
   (->QueryDatasource kv
                      object-store
+                     attr-dict
                      bus
                      (lru/get-named-cache kv ::query-cache)
                      (lru/get-named-cache kv ::conform-cache)

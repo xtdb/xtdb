@@ -11,7 +11,8 @@
             [crux.fixtures.standalone :as fs]
             [crux.query :as q]
             [crux.index :as i]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.index :as idx])
   (:import java.util.UUID))
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
@@ -2819,13 +2820,22 @@
                            {f true, g nil}
                            {f nil, g true}]}))))
 
+(defn query-plan-for [q attr-dict stats]
+  (let [{:keys [where args rules]} (s/conform ::q/query q)]
+    (#'q/compile-sub-query where (#'q/arg-vars args) (#'q/rule-name->rules rules) attr-dict stats)))
+
 (t/deftest test-binds-args-before-entities
   (t/is (= ['m 'e]
-           (->> (q/query-plan-for {:find '[e]
-                                   :where '[[e :foo/type "type"]
-                                            [e :foo/id m]]
-                                   :args [{'m 1}]}
-
-                                  {})
+           (->> (query-plan-for {:find '[e]
+                                 :where '[[e :foo/type "type"]
+                                          [e :foo/id m]]
+                                 :args [{'m 1}]}
+                                (reify db/AttributeDictionary
+                                  (attr->aid [_ attr]
+                                    (get {:crux.db/id 0
+                                          :foo/type 1
+                                          :foo/id 2}
+                                         attr)))
+                                {})
                 :vars-in-join-order
                 (filter #{'m 'e})))))

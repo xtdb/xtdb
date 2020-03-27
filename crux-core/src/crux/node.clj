@@ -34,7 +34,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store bus
+(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store attr-dict bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
@@ -54,7 +54,7 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db kv-store object-store bus valid-time tx-time))))
+        (q/db kv-store object-store attr-dict bus valid-time tx-time))))
 
   (document [this content-hash]
     (cio/with-read-lock lock
@@ -188,7 +188,7 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store bus]} node-opts]
+  {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store attr-dict bus]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
@@ -196,10 +196,11 @@
                                :tx-consumer tx-consumer
                                :document-store document-store
                                :object-store object-store
+                               :attr-dict attr-dict
                                :bus bus
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::object-store ::tx-log}
+   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::object-store ::attr-dict ::tx-log}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})
@@ -209,6 +210,7 @@
    ::object-store 'crux.object-store/kv-object-store
    ::indexer 'crux.tx/kv-indexer
    ::tx-consumer 'crux.tx.consumer/tx-consumer
+   ::attr-dict 'crux.index/attr-dict
    ::bus 'crux.bus/bus
    ::node 'crux.node/node-component})
 

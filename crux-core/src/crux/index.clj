@@ -77,8 +77,8 @@
                               (kv/seek i))]
           (attribute-value+placeholder k peek-state))))))
 
-(defn new-doc-attribute-value-entity-value-index [snapshot attr]
-  (let [attr (c/->attr-buffer attr)
+(defn new-doc-attribute-value-entity-value-index [snapshot aid]
+  (let [attr (c/->attr-buffer aid)
         prefix (c/encode-avec-key-to nil attr)]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ValueEntityValuePeekState. nil nil))))
 
@@ -131,8 +131,8 @@
       (when-let [k (some->> (.peek peek-state) (kv/seek i))]
         (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
 
-(defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->attr-buffer attr) value-entity-value-idx entity-as-of-idx
+(defn new-doc-attribute-value-entity-entity-index [snapshot aid value-entity-value-idx entity-as-of-idx]
+  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->attr-buffer aid) value-entity-value-idx entity-as-of-idx
                                         (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
                                         (DocAttributeValueEntityEntityIndexState. nil)))
 
@@ -172,8 +172,8 @@
               (recur)
               placeholder)))))))
 
-(defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
-  (let [attr (c/->attr-buffer attr)
+(defn new-doc-attribute-entity-value-entity-index [snapshot aid entity-as-of-idx]
+  (let [attr (c/->attr-buffer aid)
         prefix (c/encode-aecv-key-to nil attr)]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
                                           (EntityValueEntityPeekState. nil nil))))
@@ -209,8 +209,8 @@
         [(mem/copy-buffer (.value (c/decode-aecv-key->evc-from k)))
          entity-tx]))))
 
-(defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
-  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->attr-buffer attr) entity-value-entity-idx
+(defn new-doc-attribute-entity-value-value-index [snapshot aid entity-value-entity-idx]
+  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->attr-buffer aid) entity-value-entity-idx
                                        (ExpandableDirectByteBuffer.)))
 
 ;; Range Constraints
@@ -336,12 +336,27 @@
 (defn update-predicate-stats [kv docs-stats]
   (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
 
-(defn doc-idx-keys [content-hash doc]
+(defrecord AttributeDictionary [!attr->aid]
+  db/AttributeDictionary
+  (attr->aid [_ attr]
+    (get @!attr->aid attr))
+
+  (ensure-attr->aid [_ attr]
+    (or (get @!attr->aid attr)
+        (-> (swap! !attr->aid (fn [attr->aid]
+                                (assoc attr->aid attr (count attr->aid))))
+            (get attr))) ))
+
+(def attr-dict
+  {:start-fn (fn [deps args]
+               (->AttributeDictionary (atom {:crux.db/id 0})))
+   :deps #{}})
+
+(defn doc-idx-keys [attr-dict content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
         content-hash (c/->id-buffer content-hash)]
     (->> (for [[k v] doc
-               ;; TODO (JH) this'll need the attr dictionary eventually
-               :let [k (c/->attr-buffer k)]
+               :let [k (c/->attr-buffer (db/ensure-attr->aid attr-dict k))]
                v (vectorize-value v)
                :let [v (c/->value-buffer v)]
                :when (pos? (mem/capacity v))]
@@ -358,8 +373,8 @@
 
 ;; Utils
 
-(defn doc-indexed? [snapshot eid content-hash]
-  (let [k (c/->attr-buffer :crux.db/id)
+(defn doc-indexed? [snapshot attr-dict eid content-hash]
+  (let [k (c/->attr-buffer (db/attr->aid attr-dict :crux.db/id))
         eid (c/->id-buffer eid)
         content-hash (c/->id-buffer content-hash)]
     (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
