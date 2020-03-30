@@ -139,6 +139,15 @@
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
 
+   "standalone-rocksdb-with-metrics"
+   (fn [data-dir]
+     {:crux.node/topology '[crux.standalone/topology
+                            crux.metrics.dropwizard.cloudwatch/reporter
+                            crux.kv.rocksdb/kv-store-with-metrics]
+      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb-with-metrics"))
+      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb-with-metrics"))
+      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
+
    "kafka-rocksdb"
    (fn [data-dir]
      {:crux.node/topology '[crux.kafka/topology
