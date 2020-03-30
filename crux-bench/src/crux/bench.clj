@@ -129,6 +129,9 @@
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
+(defn node-size-in-bytes [node]
+  {:node-size-bytes (:crux.kv/size (api/status node))})
+
 (def nodes
   {"standalone-rocksdb"
    (fn [data-dir]
