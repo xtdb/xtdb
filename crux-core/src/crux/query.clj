@@ -272,7 +272,7 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [snapshot {:keys [entity-as-of-idx]} binary-idx vars-in-join-order var->range-constraints]
+(defn- update-binary-index! [snapshot {:keys [entity-as-of-idx object-store] :as db} binary-idx vars-in-join-order var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
@@ -280,7 +280,7 @@
         e-range-constraints (get var->range-constraints e)]
     (if (= (:v names) (first order))
       (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
-            e-idx (-> (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)
+            e-idx (-> (idx/new-doc-attribute-value-entity-entity-index db snapshot a v-doc-idx)
                       (idx/wrap-with-range-constraints e-range-constraints))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
