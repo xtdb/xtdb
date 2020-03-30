@@ -71,7 +71,8 @@
                                                                                               [:crux.tx/put reading-doc time])))})
                                                       {:op-count (count info-tx-ops)}))))]
       (crux/await-tx node last-tx (Duration/ofMinutes 20))
-      {:op-count op-count})))
+      {:op-count op-count
+       :node-size-bytes (bench/node-size-in-bytes node)})))
 
 (defn test-battery-readings [node]
   ;; 10 most recent battery temperature readings for charging devices
@@ -249,7 +250,6 @@
   (bench/with-bench-ns :ts-devices
     (bench/with-crux-dimensions
       (submit-ts-devices-data node)
-
       (test-battery-readings node)
       (test-busiest-devices node)
       (test-min-max-battery-level-per-hour node))))

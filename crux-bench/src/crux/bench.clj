@@ -138,8 +138,8 @@
      {:crux.node/topology '[crux.standalone/topology
                             crux.metrics.dropwizard.cloudwatch/reporter
                             crux.kv.rocksdb/kv-store]
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
-      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
+      :crux.kv/db-dir (str (io/file data-dir "kv/standalone-rocksdb"))
+      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/standalone-rocksdb"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
 
    "standalone-rocksdb-with-metrics"
@@ -159,7 +159,7 @@
       :crux.kafka/bootstrap-servers "localhost:9092"
       :crux.kafka/doc-topic "kafka-rocksdb-doc"
       :crux.kafka/tx-topic "kafka-rocksdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
+      :crux.kv/db-dir (str (io/file data-dir "kv/kafka-rocksdb"))})
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
@@ -169,7 +169,7 @@
       :crux.kafka/bootstrap-servers "localhost:9091"
       :crux.kafka/doc-topic "kafka-rocksdb-doc"
       :crux.kafka/tx-topic "kafka-rocksdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
+      :crux.kv/db-dir (str (io/file data-dir "kv/embedded-kafka-rocksdb"))})
    #_"standalone-lmdb"
    #_(fn [data-dir]
        {:crux.node/topology '[crux.standalone/topology
