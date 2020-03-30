@@ -1087,17 +1087,17 @@
                            q)
                          identity
                          (fn [q]
-                           (if-let [s-error (s/explain-data ::query q)]
-                             (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
-                             (let [q (normalize-query q)]
-                               (->ConformedQuery q (s/conform ::query q))))))]
+                           (when-not (s/valid? ::query q)
+                             (throw (ex-info (str "Spec assertion failed\n" (s/explain-str ::query q)) (s/explain-data ::query q))))
+                           (let [q (normalize-query q)]
+                             (->ConformedQuery q (s/conform ::query q)))))]
     (if args
-      (if-let [s-error (s/explain-data  ::args args)]
-        (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
-        (do
-          (-> conformed-query
-              (assoc-in [:q-normalized :args] args)
-              (assoc-in [:q-conformed :args] args))))
+      (do
+        (when-not (s/valid? ::args args)
+          (throw (ex-info (str "Spec assertion failed\n" (s/explain-str ::args args)) (s/explain-data ::args args))))
+        (-> conformed-query
+            (assoc-in [:q-normalized :args] args)
+            (assoc-in [:q-conformed :args] args)))
       conformed-query)))
 
 ;; TODO: Move future here to a bounded thread pool.

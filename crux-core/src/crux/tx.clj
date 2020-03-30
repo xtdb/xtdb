@@ -58,9 +58,9 @@
     (filter map? args)))
 
 (defn tx-ops->id-and-docs [tx-ops]
-  (if-let [s-error (s/explain-data :crux.api/tx-ops tx-ops)]
-    (throw (ex-info (str "Spec assertion failed\n" (with-out-str (s/explain-out s-error))) s-error))
-    (map #(vector (str (c/new-id %)) %) (mapcat tx-op->docs tx-ops))))
+  (when-not (s/valid? :crux.api/tx-ops tx-ops)
+    (throw (ex-info (str "Spec assertion failed\n" (s/explain-str :crux.api/tx-ops tx-ops)) (s/explain-data :crux.api/tx-ops tx-ops))))
+  (map #(vector (str (c/new-id %)) %) (mapcat tx-op->docs tx-ops)))
 
 (defn tx-op->tx-event [tx-op]
   (let [[op id & args] (conform-tx-op tx-op)]
