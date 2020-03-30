@@ -295,7 +295,11 @@
         args-id (:crux.db/id args-doc)
         fn-result (try
                     (let [tx-ops (apply (tx-fn-eval-cache body) db args)
-                          _ (when tx-ops (s/assert :crux.api/tx-ops tx-ops))
+                          _ (when tx-ops
+                              (when-not (s/valid? :crux.api/tx-ops tx-ops)
+                                (throw (ex-info
+                                        (str "Spec assertion failed\n" (s/explain-str :crux.api/tx-ops tx-ops))
+                                        (s/explain-data :crux.api/tx-ops tx-ops)))))
                           docs (mapcat tx-op->docs tx-ops)
                           {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
                       ;; TODO: might lead to orphaned and unevictable
