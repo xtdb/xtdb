@@ -409,10 +409,19 @@ data in a suitable application.
 [#config-metrics-dependency]
 *Project Dependency*
 
+In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
+
 [source,clj]
 ----
 include::./deps.edn[tags=MetricsDeps]
 ----
+
+The various types of metric reporters bring in their own sets of dependencies,
+so we expect these to be provided by the user in their own project (in order
+to keep the core of `crux-metrics` as lightweight as possible). Reporters
+requiring further dependencies will have an 'additional dependencies' section.
+
+*Getting Started*
 
 By default `indexer` and `query` metrics are included. It is also
 possible to add `rocksdb` metrics when it is being used. These arguments can be
@@ -426,9 +435,11 @@ used whenever any of the topologies to display metrics are included.
 |`:crux.metrics/with-query-metrics?`|`boolean`|`true`| Includes query metrics in the metrics registry
 |===
 
-To include rocksdb metrics in monitoring the
+*RocksDB metrics*
+
+To include the RocksDB metrics when monitoring the
 `'crux.kv.rocksdb/kv-store-with-metrics` module should be included in the
-topology map instead of `'crux.kv.rocksdb/kv-store`
+topology map (in place of `'crux.kv.rocksdb/kv-store`):
 
 [source,clj]
 ----
@@ -437,6 +448,8 @@ topology map instead of `'crux.kv.rocksdb/kv-store`
                                       ...]
                  ...})
 ----
+
+*Reporters*
 
 Crux currently supports the following outputs:
 
@@ -501,6 +514,8 @@ Provides JMX mbeans output.
 [#config-metrics-jmx-dependencies]
 *Additional Dependencies*
 
+You will need to add the following dependencies, alongside `crux-metrics`, in your project:
+
 [source,clj]
 ----
 include::../project.clj[tags=MetricsJMXDeps]
@@ -516,8 +531,6 @@ include::../project.clj[tags=MetricsJMXDeps]
                  })
 ----
 
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
-
 .JMX metrics arguments
 [#table-conversion%header,cols="d,d,d"]
 |===
@@ -531,10 +544,10 @@ You will need to add the following dependencies, alongside `crux-metrics`, in yo
 [#config-metrics-prometheus]
 === Prometheus
 
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
-
 [#config-metrics-prometheus-dependencies]
 *Additional Dependencies*
+
+You will need to add the following dependencies, alongside `crux-metrics`, in your project:
 
 [source,clj]
 ----
@@ -601,10 +614,10 @@ credentials through system variables.
 Crux uses this in its aws benchmarking system which can be found
 https://github.com/juxt/crux/tree/master/crux-bench[here].
 
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
-
 [#config-metrics-cloudwatch-dependencies]
 *Additional Dependencies*
+
+You will need to add the following dependencies, alongside `crux-metrics`, in your project:
 
 [source,clj]
 ----
