@@ -17,24 +17,26 @@
                                                        :ticker-count (.getAndResetTickerCount stats ticker-type)}))))]
                         bin-size))
 
-(defn start-rocksdb-metrics
-  [{:keys [crux.node/kv-store crux.metrics/registry crux.kv.rocksdb/metrics?]} {::keys [bin-size shutdown-timeout]}]
-
-  (when metrics?
-    (let [meters (->> (seq (TickerType/values))
-                      (into {} (map (fn [^TickerType ticker-type]
-                                      [ticker-type (dw/meter registry ["rocksdb" (ticker-type-name ticker-type)])]))))
-          stats (get-in kv-store [:kv :stats])
-          collector (doto (->collector stats
-                                       (fn [{:keys [ticker-type ticker-count]}]
-                                         (some-> (get meters ticker-type) (dw/mark! ticker-count)))
-                                       bin-size)
-                      .start)
-          num-snapshots (dw/gauge registry ["rocksdb" "num-snapshots"]
-                                  #(.getLongProperty (get-in kv-store [:kv :db]) "rocksdb.num-snapshots"))]
-      {:rocks-meters meters
-       :num-snapshots num-snapshots}
-
-      (reify Closeable
-        (close [_]
-          (.shutDown collector shutdown-timeout))))))
+(def metrics-module
+  {:start-fn (fn [{:keys [crux.node/kv-store crux.metrics/registry]} {::keys [bin-size shutdown-timeout]}]
+               (let [meters (->> (seq (TickerType/values))
+                                 (into {} (map (fn [^TickerType ticker-type]
+                                                 [ticker-type (dw/meter registry ["rocksdb" (ticker-type-name ticker-type)])]))))
+                     collector (doto (->collector (get-in kv-store [:kv :stats])
+                                                  (fn [{:keys [ticker-type ticker-count]}]
+                                                    (some-> (get meters ticker-type) (dw/mark! ticker-count)))
+                                                  bin-size)
+                                 .start)]
+                 (dw/gauge registry ["rocksdb" "num-snapshots"]
+                           #(.getLongProperty (get-in kv-store [:kv :db]) "rocksdb.num-snapshots"))
+                 (reify Closeable
+                   (close [_]
+                     (.shutDown collector shutdown-timeout)))))
+   :deps #{:crux.node/kv-store :crux.metrics/registry}
+   :before #{:crux.metrics/all-metrics-loaded}
+   :args {::bin-size {:doc "Sample size of statistics collector in milliseconds"
+                      :default 3000
+                      :crux.config/type :crux.config/int}
+          ::shutdown-timeout {:doc "Time for statistics collector object to finish collecting in milliseconds"
+                              :default 5000
+                              :crux.config/type :crux.config/int}}})
