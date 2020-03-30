@@ -70,6 +70,9 @@
 ;; used in standalone TxLog
 (def ^:const ^:private tx-events-index-id 8)
 
+;; indexed content-hashes
+(def ^:const ^:private indexed-content-hashes-index-id 9)
+
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
@@ -759,3 +762,20 @@
   (assert (tx-event-key? k))
   {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
    :crux.tx/tx-time (reverse-time-ms->date (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
+
+(defn encode-indexed-content-hash-to
+  (^org.agrona.DirectBuffer [^org.agrona.MutableDirectBuffer b, ^DirectBuffer eid]
+   (encode-indexed-content-hash-to b eid empty-buffer))
+  (^org.agrona.DirectBuffer [^org.agrona.MutableDirectBuffer b, ^DirectBuffer eid, ^DirectBuffer content-hash]
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size id-size)))]
+     (-> (doto b
+           (.putByte 0 indexed-content-hashes-index-id)
+           (.putBytes index-id-size eid 0 (.capacity eid))
+           (.putBytes (+ index-id-size id-size) content-hash 0 (.capacity content-hash)))
+         (mem/limit-buffer (+ index-id-size (.capacity eid) (.capacity content-hash)))))))
+
+(defn decode-indexed-content-hash-from [^DirectBuffer k]
+  (assert (= (+ index-id-size id-size id-size) (.capacity k)) (mem/buffer->hex k))
+  (assert (= indexed-content-hashes-index-id (.getByte k 0)))
+  {:eid (Id. (mem/slice-buffer k index-id-size id-size) 0)
+   :content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size) id-size) 0)})
