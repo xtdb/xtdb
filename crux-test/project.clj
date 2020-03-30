@@ -22,7 +22,6 @@
                  [com.opentable.components/otj-pg-embedded "0.13.1" :exclusions [org.slf4j/slf4j-api
                                                                                  org.tukaani/xz
                                                                                  com.github.spotbugs/spotbugs-annotations
-                                                                                 org.apache.commons/commons-lang3
                                                                                  commons-codec]]
                  [org.xerial/sqlite-jdbc "3.28.0"]
                  [mysql/mysql-connector-java "8.0.17"]

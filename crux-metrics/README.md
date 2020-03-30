@@ -20,7 +20,7 @@ The following 5 components can be used to display these.
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-console]
+                                      'crux.metrics.dropwizard.console/reporter]
                  ;; optional args
                  :crux.metrics.dropwizard.console/report-frequency "PT1S"
                  :crux.metrics.dropwizard.console/rate-unit "seconds"
@@ -31,7 +31,7 @@ The following 5 components can be used to display these.
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-csv]
+                                      'crux.metrics.dropwizard.csv/reporter]
                  :crux.metrics.dropwizard.csv/file-name "out.csv"
                  ;; optional args
                  :crux.metrics.dropwizard.csv/report-frequency "PT1S"
@@ -43,7 +43,7 @@ The following 5 components can be used to display these.
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-jmx]
+                                      'crux.metrics.dropwizard.jmx/reporter]
                  ;; optional args
                  :crux.metrics.dropwizard.jmx/domain "prod-node"
                  :crux.metrics.dropwizard.jmx/rate-unit "seconds"
@@ -56,7 +56,7 @@ The following 5 components can be used to display these.
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-prometheus-https-exporter]
+                                      'crux.metrics.dropwizard.prometheus/http-exporter]
                  ;; optional args
                  :crux.metrics.dropwizard.prometheus/port 8080
                  :crux.metrics.dropwizard.prometheus/jvm-metrics? false})
@@ -66,7 +66,7 @@ The following 5 components can be used to display these.
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-prometheus-reporter]
+                                      'crux.metrics.dropwizard.prometheus/reporter]
                  :crux.metrics.dropwizard.prometheus/push-gateway "localhost:9090"
                  ;; optional args
                  :crux.metrics.dropwizard.prometheus/report-frequency "PT1S"
@@ -77,7 +77,7 @@ The following 5 components can be used to display these.
 
 ```
 (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics/with-cloudwatch]
+                                      'crux.metrics.dropwizard.cloudwatch/reporter]
                  ;; optional args
                  :crux.metrics.dropwizard.cloudwatch/dry-run-report-frequency "PT1S"
                  :crux.metrics.dropwizard.cloudwatch/dry-run? false
