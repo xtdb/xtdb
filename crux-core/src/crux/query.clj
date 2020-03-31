@@ -285,7 +285,7 @@
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
       (let [e-doc-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
-            v-idx (-> (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
+            v-idx (-> (idx/new-doc-attribute-entity-value-value-index db snapshot a e-doc-idx)
                       (idx/wrap-with-range-constraints v-range-constraints))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints e-doc-idx e-range-constraints) v-idx)))))
