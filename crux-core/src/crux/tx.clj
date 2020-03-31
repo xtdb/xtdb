@@ -152,9 +152,8 @@
 
   (all-content-hashes [_ eid]
     (with-open [i (kv/new-iterator snapshot)]
-      (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
-                      (map c/decode-aecv-key->evc-from)
-                      (map #(.content-hash ^EntityValueContentHash %))))
+      (into (->> (idx/all-keys-in-prefix i (c/encode-indexed-content-hash-to nil (c/->id-buffer eid)))
+                 (into #{} (map (comp :content-hash c/decode-indexed-content-hash-from))))
             (set (->> (get etxs eid)
                       (map #(.content-hash ^EntityTx %)))))))
 
