@@ -604,19 +604,17 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [object-store valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
   (let [entity (get (first args) e)]
-    (when (idx/or-known-triple-fast-path snapshot entity a v valid-time transact-time)
+    (when (idx/or-known-triple-fast-path object-store snapshot entity a v valid-time transact-time)
       [])))
 
 (defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
-  (->> (for [[branch-index {:keys [where
-                                   single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
+  (->> (for [[branch-index {:keys [where single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
              :when single-e-var-triple?
              :let [[[_ clause]] where]]
          [branch-index
           (-> clause
-              (update :a c/->id-buffer)
               (update :v c/->value-buffer))])
        (into {})))
 
