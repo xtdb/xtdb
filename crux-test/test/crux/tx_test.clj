@@ -166,14 +166,9 @@
           (t/is (= 5 (count (map :content-hash picasso-history))))
           (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
-                    :when (not (= (c/new-id nil) content-hash))
-                    :let [version-k (c/encode-aecv-key-to
-                                     nil
-                                     (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                     (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                     (c/->id-buffer content-hash)
-                                     (c/->value-buffer "Pablo"))]]
-              (t/is (kv/get-value snapshot version-k)))))))))
+                    :when (not (= (c/new-id nil) content-hash))]
+              (t/is (= "Pablo" (-> (db/get-single-object (:object-store *api*) snapshot content-hash)
+                                   (get :http://xmlns.com/foaf/0.1/givenName)))))))))))
 
 (t/deftest test-can-cas-entity
   (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
