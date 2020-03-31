@@ -27,7 +27,8 @@
 
                                  (let [raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
                                    (-> [(first raw-watdiv-results)
-                                        (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
+                                        (second raw-watdiv-results)
+                                        (watdiv-crux/summarise-query-results (drop 2 raw-watdiv-results))]
                                        (doto post-to-slack)))]))]
 
     (bench/send-email-via-ses

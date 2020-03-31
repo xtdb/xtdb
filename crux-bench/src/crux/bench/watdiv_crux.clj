@@ -73,8 +73,7 @@
                      (fn [{:keys [idx q]}]
                        (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
                          (bench/run-bench (format "query-%d" idx)
-                                          {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))}))))))))
-      (bench/run-bench :node-size-on-disk (bench/node-size-in-bytes node)))))
+                                          {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))})))))))))))
 
 (comment
   (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]
