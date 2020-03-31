@@ -87,24 +87,40 @@ jobs:
           root: ~/
           paths: ./
 
-  deploy:
+  deploy-commit:
     docker:
       - image: circleci/clojure:lein-2.9.1
 
     working_directory: ~/crux
     steps:
         - checkout
-        - restore_cache:
-            keys:
-              - v1-dependencies-{{ checksum "project.clj" }}
-              - v1-dependencies-
-        - run: lein sub install
-        - run: lein deps
+        - attach_workspace:
+            at: ~/
 
-        - save_cache:
-            paths:
-              - ~/.m2
-            key: v1-dependencies-{{ checksum "project.clj" }}
+        - run: sh ./crux-bench/bin/download_dataset.sh
+        - run: lein sub -s crux-bench uberjar
+        - run:
+            command: |
+              echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV
+              echo 'export BUILD_TAGS="commit-$CIRCLE_SHA1"' >> $BASH_ENV
+
+        - setup_remote_docker
+        - aws-ecr/build-and-push-image:
+              dockerfile: 'Dockerfile'
+              extra-build-args: '${BUILD_ARG}'
+              path: "crux-bench/"
+              repo: 'crux-bench'
+              tag: '${BUILD_TAGS}'
+
+  deploy-master:
+    docker:
+      - image: circleci/clojure:lein-2.9.1
+
+    working_directory: ~/crux
+    steps:
+        - checkout
+        - attach_workspace:
+            at: ~/
 
         - run: sh ./crux-bench/bin/download_dataset.sh
         - run: lein sub -s crux-bench uberjar
@@ -164,7 +180,13 @@ workflows:
   commit:
     jobs:
       - build
-      - deploy:
+      - deploy-commit:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: master
+      - deploy-master:
           requires:
             - build
           filters:

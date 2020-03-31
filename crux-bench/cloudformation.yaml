@@ -38,7 +38,7 @@ Resources:
           },
           {
             "rulePriority": 2,
-            "description": "Only keep images for 14 days",
+            "description": "Only keep master-images for 14 days",
             "selection": {
               "tagStatus": "tagged",
               "tagPrefixList": ["master-"],
@@ -50,6 +50,18 @@ Resources:
           },
           {
             "rulePriority": 3,
+            "description": "Only keep commit-sha images for 5 days",
+            "selection": {
+              "tagStatus": "tagged",
+              "tagPrefixList": ["commit-"],
+              "countType": "sinceImagePushed",
+              "countNumber": 5,
+              "countUnit": "days"
+            },
+            "action": { "type": "expire" }
+          },
+          {
+            "rulePriority": 4,
             "description": "Delete untagged images",
             "selection": {
               "tagStatus": "untagged",
@@ -58,7 +70,7 @@ Resources:
             },
             "action": { "type": "expire" }
           }]
-          }
+          },
 
 
   ECSTaskExecutionRole:
