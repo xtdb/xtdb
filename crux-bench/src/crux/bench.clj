@@ -9,6 +9,7 @@
             [clj-http.client :as client]
             [crux.fixtures :as f])
   (:import (java.util.concurrent Executors ExecutorService)
+           (java.util UUID)
            (java.io Closeable)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
@@ -153,23 +154,25 @@
 
    "kafka-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.kafka/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter
-                            crux.kv.rocksdb/kv-store]
-      :crux.kafka/bootstrap-servers "localhost:9092"
-      :crux.kafka/doc-topic "kafka-rocksdb-doc"
-      :crux.kafka/tx-topic "kafka-rocksdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/kafka-rocksdb"))})
+     (let [uuid (UUID/randomUUID)]
+       {:crux.node/topology '[crux.kafka/topology
+                              crux.metrics.dropwizard.cloudwatch/reporter
+                              crux.kv.rocksdb/kv-store]
+        :crux.kafka/bootstrap-servers "localhost:9092"
+        :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
+        :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
+        :crux.kv/db-dir (str (io/file data-dir "kv/kafka-rocksdb"))}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.kafka/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter
-                            crux.kv.rocksdb/kv-store]
-      :crux.kafka/bootstrap-servers "localhost:9091"
-      :crux.kafka/doc-topic "kafka-rocksdb-doc"
-      :crux.kafka/tx-topic "kafka-rocksdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/embedded-kafka-rocksdb"))})
+     (let [uuid (UUID/randomUUID)]
+       {:crux.node/topology '[crux.kafka/topology
+                              crux.metrics.dropwizard.cloudwatch/reporter
+                              crux.kv.rocksdb/kv-store]
+        :crux.kafka/bootstrap-servers "localhost:9091"
+        :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
+        :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
+        :crux.kv/db-dir (str (io/file data-dir "kv/embedded-kafka-rocksdb"))}))
    #_"standalone-lmdb"
    #_(fn [data-dir]
        {:crux.node/topology '[crux.standalone/topology
@@ -181,27 +184,35 @@
 
    #_"kafka-lmdb"
    #_(fn [data-dir]
-       {:crux.node/topology '[crux.kafka/topology
-                              crux.metrics.dropwizard.cloudwatch/reporter
-                              crux.kv.lmdb/kv-store]
-        :crux.kafka/bootstrap-servers "localhost:9092"
-        :crux.kafka/doc-topic "kafka-lmdb-doc"
-        :crux.kafka/tx-topic "kafka-lmdb-tx"
-        :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})})
+       (let [uuid (UUID/randomUUID)]
+         {:crux.node/topology '[crux.kafka/topology
+                                crux.metrics.dropwizard.cloudwatch/reporter
+                                crux.kv.lmdb/kv-store]
+          :crux.kafka/bootstrap-servers "localhost:9092"
+          :crux.kafka/doc-topic (str "kafka-lmdb-doc-" uuid)
+          :crux.kafka/tx-topic (str "kafka-lmdb-tx-" uuid)
+          :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))}))})
+
+(defn with-embedded-kafka* [f]
+  (f/with-tmp-dir "embedded-kafka" [data-dir]
+    (with-open [emb (ek/start-embedded-kafka
+                     {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                      :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                      :crux.kafka.embedded/kafka-port 9091})]
+      (f))))
+
+(defmacro with-embedded-kafka [& body]
+  `(with-embedded-kafka* (fn [] ~@body)))
 
 (defn with-nodes* [nodes f]
   (f/with-tmp-dir "dev-storage" [data-dir]
-    (with-open [emb (ek/start-embedded-kafka
-                      {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
-                       :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
-                       :crux.kafka.embedded/kafka-port 9091})]
-      (vec
-       (for [[node-type ->node] nodes]
-         (with-open [node (api/start-node (->node data-dir))]
-           (with-dimensions {:crux-node-type node-type}
-             (log/infof "Running bench on %s node." node-type)
-             (post-to-slack (str "running on node: " node-type))
-             [node-type (f node)])))))))
+    (vec
+     (for [[node-type ->node] nodes]
+       (with-open [node (api/start-node (->node data-dir))]
+         (with-dimensions {:crux-node-type node-type}
+           (log/infof "Running bench on %s node." node-type)
+           (post-to-slack (str "running on node: " node-type))
+           [node-type (f node)]))))))
 
 (defmacro with-nodes [[node-binding nodes] & body]
   `(with-nodes* ~nodes (fn [~node-binding] ~@body)))
