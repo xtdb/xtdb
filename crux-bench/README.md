@@ -1,6 +1,6 @@
 ## Downloading the datasets
 
-In order to run the benchmarks locally, you need the required datasets. Within the base of this directory, you can run the `./bin/download_dataset.sh` script to download them into the **data** folder.
+In order to run the benchmarks locally, you need the required datasets. Within the base of this directory, you can run the `./bin/download-dataset.sh` script to download them into the **data** folder.
 
 ## Running the benchmark locally
 
@@ -18,7 +18,9 @@ Every push on `master` triggers a deployment job on CircleCI, building a new doc
 
 ## Manually running a benchmark on AWS
 
-Assuming you have the `awscli`, and you are authenticated with AWS and the ECR (see [**here**](https://docs.aws.amazon.com/cli/latest/reference/ecr/get-login.html)), you can use the `bin/docker-build-push.sh` script to push a docker image (tagged `latest`) to the `crux-bench` ECR repository. After this, you can trigger a task to run the benchmark using the `bin/run_task.sh`.
+Circle is responsible for building and pushing the bench docker images - it does this for every commit on the origin repo for branches with an active PR.
+
+Assuming you have `awscli` and `jq` installed, and you are authenticated with AWS and ECR (see [**here**](https://docs.aws.amazon.com/cli/latest/reference/ecr/get-login.html)), you can run the bench for a CI-built commit using `bin/run-bench.sh <COMMIT-ISH>`.
 
 ## Running Non-Crux Benchmarks
 

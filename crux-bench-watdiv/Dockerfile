@@ -8,4 +8,4 @@ COPY . /usr/src/app
 RUN apt-get update
 RUN apt-get install -y awscli
 RUN bench/bin/download_watdiv_files.sh
-CMD bench/bin/run_watdiv.sh
+CMD bench/bin/run-watdiv.sh
