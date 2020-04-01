@@ -9,6 +9,7 @@
             [clj-http.client :as client]
             [crux.fixtures :as f])
   (:import (java.util.concurrent Executors ExecutorService)
+           (java.util UUID)
            (java.io Closeable)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
@@ -81,11 +82,12 @@
   (format "*%s* (%s): `%s`"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
 
 (defn results->slack-message [results]
-  (format "*%s*\n========\n%s\n"
+  (format "*%s* (%s)\n========\n%s\n"
           (:bench-ns (first results))
+          (:crux-node-type (first results))
           (->> results
                (map result->slack-message)
                (string/join "\n"))))
@@ -94,21 +96,18 @@
   (format "<p> <b>%s</b> (%s): <code>%s</code></p>"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
-
-(defn- results->html [results]
-  (format "<h3>%s</h3> %s"
-          (:bench-ns (first results))
-          (->> results
-               (map result->html)
-               (string/join " "))))
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
 
 (defn results->email [bench-results]
   (str "<h1>Crux bench results</h1>"
-       (->> (for [[node-type results] bench-results]
-              (str (format "<h2>%s</h2>" node-type)
-                   (->> (for [result results]
-                          (results->html result))
+       (->> (for [[bench-ns results] (group-by :bench-ns bench-results)]
+              (str (format "<h2>%s</h2>" bench-ns)
+                   (->> (for [[crux-node-type results] (group-by :crux-node-type results)]
+                          (format "<h3>%s</h3> %s"
+                                  crux-node-type
+                                  (->> results
+                                       (map result->html)
+                                       (string/join " "))))
                         (string/join))))
             (string/join))))
 
@@ -129,35 +128,49 @@
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
+(defn node-size-in-bytes [node]
+  (:crux.kv/size (api/status node)))
+
 (def nodes
   {"standalone-rocksdb"
    (fn [data-dir]
      {:crux.node/topology '[crux.standalone/topology
                             crux.metrics.dropwizard.cloudwatch/reporter
                             crux.kv.rocksdb/kv-store]
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))
-      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb"))
+      :crux.kv/db-dir (str (io/file data-dir "kv/standalone-rocksdb"))
+      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/standalone-rocksdb"))
+      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
+
+   "standalone-rocksdb-with-metrics"
+   (fn [data-dir]
+     {:crux.node/topology '[crux.standalone/topology
+                            crux.metrics.dropwizard.cloudwatch/reporter
+                            crux.kv.rocksdb/kv-store-with-metrics]
+      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb-with-metrics"))
+      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb-with-metrics"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
 
    "kafka-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.kafka/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter
-                            crux.kv.rocksdb/kv-store]
-      :crux.kafka/bootstrap-servers "localhost:9092"
-      :crux.kafka/doc-topic "kafka-rocksdb-doc"
-      :crux.kafka/tx-topic "kafka-rocksdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
+     (let [uuid (UUID/randomUUID)]
+       {:crux.node/topology '[crux.kafka/topology
+                              crux.metrics.dropwizard.cloudwatch/reporter
+                              crux.kv.rocksdb/kv-store]
+        :crux.kafka/bootstrap-servers "localhost:9092"
+        :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
+        :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
+        :crux.kv/db-dir (str (io/file data-dir "kv/kafka-rocksdb"))}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.kafka/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter
-                            crux.kv.rocksdb/kv-store]
-      :crux.kafka/bootstrap-servers "localhost:9091"
-      :crux.kafka/doc-topic "kafka-rocksdb-doc"
-      :crux.kafka/tx-topic "kafka-rocksdb-tx"
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})
+     (let [uuid (UUID/randomUUID)]
+       {:crux.node/topology '[crux.kafka/topology
+                              crux.metrics.dropwizard.cloudwatch/reporter
+                              crux.kv.rocksdb/kv-store]
+        :crux.kafka/bootstrap-servers "localhost:9091"
+        :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
+        :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
+        :crux.kv/db-dir (str (io/file data-dir "kv/embedded-kafka-rocksdb"))}))
    #_"standalone-lmdb"
    #_(fn [data-dir]
        {:crux.node/topology '[crux.standalone/topology
@@ -169,27 +182,35 @@
 
    #_"kafka-lmdb"
    #_(fn [data-dir]
-       {:crux.node/topology '[crux.kafka/topology
-                              crux.metrics.dropwizard.cloudwatch/reporter
-                              crux.kv.lmdb/kv-store]
-        :crux.kafka/bootstrap-servers "localhost:9092"
-        :crux.kafka/doc-topic "kafka-lmdb-doc"
-        :crux.kafka/tx-topic "kafka-lmdb-tx"
-        :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))})})
+       (let [uuid (UUID/randomUUID)]
+         {:crux.node/topology '[crux.kafka/topology
+                                crux.metrics.dropwizard.cloudwatch/reporter
+                                crux.kv.lmdb/kv-store]
+          :crux.kafka/bootstrap-servers "localhost:9092"
+          :crux.kafka/doc-topic (str "kafka-lmdb-doc-" uuid)
+          :crux.kafka/tx-topic (str "kafka-lmdb-tx-" uuid)
+          :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))}))})
+
+(defn with-embedded-kafka* [f]
+  (f/with-tmp-dir "embedded-kafka" [data-dir]
+    (with-open [emb (ek/start-embedded-kafka
+                     {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                      :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
+                      :crux.kafka.embedded/kafka-port 9091})]
+      (f))))
+
+(defmacro with-embedded-kafka [& body]
+  `(with-embedded-kafka* (fn [] ~@body)))
 
 (defn with-nodes* [nodes f]
-  (f/with-tmp-dir "dev-storage" [data-dir]
-    (with-open [emb (ek/start-embedded-kafka
-                      {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
-                       :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
-                       :crux.kafka.embedded/kafka-port 9091})]
-      (vec
-       (for [[node-type ->node] nodes]
-         (with-open [node (api/start-node (->node data-dir))]
-           (with-dimensions {:crux-node-type node-type}
-             (log/infof "Running bench on %s node." node-type)
-             (post-to-slack (str "running on node: " node-type))
-             [node-type (f node)])))))))
+  (->> (for [[node-type ->node] nodes]
+         (f/with-tmp-dir "crux-node" [data-dir]
+           (with-open [node (api/start-node (->node data-dir))]
+             (with-dimensions {:crux-node-type node-type}
+               (log/infof "Running bench on %s node." node-type)
+               (f node)))))
+       (apply concat)
+       (vec)))
 
 (defmacro with-nodes [[node-binding nodes] & body]
   `(with-nodes* ~nodes (fn [~node-binding] ~@body)))

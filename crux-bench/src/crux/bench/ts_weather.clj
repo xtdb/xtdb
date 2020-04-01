@@ -62,7 +62,8 @@
                                                       {:op-count (count location-tx-ops)
                                                        :last-tx nil}))))]
       (api/await-tx node last-tx (Duration/ofMinutes 20))
-      {:op-count op-count})))
+      {:op-count op-count
+       :node-size-bytes (bench/node-size-in-bytes node)})))
 
 (defn test-last-10-readings [node]
   ;; NOTE: Does not work with range, takes latest values.

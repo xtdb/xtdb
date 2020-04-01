@@ -13,7 +13,8 @@
                    (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream watdiv/watdiv-input-file)]
                                                           (rdf/submit-ntriples node in 1000))]
                      (crux/await-tx node last-tx)
-                     {:entity-count entity-count})))
+                     {:entity-count entity-count
+                      :node-size-bytes (bench/node-size-in-bytes node)})))
 
 (defn parse-results [resource]
   (with-open [rdr (io/reader resource)]
@@ -72,7 +73,7 @@
                      (fn [{:keys [idx q]}]
                        (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
                          (bench/run-bench (format "query-%d" idx)
-                            {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))})))))))))))
+                                          {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))})))))))))))
 
 (comment
   (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]
