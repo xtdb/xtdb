@@ -38,7 +38,15 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                       "image":"955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:commit-'${COMMIT_SHA}'",
                       "dependsOn":[{"condition":"START","containerName":"broker-container"}],
                       "essential":true,
-                      "secrets":[{"name":"SLACK_URL","valueFrom":"arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"}]
+                      "secrets":[{"name":"SLACK_URL","valueFrom":"arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"}],
+                      "logConfiguration":{
+                        "logDriver":"awslogs",
+                        "options": {
+                          "awslogs-region":"eu-west-2",
+                          "awslogs-group":"crux-bench-dev",
+                          "awslogs-stream-prefix":"'$(whoami)'-'${COMMIT_SHA}'"
+                        }
+                      }
                     }]' \
         | jq -r .taskDefinition.taskDefinitionArn )
 
