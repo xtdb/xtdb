@@ -97,19 +97,16 @@
           (java.time.Duration/ofMillis time-taken-ms)
           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
 
-(defn- results->html [results]
-  (format "<h3>%s</h3> %s"
-          (:bench-ns (first results))
-          (->> results
-               (map result->html)
-               (string/join " "))))
-
 (defn results->email [bench-results]
   (str "<h1>Crux bench results</h1>"
-       (->> (for [[node-type results] bench-results]
-              (str (format "<h2>%s</h2>" node-type)
-                   (->> (for [result results]
-                          (results->html result))
+       (->> (for [[bench-ns results] (group-by :bench-ns bench-results)]
+              (str (format "<h2>%s</h2>" bench-ns)
+                   (->> (for [[crux-node-type results] (group-by :crux-node-type results)]
+                          (format "<h3>%s</h3> %s"
+                                  crux-node-type
+                                  (->> results
+                                       (map result->html)
+                                       (string/join " "))))
                         (string/join))))
             (string/join))))
 
@@ -131,7 +128,7 @@
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
 (defn node-size-in-bytes [node]
-  {:node-size-bytes (:crux.kv/size (api/status node))})
+  (:crux.kv/size (api/status node)))
 
 (def nodes
   {"standalone-rocksdb"
@@ -205,14 +202,15 @@
   `(with-embedded-kafka* (fn [] ~@body)))
 
 (defn with-nodes* [nodes f]
-  (vec
-   (for [[node-type ->node] nodes]
-     (f/with-tmp-dir "crux-node" [data-dir]
-       (with-open [node (api/start-node (->node data-dir))]
-         (with-dimensions {:crux-node-type node-type}
-           (log/infof "Running bench on %s node." node-type)
-           (post-to-slack (str "running on node: " node-type))
-           [node-type (f node)]))))))
+  (->> (for [[node-type ->node] nodes]
+         (f/with-tmp-dir "crux-node" [data-dir]
+           (with-open [node (api/start-node (->node data-dir))]
+             (with-dimensions {:crux-node-type node-type}
+               (log/infof "Running bench on %s node." node-type)
+               (post-to-slack (str "running on node: " node-type))
+               (f node)))))
+       (apply concat)
+       (vec)))
 
 (defmacro with-nodes [[node-binding nodes] & body]
   `(with-nodes* ~nodes (fn [~node-binding] ~@body)))
