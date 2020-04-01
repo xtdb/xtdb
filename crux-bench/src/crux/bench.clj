@@ -205,9 +205,9 @@
   `(with-embedded-kafka* (fn [] ~@body)))
 
 (defn with-nodes* [nodes f]
-  (f/with-tmp-dir "dev-storage" [data-dir]
-    (vec
-     (for [[node-type ->node] nodes]
+  (vec
+   (for [[node-type ->node] nodes]
+     (f/with-tmp-dir "crux-node" [data-dir]
        (with-open [node (api/start-node (->node data-dir))]
          (with-dimensions {:crux-node-type node-type}
            (log/infof "Running bench on %s node." node-type)
