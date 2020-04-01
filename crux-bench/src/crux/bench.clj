@@ -82,11 +82,12 @@
   (format "*%s* (%s): `%s`"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
 
 (defn results->slack-message [results]
-  (format "*%s*\n========\n%s\n"
+  (format "*%s* (%s)\n========\n%s\n"
           (:bench-ns (first results))
+          (:crux-node-type (first results))
           (->> results
                (map result->slack-message)
                (string/join "\n"))))
@@ -95,7 +96,7 @@
   (format "<p> <b>%s</b> (%s): <code>%s</code></p>"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-commit :crux-version :time-taken-ms))))
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
 
 (defn results->email [bench-results]
   (str "<h1>Crux bench results</h1>"
@@ -207,7 +208,6 @@
            (with-open [node (api/start-node (->node data-dir))]
              (with-dimensions {:crux-node-type node-type}
                (log/infof "Running bench on %s node." node-type)
-               (post-to-slack (str "running on node: " node-type))
                (f node)))))
        (apply concat)
        (vec)))
