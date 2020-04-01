@@ -25,7 +25,6 @@ orbs:
 
           - run:
               command: |
-                export IMAGE_NAME=juxt/<<parameters.artifact-name>>
                 cd crux-build
                 DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
                 cd crux-builder/clj-uberjar/
@@ -37,8 +36,9 @@ orbs:
 
           - run:
               command: |
+                export IMAGE_NAME=juxt/<<parameters.artifact-name>>
                 cd crux-build/crux-builder/docker/
-                IMAGE_NAME="<<parameters.artifact-name>>" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
+                IMAGE_NAME="${IMAGE_NAME}" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                 docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
       deploy-tar:
