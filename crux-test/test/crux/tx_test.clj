@@ -15,7 +15,8 @@
             [crux.rdf :as rdf]
             [crux.query :as q]
             [crux.node :as n]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [taoensso.nippy :as nippy])
   (:import [java.util Date]
            [java.time Duration]
            [crux.api ITxLog]))
@@ -749,7 +750,11 @@
         (t/is false))
 
       (t/is (= [{::bus/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
-                {::bus/event-type ::tx/indexed-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
+                {::bus/event-type ::tx/indexed-docs
+                 :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
+                 :av-count 4
+                 ;; a bit brittle, granted, but hopefully it doesn't change often
+                 :bytes-indexed 632}
                 {::bus/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
                 {::bus/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
                @!events)))))

@@ -27,11 +27,11 @@
 (s/def ::tx-time date?)
 (s/def ::submitted-tx (s/keys :req [::tx-id ::tx-time]))
 (s/def ::committed? boolean?)
-
+(s/def ::av-count nat-int?)
+(s/def ::bytes-indexed nat-int?)
 (s/def ::doc-ids (s/coll-of #(instance? crux.codec.Id %) :kind set?))
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
-(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids]))
-
+(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx], :req-un [::committed?]))
 
@@ -360,10 +360,11 @@
 
     (let [{docs-to-evict true, docs-to-upsert false} (group-by (comp boolean idx/evicted-doc? val) docs)
 
-          _ (when (seq docs-to-upsert)
-              (->> docs-to-upsert
-                   (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-                   (idx/store-doc-idx-keys kv-store)))
+          doc-idx-keys (when (seq docs-to-upsert)
+                         (->> docs-to-upsert
+                              (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))))
+
+          _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))
 
           docs-to-remove (when (seq docs-to-evict)
                            (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -383,7 +384,11 @@
 
       (db/put-objects object-store docs)
 
-      (bus/send bus {::bus/event-type ::indexed-docs, :doc-ids (set (keys docs))})
+      (bus/send bus {::bus/event-type ::indexed-docs,
+                     :doc-ids (set (keys docs))
+                     :av-count (->> (vals docs) (apply concat) (count))
+                     :bytes-indexed (->> doc-idx-keys
+                                         (transduce (map mem/capacity) +))})
 
       (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
         (if stats-executor
