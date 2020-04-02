@@ -164,17 +164,21 @@
                                   :opt-un [::valid-time
                                            ::transact-time])))
 
+(defn- validate-or-throw [body-edn spec]
+  (when-not (s/valid? spec body-edn)
+    (throw (ex-info (str "Spec assertion failed\n" (s/explain-str spec body-edn)) (s/explain-data spec body-edn)))))
+
 ;; TODO: Potentially require both valid and transaction time sent by
 ;; the client?
 (defn- query [^ICruxAPI crux-node request]
-  (let [query-map (s/assert ::query-map (body->edn request))
+  (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (db-for-request crux-node query-map)]
     (-> (success-response
          (.q db (:query query-map)))
         (add-last-modified (.transactionTime db)))))
 
 (defn- query-stream [^ICruxAPI crux-node request]
-  (let [query-map (s/assert ::query-map (body->edn request))
+  (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (db-for-request crux-node query-map)
         snapshot (.newSnapshot db)
         result (.q db snapshot (:query query-map))]
@@ -189,21 +193,21 @@
 
 ;; TODO: Could support as-of now via path and GET.
 (defn- entity [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
 (defn- entity-tx [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response entity-tx)
         (add-last-modified tx-time))))
 
 (defn- history-ascending [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
         snapshot (.newSnapshot db)
         history (.historyAscending db snapshot (c/new-id eid))]
@@ -211,7 +215,7 @@
         (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- history-descending [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
         snapshot (.newSnapshot db)
         history (.historyDescending db snapshot (c/new-id eid))]

@@ -23,10 +23,6 @@
            [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
 
-(s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
-                   (Boolean/parseBoolean check-asserts)
-                   true))
-
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
     (with-open [in (io/reader pom-file)]

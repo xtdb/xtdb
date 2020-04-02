@@ -84,7 +84,9 @@
                "crux-metrics/test"
                "crux-test/test"]
 
-  :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"]
+  :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
+             "-Dclojure.spec.compile-asserts=true"
+             "-Dclojure.spec.check-asserts=true"]
   :global-vars {*warn-on-reflection* true}
 
   :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
