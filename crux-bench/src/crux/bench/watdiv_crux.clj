@@ -31,34 +31,30 @@
    :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200303-155352Z.edn") parse-results)})
 
 (defn get-db-results-at-idx [idx]
-  (into
-   {}
-   (map
-    (fn [db-name]
-      (let [time-taken-ms (get-in db-query-results [db-name idx :time-taken-ms])
-            result-count (get-in db-query-results [db-name idx :result-count])]
-        {db-name {:db-time-taken-ms time-taken-ms
-                  :db-result-count result-count}}))
-    (keys db-query-results))))
+  (->> (for [[db-name db-results] db-query-results]
+         (let [time-taken-ms (get-in db-results [idx :time-taken-ms])
+               result-count (get-in db-results [idx :result-count])]
+           [db-name {:db-time-taken-ms time-taken-ms
+                     :db-result-count result-count}]))
+       (into {})))
 
 (defn summarise-query-results [watdiv-query-results]
-  (into {:bench-type "queries"
-         :time-taken-ms (->> (rest watdiv-query-results) (map :time-taken-ms) (reduce +))}
-        (map
-         (fn [db-name]
-           (let [watdiv-results-with-db (map
-                                         (fn [query-result] (merge query-result (db-name query-result)))
-                                         watdiv-query-results)
-                 both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
-                 crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
-                 correct-idxs (into #{} (map :query-idx) crux-correct)]
-             {db-name
-              {:crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) vec)
-               :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (mapv :query-idx))
+  (merge (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
+         {:bench-type "queries"
+          :time-taken-ms (->> watdiv-query-results (map :time-taken-ms) (reduce +))}
+         (->> (for [db-name (keys db-query-results)]
+                (let [watdiv-results-with-db (for [query-result watdiv-query-results]
+                                               (merge query-result (get query-result db-name)))
+                      both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
+                      crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
+                      correct-idxs (into #{} (map :query-idx) crux-correct)]
+                  [db-name
+                   {:crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
+                    :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
 
-               :crux-time-taken (->> crux-correct (map :time-taken-ms) (reduce +) (Duration/ofMillis) (str))
-               :db-time-taken (->> crux-correct (map :db-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}})))
-        (keys db-query-results)))
+                    :crux-time-taken (->> crux-correct (map :time-taken-ms) (reduce +) (Duration/ofMillis) (str))
+                    :db-time-taken (->> crux-correct (map :db-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}]))
+              (into {}))))
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]
   (bench/with-bench-ns :watdiv-crux
@@ -77,5 +73,5 @@
 
 (comment
   (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]
-    (bench/with-node [node]
+    (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
       (run-watdiv-bench node {:test-count 10}))))
