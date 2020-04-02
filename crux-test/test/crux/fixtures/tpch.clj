@@ -5,14 +5,8 @@
 (def tpch-column-types->crux-calcite-type
   {TpchColumnType$Base/INTEGER :integer
    TpchColumnType$Base/VARCHAR :varchar
-
-   ;; TODO ALL TYPES:
-   ;; INTEGER,
-   ;; IDENTIFIER,
-   ;; DATE,
-   ;; DOUBLE,
-   ;; VARCHAR
-   })
+   TpchColumnType$Base/IDENTIFIER :varchar
+   TpchColumnType$Base/DOUBLE :double})
 
 (defn tpch-table->crux-sql-schema [^TpchTable t]
   {:crux.db/id (keyword "crux.sql.schema" (.getTableName t))
@@ -24,6 +18,3 @@
 
 (defn tpch-tables->crux-sql-schemas []
   (map tpch-table->crux-sql-schema (TpchTable/getTables)))
-
-(comment
-  (tpch-tables->crux-sql-schemas))

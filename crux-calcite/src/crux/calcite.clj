@@ -78,7 +78,8 @@
 (def ^:private column-types {:varchar SqlTypeName/VARCHAR
                              :keyword SqlTypeName/VARCHAR
                              :integer SqlTypeName/BIGINT
-                             :boolean SqlTypeName/BOOLEAN})
+                             :boolean SqlTypeName/BOOLEAN
+                             :double SqlTypeName/DOUBLE})
 
 (defn- ^java.util.List perform-query [q]
   (->> (crux/q (crux/db @!node) q)
@@ -86,8 +87,10 @@
 
 (defn- ^java.util.List row-types [{:keys [:crux.sql.table/columns]} ^RelDataTypeFactory type-factory]
   (->> (for [definition columns]
-         [(string/upper-case (:crux.sql.column/name definition))
-          (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])
+         (let [column-type (column-types (:crux.sql.column/type definition))]
+           (assert column-type (format "Unknown column type %s:%s " (:crux.sql.column/name definition) (:crux.sql.column/type definition)))
+           [(string/upper-case (:crux.sql.column/name definition))
+            (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))]))
        (into {})
        (seq)))
 
