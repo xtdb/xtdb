@@ -26,6 +26,14 @@
                 {:crux.bus/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [av-count]}]
                   (dropwizard/mark! meter av-count)))
+    meter))
+
+(defn assign-bytes-meter [registry {:crux.node/keys [bus]}]
+  (let [meter (dropwizard/meter registry ["indexer" "indexed-bytes"])]
+    (bus/listen bus
+                {:crux.bus/event-types #{:crux.tx/indexed-docs}}
+                (fn [{:keys [bytes-indexed]}]
+                  (dropwizard/mark! meter bytes-indexed)))
 
     meter))
 
@@ -50,6 +58,7 @@
   Returns an atom containing updating metrics"
   [registry deps]
   {:tx-id-lag (assign-tx-id-lag registry deps)
-   :docs-ingest-meter (assign-doc-meter registry deps)
-   :av-ingest-meter (assign-av-meter registry deps)
+   :docs-ingested-meter (assign-doc-meter registry deps)
+   :av-ingested-meter (assign-av-meter registry deps)
+   :bytes-ingested-meter (assign-bytes-meter registry deps)
    :tx-ingest-timer (assign-tx-timer registry deps)})

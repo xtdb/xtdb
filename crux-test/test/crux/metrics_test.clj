@@ -17,14 +17,14 @@
         mets (indexer-metrics/assign-listeners registry #:crux.node{:node node, :bus bus, :indexer indexer})]
     (t/testing "initial ingest values"
       (t/is (nil? (dropwizard/value (:tx-id-lag mets))))
-      (t/is (zero? (dropwizard/meter-count (:docs-ingest-meter mets))))
+      (t/is (zero? (dropwizard/meter-count (:docs-ingested-meter mets))))
       (t/is (zero? (dropwizard/meter-count (:tx-ingest-timer mets)))))
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
     (.close ^Closeable bus)
 
     (t/testing "post ingest values"
-      (t/is (= 1 (dropwizard/meter-count (:docs-ingest-meter mets))))
+      (t/is (= 1 (dropwizard/meter-count (:docs-ingested-meter mets))))
       (t/is (zero? (dropwizard/value (:tx-id-lag mets))))
       (t/is (= 1 (dropwizard/meter-count (:tx-ingest-timer mets)))))))
 
@@ -33,7 +33,7 @@
         registry (dropwizard/new-registry)
         mets (query-metrics/assign-listeners registry #:crux.node{:bus bus})]
 
-    (t/testing "inital query timer values"
+    (t/testing "initial query timer values"
       (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))
 
     (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
