@@ -27,11 +27,10 @@
 (s/def ::tx-time date?)
 (s/def ::submitted-tx (s/keys :req [::tx-id ::tx-time]))
 (s/def ::committed? boolean?)
-
+(s/def ::av-count nat-int?)
 (s/def ::doc-ids (s/coll-of #(instance? crux.codec.Id %) :kind set?))
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
-(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids]))
-
+(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx], :req-un [::committed?]))
 
@@ -383,7 +382,12 @@
 
       (db/put-objects object-store docs)
 
-      (bus/send bus {::bus/event-type ::indexed-docs, :doc-ids (set (keys docs))})
+      (bus/send bus {::bus/event-type ::indexed-docs,
+                     :doc-ids (set (keys docs))
+                     :av-count (->> (vals docs)
+                                    (set)
+                                    (map count)
+                                    (reduce +))})
 
       (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
         (if stats-executor
