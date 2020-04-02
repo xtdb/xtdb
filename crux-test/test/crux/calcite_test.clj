@@ -213,3 +213,13 @@
   (t/testing "retrieve data"
     (t/is (= #{{:id ":person/ivan", :name "Ivan", :planet "earth"}}
              (set (query "SELECT * FROM PERSON"))))))
+
+;; TpcdsTest
+;; Calcite ought be able to run it against a given adapter?
+;; The hard bit would be the schema?
+
+;; We have Tpch cs Tpcds (ds = decision support)
+
+;; Concerns
+;; Both TPCH report performance, we're more interested in query compatibility.
+;; Based case we don't have to rip the TPCH test code, but we can run the suite, possibly calling against Calcite.

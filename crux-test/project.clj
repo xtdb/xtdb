@@ -31,6 +31,9 @@
                  ;; Uncomment to test Oracle, you'll need to locally install the JAR:
                  ;; [com.oracle/ojdbc "12.2.0.1"]
 
+                 ;; Calcite
+                 [io.airlift.tpch/tpch "0.10"]
+
                  ;; General:
                  [org.clojure/test.check "0.10.0"]
                  [org.slf4j/slf4j-api "1.7.29"]
