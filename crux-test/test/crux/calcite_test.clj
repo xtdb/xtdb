@@ -1,44 +1,20 @@
 (ns crux.calcite-test
   (:require [clojure.test :as t]
-            [crux.api :as api]
-            [crux.calcite :as cal]
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.calcite :as cf :refer [query]]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.standalone :as fs]
-            [crux.node :as n])
-  (:import java.sql.DriverManager))
+            [crux.fixtures.standalone :as fs]))
 
 ;; See https://github.com/juxt/crux/issues/514
 
-(def ^:dynamic ^java.sql.Connection *conn*)
-
-(defn- with-calcite-connection [f]
-  (with-open [conn (cal/jdbc-connection)]
-    (binding [*conn* conn]
-      (f))))
-
-(defn- with-avatica-connection [f]
-  (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")]
-    (binding [*conn* conn]
-      (f))))
-
 (defn- with-each-connection-type [f]
-  (with-calcite-connection f)
+  (cf/with-calcite-connection f)
   (t/testing "With Avatica Connection"
-    (with-avatica-connection f)))
+    (cf/with-avatica-connection f)))
 
-(defn with-calcite-module [f]
-  (fapi/with-opts (-> fapi/*opts*
-                      (update ::n/topology conj cal/module))
-    f))
-
-(defn- query [q]
-  (let [stmt (.createStatement *conn*)]
-    (->> q (.executeQuery stmt) resultset-seq)))
-
-(t/use-fixtures :each fs/with-standalone-node with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type)
+(t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type)
 
 (t/deftest test-hello-world-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person

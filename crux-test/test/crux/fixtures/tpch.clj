@@ -1,4 +1,4 @@
-(ns crux.calcite.tpch
+(ns crux.fixtures.tpch
   (:require  [clojure.test :as t])
   (:import [io.airlift.tpch TpchTable TpchColumn TpchColumnTypes TpchColumnType TpchColumnType$Base]))
 
@@ -25,4 +25,5 @@
 (defn tpch-tables->crux-sql-schemas []
   (map tpch-table->crux-sql-schema (TpchTable/getTables)))
 
-(tpch-tables->crux-sql-schemas)
+(comment
+  (tpch-tables->crux-sql-schemas))
