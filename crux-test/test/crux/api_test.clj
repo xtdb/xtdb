@@ -25,23 +25,23 @@
            org.eclipse.rdf4j.query.Binding))
 
 (defn- with-each-api-implementation [f]
-  #_(t/testing "Local API ClusterNode"
+  (t/testing "Local API ClusterNode"
     ((t/join-fixtures [fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Local API StandaloneNode"
     ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node]) f))
-  #_(t/testing "H2 Node"
+  (t/testing "H2 Node"
     ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
-  #_(t/testing "SQLite Node"
+  (t/testing "SQLite Node"
     ((t/join-fixtures [#(fj/with-jdbc-node :sqlite %) kvf/with-kv-dir fapi/with-node]) f))
   (t/testing "Remote API"
     ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
                        fapi/with-node
                        fh/with-http-client])
      f))
-  #_(t/testing "Kafka and Remote Doc Store"
+  (t/testing "Kafka and Remote Doc Store"
     ((t/join-fixtures [fk/with-cluster-node-opts fs/with-standalone-doc-store kvf/with-kv-dir fapi/with-node]) f)))
 
-(t/use-fixtures :once #_fk/with-embedded-kafka-cluster)
+(t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
 
 (defn execute-sparql [^RepositoryConnection conn q]

@@ -3,7 +3,8 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
             ICruxAsyncIngestAPI ICruxDatasource ICursor]
            java.io.Closeable
@@ -234,7 +235,7 @@
     (.submitTx this (conform-tx-ops tx-ops)))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
-    (.openTxLog this after-tx-id with-ops?)))
+    (cio/<-cursor (.openTxLog this after-tx-id with-ops?))))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
@@ -316,7 +317,7 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (open-q [this query] (.openQuery this query))
+  (open-q [this query] (cio/<-cursor (.openQuery this query)))
 
   (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
   (history-descending [this snapshot eid] (.historyDescending this snapshot eid))

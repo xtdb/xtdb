@@ -613,9 +613,8 @@
   (fapi/submit+await-tx [[:crux.tx/cas {:crux.db/id :to-evict} {:crux.db/id :to-evict :test "test"}]])
   (fapi/submit+await-tx [[:crux.tx/evict :to-evict]])
 
-  (with-open [log-iterator (api/open-tx-log *api* nil true)]
-    (t/is (= (->> (iterator-seq log-iterator)
-                  (map :crux.api/tx-ops))
+  (with-open [tx-log (api/open-tx-log *api* nil true)]
+    (t/is (= (->> tx-log (map :crux.api/tx-ops))
              [[[:crux.tx/put
                 #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                           :evicted? true}]]
