@@ -20,6 +20,15 @@
 
     meter))
 
+(defn assign-bytes-meter [registry {:crux.node/keys [bus]}]
+  (let [meter (dropwizard/meter registry ["indexer" "indexed-bytes"])]
+    (bus/listen bus
+                {:crux.bus/event-types #{:crux.tx/indexed-docs}}
+                (fn [{:keys [bytes-indexed]}]
+                  (dropwizard/mark! meter bytes-indexed)))
+
+    meter))
+
 (defn assign-tx-timer [registry {:crux.node/keys [bus]}]
   (let [timer (dropwizard/timer registry ["indexer" "indexed-txs"])
         !timer (atom nil)]
@@ -42,4 +51,5 @@
   [registry deps]
   {:tx-id-lag (assign-tx-id-lag registry deps)
    :docs-ingest-meter (assign-doc-meter registry deps)
+   :kb-ingest-meter (assign-bytes-meter registry deps)
    :tx-ingest-timer (assign-tx-timer registry deps)})
