@@ -17,6 +17,26 @@ Resources:
       LogGroupName: 'crux-bench'
       RetentionInDays: 365
 
+  IngestTimeTakenMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      FilterPattern: '{ $.bench-type = "ingest" }'
+      LogGroupName: 'crux-bench'
+      MetricTransformations:
+        - MetricName: "ingest-time-taken"
+          MetricNamespace: "LogMetrics"
+          MetricValue: '$.time-taken-ms'
+
+  IngestOpCountMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      FilterPattern: '{ $.bench-type = "ingest" }'
+      LogGroupName: 'crux-bench'
+      MetricTransformations:
+        - MetricName: "ingest-op-count"
+          MetricNamespace: "LogMetrics"
+          MetricValue: '$.op-count'
+
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
