@@ -11,4 +11,7 @@
 (t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node cf/with-calcite-connection)
 
 (t/deftest test-tpch-schema
-  (t/is (f/transact! *api* (tf/tpch-tables->crux-sql-schemas))))
+  (t/is (f/transact! *api* (tf/tpch-tables->crux-sql-schemas)))
+
+  (t/is (= [{:name "Ivan" :age 21}]
+           (query "SELECT * FROM CUSTOMER"))))
