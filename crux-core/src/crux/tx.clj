@@ -360,10 +360,11 @@
 
     (let [{docs-to-evict true, docs-to-upsert false} (group-by (comp boolean idx/evicted-doc? val) docs)
 
-          _ (when (seq docs-to-upsert)
-              (->> docs-to-upsert
-                   (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-                   (idx/store-doc-idx-keys kv-store)))
+          doc-idx-keys (when (seq docs-to-upsert)
+                         (->> docs-to-upsert
+                              (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))))
+
+          _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))
 
           docs-to-remove (when (seq docs-to-evict)
                            (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -385,13 +386,9 @@
 
       (bus/send bus {::bus/event-type ::indexed-docs,
                      :doc-ids (set (keys docs))
-                     :av-count (->> (vals docs)
-                                    (set)
-                                    (map count)
-                                    (reduce +))
-                     :bytes-indexed (->> (vals docs)
-                                         (map #(count (nippy/fast-freeze %)))
-                                         (reduce +))})
+                     :av-count (->> (vals docs) (apply concat) (count))
+                     :bytes-indexed (->> doc-idx-keys
+                                         (transduce (map mem/capacity) +))})
 
       (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
         (if stats-executor

@@ -753,9 +753,8 @@
                 {::bus/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
                  :av-count 4
-                 :bytes-indexed (->> [doc-1 doc-2]
-                                     (map #(count (nippy/fast-freeze %)))
-                                     (reduce +))}
+                 ;; a bit brittle, granted, but hopefully it doesn't change often
+                 :bytes-indexed 632}
                 {::bus/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
                 {::bus/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
                @!events)))))
