@@ -11,7 +11,7 @@
              {:dependencies
               [[io.dropwizard.metrics/metrics-jmx "4.1.2"]
 
-               [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
+               [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.5"]
                [software.amazon.awssdk/cloudwatch "2.10.61"]
 
                [org.dhatim/dropwizard-prometheus "2.2.0"]

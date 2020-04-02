@@ -1,7 +1,7 @@
 (ns crux.metrics.dropwizard.cloudwatch
   (:require [crux.metrics :as metrics]
             [clojure.string :as string])
-  (:import [io.github.azagniotov.metrics.reporter.cloudwatch CloudWatchReporter]
+  (:import [io.github.azagniotov.metrics.reporter.cloudwatch CloudWatchReporter CloudWatchReporter$Percentile]
            [java.io Closeable]
            [software.amazon.awssdk.services.cloudwatch CloudWatchAsyncClient CloudWatchAsyncClientBuilder]
            [software.amazon.awssdk.regions Region]
@@ -41,6 +41,7 @@
                 dimensions (.withGlobalDimensions (->> dimensions
                                                        (map (fn [[k v]] (format "%s=%s" k v)))
                                                        (into-array String))))
+        (.withPercentiles (into-array CloudWatchReporter$Percentile []))
         (.build)
         (doto (.start (.toMillis ^Duration dry-run-report-frequency) TimeUnit/MILLISECONDS)))))
 
