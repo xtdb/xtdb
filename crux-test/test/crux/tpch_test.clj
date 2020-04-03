@@ -8,6 +8,9 @@
             [crux.fixtures.tpch :as tf])
   (:import io.airlift.tpch.TpchTable))
 
+;; Transaction Processing Performance Council
+;; http://www.tpc.org/
+
 (defn- with-tpch-schema [f]
   (f/transact! *api* (tf/tpch-tables->crux-sql-schemas))
   (f))
