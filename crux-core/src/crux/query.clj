@@ -1238,14 +1238,13 @@
           (bus/send bus {:crux.bus/event-type ::submitted-query
                          ::query safe-query
                          ::query-id query-id}))
-        (cio/->cursor (fn []
-                                    (.close snapshot)
-                                    (when bus
-                                      (bus/send bus {:crux.bus/event-type ::completed-query
-                                                     ::query safe-query
-                                                     ::query-id query-id})))
-
-                                  (q this snapshot conformed-query)))))
+        (doto (cio/->stream (q this snapshot conformed-query))
+          (.onClose (fn []
+                      (.close snapshot)
+                      (when bus
+                        (bus/send bus {:crux.bus/event-type ::completed-query
+                                       ::query safe-query
+                                       ::query-id query-id}))))))))
 
   (historyAscending [this snapshot eid]
     ;; TODO this doesn't close the iterator - we'll want to do this when we move to 'openHistoryAscending'

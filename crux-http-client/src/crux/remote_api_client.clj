@@ -132,8 +132,8 @@
                                (assoc (as-of-map this)
                                       :query (q/normalize-query q))
                                {:as :stream})]
-      (cio/->cursor (fn [] (.close ^Closeable in))
-                    (edn-list->lazy-seq in))))
+      (doto (cio/->stream (edn-list->lazy-seq in))
+        (.onClose (fn [] (.close ^Closeable in))))))
 
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
@@ -217,8 +217,8 @@
                                nil
                                {:method :get
                                 :as :stream})]
-      (cio/->cursor #(.close ^Closeable in)
-                    (edn-list->lazy-seq in))))
+      (doto (cio/->stream (edn-list->lazy-seq in))
+        (.onClose #(.close ^Closeable in)))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")

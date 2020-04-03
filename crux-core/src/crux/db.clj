@@ -26,7 +26,7 @@
 ;; tag::TxLog[]
 (defprotocol TxLog
   (submit-tx [this tx-events])
-  (open-tx-log ^crux.api.ICursor [this after-tx-id])
+  (open-tx-log ^java.lang.AutoCloseable [this after-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 

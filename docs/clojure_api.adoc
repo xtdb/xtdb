@@ -142,7 +142,7 @@ toc::[]
 
 [source,clj]
 ----
-(open-tx-log ^ICursor [this after-tx-id with-ops?]
+(open-tx-log ^AutoCloseable [this after-tx-id with-ops?]
   "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another

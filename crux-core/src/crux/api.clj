@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ICursor]
+            ICruxAsyncIngestAPI ICruxDatasource]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -234,8 +234,8 @@
   (submit-tx [this tx-ops]
     (.submitTx this (conform-tx-ops tx-ops)))
 
-  (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
-    (cio/<-cursor (.openTxLog this after-tx-id with-ops?))))
+  (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
+    (cio/<-stream (.openTxLog this after-tx-id with-ops?))))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
@@ -317,7 +317,7 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (open-q [this query] (cio/<-cursor (.openQuery this query)))
+  (open-q [this query] (cio/<-stream (.openQuery this query)))
 
   (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
   (history-descending [this snapshot eid] (.historyDescending this snapshot eid))
