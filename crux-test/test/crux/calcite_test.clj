@@ -96,7 +96,7 @@
                                                    :crux.sql.column/type :varchar}
                                                   {:crux.db/attribute :age
                                                    :crux.sql.column/name "age"
-                                                   :crux.sql.column/type :integer}]}])
+                                                   :crux.sql.column/type :long}]}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
                                   {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
 
