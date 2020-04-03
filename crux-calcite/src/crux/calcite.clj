@@ -79,7 +79,8 @@
                              :keyword SqlTypeName/VARCHAR
                              :integer SqlTypeName/BIGINT
                              :boolean SqlTypeName/BOOLEAN
-                             :double SqlTypeName/DOUBLE})
+                             :double SqlTypeName/DOUBLE
+                             :datetime SqlTypeName/DATE})
 
 (defn- ^java.util.List perform-query [q]
   (->> (crux/q (crux/db @!node) q)

@@ -5,20 +5,21 @@
   {TpchColumnType$Base/INTEGER :integer
    TpchColumnType$Base/VARCHAR :varchar
    TpchColumnType$Base/IDENTIFIER :integer
-   TpchColumnType$Base/DOUBLE :double})
+   TpchColumnType$Base/DOUBLE :double
+   TpchColumnType$Base/DATE :datetime})
 
 (defn tpch-table->crux-sql-schema [^TpchTable t]
   {:crux.db/id (keyword "crux.sql.schema" (.getTableName t))
    :crux.sql.table/name (.getTableName t)
    :crux.sql.table/columns (for [^TpchColumn c (.getColumns t)]
                              {:crux.db/attribute (keyword (.getSimplifiedColumnName c))
-                              :crux.sql.column/name (.getSimplifiedColumnName c)
+                              :crux.sql.column/name (.getColumnName c)
                               :crux.sql.column/type (tpch-column-types->crux-calcite-type (.getBase (.getType c)))})})
 
 (defn tpch-tables->crux-sql-schemas []
   (map tpch-table->crux-sql-schema (TpchTable/getTables)))
 
-(defn tpch-generated->doc [^TpchTable t ^TpchEntity b]
+(defn tpch-entity->doc [^TpchTable t ^TpchEntity b]
   (into {:crux.db/id (keyword (str (.getTableName t) "-" (.getRowNumber b)))}
         (for [^TpchColumn c (.getColumns t)]
           [(keyword (.getSimplifiedColumnName c))
@@ -30,11 +31,15 @@
              TpchColumnType$Base/VARCHAR
              (.getString c b)
              TpchColumnType$Base/DOUBLE
-             (.getDouble c b))])))
+             (.getDouble c b)
+             TpchColumnType$Base/DATE
+             (.getDate c b))])))
 
 (defn tpch-table->docs [^TpchTable t]
   ;; first happens to be customers (;; 150000)
-  (map (partial tpch-generated->doc t) (seq (.createGenerator ^TpchTable t 1 1 1))))
+  (map (partial tpch-entity->doc t) (seq (.createGenerator ^TpchTable t 0.01 1 1))))
+
+;(map count (map #(seq (.createGenerator % 0.1 1 1)) (TpchTable/getTables)))
 
 (comment
   (first (tpch-tables->crux-sql-schemas))
