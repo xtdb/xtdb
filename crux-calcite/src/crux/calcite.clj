@@ -87,13 +87,11 @@
        (mapv to-array)))
 
 (defn- ^java.util.List row-types [{:keys [:crux.sql.table/columns]} ^RelDataTypeFactory type-factory]
-  (->> (for [definition columns]
-         (let [column-type (column-types (:crux.sql.column/type definition))]
-           (assert column-type (format "Unknown column type %s:%s " (:crux.sql.column/name definition) (:crux.sql.column/type definition)))
-           [(string/upper-case (:crux.sql.column/name definition))
-            (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))]))
-       (into {})
-       (seq)))
+  (for [definition columns]
+    (let [column-type (column-types (:crux.sql.column/type definition))]
+      (assert column-type (format "Unknown column type %s:%s " (:crux.sql.column/name definition) (:crux.sql.column/type definition)))
+      [(string/upper-case (:crux.sql.column/name definition))
+       (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])))
 
 (defn- make-table [table-schema]
   (let [table-schema table-schema]
@@ -102,7 +100,8 @@
          org.apache.calcite.schema.ProjectableFilterableTable]
         []
         (getRowType [^RelDataTypeFactory type-factory]
-          (.createStructType type-factory (row-types table-schema type-factory)))
+          (let [columns (row-types table-schema type-factory)]
+            (.createStructType type-factory (map second columns) (map first columns))))
         (scan [root filters projects]
           (org.apache.calcite.linq4j.Linq4j/asEnumerable
            (perform-query (doto (->crux-query table-schema filters projects) prn)))))))
