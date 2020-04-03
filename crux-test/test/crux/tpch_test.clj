@@ -6,7 +6,7 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]
             [crux.fixtures.tpch :as tf])
-  (:import [io.airlift.tpch TpchTable Customer Order]))
+  (:import io.airlift.tpch.TpchTable))
 
 (defn- with-tpch-schema [f]
   (f/transact! *api* (tf/tpch-tables->crux-sql-schemas))
@@ -19,16 +19,15 @@
 
 (t/deftest test-tpch-schema
   (doseq [^TpchTable t (TpchTable/getTables)]
-    (f/transact! *api* (tf/tpch-table->docs t)))
+    (f/transact! *api* (take 5 (tf/tpch-table->docs t))))
 
-  (t/is (= 50 (count (query "SELECT * FROM tpch.customer"))))
-  (t/is (= 1 (count (query "SELECT count(*) FROM tpch.lineitem"))))
-  (t/is (= 5 (count (query "SELECT * FROM tpch.orders"))))
+  (t/is (= 5 (count (query "SELECT * FROM tpch.customer"))))
+  (t/is (= 5 (count (query "SELECT o_orderkey,o_orderpriority FROM tpch.orders"))))
   (t/is (= 5 (count (query "SELECT * FROM tpch.part"))))
-  (t/is (= 5 (count (query "SELECT * FROM tpch.partsupp"))))
-  (t/is (= 3 (count (query "SELECT * FROM tpch.supplier"))))
-  (t/is (= 25 (count (query "SELECT * FROM tpch.nation"))))
-  (t/is (= 30 (count (query "SELECT * FROM tpch.region")))))
+  (t/is (= 2 (count (query "SELECT * FROM tpch.partsupp"))))
+  (t/is (= 5 (count (query "SELECT * FROM tpch.supplier"))))
+  (t/is (= 5 (count (query "SELECT * FROM tpch.nation"))))
+  (t/is (= 10 (count (query "SELECT * FROM tpch.region")))))
 
 #_(t/deftest test-001-query
   (t/is (= 5 (query "select\n"
@@ -109,30 +108,30 @@
     (println "Ingesting" (.getTableName t))
     (f/transact! *api* (tf/tpch-table->docs t)))
 
-  (t/is (= 5 (query (str
-                     "select\n"
-                     "  l.l_orderkey,\n"
-                     "  sum(l.l_extendedprice * (1 - l.l_discount)) as revenue,\n"
-                     "  o.o_orderdate,\n"
-                     "  o.o_shippriority\n"
-                     "\n"
-                     "from\n"
-                     "  tpch.customer c,\n"
-                     "  tpch.orders o,\n"
-                     "  tpch.lineitem l\n"
-                     "\n"
-                     "where\n"
-                     "  c.c_mktsegment = 'HOUSEHOLD'\n"
-                     "  and c.c_custkey = o.o_custkey\n"
-                     "  and l.l_orderkey = o.o_orderkey\n"
-                     "--  and o.o_orderdate < date '1995-03-25'\n"
-                     "--  and l.l_shipdate > date '1995-03-25'\n"
-                     "\n"
-                     "group by\n"
-                     "  l.l_orderkey,\n"
-                     "  o.o_orderdate,\n"
-                     "  o.o_shippriority\n"
-                     "order by\n"
-                     "  revenue desc,\n"
-                     "  o.o_orderdate\n"
-                     "limit 10")))))
+  (t/is (= 10 (count (query (str
+                             "select\n"
+                             "  l.l_orderkey,\n"
+                             "  sum(l.l_extendedprice * (1 - l.l_discount)) as revenue,\n"
+                             "  o.o_orderdate,\n"
+                             "  o.o_shippriority\n"
+                             "\n"
+                             "from\n"
+                             "  tpch.customer c,\n"
+                             "  tpch.orders o,\n"
+                             "  tpch.lineitem l\n"
+                             "\n"
+                             "where\n"
+                             "  c.c_mktsegment = 'HOUSEHOLD'\n"
+                             "  and c.c_custkey = o.o_custkey\n"
+                             "  and l.l_orderkey = o.o_orderkey\n"
+                             "--  and o.o_orderdate < date '1995-03-25'\n"
+                             "--  and l.l_shipdate > date '1995-03-25'\n"
+                             "\n"
+                             "group by\n"
+                             "  l.l_orderkey,\n"
+                             "  o.o_orderdate,\n"
+                             "  o.o_shippriority\n"
+                             "order by\n"
+                             "  revenue desc,\n"
+                             "  o.o_orderdate\n"
+                             "limit 10"))))))

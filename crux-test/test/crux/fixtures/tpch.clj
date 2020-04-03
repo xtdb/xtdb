@@ -4,7 +4,7 @@
 (def tpch-column-types->crux-calcite-type
   {TpchColumnType$Base/INTEGER :integer
    TpchColumnType$Base/VARCHAR :varchar
-   TpchColumnType$Base/IDENTIFIER :integer
+   TpchColumnType$Base/IDENTIFIER :long
    TpchColumnType$Base/DOUBLE :double
    TpchColumnType$Base/DATE :datetime})
 
@@ -37,7 +37,7 @@
 
 (defn tpch-table->docs [^TpchTable t]
   ;; first happens to be customers (;; 150000)
-  (map (partial tpch-entity->doc t) (seq (.createGenerator ^TpchTable t 0.01 1 1))))
+  (map (partial tpch-entity->doc t) (seq (.createGenerator ^TpchTable t 0.005 1 1))))
 
 ;(map count (map #(seq (.createGenerator % 0.1 1 1)) (TpchTable/getTables)))
 

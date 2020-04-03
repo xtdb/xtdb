@@ -77,7 +77,8 @@
 
 (def ^:private column-types {:varchar SqlTypeName/VARCHAR
                              :keyword SqlTypeName/VARCHAR
-                             :integer SqlTypeName/BIGINT
+                             :integer SqlTypeName/INTEGER
+                             :long SqlTypeName/BIGINT
                              :boolean SqlTypeName/BOOLEAN
                              :double SqlTypeName/DOUBLE
                              :datetime SqlTypeName/DATE})
