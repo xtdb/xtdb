@@ -81,11 +81,18 @@
                  {:body (json/write-str {:text message})
                   :content-type :json})))
 
-(defn- result->slack-message [{:keys [time-taken-ms bench-type] :as bench-map}]
-  (format "*%s* (%s): `%s`"
+(defn- result->slack-message [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
+                                      minimum-time-taken-this-week maximum-time-taken-this-week] :as bench-map}]
+  (format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
+          (if (neg? percentage-difference-since-last-run)
+            (format "%.2f" percentage-difference-since-last-run)
+            (format "+%.2f" percentage-difference-since-last-run))
+          (java.time.Duration/ofMillis minimum-time-taken-this-week)
+          (java.time.Duration/ofMillis maximum-time-taken-this-week)
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                          :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))
 
 (defn results->slack-message [results]
   (format "*%s* (%s)\n========\n%s\n"
@@ -95,11 +102,18 @@
                (map result->slack-message)
                (string/join "\n"))))
 
-(defn- result->html [{:keys [time-taken-ms bench-type] :as bench-map}]
-  (format "<p> <b>%s</b> (%s): <code>%s</code></p>"
+(defn- result->html [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
+                             minimum-time-taken-this-week maximum-time-taken-this-week] :as bench-map}]
+  (format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s): <code>%s</code></p>"
           (name bench-type)
           (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
+          (if (neg? percentage-difference-since-last-run)
+            (format "<b style=\"color: green\">%.2f%%</b>" percentage-difference-since-last-run)
+            (format "<b style=\"color: red\">+%.2f%%</b>" percentage-difference-since-last-run))
+          (java.time.Duration/ofMillis minimum-time-taken-this-week)
+          (java.time.Duration/ofMillis maximum-time-taken-this-week)
+          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                          :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))
 
 (defn results->email [bench-results]
   (str "<h1>Crux bench results</h1>"
