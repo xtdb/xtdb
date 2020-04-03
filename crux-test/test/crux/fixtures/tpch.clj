@@ -39,8 +39,6 @@
   ;; first happens to be customers (;; 150000)
   (map (partial tpch-entity->doc t) (seq (.createGenerator ^TpchTable t 0.005 1 1))))
 
-;(map count (map #(seq (.createGenerator % 0.1 1 1)) (TpchTable/getTables)))
-
 (comment
   (first (tpch-tables->crux-sql-schemas))
   {:crux.db/id :crux.sql.schema/customer,
