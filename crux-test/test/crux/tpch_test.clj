@@ -22,7 +22,7 @@
     (f/transact! *api* (take 5 (tf/tpch-table->docs t))))
 
   (t/is (= 5 (count (query "SELECT * FROM tpch.customer"))))
-  (t/is (= 5 (count (query "SELECT o_orderkey,o_orderpriority FROM tpch.orders"))))
+  (t/is (= 5 (count (query "SELECT * FROM tpch.orders"))))
   (t/is (= 5 (count (query "SELECT * FROM tpch.part"))))
   (t/is (= 2 (count (query "SELECT * FROM tpch.partsupp"))))
   (t/is (= 5 (count (query "SELECT * FROM tpch.supplier"))))
