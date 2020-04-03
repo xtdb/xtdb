@@ -9,12 +9,15 @@
             [clj-http.client :as client]
             [crux.fixtures :as f])
   (:import (java.util.concurrent Executors ExecutorService)
-           (java.util UUID)
+           (java.util UUID Date)
+           (java.time Duration Instant)
            (java.io Closeable)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
            (software.amazon.awssdk.core.exception SdkClientException)
+           (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
+           (com.amazonaws.services.logs.model StartQueryRequest StartQueryResult GetQueryResultsRequest GetQueryResultsResult)
            (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClientBuilder)
            (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)))
 
@@ -262,6 +265,44 @@
                     (.build)))
     (catch SdkClientException e
       (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
+
+(defn with-comparison-times [{:keys [crux-node-type bench-type bench-ns time-taken-ms] :as result}]
+  (let [log-client (AWSLogsClientBuilder/defaultClient)
+        query-id (-> (.startQuery log-client (-> (StartQueryRequest.)
+                                                 (.withLogGroupName "crux-bench")
+                                                 (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
+                                                                            crux-node-type (name bench-type) (name bench-ns)))
+                                                 (.withStartTime (-> (Date.)
+                                                                     (.toInstant)
+                                                                     (.minus (Duration/ofDays 7))
+                                                                     (.toEpochMilli)))
+                                                 (.withEndTime (.getTime (Date.)))))
+                     (.getQueryId))
+        get-query-request (-> (GetQueryResultsRequest.)
+                              (.withQueryId query-id))
+        _ (while (not= "Complete" (-> (.getQueryResults log-client get-query-request)
+                                      (.getStatus)))
+            (Thread/sleep 10))
+        times-taken (-> (.getQueryResults log-client get-query-request)
+                        (.getResults)
+                        ((fn [query-results] (->> (map first query-results)
+                                                  (map #(.getValue %))
+                                                  (map #(Integer/parseInt %))))))]
+    (if (empty? times-taken)
+      (assoc
+       result
+       :percentage-difference-since-last-run (float 0)
+       :minimum-time-taken-this-week time-taken-ms
+       :maximum-time-taken-this-week time-taken-ms)
+      (assoc
+       result
+       :percentage-difference-since-last-run (-> time-taken-ms
+                                                 (- (first times-taken))
+                                                 (/ (first times-taken))
+                                                 (* 100)
+                                                 (float))
+       :minimum-time-taken-this-week (apply min (conj times-taken time-taken-ms))
+       :maximum-time-taken-this-week (apply max (conj times-taken time-taken-ms))))))
 
 (defn send-email-via-ses [message]
   (try
