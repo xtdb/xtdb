@@ -47,23 +47,21 @@
 
 (defn submit-ts-weather-data [node]
   (bench/run-bench :ingest
-    (let [location-tx-ops (vec (for [location-doc location-docs]
-                                 [:crux.tx/put location-doc]))
-          _ (api/submit-tx node location-tx-ops)
-          {:keys [op-count last-tx]} (with-condition-docs
-                                       (fn [condition-docs]
-                                         (->> condition-docs
-                                              (partition-all conditions-chunk-size)
-                                              (reduce (fn [{:keys [op-count last-tx]} chunk]
-                                                        {:op-count (+ op-count (count chunk))
-                                                         :last-tx (api/submit-tx node
-                                                                                 (vec (for [{:keys [condition/time] :as condition-doc} chunk]
-                                                                                        [:crux.tx/put condition-doc time])))})
-                                                      {:op-count (count location-tx-ops)
-                                                       :last-tx nil}))))]
-      (api/await-tx node last-tx (Duration/ofMinutes 20))
-      {:op-count op-count
-       :node-size-bytes (bench/node-size-in-bytes node)})))
+    (bench/with-additional-index-metrics node
+      (let [location-tx-ops (vec (for [location-doc location-docs]
+                                   [:crux.tx/put location-doc]))
+            _ (api/submit-tx node location-tx-ops)
+            {:keys [last-tx]} (with-condition-docs
+                                         (fn [condition-docs]
+                                           (->> condition-docs
+                                                (partition-all conditions-chunk-size)
+                                                (reduce (fn [{:keys [last-tx]} chunk]
+                                                          {:last-tx (api/submit-tx node
+                                                                                   (vec (for [{:keys [condition/time] :as condition-doc} chunk]
+                                                                                          [:crux.tx/put condition-doc time])))})
+                                                        {:last-tx nil}))))]
+        (api/await-tx node last-tx (Duration/ofMinutes 20))
+        {:node-size-bytes (bench/node-size-in-bytes node)}))))
 
 (defn test-last-10-readings [node]
   ;; NOTE: Does not work with range, takes latest values.
