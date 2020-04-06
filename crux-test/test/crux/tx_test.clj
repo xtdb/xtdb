@@ -767,7 +767,7 @@
     (t/is (true? (cio/wait-while twice-no nil)))))
 
 (t/deftest await-fails-quickly-738
-  (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "boom!" {})))]
+  (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "test error for await-fails-quickly-738" {})))]
     (let [!fut (future (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
       (t/is (thrown-with-msg? Exception #"Transaction consumer aborted"
                               (deref !fut 1000 ::timeout)))
