@@ -15,7 +15,7 @@
             [crux.status :as status]
             [crux.tx.conform :as txc]
             crux.tx.event)
-  (:import [crux.codec EntityTx EntityValueContentHash]
+  (:import [crux.codec EntityTx]
            java.io.Closeable
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
            java.util.Date))
@@ -118,9 +118,9 @@
 
   (all-content-hashes [_ eid]
     (with-open [i (kv/new-iterator snapshot)]
-      (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
-                      (map c/decode-aecv-key->evc-from)
-                      (map #(.content-hash ^EntityValueContentHash %))))
+      (into (set (->> (idx/all-keys-in-prefix i (c/encode-indexed-content-hash-to nil (c/->id-buffer eid)))
+                      (map c/decode-indexed-content-hash-from)
+                      (map :content-hash)))
             (set (->> (get etxs eid)
                       (map #(.content-hash ^EntityTx %)))))))
 
