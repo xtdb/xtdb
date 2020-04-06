@@ -108,20 +108,25 @@
 (defn- result->slack-message [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
                                       minimum-time-taken-this-week maximum-time-taken-this-week
                                       doc-count av-count bytes-indexed] :as bench-map}]
-  (format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
-          (name bench-type)
-          (java.time.Duration/ofMillis time-taken-ms)
-          (if (neg? percentage-difference-since-last-run)
-            (format "%.2f" percentage-difference-since-last-run)
-            (format "+%.2f" percentage-difference-since-last-run))
-          (java.time.Duration/ofMillis minimum-time-taken-this-week)
-          (java.time.Duration/ofMillis maximum-time-taken-this-week)
-          (let [time-taken-seconds (/ time-taken-ms 1000)]
-            (pr-str (cond-> (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
-                                    :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)
-                      (= bench-type :ingest) (-> (assoc :docs-per-second (float (/ doc-count time-taken-seconds)))
-                                                 (assoc :avs-per-second (float (/ av-count time-taken-seconds)))
-                                                 (assoc :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds)))))))))
+  (cond-> (format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
+                  (name bench-type)
+                  (java.time.Duration/ofMillis time-taken-ms)
+                  (if (neg? percentage-difference-since-last-run)
+                    (format "%.2f" percentage-difference-since-last-run)
+                    (format "+%.2f" percentage-difference-since-last-run))
+                  (java.time.Duration/ofMillis minimum-time-taken-this-week)
+                  (java.time.Duration/ofMillis maximum-time-taken-this-week)
+                  (let [time-taken-seconds (/ time-taken-ms 1000)]
+                    (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                                    :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))
+    (= bench-type :ingest) (str "\n"
+                                (string/join "\n"
+                                             (map
+                                              (fn [[k v]] (format "*%s*: `%s`" (name k) v))
+                                              (let [time-taken-seconds (/ time-taken-ms 1000)]
+                                                {:docs-per-second (float (/ doc-count time-taken-seconds))
+                                                 :avs-per-second (float (/ av-count time-taken-seconds))
+                                                 :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds))}))))))
 
 (defn results->slack-message [results]
   (format "*%s* (%s)\n========\n%s\n"
@@ -134,20 +139,24 @@
 (defn- result->html [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
                              minimum-time-taken-this-week maximum-time-taken-this-week
                              doc-count av-count bytes-indexed] :as bench-map}]
-  (format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s): <code>%s</code></p>"
-          (name bench-type)
-          (java.time.Duration/ofMillis time-taken-ms)
-          (if (neg? percentage-difference-since-last-run)
-            (format "<b style=\"color: green\">%.2f%%</b>" percentage-difference-since-last-run)
-            (format "<b style=\"color: red\">+%.2f%%</b>" percentage-difference-since-last-run))
-          (java.time.Duration/ofMillis minimum-time-taken-this-week)
-          (java.time.Duration/ofMillis maximum-time-taken-this-week)
-          (let [time-taken-seconds (/ time-taken-ms 1000)]
-            (pr-str (cond-> (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
-                                    :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)
-                      (= bench-type :ingest) (-> (assoc :docs-per-second (float (/ doc-count time-taken-seconds)))
-                                                 (assoc :avs-per-second (float (/ av-count time-taken-seconds)))
-                                                 (assoc :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds)))))))))
+  (cond-> (format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s): <code>%s</code></p>"
+                  (name bench-type)
+                  (java.time.Duration/ofMillis time-taken-ms)
+                  (if (neg? percentage-difference-since-last-run)
+                    (format "<b style=\"color: green\">%.2f%%</b>" percentage-difference-since-last-run)
+                    (format "<b style=\"color: red\">+%.2f%%</b>" percentage-difference-since-last-run))
+                  (java.time.Duration/ofMillis minimum-time-taken-this-week)
+                  (java.time.Duration/ofMillis maximum-time-taken-this-week)
+                  (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                                  :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)))
+    (= bench-type :ingest) (str " "
+                                (string/join " "
+                                             (map
+                                              (fn [[k v]] (format "<p><b>%s</b>: <code>%s</code></p>" (name k) v))
+                                              (let [time-taken-seconds (/ time-taken-ms 1000)]
+                                                {:docs-per-second (float (/ doc-count time-taken-seconds))
+                                                 :avs-per-second (float (/ av-count time-taken-seconds))
+                                                 :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds))}))))))
 
 (defn results->email [bench-results]
   (str "<h1>Crux bench results</h1>"
