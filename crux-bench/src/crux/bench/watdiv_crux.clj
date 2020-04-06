@@ -7,6 +7,23 @@
             [crux.sparql :as sparql])
   (:import (java.time Duration)))
 
+(defn parse-results [resource]
+  (with-open [rdr (io/reader resource)]
+    (let [rdr-lines (line-seq rdr)]
+      {:ingest (-> (first rdr-lines)
+                   (read-string)
+                   (:time-taken-ms))
+       :queries (->> (rest rdr-lines)
+                     (map read-string)
+                     (filter :result-count)
+                     (map (juxt :query-idx identity))
+                     (into {}))})))
+
+(def parsed-db-results
+  {:rdf4j (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200406-170508Z.edn") parse-results)
+   :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200406-171121Z.edn") parse-results)
+   :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200406-170841Z.edn") parse-results)})
+
 (defn ingest-crux
   [node]
   (bench/run-bench :ingest
@@ -14,21 +31,15 @@
                                                           (rdf/submit-ntriples node in 1000))]
                      (crux/await-tx node last-tx)
                      {:entity-count entity-count
-                      :node-size-bytes (bench/node-size-in-bytes node)})))
-
-(defn parse-results [resource]
-  (with-open [rdr (io/reader resource)]
-    (->> (line-seq rdr)
-         (map read-string)
-         (filter :result-count)
-         (map (juxt :query-idx identity))
-         (into {}))))
+                      :node-size-bytes (bench/node-size-in-bytes node)
+                      :neo4j-time-taken (get-in parsed-db-results [:neo4j :ingest])
+                      :rdf4j-time-taken (get-in parsed-db-results [:rdf4j :ingest])
+                      :datomic-time-taken (get-in parsed-db-results [:datomic :ingest])})))
 
 (def db-query-results
-  {:rdf4j (some->
-            (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200214-174740Z.edn") parse-results)
-   :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200219-114016Z.edn") parse-results)
-   :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200303-155352Z.edn") parse-results)})
+  {:rdf4j (get-in parsed-db-results [:rdf4j :queries])
+   :neo4j (get-in parsed-db-results [:neo4j :queries])
+   :datomic (get-in parsed-db-results [:datomic :queries])})
 
 (defn get-db-results-at-idx [idx]
   (->> (for [[db-name db-results] db-query-results]

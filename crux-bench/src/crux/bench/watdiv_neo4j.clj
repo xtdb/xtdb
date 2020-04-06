@@ -141,9 +141,10 @@
                                             {:result-count (count (execute-cypher conn (sparql->cypher conn q)))}))))))))))))
 
 (defn -main []
-  (let [output-file (io/file "neo4j-results.edn")]
-    (bench/save-to-file output-file
-                        (->> (run-watdiv-bench {:test-count 100})
-                             (filter :query-idx)
-                             (sort-by :query-idx)))
+  (let [output-file (io/file "neo4j-results.edn")
+        watdiv-results (run-watdiv-bench {:test-count 100})]
+    (bench/save-to-file output-file (cons (first watdiv-results)
+                                          (->> (rest watdiv-results)
+                                               (filter :query-idx)
+                                               (sort-by :query-idx))))
     (bench/save-to-s3 {:database "neo4j" :version "4.0.0"} output-file)))

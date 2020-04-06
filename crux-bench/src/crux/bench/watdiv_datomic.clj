@@ -351,11 +351,12 @@
                                                                             :args [(d/db conn)]}))}))))))))))))
 
 (defn -main []
-  (let [output-file (io/file "datomic-results.edn")]
-    (bench/save-to-file output-file
-                        (->> (run-watdiv-bench {:test-count 100})
-                             (filter :query-idx)
-                             (sort-by :query-idx)))
+  (let [output-file (io/file "datomic-results.edn")
+        watdiv-results (run-watdiv-bench {:test-count 100})]
+    (bench/save-to-file output-file (cons (first watdiv-results)
+                                          (->> (rest watdiv-results)
+                                               (filter :query-idx)
+                                               (sort-by :query-idx))))
     (bench/save-to-s3 {:database "datomic" :version "0.9.5697"} output-file))
   (shutdown-agents)
   ;; TODO: Queries with timeouts don't close properly (currently), so this system exit is necessary. Post a fix, it should be removed.
