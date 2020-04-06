@@ -110,12 +110,12 @@
                                       doc-count av-count bytes-indexed] :as bench-map}]
   (cond-> (format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
                   (name bench-type)
-                  (java.time.Duration/ofMillis time-taken-ms)
+                  (Duration/ofMillis time-taken-ms)
                   (if (neg? percentage-difference-since-last-run)
                     (format "%.2f" percentage-difference-since-last-run)
                     (format "+%.2f" percentage-difference-since-last-run))
-                  (java.time.Duration/ofMillis minimum-time-taken-this-week)
-                  (java.time.Duration/ofMillis maximum-time-taken-this-week)
+                  (Duration/ofMillis minimum-time-taken-this-week)
+                  (Duration/ofMillis maximum-time-taken-this-week)
                   (let [time-taken-seconds (/ time-taken-ms 1000)]
                     (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
                                     :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))
@@ -141,12 +141,12 @@
                              doc-count av-count bytes-indexed] :as bench-map}]
   (cond-> (format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s): <code>%s</code></p>"
                   (name bench-type)
-                  (java.time.Duration/ofMillis time-taken-ms)
+                  (Duration/ofMillis time-taken-ms)
                   (if (neg? percentage-difference-since-last-run)
                     (format "<b style=\"color: green\">%.2f%%</b>" percentage-difference-since-last-run)
                     (format "<b style=\"color: red\">+%.2f%%</b>" percentage-difference-since-last-run))
-                  (java.time.Duration/ofMillis minimum-time-taken-this-week)
-                  (java.time.Duration/ofMillis maximum-time-taken-this-week)
+                  (Duration/ofMillis minimum-time-taken-this-week)
+                  (Duration/ofMillis maximum-time-taken-this-week)
                   (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
                                   :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)))
     (= bench-type :ingest) (str " "
