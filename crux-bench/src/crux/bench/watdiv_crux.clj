@@ -32,9 +32,9 @@
                      (crux/await-tx node last-tx)
                      {:entity-count entity-count
                       :node-size-bytes (bench/node-size-in-bytes node)
-                      :neo4j-time-taken (get-in parsed-db-results [:neo4j :ingest])
-                      :rdf4j-time-taken (get-in parsed-db-results [:rdf4j :ingest])
-                      :datomic-time-taken (get-in parsed-db-results [:datomic :ingest])})))
+                      :neo4j-time-taken-ms (get-in parsed-db-results [:neo4j :ingest])
+                      :rdf4j-time-taken-ms (get-in parsed-db-results [:rdf4j :ingest])
+                      :datomic-time-taken-ms (get-in parsed-db-results [:datomic :ingest])})))
 
 (def db-query-results
   {:rdf4j (get-in parsed-db-results [:rdf4j :queries])
@@ -49,6 +49,18 @@
                      :db-result-count result-count}]))
        (into {})))
 
+(defn render-duration [m from-k to-k]
+  (-> (dissoc m from-k)
+      (assoc to-k (-> (get m from-k)
+                      (Duration/ofMillis)
+                      (str)))))
+
+(defn render-comparison-durations [m]
+  (-> m
+      (render-duration :neo4j-time-taken-ms :neo4j-time-taken)
+      (render-duration :rdf4j-time-taken-ms :rdf4j-time-taken)
+      (render-duration :datomic-time-taken-ms :datomic-time-taken)))
+
 (defn summarise-query-results [watdiv-query-results]
   (merge (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
          {:bench-type "queries"
@@ -60,11 +72,13 @@
                       crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
                       correct-idxs (into #{} (map :query-idx) crux-correct)]
                   [db-name
-                   {:crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
-                    :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
+                   (-> {:crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
+                        :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
 
-                    :crux-time-taken (->> crux-correct (map :time-taken-ms) (reduce +) (Duration/ofMillis) (str))
-                    :db-time-taken (->> crux-correct (map :db-time-taken-ms) (reduce +) (Duration/ofMillis) (str))}]))
+                        :crux-time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
+                        :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))}
+                       (render-duration :crux-time-taken-ms :crux-time-taken)
+                       (render-duration :db-time-taken-ms :db-time-taken))]))
               (into {}))))
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]

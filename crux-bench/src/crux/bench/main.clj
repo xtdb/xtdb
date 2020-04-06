@@ -30,7 +30,7 @@
 
                   (bench/with-nodes [node bench/nodes]
                     (let [raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
-                      (-> [(first raw-watdiv-results)
+                      (-> [(watdiv-crux/render-comparison-durations (first raw-watdiv-results))
                            (watdiv-crux/summarise-query-results (rest raw-watdiv-results))]
                           (doto post-to-slack)))))]
 
