@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 aws ecs run-task\
- --task-definition crux-bench-latest\
+ --task-definition crux-bench-dev\
  --cluster crux-bench\
  --overrides "{\"containerOverrides\": [{\"name\":\"bench-container\",\"command\":[\"crux.bench.watdiv-neo4j\"]}]}"\
  --launch-type FARGATE\
