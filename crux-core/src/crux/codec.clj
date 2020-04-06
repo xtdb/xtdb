@@ -73,6 +73,8 @@
 ;; indexed content-hashes
 (def ^:const ^:private indexed-content-hashes-index-id 9)
 
+(def ^:const ^:private cav-index-id 10)
+
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
@@ -779,3 +781,16 @@
   (assert (= indexed-content-hashes-index-id (.getByte k 0)))
   {:eid (Id. (mem/slice-buffer k index-id-size id-size) 0)
    :content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size) id-size) 0)})
+
+(defn encode-cav-key-to
+  (^org.agrona.DirectBuffer [^org.agrona.MutableDirectBuffer b, ^DirectBuffer content-hash, ^DirectBuffer attr]
+   (encode-cav-key-to b content-hash attr empty-buffer))
+
+  (^org.agrona.DirectBuffer [^org.agrona.MutableDirectBuffer b, ^DirectBuffer content-hash, ^DirectBuffer attr, ^DirectBuffer value]
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (.capacity attr) (.capacity value))))]
+     (-> (doto b
+           (.putByte 0 cav-index-id)
+           (.putBytes index-id-size content-hash 0 id-size)
+           (.putBytes (+ index-id-size id-size) attr 0 (.capacity attr))
+           (.putBytes (+ index-id-size id-size id-size) value 0 (.capacity value)))
+         (mem/limit-buffer (+ index-id-size id-size (.capacity attr) (.capacity value)))))))

@@ -336,25 +336,28 @@
 (defn update-predicate-stats [kv docs-stats]
   (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
 
-(defn doc-idx-keys [content-hash doc]
+(def ^:private cav-single-value nil)
+(def ^:private cav-set-value (byte -1))
+
+(defn doc-idx-kvs [content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
         content-hash (c/->id-buffer content-hash)]
-    (into [(c/encode-indexed-content-hash-to nil id content-hash)]
-          (->> (for [[k v] doc
-                     :let [k (c/->id-buffer k)]
-                     v (vectorize-value v)
-                     :let [v (c/->value-buffer v)]
-                     :when (pos? (mem/capacity v))]
-                 [(c/encode-avec-key-to nil k v id content-hash)
-                  (c/encode-aecv-key-to nil k id content-hash v)])
+    (into [[(c/encode-indexed-content-hash-to nil id content-hash) c/empty-buffer]]
+          (->> (for [[k vs] doc
+                     :let [k-buf (c/->id-buffer k)]
+                     [idx v] (map vector
+                                  (cond
+                                    (vector? vs) (range)
+                                    (set? vs) (repeat cav-set-value)
+                                    :else (repeat cav-single-value))
+                                  (vectorize-value vs))
+                     :let [v-buf (c/->value-buffer v)]
+                     :when (pos? (mem/capacity v-buf))]
+                 [[(c/encode-cav-key-to nil content-hash k-buf v-buf)
+                   (mem/->off-heap (nippy/fast-freeze [k v idx]))]
+                  [(c/encode-avec-key-to nil k-buf v-buf id content-hash) c/empty-buffer]
+                  [(c/encode-aecv-key-to nil k-buf id content-hash v-buf) c/empty-buffer]])
                (apply concat)))))
-
-(defn store-doc-idx-keys [kv idx-keys]
-  (kv/store kv (for [k idx-keys]
-                 [k c/empty-buffer])))
-
-(defn delete-doc-idx-keys [kv idx-keys]
-  (kv/delete kv idx-keys))
 
 ;; Utils
 

@@ -317,9 +317,9 @@
   (let [existing-docs (db/get-objects object-store snapshot (keys tombstones))]
     (db/put-objects object-store tombstones)
 
-    (->> existing-docs
-         (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-         (idx/delete-doc-idx-keys kv-store))
+    (kv/delete kv-store (->> existing-docs
+                             (mapcat (fn [[k doc]] (idx/doc-idx-kvs k doc)))
+                             (map first)))
 
     (update-stats (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true)))
                   deps)))
@@ -348,11 +348,11 @@
                                      not-empty)]
         (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-        (let [doc-idx-keys (when (seq docs-to-upsert)
-                             (->> docs-to-upsert
-                                  (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))))
+        (let [doc-idx-kvs (when (seq docs-to-upsert)
+                            (->> docs-to-upsert
+                                 (mapcat (fn [[k doc]] (idx/doc-idx-kvs k doc)))))
 
-              _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))
+              _ (some->> (seq doc-idx-kvs) (kv/store kv-store))
 
               docs-stats (->> (vals docs-to-upsert)
                               (map #(idx/doc-predicate-stats % false)))]
@@ -362,7 +362,8 @@
           (bus/send bus {::bus/event-type ::indexed-docs,
                          :doc-ids (set (keys docs))
                          :av-count (->> (vals docs) (apply concat) (count))
-                         :bytes-indexed (->> doc-idx-keys
+                         :bytes-indexed (->> doc-idx-kvs
+                                             (apply concat)
                                              (transduce (map mem/capacity) +))})
 
           (update-stats docs-stats this)))))
