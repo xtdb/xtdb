@@ -7,9 +7,8 @@
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            org.apache.calcite.rel.type.RelDataTypeFactory
-           [org.apache.calcite.rex RexCall RexInputRef RexLiteral]
+           [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
-           org.apache.calcite.rex.RexNode
            org.apache.calcite.sql.type.SqlTypeName))
 
 (defonce !node (atom nil))
@@ -100,7 +99,7 @@
           (.createStructType type-factory (map first column-pairs) (map second column-pairs))))
       (scan [root filters projects]
         (org.apache.calcite.linq4j.Linq4j/asEnumerable
-         (perform-query (doto (->crux-query table-schema filters projects) prn))))))
+         (perform-query (doto (->crux-query table-schema filters projects) log/debug))))))
 
 (defn- conform-schema [s]
   (update s :crux.sql.table/columns
