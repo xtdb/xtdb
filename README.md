@@ -104,9 +104,7 @@ projects.
 
 Project directories are published to Clojars independently so that you can
 maintain granular dependencies on precisely the individual components needed
-for your application. Alternatively you can depend on `crux-uberjar` whilst in
-development to spend less time worrying about which parts of Crux you need now
-or in the future.
+for your application.
 
 ### Core
 
@@ -161,14 +159,6 @@ Better write performance for heavy ingestion.
 Import RDF data and run a subset of SPARQL queries.
 
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rdf.svg)](https://clojars.org/juxt/crux-rdf)
-
-### Uberjar
-
-#### crux-uberjar
-
-One dependency to rule them all.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-uberjar.svg)](https://clojars.org/juxt/crux-uberjar)
 
 ## Crux Labs
 
