@@ -257,7 +257,7 @@
         (StreamSupport/stream false))))
 
 (defn <-stream ^java.io.Closeable [^Stream stream]
-  (let [^ISeq sq (or (iterator-seq (.iterator stream)) [])]
+  (let [^ISeq sq (or (iterator-seq (.iterator stream)) (list))]
     (reify
       Sequential
 
