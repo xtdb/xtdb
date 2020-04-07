@@ -6,10 +6,10 @@
    "crux-jdbc"
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
+   "crux-calcite"
    "crux-test"
    "crux-s3"
    "crux-cli"
-   "crux-calcite"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
