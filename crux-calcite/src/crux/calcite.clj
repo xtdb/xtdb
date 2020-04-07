@@ -87,30 +87,30 @@
   (->> (crux/q (crux/db @!node) q)
        (mapv to-array)))
 
-(defn- ^java.util.List row-types [{:keys [:crux.sql.table/columns]} ^RelDataTypeFactory type-factory]
-  (for [definition columns]
-    (let [column-type (column-types (:crux.sql.column/type definition))]
-      (assert column-type (format "Unknown column type %s:%s " (:crux.sql.column/name definition) (:crux.sql.column/type definition)))
-      [(string/upper-case (:crux.sql.column/name definition))
-       (.createSqlType type-factory (column-types (:crux.sql.column/type definition)))])))
-
-(defn- make-table [table-schema]
-  (let [table-schema table-schema]
-    (proxy
-        [org.apache.calcite.schema.impl.AbstractTable
-         org.apache.calcite.schema.ProjectableFilterableTable]
-        []
-        (getRowType [^RelDataTypeFactory type-factory]
-          (let [columns (row-types table-schema type-factory)]
-            (.createStructType type-factory (map second columns) (map first columns))))
-        (scan [root filters projects]
-          (org.apache.calcite.linq4j.Linq4j/asEnumerable
-           (perform-query (doto (->crux-query table-schema filters projects) prn)))))))
+(defn- make-table [{:keys [:crux.sql.table/columns] :as table-schema}]
+  (proxy
+      [org.apache.calcite.schema.impl.AbstractTable
+       org.apache.calcite.schema.ProjectableFilterableTable]
+      []
+      (getRowType [^RelDataTypeFactory type-factory]
+        (let [column-types (zipmap (keys column-types) (map #(.createSqlType type-factory %) (vals column-types)))
+              column-pairs (into []
+                                 (for [c columns]
+                                   [(column-types (:crux.sql.column/type c)) (string/upper-case (:crux.sql.column/name c))]))]
+          (.createStructType type-factory (map first column-pairs) (map second column-pairs))))
+      (scan [root filters projects]
+        (org.apache.calcite.linq4j.Linq4j/asEnumerable
+         (perform-query (doto (->crux-query table-schema filters projects) prn))))))
 
 (defn- conform-schema [s]
   (update s :crux.sql.table/columns
           (fn [columns]
-            (mapv (fn [c] (assoc c ::sym (gensym (:crux.sql.column/name c)))) columns))))
+            (vec
+             (for [c columns]
+               (do
+                 (assert (column-types (:crux.sql.column/type c))
+                         (format "Unknown column type %s:%s" (:crux.sql.column/name c) (:crux.sql.column/type c)))
+                 (assoc c ::sym (gensym (:crux.sql.column/name c)))))))))
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
