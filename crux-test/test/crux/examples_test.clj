@@ -99,7 +99,7 @@
     (t/is (= #{[21]} (ex/query-example-with-predicate-1 node)))
 
     (let [!results (atom [])]
-      (ex/query-example-lazy node #(swap! !results conj %))
+      (ex/query-example-streaming node #(swap! !results conj %))
       (t/is (= [[:smith]] @!results)))))
 
 (t/deftest test-example-time-queries

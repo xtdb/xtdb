@@ -63,10 +63,8 @@
                           (tx-log (kv/next iterator))))))]
 
         (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
-          (->> (when k (tx-log (if after-tx-id (kv/next iterator) k)))
-               (db/->closeable-tx-log-iterator (fn []
-                                                 (cio/try-close iterator)
-                                                 (cio/try-close snapshot))))))))
+          (doto (cio/->stream (when k (tx-log (if after-tx-id (kv/next iterator) k))))
+            (.onClose #(run! cio/try-close [iterator snapshot])))))))
 
   Closeable
   (close [_]

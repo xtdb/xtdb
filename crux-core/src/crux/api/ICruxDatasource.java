@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import clojure.lang.Keyword;
 
 /**
@@ -65,7 +66,16 @@ public interface ICruxDatasource {
      * @param query    the query in map, vector or string form.
      * @return         a lazy sequence of result tuples.
      */
+    @Deprecated
     public Iterable<List<?>> q(Closeable snapshot, Object query);
+
+    /**
+     * Queries the db lazily.
+     *
+     * @param query the query in map, vector or string form.
+     * @return      a stream of result tuples.
+     */
+    public Stream<List<?>> openQuery(Object query);
 
     /**
      * Retrieves entity history lazily in chronological order from and

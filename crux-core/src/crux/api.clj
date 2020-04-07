@@ -3,9 +3,10 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ITxLog]
+            ICruxAsyncIngestAPI ICruxDatasource]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -155,7 +156,9 @@
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
 
-  (open-tx-log ^crux.api.ITxLog [this after-tx-id with-ops?]
+  ;; returning an iterator
+
+  (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another
@@ -231,8 +234,8 @@
   (submit-tx [this tx-ops]
     (.submitTx this (conform-tx-ops tx-ops)))
 
-  (open-tx-log ^crux.api.ITxLog [this after-tx-id with-ops?]
-    (.openTxLog this after-tx-id with-ops?)))
+  (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
+    (cio/<-stream (.openTxLog this after-tx-id with-ops?))))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
@@ -260,13 +263,29 @@
 
   (q
     [db query]
-    [db snapshot query]
+    ^:deprecated [db snapshot query]
     "q[uery] a Crux db.
   query param is a datalog query in map, vector or string form.
   First signature will evaluate eagerly and will return a set or vector
   of result tuples.
   Second signature accepts a db snapshot, see `new-snapshot`.
   Evaluates *lazily* consequently returns lazy sequence of result tuples.")
+
+  (open-q ^java.io.Closeable [db query]
+    "lazily q[uery] a Crux db.
+  query param is a datalog query in map, vector or string form.
+
+  This function returns a Closeable sequence of result tuples - once you've consumed
+  as much of the sequence as you need to, you'll need to `.close` the sequence.
+  A common way to do this is using `with-open`:
+
+  (with-open [res (crux/open-q db '{:find [...]
+                                    :where [...]})]
+    (doseq [row res]
+      ...))
+
+  Once the sequence is closed, attempting to iterate it is undefined.
+  ")
 
   (history-ascending
     [db snapshot eid]
@@ -310,18 +329,13 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (history-ascending [this snapshot eid]
-    (.historyAscending this snapshot eid))
+  (open-q [this query] (cio/<-stream (.openQuery this query)))
 
-  (history-descending [this snapshot eid]
-    (.historyDescending this snapshot eid))
+  (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
+  (history-descending [this snapshot eid] (.historyDescending this snapshot eid))
 
-  (valid-time
-    [this]
-    (.validTime this))
-
-  (transaction-time [this]
-    (.transactionTime this)))
+  (valid-time [this] (.validTime this))
+  (transaction-time [this] (.transactionTime this)))
 
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."

@@ -3,6 +3,7 @@ package crux.api;
 import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import clojure.lang.Keyword;
 
 /**
@@ -22,10 +23,10 @@ public interface ICruxIngestAPI extends Closeable {
      * under the :crux.api/tx-ops key to be piped into (submit-tx tx-ops) of another
      * Crux instance.
      *
-     * @param afterTxId         optional transaction id to start after.
-     * @param withOps          should the operations with documents be included?
-     * @return                 a lazy sequence of the transaction log.
+     * @param afterTxId optional transaction id to start after.
+     * @param withOps   should the operations with documents be included?
+     * @return          a lazy sequence of the transaction log.
      */
 
-    public ITxLog openTxLog(Long afterTxId, boolean withOps);
+    public Stream<Map<Keyword, ?>> openTxLog(Long afterTxId, boolean withOps);
 }

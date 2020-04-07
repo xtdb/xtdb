@@ -142,14 +142,14 @@ toc::[]
 
 [source,clj]
 ----
-(open-tx-log ^ITxLog [this after-tx-id with-ops?]
+(open-tx-log ^AutoCloseable [this after-tx-id with-ops?]
   "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :crux.api/tx-ops
   key to be piped into (submit-tx tx-ops) of another
   Crux instance.
   after-tx-id      optional transaction id to start after.
-  with-ops?       should the operations with documents be included?
-  Returns an iterator of the TxLog.")
+  with-ops?        should the operations with documents be included?
+  Returns a cursor over the TxLog.")
   (attribute-stats [node]
     "Returns frequencies of indexed attributes")
 ----
@@ -192,11 +192,9 @@ Represents the database as of a specific valid and transaction time.
 [source,clj]
 ----
   (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation specific snapshot allowing for lazy query
-     results in a try-with-resources block using (q db  snapshot  query)}.
-     Can also be used for
-     (history-ascending db snapshot  eid) and
-     (history-descending db snapshot  eid)
+     "Returns a new implementation-specific snapshot allowing for lazy history
+     results in a try-with-resources block. Can be passed to history-ascending
+     and history-descending.
      returns an implementation specific snapshot")
 ----
 
@@ -206,13 +204,31 @@ Represents the database as of a specific valid and transaction time.
 ----
   (q
     [db query]
-    [db snapshot query]
     "q[uery] a Crux db.
     query param is a datalog query in map, vector or string form.
-    First signature will evaluate eagerly and will return a set or vector
-    of result tuples.
-    Second signature accepts a db snapshot, see `new-snapshot`.
-    Evaluates *lazily* consequently returns lazy sequence of result tuples.")
+    Returns a vector of result tuples.")
+----
+
+=== open-q
+
+[source,clj]
+----
+  (open-q
+    [db query]
+    "lazily q[uery] a Crux db.
+      query param is a datalog query in map, vector or string form.
+
+     This function returns a Closeable sequence of result tuples - once you've consumed
+     as much of the sequence as you need to, you'll need to `.close` the sequence.
+     A common way to do this is using `with-open`:
+
+     (with-open [res (crux/open-q db '{:find [...]
+                                       :where [...]})]
+       (doseq [row res]
+         ...))
+
+     Once the sequence is closed, attempting to iterate it is undefined.
+     ")
 ----
 
 === history-ascending

@@ -3,7 +3,8 @@
             [crux.db :as db]
             [crux.node :as n]
             [crux.tx :as tx]
-            [crux.codec :as c])
+            [crux.codec :as c]
+            [crux.io :as cio])
   (:import java.io.Closeable
            java.time.Duration))
 
@@ -11,9 +12,8 @@
   (log/info "Started tx-consumer")
   (try
     (while true
-      (let [consumed-txs? (with-open [tx-log (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer)))]
-                            (let [tx-log (iterator-seq tx-log)
-                                  consumed-txs? (not (empty? tx-log))]
+      (let [consumed-txs? (with-open [tx-log (cio/<-stream (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer))))]
+                            (let [consumed-txs? (not (empty? tx-log))]
                               (doseq [{:keys [crux.tx.event/tx-events] :as tx} tx-log
                                       :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
                                 (db/index-docs indexer (db/fetch-docs document-store

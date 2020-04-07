@@ -16,7 +16,7 @@
   (submitTx [this tx-ops]
     @(.submitTxAsync this tx-ops))
 
-  (openTxLog ^crux.api.ITxLog [_ after-tx-id with-ops?]
+  (openTxLog ^java.util.stream.Stream [_ after-tx-id with-ops?]
     (when with-ops?
       (throw (IllegalArgumentException. "with-ops? not supported")))
     (db/open-tx-log tx-log after-tx-id))

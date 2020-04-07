@@ -127,6 +127,14 @@
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
+  (openQuery [this q]
+    (let [in (api-request-sync (str url "/query-stream")
+                               (assoc (as-of-map this)
+                                      :query (q/normalize-query q))
+                               {:as :stream})]
+      (doto (cio/->stream (edn-list->lazy-seq in))
+        (.onClose (fn [] (.close ^Closeable in))))))
+
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
                                (assoc (as-of-map this) :eid eid)
@@ -209,8 +217,8 @@
                                nil
                                {:method :get
                                 :as :stream})]
-      (db/->closeable-tx-log-iterator #(.close ^Closeable in)
-                                      (edn-list->lazy-seq in))))
+      (doto (cio/->stream (edn-list->lazy-seq in))
+        (.onClose #(.close ^Closeable in)))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")

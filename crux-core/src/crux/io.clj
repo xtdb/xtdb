@@ -4,7 +4,8 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
+  (:import [clojure.lang ISeq Sequential IPending]
+           [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
@@ -12,9 +13,10 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
+           [java.util Comparator Date IdentityHashMap Iterator PriorityQueue Properties Spliterator Spliterators]
            [java.util.concurrent ThreadFactory]
-           java.util.concurrent.locks.StampedLock))
+           java.util.concurrent.locks.StampedLock
+           [java.util.stream Stream StreamSupport]))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -247,3 +249,30 @@
         (doto (Thread. r)
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
+
+(defn ->stream ^java.util.stream.Stream [^Iterable sq]
+  (let [^Iterable sq (or sq [])]
+    (-> (.iterator sq)
+        (Spliterators/spliteratorUnknownSize Spliterator/IMMUTABLE)
+        (StreamSupport/stream false))))
+
+(defn <-stream ^java.io.Closeable [^Stream stream]
+  (let [^ISeq sq (or (iterator-seq (.iterator stream)) [])]
+    (reify
+      Sequential
+
+      Closeable
+      (close [_] (.close stream))
+
+      IPending
+      (isRealized [_] (.isRealized ^IPending sq))
+
+      ISeq
+      (first [_] (.first sq))
+      (next [_] (.next sq))
+      (more [_] (.more sq))
+      (cons [_ o] (.cons sq o))
+      (count [_] (.count sq))
+      (empty [_] (.empty sq))
+      (equiv [_ o] (.equiv sq o))
+      (seq [_] (.seq sq)))))
