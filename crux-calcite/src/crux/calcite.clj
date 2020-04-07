@@ -1,7 +1,9 @@
 (ns crux.calcite
   (:require [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.api :as crux])
+            [clojure.spec.alpha :as s]
+            [crux.api :as crux]
+            [crux.db])
   (:import java.sql.DriverManager
            java.util.Properties
            org.apache.calcite.avatica.jdbc.JdbcMeta
@@ -48,7 +50,7 @@
     SqlKind/OR
     [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/INPUT_REF
-    [['?e (:crux.db/attribute (operand->v filter* schema)) true]]
+    [['?e (:crux.sql.column/attribute (operand->v filter* schema)) true]]
     SqlKind/NOT
     [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/GREATER_THAN
@@ -68,7 +70,7 @@
        :where (vec
                (concat
                 (mapcat (partial ->crux-where-clauses schema) filters)
-                (mapv (fn [{:keys [:crux.db/attribute ::sym]}] ['?e attribute sym]) columns)
+                (mapv (fn [{:keys [:crux.sql.column/attribute ::sym]}] ['?e attribute sym]) columns)
                 query))})
     (catch Throwable e
       (log/error e)
@@ -101,15 +103,21 @@
         (org.apache.calcite.linq4j.Linq4j/asEnumerable
          (perform-query (doto (->crux-query table-schema filters projects) log/debug))))))
 
+(s/def :crux.sql.column/attribute keyword?)
+(s/def :crux.sql.column/name string?)
+(s/def :crux.sql.column/type column-types)
+(s/def :crux.sql.table/name string?)
+(s/def :crux.sql.table/columns (s/coll-of (s/keys :req [:crux.sql.column/attribute
+                                                        :crux.sql.column/name
+                                                        :crux.sql.column/type])))
+(s/def ::table
+  (s/keys :req [:crux.db/id :crux.sql.table/name :crux.sql.table/columns]))
+
 (defn- conform-schema [s]
+  (s/valid? ::table s)
   (update s :crux.sql.table/columns
           (fn [columns]
-            (vec
-             (for [c columns]
-               (do
-                 (assert (column-types (:crux.sql.column/type c))
-                         (format "Unknown column type %s:%s" (:crux.sql.column/name c) (:crux.sql.column/type c)))
-                 (assoc c ::sym (gensym (:crux.sql.column/name c)))))))))
+            (mapv #(assoc % ::sym (gensym (:crux.sql.column/name %))) columns))))
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]

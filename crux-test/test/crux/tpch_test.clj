@@ -34,7 +34,6 @@
 
 (t/deftest test-001-query
   (doseq [^TpchTable t (TpchTable/getTables)]
-    (println "Ingesting" (.getTableName t))
     (f/transact! *api* (tf/tpch-table->docs t)))
 
   (t/is (= 4 (count (query (str "select\n"
@@ -62,7 +61,6 @@
 
 (t/deftest test-003-query
   (doseq [^TpchTable t (TpchTable/getTables)]
-    (println "Ingesting" (.getTableName t))
     (f/transact! *api* (tf/tpch-table->docs t)))
 
   (t/is (= 10 (count (query (str

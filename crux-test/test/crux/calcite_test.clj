@@ -19,16 +19,16 @@
 (t/deftest test-hello-world-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
                                                  :crux.sql.column/name "id"
                                                  :crux.sql.column/type :keyword}
-                                                {:crux.db/attribute :name
+                                                {:crux.sql.column/attribute :name
                                                  :crux.sql.column/name "name"
                                                  :crux.sql.column/type :varchar}
-                                                {:crux.db/attribute :homeworld
+                                                {:crux.sql.column/attribute :homeworld
                                                  :crux.sql.column/name "homeworld"
                                                  :crux.sql.column/type :varchar}
-                                                {:crux.db/attribute :alive
+                                                {:crux.sql.column/attribute :alive
                                                  :crux.sql.column/name "alive"
                                                  :crux.sql.column/type :boolean}]}])
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :alive true}
@@ -91,10 +91,10 @@
     (fapi/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
-                         :crux.sql.table/columns [{:crux.db/attribute :name
+                         :crux.sql.table/columns [{:crux.sql.column/attribute :name
                                                    :crux.sql.column/name "name"
                                                    :crux.sql.column/type :varchar}
-                                                  {:crux.db/attribute :age
+                                                  {:crux.sql.column/attribute :age
                                                    :crux.sql.column/name "age"
                                                    :crux.sql.column/type :long}]}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
@@ -127,10 +127,10 @@
     (fapi/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
-                         :crux.sql.table/columns [{:crux.db/attribute :name
+                         :crux.sql.table/columns [{:crux.sql.column/attribute :name
                                                    :crux.sql.column/name "name"
                                                    :crux.sql.column/type :varchar}
-                                                  {:crux.db/attribute :surname
+                                                  {:crux.sql.column/attribute :surname
                                                    :crux.sql.column/name "surname"
                                                    :crux.sql.column/type :varchar}]}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname "Ivan"}
@@ -145,24 +145,24 @@
 (t/deftest test-simple-joins
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
                                                  :crux.sql.column/name "id"
                                                  :crux.sql.column/type :keyword}
-                                                {:crux.db/attribute :name
+                                                {:crux.sql.column/attribute :name
                                                  :crux.sql.column/name "name"
                                                  :crux.sql.column/type :varchar}
-                                                {:crux.db/attribute :planet
+                                                {:crux.sql.column/attribute :planet
                                                  :crux.sql.column/name "planet"
                                                  :crux.sql.column/type :varchar}]}
                       {:crux.db/id :crux.sql.schema/planet
                        :crux.sql.table/name "planet"
-                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
                                                  :crux.sql.column/name "id"
                                                  :crux.sql.column/type :keyword}
-                                                {:crux.db/attribute :name
+                                                {:crux.sql.column/attribute :name
                                                  :crux.sql.column/name "name"
                                                  :crux.sql.column/type :varchar}
-                                                {:crux.db/attribute :climate
+                                                {:crux.sql.column/attribute :climate
                                                  :crux.sql.column/name "climate"
                                                  :crux.sql.column/type :varchar}]}])
   (f/transact! *api* (f/people [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
@@ -174,13 +174,13 @@
 (t/deftest test-table-backed-by-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.db/attribute :crux.db/id
+                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
                                                  :crux.sql.column/name "id"
                                                  :crux.sql.column/type :keyword}
-                                                {:crux.db/attribute :name
+                                                {:crux.sql.column/attribute :name
                                                  :crux.sql.column/name "name"
                                                  :crux.sql.column/type :varchar}
-                                                {:crux.db/attribute :planet
+                                                {:crux.sql.column/attribute :planet
                                                  :crux.sql.column/name "planet"
                                                  :crux.sql.column/type :varchar}]
                        :crux.sql.table/query '[[?e :planet "earth"]]}])

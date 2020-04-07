@@ -12,7 +12,7 @@
   {:crux.db/id (keyword "crux.sql.schema" (.getTableName t))
    :crux.sql.table/name (.getTableName t)
    :crux.sql.table/columns (for [^TpchColumn c (.getColumns t)]
-                             {:crux.db/attribute (keyword (.getSimplifiedColumnName c))
+                             {:crux.sql.column/attribute (keyword (.getSimplifiedColumnName c))
                               :crux.sql.column/name (.getColumnName c)
                               :crux.sql.column/type (tpch-column-types->crux-calcite-type (.getBase (.getType c)))})})
 
@@ -43,13 +43,13 @@
   (first (tpch-tables->crux-sql-schemas))
   {:crux.db/id :crux.sql.schema/customer,
    :crux.sql.table/name "customer",
-   :crux.sql.table/columns [{:crux.db/attribute :c_custkey, :crux.sql.column/name "c_custkey", :crux.sql.column/type :varchar}
-                            {:crux.db/attribute :c_name, :crux.sql.column/name "c_name", :crux.sql.column/type :varchar}
-                            {:crux.db/attribute :c_address, :crux.sql.column/name "c_address", :crux.sql.column/type :varchar}
-                            {:crux.db/attribute :c_nationkey, :crux.sql.column/name "c_nationkey", :crux.sql.column/type :varchar}
-                            {:crux.db/attribute :c_phone, :crux.sql.column/name "c_phone", :crux.sql.column/type :varchar}
-                            {:crux.db/attribute :c_acctbal, :crux.sql.column/name "c_acctbal", :crux.sql.column/type :double}
-                            {:crux.db/attribute :c_mktsegment, :crux.sql.column/name "c_mktsegment", :crux.sql.column/type :varchar}
-                            {:crux.db/attribute :c_comment, :crux.sql.column/name "c_comment", :crux.sql.column/type :varchar}]}
+   :crux.sql.table/columns [{:crux.sql.column/attribute :c_custkey, :crux.sql.column/name "c_custkey", :crux.sql.column/type :varchar}
+                            {:crux.sql.column/attribute :c_name, :crux.sql.column/name "c_name", :crux.sql.column/type :varchar}
+                            {:crux.sql.column/attribute :c_address, :crux.sql.column/name "c_address", :crux.sql.column/type :varchar}
+                            {:crux.sql.column/attribute :c_nationkey, :crux.sql.column/name "c_nationkey", :crux.sql.column/type :varchar}
+                            {:crux.sql.column/attribute :c_phone, :crux.sql.column/name "c_phone", :crux.sql.column/type :varchar}
+                            {:crux.sql.column/attribute :c_acctbal, :crux.sql.column/name "c_acctbal", :crux.sql.column/type :double}
+                            {:crux.sql.column/attribute :c_mktsegment, :crux.sql.column/name "c_mktsegment", :crux.sql.column/type :varchar}
+                            {:crux.sql.column/attribute :c_comment, :crux.sql.column/name "c_comment", :crux.sql.column/type :varchar}]}
 
   (first (tpch-table->docs (first (TpchTable/getTables)) 5)))
