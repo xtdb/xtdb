@@ -133,7 +133,7 @@
                                       :query (q/normalize-query q))
                                {:as :stream})]
       (doto (cio/->stream (edn-list->lazy-seq in))
-        (.onClose (fn [] (.close ^Closeable in))))))
+        (.onClose #(.close ^Closeable in)))))
 
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
@@ -142,12 +142,26 @@
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
+  (openHistoryAscending [this eid]
+    (let [in (api-request-sync (str url "/history-ascending")
+                               (assoc (as-of-map this) :eid eid)
+                               {:as :stream})]
+      (doto (cio/->stream (edn-list->lazy-seq in))
+        (.onClose #(.close ^java.io.Closeable in)))))
+
   (historyDescending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-descending")
                                (assoc (as-of-map this) :eid eid)
                                {:as :stream})]
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
+
+  (openHistoryDescending [this eid]
+    (let [in (api-request-sync (str url "/history-descending")
+                               (assoc (as-of-map this) :eid eid)
+                               {:as :stream})]
+      (doto (cio/->stream (edn-list->lazy-seq in))
+        (.onClose #(.close ^java.io.Closeable in)))))
 
   (validTime [_]
     valid-time)

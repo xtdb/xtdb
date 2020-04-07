@@ -254,11 +254,8 @@
   eid is an object that can be coerced into an entity id.")
 
   (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation specific snapshot allowing for lazy query results in a
-  try-with-resources block using (q db  snapshot  query)}.
-  Can also be used for
-  (history-ascending db snapshot  eid) and
-  (history-descending db snapshot  eid)
+    "Returns a new implementation-specific snapshot allowing for multiple
+  entity calls to share the same KV store snapshot.
   returns an implementation specific snapshot")
 
   (q
@@ -288,13 +285,23 @@
   ")
 
   (history-ascending
-    [db snapshot eid]
+    ^:deprecated [db snapshot eid]
+    "Retrieves entity history lazily in chronological order
+  from and including the valid time of the db while respecting
+  transaction time. Includes the documents.")
+
+  (open-history-ascending ^java.io.Closeable [db eid]
     "Retrieves entity history lazily in chronological order
   from and including the valid time of the db while respecting
   transaction time. Includes the documents.")
 
   (history-descending
-    [db snapshot eid]
+    ^:deprecated [db snapshot eid]
+    "Retrieves entity history lazily in reverse chronological order
+  from and including the valid time of the db while respecting
+  transaction time. Includes the documents.")
+
+  (open-history-descending ^java.io.Closeable [db eid]
     "Retrieves entity history lazily in reverse chronological order
   from and including the valid time of the db while respecting
   transaction time. Includes the documents.")
@@ -329,10 +336,12 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (open-q [this query] (cio/<-stream (.openQuery this query)))
+  (open-q [this query] (doto (cio/<-stream (.openQuery this query)) (prn :adapter)))
 
   (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
+  (open-history-ascending [this eid] (cio/<-stream (.openHistoryAscending this eid)))
   (history-descending [this snapshot eid] (.historyDescending this snapshot eid))
+  (open-history-descending [this eid] (cio/<-stream (.openHistoryDescending this eid)))
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this)))
