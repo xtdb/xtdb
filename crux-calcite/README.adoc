@@ -26,6 +26,35 @@ A SQL table is a schema that maps Crux attributes to SQL table
 columns. Any document in Crux that has attributes matching those
 specified in a table schema could be return via the SQL query.
 
+The following column types are supported:
+
+* `:varchar`
+* `:keyword`
+* `:integer`
+* `:long`
+* `:boolean`
+* `:double`
+* `:datetime`
+
+== Connecting
+
+If you want to connect in-process, you can do so using
+`crux.calcite/jdbc-connection`.
+
+You can also use https://calcite.apache.org/avatica/[Apache Avatica]
+to connect on-the-wire. Use the
+https://mvnrepository.com/artifact/org.apache.calcite.avatica/avatica-core[Avatica
+SQL driver] and the connection string:
+
+[source,properties]
+----
+jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf
+----
+
+`server-hostname` is the hostname of the Crux node. The port by
+default is `1501` but you can swap it out by configuring the Crux
+`crux.calcite.port` configuration property.
+
 == Current Limitations
 
 Joins are handled by Calcite rather than Crux, with Calcite running
