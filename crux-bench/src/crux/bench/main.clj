@@ -17,22 +17,25 @@
   (bench/with-embedded-kafka
     (let [bench-results
           (concat (bench/with-nodes [node (select-keys bench/nodes ["embedded-kafka-rocksdb"])]
-                    (-> (map bench/with-comparison-times (sorted-maps/run-sorted-maps-microbench node))
+                    (-> (bench/with-comparison-times
+                          (sorted-maps/run-sorted-maps-microbench node))
                         (doto post-to-slack)))
 
                   (bench/with-nodes [node bench/nodes]
-                    (-> (map bench/with-comparison-times (devices/run-devices-bench node))
+                    (-> (bench/with-comparison-times
+                          (devices/run-devices-bench node))
                         (doto post-to-slack)))
 
                   (bench/with-nodes [node bench/nodes]
-                    (-> (map bench/with-comparison-times (weather/run-weather-bench node))
+                    (-> (bench/with-comparison-times
+                          (weather/run-weather-bench node))
                         (doto post-to-slack)))
 
                   (bench/with-nodes [node bench/nodes]
                     (let [raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
-                      (-> (->> (concat [(watdiv-crux/render-comparison-durations (first raw-watdiv-results))]
-                                       (watdiv-crux/summarise-query-results (rest raw-watdiv-results)))
-                               (map bench/with-comparison-times))
+                      (-> (concat [(watdiv-crux/render-comparison-durations (first raw-watdiv-results))]
+                                  (watdiv-crux/summarise-query-results (rest raw-watdiv-results)))
+                          (bench/with-comparison-times)
                           (doto post-to-slack)))))]
       (bench/send-email-via-ses
        (bench/results->email bench-results))))

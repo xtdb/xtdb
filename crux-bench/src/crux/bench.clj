@@ -323,43 +323,61 @@
     (catch SdkClientException e
       (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
 
-(defn with-comparison-times [{:keys [crux-node-type bench-type bench-ns time-taken-ms] :as result}]
-  (let [log-client (AWSLogsClientBuilder/defaultClient)
-        query-id (-> (.startQuery log-client (-> (StartQueryRequest.)
-                                                 (.withLogGroupName "crux-bench")
-                                                 (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
-                                                                            crux-node-type (name bench-type) (name bench-ns)))
-                                                 (.withStartTime (-> (Date.)
-                                                                     (.toInstant)
-                                                                     (.minus (Duration/ofDays 7))
-                                                                     (.toEpochMilli)))
-                                                 (.withEndTime (.getTime (Date.)))))
-                     (.getQueryId))
-        get-query-request (-> (GetQueryResultsRequest.)
-                              (.withQueryId query-id))
-        _ (while (not= "Complete" (-> (.getQueryResults log-client get-query-request)
-                                      (.getStatus)))
-            (Thread/sleep 10))
-        times-taken (-> (.getQueryResults log-client get-query-request)
-                        (.getResults)
-                        ((fn [query-results] (->> (map first query-results)
-                                                  (map #(.getValue %))
-                                                  (map #(Integer/parseInt %))))))]
-    (if (empty? times-taken)
-      (assoc
-       result
-       :percentage-difference-since-last-run (float 0)
-       :minimum-time-taken-this-week time-taken-ms
-       :maximum-time-taken-this-week time-taken-ms)
-      (assoc
-       result
-       :percentage-difference-since-last-run (-> time-taken-ms
-                                                 (- (first times-taken))
-                                                 (/ (first times-taken))
-                                                 (* 100)
-                                                 (float))
-       :minimum-time-taken-this-week (apply min (conj times-taken time-taken-ms))
-       :maximum-time-taken-this-week (apply max (conj times-taken time-taken-ms))))))
+(def log-client
+  (try
+    (AWSLogsClientBuilder/defaultClient)
+    (catch SdkClientException e
+      (log/info "AWS credentials not found! Cannot get comparison times."))))
+
+(defn get-comparison-times [results]
+  (let [query-requests (for [{:keys [crux-node-type bench-type bench-ns time-taken-ms] :as result} results]
+                         (let [query-id (-> (.startQuery log-client (-> (StartQueryRequest.)
+                                                                        (.withLogGroupName "crux-bench")
+                                                                        (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
+                                                                                                   crux-node-type (name bench-type) (name bench-ns)))
+                                                                        (.withStartTime (-> (Date.)
+                                                                                            (.toInstant)
+                                                                                            (.minus (Duration/ofDays 7))
+                                                                                            (.toEpochMilli)))
+                                                                        (.withEndTime (.getTime (Date.)))))
+                                            (.getQueryId))]
+                           (-> (GetQueryResultsRequest.)
+                               (.withQueryId query-id))))]
+
+    (while (not-any? (fn [query-request]
+                       (= "Complete"
+                          (->> (.getQueryResults log-client query-request)
+                               (.getStatus))))
+                     query-requests)
+      (Thread/sleep 100))
+
+    (map (fn [query-request]
+           (->> (map first (-> (.getQueryResults log-client query-request)
+                               (.getResults)))
+                (map #(.getValue %))
+                (map #(Integer/parseInt %))))
+         query-requests)))
+
+(defn with-comparison-times [results]
+  (let [comparison-times (get-comparison-times results)]
+    (map (fn [{:keys [time-taken-ms] :as result} times-taken]
+           (if (empty? times-taken)
+             (assoc
+              result
+              :percentage-difference-since-last-run (float 0)
+              :minimum-time-taken-this-week time-taken-ms
+              :maximum-time-taken-this-week time-taken-ms)
+             (assoc
+              result
+              :percentage-difference-since-last-run (-> time-taken-ms
+                                                        (- (first times-taken))
+                                                        (/ (first times-taken))
+                                                        (* 100)
+                                                        (float))
+              :minimum-time-taken-this-week (apply min (conj times-taken time-taken-ms))
+              :maximum-time-taken-this-week (apply max (conj times-taken time-taken-ms)))))
+         results
+         comparison-times)))
 
 (defn send-email-via-ses [message]
   (try
