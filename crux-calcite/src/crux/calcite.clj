@@ -60,7 +60,9 @@
     SqlKind/LESS_THAN
     [[(apply list '< (->operands schema filter*))]]
     SqlKind/LESS_THAN_OR_EQUAL
-    [[(apply list '<= (->operands schema filter*))]]))
+    [[(apply list '<= (->operands schema filter*))]]
+    SqlKind/LIKE
+    [[(apply list 'like (->operands schema filter*))]]))
 
 (defn- ->crux-query
   [schema filters projects]
@@ -71,7 +73,8 @@
                (concat
                 (mapcat (partial ->crux-where-clauses schema) filters)
                 (mapv (fn [{:keys [:crux.sql.column/attribute ::sym]}] ['?e attribute sym]) columns)
-                query))})
+                query))
+       :args [{:like #(org.apache.calcite.runtime.SqlFunctions/like %1 %2)}]})
     (catch Throwable e
       (log/error e)
       (throw e))))

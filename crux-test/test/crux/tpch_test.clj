@@ -91,7 +91,8 @@
                              "  o.o_orderdate\n"
                              "limit 10"))))))
 
-(t/deftest test-008-query
+;; Runs but slow
+#_(t/deftest test-008-query
   (query (str "select\n"
               "  o_year,\n"
               "  sum(case\n"
@@ -129,4 +130,39 @@
               "  o_year\n"
               "order by\n"
               "  o_year"))
-  (t/is true))
+    (t/is true))
+
+(t/deftest test-016-query
+  (doseq [^TpchTable t (TpchTable/getTables)]
+    (f/transact! *api* (take 10 (tf/tpch-table->docs t))))
+
+  (t/is (query (str "select\n"
+                    "  p.p_brand,\n"
+                    "  p.p_type,\n"
+                    "  p.p_size,\n"
+                    "  count(distinct ps.ps_suppkey) as supplier_cnt\n"
+                    "from\n"
+                    "  tpch.partsupp ps,\n"
+                    "  tpch.part p\n"
+                    "where\n"
+                    "  p.p_partkey = ps.ps_partkey\n"
+                    "  and p.p_brand <> 'Brand#21'\n"
+                    "  and p.p_type not like 'MEDIUM PLATED%'\n"
+                    "  and p.p_size in (38, 2, 8, 31, 44, 5, 14, 24)\n"
+                    "  and ps.ps_suppkey not in (\n"
+                    "    select\n"
+                    "      s_suppkey\n"
+                    "    from\n"
+                    "      tpch.supplier\n"
+                    "    where\n"
+                    "      s_comment like '%Customer%Complaints%'\n"
+                    "  )\n"
+                    "group by\n"
+                    "  p.p_brand,\n"
+                    "  p.p_type,\n"
+                    "  p.p_size\n"
+                    "order by\n"
+                    "  supplier_cnt desc,\n"
+                    "  p.p_brand,\n"
+                    "  p.p_type,\n"
+                    "  p.p_size"))))
