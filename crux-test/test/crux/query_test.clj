@@ -1603,7 +1603,10 @@
                                  #inst "2019-01-12"]])
       (->> (api/await-tx *api*)))
 
-    (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
+
+    (log/warn "test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper disabled due to intermittent failure, see #421")
+
+    #_(t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
                [:p3 :LA #inst "2018-12-31" :na]
                [:p4 :NY #inst "2019-01-02" :na]}
              (api/q (api/db *api* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
