@@ -16,7 +16,7 @@
 
 (t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type)
 
-(t/deftest test-hello-world-query
+(t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
                        :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
@@ -82,6 +82,12 @@
              (set (query "SELECT NAME FROM PERSON WHERE ALIVE = TRUE"))))
     (t/is (= #{{:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE ALIVE = FALSE")))))
+
+  (t/testing "like"
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME LIKE 'Iva%'"))))
+    (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME LIKE 'Iva%' OR NAME LIKE 'Mal%'")))))
 
   (t/testing "namespaced keywords"
     (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
