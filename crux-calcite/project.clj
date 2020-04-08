@@ -7,6 +7,7 @@
                  [juxt/crux-core "derived-from-git"]
                  [com.google.guava/guava "28.2-jre"]
                  [com.google.code.findbugs/jsr305 "3.0.2"]
+                 [com.google.protobuf/protobuf-java "3.9.2"]
                  [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
                  [org.apache.calcite/calcite-core "1.21.0" :exclusions [org.apache.commons/commons-lang3
                                                                         org.apache.calcite.avatica/avatica-core
