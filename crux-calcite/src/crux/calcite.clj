@@ -1,9 +1,9 @@
 (ns crux.calcite
-  (:require [clojure.string :as string]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]
             [crux.api :as crux]
-            [crux.db])
+            crux.db)
   (:import java.sql.DriverManager
            java.util.Properties
            org.apache.calcite.avatica.jdbc.JdbcMeta
@@ -27,7 +27,8 @@
   (operand->v [this schema]
     (case (str (.-op this))
       "CRUXID"
-      (keyword (operand->v (first (.-operands this)) schema))))
+      (keyword (operand->v (first (.-operands this)) schema))
+      (operand->v (first (.-operands this)) schema)))
 
   RexLiteral
   (operand->v [this schema]

@@ -89,6 +89,10 @@
     (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE NAME LIKE 'Iva%' OR NAME LIKE 'Mal%'")))))
 
+  (t/testing "arbitrary sql function"
+    (t/is (= #{{:name "Iva"}}
+             (set (query "SELECT SUBSTRING(NAME,1,3) AS NAME FROM PERSON WHERE NAME = 'Ivan'")))))
+
   (t/testing "namespaced keywords"
     (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))

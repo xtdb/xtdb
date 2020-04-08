@@ -166,3 +166,46 @@
                     "  p.p_brand,\n"
                     "  p.p_type,\n"
                     "  p.p_size"))))
+
+(t/deftest test-022-query
+  (doseq [^TpchTable t (TpchTable/getTables)]
+    (f/transact! *api* (take 10 (tf/tpch-table->docs t))))
+
+  (query (str "select\n"
+              "  cntrycode,\n"
+              "  count(*) as numcust,\n"
+              "  sum(c_acctbal) as totacctbal\n"
+              "from\n"
+              "  (\n"
+              "    select\n"
+              "      substring(c_phone from 1 for 2) as cntrycode,\n"
+              "      c_acctbal\n"
+              "    from\n"
+              "      tpch.customer c\n"
+              "    where\n"
+              "      substring(c_phone from 1 for 2) in\n"
+              "        ('24', '31', '11', '16', '21', '20', '34')\n"
+              "      and c_acctbal > (\n"
+              "        select\n"
+              "          avg(c_acctbal)\n"
+              "        from\n"
+              "          tpch.customer\n"
+              "        where\n"
+              "          c_acctbal > 0.00\n"
+              "          and substring(c_phone from 1 for 2) in\n"
+              "            ('24', '31', '11', '16', '21', '20', '34')\n"
+              "      )\n"
+              "      and not exists (\n"
+              "        select\n"
+              "          *\n"
+              "        from\n"
+              "          tpch.orders o\n"
+              "        where\n"
+              "          o.o_custkey = c.c_custkey\n"
+              "      )\n"
+              "  ) as custsale\n"
+              "group by\n"
+              "  cntrycode\n"
+              "order by\n"
+              "  cntrycode"))
+  (t/is true))
