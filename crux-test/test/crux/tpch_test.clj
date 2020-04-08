@@ -62,39 +62,94 @@
 ;; Skipping 2: Calcite: @Disabled("Infinite planning")
 
 (t/deftest test-003
-  (t/is (query (str
-                "select\n"
-                "  l.l_orderkey,\n"
-                "  sum(l.l_extendedprice * (1 - l.l_discount)) as revenue,\n"
-                "  o.o_orderdate,\n"
-                "  o.o_shippriority\n"
-                "\n"
-                "from\n"
-                "  tpch.customer c,\n"
-                "  tpch.orders o,\n"
-                "  tpch.lineitem l\n"
-                "\n"
-                "where\n"
-                "  c.c_mktsegment = 'HOUSEHOLD'\n"
-                "  and c.c_custkey = o.o_custkey\n"
-                "  and l.l_orderkey = o.o_orderkey\n"
-                "--  and o.o_orderdate < date '1995-03-25'\n"
-                "--  and l.l_shipdate > date '1995-03-25'\n"
-                "\n"
-                "group by\n"
-                "  l.l_orderkey,\n"
-                "  o.o_orderdate,\n"
-                "  o.o_shippriority\n"
-                "order by\n"
-                "  revenue desc,\n"
-                "  o.o_orderdate\n"
-                "limit 10"))))
+  (query (str
+          "select\n"
+          "  l.l_orderkey,\n"
+          "  sum(l.l_extendedprice * (1 - l.l_discount)) as revenue,\n"
+          "  o.o_orderdate,\n"
+          "  o.o_shippriority\n"
+          "\n"
+          "from\n"
+          "  tpch.customer c,\n"
+          "  tpch.orders o,\n"
+          "  tpch.lineitem l\n"
+          "\n"
+          "where\n"
+          "  c.c_mktsegment = 'HOUSEHOLD'\n"
+          "  and c.c_custkey = o.o_custkey\n"
+          "  and l.l_orderkey = o.o_orderkey\n"
+          "--  and o.o_orderdate < date '1995-03-25'\n"
+          "--  and l.l_shipdate > date '1995-03-25'\n"
+          "\n"
+          "group by\n"
+          "  l.l_orderkey,\n"
+          "  o.o_orderdate,\n"
+          "  o.o_shippriority\n"
+          "order by\n"
+          "  revenue desc,\n"
+          "  o.o_orderdate\n"
+          "limit 10"))
+  (t/is true))
 
 ;; Skipping 4: Calcite: @Disabled("NoSuchMethodException: SqlFunctions.lt(Date, Date)")
 ;; Skipping 5: Calcite: @Disabled("OutOfMemoryError")
 
+(t/deftest test-006
+  (t/is (query (str "select\n"
+                    "  sum(l_extendedprice * l_discount) as revenue\n"
+                    "from\n"
+                    "  tpch.lineitem\n"
+                    "where\n"
+                    "--  l_shipdate >= date '1997-01-01'\n"
+                    "--  and l_shipdate < date '1997-01-01' + interval '1' year\n"
+                    "--  and\n"
+                    "  l_discount between 0.03 - 0.01 and 0.03 + 0.01\n"
+                    "  and l_quantity < 24"))))
+
 ;; Runs but slow
-#_(t/deftest test-008-query
+#_(t/deftest test-007
+  (t/is (query (str "select\n"
+                    "  supp_nation,\n"
+                    "  cust_nation,\n"
+                    "  l_year,\n"
+                    "  sum(volume) as revenue\n"
+                    "from\n"
+                    "  (\n"
+                    "    select\n"
+                    "      n1.n_name as supp_nation,\n"
+                    "      n2.n_name as cust_nation,\n"
+                    "      extract(year from l.l_shipdate) as l_year,\n"
+                    "      l.l_extendedprice * (1 - l.l_discount) as volume\n"
+                    "    from\n"
+                    "      tpch.supplier s,\n"
+                    "      tpch.lineitem l,\n"
+                    "      tpch.orders o,\n"
+                    "      tpch.customer c,\n"
+                    "      tpch.nation n1,\n"
+                    "      tpch.nation n2\n"
+                    "    where\n"
+                    "      s.s_suppkey = l.l_suppkey\n"
+                    "      and o.o_orderkey = l.l_orderkey\n"
+                    "      and c.c_custkey = o.o_custkey\n"
+                    "      and s.s_nationkey = n1.n_nationkey\n"
+                    "      and c.c_nationkey = n2.n_nationkey\n"
+                    "      and (\n"
+                    "        (n1.n_name = 'EGYPT' and n2.n_name = 'UNITED STATES')\n"
+                    "        or (n1.n_name = 'UNITED STATES' and n2.n_name = 'EGYPT')\n"
+                    "      )\n"
+                    "--      and l.l_shipdate between date '1995-01-01' and date '1996-12-31'\n"
+                    "  ) as shipping\n"
+                    "group by\n"
+                    "  supp_nation,\n"
+                    "  cust_nation,\n"
+                    "  l_year\n"
+                    "order by\n"
+                    "  supp_nation,\n"
+                    "  cust_nation,\n"
+                    "  l_year"))))
+
+;; Runs but slow
+#_(t/deftest test-008
   (query (str "select\n"
               "  o_year,\n"
               "  sum(case\n"
@@ -135,6 +190,63 @@
     (t/is true))
 
 ;; Skipping 9: Calcite: @Disabled("no method found")
+
+(t/deftest test-010
+  (query (str "select\n"
+              "  c.c_custkey,\n"
+              "  c.c_name,\n"
+              "  sum(l.l_extendedprice * (1 - l.l_discount)) as revenue,\n"
+              "  c.c_acctbal,\n"
+              "  n.n_name,\n"
+              "  c.c_address,\n"
+              "  c.c_phone,\n"
+              "  c.c_comment\n"
+              "from\n"
+              "  tpch.customer c,\n"
+              "  tpch.orders o,\n"
+              "  tpch.lineitem l,\n"
+              "  tpch.nation n\n"
+              "where\n"
+              "  c.c_custkey = o.o_custkey\n"
+              "  and l.l_orderkey = o.o_orderkey\n"
+              "  and o.o_orderdate >= date '1994-03-01'\n"
+              "  and o.o_orderdate < date '1994-03-01' + interval '3' month\n"
+              "  and l.l_returnflag = 'R'\n"
+              "  and c.c_nationkey = n.n_nationkey\n"
+              "group by\n"
+              "  c.c_custkey,\n"
+              "  c.c_name,\n"
+              "  c.c_acctbal,\n"
+              "  c.c_phone,\n"
+              "  n.n_name,\n"
+              "  c.c_address,\n"
+              "  c.c_comment\n"
+              "order by\n"
+              "  revenue desc\n"
+              "limit 20"))
+  (t/is true))
+
+;; Skipping 11: Calcite: @Disabled("CannotPlanException")
+;; Skipping 12: Calcite: @Disabled("NoSuchMethodException: SqlFunctions.lt(Date, Date)")
+;; Skipping 13: Calcite: @Disabled("CannotPlanException")
+
+(t/deftest test-014
+  (t/is (= [{:promo_revenue nil}]
+           (query (str "select\n"
+                       "  100.00 * sum(case\n"
+                       "    when p.p_type like 'PROMO%'\n"
+                       "      then l.l_extendedprice * (1 - l.l_discount)\n"
+                       "    else 0\n"
+                       "  end) / sum(l.l_extendedprice * (1 - l.l_discount)) as promo_revenue\n"
+                       "from\n"
+                       "  tpch.lineitem l,\n"
+                       "  tpch.part p\n"
+                       "where\n"
+                       "  l.l_partkey = p.p_partkey\n"
+                       "  and l.l_shipdate >= date '1994-08-01'\n"
+                       "  and l.l_shipdate < date '1994-08-01' + interval '1' month")))))
+
+;; Skipping 15: Calcite: @Disabled("AssertionError")
 
 (t/deftest test-016
   (query (str "select\n"
@@ -220,6 +332,8 @@
               "  o.o_totalprice desc,\n"
               "  o.o_orderdate\n"
               "limit 100")))
+
+;; Skipping 19: Calcite: @Timeout(value = 10, unit = TimeUnit.MINUTES)
 
 (t/deftest test-020
   (query (str "select\n"
