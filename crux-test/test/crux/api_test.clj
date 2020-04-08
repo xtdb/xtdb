@@ -266,7 +266,8 @@
           (t/is (empty? tx-log)))))
 
     (t/testing "tx log skips failed transactions"
-      (let [tx2 (fapi/submit+await-tx [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
+      (let [tx2 (fapi/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan2"}]
+                                       [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
         (t/is (false? (api/tx-committed? *api* tx2)))
 
         (with-open [tx-log (api/open-tx-log *api* nil false)]
@@ -274,7 +275,8 @@
                            :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                    tx-log)))
 
-        (let [tx3 (fapi/submit+await-tx [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
+        (let [tx3 (fapi/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan"}]
+                                         [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
           (t/is (true? (api/tx-committed? *api* tx3)))
           (with-open [tx-log (api/open-tx-log *api* nil false)]
             (t/is (= 2 (count tx-log)))))))))

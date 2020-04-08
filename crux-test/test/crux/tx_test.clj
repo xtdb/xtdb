@@ -221,6 +221,54 @@
                                     :tx-id ivan-tx-id})]
                  (idx/entity-history snapshot :ivan)))))))
 
+(t/deftest test-match-ops
+  (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
+
+    (t/testing "match does nothing with wrong content hash"
+      (let [wrong-picasso (assoc picasso :baz :boz)
+            match-failure-tx (api/submit-tx *api* [[:crux.tx/match picasso-id wrong-picasso]])]
+
+        (api/await-tx *api* match-failure-tx (Duration/ofMillis 1000))
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id picasso)
+                                      :vt picasso-tx-time
+                                      :tt picasso-tx-time
+                                      :tx-id picasso-tx-id})]
+                   (idx/entity-history snapshot picasso-id))))))
+
+    (t/testing "match continues with correct content hash"
+      (let [new-picasso (assoc picasso :new? true)
+            {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (fapi/submit+await-tx [[:crux.tx/match picasso-id picasso]
+                                                                                            [:crux.tx/put new-picasso]])]
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id new-picasso)
+                                      :vt new-tx-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})
+                    (c/map->EntityTx {:eid picasso-eid
+                                      :content-hash (c/new-id picasso)
+                                      :vt picasso-tx-time
+                                      :tt picasso-tx-time
+                                      :tx-id picasso-tx-id})]
+                   (idx/entity-history snapshot picasso-id)))))))
+
+  (t/testing "match can check non existing entity"
+    (let [ivan {:crux.db/id :ivan, :value 12}
+          {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (fapi/submit+await-tx [[:crux.tx/match :ivan nil]
+                                                                                            [:crux.tx/put ivan]])]
+
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+        (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
+                                    :content-hash (c/new-id ivan)
+                                    :vt ivan-tx-time
+                                    :tt ivan-tx-time
+                                    :tx-id ivan-tx-id})]
+                 (idx/entity-history snapshot :ivan)))))))
+
 (t/deftest test-can-evict-entity
   (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
         {evict-tx-time :crux.tx/tx-time} (fapi/submit+await-tx [[:crux.tx/evict picasso-id]])]

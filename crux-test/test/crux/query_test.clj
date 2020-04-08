@@ -1372,12 +1372,11 @@
     (t/is (<= secondary-time (* entity-slowdown-factor entity-time)))
     (t/is (<= secondary-time (* id-slowdown-factor id-time)))))
 
-(t/deftest test-query-and-cas
+(t/deftest test-query-and-match
   (t/testing "can create new user"
-    (let [{:crux.tx/keys [tx-time
-                          tx-id] :as submitted-tx}
-          (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
-                                                   :name "Ivan 1st"}]])]
+    (let [{:crux.tx/keys [tx-time tx-id] :as submitted-tx}
+          (api/submit-tx *api* [[:crux.tx/match :ivan nil]
+                                [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 1st"}]])]
       (api/await-tx *api* submitted-tx)
       (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
@@ -1391,10 +1390,9 @@
                 :name "Ivan 1st"} (api/entity (api/db *api* tx-time tx-time) :ivan)))))
 
   (t/testing "cannot create existing user"
-    (let [{:crux.tx/keys [tx-time
-                          tx-id] :as submitted-tx}
-          (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
-                                                   :name "Ivan 2nd"}]])]
+    (let [{:crux.tx/keys [tx-time tx-id] :as submitted-tx}
+          (api/submit-tx *api* [[:crux.tx/match :ivan nil]
+                                [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 2nd"}]])]
 
       (api/await-tx *api* submitted-tx)
       (t/is (false? (api/tx-committed? *api* submitted-tx)))
@@ -1407,46 +1405,30 @@
 
   (t/testing "can update existing user"
     (let [{:crux.tx/keys [tx-time] :as submitted-update-tx}
-          (api/submit-tx *api* [[:crux.tx/cas
-                                 {:crux.db/id :ivan
-                                  :name "Ivan 1st"}
-                                 {:crux.db/id :ivan
-                                  :name "Ivan 2nd"}]])]
+          (api/submit-tx *api* [[:crux.tx/match :ivan {:crux.db/id :ivan, :name "Ivan 1st"}]
+                                [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 2nd"}]])]
       (api/await-tx *api* submitted-update-tx)
       (t/is (true? (api/tx-committed? *api* submitted-update-tx)))
       (t/is (= #{["Ivan 2nd"]} (api/q (api/db *api* tx-time tx-time)
                                       '{:find [n]
                                         :where [[:ivan :name n]]})))
 
-      (t/testing "last CAS command in tx wins"
+      (t/testing "match sees interim state through the transaction"
         (let [{:crux.tx/keys [tx-time] :as submitted-tx}
-              (api/submit-tx *api* [[:crux.tx/cas
-                                     {:crux.db/id :ivan
-                                      :name "Ivan 2nd"}
-                                     {:crux.db/id :ivan
-                                      :name "Ivan 3rd"}]
-                                    [:crux.tx/cas
-                                     {:crux.db/id :ivan
-                                      :name "Ivan 3rd"}
-                                     {:crux.db/id :ivan
-                                      :name "Ivan 4th"}]])
-              _ (api/await-tx *api* submitted-tx)
-              updated? (api/tx-committed? *api* submitted-tx)]
+              (api/submit-tx *api* [[:crux.tx/match :ivan {:crux.db/id :ivan, :name "Ivan 2nd"}]
+                                    [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 3rd"}]
+                                    [:crux.tx/match :ivan {:crux.db/id :ivan, :name "Ivan 3rd"}]
+                                    [:crux.tx/put {:crux.db/id :ivan :name "Ivan 4th"}]])]
+          (api/await-tx *api* submitted-tx)
 
-          ;; NOTE: adding tx log to failure message to help debug #321
-          ;; "Duplicate CAS failure".
-          (t/is (true? updated?)
-                (when-not updated?
-                  (with-out-str
-                    (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
-                      (doseq [tx (iterator-seq tx-log-iterator)]
-                        (prn tx))))))
+          (t/is (api/tx-committed? *api* submitted-tx))
 
-          (t/is (= #{["Ivan 4th"]} (api/q (api/db *api* tx-time
-                                                  tx-time) '{:find [n]
-                                                             :where [[:ivan :name n]]})))))
+          (t/is (= #{["Ivan 4th"]}
+                   (api/q (api/db *api* tx-time tx-time)
+                          '{:find [n]
+                            :where [[:ivan :name n]]})))))
 
-      (t/testing "normal put after CAS works"
+      (t/testing "normal put works after match"
         (let [{:crux.tx/keys [tx-time] :as submitted-tx}
               (api/submit-tx *api* [[:crux.tx/put
                                      {:crux.db/id :ivan

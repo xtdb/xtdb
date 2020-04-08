@@ -76,6 +76,7 @@
         ::put (zipmap [:eid :content-hash :start-valid-time :end-valid-time] args)
         ::delete (zipmap [:eid :start-valid-time :end-valid-time] args)
         ::cas (zipmap [:eid :old-content-hash :new-content-hash :valid-time] args)
+        ::match (zipmap [:eid :content-hash :valid-time] args)
         ::evict (let [[eid & args] args
                       [start-valid-time end-valid-time] (filter inst? args)
                       [keep-latest? keep-earliest?] (filter boolean? args)]
@@ -232,6 +233,16 @@
 
 (defmethod index-tx-event :crux.tx/delete [[op k start-valid-time end-valid-time] tx deps]
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx deps)})
+
+(defmethod index-tx-event :crux.tx/match [[op k v at-valid-time :as match-op]
+                                          {:crux.tx/keys [tx-time tx-id] :as tx}
+                                          {:keys [history] :as deps}]
+  {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history
+                                                                      (c/new-id k)
+                                                                      (or at-valid-time tx-time)
+                                                                      tx-time)]
+                     (or (= (c/new-id content-hash) (c/new-id v))
+                         (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash))))})
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {:crux.tx/keys [tx-time tx-id] :as tx}
