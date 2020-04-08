@@ -1498,8 +1498,6 @@
                           :arrival-time #inst "2018-12-31"
                           :departure-time :na}
                          #inst "2018-12-31"]])
-  ;; TODO Remove this sleep
-  (Thread/sleep 1000)
   ;; Day 1, nothing happens.
   (api/submit-tx *api* [])
   ;; Day 2
@@ -1516,6 +1514,12 @@
                                                        :arrival-time #inst "2019-01-02"
                                                        :departure-time #inst "2019-01-03"}
                                                       #inst "2019-01-03"]])]
+    ;; this introduces enough delay s.t. tx3 and tx4 don't happen in the same millisecond
+    ;; (see test further down)
+    ;; because we only ask for the DB at the tx-time, currently, not the tx-id
+    ;; see #421
+    (api/await-tx *api* third-day-submitted-tx)
+
     ;; Day 4, correction, adding missing trip on new arrival.
     (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p1
@@ -1603,10 +1607,7 @@
                                  #inst "2019-01-12"]])
       (->> (api/await-tx *api*)))
 
-
-    (log/warn "test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper disabled due to intermittent failure, see #421")
-
-    #_(t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
+    (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
                [:p3 :LA #inst "2018-12-31" :na]
                [:p4 :NY #inst "2019-01-02" :na]}
              (api/q (api/db *api* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
