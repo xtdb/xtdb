@@ -487,14 +487,9 @@
        inkscape:export-ydpi="60"><tspan
          sodipodi:role="line"
          x="149.2623"
-         y="31.105722"
-         style="font-weight:bold;font-size:7.76111126px;line-height:1.25;text-align:start;text-anchor:start;stroke-width:0.18165512"
-         id="tspan2155-0-6-3-7-0-5-4-7-4-4-3">Put/</tspan><tspan
-         sodipodi:role="line"
-         x="149.2623"
          y="40.80711"
          style="font-weight:bold;font-size:7.76111126px;line-height:1.25;text-align:start;text-anchor:start;stroke-width:0.18165512"
-         id="tspan7694-9-0">CAS/</tspan><tspan
+         id="tspan7694-9-0">Put/</tspan><tspan
          sodipodi:role="line"
          x="149.2623"
          y="50.508499"
@@ -511,7 +506,7 @@
          id="tspan19940-6-6"
          style="font-weight:bold;font-size:7.76111126px;line-height:1.25;text-align:center;text-anchor:middle;stroke-width:0.18165512"
          y="83.93824"
-         x="166.70201"
+         x="160.70201"
          sodipodi:role="line">Evict</tspan></text>
     <path
        inkscape:export-ydpi="60"

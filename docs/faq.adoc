@@ -200,22 +200,17 @@ with the cost of non-trivial additional latency. Further reading: http://www.bai
 
 How is consistency provided by Crux?::
 
-  Crux does not try to enforce consistency among nodes, which all
-consume the log in the same order, but nodes may be at different points. A
-client using the same node will have a consistent view. Reading your own
-writes can be achieved by providing the transaction time Kafka assigned
-to the submitted transaction, which is returned in a promise from
-`crux.api/submit-tx`, in the call to `crux.api/sync`. This will block
-until this transaction time has been seen by the cluster node.
+  Crux does not try to enforce consistency among nodes. All nodes consume the
+log in the same order, but nodes may be at different points. A client using the
+same node will have a consistent view. Reading your own writes can be achieved
+by providing the transaction details from the transaction log (returned from
+`crux.api/submit-tx`), in a call to `crux.api/await-tx`. This will block until
+this transaction time has been seen by the cluster node.
 +
-Write consistency across nodes is provided via the `:crux.db/cas`
-operation. The user needs to attempt to perform a CAS, then wait for the
-transaction time (as above), and check that the entity got updated. More
-advanced algorithms can be built on top of this. As mentioned above, all
-CAS operations in a transaction must pass their pre-condition check for
-the transaction to proceed and get indexed, which enables one to enforce
-consistency across documents. There is currently no way to check if a
-transaction got aborted, apart from checking if the write succeeded.
+Write consistency across nodes is provided via the `:crux.db/match` operation.
+The user needs to include a match operation in their transaction, wait for the transaction time (as above), and check that the transaction committed.
+More advanced algorithms can be built on top of this.
+As mentioned above, all match operations in a transaction must pass for the transaction to proceed and get indexed, which enables one to enforce consistency across documents.
 
 Will a lack of schema lead to confusion?::
 

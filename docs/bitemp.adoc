@@ -17,7 +17,7 @@ worth storing in special "bitemporal tables" upfront.
 One or more documents may be inserted into Crux via a `put` transaction at a
 specific `valid-time`, defaulting to the `transaction time` (i.e. `now`), and
 each document remains valid until explicitly updated with a new version via
-`put` (or `cas`) or deleted via `delete`.
+`put` or deleted via `delete`.
 
 [#bitemp-why]
 == Why?

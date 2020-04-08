@@ -50,7 +50,7 @@ otherwise restrict the execution of queries.
 |<<#rest-document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
 |<<#rest-documents, `/documents`>>|POST|returns a map of document ids and respective documents for a given set of content hashes submitted in the request body
 |<<#rest-entity, `/entity`>>|POST|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
-|<<#rest-entity-tx, `/entity-tx`>>|POST|Returns the `:put` or `:cas` transaction that most recently set a key
+|<<#rest-entity-tx, `/entity-tx`>>|POST|Returns the `:put` transaction that most recently set a key
 |<<#rest-history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
 |<<#rest-query, `/query`>>|POST|Takes a datalog query and returns its results
 |<<#rest-query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
@@ -159,7 +159,7 @@ nil
 [#rest-entity-tx]
 === POST `/entity-tx`
 
-Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
+Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` transaction that most recently set that key at those times.
 
 See <<#bitemporality, Bitemporality>> for more information.
 
@@ -273,7 +273,7 @@ curl -X GET $nodeURL/tx-log
 [#rest-tx-log-post]
 === POST `/tx-log`
 
-Takes a vector of transactions (any combination of `:put`, `:delete`, `:cas` and `:evict`) and executes them in order. This is the only "write" endpoint.
+Takes a vector of transactions (any combination of `:put`, `:delete`, `:match`, and `:evict`) and executes them in order. This is the only "write" endpoint.
 
 [source,bash]
 ----
