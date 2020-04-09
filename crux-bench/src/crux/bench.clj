@@ -7,16 +7,22 @@
             [clojure.java.io :as io]
             [clojure.string :as string]
             [clj-http.client :as client]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.bus :as bus])
   (:import (java.util.concurrent Executors ExecutorService)
-           (java.util UUID)
+           (java.util UUID Date)
+           (java.time Duration Instant)
            (java.io Closeable)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
            (software.amazon.awssdk.core.exception SdkClientException)
+           (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
+           (com.amazonaws.services.logs.model StartQueryRequest StartQueryResult GetQueryResultsRequest GetQueryResultsResult)
            (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClientBuilder)
-           (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)))
+           (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)
+           (crux.bus EventBus)))
+
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -53,6 +59,27 @@
 (defmacro with-timing [& body]
   `(with-timing* (fn [] ~@body)))
 
+(defn with-additional-index-metrics* [bus f]
+  (let [!index-metrics (atom {:av-count 0
+                              :bytes-indexed 0
+                              :doc-count 0})]
+    (bus/listen
+     bus {:crux.bus/event-types #{:crux.tx/indexed-docs}}
+     (fn [{:keys [doc-ids av-count bytes-indexed]}]
+       (swap! !index-metrics (fn [index-metrics-map]
+                               (-> index-metrics-map
+                                   (update :av-count + av-count)
+                                   (update :bytes-indexed + bytes-indexed)
+                                   (update :doc-count + (count doc-ids)))))))
+    (let [results (f)]
+      (assoc results
+             :av-count (:av-count @!index-metrics)
+             :bytes-indexed (:bytes-indexed @!index-metrics)
+             :doc-count (:doc-count @!index-metrics)))))
+
+(defmacro with-additional-index-metrics [node & body]
+  `(with-additional-index-metrics* (get-in (meta ~node) [:crux.node/topology :crux.node/bus]) (fn [] ~@body)))
+
 (defn run-bench* [bench-type f]
   (log/infof "running bench '%s/%s'..." *bench-ns* (name bench-type))
 
@@ -78,11 +105,27 @@
                  {:body (json/write-str {:text message})
                   :content-type :json})))
 
-(defn- result->slack-message [{:keys [time-taken-ms bench-type] :as bench-map}]
-  (format "*%s* (%s): `%s`"
-          (name bench-type)
-          (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
+(defn- result->slack-message [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
+                                      minimum-time-taken-this-week maximum-time-taken-this-week
+                                      doc-count av-count bytes-indexed] :as bench-map}]
+  (->> (concat [(format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
+                        (name bench-type)
+                        (Duration/ofMillis time-taken-ms)
+                        (if (neg? percentage-difference-since-last-run)
+                          (format "%.2f" percentage-difference-since-last-run)
+                          (format "+%.2f" percentage-difference-since-last-run))
+                        (Duration/ofMillis minimum-time-taken-this-week)
+                        (Duration/ofMillis maximum-time-taken-this-week)
+                        (let [time-taken-seconds (/ time-taken-ms 1000)]
+                          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                                          :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))]
+               (when (= bench-type :ingest)
+                 (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
+                        {:docs-per-second (float (/ doc-count time-taken-seconds))
+                         :avs-per-second (float (/ av-count time-taken-seconds))
+                         :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds))})
+                      (map (fn [[k v]] (format "*%s*: `%s`" (name k) v))))))
+       (string/join "\n")))
 
 (defn results->slack-message [results]
   (format "*%s* (%s)\n========\n%s\n"
@@ -92,11 +135,27 @@
                (map result->slack-message)
                (string/join "\n"))))
 
-(defn- result->html [{:keys [time-taken-ms bench-type] :as bench-map}]
-  (format "<p> <b>%s</b> (%s): <code>%s</code></p>"
-          (name bench-type)
-          (java.time.Duration/ofMillis time-taken-ms)
-          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms))))
+(defn- result->html [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
+                             minimum-time-taken-this-week maximum-time-taken-this-week
+                             doc-count av-count bytes-indexed] :as bench-map}]
+  (concat [(format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s): <code>%s</code></p>"
+                   (name bench-type)
+                   (Duration/ofMillis time-taken-ms)
+                   (if (neg? percentage-difference-since-last-run)
+                     (format "<b style=\"color: green\">%.2f%%</b>" percentage-difference-since-last-run)
+                     (format "<b style=\"color: red\">+%.2f%%</b>" percentage-difference-since-last-run))
+                   (Duration/ofMillis minimum-time-taken-this-week)
+                   (Duration/ofMillis maximum-time-taken-this-week)
+                   (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                                   :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)))]
+          (when (= bench-type :ingest)
+            (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
+                   {:docs-per-second (float (/ doc-count time-taken-seconds))
+                    :avs-per-second (float (/ av-count time-taken-seconds))
+                    :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds))})
+                 (map (fn [[k v]] (format "<p><b>%s</b>: <code>%s</code></p>" (name k) v)))))
+
+          (string/join " ")))
 
 (defn results->email [bench-results]
   (str "<h1>Crux bench results</h1>"
@@ -262,6 +321,62 @@
                     (.build)))
     (catch SdkClientException e
       (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
+
+(def log-client
+  (try
+    (AWSLogsClientBuilder/defaultClient)
+    (catch SdkClientException e
+      (log/info "AWS credentials not found! Cannot get comparison times."))))
+
+(defn get-comparison-times [results]
+  (let [query-requests (for [{:keys [crux-node-type bench-type bench-ns time-taken-ms] :as result} results]
+                         (let [query-id (-> (.startQuery log-client (-> (StartQueryRequest.)
+                                                                        (.withLogGroupName "crux-bench")
+                                                                        (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
+                                                                                                   crux-node-type (name bench-type) (name bench-ns)))
+                                                                        (.withStartTime (-> (Date.)
+                                                                                            (.toInstant)
+                                                                                            (.minus (Duration/ofDays 7))
+                                                                                            (.toEpochMilli)))
+                                                                        (.withEndTime (.getTime (Date.)))))
+                                            (.getQueryId))]
+                           (-> (GetQueryResultsRequest.)
+                               (.withQueryId query-id))))]
+
+    (while (not-any? (fn [query-request]
+                       (= "Complete"
+                          (->> (.getQueryResults log-client query-request)
+                               (.getStatus))))
+                     query-requests)
+      (Thread/sleep 100))
+
+    (map (fn [query-request]
+           (->> (map first (-> (.getQueryResults log-client query-request)
+                               (.getResults)))
+                (map #(.getValue %))
+                (map #(Integer/parseInt %))))
+         query-requests)))
+
+(defn with-comparison-times [results]
+  (let [comparison-times (get-comparison-times results)]
+    (map (fn [{:keys [time-taken-ms] :as result} times-taken]
+           (if (empty? times-taken)
+             (assoc
+              result
+              :percentage-difference-since-last-run (float 0)
+              :minimum-time-taken-this-week 0
+              :maximum-time-taken-this-week 0)
+             (assoc
+              result
+              :percentage-difference-since-last-run (-> time-taken-ms
+                                                        (- (first times-taken))
+                                                        (/ (first times-taken))
+                                                        (* 100)
+                                                        (float))
+              :minimum-time-taken-this-week (apply min times-taken)
+              :maximum-time-taken-this-week (apply max times-taken))))
+         results
+         comparison-times)))
 
 (defn send-email-via-ses [message]
   (try

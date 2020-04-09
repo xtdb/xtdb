@@ -130,6 +130,10 @@ Resources:
                 # Put metric data in cloudwatch
                 - 'cloudwatch:PutMetricData'
 
+                # Perform cloudwatch log queries
+                - 'logs:StartQuery'
+                - 'logs:GetQueryResults'
+
                 # Allow the ECS tasks to send emails via SES
                 - 'ses:SendEmail'
               Resource: '*'

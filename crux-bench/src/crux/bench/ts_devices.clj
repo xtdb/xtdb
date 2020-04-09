@@ -58,21 +58,20 @@
 ;; Submits data from devices database into Crux node.
 (defn submit-ts-devices-data [node]
   (bench/run-bench :ingest
-    (let [info-tx-ops (vec (for [info-doc info-docs]
-                             [:crux.tx/put info-doc]))
-          _ (crux/submit-tx node info-tx-ops)
-          {:keys [op-count last-tx]} (with-readings-docs
-                                       (fn [readings-docs]
-                                         (->> readings-docs
-                                              (partition-all readings-chunk-size)
-                                              (reduce (fn [{:keys [op-count last-tx]} chunk]
-                                                        {:op-count (+ op-count (count chunk))
-                                                         :last-tx (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
-                                                                                              [:crux.tx/put reading-doc time])))})
-                                                      {:op-count (count info-tx-ops)}))))]
-      (crux/await-tx node last-tx (Duration/ofMinutes 20))
-      {:op-count op-count
-       :node-size-bytes (bench/node-size-in-bytes node)})))
+    (bench/with-additional-index-metrics node
+      (let [info-tx-ops (vec (for [info-doc info-docs]
+                               [:crux.tx/put info-doc]))
+            _ (crux/submit-tx node info-tx-ops)
+            last-tx (with-readings-docs
+                      (fn [readings-docs]
+                        (->> readings-docs
+                             (partition-all readings-chunk-size)
+                             (reduce (fn [last-tx chunk]
+                                       (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
+                                                                   [:crux.tx/put reading-doc time]))))
+                                     nil))))]
+        (crux/await-tx node last-tx (Duration/ofMinutes 20))
+        {:node-size-bytes (bench/node-size-in-bytes node)}))))
 
 (defn test-battery-readings [node]
   ;; 10 most recent battery temperature readings for charging devices

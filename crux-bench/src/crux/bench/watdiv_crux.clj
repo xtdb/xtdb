@@ -4,7 +4,8 @@
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
             [crux.api :as crux]
-            [crux.sparql :as sparql])
+            [crux.sparql :as sparql]
+            [clojure.data.json :as json])
   (:import (java.time Duration)))
 
 (defn parse-results [resource]
@@ -27,14 +28,15 @@
 (defn ingest-crux
   [node]
   (bench/run-bench :ingest
-                   (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream watdiv/watdiv-input-file)]
-                                                          (rdf/submit-ntriples node in 1000))]
-                     (crux/await-tx node last-tx)
-                     {:entity-count entity-count
-                      :node-size-bytes (bench/node-size-in-bytes node)
-                      :neo4j-time-taken-ms (get-in parsed-db-results [:neo4j :ingest])
-                      :rdf4j-time-taken-ms (get-in parsed-db-results [:rdf4j :ingest])
-                      :datomic-time-taken-ms (get-in parsed-db-results [:datomic :ingest])})))
+    (bench/with-additional-index-metrics node
+      (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream watdiv/watdiv-input-file)]
+                                             (rdf/submit-ntriples node in 1000))]
+        (crux/await-tx node last-tx)
+        {:entity-count entity-count
+         :node-size-bytes (bench/node-size-in-bytes node)
+         :neo4j-time-taken-ms (get-in parsed-db-results [:neo4j :ingest])
+         :rdf4j-time-taken-ms (get-in parsed-db-results [:rdf4j :ingest])
+         :datomic-time-taken-ms (get-in parsed-db-results [:datomic :ingest])}))))
 
 (def db-query-results
   {:rdf4j (get-in parsed-db-results [:rdf4j :queries])
@@ -62,24 +64,29 @@
       (render-duration :datomic-time-taken-ms :datomic-time-taken)))
 
 (defn summarise-query-results [watdiv-query-results]
-  (merge (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
-         {:bench-type "queries"
-          :time-taken-ms (->> watdiv-query-results (map :time-taken-ms) (reduce +))}
-         (->> (for [db-name (keys db-query-results)]
-                (let [watdiv-results-with-db (for [query-result watdiv-query-results]
-                                               (merge query-result (get query-result db-name)))
-                      both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
-                      crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
-                      correct-idxs (into #{} (map :query-idx) crux-correct)]
-                  [db-name
-                   (-> {:crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
-                        :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
-
-                        :crux-time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
-                        :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))}
-                       (render-duration :crux-time-taken-ms :crux-time-taken)
-                       (render-duration :db-time-taken-ms :db-time-taken))]))
-              (into {}))))
+  (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
+        query-summary (merge base-map
+                             {:bench-type "queries"
+                              :time-taken-ms (->> watdiv-query-results (map :time-taken-ms) (reduce +))})
+        summarised-results (concat
+                            [query-summary]
+                            (mapv
+                             (fn [db-name]
+                               (let [watdiv-results-with-db (for [query-result watdiv-query-results]
+                                                              (merge query-result (get query-result db-name)))
+                                     both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
+                                     crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
+                                     correct-idxs (into #{} (map :query-idx) crux-correct)]
+                                 (-> (merge base-map
+                                            {:bench-type (str "queries-" (name db-name))
+                                             :crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
+                                             :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
+                                             :time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
+                                             :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))})
+                                     (render-duration :db-time-taken-ms :db-time-taken))))
+                             (keys db-query-results)))]
+    (run! (comp println json/write-str) summarised-results)
+    summarised-results))
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]
   (bench/with-bench-ns :watdiv-crux
