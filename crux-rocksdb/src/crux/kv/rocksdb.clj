@@ -118,6 +118,9 @@
         (.delete wb (mem/->on-heap k)))
       (.write db write-options wb)))
 
+  (compact [{:keys [^RocksDB db]}]
+    (.compactRange db))
+
   (fsync [{:keys [^RocksDB db]}]
     (with-open [flush-options (doto (FlushOptions.)
                                 (.setWaitForFlush true))]

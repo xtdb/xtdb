@@ -111,6 +111,17 @@
       (finally
         (cio/delete-dir backup-dir)))))
 
+(t/deftest test-compact []
+  (t/testing "store, retrieve and delete value"
+    (kv/store *kv* [[(.getBytes "key-with-a-long-prefix-1") (.getBytes "Crux")]])
+    (kv/store *kv* [[(.getBytes "key-with-a-long-prefix-2") (.getBytes "is")]])
+    (kv/store *kv* [[(.getBytes "key-with-a-long-prefix-3") (.getBytes "awesome")]])
+    (t/testing "compacting"
+      (kv/compact *kv*))
+    (t/is (= "Crux" (String. ^bytes (value *kv* (.getBytes "key-with-a-long-prefix-1")))))
+    (t/is (= "is" (String. ^bytes (value *kv* (.getBytes "key-with-a-long-prefix-2")))))
+    (t/is (= "awesome" (String. ^bytes (value *kv* (.getBytes "key-with-a-long-prefix-3")))))))
+
 (t/deftest test-sanity-check-can-start-with-sync-enabled
   (binding [fkv/*sync* true]
     (fkv/with-kv-store

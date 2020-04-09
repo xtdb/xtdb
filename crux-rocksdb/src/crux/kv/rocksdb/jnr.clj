@@ -282,6 +282,8 @@
           (.rocksdb_flushoptions_destroy rocksdb flush-options)
           (check-error errptr-out)))))
 
+  (compact [_])
+
   (backup [{:keys [^Pointer db]} dir]
     (let [dir (io/file dir)]
       (when (.exists dir)
