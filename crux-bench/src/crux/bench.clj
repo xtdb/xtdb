@@ -8,7 +8,8 @@
             [clojure.string :as string]
             [clj-http.client :as client]
             [crux.fixtures :as f]
-            [crux.bus :as bus])
+            [crux.bus :as bus]
+            [crux.kv :as kv])
   (:import (java.util.concurrent Executors ExecutorService)
            (java.util UUID Date List)
            (java.time Duration Instant)
@@ -59,18 +60,18 @@
 (defmacro with-timing [& body]
   `(with-timing* (fn [] ~@body)))
 
-(defn with-additional-index-metrics* [bus f]
+(defn with-additional-index-metrics* [node f]
   (let [!index-metrics (atom {:av-count 0
                               :bytes-indexed 0
                               :doc-count 0})]
-    (bus/listen
-     bus {:crux.bus/event-types #{:crux.tx/indexed-docs}}
-     (fn [{:keys [doc-ids av-count bytes-indexed]}]
-       (swap! !index-metrics (fn [index-metrics-map]
-                               (-> index-metrics-map
-                                   (update :av-count + av-count)
-                                   (update :bytes-indexed + bytes-indexed)
-                                   (update :doc-count + (count doc-ids)))))))
+    (bus/listen (:bus node)
+                {:crux.bus/event-types #{:crux.tx/indexed-docs}}
+                (fn [{:keys [doc-ids av-count bytes-indexed]}]
+                  (swap! !index-metrics (fn [index-metrics-map]
+                                          (-> index-metrics-map
+                                              (update :av-count + av-count)
+                                              (update :bytes-indexed + bytes-indexed)
+                                              (update :doc-count + (count doc-ids)))))))
     (let [results (f)]
       (assoc results
              :av-count (:av-count @!index-metrics)
@@ -78,7 +79,7 @@
              :doc-count (:doc-count @!index-metrics)))))
 
 (defmacro with-additional-index-metrics [node & body]
-  `(with-additional-index-metrics* (get-in (meta ~node) [:crux.node/topology :crux.node/bus]) (fn [] ~@body)))
+  `(with-additional-index-metrics* ~node (fn [] ~@body)))
 
 (defn run-bench* [bench-type f]
   (log/infof "running bench '%s/%s'..." *bench-ns* (name bench-type))
@@ -96,6 +97,14 @@
 
 (defmacro run-bench {:style/indent 1} [bench-type & body]
   `(run-bench* ~bench-type (fn [] ~@body)))
+
+(defn compact-node [node]
+  (run-bench :compaction
+    (let [pre-compact-bytes (:crux.kv/size (api/status node))]
+      (kv/compact (:kv-store node))
+
+      {:bytes-on-disk pre-compact-bytes
+       :compacted-bytes-on-disk (:crux.kv/size (api/status node))})))
 
 (defn post-to-slack [message]
   (when-let [slack-url (System/getenv "SLACK_URL")]
@@ -186,9 +195,6 @@
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
-
-(defn node-size-in-bytes [node]
-  (:crux.kv/size (api/status node)))
 
 (def nodes
   {"standalone-rocksdb"
