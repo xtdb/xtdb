@@ -89,8 +89,10 @@
     (swap! db #(apply dissoc % (map mem/->off-heap ks)))
     nil)
 
+  (compact [_])
+
   (fsync [_]
-    (log/warn "Using fsync on MemKv has no effect."))
+    (log/debug "Using fsync on MemKv has no effect."))
 
   (backup [_ dir]
     (let [file (io/file dir)]
