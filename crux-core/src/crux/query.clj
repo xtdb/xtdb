@@ -1247,14 +1247,28 @@
                                        ::query-id query-id}))))))))
 
   (historyAscending [this snapshot eid]
-    ;; TODO this doesn't close the iterator - we'll want to do this when we move to 'openHistoryAscending'
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
+  (openHistoryAscending [this eid]
+    (let [snapshot (.newSnapshot this)
+          i (kv/new-iterator snapshot)]
+      (doto (cio/->stream (for [^EntityTx entity-tx (idx/entity-history-seq-ascending i eid valid-time transact-time)]
+                            (assoc (c/entity-tx->edn entity-tx)
+                                   :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+        (.onClose #(run! cio/try-close [i snapshot])))))
+
   (historyDescending [this snapshot eid]
-    ;; TODO this doesn't close the iterator - we'll want to do this when we move to 'openHistoryDescending'
     (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+
+  (openHistoryDescending [this eid]
+    (let [snapshot (.newSnapshot this)
+          i (kv/new-iterator snapshot)]
+      (doto (cio/->stream (for [^EntityTx entity-tx (idx/entity-history-seq-descending i eid valid-time transact-time)]
+                            (assoc (c/entity-tx->edn entity-tx)
+                                   :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+        (.onClose #(run! cio/try-close [i snapshot])))))
 
   (validTime [_]
     valid-time)

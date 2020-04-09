@@ -278,13 +278,14 @@
       (t/is (= 4 (count history))))
 
     (let [db (.db *api* #inst "2019-02-03")]
-      (with-open [snapshot (.newSnapshot db)]
+      (with-open [history-asc (api/open-history-ascending db :ivan)
+                  history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+                 (map :crux.db/doc history-asc)))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
                   {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+                 (map :crux.db/doc history-desc)))))
 
     (let [db (.db *api* #inst "2019-02-02")]
       (with-open [snapshot (.newSnapshot db)]
@@ -296,20 +297,22 @@
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
     (let [db (.db *api* #inst "2019-01-31")]
-      (with-open [snapshot (.newSnapshot db)]
+      (with-open [history-asc (api/open-history-ascending db :ivan)
+                  history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
                   {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-        (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+                 (map :crux.db/doc history-asc)))
+        (t/is (empty? (map :crux.db/doc history-desc)))))
 
     (let [db (.db *api* #inst "2019-02-04")]
-      (with-open [snapshot (.newSnapshot db)]
-        (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+      (with-open [history-asc (api/open-history-ascending db :ivan)
+                  history-desc (api/open-history-descending db :ivan)]
+        (t/is (empty? (map :crux.db/doc history-asc)))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
                   {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+                 (map :crux.db/doc history-desc)))))
 
     (let [db (.db *api* #inst "2019-02-04" #inst "2019-01-31")]
       (with-open [snapshot (.newSnapshot db)]
@@ -317,12 +320,13 @@
         (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
     (let [db (.db *api* #inst "2019-02-02" version-2-submitted-tx-time)]
-      (with-open [snapshot (.newSnapshot db)]
+      (with-open [history-asc (api/open-history-ascending db :ivan)
+                  history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}]
-                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+                 (map :crux.db/doc history-asc)))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+                 (map :crux.db/doc history-desc)))))
 
     (let [db (.db *api* #inst "2019-02-03" version-2-submitted-tx-time)]
       (with-open [snapshot (.newSnapshot db)]

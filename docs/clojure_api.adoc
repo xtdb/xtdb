@@ -192,9 +192,8 @@ Represents the database as of a specific valid and transaction time.
 [source,clj]
 ----
   (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation-specific snapshot allowing for lazy history
-     results in a try-with-resources block. Can be passed to history-ascending
-     and history-descending.
+     "Returns a new implementation-specific snapshot allowing for multiple
+     entity calls to share the same KV store snapshot.
      returns an implementation specific snapshot")
 ----
 
@@ -231,23 +230,23 @@ Represents the database as of a specific valid and transaction time.
      ")
 ----
 
-=== history-ascending
+=== open-history-ascending
 
 [source,clj]
 ----
-  (history-ascending
-    [db snapshot eid]
+  (open-history-ascending
+    [db eid]
     "Retrieves entity history lazily in chronological order
     from and including the valid time of the db while respecting
     transaction time. Includes the documents.")
 ----
 
-=== history-descending
+=== open-history-descending
 
 [source,clj]
 ----
-  (history-descending
-    [db snapshot eid]
+  (open-history-descending
+    [db eid]
     "Retrieves entity history lazily in reverse chronological order
     from and including the valid time of the db while respecting
     transaction time. Includes the documents.")

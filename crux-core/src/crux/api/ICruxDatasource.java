@@ -86,7 +86,18 @@ public interface ICruxDatasource {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a lazy sequence of history.
      */
+    @Deprecated
     public Iterable<Map<Keyword,?>> historyAscending(Closeable snapshot, Object eid);
+
+    /**
+     * Retrieves entity history lazily in chronological order from and
+     * including the valid time of the db while respecting
+     * transaction time. Includes the documents.
+     *
+     * @param eid      an object that can be coerced into an entity id.
+     * @return         a stream of history.
+     */
+    public Stream<Map<Keyword,?>> openHistoryAscending(Object eid);
 
     /**
      * Retrieves entity history lazily in reverse chronological order
@@ -97,7 +108,18 @@ public interface ICruxDatasource {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a lazy sequence of history.
      */
+    @Deprecated
     public Iterable<Map<Keyword,?>> historyDescending(Closeable snapshot, Object eid);
+
+    /**
+     * Retrieves entity history lazily in reverse chronological order
+     * from and including the valid time of the db while respecting
+     * transaction time. Includes the documents.
+     *
+     * @param eid      an object that can be coerced into an entity id.
+     * @return         a stream of history.
+     */
+    public Stream<Map<Keyword,?>> openHistoryDescending(Object eid);
 
     /**
      * The valid time of this db.

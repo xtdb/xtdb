@@ -181,9 +181,8 @@
 (defn- query-stream [^ICruxAPI crux-node request]
   (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (db-for-request crux-node query-map)
-        snapshot (.newSnapshot db)
-        result (.q db snapshot (:query query-map))]
-    (-> (streamed-edn-response snapshot result)
+        result (api/open-q db (:query query-map))]
+    (-> (streamed-edn-response result result)
         (add-last-modified (.transactionTime db)))))
 
 (s/def ::eid c/valid-id?)
@@ -210,17 +209,15 @@
 (defn- history-ascending [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
-        snapshot (.newSnapshot db)
-        history (.historyAscending db snapshot (c/new-id eid))]
-    (-> (streamed-edn-response snapshot history)
+        history (api/open-history-ascending db (c/new-id eid))]
+    (-> (streamed-edn-response history history)
         (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- history-descending [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
-        snapshot (.newSnapshot db)
-        history (.historyDescending db snapshot (c/new-id eid))]
-    (-> (streamed-edn-response snapshot history)
+        history (api/open-history-descending db (c/new-id eid))]
+    (-> (streamed-edn-response history history)
         (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- transact [^ICruxAPI crux-node request]

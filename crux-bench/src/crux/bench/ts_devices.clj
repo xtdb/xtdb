@@ -218,10 +218,12 @@
                                                           (or [device-id :device-info/model "pinto"]
                                                               [device-id :device-info/model "focus"])]})
                                         (reduce into []))
-                       db (crux/db node #inst "1970")]
-                   (with-open [snapshot (crux/new-snapshot db)]
-                     (->> (for [r reading-ids]
-                            (for [entity-tx (crux/history-ascending db snapshot r)]
+                       db (crux/db node #inst "1970")
+                       histories (for [r reading-ids]
+                                   (crux/open-history-ascending db r))]
+                   (try
+                     (->> (for [history histories]
+                            (for [entity-tx history]
                               (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                           (cio/merge-sort (fn [a b]
                                             (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
@@ -231,7 +233,10 @@
                                   (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
                                     [(:crux.db/valid-time (first group))
                                      (first battery-levels)
-                                     (last battery-levels)]))))))
+                                     (last battery-levels)]))))
+                     (finally
+                       (run! cio/try-close histories))))
+
           successful? (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
                           [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
                           [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
