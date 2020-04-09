@@ -33,7 +33,6 @@
                                              (rdf/submit-ntriples node in 1000))]
         (crux/await-tx node last-tx)
         {:entity-count entity-count
-         :node-size-bytes (bench/node-size-in-bytes node)
          :neo4j-time-taken-ms (get-in parsed-db-results [:neo4j :ingest])
          :rdf4j-time-taken-ms (get-in parsed-db-results [:rdf4j :ingest])
          :datomic-time-taken-ms (get-in parsed-db-results [:datomic :ingest])}))))
@@ -92,6 +91,7 @@
   (bench/with-bench-ns :watdiv-crux
     (bench/with-crux-dimensions
       (ingest-crux node)
+      (bench/compact-node node)
 
       (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
         (fn [queries]

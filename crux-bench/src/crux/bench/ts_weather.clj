@@ -61,7 +61,7 @@
                                                              [:crux.tx/put condition-doc time]))))
                                      nil))))]
         (api/await-tx node last-tx (Duration/ofMinutes 20))
-        {:node-size-bytes (bench/node-size-in-bytes node)}))))
+        {}))))
 
 (defn test-last-10-readings [node]
   ;; NOTE: Does not work with range, takes latest values.
@@ -348,6 +348,7 @@
   (bench/with-bench-ns :ts-weather
     (bench/with-crux-dimensions
       (submit-ts-weather-data node)
+      (bench/compact-node node)
       (test-last-10-readings node)
       (test-last-10-readings-from-outside-locations node)
       (test-hourly-average-min-max-temperatures-for-field-locations node))))
