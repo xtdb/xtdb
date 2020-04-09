@@ -77,13 +77,12 @@
                                      both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
                                      crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
                                      correct-idxs (into #{} (map :query-idx) crux-correct)]
-                                 (-> (doto (merge base-map
-                                                  {:bench-type (str "queries-" (name db-name))
-                                                   :crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
-                                                   :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
-                                                   :time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
-                                                   :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))})
-                                       #(println "result:" (json/write-str %)))
+                                 (-> (merge base-map
+                                            {:bench-type (str "queries-" (name db-name))
+                                             :crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
+                                             :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
+                                             :time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
+                                             :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))})
                                      (render-duration :db-time-taken-ms :db-time-taken))))
                              (keys db-query-results)))]
     (run! (comp println json/write-str) summarised-results)
