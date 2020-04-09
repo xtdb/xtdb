@@ -30,7 +30,7 @@
           (Thread/sleep (.toMillis poll-sleep-duration)))))
 
     (catch InterruptedException e)
-    (catch Exception e
+    (catch Throwable e
       (reset! !error e)
       (log/error e "Error consuming transactions")))
 
