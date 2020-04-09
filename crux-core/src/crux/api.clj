@@ -336,7 +336,7 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (open-q [this query] (doto (cio/<-stream (.openQuery this query)) (prn :adapter)))
+  (open-q [this query] (cio/<-stream (.openQuery this query)))
 
   (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
   (open-history-ascending [this eid] (cio/<-stream (.openHistoryAscending this eid)))
