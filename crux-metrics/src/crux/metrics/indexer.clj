@@ -2,7 +2,8 @@
   (:require [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]
-            [crux.metrics.dropwizard :as dropwizard]))
+            [crux.metrics.dropwizard :as dropwizard])
+  (:import (java.util Date)))
 
 (defn assign-tx-id-lag [registry {:crux.node/keys [node]}]
   (dropwizard/gauge registry
@@ -10,6 +11,18 @@
                     #(when-let [completed (api/latest-completed-tx node)]
                        (- (::tx/tx-id (api/latest-submitted-tx node))
                           (::tx/tx-id completed)))))
+
+(defn assign-tx-latency-gauge [registry {:crux.node/keys [bus]}]
+  (let [!last-tx-lag (atom nil)]
+    (bus/listen bus
+                {:crux.bus/event-types #{:crux.tx/indexed-tx}}
+                (fn [{::tx/keys [submitted-tx]}]
+                  (reset! !last-tx-lag (- (System/currentTimeMillis)
+                                          (.getTime ^Date (::tx/tx-time submitted-tx))))))
+    (dropwizard/gauge registry
+                      ["indexer" "tx-latency"]
+                      (fn []
+                        (first (reset-vals! !last-tx-lag nil))))))
 
 (defn assign-doc-meter [registry {:crux.node/keys [bus]}]
   (let [meter (dropwizard/meter registry ["indexer" "indexed-docs"])]
@@ -58,6 +71,7 @@
   Returns an atom containing updating metrics"
   [registry deps]
   {:tx-id-lag (assign-tx-id-lag registry deps)
+   :tx-latency-gauge (assign-tx-latency-gauge registry deps)
    :docs-ingested-meter (assign-doc-meter registry deps)
    :av-ingested-meter (assign-av-meter registry deps)
    :bytes-ingested-meter (assign-bytes-meter registry deps)

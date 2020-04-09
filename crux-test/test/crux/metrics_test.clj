@@ -26,6 +26,7 @@
     (t/testing "post ingest values"
       (t/is (= 1 (dropwizard/meter-count (:docs-ingested-meter mets))))
       (t/is (zero? (dropwizard/value (:tx-id-lag mets))))
+      (t/is (pos? (dropwizard/value (:tx-latency-gauge mets))))
       (t/is (= 1 (dropwizard/meter-count (:tx-ingest-timer mets)))))))
 
 (t/deftest test-query-metrics
