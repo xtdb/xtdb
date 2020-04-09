@@ -71,7 +71,7 @@
 (t/deftest test-basic-query-returning-full-results
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
 
-  (t/testing "Can retrieve full results"
+  #_(t/testing "Can retrieve full results"
     (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
               "Ivan"] (first (api/q (api/db *api*)
                                     '{:find [e first-name]
@@ -242,6 +242,18 @@
                                 {:name "Ivan" :last-name "2"}]))
   (t/is (= 2
            (count (api/q (api/db *api*) '{:find [e] :where [[e :name "Ivan"]]})))))
+
+(t/deftest test-attribute-removal
+  (f/transact! *api* [{:crux.db/id :foo
+                       :has-thing? true
+                       :thing :something}])
+  (f/transact! *api* [{:crux.db/id :foo
+                       :has-thing? false}])
+
+  (t/is (= #{}
+           (api/q (api/db *api*) '{:find [has-thing? thing]
+                                   :where [[e :has-thing? has-thing?]
+                                           [e :thing thing]]}))))
 
 (t/deftest test-query-using-keywords
   (f/transact! *api* (f/people [{:name "Ivan" :sex :male}
