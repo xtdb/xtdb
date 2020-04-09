@@ -1,6 +1,25 @@
 = crux-calcite
 
-SQL adapter for Crux, built on https://calcite.apache.org/[Apache Calcite].
+SQL adapter for Crux, built on top of https://calcite.apache.org/[Apache Calcite].
+
+== Setup
+
+`crux-calcite` runs in-process as part of the Crux node as Crux
+module.
+
+First, add the `crux-calcite` dependency to your project:
+
+[source,clojure]
+----
+[juxt/crux-calcite "RELEASE"]]
+----
+
+Then add the calcite module to your topology:
+
+[source,clojure]
+----
+{:crux.node/topology ['crux.kafka/topology 'crux.calcite/module]}
+----
 
 == Table Definitions
 
@@ -24,7 +43,64 @@ And query `SELECT PERSON.NAME FROM PERSON`.
 
 A SQL table is a schema that maps Crux attributes to SQL table
 columns. Any document in Crux that has attributes matching those
-specified in a table schema could be return via the SQL query.
+specified in a table schema could be returned via the SQL query.
+
+For example with the following Crux transaction operation:
+
+[source,clojure]
+----
+[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}]
+----
+
+Query as such:
+
+[source,clojure]
+----
+(require '[crux.calcite])
+
+(defn query [q]
+  (with-open [conn (crux.calcite/jdbc-connection)]
+    (let [stmt (.createStatement conn)]
+      (->> q (.executeQuery stmt) resultset-seq))))
+
+(query "SELECT * PERSON.NAME FROM PERSON")
+----
+
+Returns:
+
+[source,clojure]
+----
+[{:name "Ivan"}]
+----
+
+== Connecting
+
+If you want to connect in-process, you can do so with the above method
+of using `crux.calcite/jdbc-connection` to establish a
+`java.sql.Connection`.
+
+You can also use https://calcite.apache.org/avatica/[Apache Avatica]
+to connect on-the-wire. Add to the
+https://mvnrepository.com/artifact/org.apache.calcite.avatica/avatica-core[Avatica
+SQL driver] to your project and use the connection string:
+
+[source,properties]
+----
+jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf
+----
+
+`server-hostname` is the hostname of the Crux node. The port by
+default is `1501` but you can swap it out by configuring the Crux
+`crux.calcite.port` configuration property.
+
+For example:
+
+[source,clojure]
+----
+(java.sql.DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")
+----
+
+== Column Types
 
 The following column types are supported:
 
@@ -36,26 +112,40 @@ The following column types are supported:
 * `:double`
 * `:datetime`
 
-== Connecting
+== Table backed Query
 
-If you want to connect in-process, you can do so using
-`crux.calcite/jdbc-connection`.
+The query that is built by `crux-calcite` to operate against Crux,
+looks for all documents that have all the attributes matching the
+defined columns.
 
-You can also use https://calcite.apache.org/avatica/[Apache Avatica]
-to connect on-the-wire. Use the
-https://mvnrepository.com/artifact/org.apache.calcite.avatica/avatica-core[Avatica
-SQL driver] and the connection string:
+You can however add an additional clause into the table schema
+definition, to refine what documents are in scope for a particular
+table, by adding `:crux.sql.table/query` to your schema.
 
-[source,properties]
+For example:
+
+[source,clojure]
 ----
-jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf
+{:crux.db/id :crux.sql.schema/person
+ :crux.sql.table/name "person"
+ :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
+                           :crux.sql.column/name "id"
+                           :crux.sql.column/type :keyword}
+                          {:crux.sql.column/attribute :name
+                           :crux.sql.column/name "name"
+                           :crux.sql.column/type :varchar}
+                          {:crux.sql.column/attribute :planet
+                           :crux.sql.column/name "planet"
+                           :crux.sql.column/type :varchar}]
+ :crux.sql.table/query '[[?e :planet "earth"]]}
 ----
 
-`server-hostname` is the hostname of the Crux node. The port by
-default is `1501` but you can swap it out by configuring the Crux
-`crux.calcite.port` configuration property.
+Now queries against the `PERSON` SQL table will only return documents
+where `:planet` is "earth".
 
 == Current Limitations
 
 Joins are handled by Calcite rather than Crux, with Calcite running
-separate queries and then joining the result-sets together in memory.
+separate queries and then joining the result-sets together in
+memory. Executing queries directly against Crux would be
+efficient. This module is intended for light usage for the time being.
