@@ -749,12 +749,11 @@
       (t/is (= [{::bus/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
                 {::bus/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
-                 :av-count 4
-                 ;; a bit brittle, granted, but hopefully it doesn't change often
-                 :bytes-indexed 632}
+                 :av-count 4}
                 {::bus/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
                 {::bus/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
-               @!events)))))
+               (-> (vec @!events)
+                   (update 1 dissoc :bytes-indexed)))))))
 
 (t/deftest test-wait-while
   (let [twice-no (let [!atom (atom 3)]
