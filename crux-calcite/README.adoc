@@ -39,8 +39,6 @@ To define a table, transact a document into Crux:
                            :crux.sql.column/type :varchar}]}
 ```
 
-And query `SELECT PERSON.NAME FROM PERSON`.
-
 A SQL table is a schema that maps Crux attributes to SQL table
 columns. Any document in Crux that has attributes matching those
 specified in a table schema could be returned via the SQL query.
@@ -52,7 +50,7 @@ For example with the following Crux transaction operation:
 [:crux.tx/put {:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}]
 ----
 
-Query as such:
+Get a connection and query as such:
 
 [source,clojure]
 ----
@@ -62,7 +60,12 @@ Query as such:
   (with-open [conn (crux.calcite/jdbc-connection)]
     (let [stmt (.createStatement conn)]
       (->> q (.executeQuery stmt) resultset-seq))))
+----
 
+So that:
+
+[source,clojure]
+----
 (query "SELECT * PERSON.NAME FROM PERSON")
 ----
 
@@ -120,7 +123,7 @@ defined columns.
 
 You can however add an additional clause into the table schema
 definition, to refine what documents are in scope for a particular
-table, by adding `:crux.sql.table/query` to your schema.
+table by adding `:crux.sql.table/query` to your schema.
 
 For example:
 
@@ -148,4 +151,4 @@ where `:planet` is "earth".
 Joins are handled by Calcite rather than Crux, with Calcite running
 separate queries and then joining the result-sets together in
 memory. Executing queries directly against Crux would be
-efficient. This module is intended for light usage for the time being.
+efficient. This module is therefore intended for light usage for the time being.
