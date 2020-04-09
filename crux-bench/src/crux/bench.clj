@@ -121,10 +121,10 @@
                                           :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))]
                (when (= bench-type :ingest)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
-                        {:docs-per-second (float (/ doc-count time-taken-seconds))
-                         :avs-per-second (float (/ av-count time-taken-seconds))
-                         :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds))})
-                      (map (fn [[k v]] (format "*%s*: `%s`" (name k) v))))))
+                        {:docs-per-second (int (/ doc-count time-taken-seconds))
+                         :avs-per-second (int (/ av-count time-taken-seconds))
+                         :bytes-indexed-per-second (int (/ bytes-indexed time-taken-seconds))})
+                      (map (fn [[k v]] (format "*%s*: %s" (name k) v))))))
        (string/join "\n")))
 
 (defn results->slack-message [results]
@@ -150,9 +150,9 @@
                                         :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)))]
                (when (= bench-type :ingest)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
-                        {:docs-per-second (float (/ doc-count time-taken-seconds))
-                         :avs-per-second (float (/ av-count time-taken-seconds))
-                         :bytes-indexed-per-second (float (/ bytes-indexed time-taken-seconds))})
+                        {:docs-per-second (int (/ doc-count time-taken-seconds))
+                         :avs-per-second (int (/ av-count time-taken-seconds))
+                         :bytes-indexed-per-second (int (/ bytes-indexed time-taken-seconds))})
                       (map (fn [[k v]] (format "<p><b>%s</b>: <code>%s</code></p>" (name k) v))))))
 
        (string/join " ")))
