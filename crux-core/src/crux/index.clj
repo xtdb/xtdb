@@ -183,9 +183,10 @@
   (seek-values [this v]
     (let [entity-tx ^EntityTx (.entity-tx ^EntityValueEntityPeekState (.peek-state entity-value-entity-idx))]
       (when-let [[v & more-vs] (seq (-> (db/get-single-object object-store snapshot (.content-hash entity-tx))
-                                        (get attr)
+                                        (get attr ::not-found)
                                         vectorize-value
-                                        (->> (map c/->value-buffer)
+                                        (->> (remove #{::not-found})
+                                             (map c/->value-buffer)
                                              (drop-while #(and v (neg? (.compare mem/buffer-comparator % v)))))))]
         (reset! !vs more-vs)
         [(mem/copy-buffer v) entity-tx])))
