@@ -10,16 +10,16 @@
             [crux.fixtures :as f]
             [crux.bus :as bus])
   (:import (java.util.concurrent Executors ExecutorService)
-           (java.util UUID Date)
+           (java.util UUID Date List)
            (java.time Duration Instant)
-           (java.io Closeable)
+           (java.io Closeable File)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
            (software.amazon.awssdk.core.exception SdkClientException)
            (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
-           (com.amazonaws.services.logs.model StartQueryRequest StartQueryResult GetQueryResultsRequest GetQueryResultsResult)
-           (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClientBuilder)
+           (com.amazonaws.services.logs.model StartQueryRequest StartQueryResult GetQueryResultsRequest GetQueryResultsResult ResultField)
+           (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClient AmazonSimpleEmailServiceClientBuilder)
            (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)
            (crux.bus EventBus)))
 
@@ -301,13 +301,13 @@
                             (.format (java.text.SimpleDateFormat. "yyyyMMdd-HHmmss")))]
     (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
 
-(defn save-to-s3 [{:keys [database version]} file]
+(defn save-to-s3 [{:keys [database version]} ^File file]
   (try
     (.putObject (S3Client/create)
                 (-> (PutObjectRequest/builder)
                     (.bucket "crux-bench")
                     (.key (generate-s3-filename database version))
-                    (.build))
+                    ^PutObjectRequest (.build))
                 (RequestBody/fromFile file))
     (catch SdkClientException e
       "AWS credentials not found! Results file not saved.")))
@@ -318,11 +318,11 @@
                 (-> (GetObjectRequest/builder)
                     (.bucket "crux-bench")
                     (.key key)
-                    (.build)))
+                    ^GetObjectRequest (.build)))
     (catch SdkClientException e
       (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
 
-(def log-client
+(def ^AWSLogsClient log-client
   (try
     (AWSLogsClientBuilder/defaultClient)
     (catch SdkClientException e
@@ -353,7 +353,7 @@
     (map (fn [query-request]
            (->> (map first (-> (.getQueryResults log-client query-request)
                                (.getResults)))
-                (map #(.getValue %))
+                (map #(.getValue ^ResultField %))
                 (map #(Integer/parseInt %))))
          query-requests)))
 
@@ -380,9 +380,14 @@
 
 (defn send-email-via-ses [message]
   (try
-    (let [email (-> (SendEmailRequest.)
-                    (.withDestination (-> (Destination.)
-                                          (.withToAddresses [(string/replace "crux-bench at juxt.pro" " at " "@")])))
+    (let [client (-> (AmazonSimpleEmailServiceClientBuilder/standard)
+                     (.withRegion "eu-west-1")
+                     ^AmazonSimpleEmailServiceClient (.build))
+
+          email (-> (SendEmailRequest.)
+                    (.withDestination (let [^List to-addresses [(string/replace "crux-bench at juxt.pro" " at " "@")]]
+                                        (-> (Destination.)
+                                            (.withToAddresses to-addresses))))
                     (.withMessage
                      (-> (Message.)
                          (.withBody (-> (Body.)
@@ -390,13 +395,11 @@
                                                        (.withCharset "UTF-8")
                                                        (.withData message)))))
                          (.withSubject (-> (Content.)
-                                             (.withCharset "UTF-8")
-                                             (.withData (str "Bench Results"))))))
+                                           (.withCharset "UTF-8")
+                                           (.withData (str "Bench Results"))))))
                     (.withSource "crux-bench@juxt.pro"))]
-      (-> (AmazonSimpleEmailServiceClientBuilder/standard)
-          (.withRegion "eu-west-1")
-          (.build)
-          (.sendEmail email)))
+
+      (.sendEmail client email))
 
     (catch Exception e
       (log/warn "Email failed to send! Error: " e))))
