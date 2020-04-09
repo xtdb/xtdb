@@ -129,36 +129,19 @@
 ;; to the lower levels.
 (defrecord CacheProvidingKvStore [kv cache-state cache-size]
   kv/KvStore
-  (open [this options]
-    (assoc this :kv (kv/open kv options)))
-
-  (new-snapshot [_]
-    (new-cached-snapshot (kv/new-snapshot kv) true))
-
-  (store [_ kvs]
-    (kv/store kv kvs))
-
-  (delete [_ ks]
-    (kv/delete kv ks))
-
-  (fsync [_]
-    (kv/fsync kv))
-
-  (backup [_ dir]
-    (kv/backup kv dir))
-
-  (count-keys [_]
-    (kv/count-keys kv))
-
-  (db-dir [_]
-    (kv/db-dir kv))
-
-  (kv-name [_]
-    (kv/kv-name kv))
+  (open [this options] (assoc this :kv (kv/open kv options)))
+  (new-snapshot [_] (new-cached-snapshot (kv/new-snapshot kv) true))
+  (store [_ kvs] (kv/store kv kvs))
+  (delete [_ ks] (kv/delete kv ks))
+  (fsync [_] (kv/fsync kv))
+  (compact [_] (kv/compact kv))
+  (backup [_ dir] (kv/backup kv dir))
+  (count-keys [_] (kv/count-keys kv))
+  (db-dir [_] (kv/db-dir kv))
+  (kv-name [_] (kv/kv-name kv))
 
   Closeable
-  (close [_]
-    (.close ^Closeable kv))
+  (close [_] (.close ^Closeable kv))
 
   CacheProvider
   (get-named-cache [this cache-name]
