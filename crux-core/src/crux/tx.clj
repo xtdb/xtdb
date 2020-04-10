@@ -284,14 +284,16 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [object-store kv-store indexer tx-log snapshot], :as deps}]
+                                       {:keys [object-store kv-store indexer tx-log snapshot nested-fn-args], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
         db (q/db kv-store object-store nil tx-time tx-time)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
-        {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
+        {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
+                                                 (or (get nested-fn-args arg-id)
+                                                     (db/get-single-object object-store snapshot arg-id)))
         args-id (:crux.db/id args-doc)
         fn-result (try
                     (let [tx-ops (apply (tx-fn-eval-cache body) db args)
@@ -302,22 +304,11 @@
                                         (s/explain-data :crux.api/tx-ops tx-ops)))))
                           docs (mapcat tx-op->docs tx-ops)
                           {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
-                      ;; TODO: might lead to orphaned and unevictable
-                      ;; argument docs if the transaction fails. As
-                      ;; these nested docs never go to the doc topic,
-                      ;; it's slightly less of an issue. It's done
-                      ;; this way to support nested fns.
-
-                      ;; FIXME I have a theory that this is broken - running the tx-test with memdb fails,
-                      ;; Rocks passes.
-                      ;; Theory is that, when the tx-fn returns another tx-fn, we index the doc here,
-                      ;; but when we go to index the tx-event, below, we then try to read the docs out of the
-                      ;; same KV snapshot - which shouldn't return the doc indexed after the snapshot was taken.
-                      ;; In Rocks, it does, in memdb (correctly, IMO) it doesn't, but this breaks the test.
-                      (db/index-docs indexer (->> arg-docs (into {} (map (juxt c/new-id identity)))))
                       {:docs (vec docs)
                        :ops-result (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
-                                          (index-tx-event tx-event tx deps)))})
+                                          (index-tx-event tx-event tx
+                                                          (-> deps
+                                                              (update :nested-fn-args (fnil into {}) (map (juxt c/new-id identity)) arg-docs)))))})
 
                     (catch Throwable t
                       t))]
