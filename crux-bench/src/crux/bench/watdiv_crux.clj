@@ -33,7 +33,6 @@
                                              (rdf/submit-ntriples node in 1000))]
         (crux/await-tx node last-tx)
         {:entity-count entity-count
-         :node-size-bytes (bench/node-size-in-bytes node)
          :neo4j-time-taken-ms (get-in parsed-db-results [:neo4j :ingest])
          :rdf4j-time-taken-ms (get-in parsed-db-results [:rdf4j :ingest])
          :datomic-time-taken-ms (get-in parsed-db-results [:datomic :ingest])}))))
@@ -52,10 +51,10 @@
        (into {})))
 
 (defn render-duration [m from-k to-k]
-  (-> (dissoc m from-k)
-      (assoc to-k (-> (get m from-k)
-                      (Duration/ofMillis)
-                      (str)))))
+  (let [duration (some-> (get m from-k) (Duration/ofMillis))]
+    (cond-> m
+      duration (-> (dissoc m from-k)
+                   (assoc to-k (str duration))))))
 
 (defn render-comparison-durations [m]
   (-> m
@@ -92,6 +91,7 @@
   (bench/with-bench-ns :watdiv-crux
     (bench/with-crux-dimensions
       (ingest-crux node)
+      (bench/compact-node node)
 
       (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
         (fn [queries]
@@ -104,6 +104,17 @@
                                           {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))})))))))))))
 
 (comment
-  (with-redefs [watdiv/watdiv-input-file (io/resource "watdiv.10.nt")]
-    (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
-      (run-watdiv-bench node {:test-count 10}))))
+  (def foo-raw-watdiv-results
+    (with-redefs [watdiv/watdiv-input-file (io/file "crux-bench/data/watdiv.10.nt")]
+     (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
+       (run-watdiv-bench node {:test-count 10}))))
+
+  (def foo-summarised-watdiv-results
+    (let [[ingest-results query-results] (->> foo-raw-watdiv-results
+                                              (split-at 2))]
+      (-> (concat (->> ingest-results (map render-comparison-durations))
+                  (summarise-query-results query-results))
+          (bench/with-comparison-times))))
+
+  (bench/results->slack-message foo-summarised-watdiv-results)
+  (bench/results->email foo-summarised-watdiv-results))

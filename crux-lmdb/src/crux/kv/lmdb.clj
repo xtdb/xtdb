@@ -247,6 +247,8 @@
             (kv/delete this ks))
           (throw e)))))
 
+  (compact [_])
+
   (fsync [this]
     (success? (LMDB/mdb_env_sync env true)))
 
