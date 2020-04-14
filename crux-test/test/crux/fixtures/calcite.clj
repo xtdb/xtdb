@@ -7,7 +7,7 @@
 (def ^:dynamic ^java.sql.Connection *conn*)
 
 (defn with-calcite-connection [f]
-  (with-open [conn (cal/jdbc-connection)]
+  (with-open [conn (cal/jdbc-connection fapi/*api*)]
     (binding [*conn* conn]
       (f))))
 

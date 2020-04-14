@@ -14,7 +14,8 @@
                                                                         com.fasterxml.jackson.core/jackson-core
                                                                         com.fasterxml.jackson.core/jackson-databind
                                                                         com.fasterxml.jackson.core/jackson-annotations]]
-                 [org.apache.calcite.avatica/avatica-server "1.16.0"]]
+                 [org.apache.calcite.avatica/avatica-server "1.16.0"]
+                 [cheshire "5.10.0"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                   [io.airlift.tpch/tpch "0.10"]]}}
   :middleware [leiningen.project-version/middleware]
