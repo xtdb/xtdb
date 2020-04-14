@@ -90,73 +90,78 @@
     (t/is (= #{{:name "Iva"}}
              (set (query "SELECT SUBSTRING(NAME,1,3) AS NAME FROM PERSON WHERE NAME = 'Ivan'")))))
 
-  (t/testing "namespaced keywords"
-    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
-    (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
-
-  (t/testing "numeric values"
-    (fapi/delete-all-entities)
-    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                         :crux.sql.table/name "person"
-                         :crux.sql.table/query {:find ['id 'name 'age]
-                                                :where [['id :name 'name]
-                                                        ['id :age 'age]]}
-                         :crux.sql.table/columns {'id :keyword, 'name :varchar, 'age :long}}])
-    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
-                                  {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
-
-    (t/is (= [{:name "Ivan" :age 21}]
-             (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
-
-    (t/testing "Range"
-      (t/is (= ["Malcolm"]
-               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE > 21"))))
-      (t/is (= ["Ivan"]
-               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE 23 > AGE"))))
-      (t/is (= #{"Ivan" "Malcolm"}
-               (set (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE >= 21")))))
-      (t/is (= ["Ivan"]
-               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE < 22"))))
-      (t/is (= ["Ivan"]
-               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE <= 21")))))
-
-    (t/testing "order by"
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE ASC")))
-      (t/is (= [{:name "Malcolm"}
-                {:name "Ivan"}]
-               (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE DESC")))))
-
-  (t/testing "equality of columns"
-    (fapi/delete-all-entities)
-    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                         :crux.sql.table/name "person"
-                         :crux.sql.table/query {:find ['id 'name 'surname]
-                                                :where [['id :name 'name]
-                                                        ['id :surname 'surname]]}
-                         :crux.sql.table/columns {'id :keyword, 'name :varchar, 'surname :varchar}}])
-    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname "Ivan"}
-                                  {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
-    (t/is (= [{:name "Ivan"}]
-             (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = SURNAME"))))
-
-  (t/testing "null"
-    (fapi/delete-all-entities)
-    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                         :crux.sql.table/name "person"
-                         :crux.sql.table/query {:find ['id 'name 'surname]
-                                                :where [['id :name 'name]
-                                                        ['id :surname 'surname]]}
-                         :crux.sql.table/columns {'id :keyword, 'name :varchar 'surname :varchar}}])
-    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname nil}
-                                  {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
-    (t/is (= [{:name "Ivan"}]
-             (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL"))))
-
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
+
+(t/deftest test-namespaced-keywords
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/query '{:find [?id ?name ?homeworld ?alive]
+                                               :where [[?id :name ?name]
+                                                       [?id :homeworld ?homeworld]
+                                                       [?id :alive ?alive]]}
+                       :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?alive :boolean}}])
+  (t/testing "namespaced keywords"
+    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
+    (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')")))))
+
+(t/deftest test-numeric-columns
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/query {:find ['id 'name 'age]
+                                              :where [['id :name 'name]
+                                                      ['id :age 'age]]}
+                       :crux.sql.table/columns {'id :keyword, 'name :varchar, 'age :long}}])
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
+                                {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
+
+  (t/is (= [{:name "Ivan" :age 21}]
+           (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
+
+  (t/testing "Range"
+    (t/is (= ["Malcolm"]
+             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE > 21"))))
+    (t/is (= ["Ivan"]
+             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE 23 > AGE"))))
+    (t/is (= #{"Ivan" "Malcolm"}
+             (set (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE >= 21")))))
+    (t/is (= ["Ivan"]
+             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE < 22"))))
+    (t/is (= ["Ivan"]
+             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE <= 21")))))
+
+  (t/testing "order by"
+    (t/is (= [{:name "Ivan"}
+              {:name "Malcolm"}]
+             (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE ASC")))
+    (t/is (= [{:name "Malcolm"}
+              {:name "Ivan"}]
+             (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE DESC")))))
+
+(t/deftest test-equality-of-columns
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/query {:find ['id 'name 'surname]
+                                              :where [['id :name 'name]
+                                                      ['id :surname 'surname]]}
+                       :crux.sql.table/columns {'id :keyword, 'name :varchar, 'surname :varchar}}])
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname "Ivan"}
+                                {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
+  (t/is (= [{:name "Ivan"}]
+           (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = SURNAME"))))
+
+(t/deftest test-query-for-null
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/query {:find ['id 'name 'surname]
+                                              :where [['id :name 'name]
+                                                      ['id :surname 'surname]]}
+                       :crux.sql.table/columns {'id :keyword, 'name :varchar 'surname :varchar}}])
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname nil}
+                                {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
+  (t/is (= [{:name "Ivan"}]
+           (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL"))))
 
 (t/deftest test-simple-joins
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
