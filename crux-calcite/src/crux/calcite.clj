@@ -1,5 +1,6 @@
 (ns crux.calcite
-  (:require [clojure.spec.alpha :as s]
+  (:require [cheshire.core :as json]
+            [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [crux.api :as crux]
@@ -8,12 +9,13 @@
            java.util.Properties
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
+           [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName))
 
-(defonce !node (atom nil))
+(defonce !crux-nodes (atom {}))
 
 (defprotocol OperandToCruxInput
   (operand->v [this schema]))
@@ -90,11 +92,11 @@
                              :double SqlTypeName/DOUBLE
                              :datetime SqlTypeName/DATE})
 
-(defn- ^java.util.List perform-query [q]
-  (->> (crux/q (crux/db @!node) q)
+(defn- ^java.util.List perform-query [node q]
+  (->> (crux/q (crux/db node) q)
        (mapv to-array)))
 
-(defn- make-table [{:keys [:crux.sql.table/columns] :as table-schema}]
+(defn- make-table [node {:keys [:crux.sql.table/columns] :as table-schema}]
   (proxy
       [org.apache.calcite.schema.impl.AbstractTable
        org.apache.calcite.schema.ProjectableFilterableTable]
@@ -108,7 +110,7 @@
           (.build field-info)))
       (scan [root filters projects]
         (org.apache.calcite.linq4j.Linq4j/asEnumerable
-         (perform-query (doto (->crux-query table-schema filters projects) log/debug))))))
+         (perform-query node (doto (->crux-query table-schema filters projects) log/debug))))))
 
 (s/def :crux.sql.column/attribute keyword?)
 (s/def :crux.sql.column/name string?)
@@ -133,33 +135,46 @@
          (map (comp conform-schema (partial crux/entity db) first)))))
 
 (defn create-schema [parent-schema name operands]
-  (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
-    (getTableMap []
-      (into {}
-            (for [table-schema (lookup-schema @!node)]
-              [(string/upper-case (:crux.sql.table/name table-schema)) (make-table table-schema)])))))
+  (let [node (@!crux-nodes (get operands "CRUX_NODE"))]
+    (assert node)
+    (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
+      (getTableMap []
+        (into {}
+              (for [table-schema (lookup-schema node)]
+                [(string/upper-case (:crux.sql.table/name table-schema)) (make-table node table-schema)]))))))
 
-(defn- model-properties []
+(def ^:private model {:version "1.0",
+                      :defaultSchema "crux",
+                      :schemas [{:name "crux",
+                                 :type "custom",
+                                 :factory "crux.calcite.CruxSchemaFactory",
+                                 :functions [{:name "CRUXID", :className "crux.calcite.CruxIdFn"}]}]})
+
+(defn- model-properties [node-uuid]
   (doto (Properties.)
-    (.put "model" (str "inline:" (slurp (clojure.java.io/resource "crux-calcite-model.json"))))))
+    (.put "model" (str "inline:" (-> model
+                                     (update-in [:schemas 0 :operand] assoc "CRUX_NODE" node-uuid)
+                                     json/generate-string)))))
 
-(defn ^java.sql.Connection jdbc-connection []
-  (DriverManager/getConnection "jdbc:calcite:" (model-properties)))
+(defrecord CalciteAvaticaServer [^HttpServer server node-uuid]
+  java.io.Closeable
+  (close [this]
+    (swap! !crux-nodes dissoc node-uuid)
+    (.stop server)))
+
+(defn ^java.sql.Connection jdbc-connection [node]
+  (assert node)
+  (DriverManager/getConnection "jdbc:calcite:" (-> node meta :crux.node/topology ::server :node-uuid model-properties)))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
-  ;; TODO, find a better approach
-  (reset! !node node)
-  ;; note, offer port configuration
-  ;; Todo won't work from a JAR file:
-  ;; Pass through the SchemaFactory
-  (let [server (.build (doto (org.apache.calcite.avatica.server.HttpServer$Builder.)
-                         (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:" (model-properties)))
-                                       org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
-                         (.withPort port)))]
-    (.start server)
-    (reify java.io.Closeable
-      (close [this]
-        (.stop server)))))
+  (let [node-uuid (str (java.util.UUID/randomUUID))]
+    (swap! !crux-nodes assoc node-uuid node)
+    (let [server (.build (doto (HttpServer$Builder.)
+                           (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:" (model-properties node-uuid)))
+                                         org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
+                           (.withPort port)))]
+      (.start server)
+      (CalciteAvaticaServer. server node-uuid))))
 
 (def module {::server {:start-fn start-server
                        :args {::port {:doc "JDBC Server Port"
