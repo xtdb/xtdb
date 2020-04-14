@@ -153,6 +153,21 @@
     (t/is (= [{:name "Ivan"}]
              (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = SURNAME"))))
 
+  (t/testing "null"
+    (fapi/delete-all-entities)
+    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                         :crux.sql.table/name "person"
+                         :crux.sql.table/columns [{:crux.sql.column/attribute :name
+                                                   :crux.sql.column/name "name"
+                                                   :crux.sql.column/type :varchar}
+                                                  {:crux.sql.column/attribute :surname
+                                                   :crux.sql.column/name "surname"
+                                                   :crux.sql.column/type :varchar}]}])
+    (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname nil}
+                                  {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
+    (t/is (= [{:name "Ivan"}]
+             (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL"))))
+
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))

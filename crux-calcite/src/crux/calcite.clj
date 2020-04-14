@@ -8,7 +8,7 @@
            java.util.Properties
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
-           org.apache.calcite.rel.type.RelDataTypeFactory
+           [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName))
@@ -63,7 +63,9 @@
     SqlKind/LESS_THAN_OR_EQUAL
     [[(apply list '<= (->operands schema filter*))]]
     SqlKind/LIKE
-    [[(apply list 'like (->operands schema filter*))]]))
+    [[(apply list 'like (->operands schema filter*))]]
+    SqlKind/IS_NULL
+    [[(apply list '= (->operands schema filter*))]]))
 
 (defn- ->crux-query
   [schema filters projects]
@@ -98,11 +100,12 @@
        org.apache.calcite.schema.ProjectableFilterableTable]
       []
       (getRowType [^RelDataTypeFactory type-factory]
-        (let [column-types (zipmap (keys column-types) (map #(.createSqlType type-factory %) (vals column-types)))
-              column-pairs (into []
-                                 (for [c columns]
-                                   [(column-types (:crux.sql.column/type c)) (string/upper-case (:crux.sql.column/name c))]))]
-          (.createStructType type-factory (map first column-pairs) (map second column-pairs))))
+        (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
+          (doseq [c columns]
+            (doto  field-info
+              (.add (string/upper-case (:crux.sql.column/name c)) ^SqlTypeName (column-types (:crux.sql.column/type c)))
+              (.nullable true)))
+          (.build field-info)))
       (scan [root filters projects]
         (org.apache.calcite.linq4j.Linq4j/asEnumerable
          (perform-query (doto (->crux-query table-schema filters projects) log/debug))))))
