@@ -17,14 +17,38 @@ toc::[]
     [node]
     [node ^Date valid-time]
     [node ^Date valid-time ^Date transaction-time]
-    "Will return the latest value of the db currently known. Non-blocking.
+    "When a valid time is specified then returned db value contains only those
+     documents whose valid time is before the specified time.
 
-     When a valid time is specified then returned db value contains only those
-     documents whose valid time is not after the specified. Non-blocking.
+     When both valid and transaction time are specified returns a db value as of
+     the valid time and the latest transaction time indexed at or before the
+     specified transaction time.
 
-     When both valid and transaction time are specified returns a db value
-     as of the valid and transaction time. Will block until the transaction
-     time is present in the index.")
+     If the node hasn't yet indexed a transaction at or past the given
+     transaction-time, this throws NodeOutOfSyncException")
+----
+
+==== open-db
+
+[source,clj]
+----
+  (open-db
+    [node]
+    [node ^Date valid-time]
+    [node ^Date valid-time ^Date transaction-time]
+    "When a valid time is specified then returned db value contains only those
+     documents whose valid time is before the specified time.
+
+     When both valid and transaction time are specified returns a db value as of
+     the valid time and the latest transaction time indexed at or before the
+     specified transaction time.
+
+     If the node hasn't yet indexed a transaction at or past the given
+     transaction-time, this throws NodeOutOfSyncException
+
+     This DB opens up shared resources to make multiple requests faster - it must
+     be `.close`d when you've finished using it (for example, in a `with-open`
+     block)")
 ----
 
 ==== document
@@ -35,7 +59,6 @@ toc::[]
     "Reads a document from the document store based on its
     content hash.")
 ----
-
 
 ==== history
 

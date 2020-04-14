@@ -290,7 +290,7 @@
 
   (let [fn-id (c/new-id k)
         db (q/db kv-store object-store nil tx-time tx-time)
-        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
+        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db snapshot fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
                                                  (or (get nested-fn-args arg-id)
                                                      (db/get-single-object object-store snapshot arg-id)))

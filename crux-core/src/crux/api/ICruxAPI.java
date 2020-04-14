@@ -12,33 +12,55 @@ import clojure.lang.Keyword;
  *  Provides API access to Crux.
  */
 public interface ICruxAPI extends ICruxIngestAPI, Closeable {
+
     /**
-     * Returns a db as of now. Will return the latest consistent
-     * snapshot of the db currently known. Does not block.
-     *
-     * @return the database.
+     * Returns a db as of now. Will return the latest consistent snapshot of the
+     * db currently known. Does not block.
      */
     public ICruxDatasource db();
 
     /**
-     * Returns a db as of valid time. Will return the latest
-     * consistent snapshot of the db currently known, but does not
-     * wait for valid time to be current. Does not block.
+     * Returns a db as of now. Will return the latest consistent snapshot of the
+     * db currently known. Does not block.
      *
-     * @param validTime    the valid time.
-     * @return             the database.
+     * This method returns a DB that opens resources shared between method calls
+     * - it must be `.close`d when you've finished using it.
+     */
+    public ICruxDatasource openDB();
+
+    /**
+     * Returns a db as of the provided valid time. Will return the latest
+     * consistent snapshot of the db currently known, but does not wait for
+     * valid time to be current. Does not block.
      */
     public ICruxDatasource db(Date validTime);
 
     /**
-     * Returns a db as of valid time and transaction time. Will
-     * block until the transaction time is present in the index.
+     * Returns a db as of the provided valid time. Will return the latest
+     * consistent snapshot of the db currently known, but does not wait for
+     * valid time to be current. Does not block.
      *
-     * @param validTime       the valid time.
-     * @param transactionTime the transaction time.
-     * @return                the database.
+     * This method returns a DB that opens resources shared between method calls
+     * - it must be `.close`d when you've finished using it.
+     */
+    public ICruxDatasource openDB(Date validTime);
+
+    /**
+     * Returns a db as of valid time and transaction time.
+     *
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transactionTime`
      */
     public ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
+
+    /**
+     * Returns a db as of valid time and transaction time.
+     *
+     * This method returns a DB that opens resources shared between method calls
+     * - it must be `.close`d when you've finished using it.
+     *
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transactionTime`
+     */
+    public ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
      *  Reads a document from the document store based on its

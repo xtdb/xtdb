@@ -63,18 +63,36 @@
 (defprotocol PCruxNode
   "Provides API access to Crux."
   (db
-    [node]
-    [node ^Date valid-time]
-    [node ^Date valid-time ^Date transaction-time]
-    "Will return the latest value of the db currently known. Non-blocking.
+    ^crux.api.ICruxDatasource [node]
+    ^crux.api.ICruxDatasource [node ^Date valid-time]
+    ^crux.api.ICruxDatasource [node ^Date valid-time ^Date transaction-time]
+    "When a valid time is specified then returned db value contains only those
+  documents whose valid time is before the specified time.
 
-  When a valid time is specified then returned db value contains only those
-  documents whose valid time is before the specified time. Non-blocking.
+  When both valid and transaction time are specified returns a db value as of
+  the valid time and the latest transaction time indexed at or before the
+  specified transaction time.
 
-  When both valid and transaction time are specified returns a db value
-  as of the valid time and the latest transaction time indexed at or before
-  the specified transaction time. Non-blocking. The index may not yet
-  contain a transaction with the specified transaction time.")
+  If the node hasn't yet indexed a transaction at or past the given
+  transaction-time, this throws NodeOutOfSyncException")
+
+  (open-db
+    ^crux.api.ICruxDatasource [node]
+    ^crux.api.ICruxDatasource [node ^Date valid-time]
+    ^crux.api.ICruxDatasource [node ^Date valid-time ^Date transaction-time]
+    "When a valid time is specified then returned db value contains only those
+  documents whose valid time is before the specified time.
+
+  When both valid and transaction time are specified returns a db value as of
+  the valid time and the latest transaction time indexed at or before the
+  specified transaction time.
+
+  If the node hasn't yet indexed a transaction at or past the given
+  transaction-time, this throws NodeOutOfSyncException
+
+  This DB opens up shared resources to make multiple requests faster - it must
+  be `.close`d when you've finished using it (for example, in a `with-open`
+  block)")
 
   (document [node content-hash]
     "Reads a document from the document store based on its
@@ -172,36 +190,30 @@
 (extend-protocol PCruxNode
   ICruxAPI
   (db
-    ([this]
-     (.db this))
-    ([this ^Date valid-time]
-     (.db this valid-time))
-    ([this ^Date valid-time ^Date transaction-time]
-     (.db this valid-time transaction-time)))
+    ([this] (.db this))
+    ([this ^Date valid-time] (.db this valid-time))
+    ([this ^Date valid-time ^Date transaction-time] (.db this valid-time transaction-time)))
 
-  (document [this content-hash]
-    (.document this content-hash))
+  (open-db
+    ([this] (.openDB this))
+    ([this ^Date valid-time] (.openDB this valid-time))
+    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time)))
 
-  (documents [this content-hash-set]
-    (.documents this content-hash-set))
+  (document [this content-hash] (.document this content-hash))
+  (documents [this content-hash-set] (.documents this content-hash-set))
 
-  (history [this eid]
-    (.history this eid))
+  (history [this eid] (.history this eid))
 
   (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
-  (status [this]
-    (.status this))
+  (status [this] (.status this))
 
-  (tx-committed? [this submitted-tx]
-    (.hasTxCommitted this submitted-tx))
+  (tx-committed? [this submitted-tx] (.hasTxCommitted this submitted-tx))
 
   (sync
-    ([this]
-     (.sync this nil))
-    ([this timeout]
-     (.sync this timeout))
+    ([this] (.sync this nil))
+    ([this timeout] (.sync this timeout))
 
     ([this tx-time timeout]
      (defonce warn-on-deprecated-sync
@@ -209,25 +221,17 @@
      (.awaitTxTime this tx-time timeout)))
 
   (await-tx
-    ([this submitted-tx]
-     (await-tx this submitted-tx nil))
-    ([this submitted-tx timeout]
-     (.awaitTx this submitted-tx timeout)))
+    ([this submitted-tx] (await-tx this submitted-tx nil))
+    ([this submitted-tx timeout] (.awaitTx this submitted-tx timeout)))
 
   (await-tx-time
-    ([this tx-time]
-     (await-tx-time this tx-time nil))
-    ([this tx-time timeout]
-     (.awaitTxTime this tx-time timeout)))
+    ([this tx-time] (await-tx-time this tx-time nil))
+    ([this tx-time timeout] (.awaitTxTime this tx-time timeout)))
 
-  (latest-completed-tx [node]
-    (.latestCompletedTx node))
+  (latest-completed-tx [node] (.latestCompletedTx node))
+  (latest-submitted-tx [node] (.latestSubmittedTx node))
 
-  (latest-submitted-tx [node]
-    (.latestSubmittedTx node))
-
-  (attribute-stats [this]
-    (.attributeStats this)))
+  (attribute-stats [this] (.attributeStats this)))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
@@ -243,7 +247,7 @@
 
   (entity
     [db eid]
-    [db snapshot eid]
+    ^:deprecated [db snapshot eid]
     "queries a document map for an entity.
   eid is an object which can be coerced into an entity id.
   returns the entity document map.")
@@ -253,7 +257,7 @@
   include tx-id and tx-time.
   eid is an object that can be coerced into an entity id.")
 
-  (new-snapshot ^java.io.Closeable [db]
+  (new-snapshot ^java.io.Closeable ^:deprecated [db]
     "Returns a new implementation-specific snapshot allowing for multiple
   entity calls to share the same KV store snapshot.
   returns an implementation specific snapshot")

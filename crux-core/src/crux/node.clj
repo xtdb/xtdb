@@ -37,11 +37,8 @@
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
-  (db [this]
-    (.db this nil nil))
-
-  (db [this valid-time]
-    (.db this valid-time nil))
+  (db [this] (.db this nil nil))
+  (db [this valid-time] (.db this valid-time nil))
 
   (db [this valid-time tx-time]
     (cio/with-read-lock lock
@@ -55,6 +52,12 @@
             valid-time (or valid-time (Date.))]
 
         (q/db kv-store object-store bus valid-time tx-time))))
+
+  (openDB [this] (.openDB this nil nil))
+  (openDB [this valid-time] (.openDB this valid-time nil))
+  (openDB [this valid-time tx-time]
+    (let [db (.db this valid-time tx-time)]
+      (assoc db :snapshot (q/open-snapshot db))))
 
   (document [this content-hash]
     (cio/with-read-lock lock
