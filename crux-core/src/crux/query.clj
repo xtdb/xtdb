@@ -1246,6 +1246,10 @@
                                        ::query safe-query
                                        ::query-id query-id}))))))))
 
+  (historyAscending [this eid]
+    (with-open [history (cio/<-stream (.openHistoryAscending this eid))]
+      (vec history)))
+
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
@@ -1257,6 +1261,10 @@
                             (assoc (c/entity-tx->edn entity-tx)
                                    :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
         (.onClose #(run! cio/try-close [i snapshot])))))
+
+  (historyDescending [this eid]
+    (with-open [history (cio/<-stream (.openHistoryDescending this eid))]
+      (vec history)))
 
   (historyDescending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time)]

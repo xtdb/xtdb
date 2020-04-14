@@ -285,10 +285,11 @@
   ")
 
   (history-ascending
+    [db eid]
     ^:deprecated [db snapshot eid]
-    "Retrieves entity history lazily in chronological order
-  from and including the valid time of the db while respecting
-  transaction time. Includes the documents.")
+    "Retrieves entity history (lazily, in the deprecated 3-arg arity - see
+  `open-history-ascending`) in chronological order from and including the valid
+  time of the db while respecting transaction time. Includes the documents.")
 
   (open-history-ascending ^java.io.Closeable [db eid]
     "Retrieves entity history lazily in chronological order
@@ -296,10 +297,12 @@
   transaction time. Includes the documents.")
 
   (history-descending
+    [db eid]
     ^:deprecated [db snapshot eid]
-    "Retrieves entity history lazily in reverse chronological order
-  from and including the valid time of the db while respecting
-  transaction time. Includes the documents.")
+    "Retrieves entity history (lazily, in the deprecated 3-arg arity - see
+  `open-history-descending`) in reverse chronological order from and including
+  the valid time of the db while respecting transaction time. Includes the
+  documents.")
 
   (open-history-descending ^java.io.Closeable [db eid]
     "Retrieves entity history lazily in reverse chronological order
@@ -338,9 +341,16 @@
 
   (open-q [this query] (cio/<-stream (.openQuery this query)))
 
-  (history-ascending [this snapshot eid] (.historyAscending this snapshot eid))
+  (history-ascending
+    ([this eid] (.historyAscending this eid))
+    ([this snapshot eid] (.historyAscending this snapshot eid)))
+
   (open-history-ascending [this eid] (cio/<-stream (.openHistoryAscending this eid)))
-  (history-descending [this snapshot eid] (.historyDescending this snapshot eid))
+
+  (history-descending
+    ([this eid] (.historyDescending this eid))
+    ([this snapshot eid] (.historyDescending this snapshot eid)))
+
   (open-history-descending [this eid] (cio/<-stream (.openHistoryDescending this eid)))
 
   (valid-time [this] (.validTime this))

@@ -230,15 +230,37 @@ Represents the database as of a specific valid and transaction time.
      ")
 ----
 
+=== history-ascending
+
+[source,clj]
+----
+  (history-ascending
+    [db eid]
+    "Retrieves entity history in chronological order from and including the
+    valid time of the db while respecting transaction time. Includes the
+    documents.")
+----
+
 === open-history-ascending
 
 [source,clj]
 ----
   (open-history-ascending
     [db eid]
-    "Retrieves entity history lazily in chronological order
-    from and including the valid time of the db while respecting
-    transaction time. Includes the documents.")
+    "Retrieves entity history lazily in chronological order from and including
+    the valid time of the db while respecting transaction time. Includes the
+    documents.")
+----
+
+=== history-descending
+
+[source,clj]
+----
+  (history-descending
+    [db eid]
+    "Retrieves entity history in reverse chronological order from and including
+    the valid time of the db while respecting transaction time. Includes the
+    documents.")
 ----
 
 === open-history-descending
@@ -247,9 +269,9 @@ Represents the database as of a specific valid and transaction time.
 ----
   (open-history-descending
     [db eid]
-    "Retrieves entity history lazily in reverse chronological order
-    from and including the valid time of the db while respecting
-    transaction time. Includes the documents.")
+    "Retrieves entity history lazily in reverse chronological order from and
+    including the valid time of the db while respecting transaction time.
+    Includes the documents.")
 ----
 
 === valid-time

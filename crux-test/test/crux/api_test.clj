@@ -278,6 +278,14 @@
       (t/is (= 4 (count history))))
 
     (let [db (.db *api* #inst "2019-02-03")]
+      (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
+               (map :crux.db/doc (api/history-ascending db :ivan))))
+
+      (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
+                {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                {:crux.db/id :ivan :name "Ivan" :version 1}]
+               (map :crux.db/doc (api/history-descending db :ivan))))
+
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
@@ -297,6 +305,12 @@
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
     (let [db (.db *api* #inst "2019-01-31")]
+      (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
+                {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                {:crux.db/id :ivan :name "Ivan" :version 3}]
+               (map :crux.db/doc (api/history-ascending db :ivan))))
+      (t/is (empty? (map :crux.db/doc (api/history-descending db :ivan))))
+
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}

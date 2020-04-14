@@ -135,6 +135,10 @@
       (doto (cio/->stream (edn-list->lazy-seq in))
         (.onClose #(.close ^Closeable in)))))
 
+  (historyAscending [this eid]
+    (with-open [history (cio/<-stream (.openHistoryAscending this eid))]
+      (vec history)))
+
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
                                (assoc (as-of-map this) :eid eid)
@@ -148,6 +152,10 @@
                                {:as :stream})]
       (doto (cio/->stream (edn-list->lazy-seq in))
         (.onClose #(.close ^java.io.Closeable in)))))
+
+  (historyDescending [this eid]
+    (with-open [history (cio/<-stream (.openHistoryDescending this eid))]
+      (vec history)))
 
   (historyDescending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-descending")

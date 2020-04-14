@@ -78,6 +78,16 @@ public interface ICruxDatasource {
     public Stream<List<?>> openQuery(Object query);
 
     /**
+     * Retrieves entity history in chronological order from and
+     * including the valid time of the db while respecting
+     * transaction time. Includes the documents.
+     *
+     * @param eid      an object that can be coerced into an entity id.
+     * @return         the history of the given entity.
+     */
+    public List<Map<Keyword,?>> historyAscending(Object eid);
+
+    /**
      * Retrieves entity history lazily in chronological order from and
      * including the valid time of the db while respecting
      * transaction time. Includes the documents.
@@ -98,6 +108,16 @@ public interface ICruxDatasource {
      * @return         a stream of history.
      */
     public Stream<Map<Keyword,?>> openHistoryAscending(Object eid);
+
+    /**
+     * Retrieves entity history in reverse chronological order
+     * from and including the valid time of the db while respecting
+     * transaction time. Includes the documents.
+     *
+     * @param eid      an object that can be coerced into an entity id.
+     * @return         the history of the given entity.
+     */
+    public List<Map<Keyword,?>> historyDescending(Object eid);
 
     /**
      * Retrieves entity history lazily in reverse chronological order
