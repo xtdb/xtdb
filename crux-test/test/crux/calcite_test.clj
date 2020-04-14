@@ -45,7 +45,12 @@
   (t/testing "retrieve data"
     (t/is (= [{:name "Ivan"}
               {:name "Malcolm"}]
-             (query "SELECT PERSON.NAME FROM PERSON"))))
+             (query "SELECT PERSON.NAME FROM PERSON")))
+
+    (t/testing "retrieve data case insensitivity of table schema"
+      (t/is (= [{:name "Ivan"}
+                {:name "Malcolm"}]
+               (query "select person.name from person")))))
 
   (t/testing "multiple columns"
     (t/is (= [{:name "Ivan" :homeworld "Earth"}
