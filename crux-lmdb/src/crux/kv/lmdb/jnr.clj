@@ -107,6 +107,8 @@
   (fsync [this]
     (.sync env true))
 
+  (compact [_])
+
   (backup [_ dir]
     (let [file (io/file dir)]
       (when (.exists file)

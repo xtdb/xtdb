@@ -32,9 +32,10 @@
                         (doto post-to-slack)))
 
                   (bench/with-nodes [node bench/nodes]
-                    (let [raw-watdiv-results (watdiv-crux/run-watdiv-bench node {:test-count 100})]
-                      (-> (concat [(watdiv-crux/render-comparison-durations (first raw-watdiv-results))]
-                                  (watdiv-crux/summarise-query-results (rest raw-watdiv-results)))
+                    (let [[ingest-results query-results] (->> (watdiv-crux/run-watdiv-bench node {:test-count 100})
+                                                              (split-at 2))]
+                      (-> (concat (->> ingest-results (map watdiv-crux/render-comparison-durations))
+                                  (watdiv-crux/summarise-query-results query-results))
                           (bench/with-comparison-times)
                           (doto post-to-slack)))))]
       (bench/send-email-via-ses

@@ -23,6 +23,7 @@
   (store [this kvs])
   (delete [this ks])
   (fsync [this])
+  (compact [this])
   (backup [this dir])
   (count-keys [this])
   (db-dir [this])
