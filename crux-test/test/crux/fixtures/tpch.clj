@@ -11,10 +11,12 @@
 (defn tpch-table->crux-sql-schema [^TpchTable t]
   {:crux.db/id (keyword "crux.sql.schema" (.getTableName t))
    :crux.sql.table/name (.getTableName t)
-   :crux.sql.table/columns (for [^TpchColumn c (.getColumns t)]
-                             {:crux.sql.column/attribute (keyword (.getSimplifiedColumnName c))
-                              :crux.sql.column/name (.getColumnName c)
-                              :crux.sql.column/type (tpch-column-types->crux-calcite-type (.getBase (.getType c)))})})
+   :crux.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
+                                       (symbol (.getColumnName c))))
+                          :where (vec (for [^TpchColumn c (.getColumns t)]
+                                        ['e (keyword (.getSimplifiedColumnName c)) (symbol (.getColumnName c))]))}
+   :crux.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
+                                      [(symbol (.getColumnName c)) (tpch-column-types->crux-calcite-type (.getBase (.getType c)))]))})
 
 (defn tpch-tables->crux-sql-schemas []
   (map tpch-table->crux-sql-schema (TpchTable/getTables)))

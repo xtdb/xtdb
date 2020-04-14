@@ -23,7 +23,7 @@
 (extend-protocol OperandToCruxInput
   RexInputRef
   (operand->v [this schema]
-    (get-in schema [:crux.sql.table/columns (.getIndex this)]))
+    (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
 
   org.apache.calcite.rex.RexCall
   (operand->v [this schema]
@@ -38,8 +38,7 @@
 
 (defn- ->operands [schema ^RexCall filter*]
   (->> (.getOperands filter*)
-       (map #(operand->v % schema))
-       (map #(if (map? %) (::sym %) %))))
+       (map #(operand->v % schema))))
 
 (defn- ->crux-where-clauses
   [schema ^RexNode filter*]
@@ -53,7 +52,7 @@
     SqlKind/OR
     [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/INPUT_REF
-    [['?e (:crux.sql.column/attribute (operand->v filter* schema)) true]]
+    [[(list '= (operand->v filter* schema) true)]]
     SqlKind/NOT
     [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/GREATER_THAN
@@ -67,72 +66,69 @@
     SqlKind/LIKE
     [[(apply list 'like (->operands schema filter*))]]
     SqlKind/IS_NULL
-    [[(apply list '= (->operands schema filter*))]]))
+    [[(apply list '= (->operands schema filter*))]]
+    SqlKind/IS_NOT_NULL
+    [[(list 'not (apply list '= (->operands schema filter*)))]]))
 
 (defn- ->crux-query
   [schema filters projects]
   (try
-    (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema]
-      {:find (mapv ::sym (if (seq projects) (map columns projects) columns))
+    (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
+          {:keys [find where]} query]
+      {:find (if (seq projects) (mapv find projects) find)
        :where (vec
                (concat
                 (mapcat (partial ->crux-where-clauses schema) filters)
-                (mapv (fn [{:keys [:crux.sql.column/attribute ::sym]}] ['?e attribute sym]) columns)
-                query))
+                where))
        :args [{:like #(org.apache.calcite.runtime.SqlFunctions/like %1 %2)}]})
     (catch Throwable e
       (log/error e)
       (throw e))))
 
-(def ^:private column-types {:varchar SqlTypeName/VARCHAR
-                             :keyword SqlTypeName/VARCHAR
-                             :integer SqlTypeName/INTEGER
-                             :long SqlTypeName/BIGINT
-                             :boolean SqlTypeName/BOOLEAN
-                             :double SqlTypeName/DOUBLE
-                             :datetime SqlTypeName/DATE})
+(def ^:private column-types->sql-types {:varchar SqlTypeName/VARCHAR
+                                        :keyword SqlTypeName/VARCHAR
+                                        :integer SqlTypeName/INTEGER
+                                        :long SqlTypeName/BIGINT
+                                        :boolean SqlTypeName/BOOLEAN
+                                        :double SqlTypeName/DOUBLE
+                                        :datetime SqlTypeName/DATE})
 
 (defn- ^java.util.List perform-query [node q]
   (->> (crux/q (crux/db node) q)
        (mapv to-array)))
 
-(defn- make-table [node {:keys [:crux.sql.table/columns] :as table-schema}]
+(defn- ^String ->column-name [c]
+  (string/replace (string/upper-case (str c)) #"^\?" ""))
+
+(defn- make-table [node {:keys [:crux.sql.table/query :crux.sql.table/columns] :as table-schema}]
   (proxy
       [org.apache.calcite.schema.impl.AbstractTable
        org.apache.calcite.schema.ProjectableFilterableTable]
       []
       (getRowType [^RelDataTypeFactory type-factory]
         (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
-          (doseq [c columns]
-            (doto  field-info
-              (.add (string/upper-case (:crux.sql.column/name c)) ^SqlTypeName (column-types (:crux.sql.column/type c)))
-              (.nullable true)))
+          (doseq [c (:find query)]
+            (let  [col-name (->column-name c)
+                   col-type ^SqlTypeName (column-types->sql-types (columns c))]
+              (assert col-type (str "Unrecognized column: " c))
+              (log/debug "Adding column" col-name col-type)
+              (doto field-info
+                (.add col-name col-type)
+                (.nullable true))))
           (.build field-info)))
       (scan [root filters projects]
         (org.apache.calcite.linq4j.Linq4j/asEnumerable
          (perform-query node (doto (->crux-query table-schema filters projects) log/debug))))))
 
-(s/def :crux.sql.column/attribute keyword?)
-(s/def :crux.sql.column/name string?)
-(s/def :crux.sql.column/type column-types)
 (s/def :crux.sql.table/name string?)
-(s/def :crux.sql.table/columns (s/coll-of (s/keys :req [:crux.sql.column/attribute
-                                                        :crux.sql.column/name
-                                                        :crux.sql.column/type])))
-(s/def ::table
-  (s/keys :req [:crux.db/id :crux.sql.table/name :crux.sql.table/columns]))
-
-(defn- conform-schema [s]
-  (s/valid? ::table s)
-  (update s :crux.sql.table/columns
-          (fn [columns]
-            (mapv #(assoc % ::sym (gensym (:crux.sql.column/name %))) columns))))
+(s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
+(s/def ::table (s/keys :req [:crux.db/id :crux.sql.table/name :crux.sql.table/columns]))
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
     (->> (crux/q db '{:find [e]
                       :where [[e :crux.sql.table/name]]})
-         (map (comp conform-schema (partial crux/entity db) first)))))
+         (map (comp (partial crux/entity db) first)))))
 
 (defn create-schema [parent-schema name operands]
   (let [node (@!crux-nodes (get operands "CRUX_NODE"))]
@@ -141,7 +137,8 @@
       (getTableMap []
         (into {}
               (for [table-schema (lookup-schema node)]
-                [(string/upper-case (:crux.sql.table/name table-schema)) (make-table node table-schema)]))))))
+                (do (s/valid? ::table table-schema)
+                    [(string/upper-case (:crux.sql.table/name table-schema)) (make-table node table-schema)])))))))
 
 (def ^:private model {:version "1.0",
                       :defaultSchema "crux",

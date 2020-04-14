@@ -7,8 +7,6 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]))
 
-;; See https://github.com/juxt/crux/issues/514
-
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection f)
   (t/testing "With Avatica Connection"
@@ -19,18 +17,12 @@
 (t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
-                                                 :crux.sql.column/name "id"
-                                                 :crux.sql.column/type :keyword}
-                                                {:crux.sql.column/attribute :name
-                                                 :crux.sql.column/name "name"
-                                                 :crux.sql.column/type :varchar}
-                                                {:crux.sql.column/attribute :homeworld
-                                                 :crux.sql.column/name "homeworld"
-                                                 :crux.sql.column/type :varchar}
-                                                {:crux.sql.column/attribute :alive
-                                                 :crux.sql.column/name "alive"
-                                                 :crux.sql.column/type :boolean}]}])
+                       :crux.sql.table/query '{:find [?id ?name ?homeworld ?alive]
+                                               :where [[?id :name ?name]
+                                                       [?id :homeworld ?homeworld]
+                                                       [?id :alive ?alive]]}
+                       :crux.sql.table/columns {'?id :keyword, '?name :varchar, '?homeworld :varchar, '?alive :boolean}}])
+
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :alive true}
                                 {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :alive false}]))
 
@@ -106,12 +98,10 @@
     (fapi/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
-                         :crux.sql.table/columns [{:crux.sql.column/attribute :name
-                                                   :crux.sql.column/name "name"
-                                                   :crux.sql.column/type :varchar}
-                                                  {:crux.sql.column/attribute :age
-                                                   :crux.sql.column/name "age"
-                                                   :crux.sql.column/type :long}]}])
+                         :crux.sql.table/query {:find ['id 'name 'age]
+                                                :where [['id :name 'name]
+                                                        ['id :age 'age]]}
+                         :crux.sql.table/columns {'id :keyword, 'name :varchar, 'age :long}}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
                                   {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
 
@@ -142,12 +132,10 @@
     (fapi/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
-                         :crux.sql.table/columns [{:crux.sql.column/attribute :name
-                                                   :crux.sql.column/name "name"
-                                                   :crux.sql.column/type :varchar}
-                                                  {:crux.sql.column/attribute :surname
-                                                   :crux.sql.column/name "surname"
-                                                   :crux.sql.column/type :varchar}]}])
+                         :crux.sql.table/query {:find ['id 'name 'surname]
+                                                :where [['id :name 'name]
+                                                        ['id :surname 'surname]]}
+                         :crux.sql.table/columns {'id :keyword, 'name :varchar, 'surname :varchar}}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname "Ivan"}
                                   {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
     (t/is (= [{:name "Ivan"}]
@@ -157,12 +145,10 @@
     (fapi/delete-all-entities)
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
-                         :crux.sql.table/columns [{:crux.sql.column/attribute :name
-                                                   :crux.sql.column/name "name"
-                                                   :crux.sql.column/type :varchar}
-                                                  {:crux.sql.column/attribute :surname
-                                                   :crux.sql.column/name "surname"
-                                                   :crux.sql.column/type :varchar}]}])
+                         :crux.sql.table/query {:find ['id 'name 'surname]
+                                                :where [['id :name 'name]
+                                                        ['id :surname 'surname]]}
+                         :crux.sql.table/columns {'id :keyword, 'name :varchar 'surname :varchar}}])
     (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname nil}
                                   {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
     (t/is (= [{:name "Ivan"}]
@@ -175,26 +161,16 @@
 (t/deftest test-simple-joins
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
-                                                 :crux.sql.column/name "id"
-                                                 :crux.sql.column/type :keyword}
-                                                {:crux.sql.column/attribute :name
-                                                 :crux.sql.column/name "name"
-                                                 :crux.sql.column/type :varchar}
-                                                {:crux.sql.column/attribute :planet
-                                                 :crux.sql.column/name "planet"
-                                                 :crux.sql.column/type :varchar}]}
+                       :crux.sql.table/query {:find ['id 'name 'planet]
+                                              :where [['id :name 'name]
+                                                      ['id :planet 'planet]]}
+                       :crux.sql.table/columns {'id :keyword, 'name :varchar 'planet :varchar}}
                       {:crux.db/id :crux.sql.schema/planet
                        :crux.sql.table/name "planet"
-                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
-                                                 :crux.sql.column/name "id"
-                                                 :crux.sql.column/type :keyword}
-                                                {:crux.sql.column/attribute :name
-                                                 :crux.sql.column/name "name"
-                                                 :crux.sql.column/type :varchar}
-                                                {:crux.sql.column/attribute :climate
-                                                 :crux.sql.column/name "climate"
-                                                 :crux.sql.column/type :varchar}]}])
+                       :crux.sql.table/query {:find ['id 'name 'climate]
+                                              :where [['id :name 'name]
+                                                      ['id :climate 'climate]]}
+                       :crux.sql.table/columns {'id :keyword, 'name :varchar 'climate :varchar}}])
   (f/transact! *api* (f/people [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
                                 {:crux.db/id :planet/earth :name "earth" :climate "Hot"}]))
   (t/testing "retrieve data"
@@ -204,16 +180,11 @@
 (t/deftest test-table-backed-by-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
-                                                 :crux.sql.column/name "id"
-                                                 :crux.sql.column/type :keyword}
-                                                {:crux.sql.column/attribute :name
-                                                 :crux.sql.column/name "name"
-                                                 :crux.sql.column/type :varchar}
-                                                {:crux.sql.column/attribute :planet
-                                                 :crux.sql.column/name "planet"
-                                                 :crux.sql.column/type :varchar}]
-                       :crux.sql.table/query '[[?e :planet "earth"]]}])
+                       :crux.sql.table/query {:find ['id 'name 'planet]
+                                              :where [['id :name 'name]
+                                                      ['id :planet 'planet]
+                                                      ['id :planet "earth"]]}
+                       :crux.sql.table/columns {'id :keyword, 'name :varchar 'planet :varchar}}])
   (f/transact! *api* (f/people [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
                                 {:crux.db/id :person/igor :name "Igor" :planet "not-earth"}]))
   (t/testing "retrieve data"
