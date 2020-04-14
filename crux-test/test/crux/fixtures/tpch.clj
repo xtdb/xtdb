@@ -43,15 +43,4 @@
 
 (comment
   (first (tpch-tables->crux-sql-schemas))
-  {:crux.db/id :crux.sql.schema/customer,
-   :crux.sql.table/name "customer",
-   :crux.sql.table/columns [{:crux.sql.column/attribute :c_custkey, :crux.sql.column/name "c_custkey", :crux.sql.column/type :varchar}
-                            {:crux.sql.column/attribute :c_name, :crux.sql.column/name "c_name", :crux.sql.column/type :varchar}
-                            {:crux.sql.column/attribute :c_address, :crux.sql.column/name "c_address", :crux.sql.column/type :varchar}
-                            {:crux.sql.column/attribute :c_nationkey, :crux.sql.column/name "c_nationkey", :crux.sql.column/type :varchar}
-                            {:crux.sql.column/attribute :c_phone, :crux.sql.column/name "c_phone", :crux.sql.column/type :varchar}
-                            {:crux.sql.column/attribute :c_acctbal, :crux.sql.column/name "c_acctbal", :crux.sql.column/type :double}
-                            {:crux.sql.column/attribute :c_mktsegment, :crux.sql.column/name "c_mktsegment", :crux.sql.column/type :varchar}
-                            {:crux.sql.column/attribute :c_comment, :crux.sql.column/name "c_comment", :crux.sql.column/type :varchar}]}
-
-  (first (tpch-table->docs (first (TpchTable/getTables)) 5)))
+  (first (tpch-table->docs (first (TpchTable/getTables)) )))
