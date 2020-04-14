@@ -277,7 +277,8 @@
               "order by\n"
               "  supplier_cnt desc,\n"
               "  p.p_brand,\n"
-              "  p.p_type")))
+              "  p.p_type"))
+  (t/is true))
 
 (t/deftest test-017
   (query (str "select\n"
@@ -296,7 +297,8 @@
               "      tpch.lineitem l2\n"
               "    where\n"
               "      l2.l_partkey = p.p_partkey\n"
-              ")")))
+              ")"))
+  (t/is true))
 
 (t/deftest test-018
   (query (str "select\n"
@@ -331,7 +333,8 @@
               "order by\n"
               "  o.o_totalprice desc,\n"
               "  o.o_orderdate\n"
-              "limit 100")))
+              "limit 100"))
+  (t/is true))
 
 ;; Skipping 19: Calcite: @Timeout(value = 10, unit = TimeUnit.MINUTES)
 
@@ -372,7 +375,8 @@
               "  and s.s_nationkey = n.n_nationkey\n"
               "  and n.n_name = 'KENYA'\n"
               "order by\n"
-              "  s.s_name")))
+              "  s.s_name"))
+  (t/is true))
 
 (t/deftest test-021
   (query (str "select\n"
@@ -414,7 +418,8 @@
               "order by\n"
               "  numwait desc,\n"
               "  s.s_name\n"
-              "limit 100")))
+              "limit 100"))
+  (t/is true))
 
 (t/deftest test-022
   (query (str "select\n"

@@ -28,20 +28,15 @@ To define a table, transact a document into Crux:
 ``` clojure
 {:crux.db/id :crux.sql.schema/person
  :crux.sql.table/name "person"
- :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
-                           :crux.sql.column/name "id"
-                           :crux.sql.column/type :keyword}
-                          {:crux.sql.column/attribute :name
-                           :crux.sql.column/name "name"
-                           :crux.sql.column/type :varchar}
-                          {:crux.sql.column/attribute :homeworld
-                           :crux.sql.column/name "homeworld"
-                           :crux.sql.column/type :varchar}]}
+ :crux.sql.table/query {:find ['id 'name 'homeworld]
+                        :where [['id :name 'name]
+                                ['id :homeworld 'homeworld]]}
+ :crux.sql.table/columns {'id :keyword 'name :varchar 'homeworld :varchar}}
 ```
 
 A SQL table is a schema that maps Crux attributes to SQL table
-columns. Any document in Crux that has attributes matching those
-specified in a table schema could be returned via the SQL query.
+columns. Any document in Crux that matches the `crux.sql.table/query`
+in the schema document is eligible to be returned via the SQL query.
 
 For example with the following Crux transaction operation:
 
@@ -114,37 +109,6 @@ The following column types are supported:
 * `:boolean`
 * `:double`
 * `:datetime`
-
-== Table backed Query
-
-The query that is built by `crux-calcite` to operate against Crux,
-looks for all documents that have all the attributes matching the
-defined columns.
-
-You can however add an additional clause into the table schema
-definition, to refine what documents are in scope for a particular
-table by adding `:crux.sql.table/query` to your schema.
-
-For example:
-
-[source,clojure]
-----
-{:crux.db/id :crux.sql.schema/person
- :crux.sql.table/name "person"
- :crux.sql.table/columns [{:crux.sql.column/attribute :crux.db/id
-                           :crux.sql.column/name "id"
-                           :crux.sql.column/type :keyword}
-                          {:crux.sql.column/attribute :name
-                           :crux.sql.column/name "name"
-                           :crux.sql.column/type :varchar}
-                          {:crux.sql.column/attribute :planet
-                           :crux.sql.column/name "planet"
-                           :crux.sql.column/type :varchar}]
- :crux.sql.table/query '[[?e :planet "earth"]]}
-----
-
-Now queries against the `PERSON` SQL table will only return documents
-where `:planet` is "earth".
 
 == Current Limitations
 
