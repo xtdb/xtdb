@@ -7,7 +7,8 @@
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
             [crux.memory :as mem]
-            [crux.lru :as lru])
+            [crux.lru :as lru]
+            [crux.index :as idx])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -206,34 +207,6 @@
 
 (defrecord RocksJNRKv [db-dir]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.rocksdb.jnr/db-options crux.kv.rocksdb.jnr/disable-wal?] :as options}]
-    (init-rocksdb-jnr!)
-    (let [opts (.rocksdb_options_create rocksdb)
-          _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
-          _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
-          errptr-out (make-array String 1)
-          db (try
-               (let [db (.rocksdb_open rocksdb
-                                       opts
-                                       (.getAbsolutePath (doto (io/file db-dir)
-                                                           (.mkdirs)))
-                                       errptr-out)]
-                 (check-error errptr-out)
-                 db)
-               (catch Throwable t
-                 (.rocksdb_options_destroy rocksdb opts)
-                 (throw t)))
-          write-options (.rocksdb_writeoptions_create rocksdb)]
-      (when sync?
-        (.rocksdb_writeoptions_set_sync rocksdb write-options 1))
-      (when disable-wal?
-        (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1))
-      (assoc this
-             :db-dir db-dir
-             :db db
-             :options opts
-             :write-options write-options)))
-
   (new-snapshot [{:keys [^Pointer db]}]
     (let [snapshot (.rocksdb_create_snapshot rocksdb db)
           read-options (.rocksdb_readoptions_create rocksdb)]
@@ -315,12 +288,45 @@
     (.rocksdb_options_destroy rocksdb options)
     (.rocksdb_writeoptions_destroy rocksdb write-options)))
 
-(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
-                     (lru/start-kv-store (map->RocksJNRKv {:db-dir db-dir}) options))
-         :args (merge lru/options
-                      {::db-options {:doc "RocksDB Options"
-                                     :crux.config/type :crux.config/string}
-                       ::disable-wal? {:doc "Disable Write Ahead Log"
-                                       :crux.config/type :crux.config/boolean}})})
+(def kv
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version
+                            ::db-options ::disable-wal?]
+                     :as options}]
+               (init-rocksdb-jnr!)
+               (let [opts (.rocksdb_options_create rocksdb)
+                     _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
+                     _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
+                     errptr-out (make-array String 1)
+                     db (try
+                          (let [db (.rocksdb_open rocksdb
+                                                  opts
+                                                  (.getAbsolutePath (doto (io/file db-dir)
+                                                                      (.mkdirs)))
+                                                  errptr-out)]
+                            (check-error errptr-out)
+                            db)
+                          (catch Throwable t
+                            (.rocksdb_options_destroy rocksdb opts)
+                            (throw t)))
+                     write-options (.rocksdb_writeoptions_create rocksdb)]
+
+                 (when sync?
+                   (.rocksdb_writeoptions_set_sync rocksdb write-options 1))
+                 (when disable-wal?
+                   (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1))
+
+                 (-> (map->RocksJNRKv {:db-dir db-dir
+                                       :db db
+                                       :options opts
+                                       :write-options write-options})
+                     (cond-> check-and-store-index-version idx/check-and-store-index-version)
+                     (lru/wrap-lru-cache options))))
+
+   :args (merge kv/options
+                lru/options
+                {::db-options {:doc "RocksDB Options"
+                               :crux.config/type :crux.config/string}
+                 ::disable-wal? {:doc "Disable Write Ahead Log"
+                                 :crux.config/type :crux.config/boolean}})})
 
 (def kv-store {:crux.node/kv-store kv})

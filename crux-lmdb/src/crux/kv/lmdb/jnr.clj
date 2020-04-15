@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
             [crux.lru :as lru]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.index :as idx])
   (:import java.io.Closeable
            org.agrona.ExpandableDirectByteBuffer
            [org.lmdbjava CopyFlags Cursor Dbi DbiFlags DirectBufferProxy Env EnvFlags Env$MapFullException GetOp PutFlags Txn]))
@@ -57,21 +58,6 @@
 
 (defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.lmdb.java/env-flags] :as options}]
-    (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
-                     (io/file db-dir)
-                     (into-array EnvFlags (cond-> default-env-flags
-                                            (not sync?) (concat no-sync-env-flags))))
-          ^String db-name nil]
-      (try
-        (assoc this
-               :env env
-               :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))
-               :db-dir db-dir)
-        (catch Throwable t
-          (.close env)
-          (throw t)))))
-
   (new-snapshot [_]
     (->LMDBJNRSnapshot dbi (.txnRead env)))
 
@@ -130,9 +116,24 @@
   (close [_]
     (.close env)))
 
-(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
-                     (lru/start-kv-store (map->LMDBJNRKv {:db-dir db-dir}) options))
-         :args (merge lru/options
+(def kv {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version ::env-flags]
+                           :as options}]
+                     (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
+                                      (io/file db-dir)
+                                      (into-array EnvFlags (cond-> default-env-flags
+                                                             (not sync?) (concat no-sync-env-flags))))
+                           ^String db-name nil]
+                       (try
+                         (-> (map->LMDBJNRKv {:db-dir db-dir
+                                              :env env
+                                              :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))})
+                             (lru/wrap-lru-cache options)
+                             (cond-> check-and-store-index-version idx/check-and-store-index-version))
+                         (catch Throwable t
+                           (.close env)
+                           (throw t)))))
+         :args (merge kv/options
+                      lru/options
                       {::env-flags {:doc "LMDB Flags"
                                     :crux.config/type [any? identity]}})})
 

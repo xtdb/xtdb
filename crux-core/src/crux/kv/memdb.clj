@@ -5,7 +5,8 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.index :as idx])
   (:import clojure.lang.Box
            java.io.Closeable))
 
@@ -65,17 +66,6 @@
 
 (defrecord MemKv [db db-dir persist-on-close?]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.memdb.kv/persist-on-close?] :as options}]
-    (when sync?
-      (log/warn "Using sync? on MemKv has no effect."
-                (if (and db-dir persist-on-close?)
-                  "Will persist on close."
-                  "Persistence is disabled.")))
-    (let [this (assoc this :db-dir db-dir :persist-on-close? persist-on-close?)]
-      (if (.isFile (io/file db-dir "memdb"))
-        (assoc this :db (atom (restore-db db-dir)))
-        (assoc this :db (atom (sorted-map-by mem/buffer-comparator))))))
-
   (new-snapshot [_]
     (->MemKvSnapshot @db))
 
@@ -114,11 +104,26 @@
     (when (and db-dir persist-on-close?)
       (persist-db db-dir db))))
 
-(def kv {:start-fn (fn [_ {:keys [crux.kv/db-dir crux.kv.memdb/persist-on-close?] :as options}]
-                     (lru/start-kv-store (map->MemKv {:db-dir db-dir :persist-on-close? persist-on-close?}) options))
-         :args (merge lru/options
-                      {::persist-on-close? {:doc "Persist Mem Db on close"
-                                            :default false
-                                            :crux.config/type :crux.config/boolean}})})
+(def kv
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version ::persist-on-close?]
+                     :as options}]
+               (when sync?
+                 (log/warn "Using sync? on MemKv has no effect."
+                           (if (and db-dir persist-on-close?)
+                             "Will persist on close."
+                             "Persistence is disabled.")))
+               (-> (map->MemKv {:db-dir db-dir
+                                :persist-on-close? persist-on-close?
+                                :db (atom (if (.isFile (io/file db-dir "memdb"))
+                                            (restore-db db-dir)
+                                            (sorted-map-by mem/buffer-comparator)))})
+                   (cond-> check-and-store-index-version idx/check-and-store-index-version)
+                   (lru/wrap-lru-cache options)))
+
+   :args (merge kv/options
+                lru/options
+                {::persist-on-close? {:doc "Persist Mem Db on close"
+                                      :default false
+                                      :crux.config/type :crux.config/boolean}})})
 
 (def kv-store {:crux.node/kv-store kv})
