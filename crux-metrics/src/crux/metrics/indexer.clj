@@ -13,7 +13,7 @@
                           (::tx/tx-id completed)))))
 
 (defn assign-tx-latency-gauge [registry {:crux.node/keys [bus]}]
-  (let [!last-tx-lag (atom nil)]
+  (let [!last-tx-lag (atom 0)]
     (bus/listen bus
                 {:crux.bus/event-types #{:crux.tx/indexed-tx}}
                 (fn [{::tx/keys [submitted-tx]}]
@@ -22,7 +22,7 @@
     (dropwizard/gauge registry
                       ["indexer" "tx-latency"]
                       (fn []
-                        (first (reset-vals! !last-tx-lag nil))))))
+                        (first (reset-vals! !last-tx-lag 0))))))
 
 (defn assign-doc-meter [registry {:crux.node/keys [bus]}]
   (let [meter (dropwizard/meter registry ["indexer" "indexed-docs"])]
