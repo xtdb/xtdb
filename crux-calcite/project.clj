@@ -5,19 +5,20 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [juxt/crux-core "derived-from-git"]
-                 [com.google.guava/guava "28.2-jre"]
-                 [com.google.code.findbugs/jsr305 "3.0.2"]
-                 [com.google.protobuf/protobuf-java "3.9.2"]
-                 [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
-                 [org.apache.calcite/calcite-core "1.21.0" :exclusions [org.apache.commons/commons-lang3
-                                                                        org.apache.calcite.avatica/avatica-core
-                                                                        com.fasterxml.jackson.core/jackson-core
-                                                                        com.fasterxml.jackson.core/jackson-databind
-                                                                        com.fasterxml.jackson.core/jackson-annotations]]
+                 [cheshire "5.10.0"]
+
+                 [org.apache.calcite/calcite-core "1.21.0"]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
-                 [cheshire "5.10.0"]]
+
+                 ;; dependency conflict resolution
+                 [org.apache.calcite.avatica/avatica-core "1.16.0"]
+                 [com.fasterxml.jackson.core/jackson-annotations "2.10.0"]
+                 [com.fasterxml.jackson.core/jackson-databind "2.10.0"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [io.airlift.tpch/tpch "0.10"]]}}
+                                  [io.airlift.tpch/tpch "0.10"]
+
+                                  ;; dependency conflict resolution:
+                                  [com.google.guava/guava "26.0-jre"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

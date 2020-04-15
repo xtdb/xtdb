@@ -58,7 +58,10 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                  [io.netty/netty-transport "4.1.45.Final"]
                  [io.netty/netty-codec-http "4.1.45.Final"]
-                 [org.reactivestreams/reactive-streams "1.0.3"]]
+                 [org.reactivestreams/reactive-streams "1.0.3"]
+                 [cheshire "5.10.0"]
+                 [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
+                 [org.apache.commons/commons-lang3 "3.8"]]
 
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]

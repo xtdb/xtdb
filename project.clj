@@ -52,6 +52,7 @@
    [io.netty/netty-transport "4.1.45.Final"]
    [io.netty/netty-codec-http "4.1.45.Final"]
    [org.reactivestreams/reactive-streams "1.0.3"]
+   [cheshire "5.10.0"]
 
    ;; crux metrics dependencies
    ;; tag::MetricsJMXDeps[]
