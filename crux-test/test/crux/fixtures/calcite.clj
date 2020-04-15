@@ -22,5 +22,6 @@
     f))
 
 (defn query [q]
-  (let [stmt (.createStatement *conn*)]
-    (->> q (.executeQuery stmt) resultset-seq)))
+  (with-open [stmt (.createStatement *conn*)
+              rs (.executeQuery stmt q)]
+    (->> rs resultset-seq (into []))))
