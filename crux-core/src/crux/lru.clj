@@ -129,7 +129,6 @@
 ;; to the lower levels.
 (defrecord CacheProvidingKvStore [kv cache-state cache-size]
   kv/KvStore
-  (open [this options] (assoc this :kv (kv/open kv options)))
   (new-snapshot [_] (new-cached-snapshot (kv/new-snapshot kv) true))
   (store [_ kvs] (kv/store kv kvs))
   (delete [_ ks] (kv/delete kv ks))
@@ -168,22 +167,10 @@
 (def ^:const default-query-cache-size 10240)
 
 (def options
-  (merge kv/options
-         {::query-cache-size
-          {:doc "Query Cache Size"
-           :default default-query-cache-size
-           :crux.config/type :crux.config/nat-int}}))
+  {::query-cache-size {:doc "Query Cache Size"
+                       :default default-query-cache-size
+                       :crux.config/type :crux.config/nat-int}})
 
-(defn start-kv-store ^java.io.Closeable [kv {:keys [crux.kv/check-and-store-index-version
-                                                    crux.lru/query-cache-size] :as options}]
-  (let [kv (if (instance? CacheProvidingKvStore kv)
-             kv
-             (->CacheProvidingKvStore kv (atom {}) query-cache-size))
-        kv (kv/open kv options)]
-    (try
-      (if check-and-store-index-version
-        (idx/check-and-store-index-version kv)
-        kv)
-      (catch Throwable t
-        (.close ^Closeable kv)
-        (throw t)))))
+(defn wrap-lru-cache ^java.io.Closeable [kv {:keys [crux.lru/query-cache-size]}]
+  (cond-> kv
+    (not (instance? CacheProvidingKvStore kv)) (->CacheProvidingKvStore (atom {}) query-cache-size)))

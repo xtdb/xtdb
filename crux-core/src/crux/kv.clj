@@ -18,7 +18,6 @@
 
 ;; tag::KvStore[]
 (defprotocol KvStore
-  (open ^crux.kv.KvStore [this options])
   (new-snapshot ^java.io.Closeable [this])
   (store [this kvs])
   (delete [this ks])

@@ -5,7 +5,8 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.kv.rocksdb.loader]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.index :as idx])
   (:import java.io.Closeable
            clojure.lang.MapEntry
            (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
@@ -70,34 +71,6 @@
 
 (defrecord RocksKv [db-dir]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.rocksdb/disable-wal?
-                      crux.kv.rocksdb/metrics?
-                      ^Options crux.kv.rocksdb/db-options] :as options}]
-    (RocksDB/loadLibrary)
-    (let [stats (when metrics? (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
-          opts (doto (or db-options (Options.))
-                 (cond-> metrics? (.setStatistics stats))
-                 (.setCompressionType CompressionType/LZ4_COMPRESSION)
-                 (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
-                 (.setCreateIfMissing true))
-          db (try
-               (RocksDB/open opts (.getAbsolutePath (doto (io/file db-dir)
-                                                      (.mkdirs))))
-               (catch Throwable t
-                 (.close opts)
-                 (throw t)))
-          write-opts (WriteOptions.)]
-      (when sync?
-        (.setSync write-opts true))
-      (when disable-wal?
-        (.setDisableWAL write-opts true))
-      (assoc this
-             :db-dir db-dir
-             :db db
-             :options opts
-             :stats stats
-             :write-options write-opts)))
-
   (new-snapshot [{:keys [^RocksDB db]}]
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
@@ -150,21 +123,48 @@
     (.close write-options)))
 
 (def kv
-  {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
-               (lru/start-kv-store (map->RocksKv {:db-dir db-dir}) options))
-   :args (-> lru/options
-             (assoc ::db-options {:doc "RocksDB Options"
-                                  :crux.config/type [#(instance? Options %) identity]}
-                    ::disable-wal? {:doc "Disable Write Ahead Log"
-                                    :crux.config/type :crux.config/boolean}
-                    ::metrics? {:doc "Enable RocksDB metrics"
-                                :default false
-                                :crux.config/type :crux.config/boolean})
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version
+                            ::disable-wal? ::metrics? ::db-options]
+                     :as options}]
+               (RocksDB/loadLibrary)
+               (let [stats (when metrics? (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
+                     opts (doto (or ^Options db-options (Options.))
+                            (cond-> metrics? (.setStatistics stats))
+                            (.setCompressionType CompressionType/LZ4_COMPRESSION)
+                            (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
+                            (.setCreateIfMissing true))
+                     db (try
+                          (RocksDB/open opts (.getAbsolutePath (doto (io/file db-dir)
+                                                                 (.mkdirs))))
+                          (catch Throwable t
+                            (.close opts)
+                            (throw t)))
+                     write-opts (doto (WriteOptions.)
+                                  (.setSync (boolean sync?))
+                                  (.setDisableWAL (boolean disable-wal?)))]
+                 (-> (map->RocksKv {:db-dir db-dir
+                                    :db db
+                                    :options opts
+                                    :stats stats
+                                    :write-options write-opts})
+                     (cond-> check-and-store-index-version idx/check-and-store-index-version)
+                     (lru/wrap-lru-cache options))))
+
+   :args (-> (merge kv/options
+                    lru/options
+                    {::db-options {:doc "RocksDB Options"
+                                   :crux.config/type [#(instance? Options %) identity]}
+                     ::disable-wal? {:doc "Disable Write Ahead Log"
+                                     :crux.config/type :crux.config/boolean}
+                     ::metrics? {:doc "Enable RocksDB metrics"
+                                 :default false
+                                 :crux.config/type :crux.config/boolean}})
              (update ::kv/db-dir assoc :required? true, :default "data"))})
 
 (def kv-store {:crux.node/kv-store kv})
 
-(def kv-store-with-metrics {:crux.node/kv-store (update-in kv [:args ::metrics? :default] not)
-                            :crux.metrics/registry 'crux.metrics/registry-module
-                            :crux.metrics/all-metrics-loaded 'crux.metrics/all-metrics-loaded
-                            ::metrics 'crux.kv.rocksdb.metrics/metrics-module})
+(def kv-store-with-metrics
+  {:crux.node/kv-store (update-in kv [:args ::metrics? :default] not)
+   :crux.metrics/registry 'crux.metrics/registry-module
+   :crux.metrics/all-metrics-loaded 'crux.metrics/all-metrics-loaded
+   ::metrics 'crux.kv.rocksdb.metrics/metrics-module})

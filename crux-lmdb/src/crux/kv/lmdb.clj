@@ -6,7 +6,8 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.lru :as lru])
+            [crux.lru :as lru]
+            [crux.index :as idx])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
@@ -201,24 +202,6 @@
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
-  (open [this {:keys [crux.kv/db-dir crux.kv/sync? crux.kv.lmdb/env-flags] :as options}]
-    (let [env-flags (or env-flags
-                        (bit-or default-env-flags
-                                (if sync?
-                                  0
-                                  no-sync-env-flags)))
-          env (env-create)]
-      (try
-        (env-open env db-dir env-flags)
-        (assoc this
-               :db-dir db-dir
-               :env env
-               :env-flags env-flags
-               :dbi (dbi-open env))
-        (catch Throwable t
-          (env-close env)
-          (throw t)))))
-
   (new-snapshot [_]
     (let [tx (new-transaction env LMDB/MDB_RDONLY)]
       (->LMDBKvSnapshot env dbi tx)))
@@ -273,11 +256,29 @@
     (env-close env)))
 
 (def kv
-  {:start-fn (fn [_ {:keys [crux.kv/db-dir] :as options}]
-               (lru/start-kv-store (map->LMDBKv {:db-dir db-dir}) options))
-   :args (-> lru/options
-             (assoc ::env-flags {:doc "LMDB Flags"
-                                 :crux.config/type :crux.config/nat-int})
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version ::env-flags] :as options}]
+               (let [env-flags (or env-flags
+                                   (bit-or default-env-flags
+                                           (if sync?
+                                             0
+                                             no-sync-env-flags)))
+                     env (env-create)]
+                 (try
+                   (env-open env db-dir env-flags)
+                   (-> (map->LMDBKv {:db-dir db-dir
+                                     :env env
+                                     :env-flags env-flags
+                                     :dbi (dbi-open env)})
+                       (cond-> check-and-store-index-version idx/check-and-store-index-version)
+                       (lru/wrap-lru-cache options))
+                   (catch Throwable t
+                     (env-close env)
+                     (throw t)))))
+
+   :args (-> (merge kv/options
+                    lru/options
+                    {::env-flags {:doc "LMDB Flags"
+                                  :crux.config/type :crux.config/nat-int}})
              (update ::kv/db-dir assoc :required? true, :default "data"))})
 
 (def kv-store {:crux.node/kv-store kv})
