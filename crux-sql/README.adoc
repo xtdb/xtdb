@@ -1,17 +1,17 @@
-= crux-calcite
+= crux-sql
 
 SQL adapter for Crux, built on top of https://calcite.apache.org/[Apache Calcite].
 
 == Setup
 
-`crux-calcite` runs in-process as part of the Crux node as Crux
+`crux-sql` runs in-process as part of the Crux node as Crux
 module.
 
-First, add the `crux-calcite` dependency to your project:
+First, add the `crux-sql` dependency to your project:
 
 [source,clojure]
 ----
-[juxt/crux-calcite "RELEASE"]]
+[juxt/crux-sql "RELEASE"]]
 ----
 
 Then add the calcite module to your topology:

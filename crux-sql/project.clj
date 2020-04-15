@@ -1,4 +1,4 @@
-(defproject juxt/crux-calcite "derived-from-git"
+(defproject juxt/crux-sql "derived-from-git"
   :description "SQL for Crux using Apache Calcite"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
