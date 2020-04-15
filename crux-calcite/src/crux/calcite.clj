@@ -140,12 +140,13 @@
                 (do (s/valid? ::table table-schema)
                     [(string/upper-case (:crux.sql.table/name table-schema)) (make-table node table-schema)])))))))
 
-(def ^:private model {:version "1.0",
-                      :defaultSchema "crux",
-                      :schemas [{:name "crux",
-                                 :type "custom",
-                                 :factory "crux.calcite.CruxSchemaFactory",
-                                 :functions [{:name "CRUXID", :className "crux.calcite.CruxIdFn"}]}]})
+(def ^:private model
+  {:version "1.0",
+   :defaultSchema "crux",
+   :schemas [{:name "crux",
+              :type "custom",
+              :factory "crux.calcite.CruxSchemaFactory",
+              :functions [{:name "CRUXID", :className "crux.calcite.CruxIdFn"}]}]})
 
 (defn- model-properties [node-uuid]
   (doto (Properties.)

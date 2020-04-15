@@ -87,11 +87,19 @@ SQL driver] to your project and use the connection string:
 jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf
 ----
 
-`server-hostname` is the hostname of the Crux node. The port by
-default is `1501` but you can swap it out by configuring the Crux
-`crux.calcite.port` configuration property.
+`server-hostname` is the hostname of the Crux node.
 
-For example:
+The port by default is `1501` but you can swap it out by configuring
+the `:crux.calcite/port` Crux configuration property, i.e.:
+
+[source,clojure]
+----
+{:crux.node/topology ['crux.kafka/topology 'crux.calcite/module]
+ :crux.calcite/port 1502
+...}
+----
+
+You can then connect using the Avatica JDBC driver, for example:
 
 [source,clojure]
 ----
@@ -114,5 +122,6 @@ The following column types are supported:
 
 Joins are handled by Calcite rather than Crux, with Calcite running
 separate queries and then joining the result-sets together in
-memory. Executing queries directly against Crux would be
-efficient. This module is therefore intended for light usage for the time being.
+memory. Executing queries directly against Crux would be more
+efficient and provide greater consistency. This module is therefore
+intended for light usage for the time being.
