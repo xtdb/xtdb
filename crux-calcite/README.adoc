@@ -118,6 +118,15 @@ The following column types are supported:
 * `:double`
 * `:datetime`
 
+== Column Names
+
+SQL table column names are mapped from the symbols used by the
+`:crux.sql.table/query` query backing the table and referred to by
+`:crux.sql.table/columns`.
+
+Note that in the case where symbols are prefixed with `?`, then `?` is
+stripped for the SQL column name.
+
 == Current Limitations
 
 Joins are handled by Calcite rather than Crux, with Calcite running
