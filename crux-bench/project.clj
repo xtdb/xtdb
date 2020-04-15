@@ -1,6 +1,7 @@
 (defproject juxt/crux-bench "derived-from-git"
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/data.json "0.2.7"]
+                 [org.clojure/tools.cli "1.0.194"]
                  [juxt/crux-core "derived-from-git"]
                  [juxt/crux-kafka "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
