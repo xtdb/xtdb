@@ -54,7 +54,9 @@
                  [org.apache.httpcomponents/httpclient "4.5.9"]
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
-                 [com.fasterxml.jackson.core/jackson-databind "2.10.2"]]
+                 [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
+                 [cheshire "5.10.0"]
+                 [org.codehaus.janino/commons-compiler "3.0.11"]]
 
   :middleware [leiningen.project-version/middleware]
 
