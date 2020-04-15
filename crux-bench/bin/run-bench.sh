@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
 set -e
-COMMIT_ISH=${1:-HEAD}
-COMMIT_SHA="$(git rev-parse ${COMMIT_ISH})"
+
+# COMMAND = '["crux.bench.main", "foo", "bar"]'
+COMMAND='["crux.bench.main"'
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -r|--rev)
+            REV="$2";
+            shift 2;;
+        --nodes|--tests)
+            COMMAND+=", \"$1\", \"$2\""
+            shift 2;;
+        *) echo "Unknown parameter passed: $1"; exit 1;;
+    esac
+done
+
+COMMAND+="]"
+REV=${REV:-HEAD}
+SHA="$(git rev-parse ${REV})"
 
 TASKDEF_ARN=$(aws ecs register-task-definition\
                   --family "crux-bench-dev" \
@@ -35,7 +52,7 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                       "name":"bench-container",
                       "cpu":2048,
                       "memory":8192,
-                      "image":"955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:commit-'${COMMIT_SHA}'",
+                      "image":"955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:commit-'${SHA}'",
                       "dependsOn":[{"condition":"START","containerName":"broker-container"}],
                       "essential":true,
                       "secrets":[{"name":"SLACK_URL","valueFrom":"arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"}],
@@ -50,11 +67,13 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                     }]' \
         | jq -r .taskDefinition.taskDefinitionArn )
 
+echo "Starting ECS task @ ${SHA:0:8}. Failures:"
 aws ecs run-task \
     --task-definition "$TASKDEF_ARN" \
     --cluster crux-bench \
     --launch-type FARGATE \
     --count 1 \
     --network-configuration "awsvpcConfiguration={subnets=[subnet-5140ba2b],assignPublicIp=\"ENABLED\"}" \
+    --overrides '{"containerOverrides": [{"name": "bench-container", "command": '"$COMMAND"'}]}' \
     --output json \
     | jq .failures
