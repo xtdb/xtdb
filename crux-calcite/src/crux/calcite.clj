@@ -110,7 +110,8 @@
           (doseq [c (:find query)]
             (let  [col-name (->column-name c)
                    col-type ^SqlTypeName (column-types->sql-types (columns c))]
-              (assert col-type (str "Unrecognized column: " c))
+              (when-not col-type
+                (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
               (log/debug "Adding column" col-name col-type)
               (doto field-info
                 (.add col-name col-type)
@@ -137,7 +138,8 @@
       (getTableMap []
         (into {}
               (for [table-schema (lookup-schema node)]
-                (do (s/valid? ::table table-schema)
+                (do (when-not (s/valid? ::table table-schema)
+                      (throw (IllegalStateException. (str "Invalid table schema: " (prn-str table-schema)))))
                     [(string/upper-case (:crux.sql.table/name table-schema)) (make-table node table-schema)])))))))
 
 (def ^:private model
