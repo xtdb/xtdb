@@ -6,7 +6,7 @@
             [crux.api :as crux]
             crux.db)
   (:import java.sql.DriverManager
-           java.util.Properties
+           [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
@@ -15,7 +15,7 @@
            org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName))
 
-(defonce !crux-nodes (atom {}))
+(defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
 (defprotocol OperandToCruxInput
   (operand->v [this schema]))
@@ -95,7 +95,7 @@
 
 (defn- ^java.util.List perform-query [node q]
   (->> (crux/q (crux/db node) q)
-       (mapv to-array)))
+       (map to-array)))
 
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
@@ -131,7 +131,7 @@
          (map (comp (partial crux/entity db) first)))))
 
 (defn create-schema [parent-schema name operands]
-  (let [node (@!crux-nodes (get operands "CRUX_NODE"))]
+  (let [node (get !crux-nodes (get operands "CRUX_NODE"))]
     (assert node)
     (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
       (getTableMap []
@@ -157,7 +157,7 @@
 (defrecord CalciteAvaticaServer [^HttpServer server node-uuid]
   java.io.Closeable
   (close [this]
-    (swap! !crux-nodes dissoc node-uuid)
+    (.remove !crux-nodes node-uuid)
     (.stop server)))
 
 (defn ^java.sql.Connection jdbc-connection [node]
@@ -166,7 +166,7 @@
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
   (let [node-uuid (str (java.util.UUID/randomUUID))]
-    (swap! !crux-nodes assoc node-uuid node)
+    (.put !crux-nodes node-uuid node)
     (let [server (.build (doto (HttpServer$Builder.)
                            (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:" (model-properties node-uuid)))
                                          org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
