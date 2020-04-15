@@ -56,7 +56,7 @@
     SqlKind/NOT
     [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/GREATER_THAN
-    [[(list '> (->operands schema filter*))]]
+    [[(apply list '> (->operands schema filter*))]]
     SqlKind/GREATER_THAN_OR_EQUAL
     [[(apply list '>= (->operands schema filter*))]]
     SqlKind/LESS_THAN
