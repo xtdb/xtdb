@@ -107,12 +107,14 @@
        :compacted-bytes-on-disk (:crux.kv/size (api/status node))})))
 
 (defn post-to-slack [message]
-  (when-let [slack-url (System/getenv "SLACK_URL")]
+  (if-let [slack-url (System/getenv "SLACK_URL")]
     (client/post (-> slack-url
                      (json/read-str)
                      (get "slack-url"))
                  {:body (json/write-str {:text message})
-                  :content-type :json})))
+                  :content-type :json})
+
+    (println "Would post to Slack:\n" message)))
 
 (defn- result->slack-message [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
                                       minimum-time-taken-this-week maximum-time-taken-this-week
