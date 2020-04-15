@@ -215,6 +215,22 @@
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb-with-metrics"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
 
+   "h2-rocksdb"
+   (fn [data-dir]
+     {:crux.node/topology '[crux.jdbc/topology
+                            crux.metrics.dropwizard.cloudwatch/reporter]
+      :crux.kv/db-dir (str (io/file data-dir "kv"))
+      :crux.jdbc/dbtype "h2"
+      :crux.jdbc/dbname (str (io/file data-dir "h2"))})
+
+   "sqlite-rocksdb"
+   (fn [data-dir]
+     {:crux.node/topology '[crux.jdbc/topology
+                            crux.metrics.dropwizard.cloudwatch/reporter]
+      :crux.kv/db-dir (str (io/file data-dir "kv"))
+      :crux.jdbc/dbtype "sqlite"
+      :crux.jdbc/dbname (str (io/file data-dir "sqlite"))})
+
    "kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
