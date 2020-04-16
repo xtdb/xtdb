@@ -93,9 +93,26 @@
                                         :double SqlTypeName/DOUBLE
                                         :datetime SqlTypeName/DATE})
 
-(defn- ^java.util.List perform-query [node q]
-  (->> (crux/q (crux/db node) q)
-       (map to-array)))
+(defn- perform-query [node q]
+  (let [db (crux/db node)
+        snapshot (crux/new-snapshot db)
+        results (atom (crux/q db snapshot q))]
+    (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
+        []
+        (enumerator []
+          (let [current (atom nil)]
+            (proxy [org.apache.calcite.linq4j.Enumerator]
+                []
+              (current []
+                (to-array @current))
+              (moveNext []
+                (reset! current (first @results))
+                (swap! results next)
+                (boolean @current))
+              (reset []
+                (throw (UnsupportedOperationException.)))
+              (close []
+                (.close snapshot))))))))
 
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
@@ -118,8 +135,7 @@
                 (.nullable true))))
           (.build field-info)))
       (scan [root filters projects]
-        (org.apache.calcite.linq4j.Linq4j/asEnumerable
-         (perform-query node (doto (->crux-query table-schema filters projects) log/debug))))))
+        (perform-query node (doto (->crux-query table-schema filters projects) log/debug)))))
 
 (s/def :crux.sql.table/name string?)
 (s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
