@@ -28,8 +28,7 @@
 
 (def standalone-config
   {:node {:crux.node/topology ['crux.standalone/topology
-                               'crux.kv.rocksdb/kv-store
-                               'crux.http-server/module]
+                               'crux.kv.rocksdb/kv-store]
           :crux.kv/db-dir (str (io/file dev-node-dir "db"))
           :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
           :crux.standalone/event-log-dir (str (io/file dev-node-dir "event-log"))
