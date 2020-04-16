@@ -3,6 +3,7 @@
             [crux.db :as db]
             [crux.node :as n]
             [crux.tx :as tx]
+            [crux.tx.event :as txe]
             [crux.codec :as c]
             [crux.io :as cio])
   (:import java.io.Closeable
@@ -14,15 +15,21 @@
     (while true
       (let [consumed-txs? (with-open [tx-log (cio/<-stream (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer))))]
                             (let [consumed-txs? (not (empty? tx-log))]
-                              (doseq [{:keys [crux.tx.event/tx-events] :as tx} tx-log
-                                      :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
-                                (db/index-docs indexer (db/fetch-docs document-store
-                                                                      (->> tx-events
-                                                                           (into #{} (comp (mapcat tx/tx-event->doc-hashes)
-                                                                                           (map c/new-id))))))
-                                (db/index-tx indexer tx tx-events)
-                                (when (Thread/interrupted)
-                                  (throw (InterruptedException.))))
+                              (doseq [tx-log (partition-all 1000 tx-log)]
+                                (doseq [doc-hashes (->> tx-log
+                                                        (mapcat ::txe/tx-events)
+                                                        (mapcat tx/tx-event->doc-hashes)
+                                                        (map c/new-id)
+                                                        (partition-all 100))]
+                                  (db/index-docs indexer (db/fetch-docs document-store doc-hashes))
+                                  (when (Thread/interrupted)
+                                    (throw (InterruptedException.))))
+
+                                (doseq [{:keys [::txe/tx-events] :as tx} tx-log
+                                        :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
+                                  (db/index-tx indexer tx tx-events)
+                                  (when (Thread/interrupted)
+                                    (throw (InterruptedException.)))))
                               consumed-txs?))]
         (when (Thread/interrupted)
           (throw (InterruptedException.)))
