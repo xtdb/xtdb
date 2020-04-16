@@ -1,4 +1,4 @@
-(ns crux.status)
+(ns ^:no-doc crux.status)
 
 (defprotocol Status
   (status-map [_]))

@@ -1,4 +1,4 @@
-(ns crux.tx.consumer
+(ns ^:no-doc crux.tx.consumer
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.node :as n]

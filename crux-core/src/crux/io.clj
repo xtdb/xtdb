@@ -1,4 +1,4 @@
-(ns crux.io
+(ns ^:no-doc crux.io
   (:require [clojure.instant :as instant]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]

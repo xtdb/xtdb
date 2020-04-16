@@ -1,4 +1,4 @@
-(ns crux.index
+(ns ^:no-doc crux.index
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.kv :as kv]

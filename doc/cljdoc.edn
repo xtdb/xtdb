@@ -1,0 +1,10 @@
+{:cljdoc.doc/tree [["What is Crux?" {:file "docs/what_is_crux.adoc"}]
+                   ["Bitemporality" {:file "docs/bitemp.adoc"}]
+                   ["Get Started" {:file "docs/get_started.adoc"}]
+                   ["Tutorials" {:file "docs/tutorials.adoc"}]
+                   ["Configuration" {:file "docs/configuration.adoc"}]
+                   ["Transactions" {:file "docs/transactions.adoc"}]
+                   ["Queries" {:file "docs/queries.adoc"}]
+                   ["Advanced" {:file "docs/advanced.adoc"}]
+                   ["Kafka Connect Crux" {:file "docs/kafka-connect-crux.adoc"}]
+                   ["About Crux" {:file "docs/about.adoc"}]]}

@@ -1,4 +1,4 @@
-(ns crux.kv.rocksdb.jnr
+(ns ^:no-doc crux.kv.rocksdb.jnr
   "RocksDB KV backend for Crux using JNR:
   https://github.com/jnr/jnr-ffi"
   (:require [clojure.java.io :as io]

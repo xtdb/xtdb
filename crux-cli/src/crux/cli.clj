@@ -1,4 +1,4 @@
-(ns crux.cli
+(ns ^:no-doc crux.cli
   (:require [clojure.edn :as edn]
             [clojure.pprint :as pp]
             [clojure.tools.cli :as cli]

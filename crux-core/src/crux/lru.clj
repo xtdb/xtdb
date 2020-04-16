@@ -1,4 +1,4 @@
-(ns crux.lru
+(ns ^:no-doc crux.lru
   (:require [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]

@@ -1,4 +1,4 @@
-(ns crux.tx
+(ns ^:no-doc crux.tx
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             crux.api

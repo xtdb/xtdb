@@ -1,4 +1,4 @@
-(ns crux.kv.memdb
+(ns ^:no-doc crux.kv.memdb
   "In-memory KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]

@@ -1,4 +1,4 @@
-(ns crux.sparql
+(ns ^:no-doc crux.sparql
   "SPARQL to Datalog compiler. Only handles a subset of SPARQL.
 
   https://www.w3.org/TR/2013/REC-sparql11-query-20130321/

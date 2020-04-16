@@ -1,4 +1,4 @@
-(ns crux.metrics.indexer
+(ns ^:no-doc crux.metrics.indexer
   (:require [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]

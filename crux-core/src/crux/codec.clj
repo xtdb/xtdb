@@ -1,4 +1,4 @@
-(ns crux.codec
+(ns ^:no-doc crux.codec
   #:clojure.tools.namespace.repl{:load false, :unload false} ; because of the deftypes in here
   (:require [clojure.edn :as edn]
             [crux.hash :as hash]

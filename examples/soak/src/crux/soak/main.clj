@@ -1,4 +1,4 @@
-(ns crux.soak.main
+(ns ^:no-doc crux.soak.main
   (:require [bidi.bidi :as bidi]
             [bidi.ring :as br]
             [clojure.set :as set]

@@ -1,4 +1,4 @@
-(ns crux.db)
+(ns ^:no-doc crux.db)
 
 ;; tag::Index[]
 (defprotocol Index
