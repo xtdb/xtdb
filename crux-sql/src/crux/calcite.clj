@@ -143,9 +143,9 @@
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
-    (->> (crux/q db '{:find [e]
-                      :where [[e :crux.sql.table/name]]})
-         (map (comp (partial crux/entity db) first)))))
+    (map first (crux/q db '{:find [e]
+                            :where [[e :crux.sql.table/name]]
+                            :full-results? true}))))
 
 (defn create-schema [parent-schema name operands]
   (let [node (get !crux-nodes (get operands "CRUX_NODE"))]
