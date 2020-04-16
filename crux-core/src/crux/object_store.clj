@@ -1,4 +1,4 @@
-(ns crux.object-store
+(ns ^:no-doc crux.object-store
   (:require [clojure.java.io :as io]
             [crux.codec :as c]
             [crux.db :as db]

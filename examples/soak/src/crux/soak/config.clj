@@ -1,4 +1,4 @@
-(ns crux.soak.config
+(ns ^:no-doc crux.soak.config
   (:require [clojure.string :as string]
             [nomad.config :as n])
   (:import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest

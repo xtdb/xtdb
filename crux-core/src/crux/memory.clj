@@ -1,4 +1,4 @@
-(ns crux.memory
+(ns ^:no-doc crux.memory
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]

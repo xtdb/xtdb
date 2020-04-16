@@ -1,4 +1,4 @@
-(ns crux.sparql.protocol
+(ns ^:no-doc crux.sparql.protocol
   "See https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]

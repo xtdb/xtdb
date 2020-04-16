@@ -1,4 +1,4 @@
-(ns crux.hash.jnr
+(ns ^:no-doc crux.hash.jnr
   (:require [clojure.tools.logging :as log]
             [crux.hash :as hash]
             [crux.memory :as mem])

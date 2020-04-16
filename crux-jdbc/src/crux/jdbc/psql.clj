@@ -1,4 +1,4 @@
-(ns crux.jdbc.psql
+(ns ^:no-doc crux.jdbc.psql
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc]))
 

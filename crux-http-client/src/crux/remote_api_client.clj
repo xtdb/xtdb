@@ -1,4 +1,4 @@
-(ns crux.remote-api-client
+(ns ^:no-doc crux.remote-api-client
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [crux.io :as cio]

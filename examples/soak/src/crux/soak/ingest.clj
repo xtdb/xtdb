@@ -1,4 +1,4 @@
-(ns crux.soak.ingest
+(ns ^:no-doc crux.soak.ingest
   (:require [clj-http.client :as http]
             [clojure.string :as string]
             [crux.api :as crux]

@@ -1,4 +1,4 @@
-(ns crux.tx.event
+(ns ^:no-doc crux.tx.event
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c])
   (:import java.util.Date))

@@ -1,4 +1,4 @@
-(ns crux.morton
+(ns ^:no-doc crux.morton
   (:import crux.morton.UInt128))
 
 ;; Start here:

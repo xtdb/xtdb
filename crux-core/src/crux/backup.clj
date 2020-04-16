@@ -1,4 +1,4 @@
-(ns crux.backup
+(ns ^:no-doc crux.backup
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.java.io :as io]

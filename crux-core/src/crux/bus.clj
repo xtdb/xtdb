@@ -1,4 +1,4 @@
-(ns crux.bus
+(ns ^:no-doc crux.bus
   (:refer-clojure :exclude [send])
   (:require [crux.io :as cio]
             [clojure.tools.logging :as log]

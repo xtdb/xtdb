@@ -1,4 +1,4 @@
-(ns crux.kv.rocksdb.metrics
+(ns ^:no-doc crux.kv.rocksdb.metrics
   (:require [clojure.string :as str]
             [crux.metrics.dropwizard :as dw])
   (:import (org.rocksdb Statistics StatisticsCollector StatsCollectorInput StatisticsCollectorCallback TickerType)

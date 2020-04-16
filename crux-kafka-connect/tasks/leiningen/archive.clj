@@ -1,4 +1,4 @@
-(ns leiningen.archive
+(ns ^:no-doc leiningen.archive
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as string]

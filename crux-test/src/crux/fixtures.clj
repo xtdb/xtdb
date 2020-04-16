@@ -1,4 +1,4 @@
-(ns crux.fixtures
+(ns ^:no-doc crux.fixtures
   (:require [clojure.test.check.clojure-test :as tcct]
             [crux.api :as api]
             [crux.io :as cio]

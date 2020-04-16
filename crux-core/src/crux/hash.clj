@@ -1,4 +1,4 @@
-(ns crux.hash
+(ns ^:no-doc crux.hash
   (:require [clojure.tools.logging :as log]
             [crux.memory :as mem])
   (:import [org.agrona DirectBuffer MutableDirectBuffer]

@@ -1,4 +1,4 @@
-(ns crux.jdbc.sqlite
+(ns ^:no-doc crux.jdbc.sqlite
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc])
   (:import java.util.function.Supplier

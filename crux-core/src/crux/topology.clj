@@ -1,4 +1,4 @@
-(ns crux.topology
+(ns ^:no-doc crux.topology
   (:require [clojure.spec.alpha :as s]
             [com.stuartsierra.dependency :as dep]
             [crux.io :as cio])

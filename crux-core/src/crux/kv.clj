@@ -1,4 +1,4 @@
-(ns crux.kv
+(ns ^:no-doc crux.kv
   "Protocols for KV backend implementations."
   (:require [crux.io :as cio]
             [crux.status :as status])

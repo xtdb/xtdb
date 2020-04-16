@@ -1,4 +1,4 @@
-(ns crux.query
+(ns ^:no-doc crux.query
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]

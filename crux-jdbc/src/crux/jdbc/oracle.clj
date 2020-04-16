@@ -1,4 +1,4 @@
-(ns crux.jdbc.oracle
+(ns ^:no-doc crux.jdbc.oracle
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc]
             [clojure.spec.alpha :as s]

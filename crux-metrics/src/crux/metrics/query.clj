@@ -1,4 +1,4 @@
-(ns crux.metrics.query
+(ns ^:no-doc crux.metrics.query
   (:require [crux.bus :as bus]
             [crux.metrics.dropwizard :as dropwizard]))
 
