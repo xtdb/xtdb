@@ -12,28 +12,35 @@
   (log/info "Started tx-consumer")
   (try
     (while true
-      (let [consumed-txs? (with-open [tx-log (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer)))]
-                            (let [tx-log (iterator-seq tx-log)
-                                  consumed-txs? (not (empty? tx-log))]
-                              (doseq [tx-log (partition-all 1000 tx-log)]
-                                (doseq [doc-hashes (->> tx-log
-                                                        (mapcat ::txe/tx-events)
-                                                        (mapcat tx/tx-event->doc-hashes)
-                                                        (map c/new-id)
-                                                        (partition-all 100))]
-                                  (db/index-docs indexer (db/fetch-docs document-store doc-hashes))
-                                  (when (Thread/interrupted)
-                                    (throw (InterruptedException.))))
+      (let [consumed-txs? (when-let [tx-stream (try
+                                                 (db/open-tx-log tx-log (::tx/tx-id (db/latest-completed-tx indexer)))
+                                                 (catch InterruptedException e (throw e))
+                                                 (catch Exception e
+                                                   (log/warn e "Error reading TxLog, will retry")))]
+                            (try
+                              (let [tx-log-entries (iterator-seq tx-stream)
+                                    consumed-txs? (not (empty? tx-log-entries))]
+                                (doseq [tx-log-entry (partition-all 1000 tx-log-entries)]
+                                  (doseq [doc-hashes (->> tx-log-entry
+                                                          (mapcat ::txe/tx-events)
+                                                          (mapcat tx/tx-event->doc-hashes)
+                                                          (map c/new-id)
+                                                          (partition-all 100))]
+                                    (db/index-docs indexer (db/fetch-docs document-store doc-hashes))
+                                    (when (Thread/interrupted)
+                                      (throw (InterruptedException.))))
 
-                                (doseq [{:keys [::txe/tx-events] :as tx} tx-log
-                                        :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
-                                  (when-let [{:keys [tombstones]} (db/index-tx indexer tx tx-events)]
-                                    (when (seq tombstones)
-                                      (db/submit-docs document-store tombstones)))
+                                  (doseq [{:keys [::txe/tx-events] :as tx} tx-log-entry
+                                          :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
+                                    (when-let [{:keys [tombstones]} (db/index-tx indexer tx tx-events)]
+                                      (when (seq tombstones)
+                                        (db/submit-docs document-store tombstones)))
 
-                                  (when (Thread/interrupted)
-                                    (throw (InterruptedException.)))))
-                              consumed-txs?))]
+                                    (when (Thread/interrupted)
+                                      (throw (InterruptedException.)))))
+                                consumed-txs?)
+                              (finally
+                                (.close ^Closeable tx-stream))))]
         (when (Thread/interrupted)
           (throw (InterruptedException.)))
         (when-not consumed-txs?
