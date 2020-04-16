@@ -1261,8 +1261,8 @@
                     (q this snapshot conformed-query))))
 
   (historyAscending [this eid]
-    (with-open [history (cio/<-cursor (.openHistoryAscending this eid))]
-      (vec history)))
+    (with-open [history (.openHistoryAscending this eid)]
+      (vec (iterator-seq history))))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]
@@ -1277,8 +1277,8 @@
                              :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
 
   (historyDescending [this eid]
-    (with-open [history (cio/<-cursor (.openHistoryDescending this eid))]
-      (vec history)))
+    (with-open [history (.openHistoryDescending this eid)]
+      (vec (iterator-seq history))))
 
   (historyDescending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time)]

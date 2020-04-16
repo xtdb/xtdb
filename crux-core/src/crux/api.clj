@@ -3,8 +3,7 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
-            [clojure.tools.logging :as log]
-            [crux.io :as cio])
+            [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
             ICruxAsyncIngestAPI ICruxDatasource ICursor]
            java.io.Closeable
@@ -250,7 +249,7 @@
     (.submitTx this (conform-tx-ops tx-ops)))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
-    (cio/<-cursor (.openTxLog this after-tx-id with-ops?))))
+    (.openTxLog this after-tx-id with-ops?)))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
@@ -354,19 +353,19 @@
     ([this snapshot query]
      (.q this snapshot query)))
 
-  (open-q [this query] (cio/<-cursor (.openQuery this query)))
+  (open-q [this query] (.openQuery this query))
 
   (history-ascending
     ([this eid] (.historyAscending this eid))
     ([this snapshot eid] (.historyAscending this snapshot eid)))
 
-  (open-history-ascending [this eid] (cio/<-cursor (.openHistoryAscending this eid)))
+  (open-history-ascending [this eid] (.openHistoryAscending this eid))
 
   (history-descending
     ([this eid] (.historyDescending this eid))
     ([this snapshot eid] (.historyDescending this snapshot eid)))
 
-  (open-history-descending [this eid] (cio/<-cursor (.openHistoryDescending this eid)))
+  (open-history-descending [this eid] (.openHistoryDescending this eid))
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this)))

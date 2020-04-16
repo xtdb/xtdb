@@ -29,12 +29,13 @@
                                        '{:find [e]
                                          :where [[e :name "Ivan"]]})))
 
-            (with-open [tx-log (api/open-tx-log *ingest-client* nil false)]
-              (t/is (not (realized? tx-log)))
-              (t/is (= [(assoc submitted-tx
-                               :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
-                       tx-log))
-              (t/is (realized? tx-log)))
+            (with-open [tx-log-iterator (api/open-tx-log *ingest-client* nil false)]
+              (let [result (iterator-seq tx-log-iterator)]
+                (t/is (not (realized? result)))
+                (t/is (= [(assoc submitted-tx
+                            :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
+                         result))
+                (t/is (realized? result))))
 
             (t/is (thrown? IllegalArgumentException (api/open-tx-log *ingest-client* nil true)))))))))
 

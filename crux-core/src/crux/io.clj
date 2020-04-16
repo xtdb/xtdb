@@ -5,7 +5,6 @@
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
   (:import [crux.api ICursor]
-           [clojure.lang ISeq Sequential IPending]
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
@@ -263,24 +262,3 @@
 
 (defn ->cursor [close-fn ^Iterable sq]
   (->Cursor close-fn (.iterator (lazy-seq sq))))
-
-(defn <-cursor [^ICursor cursor]
-  (let [^ISeq sq (or (iterator-seq cursor) (list))]
-    (reify
-      Sequential
-
-      Closeable
-      (close [_] (.close cursor))
-
-      IPending
-      (isRealized [_] (.isRealized ^IPending sq))
-
-      ISeq
-      (first [_] (.first sq))
-      (next [_] (.next sq))
-      (more [_] (.more sq))
-      (cons [_ o] (.cons sq o))
-      (count [_] (.count sq))
-      (empty [_] (.empty sq))
-      (equiv [_ o] (.equiv sq o))
-      (seq [_] (.seq sq)))))

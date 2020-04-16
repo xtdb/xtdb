@@ -139,8 +139,8 @@
                     (edn-list->lazy-seq in))))
 
   (historyAscending [this eid]
-    (with-open [history (cio/<-cursor (.openHistoryAscending this eid))]
-      (vec history)))
+    (with-open [history (.openHistoryAscending this eid)]
+      (vec (iterator-seq history))))
 
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
@@ -157,8 +157,8 @@
                     (edn-list->lazy-seq in))))
 
   (historyDescending [this eid]
-    (with-open [history (cio/<-cursor (.openHistoryDescending this eid))]
-      (vec history)))
+    (with-open [history (.openHistoryDescending this eid)]
+      (vec (iterator-seq history))))
 
   (historyDescending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-descending")
