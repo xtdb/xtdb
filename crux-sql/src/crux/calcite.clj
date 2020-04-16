@@ -46,7 +46,7 @@
     SqlKind/EQUALS
     [[(apply list '= (->operands schema filter*))]]
     SqlKind/NOT_EQUALS
-    [(list 'not [(apply list '= (->operands schema filter*))])]
+    [[(apply list 'not= (->operands schema filter*))]]
     SqlKind/AND
     (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*))
     SqlKind/OR
@@ -68,7 +68,7 @@
     SqlKind/IS_NULL
     [[(apply list '= (->operands schema filter*))]]
     SqlKind/IS_NOT_NULL
-    [[(list 'not (apply list '= (->operands schema filter*)))]]))
+    [[(apply list 'not= (->operands schema filter*))]]))
 
 (defn- ->crux-query
   [schema filters projects]
