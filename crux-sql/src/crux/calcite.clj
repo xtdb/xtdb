@@ -94,13 +94,13 @@
                                         :datetime SqlTypeName/DATE})
 
 (defn- perform-query [node q]
-  (let [db (crux/db node)
-        snapshot (crux/new-snapshot db)
-        results (atom (crux/q db snapshot q))]
+  (let [db (crux/db node)]
     (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
         []
         (enumerator []
-          (let [current (atom nil)]
+          (let [snapshot (crux/new-snapshot db)
+                results (atom (crux/q db snapshot q))
+                current (atom nil)]
             (proxy [org.apache.calcite.linq4j.Enumerator]
                 []
               (current []
