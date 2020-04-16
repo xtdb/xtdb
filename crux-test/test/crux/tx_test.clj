@@ -522,16 +522,17 @@
         (fapi/submit+await-tx [[:crux.tx/put tx2-ivan tx2-valid-time]
                                [:crux.tx/put tx2-petr tx2-valid-time]])]
 
-    (with-open [log (cio/<-stream (db/open-tx-log (:tx-log *api*) nil))]
-      (t/is (not (realized? log)))
-      (t/is (= [{:crux.tx/tx-id tx1-id
-                 :crux.tx/tx-time tx1-tx-time
-                 :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-valid-time]]}
-                {:crux.tx/tx-id tx2-id
-                 :crux.tx/tx-time tx2-tx-time
-                 :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
-                                           [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
-               log)))))
+    (with-open [log-iterator (db/open-tx-log (:tx-log *api*) nil)]
+      (let [log (iterator-seq log-iterator)]
+        (t/is (not (realized? log)))
+        (t/is (= [{:crux.tx/tx-id tx1-id
+                   :crux.tx/tx-time tx1-tx-time
+                   :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-valid-time]]}
+                  {:crux.tx/tx-id tx2-id
+                   :crux.tx/tx-time tx2-tx-time
+                   :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
+                                             [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
+                 log))))))
 
 (t/deftest test-can-apply-transaction-fn
   (let [exception (atom nil)

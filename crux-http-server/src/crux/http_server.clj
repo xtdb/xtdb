@@ -249,8 +249,8 @@
   (let [with-ops? (Boolean/parseBoolean (get-in request [:query-params "with-ops"]))
         after-tx-id (some->> (get-in request [:query-params "after-tx-id"])
                              (Long/parseLong))
-        result (api/open-tx-log crux-node after-tx-id with-ops?)]
-    (-> (streamed-edn-response result result)
+        result (.openTxLog crux-node after-tx-id with-ops?)]
+    (-> (streamed-edn-response result (iterator-seq result))
         (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- sync-handler [^ICruxAPI crux-node request]

@@ -3,7 +3,6 @@ package crux.api;
 import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 import clojure.lang.Keyword;
 
 /**
@@ -28,5 +27,5 @@ public interface ICruxIngestAPI extends Closeable {
      * @return          a lazy sequence of the transaction log.
      */
 
-    public Stream<Map<Keyword, ?>> openTxLog(Long afterTxId, boolean withOps);
+    public ICursor<Map<Keyword, ?>> openTxLog(Long afterTxId, boolean withOps);
 }

@@ -1252,16 +1252,16 @@
         (bus/send bus {:crux.bus/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (doto (cio/->stream (q this snapshot conformed-query))
-        (.onClose (fn []
-                    (.close snapshot)
-                    (when bus
-                      (bus/send bus {:crux.bus/event-type ::completed-query
-                                     ::query safe-query
-                                     ::query-id query-id})))))))
+      (cio/->cursor (fn []
+                      (.close snapshot)
+                      (when bus
+                        (bus/send bus {:crux.bus/event-type ::completed-query
+                                       ::query safe-query
+                                       ::query-id query-id})))
+                    (q this snapshot conformed-query))))
 
   (historyAscending [this eid]
-    (with-open [history (cio/<-stream (.openHistoryAscending this eid))]
+    (with-open [history (cio/<-cursor (.openHistoryAscending this eid))]
       (vec history)))
 
   (historyAscending [this snapshot eid]
@@ -1271,13 +1271,13 @@
   (openHistoryAscending [this eid]
     (let [snapshot (open-snapshot this)
           i (kv/new-iterator snapshot)]
-      (doto (cio/->stream (for [^EntityTx entity-tx (idx/entity-history-seq-ascending i eid valid-time transact-time)]
-                            (assoc (c/entity-tx->edn entity-tx)
-                                   :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
-        (.onClose #(run! cio/try-close [i snapshot])))))
+      (cio/->cursor #(run! cio/try-close [i snapshot])
+                    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending i eid valid-time transact-time)]
+                      (assoc (c/entity-tx->edn entity-tx)
+                             :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
 
   (historyDescending [this eid]
-    (with-open [history (cio/<-stream (.openHistoryDescending this eid))]
+    (with-open [history (cio/<-cursor (.openHistoryDescending this eid))]
       (vec history)))
 
   (historyDescending [this snapshot eid]
@@ -1287,10 +1287,10 @@
   (openHistoryDescending [this eid]
     (let [snapshot (open-snapshot this)
           i (kv/new-iterator snapshot)]
-      (doto (cio/->stream (for [^EntityTx entity-tx (idx/entity-history-seq-descending i eid valid-time transact-time)]
-                            (assoc (c/entity-tx->edn entity-tx)
-                                   :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
-        (.onClose #(run! cio/try-close [i snapshot])))))
+      (cio/->cursor #(run! cio/try-close [i snapshot])
+                    (for [^EntityTx entity-tx (idx/entity-history-seq-descending i eid valid-time transact-time)]
+                      (assoc (c/entity-tx->edn entity-tx)
+                             :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
 
   (validTime [_]
     valid-time)

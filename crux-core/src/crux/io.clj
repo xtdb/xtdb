@@ -4,7 +4,8 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang ISeq Sequential IPending]
+  (:import [crux.api ICursor]
+           [clojure.lang ISeq Sequential IPending]
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
@@ -13,10 +14,9 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Comparator Date IdentityHashMap Iterator PriorityQueue Properties Spliterator Spliterators]
+           [java.util Comparator Date IdentityHashMap Iterator PriorityQueue Properties]
            [java.util.concurrent ThreadFactory]
-           java.util.concurrent.locks.StampedLock
-           [java.util.stream Stream StreamSupport]))
+           java.util.concurrent.locks.StampedLock))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -250,19 +250,27 @@
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
 
-(defn ->stream ^java.util.stream.Stream [^Iterable sq]
-  (let [^Iterable sq (or sq [])]
-    (-> (.iterator sq)
-        (Spliterators/spliteratorUnknownSize Spliterator/IMMUTABLE)
-        (StreamSupport/stream false))))
+(defrecord Cursor [close-fn ^Iterator lazy-seq-iterator]
+  ICursor
+  (next [this]
+    (.next lazy-seq-iterator))
 
-(defn <-stream ^java.io.Closeable [^Stream stream]
-  (let [^ISeq sq (or (iterator-seq (.iterator stream)) (list))]
+  (hasNext [this]
+    (.hasNext lazy-seq-iterator))
+
+  (close [_]
+    (close-fn)))
+
+(defn ->cursor [close-fn ^Iterable sq]
+  (->Cursor close-fn (.iterator (lazy-seq sq))))
+
+(defn <-cursor [^ICursor cursor]
+  (let [^ISeq sq (or (iterator-seq cursor) (list))]
     (reify
       Sequential
 
       Closeable
-      (close [_] (.close stream))
+      (close [_] (.close cursor))
 
       IPending
       (isRealized [_] (.isRealized ^IPending sq))
