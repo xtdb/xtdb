@@ -60,7 +60,9 @@
     (t/is (= #{{:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE NAME <> 'Ivan'"))))
     (t/is (= #{{:name "Ivan"}}
-             (set (query "SELECT NAME FROM PERSON WHERE 'Ivan' = NAME")))))
+             (set (query "SELECT NAME FROM PERSON WHERE 'Ivan' = NAME"))))
+    (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
+             (set (query "SELECT NAME FROM PERSON WHERE 'Ivan' = 'Ivan'")))))
 
   (t/testing "in operand"
     (t/is (= #{{:name "Ivan"}}
@@ -164,7 +166,6 @@
              (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL")))
   (t/is (= [{:name "Malcolm"}]
            (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NOT NULL")))
-  ;; Sanity:
   (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
 
 (t/deftest test-simple-joins
