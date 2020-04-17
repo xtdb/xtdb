@@ -326,9 +326,6 @@
     [#"^/entity$" [:post]]
     (entity crux-node request)
 
-    [#"^/_entity/.+$" [:get]]
-    (entity-state crux-node request)
-
     [#"^/entity-tx$" [:post]]
     (entity-tx crux-node request)
 
@@ -380,9 +377,15 @@
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
-      {:status 400
-       :headers {"Content-Type" "text/plain"}
-       :body "Unsupported method on this address."})))
+      nil)))
+
+(defn- data-browser-handler [crux-node request]
+  (condp check-path request
+    [#"^/_entity/.+$" [:get]]
+    (entity-state crux-node request)
+
+    nil))
+
 
 (def ^:const default-server-port 3000)
 
@@ -412,7 +415,7 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
-(defn- edn->html [edn]
+(defn- entity->html [edn]
   (format
    "<dl>%s</dl>"
    (apply str
@@ -426,27 +429,34 @@
     mfc/EncodeToBytes
     (encode-to-bytes [_ data charset]
       (.getBytes
-       ^String (edn->html data)
+       ^String (entity->html data)
        ^String charset))
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ data charset]
       (fn [^OutputStream output-stream]
         (.write output-stream (.getBytes
-                               ^String (edn->html data)
+                               ^String (entity->html data)
                                ^String charset))))))
 
-(def html-formatter
-  (mfc/map->Format
-    {:name "text/html"
-     :encoder [html-encoder]}))
 
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
-                         (let [server (j/run-jetty (-> (partial handler node)
-                                                       (p/wrap-params)
-                                                       (wrap-format
-                                                        (assoc-in m/default-options [:formats "text/html"] html-formatter))
-                                                       (wrap-exception-handling))
+                         (let [server (j/run-jetty (some-fn (-> (partial handler node)
+                                                                (p/wrap-params)
+                                                                (wrap-exception-handling))
+
+                                                            (-> (partial data-browser-handler node)
+                                                                (p/wrap-params)
+                                                                (wrap-format
+                                                                 (assoc-in m/default-options [:formats "text/html"] (mfc/map->Format
+                                                                                                                     {:name "text/html"
+                                                                                                                      :encoder [html-encoder]})))
+                                                                (wrap-exception-handling))
+
+                                                            (fn [request]
+                                                              {:status 400
+                                                               :headers {"Content-Type" "text/plain"}
+                                                               :body "Unsupported method on this address."}))
                                                    {:port port
                                                     :join? false})]
                            (log/info "HTTP server started on port: " port)
