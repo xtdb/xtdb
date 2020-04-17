@@ -102,6 +102,9 @@
     transact-time (assoc :transact-time transact-time)))
 
 (defrecord RemoteDatasource [url valid-time transact-time]
+  Closeable
+  (close [_])
+
   ICruxDatasource
   (entity [this eid]
     (api-request-sync (str url "/entity")
@@ -171,19 +174,13 @@
       (doto (cio/->stream (edn-list->lazy-seq in))
         (.onClose #(.close ^java.io.Closeable in)))))
 
-  (validTime [_]
-    valid-time)
-
-  (transactionTime [_]
-    transact-time))
+  (validTime [_] valid-time)
+  (transactionTime [_] transact-time))
 
 (defrecord RemoteApiClient [url]
   ICruxAPI
-  (db [_]
-    (->RemoteDatasource url nil nil))
-
-  (db [_ valid-time]
-    (->RemoteDatasource url valid-time nil))
+  (db [_] (->RemoteDatasource url nil nil))
+  (db [_ valid-time] (->RemoteDatasource url valid-time nil))
 
   (db [_ valid-time tx-time]
     (when tx-time
@@ -195,6 +192,10 @@
                   tx-time latest-tx-time)))))
 
     (->RemoteDatasource url valid-time tx-time))
+
+  (openDB [this] (.db this))
+  (openDB [this valid-time] (.db this valid-time))
+  (openDB [this valid-time tx-time] (.db this valid-time tx-time))
 
   (document [_ content-hash]
     (api-request-sync (str url "/document/" content-hash) nil {:method :get}))

@@ -13,7 +13,7 @@ import clojure.lang.Keyword;
  * Represents the database as of a specific valid and
  * transaction time.
  */
-public interface ICruxDatasource {
+public interface ICruxDatasource extends Closeable {
     /**
      * Returns the document map for an entity.
      *
@@ -29,6 +29,7 @@ public interface ICruxDatasource {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity document map.
      */
+    @Deprecated
     public Map<Keyword,Object> entity(Closeable snapshot, Object eid);
 
     /**
@@ -49,6 +50,7 @@ public interface ICruxDatasource {
      *
      * @return an implementation specific snapshot
      */
+    @Deprecated
     public Closeable newSnapshot();
 
     /**

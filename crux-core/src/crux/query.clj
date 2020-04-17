@@ -16,6 +16,7 @@
            crux.api.ICruxDatasource
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
+           (java.io Closeable)
            java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
@@ -1176,37 +1177,50 @@
          offset (drop offset)
          limit (take limit))))))
 
-(defn entity-tx
-  ([{:keys [kv] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity-tx snapshot db eid)))
-  ([snapshot {:keys [valid-time transact-time] :as db} eid]
-   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time)))))
+(defn entity-tx [{:keys [valid-time transact-time] :as db} snapshot eid]
+  (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time))))
 
-(defn entity
-  ([{:keys [kv object-store] :as db} eid]
-   (with-open [snapshot (kv/new-snapshot kv)]
-     (entity db snapshot eid)))
-  ([{:keys [kv object-store] :as db} snapshot eid]
-   (let [entity-tx (entity-tx snapshot db eid)]
-     (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
-         idx/keep-non-evicted-doc))))
+(defn entity [{:keys [object-store] :as db} snapshot eid]
+  (let [entity-tx (entity-tx db snapshot eid)]
+    (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
+        idx/keep-non-evicted-doc)))
+
+(defrecord UnownedSnapshot [snapshot]
+  Closeable
+  (close [_])
+
+  kv/KvSnapshot
+  (new-iterator [_] (kv/new-iterator snapshot))
+  (get-value [_ k] (kv/get-value snapshot k)))
+
+(defn open-snapshot ^java.io.Closeable [{:keys [kv snapshot] :as db}]
+  (if snapshot
+    (->UnownedSnapshot snapshot)
+    (lru/new-cached-snapshot (kv/new-snapshot kv) true)))
 
 (defrecord QueryDatasource [kv object-store bus
                             query-cache conform-cache
-                            valid-time transact-time entity-as-of-idx]
+                            valid-time transact-time
+                            snapshot entity-as-of-idx]
+  Closeable
+  (close [_]
+    (when snapshot
+      (.close ^Closeable snapshot)))
+
   ICruxDatasource
   (entity [this eid]
-    (entity this eid))
+    (with-open [snapshot (open-snapshot this)]
+      (entity this snapshot eid)))
 
   (entity [this snapshot eid]
     (entity this snapshot eid))
 
   (entityTx [this eid]
-    (entity-tx this eid))
+    (with-open [snapshot (open-snapshot this)]
+      (entity-tx this snapshot eid)))
 
   (newSnapshot [this]
-    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
+    (open-snapshot this))
 
   (q [this query]
     ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
@@ -1230,21 +1244,21 @@
     (q this snapshot (normalize-and-conform-query conform-cache query)))
 
   (openQuery [this query]
-    (let [snapshot (.newSnapshot this)]
-      (let [conformed-query (normalize-and-conform-query conform-cache query)
-            query-id (str (UUID/randomUUID))
-            safe-query (-> conformed-query .q-normalized (dissoc :args))]
-        (when bus
-          (bus/send bus {:crux.bus/event-type ::submitted-query
-                         ::query safe-query
-                         ::query-id query-id}))
-        (doto (cio/->stream (q this snapshot conformed-query))
-          (.onClose (fn []
-                      (.close snapshot)
-                      (when bus
-                        (bus/send bus {:crux.bus/event-type ::completed-query
-                                       ::query safe-query
-                                       ::query-id query-id}))))))))
+    (let [snapshot (open-snapshot this)
+          conformed-query (normalize-and-conform-query conform-cache query)
+          query-id (str (UUID/randomUUID))
+          safe-query (-> conformed-query .q-normalized (dissoc :args))]
+      (when bus
+        (bus/send bus {:crux.bus/event-type ::submitted-query
+                       ::query safe-query
+                       ::query-id query-id}))
+      (doto (cio/->stream (q this snapshot conformed-query))
+        (.onClose (fn []
+                    (.close snapshot)
+                    (when bus
+                      (bus/send bus {:crux.bus/event-type ::completed-query
+                                     ::query safe-query
+                                     ::query-id query-id})))))))
 
   (historyAscending [this eid]
     (with-open [history (cio/<-stream (.openHistoryAscending this eid))]
@@ -1255,7 +1269,7 @@
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
   (openHistoryAscending [this eid]
-    (let [snapshot (.newSnapshot this)
+    (let [snapshot (open-snapshot this)
           i (kv/new-iterator snapshot)]
       (doto (cio/->stream (for [^EntityTx entity-tx (idx/entity-history-seq-ascending i eid valid-time transact-time)]
                             (assoc (c/entity-tx->edn entity-tx)
@@ -1271,7 +1285,7 @@
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
   (openHistoryDescending [this eid]
-    (let [snapshot (.newSnapshot this)
+    (let [snapshot (open-snapshot this)
           i (kv/new-iterator snapshot)]
       (doto (cio/->stream (for [^EntityTx entity-tx (idx/entity-history-seq-descending i eid valid-time transact-time)]
                             (assoc (c/entity-tx->edn entity-tx)
@@ -1292,4 +1306,5 @@
                      (lru/get-named-cache kv ::conform-cache)
                      valid-time
                      transact-time
+                     nil
                      nil))

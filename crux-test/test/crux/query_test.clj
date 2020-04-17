@@ -2751,8 +2751,8 @@
   (let [ivan {:crux.db/id :ivan}
         _ (f/transact! *api* [ivan])
         db (api/db *api*)]
-    (with-open [snapshot (api/new-snapshot db)]
-      (t/is (= (api/entity db :ivan) (api/entity db snapshot :ivan) ivan))
+    (with-open [shared-db (api/open-db *api*)]
+      (t/is (= (api/entity db :ivan) (api/entity shared-db :ivan) ivan))
       (let [n 1000
             acceptable-snapshot-speedup 1.4
             factors (->> #(let [db-hit-ns-start (System/nanoTime)
@@ -2760,7 +2760,7 @@
                                 db-hit-ns (- (System/nanoTime) db-hit-ns-start)
 
                                 snapshot-hit-ns-start (System/nanoTime)
-                                _ (api/entity db snapshot :ivan)
+                                _ (api/entity shared-db :ivan)
                                 snapshot-hit-ns (- (System/nanoTime) snapshot-hit-ns-start)]
 
                             (double (/ db-hit-ns snapshot-hit-ns)))

@@ -44,6 +44,16 @@
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
 
+(defmacro with-both-dbs [[db db-args] & body]
+  `(do
+     (t/testing "with open-db"
+       (with-open [~db (api/open-db ~@db-args)]
+         ~@body))
+
+     (t/testing "with db"
+       (let [~db (api/db ~@db-args)]
+         ~@body))))
+
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
     (set ((fn step []
@@ -93,10 +103,10 @@
              (select-keys (.status *api*) [:crux.index/index-version :crux.zk/zk-active?]))))
 
   (t/testing "empty db"
-    (t/is (.db *api*)))
+    (t/is (api/db *api*)))
 
   (t/testing "syncing empty db"
-    (t/is (nil? (.sync *api* (Duration/ofSeconds 10)))))
+    (t/is (nil? (api/sync *api* (Duration/ofSeconds 10)))))
 
   (t/testing "transaction"
     (let [valid-time (Date.)
@@ -115,90 +125,95 @@
         (t/is (= #{} (.q (.db *api* #inst "1999") '{:find  [e]
                                                     :where [[e :name "Ivan"]]})))
 
-        (t/testing "query string"
-          (t/is (= #{[:ivan]} (.q (.db *api*)
-                                  "{:find [e] :where [[e :name \"Ivan\"]]}"))))
+        (with-both-dbs [db (*api*)]
+          (t/testing "query string"
+            (t/is (= #{[:ivan]} (.q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
 
-        (t/testing "query vector"
-          (t/is (= #{[:ivan]} (.q (.db *api*) '[:find e
-                                                :where [e :name "Ivan"]]))))
+          (t/testing "query vector"
+            (t/is (= #{[:ivan]} (.q db '[:find e
+                                         :where [e :name "Ivan"]]))))
 
-        (t/testing "malformed query"
-          (t/is (thrown-with-msg? Exception
-                                  #"(status 400|Spec assertion failed)"
-                                  (.q (.db *api*) '{:find [e]}))))
+          (t/testing "malformed query"
+            (t/is (thrown-with-msg? Exception
+                                    #"(status 400|Spec assertion failed)"
+                                    (.q db '{:find [e]}))))
 
-        (t/testing "query with streaming result"
-          (let [db (.db *api*)]
+          (t/testing "query with streaming result"
             (with-open [res (api/open-q db '{:find [e]
                                              :where [[e :name "Ivan"]]})]
-              (t/is (= '([:ivan]) res)))))
+              (t/is (= '([:ivan]) res))))
 
-        (t/testing "query returning full results"
-          (let [db (.db *api*)]
+          (t/testing "query returning full results"
             (with-open [res (api/open-q db '{:find [e]
                                              :where [[e :name "Ivan"]]
                                              :full-results? true})]
-              (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}]) res)))))
+              (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}]) res))))
 
-        (t/testing "SPARQL query"
-          (when (bound? #'fh/*api-url*)
-            (let [repo (SPARQLRepository. (str fh/*api-url* "/sparql"))]
-              (try
-                (.initialize repo)
-                (with-open [conn (.getConnection repo)]
-                  (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://juxt.pro/crux/unqualified/name> \"Ivan\" }"))))
-                (finally
-                  (.shutDown repo)))))))
+          (t/testing "entity"
+            (t/is (= {:crux.db/id :ivan :name "Ivan"} (api/entity db :ivan)))
+            (with-both-dbs [db (*api* #inst "1999")]
+              (t/is (nil? (api/entity db :ivan)))))
 
-      (t/testing "entity"
-        (t/is (= {:crux.db/id :ivan :name "Ivan"} (.entity (.db *api*) :ivan)))
-        (t/is (nil? (.entity (.db *api* #inst "1999") :ivan))))
+          (t/testing "entity-tx, document and history"
+            (let [entity-tx (api/entity-tx db :ivan)
+                  ivan {:crux.db/id :ivan :name "Ivan"}
+                  ivan-crux-id (c/new-id ivan)]
+              (t/is (= (merge submitted-tx
+                              {:crux.db/id (str (c/new-id :ivan))
+                               :crux.db/content-hash (str ivan-crux-id)
+                               :crux.db/valid-time valid-time})
+                       entity-tx))
+              (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
+              (t/is (= {ivan-crux-id ivan} (api/documents *api* #{(:crux.db/content-hash entity-tx)})))
+              (t/is (= [entity-tx] (api/history *api* :ivan)))
+              (t/is (= [entity-tx] (api/history-range *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
 
-      (t/testing "entity-tx, document and history"
-        (let [entity-tx (.entityTx (.db *api*) :ivan)
-              ivan {:crux.db/id :ivan :name "Ivan"}
-              ivan-crux-id (c/new-id ivan)]
-          (t/is (= (merge submitted-tx
-                          {:crux.db/id           (str (c/new-id :ivan))
-                           :crux.db/content-hash (str ivan-crux-id)
-                           :crux.db/valid-time   valid-time})
-                   entity-tx))
-          (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
-          (t/is (= {ivan-crux-id ivan} (.documents *api* #{(:crux.db/content-hash entity-tx)})))
-          (t/is (= [entity-tx] (.history *api* :ivan)))
-          (t/is (= [entity-tx] (.historyRange *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
+              (t/is (nil? (api/document *api* (c/new-id :does-not-exist))))
+              (t/is (nil? (api/entity-tx (api/db *api* #inst "1999") :ivan))))))))))
 
-          (t/is (nil? (.document *api* (c/new-id :does-not-exist))))
-          (t/is (nil? (.entityTx (.db *api* #inst "1999") :ivan)))))
+(t/deftest test-sparql
+  (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
+    (api/await-tx *api* submitted-tx))
 
-      (t/testing "statistics"
-        (let [stats (.attributeStats *api*)]
-          (t/is (= 1 (:name stats))))
+  (t/testing "SPARQL query"
+    (when (bound? #'fh/*api-url*)
+      (let [repo (SPARQLRepository. (str fh/*api-url* "/sparql"))]
+        (try
+          (.initialize repo)
+          (with-open [conn (.getConnection repo)]
+            (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://juxt.pro/crux/unqualified/name> \"Ivan\" }"))))
+          (finally
+            (.shutDown repo)))))))
 
-        (t/testing "updated"
-          (let [valid-time (Date.)
-                submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
-            (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
-            (t/is (true? (.hasTxCommitted *api* submitted-tx))))
+(t/deftest test-statistics
+  (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
+    (api/await-tx *api* submitted-tx))
 
-          (let [stats (.attributeStats *api*)]
-            (t/is (= 2 (:name stats)))))
+  (let [stats (api/attribute-stats *api*)]
+    (t/is (= 1 (:name stats))))
 
-        (t/testing "reflect evicted documents"
-          (let [valid-time (Date.)
-                submitted-tx (.submitTx *api* [[:crux.tx/evict :ivan]])]
-            (t/is (.awaitTx *api* submitted-tx nil))
+  (t/testing "updated"
+    (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"}]])]
+      (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
+      (t/is (true? (api/tx-committed? *api* submitted-tx))))
 
-            ;; actual removal of the document happens asynchronously after
-            ;; the transaction has been processed so waiting on the
-            ;; submitted transaction time is not enough
-            (while (.entity (.db *api*) :ivan)
-              (assert (< (- (.getTime (Date.)) (.getTime valid-time)) 4000))
-              (Thread/sleep 500))
+    (let [stats (api/attribute-stats *api*)]
+      (t/is (= 2 (:name stats)))))
 
-            (let [stats (.attributeStats *api*)]
-              (t/is (= 0 (:name stats))))))))))
+  (t/testing "reflect evicted documents"
+    (let [now (Date.)
+          submitted-tx (api/submit-tx *api* [[:crux.tx/evict :ivan]])]
+      (t/is (api/await-tx *api* submitted-tx))
+
+      ;; actual removal of the document happens asynchronously after
+      ;; the transaction has been processed so waiting on the
+      ;; submitted transaction time is not enough
+      (while (api/entity (api/db *api*) :ivan)
+        (assert (< (- (.getTime (Date.)) (.getTime now)) 4000))
+        (Thread/sleep 500))
+
+      (let [stats (api/attribute-stats *api*)]
+        (t/is (= 0 (:name stats)))))))
 
 (t/deftest test-adding-back-evicted-document
   (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
@@ -277,7 +292,7 @@
     (let [history (.history *api* :ivan)]
       (t/is (= 4 (count history))))
 
-    (let [db (.db *api* #inst "2019-02-03")]
+    (with-both-dbs [db (*api* #inst "2019-02-03")]
       (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
                (map :crux.db/doc (api/history-ascending db :ivan))))
 
@@ -295,7 +310,7 @@
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
                  (map :crux.db/doc history-desc)))))
 
-    (let [db (.db *api* #inst "2019-02-02")]
+    (with-both-dbs [db (*api* #inst "2019-02-02")]
       (with-open [snapshot (.newSnapshot db)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 3}]
@@ -304,7 +319,7 @@
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-    (let [db (.db *api* #inst "2019-01-31")]
+    (with-both-dbs [db (*api* #inst "2019-01-31")]
       (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
                 {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                 {:crux.db/id :ivan :name "Ivan" :version 3}]
@@ -319,7 +334,7 @@
                  (map :crux.db/doc history-asc)))
         (t/is (empty? (map :crux.db/doc history-desc)))))
 
-    (let [db (.db *api* #inst "2019-02-04")]
+    (with-both-dbs [db (*api* #inst "2019-02-04")]
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
         (t/is (empty? (map :crux.db/doc history-asc)))
@@ -328,12 +343,12 @@
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
                  (map :crux.db/doc history-desc)))))
 
-    (let [db (.db *api* #inst "2019-02-04" #inst "2019-01-31")]
+    (with-both-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
       (with-open [snapshot (.newSnapshot db)]
         (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
         (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-    (let [db (.db *api* #inst "2019-02-02" version-2-submitted-tx-time)]
+    (with-both-dbs [db (*api* #inst "2019-02-02" version-2-submitted-tx-time)]
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}]
@@ -342,7 +357,7 @@
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
                  (map :crux.db/doc history-desc)))))
 
-    (let [db (.db *api* #inst "2019-02-03" version-2-submitted-tx-time)]
+    (with-both-dbs [db (*api* #inst "2019-02-03" version-2-submitted-tx-time)]
       (with-open [snapshot (.newSnapshot db)]
         (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
