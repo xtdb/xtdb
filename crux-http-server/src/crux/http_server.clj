@@ -209,8 +209,8 @@
           query-params (:query-params request)
           db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                             (instant/read-instant-date))
-                                        :transaction-time (some-> (get query-params "transaction-time")
-                                                                  (instant/read-instant-date))})
+                                        :transact-time (some-> (get query-params "transaction-time")
+                                                               (instant/read-instant-date))})
           entity-map (.entity db eid)]
       {:status (if (some? entity-map) 200 404)
        :body entity-map})))
