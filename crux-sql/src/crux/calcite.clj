@@ -53,7 +53,11 @@
   [schema ^RexNode filter*]
   (condp = (.getKind filter*)
     SqlKind/EQUALS
-    [[(apply list '= (->operands schema filter*))]]
+    (let [[o1 o2] (sort-by symbol? (->operands schema filter*))]
+      (if (and (symbol? o1) (not (symbol? o2)))
+        (let [[e a v] (sym-triple o1 schema)]
+          [e a o2])
+        [[(apply list '= (->operands schema filter*))]]))
     SqlKind/NOT_EQUALS
     [[(apply list 'not= (->operands schema filter*))]]
     SqlKind/AND
