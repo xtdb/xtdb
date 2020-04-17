@@ -4,7 +4,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang ISeq Sequential IPending]
+  (:import [clojure.lang Counted Sequential IPending IReduceInit Seqable]
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
@@ -257,7 +257,7 @@
         (StreamSupport/stream false))))
 
 (defn <-stream ^java.io.Closeable [^Stream stream]
-  (let [^ISeq sq (or (iterator-seq (.iterator stream)) (list))]
+  (let [it (.iterator stream)]
     (reify
       Sequential
 
@@ -265,14 +265,13 @@
       (close [_] (.close stream))
 
       IPending
-      (isRealized [_] (.isRealized ^IPending sq))
+      (isRealized [_] (not (.hasNext it)))
 
-      ISeq
-      (first [_] (.first sq))
-      (next [_] (.next sq))
-      (more [_] (.more sq))
-      (cons [_ o] (.cons sq o))
-      (count [_] (.count sq))
-      (empty [_] (.empty sq))
-      (equiv [_ o] (.equiv sq o))
-      (seq [_] (.seq sq)))))
+      Counted
+      (count [this] (.count (.seq this)))
+
+      Seqable
+      (seq [_] (iterator-seq it))
+
+      IReduceInit
+      (reduce [this f init] (reduce f init (.seq this))))))
