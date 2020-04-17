@@ -13,13 +13,16 @@
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.cors :refer [wrap-cors]]
+            [muuntaja.middleware :refer [wrap-format]]
+            [muuntaja.core :as m]
+            [muuntaja.format.core :as mfc]
             [ring.middleware.params :as p]
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
-           [java.io Closeable IOException]
+           [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
            org.eclipse.jetty.server.Server))
@@ -199,6 +202,13 @@
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
+(defn- entity-state [^ICruxAPI crux-node request]
+  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
+    (let [eid (c/id-edn-reader encoded-eid)
+          db (db-for-request crux-node {})]
+      {:status 200
+       :body (.entity db eid)})))
+
 (defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
@@ -310,6 +320,9 @@
     [#"^/entity$" [:post]]
     (entity crux-node request)
 
+    [#"^/_entity/.+$" [:get]]
+    (entity-state crux-node request)
+
     [#"^/entity-tx$" [:post]]
     (entity-tx crux-node request)
 
@@ -393,10 +406,40 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
+(defn- edn->html [edn]
+  (format
+   "<dl>%s</dl>"
+   (apply str
+          (map
+           (fn [[k v]]
+             (format "<dt>%s</dt><dd>%s</dd>" k v))
+           edn))))
+
+(defn- html-encoder [_]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ data charset]
+      (.getBytes
+       ^String (edn->html data)
+       ^String charset))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ data charset]
+      (fn [^OutputStream output-stream]
+        (.write output-stream (.getBytes
+                               ^String (edn->html data)
+                               ^String charset))))))
+
+(def html-formatter
+  (mfc/map->Format
+    {:name "text/html"
+     :encoder [html-encoder]}))
+
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
                          (let [server (j/run-jetty (-> (partial handler node)
                                                        (p/wrap-params)
+                                                       (wrap-format
+                                                        (assoc-in m/default-options [:formats "text/html"] html-formatter))
                                                        (wrap-exception-handling))
                                                    {:port port
                                                     :join? false})]
