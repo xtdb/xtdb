@@ -8,6 +8,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clojure.instant :as instant]
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.tx :as tx]
@@ -205,7 +206,11 @@
 (defn- entity-state [^ICruxAPI crux-node request]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
     (let [eid (c/id-edn-reader encoded-eid)
-          db (db-for-request crux-node {})]
+          query-params (:query-params request)
+          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                            (instant/read-instant-date))
+                                        :transaction-time (some-> (get query-params "transaction-time")
+                                                                  (instant/read-instant-date))})]
       {:status 200
        :body (.entity db eid)})))
 
