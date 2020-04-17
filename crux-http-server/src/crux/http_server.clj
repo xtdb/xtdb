@@ -210,9 +210,10 @@
           db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                             (instant/read-instant-date))
                                         :transaction-time (some-> (get query-params "transaction-time")
-                                                                  (instant/read-instant-date))})]
-      {:status 200
-       :body (.entity db eid)})))
+                                                                  (instant/read-instant-date))})
+          entity-map (.entity db eid)]
+      {:status (if (some? entity-map) 200 404)
+       :body entity-map})))
 
 (defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
