@@ -161,7 +161,11 @@
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname nil}
                                 {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
   (t/is (= [{:name "Ivan"}]
-           (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL"))))
+             (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL")))
+  (t/is (= [{:name "Malcolm"}]
+           (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NOT NULL")))
+  ;; Sanity:
+  (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
 
 (t/deftest test-simple-joins
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
