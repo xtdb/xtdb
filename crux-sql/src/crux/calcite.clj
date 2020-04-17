@@ -40,6 +40,15 @@
   (->> (.getOperands filter*)
        (map #(operand->v % schema))))
 
+(defn -like [s pattern]
+  (org.apache.calcite.runtime.SqlFunctions/like s pattern))
+
+(defn- sym-triple [sym schema]
+  (first (filter (fn [clause]
+                   (and (s/valid? :crux.query/triple clause)
+                        (= sym (last clause))))
+                 (get-in schema [:crux.sql.table/query :where]))))
+
 (defn- ->crux-where-clauses
   [schema ^RexNode filter*]
   (condp = (.getKind filter*)
@@ -64,11 +73,12 @@
     SqlKind/LESS_THAN_OR_EQUAL
     [[(apply list '<= (->operands schema filter*))]]
     SqlKind/LIKE
-    [[(apply list 'like (->operands schema filter*))]]
+    [[(apply list 'crux.calcite/-like (->operands schema filter*))]]
     SqlKind/IS_NULL
-    [[(apply list '= (->operands schema filter*))]]
+    [[(list 'nil? (first (->operands schema filter*)))]]
     SqlKind/IS_NOT_NULL
-    [[(apply list 'not= (->operands schema filter*))]]))
+    (let [[e a v] (sym-triple (first (->operands schema filter*)) schema)]
+      [[e a '_]])))
 
 (defn- ->crux-query
   [schema filters projects]
@@ -79,8 +89,7 @@
        :where (vec
                (concat
                 (mapcat (partial ->crux-where-clauses schema) filters)
-                where))
-       :args [{:like #(org.apache.calcite.runtime.SqlFunctions/like %1 %2)}]})
+                where))})
     (catch Throwable e
       (log/error e)
       (throw e))))
