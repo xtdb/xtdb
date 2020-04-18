@@ -5,7 +5,6 @@ import org.apache.calcite.schema.SchemaFactory;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 import clojure.java.api.Clojure;
-import clojure.lang.Keyword;
 import clojure.lang.IFn;
 
 public class CruxSchemaFactory implements SchemaFactory {
