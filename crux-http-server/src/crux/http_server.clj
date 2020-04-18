@@ -415,14 +415,18 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
+(defn- edn->html [edn]
+  (cond
+    (map? edn) (apply str
+                      (map
+                       (fn [[k v]]
+                         (format "<li>%s</li> <ul>%s</ul>" k (edn->html v)))
+                       edn))
+    (coll? edn) (apply str (map edn->html edn))
+    :default (format "<li>%s</li>" edn)))
+
 (defn- entity->html [edn]
-  (format
-   "<dl>%s</dl>"
-   (apply str
-          (map
-           (fn [[k v]]
-             (format "<dt>%s</dt><dd>%s</dd>" k v))
-           edn))))
+  (format "<ul>%s</ul>" (edn->html edn)))
 
 (defn- html-encoder [_]
   (reify
