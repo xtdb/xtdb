@@ -6,6 +6,7 @@
             [crux.api :as crux]
             crux.db)
   (:import java.sql.DriverManager
+           crux.calcite.CruxTable
            [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
@@ -130,25 +131,21 @@
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
 
-(defn- make-table [node {:keys [:crux.sql.table/query :crux.sql.table/columns] :as table-schema}]
-  (proxy
-      [org.apache.calcite.schema.impl.AbstractTable
-       org.apache.calcite.schema.ProjectableFilterableTable]
-      []
-      (getRowType [^RelDataTypeFactory type-factory]
-        (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
-          (doseq [c (:find query)]
-            (let  [col-name (->column-name c)
-                   col-type ^SqlTypeName (column-types->sql-types (columns c))]
-              (when-not col-type
-                (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
-              (log/debug "Adding column" col-name col-type)
-              (doto field-info
-                (.add col-name col-type)
-                (.nullable true))))
-          (.build field-info)))
-      (scan [root filters projects]
-        (perform-query node (doto (->crux-query table-schema filters projects) log/debug)))))
+(defn row-type [^RelDataTypeFactory type-factory node {:keys [:crux.sql.table/query :crux.sql.table/columns] :as table-schema}]
+  (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
+    (doseq [c (:find query)]
+      (let  [col-name (->column-name c)
+             col-type ^SqlTypeName (column-types->sql-types (columns c))]
+        (when-not col-type
+          (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
+        (log/debug "Adding column" col-name col-type)
+        (doto field-info
+          (.add col-name col-type)
+          (.nullable true))))
+    (.build field-info)))
+
+(defn ^org.apache.calcite.linq4j.Enumerable scan [node table-schema root filters projects]
+  (perform-query node (doto (->crux-query table-schema filters projects) log/debug)))
 
 (s/def :crux.sql.table/name string?)
 (s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
@@ -169,7 +166,8 @@
               (for [table-schema (lookup-schema node)]
                 (do (when-not (s/valid? ::table table-schema)
                       (throw (IllegalStateException. (str "Invalid table schema: " (prn-str table-schema)))))
-                    [(string/upper-case (:crux.sql.table/name table-schema)) (make-table node table-schema)])))))))
+                    [(string/upper-case (:crux.sql.table/name table-schema))
+                     (CruxTable. node table-schema)])))))))
 
 (def ^:private model
   {:version "1.0",
