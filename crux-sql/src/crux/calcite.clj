@@ -86,6 +86,10 @@
     (let [[e a v] (sym-triple (first (->operands schema filter*)) schema)]
       [[e a '_]])))
 
+(defn filter->clause [^RexNode filter]
+  (println filter)
+  nil)
+
 (defn- ->crux-query
   [schema filters projects]
   (try
@@ -149,9 +153,6 @@
                         ]
   (perform-query node (doto (->crux-query table-schema [] [];; filters projects
                                           ) log/debug)))
-
-(defn ->enumerable []
-  (throw (IllegalArgumentException. "fo")))
 
 (s/def :crux.sql.table/name string?)
 (s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
