@@ -7,6 +7,7 @@
             crux.db)
   (:import java.sql.DriverManager
            crux.calcite.CruxTable
+           org.apache.calcite.linq4j.Enumerable
            [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
@@ -144,8 +145,13 @@
           (.nullable true))))
     (.build field-info)))
 
-(defn ^org.apache.calcite.linq4j.Enumerable scan [node table-schema root filters projects]
-  (perform-query node (doto (->crux-query table-schema filters projects) log/debug)))
+(defn ^Enumerable scan [node table-schema ;;filters projects
+                        ]
+  (perform-query node (doto (->crux-query table-schema [] [];; filters projects
+                                          ) log/debug)))
+
+(defn ->enumerable []
+  (throw (IllegalArgumentException. "fo")))
 
 (s/def :crux.sql.table/name string?)
 (s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
