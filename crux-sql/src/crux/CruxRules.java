@@ -28,8 +28,7 @@ class CruxRules {
         private static final CruxFilterRule INSTANCE = new CruxFilterRule();
 
         private CruxFilterRule() {
-            super(LogicalFilter.class, Convention.NONE, CruxRel.CONVENTION,
-                  "CruxFilterRule");
+            super(LogicalFilter.class, Convention.NONE, CruxRel.CONVENTION, "CruxFilterRule");
         }
 
         @Override public RelNode convert(RelNode relNode) {

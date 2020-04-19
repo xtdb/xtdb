@@ -8,7 +8,7 @@ import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
-// import org.apache.calcite.linq4j.tree.MethodCallExpression;
+import org.apache.calcite.linq4j.tree.MethodCallExpression;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
@@ -18,12 +18,12 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
-// import org.apache.calcite.util.BuiltInMethod;
+import org.apache.calcite.util.BuiltInMethod;
 // import org.apache.calcite.util.Pair;
 
 // import java.util.AbstractList;
 import java.util.List;
-// import java.util.stream.Collectors;
+import java.util.stream.Collectors;
 
 /**
  * Relational expression representing a scan of a table in an Elasticsearch data source.
@@ -56,13 +56,43 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
                                               implementor.table
                                               .getExpression(CruxTable.CruxQueryable.class));
 
+        // Can I skip this washing in and out of EDN?
+        // Must read the paper https://arxiv.org/pdf/1802.10233.pdf
+
+        //        final Expression clauses = block.append("clauses", Expressions.constant(implementor.clauses));
+        final Expression clauses = block.append("clauses", constantArrayList(implementor.clauses, String.class));
+
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method));//, fields, ops));
+                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, clauses));//, fields, ops));
 
         block.add(Expressions.return_(null, enumerable));
         return relImplementor.result(physType, block.toBlock());
 
         //        return (Result)CruxUtils.resolve("crux.calcite/->enumerable").invoke();
+    }
+
+    /** E.g. {@code constantArrayList("x", "y")} returns
+     * "Arrays.asList('x', 'y')".
+     *
+     * @param values List of values
+     * @param clazz Type of values
+     * @return expression
+     */
+    @SuppressWarnings("rawtypes")
+    private static <T> MethodCallExpression constantArrayList(List<T> values,
+                                                              Class clazz) {
+        return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
+                                Expressions.newArrayInit(clazz, constantList(values)));
+    }
+
+    /** E.g. {@code constantList("x", "y")} returns
+     * {@code {ConstantExpression("x"), ConstantExpression("y")}}.
+     * @param values list of elements
+     * @param <T> type of elements inside this list
+     * @return list of constant expressions
+     */
+    private static <T> List<Expression> constantList(List<T> values) {
+        return values.stream().map(Expressions::constant).collect(Collectors.toList());
     }
 }
