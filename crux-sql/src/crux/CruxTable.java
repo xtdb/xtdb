@@ -23,8 +23,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 
 public class CruxTable extends AbstractQueryableTable implements TranslatableTable {
-    private ICruxAPI node;
-    private Map<Keyword, Object> schema;
+    ICruxAPI node;
+    Map<Keyword, Object> schema;
 
     public CruxTable (ICruxAPI node, Map<Keyword, Object> schema) {
         super(Object[].class);
@@ -36,14 +36,9 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
         return (RelDataType)CruxUtils.resolve("crux.calcite/row-type").invoke(typeFactory, node, schema);
     }
 
-    // @SuppressWarnings("unchecked")
-    // public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters, int[] projects) {
-    //     return (Enumerable<Object[]>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema, root, filters, projects);
-    // }
-
     @SuppressWarnings("unchecked")
-    public Enumerable<Object> find() {
-        return (Enumerable<Object>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema);
+    public Enumerable<Object> find(List<String> filters) {
+        return (Enumerable<Object>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema, filters);
     }
 
     @Override public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema, String tableName) {
@@ -69,8 +64,8 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
             return (CruxTable) table;
         }
 
-        public Enumerable<Object> find() {
-            return getTable().find();
+        public Enumerable<Object> find(List<String> filters) {
+            return getTable().find(filters);
         }
     }
 }

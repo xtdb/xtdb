@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [clojure.edn :as edn]
             [crux.api :as crux]
             crux.db)
   (:import java.sql.DriverManager
@@ -86,9 +87,8 @@
     (let [[e a v] (sym-triple (first (->operands schema filter*)) schema)]
       [[e a '_]])))
 
-(defn filter->clause [^RexNode filter]
-  (println filter)
-  nil)
+(defn filter->clause [schema ^RexNode filter]
+  (doto (map prn-str (->crux-where-clauses schema filter)) prn))
 
 (defn- ->crux-query
   [schema filters projects]
@@ -98,19 +98,11 @@
       {:find (if (seq projects) (mapv find projects) find)
        :where (vec
                (concat
-                (mapcat (partial ->crux-where-clauses schema) filters)
+                filters
                 where))})
     (catch Throwable e
       (log/error e)
       (throw e))))
-
-(def ^:private column-types->sql-types {:varchar SqlTypeName/VARCHAR
-                                        :keyword SqlTypeName/VARCHAR
-                                        :integer SqlTypeName/INTEGER
-                                        :long SqlTypeName/BIGINT
-                                        :boolean SqlTypeName/BOOLEAN
-                                        :double SqlTypeName/DOUBLE
-                                        :datetime SqlTypeName/DATE})
 
 (defn- perform-query [node q]
   (let [db (crux/db node)]
@@ -133,6 +125,21 @@
               (close []
                 (.close snapshot))))))))
 
+(defn ^Enumerable scan [node table-schema filters;; projects
+                        ]
+  (let [filters (map edn/read-string filters)]
+    (println filters)
+    (perform-query node (doto (->crux-query table-schema filters [];; projects
+                                            ) log/debug))))
+
+(def ^:private column-types->sql-types {:varchar SqlTypeName/VARCHAR
+                                        :keyword SqlTypeName/VARCHAR
+                                        :integer SqlTypeName/INTEGER
+                                        :long SqlTypeName/BIGINT
+                                        :boolean SqlTypeName/BOOLEAN
+                                        :double SqlTypeName/DOUBLE
+                                        :datetime SqlTypeName/DATE})
+
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
 
@@ -148,11 +155,6 @@
           (.add col-name col-type)
           (.nullable true))))
     (.build field-info)))
-
-(defn ^Enumerable scan [node table-schema ;;filters projects
-                        ]
-  (perform-query node (doto (->crux-query table-schema [] [];; filters projects
-                                          ) log/debug)))
 
 (s/def :crux.sql.table/name string?)
 (s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
