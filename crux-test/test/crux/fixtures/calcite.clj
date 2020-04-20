@@ -12,13 +12,14 @@
       (f))))
 
 (defn with-avatica-connection [f]
-  (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")]
+  (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1503;serialization=protobuf")]
     (binding [*conn* conn]
       (f))))
 
 (defn with-calcite-module [f]
   (fapi/with-opts (-> fapi/*opts*
-                      (update ::n/topology conj cal/module))
+                      (update ::n/topology conj cal/module)
+                      (assoc :crux.calcite/port 1503))
     f))
 
 (defn query [q]
