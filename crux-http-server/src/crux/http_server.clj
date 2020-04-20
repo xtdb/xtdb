@@ -21,6 +21,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
+            [hiccup2.core :refer [html]]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
@@ -417,16 +418,19 @@
 
 (defn- edn->html [edn]
   (cond
-    (map? edn) (apply str
-                      (map
-                       (fn [[k v]]
-                         (format "<li>%s</li> <ul>%s</ul>" k (edn->html v)))
-                       edn))
-    (coll? edn) (apply str (map edn->html edn))
-    :default (format "<li>%s</li>" edn)))
+    (map? edn) (into [:dl]
+                     (mapcat
+                      (fn [[k v]]
+                        [[:dt (str k)]
+                         [:dd (edn->html v)]])
+                      edn))
+    (coll? edn) (into [:ul] (map (fn [v] [:li (edn->html v)]) edn))
+    :default edn))
 
 (defn- entity->html [edn]
-  (format "<ul>%s</ul>" (edn->html edn)))
+  (str
+   (html
+    (edn->html edn))))
 
 (defn- html-encoder [_]
   (reify
