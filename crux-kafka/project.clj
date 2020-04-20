@@ -8,7 +8,7 @@
                  [juxt/crux-core "derived-from-git"]
                  [org.apache.kafka/kafka-clients "2.3.0"]
                  [cheshire "5.9.0"]
-                 [com.cognitect/transit-clj "0.8.313" :exclusions [org.msgpack/msgpack]]]
+                 [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]

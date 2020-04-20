@@ -10,7 +10,7 @@
                  [cheshire "5.9.0"]
                  [com.taoensso/nippy "2.14.0" :exclusions [org.tukaani/xz]]
                  ^:source-dep [org.tukaani/xz "1.6"]
-                 [com.cognitect/transit-clj "0.8.313" :exclusions [org.msgpack/msgpack]]]
+                 [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
   :middleware [leiningen.project-version/middleware]
   :aliases {"package" ["do" ["inline-deps"] ["with-profile" "+plugin.mranderson/config" "uberjar"] ["archive"]]}
