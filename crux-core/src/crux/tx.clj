@@ -306,38 +306,39 @@
                                                  (or (get nested-fn-args arg-id)
                                                      (db/get-single-object object-store snapshot arg-id)))
         args-id (:crux.db/id args-doc)
-        fn-result (try
-                    (let [tx-ops (apply (tx-fn-eval-cache body) db args)
-                          _ (when tx-ops
-                              (when-not (s/valid? :crux.api/tx-ops tx-ops)
-                                (throw (ex-info
-                                        (str "Spec assertion failed\n" (s/explain-str :crux.api/tx-ops tx-ops))
-                                        (s/explain-data :crux.api/tx-ops tx-ops)))))
-                          docs (mapcat tx-op->docs tx-ops)
-                          {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
-                      {:docs (vec docs)
-                       :ops-result (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
-                                          (index-tx-event tx-event tx
-                                                          (-> deps
-                                                              (update :nested-fn-args (fnil into {}) (map (juxt c/new-id identity)) arg-docs)))))})
 
-                    (catch Throwable t
-                      t))]
+        {:keys [tx-ops fn-error]} (try
+                                    (let [tx-ops (apply (tx-fn-eval-cache body) db args)]
+                                      (when tx-ops
+                                        (when-not (s/valid? :crux.api/tx-ops tx-ops)
+                                          (throw (ex-info (str "Spec assertion failed\n"
+                                                               (s/explain-str :crux.api/tx-ops tx-ops))
 
-    (if (instance? Throwable fn-result)
+                                                          (s/explain-data :crux.api/tx-ops tx-ops)))))
+                                      {:tx-ops tx-ops})
+
+                                    (catch Throwable t
+                                      {:fn-error t}))]
+
+    (if fn-error
       {:pre-commit-fn (fn []
-                        (log-tx-fn-error fn-result fn-id body args-id args)
+                        (log-tx-fn-error fn-error fn-id body args-id args)
                         false)}
 
-      (let [{:keys [docs ops-result]} fn-result]
-        {:pre-commit-fn #(do (db/index-docs indexer (->> docs (into {} (map (juxt c/new-id identity)))))
-                             (every? true? (for [{:keys [pre-commit-fn]} ops-result
-                                                 :when pre-commit-fn]
-                                             (pre-commit-fn))))
-         :etxs (cond-> (mapcat :etxs ops-result)
+      (let [docs (mapcat tx-op->docs tx-ops)
+            {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)
+            _ (db/index-docs indexer (->> docs (into {} (map (juxt c/new-id identity)))))
+            op-results (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
+                              (index-tx-event tx-event tx
+                                              (-> deps
+                                                  (update :nested-fn-args (fnil into {}) (map (juxt c/new-id identity)) arg-docs)))))]
+        {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} op-results
+                                             :when pre-commit-fn]
+                                         (pre-commit-fn)))
+         :etxs (cond-> (mapcat :etxs op-results)
                  args-doc (conj (c/->EntityTx args-id tx-time tx-time tx-id args-v)))
 
-         :tombstones (into {} (mapcat :tombstones) ops-result)}))))
+         :tombstones (into {} (mapcat :tombstones) op-results)}))))
 
 (defmethod index-tx-event :default [[op & _] tx deps]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
