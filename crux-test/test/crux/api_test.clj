@@ -24,24 +24,29 @@
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
 
-(defn- with-each-api-implementation [f]
-  (t/testing "Local API ClusterNode"
-    ((t/join-fixtures [fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "Local API StandaloneNode"
-    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "H2 Node"
-    ((t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "SQLite Node"
-    ((t/join-fixtures [#(fj/with-jdbc-node :sqlite %) kvf/with-kv-dir fapi/with-node]) f))
-  (t/testing "Remote API"
-    ((t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server
-                       fapi/with-node
-                       fh/with-http-client])
-     f))
-  (t/testing "Kafka and Remote Doc Store"
-    ((t/join-fixtures [fk/with-cluster-node-opts fs/with-standalone-doc-store kvf/with-kv-dir fapi/with-node]) f)))
+(def api-implementations
+  (-> {:local-standalone (t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node])
+       :remote (t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server fapi/with-node fh/with-http-client])
+       :h2 (t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node])
+       :sqlite (t/join-fixtures [#(fj/with-jdbc-node :sqlite %) kvf/with-kv-dir fapi/with-node])
+       :local-kafka (-> (t/join-fixtures [fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node])
+                        (with-meta {::embedded-kafka? true}))
+       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts fs/with-standalone-doc-store kvf/with-kv-dir fapi/with-node])
+                                   (with-meta {::embedded-kafka? true}))}
+      #_(select-keys [:local-standalone])
+      #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
-(t/use-fixtures :once fk/with-embedded-kafka-cluster)
+(defn- with-each-api-implementation [f]
+  (doseq [[node-type run-tests] api-implementations]
+    (t/testing (str node-type)
+      (run-tests f))))
+
+(t/use-fixtures :once
+  (fn [f]
+    (if (some (comp ::embedded-kafka? meta) (vals api-implementations))
+      (fk/with-embedded-kafka-cluster f)
+      (f))))
+
 (t/use-fixtures :each with-each-api-implementation)
 
 (defmacro with-both-dbs [[db db-args] & body]
