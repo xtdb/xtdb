@@ -1,18 +1,18 @@
 (ns crux.calcite
   (:require [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [clojure.edn :as edn]
             [crux.api :as crux]
             crux.db)
-  (:import java.sql.DriverManager
-           crux.calcite.CruxTable
-           org.apache.calcite.linq4j.Enumerable
+  (:import crux.calcite.CruxTable
+           java.sql.DriverManager
            [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
+           org.apache.calcite.linq4j.Enumerable
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
@@ -84,8 +84,7 @@
     SqlKind/IS_NULL
     [[(list 'nil? (first (->operands schema filter*)))]]
     SqlKind/IS_NOT_NULL
-    (let [[e a v] (sym-triple (first (->operands schema filter*)) schema)]
-      [[e a '_]])))
+    [[(list 'boolean (first (->operands schema filter*)))]]))
 
 (defn filter->clause [schema ^RexNode filter]
   (doto (map prn-str (->crux-where-clauses schema filter)) prn))
@@ -125,12 +124,11 @@
               (close []
                 (.close snapshot))))))))
 
-(defn ^Enumerable scan [node table-schema filters;; projects
-                        ]
+(defn ^Enumerable scan [node table-schema filters]
+  ;; TODO consider using projects here rather than bringing everything back
   (let [filters (map edn/read-string filters)]
-    (println filters)
-    (perform-query node (doto (->crux-query table-schema filters [];; projects
-                                            ) log/debug))))
+    (perform-query node (doto (->crux-query table-schema filters []) prn;log/debug
+                          ))))
 
 (def ^:private column-types->sql-types {:varchar SqlTypeName/VARCHAR
                                         :keyword SqlTypeName/VARCHAR
