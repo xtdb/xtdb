@@ -169,6 +169,12 @@
          (log/debug e "Could not list Kafka topics:")
          false))}))
 
+(defn submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
+  (doseq [[content-hash doc] id-and-docs]
+    (->> (ProducerRecord. doc-topic content-hash doc)
+         (.send producer)))
+  (.flush producer))
+
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
                                kv-store object-store
                                ^Thread indexing-thread !indexing-error]
@@ -179,10 +185,7 @@
 
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (doseq [[content-hash doc] id-and-docs]
-      (->> (ProducerRecord. doc-topic content-hash doc)
-           (.send producer)))
-    (.flush producer))
+    (submit-docs id-and-docs this))
 
   (fetch-docs [this ids]
     (loop [indexed {}]

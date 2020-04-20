@@ -5,7 +5,8 @@
             [crux.node :as n]
             [crux.tx :as tx])
   (:import crux.api.ICruxAsyncIngestAPI
-           java.io.Closeable))
+           java.io.Closeable
+           (org.apache.kafka.clients.producer KafkaProducer)))
 
 (defrecord CruxKafkaIngestClient [tx-log document-store close-fn]
   ICruxAsyncIngestAPI
@@ -25,20 +26,27 @@
   (close [_]
     (when close-fn (close-fn))))
 
+(defrecord IngestOnlyDocumentStore [^KafkaProducer producer doc-topic]
+  db/DocumentStore
+  (submit-docs [this id-and-docs]
+    (k/submit-docs id-and-docs this))
+
+  (fetch-docs [this ids]
+    (throw (UnsupportedOperationException. "Can't fetch docs from ingest-only Kafka document store"))))
+
 (def topology
-  (merge (select-keys n/base-topology [::n/kv-store ::n/object-store])
-         {::n/tx-log k/tx-log
-          ::n/document-store k/document-store
-          ::k/admin-client k/admin-client
-          ::k/producer k/producer
-          ::k/latest-submitted-tx-consumer k/latest-submitted-tx-consumer}))
+  {::n/tx-log k/tx-log
+   ::n/document-store {:start-fn (fn [{:keys [::k/producer]} {:keys [::k/doc-topic]}]
+                                   (->IngestOnlyDocumentStore producer doc-topic))
+                       :deps [::k/producer]}
+   ::k/admin-client k/admin-client
+   ::k/producer k/producer
+   ::k/latest-submitted-tx-consumer k/latest-submitted-tx-consumer})
 
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [[{::n/keys [tx-log document-store kv-store object-store]} close-fn]
+  (let [[{::n/keys [tx-log document-store]} close-fn]
         (topo/start-topology (merge {::n/topology topology}
                                     options))]
     (map->CruxKafkaIngestClient {:tx-log tx-log
                                  :document-store document-store
-                                 :kv-store kv-store
-                                 :object-store object-store
                                  :close-fn close-fn})))
