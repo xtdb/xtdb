@@ -60,7 +60,10 @@
 (defn tx-ops->id-and-docs [tx-ops]
   (when-not (s/valid? :crux.api/tx-ops tx-ops)
     (throw (ex-info (str "Spec assertion failed\n" (s/explain-str :crux.api/tx-ops tx-ops)) (s/explain-data :crux.api/tx-ops tx-ops))))
-  (map #(vector (str (c/new-id %)) %) (mapcat tx-op->docs tx-ops)))
+
+  (->> tx-ops
+       (into {} (comp (mapcat tx-op->docs)
+                      (map (juxt c/new-id identity))))))
 
 (defn tx-op->tx-event [tx-op]
   (let [[op id & args] (conform-tx-op tx-op)]
