@@ -347,7 +347,7 @@
 
 (def ^:dynamic *current-tx*)
 
-(defrecord KvIndexer [object-store kv-store document-store bus ^ExecutorService stats-executor]
+(defrecord KvIndexer [object-store kv-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
     (when stats-executor
@@ -421,7 +421,6 @@
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
         (let [deps {:object-store object-store
                     :kv-store kv-store
-                    :document-store document-store
                     :indexer this
                     :snapshot snapshot}
 
@@ -440,22 +439,24 @@
 
               committed? (not= res ::aborted)]
 
-          (if (not= res ::aborted)
-            (do
-              (when-let [tombstones (not-empty (:tombstones res))]
-                (db/index-docs this tombstones)
-                (db/submit-docs document-store tombstones))
+          (if committed?
+            (let [tombstones (not-empty (:tombstones res))]
+              (when tombstones
+                (db/index-docs this tombstones))
 
               (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
                                             (idx/meta-kv ::latest-completed-tx tx))
                                       (into (sorted-map-by mem/buffer-comparator)))))
 
-            (do (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-                (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
-                                    [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
+            (do
+              (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
+              (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
+                                  [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))
 
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
-          tx))))
+
+          {:tombstones (when committed?
+                         (:tombstones res))}))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))
@@ -473,10 +474,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [object-store kv-store document-store bus]} args]
-               (->KvIndexer object-store kv-store document-store bus
+  {:start-fn (fn [{:crux.node/keys [object-store kv-store bus]} args]
+               (->KvIndexer object-store kv-store bus
                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))
-   :deps [:crux.node/kv-store :crux.node/document-store :crux.node/object-store :crux.node/bus]})
+   :deps [:crux.node/kv-store :crux.node/object-store :crux.node/bus]})
 
 (defn await-tx [indexer tx-consumer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]

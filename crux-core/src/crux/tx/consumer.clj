@@ -27,7 +27,10 @@
 
                                 (doseq [{:keys [::txe/tx-events] :as tx} tx-log
                                         :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
-                                  (db/index-tx indexer tx tx-events)
+                                  (when-let [{:keys [tombstones]} (db/index-tx indexer tx tx-events)]
+                                    (when (seq tombstones)
+                                      (db/submit-docs document-store tombstones)))
+
                                   (when (Thread/interrupted)
                                     (throw (InterruptedException.)))))
                               consumed-txs?))]

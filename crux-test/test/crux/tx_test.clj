@@ -309,18 +309,16 @@
                         (remove idx/evicted-doc?))))))
 
     (binding [tx/*evict-all-on-legacy-time-ranges?* true]
-      (index-evict!))
+      (let [{:keys [tombstones]} (index-evict!)]
+        (db/submit-docs (:document-store *api*) tombstones)
 
-    ;; give the evict loopback time to evict the doc
-    (Thread/sleep 500)
-
-    (t/testing "eviction removes docs"
-      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot
-                                           (->> (idx/entity-history snapshot picasso-id)
-                                                (keep :content-hash)))
-                           vals
-                           (remove idx/evicted-doc?))))))))
+        (t/testing "eviction removes docs"
+          (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+            (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot
+                                               (->> (idx/entity-history snapshot picasso-id)
+                                                    (keep :content-hash)))
+                               vals
+                               (remove idx/evicted-doc?))))))))))
 
 (t/deftest test-multiple-txs-in-same-ms-441
   (let [ivan {:crux.db/id :ivan}
