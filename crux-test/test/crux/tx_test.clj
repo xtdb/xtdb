@@ -350,14 +350,12 @@
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (db/submit-docs (:document-store *api*) [[content-hash picasso]])
+    (db/submit-docs (:document-store *api*) {content-hash picasso})
     (db/index-docs (:indexer *api*) {content-hash picasso})
 
-    (Thread/sleep 500)
-
-    (t/is (empty? (db/missing-docs (:indexer *api*) #{content-hash})))
-
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+      (t/is (idx/doc-indexed? snapshot picasso-id content-hash))
+
       (t/is (= {content-hash picasso}
                (db/get-objects (:object-store *api*) snapshot #{content-hash})))
 

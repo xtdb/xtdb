@@ -219,12 +219,14 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [indexer] :as deps}]
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [kv-store object-store] :as deps}]
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn (fn []
                     (let [content-hash (c/new-id v)]
-                      (assert (empty? (db/missing-docs indexer #{content-hash}))
+                      (assert (with-open [snapshot (kv/new-snapshot kv-store)]
+                                (or (idx/doc-indexed? snapshot k content-hash)
+                                    (idx/evicted-doc? (db/get-single-object object-store snapshot content-hash))))
                               (format "Put, incorrect doc state for: '%s', tx-id '%s'"
                                       content-hash (:crux.tx/tx-id tx)))
                       true))
@@ -443,15 +445,6 @@
 
           (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
           tx))))
-
-  (missing-docs [_ content-hashes]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (let [docs (db/get-objects object-store snapshot content-hashes)]
-        (->> content-hashes
-             (into #{} (remove (fn [content-hash]
-                                 (when-let [{eid ::db/id, :as doc} (get docs content-hash)]
-                                   (or (idx/evicted-doc? doc)
-                                       (idx/doc-indexed? snapshot eid content-hash))))))))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv-store k v))

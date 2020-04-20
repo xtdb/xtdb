@@ -34,11 +34,6 @@
            [k doc])
          (into {})))
 
-  (missing-keys [this snapshot ks]
-    (->> ks
-         (into #{} (remove (fn [k]
-                             (kv/get-value snapshot (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))))))))
-
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
                    [(c/encode-doc-key-to nil (c/->id-buffer k))
@@ -71,11 +66,6 @@
       (with-open [out (DataOutputStream. (FileOutputStream. (io/file dir doc-key)))]
         (nippy/freeze-to-out! out v))))
 
-  (missing-keys [this snapshot ks]
-    (->> ks
-         (into #{} (remove (fn [k]
-                             (.exists (io/file dir (str (c/new-id k)))))))))
-
   Closeable
   (close [_]))
 
@@ -95,9 +85,6 @@
                :when v]
            [k v])
          (into {})))
-
-  (missing-keys [this snapshot ks]
-    (db/missing-keys object-store snapshot ks))
 
   (put-objects [this kvs]
     (db/put-objects
