@@ -7,7 +7,8 @@
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
-           java.sql.DriverManager
+           java.lang.reflect.Field
+           [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
@@ -87,7 +88,7 @@
     [[(list 'boolean (first (->operands schema filter*)))]]))
 
 (defn filter->clause [schema ^RexNode filter]
-  (doto (map prn-str (->crux-where-clauses schema filter)) prn))
+  (doto (map prn-str (->crux-where-clauses schema filter)) log/debug))
 
 (defn- ->crux-query
   [schema filters projects]
@@ -127,16 +128,19 @@
 (defn ^Enumerable scan [node table-schema filters]
   ;; TODO consider using projects here rather than bringing everything back
   (let [filters (map edn/read-string filters)]
-    (perform-query node (doto (->crux-query table-schema filters []) prn;log/debug
-                          ))))
+    (perform-query node (doto (->crux-query table-schema filters []) log/debug))))
 
-(def ^:private column-types->sql-types {:varchar SqlTypeName/VARCHAR
-                                        :keyword SqlTypeName/VARCHAR
-                                        :integer SqlTypeName/INTEGER
-                                        :long SqlTypeName/BIGINT
-                                        :boolean SqlTypeName/BOOLEAN
-                                        :double SqlTypeName/DOUBLE
-                                        :datetime SqlTypeName/DATE})
+;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
+(def ^:private java-sql-types
+  (into {} (for [^java.lang.reflect.Field f (.getFields Types)]
+             [(keyword (.toLowerCase (.getName f))) (int ^Integer (.get f nil)) ])))
+
+(defn java-sql-types->calcite-sql-type [java-sql-type]
+  (or ({:keyword SqlTypeName/VARCHAR} java-sql-type)
+      (let [java-sql-type-ordinal (java-sql-types java-sql-type)]
+        (when-not java-sql-type-ordinal
+          (throw (IllegalArgumentException. (str "Unrecognised java.sql.Types: " java-sql-type))))
+        (SqlTypeName/getNameForJdbcType java-sql-type-ordinal))))
 
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
@@ -145,7 +149,7 @@
   (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
     (doseq [c (:find query)]
       (let  [col-name (->column-name c)
-             col-type ^SqlTypeName (column-types->sql-types (columns c))]
+             col-type ^SqlTypeName (java-sql-types->calcite-sql-type (columns c))]
         (when-not col-type
           (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
         (log/debug "Adding column" col-name col-type)
@@ -155,7 +159,7 @@
     (.build field-info)))
 
 (s/def :crux.sql.table/name string?)
-(s/def :crux.sql.table/columns (s/map-of symbol? column-types->sql-types))
+(s/def :crux.sql.table/columns (s/map-of symbol? java-sql-types->calcite-sql-type))
 (s/def ::table (s/keys :req [:crux.db/id :crux.sql.table/name :crux.sql.table/columns]))
 
 (defn- lookup-schema [node]

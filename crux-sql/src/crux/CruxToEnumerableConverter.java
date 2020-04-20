@@ -56,8 +56,7 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
                                               implementor.table
                                               .getExpression(CruxTable.CruxQueryable.class));
 
-        // Can I skip this washing in and out of EDN?
-        // Must read the paper https://arxiv.org/pdf/1802.10233.pdf
+        // TODO can we skip this washing in and out of EDN?
 
         //        final Expression clauses = block.append("clauses", Expressions.constant(implementor.clauses));
         final Expression clauses = block.append("clauses", constantArrayList(implementor.clauses, String.class));
