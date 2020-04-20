@@ -24,29 +24,40 @@
 
 (defmulti tx-op first)
 
-(defmethod tx-op :crux.tx/put [_] (s/cat :op #{:crux.tx/put}
-                                         :doc ::doc
-                                         :start-valid-time (s/? date?)
-                                         :end-valid-time (s/? date?)))
+(defmethod tx-op :crux.tx/put [_]
+  (s/cat :op #{:crux.tx/put}
+         :doc ::doc
+         :start-valid-time (s/? date?)
+         :end-valid-time (s/? date?)))
 
-(defmethod tx-op :crux.tx/delete [_] (s/cat :op #{:crux.tx/delete}
-                                            :id :crux.db/id
-                                            :start-valid-time (s/? date?)
-                                            :end-valid-time (s/? date?)))
+(defmethod tx-op :crux.tx/delete [_]
+  (s/cat :op #{:crux.tx/delete}
+         :id :crux.db/id
+         :start-valid-time (s/? date?)
+         :end-valid-time (s/? date?)))
 
-(defmethod tx-op :crux.tx/cas [_] (s/cat :op #{:crux.tx/cas}
-                                         :old-doc (s/nilable ::doc)
-                                         :new-doc ::doc
-                                         :at-valid-time (s/? date?)))
+(defmethod tx-op :crux.tx/cas [_]
+  (s/cat :op #{:crux.tx/cas}
+         :old-doc (s/nilable ::doc)
+         :new-doc ::doc
+         :at-valid-time (s/? date?)))
 
-(defmethod tx-op :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
-                                           :id :crux.db/id))
+(defmethod tx-op :crux.tx/match [_]
+  (s/cat :op #{:crux.tx/match}
+         :id :crux.db/id
+         :doc (s/nilable ::doc)
+         :at-valid-time (s/? date?)))
+
+(defmethod tx-op :crux.tx/evict [_]
+  (s/cat :op #{:crux.tx/evict}
+         :id :crux.db/id))
 
 (s/def ::args-doc (s/and ::doc (s/keys :req [:crux.db.fn/args])))
 
-(defmethod tx-op :crux.tx/fn [_] (s/cat :op #{:crux.tx/fn}
-                                        :id :crux.db/id
-                                        :args-doc (s/? ::args-doc)))
+(defmethod tx-op :crux.tx/fn [_]
+  (s/cat :op #{:crux.tx/fn}
+         :id :crux.db/id
+         :args-doc (s/? ::args-doc)))
 
 (s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))

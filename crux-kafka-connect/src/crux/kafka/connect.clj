@@ -132,6 +132,9 @@
         :crux.tx/delete
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
+        :crux.tx/match
+        (when (= 2 (count tx-op))
+          (conj tx-op tx-time))
         :crux.tx/cas
         (when (= 3 (count tx-op))
           (conj tx-op tx-time)))
@@ -177,7 +180,7 @@
                                                                            :as tx}]
   (log/info "tx-ops:" tx-ops)
   (for [[op :as tx-op] tx-ops
-        :when (not= :crux.tx/fn op)
+        :when (not (contains? #{:crux.tx/fn :crux.tx/match} op))
         :let [[id doc] (tx-op->id+doc tx-op)
               hashed-id (str (c/new-id id))
               _ (log/info "tx-op:" tx-op "id:" id "hashed id:" hashed-id "doc:" doc)]

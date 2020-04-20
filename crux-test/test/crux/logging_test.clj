@@ -34,13 +34,13 @@
   (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
                                         :secret-2 secret}]]))
 
-(t/deftest test-submitting-cas
-  (fapi/submit+await-tx [[:crux.tx/cas
+(t/deftest test-submitting-match
+  (fapi/submit+await-tx [[:crux.tx/match
+                          :secure-document
                           {:crux.db/id :secure-document
                            :secret secret
-                           :secret-2 secret}
-                          {:crux.db/id :secure-document
-                           :secret secret}]]))
+                           :secret-2 secret}]
+                         [:crux.tx/put {:crux.db/id :secure-document, :secret secret}]]))
 
 (t/deftest test-submitting-delete
   (fapi/submit+await-tx [[:crux.tx/delete :secure-document]]))
