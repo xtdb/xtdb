@@ -3,14 +3,14 @@
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[hiccup "2.0.0-alpha2"]
+                 [org.clojure/clojure "1.10.1"]
                  [juxt/crux-core "derived-from-git"]
                  [ring/ring-core "1.8.0"]
                  [ring/ring-jetty-adapter "1.8.0"]
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]
-                 [metosin/muuntaja "0.6.6"]
-                 [hiccup "2.0.0-alpha2"]]
+                 [metosin/muuntaja "0.6.6"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

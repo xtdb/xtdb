@@ -11,6 +11,7 @@
             [clojure.instant :as instant]
             [crux.codec :as c]
             [crux.io :as cio]
+            [crux.http-console :as console]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.cors :refer [wrap-cors]]
@@ -318,6 +319,9 @@
     [#"^/$" [:get]]
     (status crux-node)
 
+    [#"^/_query" [:get]]
+    (console/query crux-node request)
+
     [#"^/document/.+$" [:get :post]]
     (document crux-node request)
 
@@ -386,7 +390,6 @@
     (entity-state crux-node request)
 
     nil))
-
 
 (def ^:const default-server-port 3000)
 
@@ -477,3 +480,9 @@
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
                             :default default-server-port}}}})
+
+
+#_(comment
+    (def node (crux/start-node
+             {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
+              :crux.http-server/port 3000})))
