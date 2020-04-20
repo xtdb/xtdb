@@ -455,10 +455,10 @@
 
                                                             (-> (partial data-browser-handler node)
                                                                 (p/wrap-params)
-                                                                (wrap-format
-                                                                 (assoc-in m/default-options [:formats "text/html"] (mfc/map->Format
-                                                                                                                     {:name "text/html"
-                                                                                                                      :encoder [html-encoder]})))
+                                                                (wrap-format (assoc-in m/default-options
+                                                                                       [:formats "text/html"]
+                                                                                       (mfc/map->Format {:name "text/html"
+                                                                                                         :encoder [html-encoder]})))
                                                                 (wrap-exception-handling))
 
                                                             (fn [request]
