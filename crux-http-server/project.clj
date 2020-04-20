@@ -8,7 +8,9 @@
                  [ring/ring-core "1.8.0"]
                  [ring/ring-jetty-adapter "1.8.0"]
                  [ring/ring-codec "1.1.2"]
-                 [ring-cors "0.1.13"]]
+                 [ring-cors "0.1.13"]
+                 [metosin/muuntaja "0.6.6"]
+                 [hiccup "2.0.0-alpha2"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

@@ -8,18 +8,23 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clojure.instant :as instant]
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.cors :refer [wrap-cors]]
+            [muuntaja.middleware :refer [wrap-format]]
+            [muuntaja.core :as m]
+            [muuntaja.format.core :as mfc]
             [ring.middleware.params :as p]
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
+            [hiccup2.core :refer [html]]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
-           [java.io Closeable IOException]
+           [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
            org.eclipse.jetty.server.Server))
@@ -199,6 +204,18 @@
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
+(defn- entity-state [^ICruxAPI crux-node request]
+  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
+    (let [eid (c/id-edn-reader encoded-eid)
+          query-params (:query-params request)
+          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                            (instant/read-instant-date))
+                                        :transact-time (some-> (get query-params "transaction-time")
+                                                               (instant/read-instant-date))})
+          entity-map (api/entity db eid)]
+      {:status (if (some? entity-map) 200 404)
+       :body entity-map})))
+
 (defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
@@ -361,9 +378,15 @@
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
-      {:status 400
-       :headers {"Content-Type" "text/plain"}
-       :body "Unsupported method on this address."})))
+      nil)))
+
+(defn- data-browser-handler [crux-node request]
+  (condp check-path request
+    [#"^/_entity/.+$" [:get]]
+    (entity-state crux-node request)
+
+    nil))
+
 
 (def ^:const default-server-port 3000)
 
@@ -393,11 +416,55 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
+(defn- edn->html [edn]
+  (cond
+    (map? edn) (into [:dl]
+                     (mapcat
+                      (fn [[k v]]
+                        [[:dt (edn->html k)]
+                         [:dd (edn->html v)]])
+                      edn))
+    (sequential? edn) (into [:ol] (map (fn [v] [:li (edn->html v)]) edn))
+    (set? edn) (into [:ul] (map (fn [v] [:li (edn->html v)]) edn))
+    :else (str edn)))
+
+(defn- entity->html [edn]
+  (str
+   (html
+    (edn->html edn))))
+
+(defn- html-encoder [_]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ data charset]
+      (.getBytes
+       ^String (entity->html data)
+       ^String charset))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ data charset]
+      (fn [^OutputStream output-stream]
+        (.write output-stream (.getBytes
+                               ^String (entity->html data)
+                               ^String charset))))))
+
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
-                         (let [server (j/run-jetty (-> (partial handler node)
-                                                       (p/wrap-params)
-                                                       (wrap-exception-handling))
+                         (let [server (j/run-jetty (some-fn (-> (partial handler node)
+                                                                (p/wrap-params)
+                                                                (wrap-exception-handling))
+
+                                                            (-> (partial data-browser-handler node)
+                                                                (p/wrap-params)
+                                                                (wrap-format (assoc-in m/default-options
+                                                                                       [:formats "text/html"]
+                                                                                       (mfc/map->Format {:name "text/html"
+                                                                                                         :encoder [html-encoder]})))
+                                                                (wrap-exception-handling))
+
+                                                            (fn [request]
+                                                              {:status 400
+                                                               :headers {"Content-Type" "text/plain"}
+                                                               :body "Unsupported method on this address."}))
                                                    {:port port
                                                     :join? false})]
                            (log/info "HTTP server started on port: " port)
