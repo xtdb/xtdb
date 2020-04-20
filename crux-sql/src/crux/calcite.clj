@@ -91,12 +91,13 @@
   (doto (map prn-str (->crux-where-clauses schema filter)) log/debug))
 
 (defn- ->crux-query
-  [schema filters projects]
+  [schema filters projects limit]
   (try
     (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
           {:keys [find where]} query]
-      {:find (if (seq projects) (mapv find projects) find)
-       :where (vec (concat filters where))})
+      (merge {:find (if (seq projects) (mapv find projects) find)
+              :where (vec (concat filters where))}
+             (when (and limit (not= limit -1)) {:limit limit})))
     (catch Throwable e
       (log/error e)
       (throw e))))
@@ -104,13 +105,13 @@
 (defn- transform-result [tuple]
   (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple))
 
-(defn- perform-query [node q]
+(defn- perform-query [node offset q]
   (let [db (crux/db node)]
     (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
         []
         (enumerator []
           (let [snapshot (crux/new-snapshot db)
-                results (atom (crux/q db snapshot q))
+                results (atom (drop offset (crux/q db snapshot q)))
                 current (atom nil)]
             (proxy [org.apache.calcite.linq4j.Enumerator]
                 []
@@ -125,10 +126,11 @@
               (close []
                 (.close snapshot))))))))
 
-(defn ^Enumerable scan [node table-schema filters]
-  ;; TODO consider using projects here rather than bringing everything back
+(defn ^Enumerable scan [node table-schema filters offset limit]
+  ;; TODO consider using projects here rather than bringing all columns back
   (let [filters (map edn/read-string filters)]
-    (perform-query node (doto (->crux-query table-schema filters []) log/debug))))
+    (->> (doto (->crux-query table-schema filters [] limit) log/debug)
+         (perform-query node offset))))
 
 (def ^:private mapped-types {:keyword :varchar})
 (def ^:private supported-types #{:boolean :bigint :double :float :integer :timestamp :varchar})

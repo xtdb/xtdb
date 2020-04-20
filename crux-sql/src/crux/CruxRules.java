@@ -1,7 +1,9 @@
 package crux.calcite;
 
+import org.apache.calcite.adapter.enumerable.EnumerableLimit;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRule;
+import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTrait;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -12,6 +14,7 @@ import org.apache.calcite.rex.RexNode;
 class CruxRules {
     static final RelOptRule[] RULES = {
         CruxFilterRule.INSTANCE,
+        CruxLimitRule.INSTANCE
     };
 
     abstract static class CruxConverterRule extends ConverterRule {
@@ -37,6 +40,30 @@ class CruxRules {
             return new CruxFilter(relNode.getCluster(), traitSet,
                                   convert(filter.getInput(), out),
                                   filter.getCondition());
+        }
+    }
+
+    private static class CruxLimitRule extends RelOptRule {
+        private static final CruxLimitRule INSTANCE = new CruxLimitRule();
+
+        private CruxLimitRule() {
+            super(operand(EnumerableLimit.class, operand(CruxToEnumerableConverter.class, any())),
+                  "CruxLimitRule");
+        }
+
+        public RelNode convert(EnumerableLimit limit) {
+            final RelTraitSet traitSet = limit.getTraitSet().replace(CruxRel.CONVENTION);
+            return new CruxLimit(limit.getCluster(), traitSet,
+                                 convert(limit.getInput(), CruxRel.CONVENTION), limit.offset, limit.fetch);
+        }
+
+        /** @see org.apache.calcite.rel.convert.ConverterRule */
+        public void onMatch(RelOptRuleCall call) {
+            final EnumerableLimit limit = call.rel(0);
+            final RelNode converted = convert(limit);
+            if (converted != null) {
+                call.transformTo(converted);
+            }
         }
     }
 }
