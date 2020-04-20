@@ -102,7 +102,7 @@
       (throw e))))
 
 (defn- transform-result [tuple]
-  (map #(if (inst? %) (inst-ms %) %) tuple))
+  (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple))
 
 (defn- perform-query [node q]
   (let [db (crux/db node)]
@@ -149,8 +149,8 @@
 (defn row-type [^RelDataTypeFactory type-factory node {:keys [:crux.sql.table/query :crux.sql.table/columns] :as table-schema}]
   (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
     (doseq [c (:find query)]
-      (let  [col-name (->column-name c)
-             col-type ^SqlTypeName (java-sql-types->calcite-sql-type (columns c))]
+      (let [col-name (->column-name c)
+            col-type ^SqlTypeName (java-sql-types->calcite-sql-type (columns c))]
         (when-not col-type
           (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
         (log/debug "Adding column" col-name col-type)
