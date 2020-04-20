@@ -96,13 +96,13 @@
     (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
           {:keys [find where]} query]
       {:find (if (seq projects) (mapv find projects) find)
-       :where (vec
-               (concat
-                filters
-                where))})
+       :where (vec (concat filters where))})
     (catch Throwable e
       (log/error e)
       (throw e))))
+
+(defn- transform-result [tuple]
+  (map #(if (inst? %) (inst-ms %) %) tuple))
 
 (defn- perform-query [node q]
   (let [db (crux/db node)]
@@ -115,7 +115,7 @@
             (proxy [org.apache.calcite.linq4j.Enumerator]
                 []
               (current []
-                (to-array @current))
+                (to-array (transform-result @current)))
               (moveNext []
                 (reset! current (first @results))
                 (swap! results next)
@@ -130,17 +130,18 @@
   (let [filters (map edn/read-string filters)]
     (perform-query node (doto (->crux-query table-schema filters []) log/debug))))
 
+(def ^:private mapped-types {:keyword :varchar})
+(def ^:private supported-types #{:boolean :bigint :double :float :integer :timestamp :varchar})
+
 ;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
 (def ^:private java-sql-types
-  (into {} (for [^java.lang.reflect.Field f (.getFields Types)]
-             [(keyword (.toLowerCase (.getName f))) (int ^Integer (.get f nil)) ])))
+  (dissoc (into {} (for [^java.lang.reflect.Field f (.getFields Types)]
+                     [(keyword (.toLowerCase (.getName f))) (int ^Integer (.get f nil)) ]))
+          :date :time))
 
 (defn java-sql-types->calcite-sql-type [java-sql-type]
-  (or ({:keyword SqlTypeName/VARCHAR} java-sql-type)
-      (let [java-sql-type-ordinal (java-sql-types java-sql-type)]
-        (when-not java-sql-type-ordinal
-          (throw (IllegalArgumentException. (str "Unrecognised java.sql.Types: " java-sql-type))))
-        (SqlTypeName/getNameForJdbcType java-sql-type-ordinal))))
+  (or (some-> (get mapped-types java-sql-type java-sql-type) java-sql-types SqlTypeName/getNameForJdbcType)
+      (throw (IllegalArgumentException. (str "Unrecognised java.sql.Types: " java-sql-type)))))
 
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
