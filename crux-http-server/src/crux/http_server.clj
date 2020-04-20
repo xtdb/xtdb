@@ -212,7 +212,7 @@
                                                             (instant/read-instant-date))
                                         :transact-time (some-> (get query-params "transaction-time")
                                                                (instant/read-instant-date))})
-          entity-map (.entity db eid)]
+          entity-map (api/entity db eid)]
       {:status (if (some? entity-map) 200 404)
        :body entity-map})))
 
