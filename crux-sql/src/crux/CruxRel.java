@@ -15,6 +15,8 @@ public interface CruxRel extends RelNode {
     class Implementor {
         RelOptTable table;
         CruxTable cruxTable;
+        int offset = 0;
+        int fetch = -1;
         final List<Object> clauses = new ArrayList<>();
 
         public void add(Object clause) {
@@ -26,5 +28,4 @@ public interface CruxRel extends RelNode {
             ((CruxRel) input).implement(this);
         }
     }
-
 }

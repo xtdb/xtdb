@@ -8,7 +8,9 @@ import java.util.List;
 public enum CruxMethod {
   CRUX_QUERYABLE_FIND(CruxTable.CruxQueryable.class,
                       "find",
-                      List.class // Filters
+                      List.class, // Filters
+                      Integer.class, // offset
+                      Integer.class // limit
                       );
 
   public final Method method;

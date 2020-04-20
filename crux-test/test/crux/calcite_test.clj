@@ -155,6 +155,22 @@
            (query "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD IS NOT NULL")))
   (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
 
+
+(t/deftest test-limit-and-offset
+  (f/transact! *api* (for [i (range 20)]
+                       {:crux.db/id (keyword (str "ivan" i)) :name "Ivan" :homeworld nil :age 21 :alive true}))
+
+  (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10"]
+    (t/is (= 10 (count (query q))))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxLimit(fetch=[10])\n"
+                  "    CruxFilter(condition=[=($1, 'Ivan')])\n"
+                  "      CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
+  (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10 OFFSET 15"]
+    (t/is (= 5 (count (query q))))))
+
 (t/deftest test-different-data-types
   (let [born #inst "2010"
         afloat (float 1.0)]
