@@ -446,7 +446,6 @@
                                ^String (entity->html data)
                                ^String charset))))))
 
-
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
                          (let [server (j/run-jetty (some-fn (-> (partial handler node)
