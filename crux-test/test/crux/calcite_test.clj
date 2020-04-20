@@ -3,7 +3,7 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
-            [crux.fixtures.calcite :as cf :refer [query]]
+            [crux.fixtures.calcite :as cf :refer [query explain]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]))
 
@@ -31,6 +31,21 @@
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                                 {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
 
+  (t/testing "retrieve data"
+    (let [q "SELECT PERSON.NAME FROM PERSON"]
+      (t/is (= [{:name "Ivan"}
+                {:name "Malcolm"}]
+               (query q)))
+      (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
+                    "  CruxToEnumerableConverter\n"
+                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+               (explain q))))
+
+    (t/testing "retrieve data case insensitivity of table schema"
+      (t/is (= [{:name "Ivan"}
+                {:name "Malcolm"}]
+               (query "select person.name from person")))))
+
   (t/testing "order by"
     (t/is (= [{:name "Ivan"}
               {:name "Malcolm"}]
@@ -38,16 +53,6 @@
     (t/is (= [{:name "Malcolm"}
               {:name "Ivan"}]
              (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME DESC"))))
-
-  (t/testing "retrieve data"
-    (t/is (= [{:name "Ivan"}
-              {:name "Malcolm"}]
-             (query "SELECT PERSON.NAME FROM PERSON")))
-
-    (t/testing "retrieve data case insensitivity of table schema"
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query "select person.name from person")))))
 
   (t/testing "multiple columns"
     (t/is (= [{:name "Ivan" :homeworld "Earth"}
