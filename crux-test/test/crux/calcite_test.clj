@@ -156,17 +156,20 @@
   (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
 
 (t/deftest test-different-data-types
-  (let [born #inst "2010"]
+  (let [born #inst "2010"
+        afloat (float 1.0)]
     (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
-                         :crux.sql.table/query '{:find [?id ?name ?born]
+                         :crux.sql.table/query '{:find [?id ?name ?born ?afloat]
                                                  :where [[?id :name ?name]
-                                                         [?id :born ?born]]}
+                                                         [?id :born ?born]
+                                                         [?id :afloat ?afloat]]}
                          :crux.sql.table/columns '{?id :keyword
                                                    ?name :varchar
-                                                   ?born :timestamp}}
-                        {:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :born born}])
-    (t/is (= [{:id ":human/ivan", :name "Ivan" :born born}] (query "SELECT * FROM PERSON"))))
+                                                   ?born :timestamp
+                                                   ?afloat :float}}
+                        {:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :born born :afloat afloat}])
+    (t/is (= [{:id ":human/ivan", :name "Ivan" :born born :afloat afloat}] (query "SELECT * FROM PERSON"))))
   (t/testing "restricted types"
     (t/is (thrown-with-msg? java.lang.IllegalArgumentException #"Unrecognised java.sql.Types: :time"
                             (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
