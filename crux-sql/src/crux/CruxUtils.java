@@ -9,5 +9,4 @@ public class CruxUtils {
     public static IFn resolve(String symbolName) {
         return (IFn) requiringResolve.invoke(Clojure.read(symbolName));
     }
-
 }

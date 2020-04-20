@@ -22,7 +22,7 @@
                                                        [?id :homeworld ?homeworld]
                                                        [?id :age ?age]
                                                        [?id :alive ?alive]]}
-                       :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :long ?alive :boolean}}])
+                       :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
   (f))
 
 (t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type with-sql-schema)
