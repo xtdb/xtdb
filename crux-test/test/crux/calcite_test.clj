@@ -137,9 +137,8 @@
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
 (t/deftest test-namespaced-keywords
-  (t/testing "namespaced keywords"
-    (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
-    (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')")))))
+  (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
+  (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
 
 (t/deftest test-equality-of-columns
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Ivan" :age 21 :alive true}
@@ -155,6 +154,26 @@
   (t/is (= [{:name "Malcolm"}]
            (query "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD IS NOT NULL")))
   (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
+
+(t/deftest test-different-data-types
+  (let [born #inst "2010"]
+    (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                         :crux.sql.table/name "person"
+                         :crux.sql.table/query '{:find [?id ?name ?born]
+                                                 :where [[?id :name ?name]
+                                                         [?id :born ?born]]}
+                         :crux.sql.table/columns '{?id :keyword
+                                                   ?name :varchar
+                                                   ?born :timestamp}}
+                        {:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :born born}])
+    (t/is (= [{:id ":human/ivan", :name "Ivan" :born born}] (query "SELECT * FROM PERSON"))))
+  (t/testing "restricted types"
+    (t/is (thrown-with-msg? java.lang.IllegalArgumentException #"Unrecognised java.sql.Types: :time"
+                            (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                                                 :crux.sql.table/name "person"
+                                                 :crux.sql.table/query '{:find [?id ?name ?born]}
+                                                 :crux.sql.table/columns '{?id :keyword
+                                                                           ?born :time}}])))))
 
 (t/deftest test-simple-joins
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person

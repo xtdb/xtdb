@@ -108,15 +108,18 @@ You can then connect using the Avatica JDBC driver, for example:
 
 == Column Types
 
-The following column types are supported:
+We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.html[`java.sql.Types`]:
 
-* `:varchar`
-* `:keyword`
-* `:integer`
-* `:long`
+* `:bigint`
 * `:boolean`
 * `:double`
-* `:datetime`
+* `:float`
+* `:integer`
+* `:timestamp`
+* `:varchar`
+* `:keyword`
+
+Note that `bigint` maps to `Long`.
 
 == Column Names
 
