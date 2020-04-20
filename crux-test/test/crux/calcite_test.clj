@@ -7,24 +7,29 @@
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]))
 
+;; TODO align the test data/fixture code with people fixture
+
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection f)
   (t/testing "With Avatica Connection"
     (cf/with-avatica-connection f)))
 
-(t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type)
-
-(t/deftest test-sql-query
+(defn- with-sql-schema [f]
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
                        :crux.sql.table/name "person"
-                       :crux.sql.table/query '{:find [?id ?name ?homeworld ?alive]
+                       :crux.sql.table/query '{:find [?id ?name ?homeworld ?age ?alive]
                                                :where [[?id :name ?name]
                                                        [?id :homeworld ?homeworld]
+                                                       [?id :age ?age]
                                                        [?id :alive ?alive]]}
-                       :crux.sql.table/columns {'?id :keyword, '?name :varchar, '?homeworld :varchar, '?alive :boolean}}])
+                       :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :long ?alive :boolean}}])
+  (f))
 
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :alive true}
-                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :alive false}]))
+(t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type with-sql-schema)
+
+(t/deftest test-sql-query
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
 
   (t/testing "order by"
     (t/is (= [{:name "Ivan"}
@@ -50,13 +55,19 @@
              (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
 
   (t/testing "wildcard columns"
-    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan" :alive true}
-               {:name "Malcolm" :homeworld "Mars" :id ":malcolm" :alive false}}
+    (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan" :age 21 :alive true}
+               {:name "Malcolm" :homeworld "Mars" :id ":malcolm" :age 25 :alive false}}
              (set (query "SELECT * FROM PERSON")))))
 
   (t/testing "equals operand"
-    (t/is (= #{{:name "Ivan"}}
-             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan'"))))
+    (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Ivan'"]
+      (t/is (= #{{:name "Ivan"}}
+               (set (query q))))
+      (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
+                    "  CruxToEnumerableConverter\n"
+                    "    CruxFilter(condition=[=($1, 'Ivan')])\n"
+                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+               (:plan (first (query (str "explain plan for " q)))))))
     (t/is (= #{{:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE NAME <> 'Ivan'"))))
     (t/is (= #{{:name "Ivan"}}
@@ -82,6 +93,30 @@
     (t/is (= #{{:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE ALIVE = FALSE")))))
 
+  (t/testing "numeric-columns"
+    (t/is (= [{:name "Ivan" :age 21}]
+             (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
+
+    (t/testing "Range"
+      (t/is (= ["Malcolm"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE > 21"))))
+      (t/is (= ["Ivan"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE 23 > AGE"))))
+      (t/is (= #{"Ivan" "Malcolm"}
+               (set (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE >= 21")))))
+      (t/is (= ["Ivan"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE < 22"))))
+      (t/is (= ["Ivan"]
+               (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE <= 21")))))
+
+    (t/testing "order by"
+      (t/is (= [{:name "Ivan"}
+                {:name "Malcolm"}]
+               (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE ASC")))
+      (t/is (= [{:name "Malcolm"}
+                {:name "Ivan"}]
+               (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE DESC")))))
+
   (t/testing "like"
     (t/is (= #{{:name "Ivan"}}
              (set (query "SELECT NAME FROM PERSON WHERE NAME LIKE 'Iva%'"))))
@@ -97,75 +132,23 @@
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
 (t/deftest test-namespaced-keywords
-  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                       :crux.sql.table/name "person"
-                       :crux.sql.table/query '{:find [?id ?name ?homeworld ?alive]
-                                               :where [[?id :name ?name]
-                                                       [?id :homeworld ?homeworld]
-                                                       [?id :alive ?alive]]}
-                       :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?alive :boolean}}])
   (t/testing "namespaced keywords"
     (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')")))))
 
-(t/deftest test-numeric-columns
-  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                       :crux.sql.table/name "person"
-                       :crux.sql.table/query {:find ['id 'name 'age]
-                                              :where [['id :name 'name]
-                                                      ['id :age 'age]]}
-                       :crux.sql.table/columns {'id :keyword, 'name :varchar, 'age :long}}])
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :age 21}
-                                {:crux.db/id :malcolm :name "Malcolm" :age 25}]))
-
-  (t/is (= [{:name "Ivan" :age 21}]
-           (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
-
-  (t/testing "Range"
-    (t/is (= ["Malcolm"]
-             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE > 21"))))
-    (t/is (= ["Ivan"]
-             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE 23 > AGE"))))
-    (t/is (= #{"Ivan" "Malcolm"}
-             (set (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE >= 21")))))
-    (t/is (= ["Ivan"]
-             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE < 22"))))
-    (t/is (= ["Ivan"]
-             (map :name (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE <= 21")))))
-
-  (t/testing "order by"
-    (t/is (= [{:name "Ivan"}
-              {:name "Malcolm"}]
-             (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE ASC")))
-    (t/is (= [{:name "Malcolm"}
-              {:name "Ivan"}]
-             (query "SELECT PERSON.NAME FROM PERSON ORDER BY AGE DESC")))))
-
 (t/deftest test-equality-of-columns
-  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                       :crux.sql.table/name "person"
-                       :crux.sql.table/query {:find ['id 'name 'surname]
-                                              :where [['id :name 'name]
-                                                      ['id :surname 'surname]]}
-                       :crux.sql.table/columns {'id :keyword, 'name :varchar, 'surname :varchar}}])
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname "Ivan"}
-                                {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Ivan" :age 21 :alive true}
+                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
   (t/is (= [{:name "Ivan"}]
-           (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = SURNAME"))))
+           (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = HOMEWORLD"))))
 
 (t/deftest test-query-for-null
-  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                       :crux.sql.table/name "person"
-                       :crux.sql.table/query {:find ['id 'name 'surname]
-                                              :where [['id :name 'name]
-                                                      ['id :surname 'surname]]}
-                       :crux.sql.table/columns {'id :keyword, 'name :varchar 'surname :varchar}}])
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :surname nil}
-                                {:crux.db/id :malcolm :name "Malcolm" :surname "Sparks"}]))
+  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld nil :age 21 :alive true}
+                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
   (t/is (= [{:name "Ivan"}]
-             (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NULL")))
+           (query "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD IS NULL")))
   (t/is (= [{:name "Malcolm"}]
-           (query "SELECT PERSON.NAME FROM PERSON WHERE SURNAME IS NOT NULL")))
+           (query "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD IS NOT NULL")))
   (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
 
 (t/deftest test-simple-joins
