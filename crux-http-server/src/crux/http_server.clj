@@ -421,11 +421,12 @@
     (map? edn) (into [:dl]
                      (mapcat
                       (fn [[k v]]
-                        [[:dt (str k)]
+                        [[:dt (edn->html k)]
                          [:dd (edn->html v)]])
                       edn))
-    (coll? edn) (into [:ul] (map (fn [v] [:li (edn->html v)]) edn))
-    :default edn))
+    (sequential? edn) (into [:ol] (map (fn [v] [:li (edn->html v)]) edn))
+    (set? edn) (into [:ul] (map (fn [v] [:li (edn->html v)]) edn))
+    :else (str edn)))
 
 (defn- entity->html [edn]
   (str
