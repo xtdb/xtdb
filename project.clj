@@ -92,4 +92,6 @@
   :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
             "build" ["do" ["sub" "install"] ["sub" "test"]]}
 
+  :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}
+
   :pedantic? :warn)
