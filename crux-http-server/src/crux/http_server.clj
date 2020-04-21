@@ -567,13 +567,13 @@
     mfc/EncodeToBytes
     (encode-to-bytes [_ data charset]
       (.getBytes
-       ^String (str data)
+       ^String (pr-str data)
        ^String charset))
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ data charset]
       (fn [^OutputStream output-stream]
         (.write output-stream (.getBytes
-                               ^String (str data)
+                               ^String (pr-str data)
                                ^String charset))))))
 
 (def module
