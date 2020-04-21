@@ -506,7 +506,7 @@
 
 (defn- entity->html [links edn]
   (if-let [href (get links edn)]
-    [:a {:href href} edn]
+    [:a {:href href} (str edn)]
     (cond
       (map? edn) (into [:dl]
                        (mapcat
@@ -551,8 +551,8 @@
                   [:td
                    (if-let [href (get links cell-value)]
                      [:a {:href href}
-                      cell-value]
-                     cell-value)]))])]]
+                      (str cell-value)]
+                     (str cell-value))]))])]]
          [:div "No results found"])]])))
 
 (defmethod edn->html :default [edn]
