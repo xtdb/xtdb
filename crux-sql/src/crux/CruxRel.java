@@ -3,9 +3,13 @@ package crux.calcite;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.rel.RelFieldCollation;
+import org.apache.calcite.util.Pair;
 
+import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public interface CruxRel extends RelNode {
     void implement(Implementor implementor);
@@ -17,13 +21,16 @@ public interface CruxRel extends RelNode {
         CruxTable cruxTable;
         int offset = 0;
         int fetch = -1;
-        int sortField = -1;
-        int sortDirection = 1;
-
+        final List<Map.Entry<Integer, RelFieldCollation.Direction>> sort = new ArrayList<>();
         final List<Object> clauses = new ArrayList<>();
 
         public void add(Object clause) {
             clauses.add(clause);
+        }
+
+        public void addSort(Integer field, RelFieldCollation.Direction direction) {
+            Objects.requireNonNull(field, "field");
+            sort.add(new Pair<>(field, direction));
         }
 
         public void visitChild(int ordinal, RelNode input) {

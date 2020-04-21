@@ -14,6 +14,7 @@
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            org.apache.calcite.linq4j.Enumerable
+           org.apache.calcite.rel.RelFieldCollation$Direction
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
@@ -90,16 +91,21 @@
 (defn filter->clause [schema ^RexNode filter]
   (doto (map prn-str (->crux-where-clauses schema filter)) log/debug))
 
+(defn- sort-by->crux [find sort-fields]
+  (when (seq sort-fields)
+    {:order-by (mapv #(vector (nth find (key %))
+                              (if (= (.-shortString ^RelFieldCollation$Direction (val %)) "DESC") :desc :asc))
+                     sort-fields)}))
+
 (defn- ->crux-query
-  [schema filters projects limit sort-field sort-direction]
+  [schema filters projects limit sort-fields]
   (try
     (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
           {:keys [find where]} query]
       (merge {:find (if (seq projects) (mapv find projects) find)
               :where (vec (concat filters where))}
              (when (and limit (not= limit -1)) {:limit limit})
-             (when (>= sort-field 0) {:order-by [[(nth find sort-field)
-                                                  (if (= sort-direction -1) :desc :asc)]]})))
+             (sort-by->crux find sort-fields)))
     (catch Throwable e
       (log/error e)
       (throw e))))
@@ -128,11 +134,11 @@
               (close []
                 (.close snapshot))))))))
 
-(defn ^Enumerable scan [node table-schema filters offset limit sort-field sort-direction]
+(defn ^Enumerable scan [node table-schema filters offset limit sort-fields]
   ;; TODO consider using projects here rather than bringing all columns back
+  ;; TODO don't use vars such as `find`
   (let [filters (map edn/read-string filters)]
-    (->> (doto (->crux-query table-schema filters [] limit sort-field sort-direction) prn;log/debug
-           )
+    (->> (doto (->crux-query table-schema filters [] limit sort-fields) log/debug)
          (perform-query node offset))))
 
 (def ^:private mapped-types {:keyword :varchar})

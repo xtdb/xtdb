@@ -18,44 +18,30 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CruxSort extends Sort implements CruxRel {
-  public CruxSort(RelOptCluster cluster, RelTraitSet traitSet,
-      RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
-    super(cluster, traitSet, child, collation, offset, fetch);
-    assert getConvention() == CruxRel.CONVENTION;
-    assert getConvention() == child.getConvention();
-  }
-
-  @Override public RelOptCost computeSelfCost(RelOptPlanner planner,
-      RelMetadataQuery mq) {
-    return super.computeSelfCost(planner, mq).multiplyBy(0.05);
-  }
-
-  @Override public Sort copy(RelTraitSet traitSet, RelNode input,
-      RelCollation newCollation, RexNode offset, RexNode fetch) {
-    return new CruxSort(getCluster(), traitSet, input, collation, offset,
-        fetch);
-  }
-
-  public void implement(Implementor implementor) {
-    implementor.visitChild(0, getInput());
-    if (!collation.getFieldCollations().isEmpty()) {
-      final List<String> keys = new ArrayList<>();
-      for (RelFieldCollation fieldCollation : collation.getFieldCollations()) {
-        implementor.sortField = fieldCollation.getFieldIndex();
-        implementor.sortDirection = direction(fieldCollation);
-      }
+    public CruxSort(RelOptCluster cluster, RelTraitSet traitSet,
+                    RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
+        super(cluster, traitSet, child, collation, offset, fetch);
+        assert getConvention() == CruxRel.CONVENTION;
+        assert getConvention() == child.getConvention();
     }
-  }
 
-  private int direction(RelFieldCollation fieldCollation) {
-    switch (fieldCollation.getDirection()) {
-    case DESCENDING:
-    case STRICTLY_DESCENDING:
-      return -1;
-    case ASCENDING:
-    case STRICTLY_ASCENDING:
-    default:
-      return 1;
+    @Override public RelOptCost computeSelfCost(RelOptPlanner planner,
+                                                RelMetadataQuery mq) {
+        return super.computeSelfCost(planner, mq).multiplyBy(0.05);
     }
-  }
+
+    @Override public Sort copy(RelTraitSet traitSet, RelNode input,
+                               RelCollation newCollation, RexNode offset, RexNode fetch) {
+        return new CruxSort(getCluster(), traitSet, input, collation, offset,
+                            fetch);
+    }
+
+    public void implement(Implementor implementor) {
+        implementor.visitChild(0, getInput());
+
+        for (RelFieldCollation fieldCollation : collation.getFieldCollations()) {
+            final Integer field = fieldCollation.getFieldIndex();
+            implementor.addSort(field, fieldCollation.getDirection());
+        }
+    }
 }
