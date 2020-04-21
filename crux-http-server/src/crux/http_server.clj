@@ -368,7 +368,7 @@
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       nil)))
 
-(defn link-entities
+(defn link-all-entities
   [crux-node vt tt path result]
   (let [metadata (atom {})
         resolved-links
@@ -402,7 +402,7 @@
       {:status (if (some? entity-map) 200 404)
        :body (when entity-map
                (if (= (get-in request [:muuntaja/response :format]) "text/html")
-                 (let [html-results (link-entities crux-node valid-time transaction-time "/_entity" entity-map)]
+                 (let [html-results (link-all-entities crux-node valid-time transaction-time "/_entity" entity-map)]
                    (with-meta html-results (assoc (meta html-results) ::render-type :entity)))
                  entity-map))})))
 
@@ -443,6 +443,27 @@
     (map first results)
     (map #(zipmap find %) results)))
 
+(defn link-top-level-entities
+  [crux-node vt tt path rows]
+  (let [links (reduce
+               (fn [coll row]
+                 (merge
+                  coll
+                  (reduce-kv
+                   (fn [coll _ v]
+                     (if (and (c/valid-id? v)
+                                (api/entity (api/db crux-node vt tt) v))
+                       (let [query-params (cond-> "?"
+                                            vt (str "valid-time=" vt "&")
+                                            tt (str "transact-time=" tt))]
+                         (assoc coll v (str path "/" v query-params)))
+                       coll))
+                   {}
+                   row)))
+               {}
+               rows)]
+    (with-meta rows {:links links})))
+
 (defn data-browser-query [^ICruxAPI crux-node request]
   (let [query-params (:query-params request)
         query (build-query query-params)
@@ -456,11 +477,12 @@
     {:status (if (some? results) 200 404)
      :body (when results
              (if (= (get-in request [:muuntaja/response :format]) "text/html")
-               (let [html-results (link-entities crux-node valid-time transaction-time "/_entity" results)]
+               (let [rows (resolve-rows query results)
+                     html-results (link-top-level-entities crux-node valid-time transaction-time "/_entity" rows)]
                  (with-meta html-results (assoc (meta html-results)
                                                 ::render-type :query
                                                 :headers (resolve-headers query results)
-                                                :rows (resolve-rows query results))))
+                                                :rows rows)))
                results))}))
 
 (defn- data-browser-handler [crux-node request]
