@@ -25,6 +25,7 @@
                                                                                  commons-codec]]
                  [org.xerial/sqlite-jdbc "3.28.0"]
                  [mysql/mysql-connector-java "8.0.17"]
+                 [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8"]
 
                  ;; Uncomment to test Oracle, you'll need to locally install the JAR:
                  ;; [com.oracle/ojdbc "12.2.0.1"]

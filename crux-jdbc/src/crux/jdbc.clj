@@ -22,6 +22,7 @@
   (condp contains? dbtype
     #{"h2"} :h2
     #{"mysql"} :mysql
+    #{"mssql"} :mssql
     #{"sqlite"} :sqlite
     #{"postgresql" "pgsql"} :psql
     #{"oracle"} :oracle))
@@ -54,6 +55,12 @@
                     (let [id (first (vals tx-result))]
                       (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
+
+                    #{"mssql"}
+                    (if-let [id (:generated_keys tx-result)]
+                      (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
+                                         {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})
+                      tx-result)
 
                     #{"oracle"}
                     (let [id (first (vals tx-result))]

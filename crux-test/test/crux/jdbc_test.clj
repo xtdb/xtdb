@@ -31,7 +31,14 @@
   (when (.exists (clojure.java.io/file ".testing-oracle.edn"))
     (t/testing "Oracle Database"
       (fj/with-jdbc-node "oracle" f
-        (read-string (slurp ".testing-oracle.edn"))))))
+        (read-string (slurp ".testing-oracle.edn")))))
+
+  #_(t/testing "MSSQL Database"
+    ;; docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+    ;; Then create the DB (use mssql-cli).
+    (fj/with-jdbc-node "mssql" f {:crux.jdbc/dbname "cruxtest"
+                                  :crux.jdbc/user "sa"
+                                  :crux.jdbc/password "yourStrong(!)Password"})))
 
 (t/use-fixtures :each with-each-jdbc-node kvf/with-kv-dir apif/with-node)
 
