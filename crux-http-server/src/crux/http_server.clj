@@ -11,7 +11,6 @@
             [clojure.instant :as instant]
             [crux.codec :as c]
             [crux.io :as cio]
-            [crux.http-console :as console]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.cors :refer [wrap-cors]]
@@ -22,7 +21,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
-            [hiccup2.core :refer [html]]
+            [hiccup.page :refer [html5]]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
@@ -205,18 +204,6 @@
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
-(defn- entity-state [^ICruxAPI crux-node request]
-  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
-    (let [eid (c/id-edn-reader encoded-eid)
-          query-params (:query-params request)
-          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
-                                                            (instant/read-instant-date))
-                                        :transact-time (some-> (get query-params "transaction-time")
-                                                               (instant/read-instant-date))})
-          entity-map (api/entity db eid)]
-      {:status (if (some? entity-map) 200 404)
-       :body entity-map})))
-
 (defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
@@ -319,9 +306,6 @@
     [#"^/$" [:get]]
     (status crux-node)
 
-    [#"^/_query" [:get]]
-    (console/query crux-node request)
-
     [#"^/document/.+$" [:get :post]]
     (document crux-node request)
 
@@ -384,11 +368,108 @@
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       nil)))
 
+(defn link-entities
+  [crux-node vt tt path result]
+  (let [metadata (atom {})
+        resolved-links
+        (fn recur-on-result [result]
+          (if (and (c/valid-id? result)
+                   (api/entity (api/db crux-node vt tt) result))
+            (let [query-params (cond-> "?"
+                                 vt (str "valid-time=" vt "&")
+                                 tt (str "transact-time=" tt))]
+              (swap! metadata assoc result (str path "/" result query-params))
+              result)
+            (cond
+              (map? result) (reduce-kv #(assoc %1 %2 (recur-on-result %3)) {} result)
+              (seq? result) (map recur-on-result result)
+              (vector? result) (mapv recur-on-result result)
+              (set? result) (into #{} (map recur-on-result result))
+              :else result)))]
+    (with-meta (resolved-links result) {:links @metadata})))
+
+(defn- entity-state [^ICruxAPI crux-node request]
+  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
+    (let [eid (c/id-edn-reader encoded-eid)
+          query-params (:query-params request)
+          valid-time (some-> (get query-params "valid-time")
+                             (instant/read-instant-date))
+          transaction-time (some-> (get query-params "transaction-time")
+                                   (instant/read-instant-date))
+          db (db-for-request crux-node {:valid-time valid-time
+                                        :transact-time transaction-time})
+          entity-map (api/entity db eid)]
+      {:status (if (some? entity-map) 200 404)
+       :body (when entity-map
+               (if (= (get-in request [:muuntaja/response :format]) "text/html")
+                 (let [html-results (link-entities crux-node valid-time transaction-time "/_entity" entity-map)]
+                   (with-meta html-results (assoc (meta html-results) ::render-type :entity)))
+                 entity-map))})))
+
+(defn- coerce-param
+  ([param]
+   (coerce-param param nil))
+  ([param wrap?]
+   (let [formatted-param
+         (cond
+           (vector? param) (str "[" (reduce str param) "]")
+           wrap? (str "[" param "]")
+           :else param)]
+     (c/read-edn-string-with-readers formatted-param))))
+
+(defn- build-query
+  [{:strs [find where args order-by limit offset full-results]}]
+  (cond-> {}
+    :find (assoc :find (coerce-param find))
+    :where (assoc :where (coerce-param where :wrap))
+    args (assoc :args (coerce-param args))
+    order-by (assoc :order-by (coerce-param args :wrap))
+    limit (assoc :limit (Integer/parseInt limit))
+    offset (assoc :offset (Integer/parseInt offset))
+    full-results (assoc :full-results? true)))
+
+(defn resolve-headers
+  [{:keys [find full-results?] :as query} results]
+  (if (and full-results? (= 1 (count (first results))))
+    (->> results
+         (mapv #(map keys %))
+         (flatten)
+         (into #{}))
+    find))
+
+(defn resolve-rows
+  [{:keys [find full-results?] :as query} results]
+  (if (and full-results? (= 1 (count (first results))))
+    (map first results)
+    (map #(zipmap find %) results)))
+
+(defn data-browser-query [^ICruxAPI crux-node request]
+  (let [query-params (:query-params request)
+        query (build-query query-params)
+        valid-time (some-> (get query-params "valid-time")
+                           (instant/read-instant-date))
+        transaction-time (some-> (get query-params "transaction-time")
+                                 (instant/read-instant-date))
+        db (db-for-request crux-node {:valid-time valid-time
+                                      :transact-time transaction-time})
+        results (api/q db query)]
+    {:status (if (some? results) 200 404)
+     :body (when results
+             (if (= (get-in request [:muuntaja/response :format]) "text/html")
+               (let [html-results (link-entities crux-node valid-time transaction-time "/_entity" results)]
+                 (with-meta html-results (assoc (meta html-results)
+                                                ::render-type :query
+                                                :headers (resolve-headers query results)
+                                                :rows (resolve-rows query results))))
+               results))}))
+
 (defn- data-browser-handler [crux-node request]
   (condp check-path request
     [#"^/_entity/.+$" [:get]]
     (entity-state crux-node request)
 
+    [#"^/_query" [:get]]
+    (data-browser-query crux-node request)
     nil))
 
 (def ^:const default-server-port 3000)
@@ -419,35 +500,76 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
-(defn- edn->html [edn]
+(defmulti edn->html
+  (fn [edn]
+    (::render-type (meta edn))))
+
+(defn- entity->html [edn]
   (cond
     (map? edn) (into [:dl]
                      (mapcat
                       (fn [[k v]]
-                        [[:dt (edn->html k)]
-                         [:dd (edn->html v)]])
+                        [[:dt (entity->html k)]
+                         [:dd (entity->html v)]])
                       edn))
-    (sequential? edn) (into [:ol] (map (fn [v] [:li (edn->html v)]) edn))
-    (set? edn) (into [:ul] (map (fn [v] [:li (edn->html v)]) edn))
+    (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html v)]) edn))
+    (set? edn) (into [:ul] (map (fn [v] [:li (entity->html v)]) edn))
     :else (str edn)))
 
-(defn- entity->html [edn]
+(defmethod edn->html :entity [edn]
+  (html5
+   (entity->html edn)))
+
+(defmethod edn->html :query [edn]
+  (let [headers (:headers (meta edn))
+        rows (:rows (meta edn))
+        links (:links (meta edn))]
+    (html5
+     [:html
+      {:lang "en"}
+      [:head
+       [:meta {:charset "utf-8"}]
+       [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
+       [:meta
+        {:name "viewport"
+         :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
+       [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]]
+      [:body
+       (if (seq rows)
+         [:table
+          [:thead
+           [:tr
+            (for [header headers]
+              [:th header])]]
+          [:tbody
+           (for [row rows]
+             [:tr
+              (for [header headers]
+                (let [cell-value (get row header)]
+                  [:td
+                   (if-let [href (get links cell-value)]
+                     [:a {:href href}
+                      cell-value]
+                     cell-value)]))])]]
+         [:div "No results found"])]])))
+
+(defmethod edn->html :default [edn]
   (str
    (html
-    (edn->html edn))))
+    [:p "Unknown rendering type"])))
 
 (defn- html-encoder [_]
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data charset]
       (.getBytes
-       ^String (entity->html data)
+       ^String (edn->html data)
        ^String charset))
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ data charset]
       (fn [^OutputStream output-stream]
         (.write output-stream (.getBytes
-                               ^String (entity->html data)
+                               ^String (edn->html data)
                                ^String charset))))))
 
 (def module
