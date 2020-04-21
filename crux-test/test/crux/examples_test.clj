@@ -58,7 +58,7 @@
 (t/deftest test-example-kafka-node
   (let [kafka-port (cio/free-port)
         embedded-kafka (ex/start-embedded-kafka kafka-port *storage-dir*)
-        node (ex/start-cluster kafka-port)]
+        node (ex/start-cluster kafka-port *storage-dir*)]
     (t/testing "example embedded kafka is created properly"
       (t/is (not= nil embedded-kafka)))
 

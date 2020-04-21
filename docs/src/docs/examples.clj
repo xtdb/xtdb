@@ -46,9 +46,10 @@
 )
 
 ;; tag::start-cluster-node[]
-(defn start-cluster [kafka-port]
+(defn start-cluster [kafka-port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
-                    :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)}))
+                    :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)
+                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
 ;; end::start-cluster-node[]
 
 ;; tag::start-standalone-with-rocks[]
@@ -274,7 +275,7 @@
                                  :where [[p1 :name n]
                                          [p1 :last-name n]
                                          [p1 :name "Smith"]]})]
-    (doseq [tuple res]
+    (doseq [tuple (iterator-seq res)]
       (prn tuple)))
   ;; end::streaming-query[]
   )
