@@ -1,5 +1,9 @@
 # Changelog
 
+## 20.04-1.8.2-alpha
+
+See the [Github milestone](https://github.com/juxt/crux/milestone/8?closed=1) for the issues included in this release
+
 ## 20.04-1.8.1-alpha
 
 See the [Github milestone](https://github.com/juxt/crux/milestone/7?closed=1) for the issues included in this release
