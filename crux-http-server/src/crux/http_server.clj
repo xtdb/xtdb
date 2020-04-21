@@ -504,21 +504,23 @@
   (fn [edn]
     (::render-type (meta edn))))
 
-(defn- entity->html [edn]
-  (cond
-    (map? edn) (into [:dl]
-                     (mapcat
-                      (fn [[k v]]
-                        [[:dt (entity->html k)]
-                         [:dd (entity->html v)]])
-                      edn))
-    (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html v)]) edn))
-    (set? edn) (into [:ul] (map (fn [v] [:li (entity->html v)]) edn))
-    :else (str edn)))
+(defn- entity->html [links edn]
+  (if-let [href (get links edn)]
+    [:a {:href href} edn]
+    (cond
+      (map? edn) (into [:dl]
+                       (mapcat
+                        (fn [[k v]]
+                          [[:dt (entity->html links k)]
+                           [:dd (entity->html links v)]])
+                        edn))
+      (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html links v)]) edn))
+      (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
+      :else (str edn))))
 
 (defmethod edn->html :entity [edn]
   (html5
-   (entity->html edn)))
+   (entity->html (:links (meta edn)) edn)))
 
 (defmethod edn->html :query [edn]
   (let [headers (:headers (meta edn))
