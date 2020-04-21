@@ -116,9 +116,10 @@
 
     (println "Would post to Slack:\n" message)))
 
-(defn- result->slack-message [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
+(defn- result->slack-message [{:keys [time-taken-ms error bench-type percentage-difference-since-last-run
                                       minimum-time-taken-this-week maximum-time-taken-this-week
-                                      doc-count av-count bytes-indexed] :as bench-map}]
+                                      doc-count av-count bytes-indexed]
+                               :as bench-map}]
   (->> (concat [(format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
                         (name bench-type)
                         (Duration/ofMillis time-taken-ms)
@@ -130,7 +131,7 @@
                         (let [time-taken-seconds (/ time-taken-ms 1000)]
                           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
                                           :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))]
-               (when (= bench-type :ingest)
+               (when (and (= bench-type :ingest) doc-count av-count bytes-indexed)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
                         {:docs-per-second (int (/ doc-count time-taken-seconds))
                          :avs-per-second (int (/ av-count time-taken-seconds))
@@ -217,13 +218,13 @@
       :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb-with-metrics"))
       :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
 
-   #_"h2-rocksdb"
-   #_(fn [data-dir]
-       {:crux.node/topology '[crux.jdbc/topology
-                              crux.metrics.dropwizard.cloudwatch/reporter]
-        :crux.kv/db-dir (str (io/file data-dir "kv"))
-        :crux.jdbc/dbtype "h2"
-        :crux.jdbc/dbname (str (io/file data-dir "h2"))})
+   "h2-rocksdb"
+   (fn [data-dir]
+     {:crux.node/topology '[crux.jdbc/topology
+                            crux.metrics.dropwizard.cloudwatch/reporter]
+      :crux.kv/db-dir (str (io/file data-dir "kv"))
+      :crux.jdbc/dbtype "h2"
+      :crux.jdbc/dbname (str (io/file data-dir "h2"))})
 
    "sqlite-rocksdb"
    (fn [data-dir]
