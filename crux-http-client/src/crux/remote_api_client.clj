@@ -135,12 +135,12 @@
                                (assoc (as-of-map this)
                                       :query (q/normalize-query q))
                                {:as :stream})]
-      (doto (cio/->stream (edn-list->lazy-seq in))
-        (.onClose #(.close ^Closeable in)))))
+      (cio/->cursor #(.close ^Closeable in)
+                    (edn-list->lazy-seq in))))
 
   (historyAscending [this eid]
-    (with-open [history (cio/<-stream (.openHistoryAscending this eid))]
-      (vec history)))
+    (with-open [history (.openHistoryAscending this eid)]
+      (vec (iterator-seq history))))
 
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
@@ -153,12 +153,12 @@
     (let [in (api-request-sync (str url "/history-ascending")
                                (assoc (as-of-map this) :eid eid)
                                {:as :stream})]
-      (doto (cio/->stream (edn-list->lazy-seq in))
-        (.onClose #(.close ^java.io.Closeable in)))))
+      (cio/->cursor #(.close ^java.io.Closeable in)
+                    (edn-list->lazy-seq in))))
 
   (historyDescending [this eid]
-    (with-open [history (cio/<-stream (.openHistoryDescending this eid))]
-      (vec history)))
+    (with-open [history (.openHistoryDescending this eid)]
+      (vec (iterator-seq history))))
 
   (historyDescending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-descending")
@@ -171,8 +171,8 @@
     (let [in (api-request-sync (str url "/history-descending")
                                (assoc (as-of-map this) :eid eid)
                                {:as :stream})]
-      (doto (cio/->stream (edn-list->lazy-seq in))
-        (.onClose #(.close ^java.io.Closeable in)))))
+      (cio/->cursor #(.close ^java.io.Closeable in)
+                    (edn-list->lazy-seq in))))
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time))
@@ -240,8 +240,8 @@
                                nil
                                {:method :get
                                 :as :stream})]
-      (doto (cio/->stream (edn-list->lazy-seq in))
-        (.onClose #(.close ^Closeable in)))))
+      (cio/->cursor #(.close ^Closeable in)
+                    (edn-list->lazy-seq in))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")

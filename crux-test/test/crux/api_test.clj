@@ -146,13 +146,15 @@
           (t/testing "query with streaming result"
             (with-open [res (api/open-q db '{:find [e]
                                              :where [[e :name "Ivan"]]})]
-              (t/is (= '([:ivan]) res))))
+              (t/is (= '([:ivan])
+                       (iterator-seq res)))))
 
           (t/testing "query returning full results"
             (with-open [res (api/open-q db '{:find [e]
                                              :where [[e :name "Ivan"]]
                                              :full-results? true})]
-              (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}]) res))))
+              (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
+                       (iterator-seq res)))))
 
           (t/testing "entity"
             (t/is (= {:crux.db/id :ivan :name "Ivan"} (api/entity db :ivan)))
@@ -251,40 +253,44 @@
         tx1 (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
 
     (t/testing "tx-log"
-      (with-open [tx-log (api/open-tx-log *api* nil false)]
-        (t/is (not (realized? tx-log)))
-        (t/is (= [(assoc tx1
-                         :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
-                 tx-log))
-        (t/is (realized? tx-log)))
+      (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+        (let [result (iterator-seq tx-log-iterator)]
+          (t/is (not (realized? result)))
+          (t/is (= [(assoc tx1
+                      :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                   result))
+          (t/is (realized? result))))
 
       (t/testing "with ops"
-        (with-open [tx-log (api/open-tx-log *api* nil true)]
-          (t/is (not (realized? tx-log)))
-          (t/is (= [(assoc tx1
-                           :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-                   tx-log))
-          (t/is (realized? tx-log))))
+        (with-open [tx-log-iterator (.openTxLog *api* nil true)]
+          (let [result (iterator-seq tx-log-iterator)]
+            (t/is (not (realized? result)))
+            (t/is (= [(assoc tx1
+                        :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+                     result))
+            (t/is (realized? result)))))
 
       (t/testing "from tx id"
-        (with-open [tx-log (api/open-tx-log *api* (::tx/tx-id tx1) false)]
-          (t/is (empty? tx-log)))))
+        (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
+          (t/is (empty? (iterator-seq tx-log-iterator))))))
 
     (t/testing "tx log skips failed transactions"
       (let [tx2 (fapi/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan2"}]
                                        [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
         (t/is (false? (api/tx-committed? *api* tx2)))
 
-        (with-open [tx-log (api/open-tx-log *api* nil false)]
-          (t/is (= [(assoc tx1
-                           :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
-                   tx-log)))
+        (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
+          (let [result (iterator-seq tx-log-iterator)]
+            (t/is (= [(assoc tx1
+                        :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                     result))))
 
         (let [tx3 (fapi/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan"}]
                                          [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
           (t/is (true? (api/tx-committed? *api* tx3)))
-          (with-open [tx-log (api/open-tx-log *api* nil false)]
-            (t/is (= 2 (count tx-log)))))))))
+          (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
+            (let [result (iterator-seq tx-log-iterator)]
+              (t/is (= 2 (count result))))))))))
 
 (t/deftest test-db-history-api
   (let [version-1-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]]) nil)
@@ -311,20 +317,20 @@
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (map :crux.db/doc history-asc)))
+                 (->> (iterator-seq history-asc) (map :crux.db/doc))))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
                   {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc history-desc)))))
+                 (->> (iterator-seq history-desc) (map :crux.db/doc))))))
 
     (with-both-dbs [db (*api* #inst "2019-02-02")]
       (with-open [snapshot (.newSnapshot db)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+                 (map :crux.db/doc (api/history-ascending db snapshot :ivan))))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+                 (map :crux.db/doc (api/history-descending db snapshot :ivan))))))
 
     (with-both-dbs [db (*api* #inst "2019-01-31")]
       (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
@@ -338,17 +344,17 @@
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
                   {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (map :crux.db/doc history-asc)))
-        (t/is (empty? (map :crux.db/doc history-desc)))))
+                 (->> (iterator-seq history-asc) (map :crux.db/doc))))
+        (t/is (empty? (iterator-seq history-desc)))))
 
     (with-both-dbs [db (*api* #inst "2019-02-04")]
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
-        (t/is (empty? (map :crux.db/doc history-asc)))
+        (t/is (empty? (iterator-seq history-asc)))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
                   {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc history-desc)))))
+                 (->> (iterator-seq history-desc) (map :crux.db/doc))))))
 
     (with-both-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
       (with-open [snapshot (.newSnapshot db)]
@@ -359,10 +365,10 @@
       (with-open [history-asc (api/open-history-ascending db :ivan)
                   history-desc (api/open-history-descending db :ivan)]
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}]
-                 (map :crux.db/doc history-asc)))
+                 (->> (iterator-seq history-asc) (map :crux.db/doc))))
         (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc history-desc)))))
+                 (->> (iterator-seq history-desc) (map :crux.db/doc))))))
 
     (with-both-dbs [db (*api* #inst "2019-02-03" version-2-submitted-tx-time)]
       (with-open [snapshot (.newSnapshot db)]

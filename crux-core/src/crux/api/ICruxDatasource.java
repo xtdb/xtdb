@@ -6,7 +6,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 import clojure.lang.Keyword;
 
 /**
@@ -75,9 +74,9 @@ public interface ICruxDatasource extends Closeable {
      * Queries the db lazily.
      *
      * @param query the query in map, vector or string form.
-     * @return      a stream of result tuples.
+     * @return      a cursor of result tuples.
      */
-    public Stream<List<?>> openQuery(Object query);
+    public ICursor<List<?>> openQuery(Object query);
 
     /**
      * Retrieves entity history in chronological order from and
@@ -109,7 +108,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a stream of history.
      */
-    public Stream<Map<Keyword,?>> openHistoryAscending(Object eid);
+    public ICursor<Map<Keyword,?>> openHistoryAscending(Object eid);
 
     /**
      * Retrieves entity history in reverse chronological order
@@ -141,7 +140,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a stream of history.
      */
-    public Stream<Map<Keyword,?>> openHistoryDescending(Object eid);
+    public ICursor<Map<Keyword,?>> openHistoryDescending(Object eid);
 
     /**
      * The valid time of this db.

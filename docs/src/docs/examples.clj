@@ -275,7 +275,7 @@
                                  :where [[p1 :name n]
                                          [p1 :last-name n]
                                          [p1 :name "Smith"]]})]
-    (doseq [tuple res]
+    (doseq [tuple (iterator-seq res)]
       (prn tuple)))
   ;; end::streaming-query[]
   )
