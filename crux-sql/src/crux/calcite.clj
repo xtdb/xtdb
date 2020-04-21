@@ -91,13 +91,15 @@
   (doto (map prn-str (->crux-where-clauses schema filter)) log/debug))
 
 (defn- ->crux-query
-  [schema filters projects limit]
+  [schema filters projects limit sort-field sort-direction]
   (try
     (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
           {:keys [find where]} query]
       (merge {:find (if (seq projects) (mapv find projects) find)
               :where (vec (concat filters where))}
-             (when (and limit (not= limit -1)) {:limit limit})))
+             (when (and limit (not= limit -1)) {:limit limit})
+             (when (>= sort-field 0) {:order-by [[(nth find sort-field)
+                                                  (if (= sort-direction -1) :desc :asc)]]})))
     (catch Throwable e
       (log/error e)
       (throw e))))
@@ -126,10 +128,11 @@
               (close []
                 (.close snapshot))))))))
 
-(defn ^Enumerable scan [node table-schema filters offset limit]
+(defn ^Enumerable scan [node table-schema filters offset limit sort-field sort-direction]
   ;; TODO consider using projects here rather than bringing all columns back
   (let [filters (map edn/read-string filters)]
-    (->> (doto (->crux-query table-schema filters [] limit) log/debug)
+    (->> (doto (->crux-query table-schema filters [] limit sort-field sort-direction) prn;log/debug
+           )
          (perform-query node offset))))
 
 (def ^:private mapped-types {:keyword :varchar})

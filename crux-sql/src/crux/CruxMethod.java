@@ -10,7 +10,9 @@ public enum CruxMethod {
                       "find",
                       List.class, // Filters
                       Integer.class, // offset
-                      Integer.class // limit
+                      Integer.class, // limit
+                      Integer.class, // sortField
+                      Integer.class // sortDirection
                       );
 
   public final Method method;

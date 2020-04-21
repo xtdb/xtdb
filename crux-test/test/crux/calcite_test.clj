@@ -180,6 +180,21 @@
   (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10 OFFSET 15"]
     (t/is (= 5 (count (query q))))))
 
+(t/deftest test-sort
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
+
+  (let [q "SELECT NAME FROM PERSON ORDER BY NAME"]
+    (t/is (= ["Ivan" "Malcolm"] (map :name (query q))))
+    (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
+                  "  CruxToEnumerableConverter\n"
+                  "    CruxSort(sort0=[$1], dir0=[ASC])\n"
+                  "      CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
+  (let [q "SELECT NAME FROM PERSON ORDER BY NAME DESC"]
+    (t/is (= ["Malcolm" "Ivan"] (map :name (query q))))))
+
 (t/deftest test-different-data-types
   (let [born #inst "2010"
         afloat (float 1.0)]

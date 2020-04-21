@@ -2,6 +2,7 @@ package crux.calcite;
 
 import org.apache.calcite.adapter.enumerable.EnumerableLimit;
 import org.apache.calcite.plan.Convention;
+import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTrait;
@@ -10,11 +11,13 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.core.Sort;
 
 class CruxRules {
     static final RelOptRule[] RULES = {
         CruxFilterRule.INSTANCE,
-        CruxLimitRule.INSTANCE
+        CruxLimitRule.INSTANCE,
+        CruxSortRule.INSTANCE,
     };
 
     abstract static class CruxConverterRule extends ConverterRule {
@@ -64,6 +67,24 @@ class CruxRules {
             if (converted != null) {
                 call.transformTo(converted);
             }
+        }
+    }
+
+    private static class CruxSortRule extends CruxConverterRule {
+        public static final CruxSortRule INSTANCE = new CruxSortRule();
+
+        private CruxSortRule() {
+            super(Sort.class, Convention.NONE, CruxRel.CONVENTION, "CruxSortRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final Sort sort = (Sort) rel;
+            final RelTraitSet traitSet =
+                sort.getTraitSet().replace(out)
+                .replace(sort.getCollation());
+            return new CruxSort(rel.getCluster(), traitSet,
+                                 convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
+                                 sort.getCollation(), sort.offset, sort.fetch);
         }
     }
 }
