@@ -350,6 +350,23 @@
 
 (def ^:dynamic *current-tx*)
 
+(defn- update-stats [docs-stats {:keys [kv-store ^ExecutorService stats-executor]}]
+  (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
+    (if stats-executor
+      (.submit stats-executor stats-fn)
+      (stats-fn))))
+
+(defn- unindex-docs [tombstones {:keys [kv-store object-store snapshot] :as deps}]
+  (let [existing-docs (db/get-objects object-store snapshot (keys tombstones))]
+    (db/put-objects object-store tombstones)
+
+    (->> existing-docs
+         (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
+         (idx/delete-doc-idx-keys kv-store))
+
+    (update-stats (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true)))
+                  deps)))
+
 (defrecord KvIndexer [object-store kv-store bus ^ExecutorService stats-executor]
   Closeable
   (close [_]
@@ -359,47 +376,29 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS))))
 
   db/Indexer
-  (index-docs [_ docs]
+  (index-docs [this docs]
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
-    ;; we have to always put evicted docs in the object store
-    ;; s.t. when we replay the log, we record that we never saw this doc
-    ;; and then tx consumption can continue
-    (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
-
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (when-let [docs (->> docs
-                           ;; only keep unevicted unindexed and indexed but now evicted docs
-                           (into {} (filter (fn [[k doc]]
-                                              (= (idx/doc-indexed? snapshot (:crux.db/id doc) k)
-                                                 (idx/evicted-doc? doc)))))
-                           not-empty)]
+      (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
+
+      (when-let [docs-to-upsert (->> docs
+                                     (into {} (remove (fn [[k doc]]
+                                                        (or (idx/doc-indexed? snapshot (:crux.db/id doc) k)
+                                                            (idx/evicted-doc? doc)))))
+                                     not-empty)]
         (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-        (let [{docs-to-evict true, docs-to-upsert false} (group-by (comp boolean idx/evicted-doc? val) docs)
-
-              doc-idx-keys (when (seq docs-to-upsert)
+        (let [doc-idx-keys (when (seq docs-to-upsert)
                              (->> docs-to-upsert
                                   (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))))
 
               _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))
 
-              docs-to-remove (when (seq docs-to-evict)
-                               (let [existing-docs (->> (db/get-objects object-store snapshot (keys docs-to-evict))
-                                                        (remove (comp idx/evicted-doc? val)))]
-                                 (->> existing-docs
-                                      (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-                                      (idx/delete-doc-idx-keys kv-store))
-
-                                 existing-docs))
-
-              docs-stats (concat (->> (vals docs-to-upsert)
-                                      (map #(idx/doc-predicate-stats % false)))
-
-                                 (->> (vals docs-to-remove)
-                                      (map #(idx/doc-predicate-stats % true))))]
+              docs-stats (->> (vals docs-to-upsert)
+                              (map #(idx/doc-predicate-stats % false)))]
 
           (db/put-objects object-store docs-to-upsert)
 
@@ -409,10 +408,7 @@
                          :bytes-indexed (->> doc-idx-keys
                                              (transduce (map mem/capacity) +))})
 
-          (let [stats-fn ^Runnable #(idx/update-predicate-stats kv-store docs-stats)]
-            (if stats-executor
-              (.submit stats-executor stats-fn)
-              (stats-fn)))))))
+          (update-stats docs-stats this)))))
 
   (index-tx [this {:crux.tx/keys [tx-time tx-id] :as tx} tx-events]
     (s/assert :crux.tx.event/tx-events tx-events)
@@ -445,7 +441,7 @@
           (if committed?
             (let [tombstones (not-empty (:tombstones res))]
               (when tombstones
-                (db/index-docs this tombstones))
+                (unindex-docs tombstones deps))
 
               (kv/store kv-store (->> (conj (->> (get-in res [:history :etxs]) (mapcat val) (mapcat etx->kvs))
                                             (idx/meta-kv ::latest-completed-tx tx))
