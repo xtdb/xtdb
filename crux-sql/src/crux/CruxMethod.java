@@ -11,8 +11,7 @@ public enum CruxMethod {
                       List.class, // Filters
                       Integer.class, // offset
                       Integer.class, // limit
-                      Integer.class, // sortField
-                      Integer.class // sortDirection
+                      List.class // sort
                       );
 
   public final Method method;

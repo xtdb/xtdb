@@ -19,7 +19,7 @@ import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.util.BuiltInMethod;
-// import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Pair;
 
 // import java.util.AbstractList;
 import java.util.List;
@@ -62,11 +62,10 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
         final Expression clauses = block.append("clauses", constantArrayList(implementor.clauses, String.class));
         final Expression offset = block.append("offset", Expressions.constant(implementor.offset));
         final Expression fetch = block.append("fetch", Expressions.constant(implementor.fetch));
-        final Expression sortField = block.append("sortField", Expressions.constant(implementor.sortField));
-        final Expression sortDirection = block.append("sortDirection", Expressions.constant(implementor.sortDirection));
+        final Expression sort = block.append("sort", constantArrayList(implementor.sort, Pair.class));
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, clauses, offset, fetch, sortField, sortDirection));
+                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, clauses, offset, fetch, sort));
 
         // if (CalciteSystemProperty.DEBUG.value()) {
         //     System.out.println("Mongo: " + opList);

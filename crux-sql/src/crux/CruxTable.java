@@ -15,6 +15,8 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.rel.RelFieldCollation;
+import org.apache.calcite.util.Pair;
 import crux.api.ICruxAPI;
 import clojure.lang.Keyword;
 import java.util.Map;
@@ -37,8 +39,8 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
     }
 
     @SuppressWarnings("unchecked")
-    public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch, Integer sortField, Integer sortDirection) {
-        return (Enumerable<Object>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema, filters, offset, fetch, sortField, sortDirection);
+    public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch, List<Map.Entry<Integer, RelFieldCollation.Direction>> sort) {
+        return (Enumerable<Object>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema, filters, offset, fetch, sort);
     }
 
     @Override public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema, String tableName) {
@@ -64,8 +66,9 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
             return (CruxTable) table;
         }
 
-        public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch, Integer sortField, Integer sortDirection) {
-            return getTable().find(filters, offset, fetch, sortField, sortDirection);
+        public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch,
+                                       List<Map.Entry<Integer, RelFieldCollation.Direction>> sort) {
+            return getTable().find(filters, offset, fetch, sort);
         }
     }
 }
