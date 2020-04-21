@@ -37,8 +37,8 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
     }
 
     @SuppressWarnings("unchecked")
-    public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch) {
-        return (Enumerable<Object>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema, filters, offset, fetch);
+    public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch, Integer sortField, Integer sortDirection) {
+        return (Enumerable<Object>)CruxUtils.resolve("crux.calcite/scan").invoke(node, schema, filters, offset, fetch, sortField, sortDirection);
     }
 
     @Override public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema, String tableName) {
@@ -64,8 +64,8 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
             return (CruxTable) table;
         }
 
-        public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch) {
-            return getTable().find(filters, offset, fetch);
+        public Enumerable<Object> find(List<String> filters, Integer offset, Integer fetch, Integer sortField, Integer sortDirection) {
+            return getTable().find(filters, offset, fetch, sortField, sortDirection);
         }
     }
 }

@@ -62,9 +62,16 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
         final Expression clauses = block.append("clauses", constantArrayList(implementor.clauses, String.class));
         final Expression offset = block.append("offset", Expressions.constant(implementor.offset));
         final Expression fetch = block.append("fetch", Expressions.constant(implementor.fetch));
+        final Expression sortField = block.append("sortField", Expressions.constant(implementor.sortField));
+        final Expression sortDirection = block.append("sortDirection", Expressions.constant(implementor.sortDirection));
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, clauses, offset, fetch));
+                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, clauses, offset, fetch, sortField, sortDirection));
+
+        // if (CalciteSystemProperty.DEBUG.value()) {
+        //     System.out.println("Mongo: " + opList);
+        // }
+        // Hook.QUERY_PLAN.run(opList);
 
         block.add(Expressions.return_(null, enumerable));
         return relImplementor.result(physType, block.toBlock());

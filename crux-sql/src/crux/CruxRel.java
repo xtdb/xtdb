@@ -17,6 +17,9 @@ public interface CruxRel extends RelNode {
         CruxTable cruxTable;
         int offset = 0;
         int fetch = -1;
+        int sortField = -1;
+        int sortDirection = 1;
+
         final List<Object> clauses = new ArrayList<>();
 
         public void add(Object clause) {
