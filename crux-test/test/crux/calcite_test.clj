@@ -155,6 +155,15 @@
            (query "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD IS NOT NULL")))
   (t/is (= 2 (count (query "SELECT PERSON.NAME FROM PERSON WHERE 'FOO' IS NOT NULL")))))
 
+(t/deftest test-cardinality
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld ["Mars" "Earth"] :age 25 :alive false}])
+
+  (let [q "SELECT * FROM PERSON WHERE HOMEWORLD = 'Earth'"]
+    (t/is (= ["Ivan" "Malcolm"] (sort (map :name (query q))))))
+
+  (let [q "SELECT * FROM PERSON"]
+    (t/is (= ["Ivan" "Malcolm" "Malcolm"] (sort (map :name (query q)))))))
 
 (t/deftest test-limit-and-offset
   (f/transact! *api* (for [i (range 20)]
