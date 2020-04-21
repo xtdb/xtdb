@@ -2,7 +2,8 @@
   "HTTP API for Crux.
 
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
@@ -507,23 +508,44 @@
       [:div "No results found"])]])
 
 (defn data-browser-query [^ICruxAPI crux-node request]
-  (let [query-params (:query-params request)
-        query (build-query query-params)
-        valid-time (some-> (get query-params "valid-time")
-                           (instant/read-instant-date))
-        transaction-time (some-> (get query-params "transaction-time")
+  (let [query-params (:query-params request)]
+    (cond
+      (empty? query-params)
+      {:status 200
+       :body
+       (html5 [:form
+               {:action "/_query"}
+               [:textarea
+                {:name "q"
+                 :cols 40
+                 :rows 10}]
+               [:br]
+               [:button
+                {:type "submit"}
+                "submit me here"]])}
+      :else
+      (try
+        (let [query (or (some-> (get query-params "q")
+                                (edn/read-string))
+                        (build-query query-params))
+              valid-time (some-> (get query-params "valid-time")
                                  (instant/read-instant-date))
-        db (db-for-request crux-node {:valid-time valid-time
-                                      :transact-time transaction-time})
-        results (api/q db query)]
-    {:status (if (some? results) 200 404)
-     :body (when results
-             (if (= (get-in request [:muuntaja/response :format]) "text/html")
-               (let [headers (resolve-headers query results)
-                     rows (resolve-rows query results)
-                     links (link-top-level-entities crux-node valid-time transaction-time "/_entity" rows)]
-                 (html5 (query->html links headers rows)))
-               results))}))
+              transaction-time (some-> (get query-params "transaction-time")
+                                       (instant/read-instant-date))
+              db (db-for-request crux-node {:valid-time valid-time
+                                            :transact-time transaction-time})
+              results (api/q db query)]
+          {:status 200
+           :body (when results
+                   (if (= (get-in request [:muuntaja/response :format]) "text/html")
+                     (let [headers (resolve-headers query results)
+                           rows (resolve-rows query results)
+                           links (link-top-level-entities crux-node valid-time transaction-time "/_entity" rows)]
+                       (html5 (query->html links headers rows)))
+                     results))})
+        (catch Exception e
+          {:status 400
+           :body (.getMessage e)})))))
 
 (defn- data-browser-handler [crux-node request]
   (condp check-path request
