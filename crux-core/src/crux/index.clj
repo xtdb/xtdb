@@ -4,7 +4,8 @@
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.morton :as morton]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [clojure.set :as set])
   (:import [clojure.lang IReduceInit Seqable Sequential]
            crux.api.IndexVersionOutOfSyncException
            crux.codec.EntityTx
@@ -384,6 +385,12 @@
 ;; returned by the iterator will (may) get invalidated by the next
 ;; iterator call.
 
+(defn <-nippy-buffer [buf]
+  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+
+(defn ->nippy-buffer [v]
+  (mem/->off-heap (nippy/fast-freeze v)))
+
 (defn all-keys-in-prefix
   ([i prefix]
    (all-keys-in-prefix i prefix false))
@@ -399,6 +406,17 @@
                     (mem/copy-to-unpooled-buffer (kv/value i))]
                    (mem/copy-to-unpooled-buffer k)) (step f-next f-next))))))
     #(kv/seek i seek-k) #(kv/next i))))
+
+(defn get-object [snapshot content-hash]
+  (with-open [i (kv/new-iterator snapshot)]
+    (some->> (seq (all-keys-in-prefix i (c/encode-cav-key-to (.get seek-buffer-tl) (c/->id-buffer content-hash)) true))
+             (map (comp <-nippy-buffer second))
+             (group-by first)
+             (into {} (map (fn [[k [[_ v idx] :as vs]]]
+                             [k (condp = idx
+                                  cav-single-value v
+                                  cav-set-value (into #{} (map second) vs)
+                                  (->> vs (sort-by last) (mapv second)))]))))))
 
 (defn idx->series
   [idx]
