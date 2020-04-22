@@ -432,16 +432,35 @@
            :else param)]
      (c/read-edn-string-with-readers formatted-param))))
 
+(def ^:const default-query-result-limit 100)
+
 (defn- build-query
-  [{:strs [find where args order-by limit offset full-results]}]
-  (cond-> {}
-    :find (assoc :find (coerce-param find))
-    :where (assoc :where (coerce-param where :wrap))
-    args (assoc :args (coerce-param args))
-    order-by (assoc :order-by (coerce-param args :wrap))
-    limit (assoc :limit (Integer/parseInt limit))
-    offset (assoc :offset (Integer/parseInt offset))
-    full-results (assoc :full-results? true)))
+  [{:strs [find where args order-by limit offset full-results page]}
+   default-limit]
+  (let [page (if page (dec (Integer/parseInt page)) 0)
+        limit (when limit (Integer/parseInt limit))
+        page-limit (if (and limit (<= limit default-limit))
+                     limit
+                     default-limit)
+        page-offset (if offset
+                      (Integer/parseInt offset)
+                      (* page-limit page))]
+    (cond-> {}
+      :find (assoc :find (coerce-param find))
+      :where (assoc :where (coerce-param where :wrap))
+      :limit (assoc :limit page-limit)
+      :offset (assoc :offset page-offset)
+      args (assoc :args (coerce-param args))
+      order-by (assoc :order-by (coerce-param args :wrap))
+      full-results (assoc :full-results? true))))
+
+(defn build-query-q
+  [resolved-query default-limit]
+  (let [limit (:limit resolved-query)
+        updated-limit (if (and limit (<= limit default-limit))
+                        limit
+                        default-limit)]
+    (assoc resolved-query :limit updated-limit)))
 
 (defn resolve-headers
   [{:keys [find full-results?] :as query} results]
@@ -478,7 +497,32 @@
    {}
    rows))
 
-(defn query->html [links headers rows]
+(defn resolve-prev-next-page
+  [query-params next-page?]
+  (let [parsed-page (if-let [page (get query-params "page")]
+                      (Integer/parseInt page)
+                      1)
+        ;; Rebuild query-string from query-params This is not using directly
+        ;; query-string because there's no safe way to remove the 'page' query
+        ;; param from the query-string without incurring into edge case
+        ;; scenarions i.e. the user chooses to name a clause in the find param
+        ;; as 'page'
+        url (str "/_query?"
+                 (subs
+                  (->> (dissoc query-params "page")
+                       (reduce-kv (fn [coll k v]
+                                    (if (vector? v)
+                                      (apply str coll (mapv #(str "&" k "=" %) v))
+                                      (str coll "&" k "=" v))) ""))
+                  1))
+        prev-url (when (>= parsed-page 2)
+                   (str url "&page=" (dec parsed-page)))
+        next-url (when next-page?
+                   (str url "&page=" (inc parsed-page)))]
+    {:prev-url prev-url
+     :next-url next-url}))
+
+(defn query->html [links headers rows {:keys [prev-url next-url]}]
   [:html
    {:lang "en"}
    [:head
@@ -490,22 +534,32 @@
     [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]]
    [:body
     (if (seq rows)
-      [:table
-       [:thead
-        [:tr
-         (for [header headers]
-           [:th header])]]
-       [:tbody
-        (for [row rows]
-          [:tr
-           (for [header headers]
-             (let [cell-value (get row header)]
-               [:td
-                (if-let [href (get links cell-value)]
-                  [:a {:href href}
-                   (str cell-value)]
-                  (str cell-value))]))])]]
-      [:div "No results found"])]])
+      [:div
+       [:table
+        [:thead
+         [:tr
+          (for [header headers]
+            [:th header])]]
+        [:tbody
+         (for [row rows]
+           [:tr
+            (for [header headers]
+              (let [cell-value (get row header)]
+                [:td
+                 (if-let [href (get links cell-value)]
+                   [:a {:href href}
+                    (str cell-value)]
+                   (str cell-value))]))])]]]
+      [:div "No results found"])
+    [:div
+     (if prev-url
+       [:a {:href prev-url}
+        "Prev"]
+       [:span "Prev"])
+     (if next-url
+       [:a {:href next-url}
+        "Next"]
+       [:span "Next"])]]])
 
 (defn data-browser-query [^ICruxAPI crux-node request]
   (let [query-params (:query-params request)]
@@ -525,9 +579,12 @@
                 "submit me here"]])}
       :else
       (try
-        (let [query (or (some-> (get query-params "q")
-                                (edn/read-string))
-                        (build-query query-params))
+        (let [default-limit (or (get-in crux-node [:options :crux.http-server/default-query-result])
+                                default-query-result-limit)
+              query (or (some-> (get query-params "q")
+                                (edn/read-string)
+                                (build-query-q default-limit))
+                        (build-query query-params default-limit))
               valid-time (some-> (get query-params "valid-time")
                                  (instant/read-instant-date))
               transaction-time (some-> (get query-params "transaction-time")
@@ -540,8 +597,10 @@
                    (if (= (get-in request [:muuntaja/response :format]) "text/html")
                      (let [headers (resolve-headers query results)
                            rows (resolve-rows query results)
-                           links (link-top-level-entities crux-node valid-time transaction-time "/_entity" rows)]
-                       (html5 (query->html links headers rows)))
+                           links (link-top-level-entities crux-node db  "/_entity" rows)
+                           next-page? (= (:limit query) (count results))
+                           prev-next-page (resolve-prev-next-page query-params next-page?)]
+                       (html5 (query->html links headers rows prev-next-page)))
                      results))})
         (catch Exception e
           {:status 400
