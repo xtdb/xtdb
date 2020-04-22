@@ -45,13 +45,13 @@
         (cli/parse-opts args
                         [[nil "--nodes node1,node2" "Node types"
                           :id :selected-nodes
-                          :default (keys bench/nodes)
+                          :default (set (keys bench/nodes))
                           :parse-fn #(set (string/split % #","))]
 
                          [nil "--tests test1,test2" "Tests to run"
                           :id :selected-tests
-                          :default (keys bench-tests)
-                          :parse-fn #(map keyword (set (string/split % #",")))]])]
+                          :default (set (keys bench-tests))
+                          :parse-fn #(into #{} (map keyword (set (string/split % #","))))]])]
     (if errors
       (binding [*out* *err*]
         (run! println errors)
@@ -72,7 +72,7 @@
 
   (let [bench-results (run-benches (-> (or (parse-args args)
                                            (System/exit 1))
-                                       (update :selected-nodes dissoc "h2-rocksdb" "sqlite-rocksdb")))]
+                                       (update :selected-nodes disj "h2-rocksdb" "sqlite-rocksdb")))]
 
     (bench/send-email-via-ses (bench/results->email bench-results)))
 
