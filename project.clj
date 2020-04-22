@@ -4,6 +4,7 @@
    "crux-metrics"
    "crux-rocksdb" "crux-lmdb"
    "crux-jdbc"
+   "crux-s3"
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-test"
