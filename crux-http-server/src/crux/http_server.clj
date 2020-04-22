@@ -371,23 +371,18 @@
 
 (defn link-all-entities
   [crux-node vt tt path result]
-  (let [links (atom {})
-        resolved-links ((fn recur-on-result [result]
-                           (if (and (c/valid-id? result)
-                                    (api/entity (api/db crux-node vt tt) result))
-                             (let [query-params (cond-> "?"
-                                                  vt (str "valid-time=" vt "&")
-                                                  tt (str "transact-time=" tt))]
-                               (swap! links assoc result (str path "/" result query-params))
-                               result)
-                             (cond
-                               (map? result) (reduce-kv #(assoc %1 %2 (recur-on-result %3)) {} result)
-                               (seq? result) (map recur-on-result result)
-                               (vector? result) (mapv recur-on-result result)
-                               (set? result) (into #{} (map recur-on-result result))
-                               :else result)))
-                        result)]
-    @links))
+  (let [resolved-links (fn recur-on-result [result links]
+                         (if (and (c/valid-id? result)
+                                  (api/entity (api/db crux-node vt tt) result))
+                           (let [query-params (cond-> "?"
+                                                vt (str "valid-time=" vt "&")
+                                                tt (str "transact-time=" tt))]
+                             (assoc links result (str path "/" result query-params)))
+                           (cond
+                             (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
+                             (sequential? result) (apply merge (map #(recur-on-result % links) result))
+                             :else links)))]
+    (resolved-links result {})))
 
 (defn- entity->html [links edn]
   (if-let [href (get links edn)]
