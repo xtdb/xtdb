@@ -370,19 +370,19 @@
       nil)))
 
 (defn link-all-entities
-  [crux-node db path result]
-  (let [resolved-links (fn recur-on-result [result links]
-                         (if (and (c/valid-id? result)
-                                  (api/entity db result))
-                           (let [query-params (format "?valid-time=%s&transaction-time=%s"
-                                                      (.toInstant ^Date (api/valid-time db))
-                                                      (.toInstant ^Date (api/transaction-time db)))]
-                             (assoc links result (str path "/" result query-params)))
-                           (cond
-                             (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
-                             (sequential? result) (apply merge (map #(recur-on-result % links) result))
-                             :else links)))]
-    (resolved-links result {})))
+  [db path result]
+  (letfn [(recur-on-result [result links]
+             (if (and (c/valid-id? result)
+                      (api/entity db result))
+               (let [query-params (format "?valid-time=%s&transaction-time=%s"
+                                          (.toInstant ^Date (api/valid-time db))
+                                          (.toInstant ^Date (api/transaction-time db)))]
+                 (assoc links result (str path "/" result query-params)))
+               (cond
+                 (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
+                 (sequential? result) (apply merge (map #(recur-on-result % links) result))
+                 :else links)))]
+    (recur-on-result result {})))
 
 (defn- entity->html [links edn]
   (if-let [href (get links edn)]
@@ -410,7 +410,7 @@
       {:status (if (some? entity-map) 200 404)
        :body (when entity-map
                (if (= (get-in request [:muuntaja/response :format]) "text/html")
-                 (let [linked-entities (link-all-entities crux-node db  "/_entity" entity-map)]
+                 (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
                    (html5 (entity->html linked-entities entity-map)))
                  entity-map))})))
 
@@ -471,7 +471,7 @@
     (map #(zipmap find %) results)))
 
 (defn link-top-level-entities
-  [crux-node db path rows]
+  [db path rows]
   (reduce
    (fn [coll row]
      (merge
@@ -579,16 +579,16 @@
                                 (build-query-q default-limit))
                         (build-query query-params default-limit))
               db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
-                                                          (instant/read-instant-date))
-                                      :transact-time (some-> (get query-params "transaction-time")
-                                                             (instant/read-instant-date))})
+                                                                (instant/read-instant-date))
+                                            :transact-time (some-> (get query-params "transaction-time")
+                                                                   (instant/read-instant-date))})
               results (api/q db query)]
           {:status 200
            :body (when results
                    (if (= (get-in request [:muuntaja/response :format]) "text/html")
                      (let [headers (resolve-headers query results)
                            rows (resolve-rows query results)
-                           links (link-top-level-entities crux-node db  "/_entity" rows)
+                           links (link-top-level-entities db  "/_entity" rows)
                            next-page? (= (:limit query) (count results))
                            prev-next-page (resolve-prev-next-page query-params next-page?)]
                        (html5 (query->html links headers rows prev-next-page)))
