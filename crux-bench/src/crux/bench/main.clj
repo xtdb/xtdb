@@ -70,8 +70,9 @@
   (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                bench/crux-version bench/commit-hash))
 
-  (let [bench-results (run-benches (or (parse-args args)
-                                       (System/exit 1)))]
+  (let [bench-results (run-benches (-> (or (parse-args args)
+                                           (System/exit 1))
+                                       (update :selected-nodes dissoc "h2-rocksdb" "sqlite-rocksdb")))]
 
     (bench/send-email-via-ses (bench/results->email bench-results)))
 
