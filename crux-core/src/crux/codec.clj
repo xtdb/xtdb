@@ -25,9 +25,6 @@
 
 (def ^:const index-id-size Byte/BYTES)
 
-;; index for actual document store
-(def ^:const ^:private content-hash->doc-index-id 0)
-
 ;; two main indexes for querying
 (def ^:const ^:private ave-index-id 1)
 (def ^:const ^:private ae-index-id 2)
@@ -496,21 +493,6 @@
  (Id. (mem/->off-heap (doto (byte-array id-size)
                         (->> (.readFully data-input))))
       0))
-
-(defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
-  (assert (= id-size (.capacity content-hash)) (mem/buffer->hex content-hash))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (mem/limit-buffer
-     (doto b
-       (.putByte 0 content-hash->doc-index-id)
-       (.putBytes index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash)))
-     (+ index-id-size id-size))))
-
-(defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
-  (assert (= (+ index-id-size id-size) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= content-hash->doc-index-id index-id))
-    (Id. (mem/slice-buffer k index-id-size id-size) 0)))
 
 (defn encode-ave-key-to
   (^org.agrona.MutableDirectBuffer[b attr]

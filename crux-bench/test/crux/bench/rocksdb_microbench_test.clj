@@ -7,6 +7,7 @@
             [crux.kv :as kv]
             [crux.fixtures :as f]
             [crux.bench :as bench]
+            [crux.index :as idx]
             [clojure.java.io :as io]))
 
 (defn with-rocksdb-node* [f]
@@ -33,4 +34,4 @@
                (db/index-docs (:indexer node) (->> doc-batch (into {} (map (juxt c/new-id identity)))))))
 
             (with-open [snapshot (kv/new-snapshot (:kv-store node))]
-              (t/is (= first-doc (db/get-single-object (:object-store node) snapshot (c/new-id first-doc)))))))))))
+              (t/is (= first-doc (idx/get-object snapshot (c/new-id first-doc)))))))))))

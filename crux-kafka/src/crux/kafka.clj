@@ -176,7 +176,7 @@
   (.flush producer))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               kv-store object-store
+                               kv-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
@@ -191,8 +191,11 @@
     (loop [indexed {}]
       (let [missing-ids (set/difference (set ids) (set (keys indexed)))
             indexed (merge indexed (when (seq missing-ids)
-                                     (with-open [kv-snapshot (kv/new-snapshot kv-store)]
-                                       (db/get-objects object-store kv-snapshot missing-ids))))]
+                                     (with-open [snapshot (kv/new-snapshot kv-store)]
+                                       (->> missing-ids
+                                            (into {} (keep (fn [id]
+                                                             (when-let [doc (idx/get-object snapshot id)]
+                                                               [id doc]))))))))]
         (if (= (count indexed) (count ids))
           indexed
           (do
@@ -300,7 +303,7 @@
    :args default-options})
 
 (def document-store
-  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [kv-store object-store] :as deps}
+  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [kv-store] :as deps}
                   {::keys [doc-topic doc-partitions] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      !indexing-error (atom nil)
@@ -311,9 +314,9 @@
                  (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
 
                  (->KafkaDocumentStore producer doc-topic
-                                       kv-store object-store
+                                       kv-store
                                        indexing-thread !indexing-error)))
-   :deps [::producer ::admin-client ::n/kv-store ::n/object-store ::n/indexer]
+   :deps [::producer ::admin-client ::n/kv-store ::n/indexer]
    :args default-options})
 
 (def topology

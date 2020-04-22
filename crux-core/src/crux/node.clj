@@ -11,7 +11,6 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
-            crux.object-store
             [crux.query :as q]
             [crux.status :as status]
             [crux.topology :as topo]
@@ -35,7 +34,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store bus
+(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer bus
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
@@ -52,7 +51,7 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db kv-store object-store bus valid-time tx-time))))
+        (q/db kv-store bus valid-time tx-time))))
 
   (openDB [this] (.openDB this nil nil))
   (openDB [this valid-time] (.openDB this valid-time nil))
@@ -64,15 +63,17 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (kv/new-snapshot kv-store)]
-        (-> (db/get-single-object object-store snapshot (c/new-id content-hash))
+        (-> (idx/get-object snapshot (c/new-id content-hash))
             (idx/keep-non-evicted-doc)))))
 
   (documents [this content-hash-set]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (kv/new-snapshot kv-store)]
-        (->> (db/get-objects object-store snapshot (map c/new-id content-hash-set))
-             (into {} (remove (comp idx/evicted-doc? val)))))))
+        (->> content-hash-set
+             (into {} (keep (fn [content-hash]
+                              (when-let [doc (.document this content-hash)]
+                                [content-hash doc]))))))))
 
   (history [this eid]
     (cio/with-read-lock lock
@@ -94,7 +95,7 @@
       ;; we don't have status-fn set when other components use node as a dependency within the topology
       (if status-fn
         (status-fn)
-        (into {} (mapcat status/status-map) [indexer kv-store object-store tx-log]))))
+        (into {} (mapcat status/status-map) [indexer kv-store tx-log]))))
 
   (attributeStats [this]
     (cio/with-read-lock lock
@@ -142,7 +143,7 @@
                                                        (dissoc :crux.tx.event/tx-events)
                                                        (assoc :crux.api/tx-ops
                                                               (->> tx-events
-                                                                   (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
+                                                                   (mapv #(tx/tx-event->tx-op % snapshot)))))))))]
 
           (cio/->cursor (fn []
                           (.close snapshot)
@@ -195,25 +196,23 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store bus]} node-opts]
+  {:start-fn (fn [{::keys [indexer tx-consumer document-store tx-log kv-store bus]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
                                :indexer indexer
                                :tx-consumer tx-consumer
                                :document-store document-store
-                               :object-store object-store
                                :bus bus
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::object-store ::tx-log}
+   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::tx-log}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
-   ::object-store 'crux.object-store/kv-object-store
    ::indexer 'crux.tx/kv-indexer
    ::tx-consumer 'crux.tx.consumer/tx-consumer
    ::bus 'crux.bus/bus

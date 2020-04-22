@@ -1060,12 +1060,12 @@
    (let [{:keys [where args rules]} (s/conform ::query q)]
      (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
-(defn- build-full-results [{:keys [object-store entity-as-of-idx]} snapshot bound-result-tuple]
+(defn- build-full-results [{:keys [entity-as-of-idx]} snapshot bound-result-tuple]
   (vec (for [^BoundResult bound-result bound-result-tuple
              :let [value (.value bound-result)]]
          (if-let [entity-tx (and (c/valid-id? value)
                                  (idx/entity-at entity-as-of-idx value))]
-           (db/get-single-object object-store snapshot (.content-hash ^EntityTx entity-tx))
+           (idx/get-object snapshot (.content-hash ^EntityTx entity-tx))
            value))))
 
 (def default-query-timeout 30000)
@@ -1180,9 +1180,9 @@
 (defn entity-tx [{:keys [valid-time transact-time] :as db} snapshot eid]
   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time))))
 
-(defn entity [{:keys [object-store] :as db} snapshot eid]
+(defn entity [db snapshot eid]
   (let [entity-tx (entity-tx db snapshot eid)]
-    (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
+    (-> (idx/get-object snapshot (:crux.db/content-hash entity-tx))
         idx/keep-non-evicted-doc)))
 
 (defrecord UnownedSnapshot [snapshot]
@@ -1198,7 +1198,7 @@
     (->UnownedSnapshot snapshot)
     (lru/new-cached-snapshot (kv/new-snapshot kv) true)))
 
-(defrecord QueryDatasource [kv object-store bus
+(defrecord QueryDatasource [kv bus
                             query-cache conform-cache
                             valid-time transact-time
                             snapshot entity-as-of-idx]
@@ -1266,7 +1266,7 @@
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (idx/get-object snapshot (.content-hash entity-tx)))))
 
   (openHistoryAscending [this eid]
     (let [snapshot (open-snapshot this)
@@ -1274,7 +1274,7 @@
       (cio/->cursor #(run! cio/try-close [i snapshot])
                     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending i eid valid-time transact-time)]
                       (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
+                             :crux.db/doc (idx/get-object snapshot (.content-hash entity-tx)))))))
 
   (historyDescending [this eid]
     (with-open [history (.openHistoryDescending this eid)]
@@ -1282,7 +1282,7 @@
 
   (historyDescending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (idx/get-object snapshot (.content-hash entity-tx)))))
 
   (openHistoryDescending [this eid]
     (let [snapshot (open-snapshot this)
@@ -1290,7 +1290,7 @@
       (cio/->cursor #(run! cio/try-close [i snapshot])
                     (for [^EntityTx entity-tx (idx/entity-history-seq-descending i eid valid-time transact-time)]
                       (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
+                             :crux.db/doc (idx/get-object snapshot (.content-hash entity-tx)))))))
 
   (validTime [_]
     valid-time)
@@ -1298,9 +1298,8 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
+(defn db ^crux.api.ICruxDatasource [kv bus valid-time transact-time]
   (->QueryDatasource kv
-                     object-store
                      bus
                      (lru/get-named-cache kv ::query-cache)
                      (lru/get-named-cache kv ::conform-cache)

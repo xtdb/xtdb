@@ -327,9 +327,9 @@
     (not (or (vector? v) (set? v)))
     (vector)))
 
-(defn doc-predicate-stats [doc evicted?]
+(defn doc-predicate-stats [doc]
   (->> (for [[k v] doc]
-         [k (cond-> (count (vectorize-value v)) evicted? -)])
+         [k (count (vectorize-value v))])
        (into {})))
 
 (defn update-predicate-stats [kv docs-stats]
@@ -338,26 +338,33 @@
 (def ^:private cav-single-value nil)
 (def ^:private cav-set-value (byte -1))
 
-(defn doc-idx-kvs [content-hash doc]
+(defn cav-idx-kvs [id doc]
+  (let [content-hash (c/->id-buffer id)]
+    (->> (for [[k vs] doc
+               :let [k-buf (c/->id-buffer k)]
+               [idx v] (map vector
+                            (cond
+                              (vector? vs) (range)
+                              (set? vs) (repeat cav-set-value)
+                              :else (repeat cav-single-value))
+                            (vectorize-value vs))
+               :let [v-buf (c/->value-buffer v)]
+               :when (pos? (mem/capacity v-buf))]
+           [(c/encode-cav-key-to nil content-hash k-buf v-buf) (mem/->off-heap (nippy/fast-freeze [k v idx]))])
+         vec)))
+
+(defn content-idx-kvs [content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
         content-hash (c/->id-buffer content-hash)]
     (into [[(c/encode-indexed-content-hash-to nil id content-hash) c/empty-buffer]]
           (->> (for [[k vs] doc
                      :let [k-buf (c/->id-buffer k)]
-                     [idx v] (map vector
-                                  (cond
-                                    (vector? vs) (range)
-                                    (set? vs) (repeat cav-set-value)
-                                    :else (repeat cav-single-value))
-                                  (vectorize-value vs))
+                     v (vectorize-value vs)
                      :let [v-buf (c/->value-buffer v)]
                      :when (pos? (mem/capacity v-buf))]
-                 [[(c/encode-cav-key-to nil content-hash k-buf v-buf)
-                   (mem/->off-heap (nippy/fast-freeze [k v idx]))]
-                  [(c/encode-ave-key-to nil k-buf v-buf id) c/empty-buffer]
+                 [[(c/encode-ave-key-to nil k-buf v-buf id) c/empty-buffer]
                   [(c/encode-ae-key-to nil k-buf id) c/empty-buffer]])
                (apply concat)))))
-
 ;; Utils
 
 (defn doc-indexed? [snapshot eid content-hash]

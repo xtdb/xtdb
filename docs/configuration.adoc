@@ -47,12 +47,6 @@ The following properties are within the topology used as a base
 for the other topologies, `crux.node`:
 
 .`crux.node` configuration
-[#table-conversion%header,cols="d,d"]
-|===
-|Property|Default Value
-|`:crux.node/object-store`|*`'crux.object-store/kv-object-store`*
-|===
-
 CAUTION: From version `20.01-1.7.0-alpha-SNAPSHOT` the `kv-store` should be
 specified by including an extra module in the node's topology vector. For
 example a `rocksdb` backend looks like `{:crux.node/topology

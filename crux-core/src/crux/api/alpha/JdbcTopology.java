@@ -15,7 +15,6 @@ public class JdbcTopology extends EdnTopology {
     private static final Keyword JDBC_DBTYPE = keyword("crux.jdbc/dbtype");
     private static final Keyword JDBC_DBNAME = keyword("crux.jdbc/dbname");
     private static final Keyword KV_STORE = keyword("crux.node/kv-store");
-    private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
     private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
     private static final Keyword SYNC = keyword("crux.kv/sync");
     private static final Keyword CHECK_AND_STORE_INDEX_VERSION = keyword("crux.kv/check-and-store-index-version");
@@ -65,10 +64,6 @@ public class JdbcTopology extends EdnTopology {
 
     public JdbcTopology withKvStore(String kvStore) {
         return with(KV_STORE, kvStore);
-    }
-
-    public JdbcTopology withObjectStore(String objectStore) {
-        return with(OBJECT_STORE, objectStore);
     }
 
     public JdbcTopology withDbDir(String dbDir) {

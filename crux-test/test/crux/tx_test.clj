@@ -277,8 +277,10 @@
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
-          (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))
-                             vals
+          (t/is (empty? (->> picasso-history
+                             (keep :content-hash)
+                             (keep (fn [hash]
+                                     (idx/get-object snapshot hash)))
                              (remove idx/evicted-doc?)))))))))
 
 (t/deftest test-handles-legacy-evict-events
@@ -301,10 +303,9 @@
 
     (t/testing "no docs evicted yet"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-        (t/is (seq (->> (db/get-objects (:object-store *api*) snapshot
-                                        (->> (idx/entity-history snapshot picasso-id)
-                                             (keep :content-hash)))
-                        vals
+        (t/is (seq (->> (idx/entity-history snapshot picasso-id)
+                        (keep :content-hash)
+                        (keep (fn [hash] (idx/get-object snapshot hash)))
                         (remove idx/evicted-doc?))))))
 
     (binding [tx/*evict-all-on-legacy-time-ranges?* true]
@@ -313,10 +314,9 @@
 
         (t/testing "eviction removes docs"
           (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-            (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot
-                                               (->> (idx/entity-history snapshot picasso-id)
-                                                    (keep :content-hash)))
-                               vals
+            (t/is (empty? (->> (idx/entity-history snapshot picasso-id)
+                               (keep :content-hash)
+                               (keep (fn [hash] (idx/get-object snapshot hash)))
                                (remove idx/evicted-doc?))))))))))
 
 (t/deftest test-multiple-txs-in-same-ms-441
@@ -353,16 +353,11 @@
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (idx/doc-indexed? snapshot picasso-id content-hash))
 
-      (t/is (= {content-hash picasso}
-               (db/get-objects (:object-store *api*) snapshot #{content-hash})))
+      (t/is (= picasso
+               (idx/get-object snapshot content-hash)))
 
       (t/testing "non existent docs are ignored"
-        (t/is (= {content-hash picasso}
-                 (db/get-objects (:object-store *api*)
-                                 snapshot
-                                 [content-hash
-                                  "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot #{})))))))
+        (t/is (nil? (idx/get-object snapshot "090622a35d4b579d2fcfebf823821298711d3867")))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
@@ -737,7 +732,7 @@
                                                                   #inst "2020-01-01"
                                                                   (:crux.tx/tx-time last-tx))
                                 (map (fn [{:keys [content-hash vt]}]
-                                       [vt (:v (db/get-single-object (:object-store *api*) snapshot content-hash))]))))]
+                                       [vt (:v (idx/get-object snapshot content-hash))]))))]
         ;; transaction functions, asserts both still apply at the start of the transaction
         (t/is (= [[#inst "2020-01-08" 8]
                   [#inst "2020-01-09" 9]
