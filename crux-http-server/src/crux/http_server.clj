@@ -370,13 +370,13 @@
       nil)))
 
 (defn link-all-entities
-  [crux-node vt tt path result]
+  [crux-node db path result]
   (let [resolved-links (fn recur-on-result [result links]
                          (if (and (c/valid-id? result)
-                                  (api/entity (api/db crux-node vt tt) result))
-                           (let [query-params (cond-> "?"
-                                                vt (str "valid-time=" vt "&")
-                                                tt (str "transact-time=" tt))]
+                                  (api/entity db result))
+                           (let [query-params (format "?valid-time=%s&transaction-time=%s"
+                                                      (.toInstant ^Date (api/valid-time db))
+                                                      (.toInstant ^Date (api/transaction-time db)))]
                              (assoc links result (str path "/" result query-params)))
                            (cond
                              (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
@@ -402,17 +402,15 @@
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
     (let [eid (c/id-edn-reader encoded-eid)
           query-params (:query-params request)
-          valid-time (some-> (get query-params "valid-time")
-                             (instant/read-instant-date))
-          transaction-time (some-> (get query-params "transaction-time")
-                                   (instant/read-instant-date))
-          db (db-for-request crux-node {:valid-time valid-time
-                                        :transact-time transaction-time})
+          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                            (instant/read-instant-date))
+                                        :transact-time (some-> (get query-params "transaction-time")
+                                                               (instant/read-instant-date))})
           entity-map (api/entity db eid)]
       {:status (if (some? entity-map) 200 404)
        :body (when entity-map
                (if (= (get-in request [:muuntaja/response :format]) "text/html")
-                 (let [linked-entities (link-all-entities crux-node valid-time transaction-time "/_entity" entity-map)]
+                 (let [linked-entities (link-all-entities crux-node db  "/_entity" entity-map)]
                    (html5 (entity->html linked-entities entity-map)))
                  entity-map))})))
 
@@ -473,7 +471,7 @@
     (map #(zipmap find %) results)))
 
 (defn link-top-level-entities
-  [crux-node vt tt path rows]
+  [crux-node db path rows]
   (reduce
    (fn [coll row]
      (merge
@@ -481,10 +479,10 @@
       (reduce-kv
        (fn [coll _ v]
          (if (and (c/valid-id? v)
-                  (api/entity (api/db crux-node vt tt) v))
-           (let [query-params (cond-> "?"
-                                vt (str "valid-time=" vt "&")
-                                tt (str "transact-time=" tt))]
+                  (api/entity db v))
+           (let [query-params (format "?valid-time=%s&transaction-time=%s"
+                                      (.toInstant ^Date (api/valid-time db))
+                                      (.toInstant ^Date (api/transaction-time db)))]
              (assoc coll v (str path "/" v query-params)))
            coll))
        {}
@@ -580,12 +578,10 @@
                                 (edn/read-string)
                                 (build-query-q default-limit))
                         (build-query query-params default-limit))
-              valid-time (some-> (get query-params "valid-time")
-                                 (instant/read-instant-date))
-              transaction-time (some-> (get query-params "transaction-time")
-                                       (instant/read-instant-date))
-              db (db-for-request crux-node {:valid-time valid-time
-                                            :transact-time transaction-time})
+              db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                          (instant/read-instant-date))
+                                      :transact-time (some-> (get query-params "transaction-time")
+                                                             (instant/read-instant-date))})
               results (api/q db query)]
           {:status 200
            :body (when results
