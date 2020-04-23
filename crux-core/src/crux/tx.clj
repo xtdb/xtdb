@@ -386,48 +386,37 @@
     (kv/get-value snapshot k))
 
   db/IndexStore
-  ;; AVE
   (new-doc-attribute-value-entity-value-index [this a]
     (idx/new-doc-attribute-value-entity-value-index snapshot a))
-  ;; this way of passing other indexes into each other could be hidden
-  ;; by having a function that creates both.
   (new-doc-attribute-value-entity-entity-index [this a v-doc-idx entity-as-of-idx]
     (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx))
-  ;; AEV
+
   (new-doc-attribute-entity-value-entity-index [this a entity-as-of-idx]
     (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx))
   (new-doc-attribute-entity-value-value-index [this a e-doc-idx]
     (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx))
 
-  ;; optimisation, not strictly necessary, can be implemented in other ways
   (or-known-triple-fast-path [this eid a v valid-time transact-time]
     (idx/or-known-triple-fast-path snapshot eid a v valid-time transact-time))
 
-  ;; bitemporal index
   (new-entity-as-of-index [this valid-time transact-time]
     (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time))
 
-  ;; this is called using single eid in crux.query so can call
-  ;; idx/entity-at instead
-  ;; (idx/entities-at this eids valid-time transact-time)
-
-  ;; history seqs, could be redone as lower-level indexes
-
-  ;; valid time history
   (entity-history-seq-ascending [this eid valid-time transact-time]
     (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time))
   (entity-history-seq-descending [this eid valid-time transact-time]
     (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time))
 
-  ;; full history
   (entity-history [this eid]
     (idx/entity-history snapshot eid))
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
-  ;; for hasTxCommitted
   (tx-failed? [this tx-id]
-    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
+    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))
+
+  (open-nested-index-store [this]
+    (->KvIndexStore (lru/new-cached-snapshot snapshot false))))
 
 (defrecord KvIndexer [object-store kv-store bus ^ExecutorService stats-executor]
   Closeable
@@ -537,9 +526,6 @@
   (latest-completed-tx [this]
     (db/read-index-meta this ::latest-completed-tx))
 
-  ;; this could potentially use the UnownedSnapshot concept, but an
-  ;; implementation might not have such a concept, the store itself
-  ;; would replace it.
   (open-index-store [this]
     (->KvIndexStore (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
 

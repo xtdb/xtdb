@@ -652,8 +652,6 @@
                                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
                                             cached-result (when cache-key
                                                             (get *recursion-table* cache-key))]]
-                                  ;; TODO: used to be (lru/new-cached-snapshot snapshot false)
-                                  ;; to reuse iterators between sub-queries.
                                   (with-open [index-store ^Closeable (open-index-store db)]
                                     (cond
                                       cached-result
@@ -729,8 +727,6 @@
         {:join-depth not-join-depth
          :constraint-fn
          (fn not-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-           ;; TODO: used to be (lru/new-cached-snapshot snapshot false)
-           ;; to reuse iterators between sub-queries.
            (with-open [index-store ^Closeable (open-index-store db)]
              (let [args (when (seq not-vars)
                           [(->> (for [var not-vars]
@@ -1071,35 +1067,9 @@
            (db/get-single-object object-store snapshot (.content-hash ^EntityTx entity-tx))
            value))))
 
-(defrecord UnownedIndexStore [index-store]
-  Closeable
-  (close [_])
-
-  db/IndexStore
-  (new-doc-attribute-value-entity-value-index [this a]
-    (db/new-doc-attribute-value-entity-value-index index-store a))
-  (new-doc-attribute-value-entity-entity-index [this a v-doc-idx entity-as-of-idx]
-    (db/new-doc-attribute-value-entity-entity-index index-store a v-doc-idx entity-as-of-idx))
-  (new-doc-attribute-entity-value-entity-index [this a entity-as-of-idx]
-    (db/new-doc-attribute-entity-value-entity-index index-store a entity-as-of-idx))
-  (new-doc-attribute-entity-value-value-index [this a e-doc-idx]
-    (db/new-doc-attribute-entity-value-value-index index-store a e-doc-idx))
-  (or-known-triple-fast-path [this eid a v valid-time transact-time]
-    (db/or-known-triple-fast-path index-store eid a v valid-time transact-time))
-  (new-entity-as-of-index [this valid-time transact-time]
-    (db/new-entity-as-of-index index-store valid-time transact-time))
-  (entity-history-seq-ascending [this eid valid-time transact-time]
-    (db/entity-history-seq-ascending index-store eid valid-time transact-time))
-  (entity-history-seq-descending [this eid valid-time transact-time]
-    (db/entity-history-seq-descending index-store eid valid-time transact-time))
-  (entity-history [this eid]
-    (db/entity-history index-store eid))
-  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (db/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)))
-
 (defn open-index-store ^java.io.Closeable [{:keys [indexer index-store] :as db}]
   (if index-store
-    (->UnownedIndexStore index-store)
+    (db/open-nested-index-store index-store)
     (db/open-index-store indexer)))
 
 (def default-query-timeout 30000)

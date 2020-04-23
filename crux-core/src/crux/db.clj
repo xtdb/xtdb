@@ -55,7 +55,10 @@
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
 
   ;; for hasTxCommitted
-  (tx-failed? [this tx-id]))
+  (tx-failed? [this tx-id])
+
+  ;; to allow nested scoping of resources, maybe not needed
+  (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 
 ;; tag::TxLog[]
