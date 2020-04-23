@@ -7,6 +7,7 @@
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
+           org.apache.calcite.util.Pair
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
@@ -111,8 +112,16 @@
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
+(defn enrich-project [schema projects]
+  (update-in schema [:crux.sql.table/query :find]
+             (fn [existing-projects]
+               (mapv (fn [^Pair p] (nth existing-projects (.getIndex ^RexInputRef (.-left p)))) projects))))
+
 (defn- transform-result [tuple]
-  (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple))
+  (let [tuple (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple)]
+    (if (= 1 (count tuple))
+      (first tuple)
+      (to-array tuple))))
 
 (defn- perform-query [node q]
   (let [db (crux/db node)]
@@ -125,7 +134,7 @@
             (proxy [org.apache.calcite.linq4j.Enumerator]
                 []
               (current []
-                (to-array (transform-result @current)))
+                (transform-result @current))
               (moveNext []
                 (reset! current (first @results))
                 (swap! results next)

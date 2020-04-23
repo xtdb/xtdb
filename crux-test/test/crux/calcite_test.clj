@@ -27,6 +27,42 @@
 
 (t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type with-sql-schema)
 
+(t/deftest test-project
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
+
+  (let [q "SELECT PERSON.NAME FROM PERSON"]
+    (t/is (= [{:name "Ivan"}
+              {:name "Malcolm"}]
+             (query q)))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxProject(NAME=[$1])\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
+  (let [q "SELECT PERSON.NAME, PERSON.HOMEWORLD FROM PERSON"]
+    (t/is (= [{:name "Ivan" :homeworld "Earth"}
+              {:name "Malcolm" :homeworld "Mars"}]
+             (query q)))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxProject(NAME=[$1], HOMEWORLD=[$2])\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
+  (let [q "SELECT PERSON.HOMEWORLD, PERSON.NAME FROM PERSON"]
+    (t/is (= [{:name "Ivan" :homeworld "Earth"}
+              {:name "Malcolm" :homeworld "Mars"}]
+             (query q)))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxProject(HOMEWORLD=[$2], NAME=[$1])\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
+  (let [q "SELECT PERSON.NAME, PERSON.AGE FROM PERSON"]
+    (t/is (= [{:name "Ivan" :age 21}
+              {:name "Malcolm" :age 25}]
+             (query q)))))
+
 (t/deftest test-sql-query
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                                 {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
@@ -36,8 +72,8 @@
       (t/is (= [{:name "Ivan"}
                 {:name "Malcolm"}]
                (query q)))
-      (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
-                    "  CruxToEnumerableConverter\n"
+      (t/is (= (str "CruxToEnumerableConverter\n"
+                    "  CruxProject(NAME=[$1])\n"
                     "    CruxTableScan(table=[[crux, PERSON]])\n")
                (explain q))))
 
@@ -68,8 +104,8 @@
     (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Ivan'"]
       (t/is (= #{{:name "Ivan"}}
                (set (query q))))
-      (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
-                    "  CruxToEnumerableConverter\n"
+      (t/is (= (str "CruxToEnumerableConverter\n"
+                    "  CruxProject(NAME=[$1])\n"
                     "    CruxFilter(condition=[=($1, 'Ivan')])\n"
                     "      CruxTableScan(table=[[crux, PERSON]])\n")
                (:plan (first (query (str "explain plan for " q)))))))
@@ -199,9 +235,9 @@
 
   (let [q "SELECT NAME FROM PERSON ORDER BY NAME"]
     (t/is (= ["Fred" "Ivan" "Malcolm"] (map :name (query q))))
-    (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxSort(sort0=[$1], dir0=[ASC])\n"
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxSort(sort0=[$0], dir0=[ASC])\n"
+                  "    CruxProject(NAME=[$1])\n"
                   "      CruxTableScan(table=[[crux, PERSON]])\n")
              (explain q))))
 
