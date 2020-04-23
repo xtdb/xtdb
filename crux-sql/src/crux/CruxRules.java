@@ -12,6 +12,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rel.core.Sort;
 
@@ -20,6 +21,7 @@ class CruxRules {
         CruxFilterRule.INSTANCE,
         CruxSortRule.INSTANCE,
         CruxProjectRule.INSTANCE,
+        CruxJoinRule.INSTANCE,
     };
 
     abstract static class CruxConverterRule extends ConverterRule {
@@ -76,6 +78,21 @@ class CruxRules {
             final RelTraitSet traitSet = project.getTraitSet().replace(CruxRel.CONVENTION);
             return new CruxProject(project.getCluster(), traitSet, project.getInput(),
                                    project.getProjects(), project.getRowType());
+        }
+    }
+
+    private static class CruxJoinRule extends ConverterRule {
+        private static final CruxJoinRule INSTANCE = new CruxJoinRule();
+
+        private CruxJoinRule() {
+            super(LogicalJoin.class, Convention.NONE, CruxRel.CONVENTION, "CruxJoinRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final LogicalJoin join = (LogicalJoin) rel;
+            final RelTraitSet traitSet = join.getTraitSet().replace(CruxRel.CONVENTION);
+            return new CruxJoin(join.getCluster(), traitSet, join.getLeft(), join.getRight(),
+                                join.getCondition(), join.getJoinType());
         }
     }
 }

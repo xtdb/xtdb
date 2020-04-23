@@ -30,10 +30,18 @@ public class CruxTableScan extends TableScan implements CruxRel {
         for (RelOptRule rule: CruxRules.RULES) {
             planner.addRule(rule);
         }
+
+       // Following PigJoin's lead here:
+        // Make sure planner picks CruxJoin over EnumerableHashJoin.
+        //planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
     }
 
     @Override public void implement(Implementor implementor) {
         implementor.table = table;
         implementor.schema = cruxTable.schema;
+    }
+
+    public CruxTable getCruxTable() {
+        return cruxTable;
     }
 }
