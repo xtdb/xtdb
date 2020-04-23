@@ -1,9 +1,12 @@
 package crux.calcite;
 
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -17,6 +20,7 @@ import clojure.lang.IFn;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.apache.calcite.rel.InvalidRelException;
 
 public class CruxJoin extends Join implements CruxRel {
     private RelOptTable table;
@@ -37,10 +41,18 @@ public class CruxJoin extends Join implements CruxRel {
     @SuppressWarnings("unchecked")
     @Override public void implement(Implementor implementor) {
         implementor.visitChild(0, getLeft());
-        implementor.schema = (Map<Keyword, Object>) joinFn.invoke(getLeft(), getRight(), getJoinType(), getCondition());
+        Map<Keyword, Object> schema1 = implementor.schema;
+        implementor.visitChild(0, getRight());
+        Map<Keyword, Object> schema2 = implementor.schema;
+        implementor.schema = (Map<Keyword, Object>) joinFn.invoke(schema1, schema2, getJoinType(), getCondition());
     }
 
     @Override public RelOptTable getTable() {
         return getLeft().getTable();
+    }
+
+    // todo, do we need?
+    @Override public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        return planner.getCostFactory().makeZeroCost();
     }
 }

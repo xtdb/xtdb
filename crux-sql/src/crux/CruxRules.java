@@ -1,5 +1,7 @@
 package crux.calcite;
 
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.adapter.enumerable.EnumerableLimit;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
@@ -15,6 +17,10 @@ import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.core.Join;
+import java.util.ArrayList;
+import java.util.List;
+import org.apache.calcite.rel.InvalidRelException;
 
 class CruxRules {
     static final RelOptRule[] RULES = {
@@ -81,18 +87,81 @@ class CruxRules {
         }
     }
 
-    private static class CruxJoinRule extends ConverterRule {
+    private static class CruxJoinRule extends CruxConverterRule {
         private static final CruxJoinRule INSTANCE = new CruxJoinRule();
 
         private CruxJoinRule() {
             super(LogicalJoin.class, Convention.NONE, CruxRel.CONVENTION, "CruxJoinRule");
         }
 
-        public RelNode convert(RelNode rel) {
-            final LogicalJoin join = (LogicalJoin) rel;
-            final RelTraitSet traitSet = join.getTraitSet().replace(CruxRel.CONVENTION);
-            return new CruxJoin(join.getCluster(), traitSet, join.getLeft(), join.getRight(),
-                                join.getCondition(), join.getJoinType());
+        @Override public RelNode convert(RelNode rel) {
+            final Join join = (Join) rel;
+            switch (join.getJoinType()) {
+            case SEMI:
+            case ANTI:
+                // It's not possible to convert semi-joins or anti-joins. They have fewer columns
+                // than regular joins.
+                return null;
+            default:
+                return convert(join, true);
+            }
+        }
+
+        public RelNode convert(Join join, boolean convertInputTraits) {
+            final List<RelNode> newInputs = new ArrayList<>();
+            for (RelNode input : join.getInputs()) {
+                if (convertInputTraits && input.getConvention() != getOutTrait()) {
+                    input =
+                        convert(input,
+                                input.getTraitSet().replace(out));
+                }
+                newInputs.add(input);
+            }
+            if (convertInputTraits && !canJoinOnCondition(join.getCondition())) {
+                return null;
+            }
+
+            return new CruxJoin(
+                                join.getCluster(),
+                                join.getTraitSet().replace(out),
+                                newInputs.get(0),
+                                newInputs.get(1),
+                                join.getCondition(),
+                                //                                    join.getVariablesSet(),
+                                join.getJoinType());
+        }
+
+        @SuppressWarnings("fallthrough")
+        private boolean canJoinOnCondition(RexNode node) {
+            final List<RexNode> operands;
+            switch (node.getKind()) {
+            case AND:
+            case OR:
+                operands = ((RexCall) node).getOperands();
+                for (RexNode operand : operands) {
+                    if (!canJoinOnCondition(operand)) {
+                        return false;
+                    }
+                }
+                return true;
+
+            case EQUALS:
+            case IS_NOT_DISTINCT_FROM:
+            case NOT_EQUALS:
+            case GREATER_THAN:
+            case GREATER_THAN_OR_EQUAL:
+            case LESS_THAN:
+            case LESS_THAN_OR_EQUAL:
+                operands = ((RexCall) node).getOperands();
+                if ((operands.get(0) instanceof RexInputRef)
+                    && (operands.get(1) instanceof RexInputRef)) {
+                    return true;
+                }
+                // fall through
+
+            default:
+                return false;
+            }
         }
     }
 }
