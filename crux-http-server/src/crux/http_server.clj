@@ -414,20 +414,10 @@
                    (html5 (entity->html linked-entities entity-map)))
                  entity-map))})))
 
-(defn- coerce-param
-  ([param]
-   (coerce-param param nil))
-  ([param wrap?]
-   (let [formatted-param
-         (cond
-           (vector? param) (str "[" (reduce str param) "]")
-           wrap? (str "[" param "]")
-           :else param)]
-     (c/read-edn-string-with-readers formatted-param))))
+(defn- vectorize-param [param]
+  (if (vector? param) param [param]))
 
-(defn- build-query
-  [{:strs [find where args order-by limit offset full-results page]}
-   default-limit]
+(defn- build-query [{:strs [find where args order-by limit offset full-results page]} default-limit]
   (let [page (if page (dec (Integer/parseInt page)) 0)
         limit (when limit (Integer/parseInt limit))
         page-limit (if (and limit (<= limit default-limit))
@@ -436,13 +426,12 @@
         page-offset (if offset
                       (Integer/parseInt offset)
                       (* page-limit page))]
-    (cond-> {}
-      :find (assoc :find (coerce-param find))
-      :where (assoc :where (coerce-param where :wrap))
-      :limit (assoc :limit page-limit)
-      :offset (assoc :offset page-offset)
-      args (assoc :args (coerce-param args))
-      order-by (assoc :order-by (coerce-param args :wrap))
+    (cond-> {:find (c/read-edn-string-with-readers find)
+             :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
+             :limit page-limit
+             :offset page-offset}
+      args (assoc :args (c/read-edn-string-with-readers args))
+      order-by (assoc :order-by (->> order-by vectorize-param (mapv c/read-edn-string-with-readers)))
       full-results (assoc :full-results? true))))
 
 (defn build-query-q
