@@ -16,7 +16,10 @@
   :profiles {:dev
              {:dependencies [[org.clojure/clojurescript "1.10.339"]
                              [com.bhauman/figwheel-main "0.2.4"]
-                             [com.bhauman/rebel-readline-cljs "0.1.4"]]}}
+                             [com.bhauman/rebel-readline-cljs "0.1.4"]
+                             [reagent "0.10.0"]
+                             [re-frame "0.12.0"]
+                             [day8.re-frame/http-fx "v0.2.0"]]}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]}
   :resource-paths ["target" "resources"]
   :middleware [leiningen.project-version/middleware]
