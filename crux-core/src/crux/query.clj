@@ -535,14 +535,14 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn- bound-result-for-var ^crux.query.BoundResult [snapshot object-store var->bindings join-keys join-results var]
+(defn- bound-result-for-var ^crux.query.BoundResult [index-store object-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
       (BoundResult. var (get join-results (.result-name binding)) nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
         (let [value-buffer (get join-keys (.result-index binding))
               content-hash (.content-hash entity-tx)
-              doc (db/get-single-object object-store snapshot content-hash)
+              doc (db/get-single-object object-store index-store content-hash)
               values (idx/vectorize-value (get doc (.attr binding)))
               value (if (or (nil? value-buffer)
                             (= (count values) 1))
@@ -1059,12 +1059,12 @@
    (let [{:keys [where args rules]} (s/conform ::query q)]
      (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
-(defn- build-full-results [{:keys [object-store entity-as-of-idx]} snapshot bound-result-tuple]
+(defn- build-full-results [{:keys [object-store entity-as-of-idx]} index-store bound-result-tuple]
   (vec (for [^BoundResult bound-result bound-result-tuple
              :let [value (.value bound-result)]]
          (if-let [entity-tx (and (c/valid-id? value)
                                  (idx/entity-at entity-as-of-idx value))]
-           (db/get-single-object object-store snapshot (.content-hash ^EntityTx entity-tx))
+           (db/get-single-object object-store index-store (.content-hash ^EntityTx entity-tx))
            value))))
 
 (defn open-index-store ^java.io.Closeable [{:keys [indexer index-store] :as db}]
