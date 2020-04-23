@@ -549,15 +549,14 @@
                                                                    (instant/read-instant-date))})
               results (api/q db query)]
           {:status 200
-           :body (when results
-                   (if html?
-                     (let [find (:find query)
-                           rows (map #(zipmap find %) results)
-                           links (link-top-level-entities db  "/_entity" results)
-                           next-page? (= (:limit query) (count results))
-                           prev-next-page (resolve-prev-next-page query-params next-page?)]
-                       (html5 (query->html links find rows prev-next-page)))
-                     results))})
+           :body (if html?
+                   (let [find (:find query)
+                         rows (map #(zipmap find %) results)
+                         links (link-top-level-entities db  "/_entity" results)
+                         next-page? (= (:limit query) (count results))
+                         prev-next-page (resolve-prev-next-page query-params next-page?)]
+                     (html5 (query->html links find rows prev-next-page)))
+                   results)})
         (catch Exception e
           {:status 400
            :body (.getMessage e)})))))
