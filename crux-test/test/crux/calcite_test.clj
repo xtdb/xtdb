@@ -169,16 +169,28 @@
   (f/transact! *api* (for [i (range 20)]
                        {:crux.db/id (keyword (str "ivan" i)) :name "Ivan" :homeworld nil :age 21 :alive true}))
 
+  (let [q "SELECT * FROM PERSON WHERE NAME='Ivan'"]
+    (t/is (= 20 (count (query q))))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxFilter(condition=[=($1, 'Ivan')])\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
   (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10"]
     (t/is (= 10 (count (query q))))
     (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxLimit(fetch=[10])\n"
+                  "  CruxSort(fetch=[10])\n"
                   "    CruxFilter(condition=[=($1, 'Ivan')])\n"
                   "      CruxTableScan(table=[[crux, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10 OFFSET 15"]
-    (t/is (= 5 (count (query q))))))
+    (t/is (= 5 (count (query q))))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxSort(offset=[15], fetch=[10])\n"
+                  "    CruxFilter(condition=[=($1, 'Ivan')])\n"
+                  "      CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q)))))
 
 (t/deftest test-sort
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
