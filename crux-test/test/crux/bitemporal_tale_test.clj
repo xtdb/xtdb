@@ -305,8 +305,11 @@
                                 baby-mary (crux/entity db :ids.people/Mary)]
                             (crux/submit-tx
                              system
-                             [[:crux.tx/cas
+                             [[:crux.tx/match
+                               :ids.people/Mary
                                baby-mary
+                               marys-birth-inst]
+                              [:crux.tx/put
                                (update baby-mary :person/has (comp set conj) :ids.artefacts/cozy-mug)
                                marys-birth-inst]])))
 
@@ -316,8 +319,11 @@
                                 mary (crux/entity db :ids.people/Mary)]
                             (crux/submit-tx
                              system
-                             [[:crux.tx/cas
+                             [[:crux.tx/match
+                               :ids.people/Mary
                                mary
+                               mug-lost-date]
+                              [:crux.tx/put
                                (update mary :person/has (comp set disj) :ids.artefacts/cozy-mug)
                                mug-lost-date]])))
     (t/is (= #{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}

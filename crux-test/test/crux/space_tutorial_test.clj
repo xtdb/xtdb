@@ -368,12 +368,14 @@
                 :company-name "Blue Energy"
                 :credits 1000}])
 
-    (fapi/submit+await-tx [[:crux.tx/cas
+    (fapi/submit+await-tx [[:crux.tx/match
+                            :blue-energy
                             {:crux.db/id :blue-energy
                              :seller? false
                              :buyer? true
                              :company-name "Blue Energy"
-                             :credits 1000}
+                             :credits 1000}]
+                           [:crux.tx/put
                             {:crux.db/id :blue-energy
                              :seller? false
                              :buyer? true
@@ -381,7 +383,8 @@
                              :credits 900
                              :units/CH4 10}]
 
-                           [:crux.tx/cas
+                           [:crux.tx/match
+                            :tombaugh-resources
                             {:crux.db/id :tombaugh-resources
                              :company-name "Tombaugh Resources Ltd."
                              :seller? true
@@ -389,7 +392,8 @@
                              :units/Pu 50
                              :units/N 3
                              :units/CH4 92
-                             :credits 51}
+                             :credits 51}]
+                           [:crux.tx/put
                             {:crux.db/id :tombaugh-resources
                              :company-name "Tombaugh Resources Ltd."
                              :seller? true
@@ -403,14 +407,16 @@
 
     (t/is (= ["Name: Blue Energy, Funds: 900, :units/CH4 10"]
              (format-stock-check (stock-check :blue-energy :units/CH4))))
-    (fapi/submit+await-tx [[:crux.tx/cas
+    (fapi/submit+await-tx [[:crux.tx/match
+                            :gold-harmony
                             ;; Old doc
                             {:crux.db/id :gold-harmony
                              :company-name "Gold Harmony"
                              :seller? true
                              :buyer? false
                              :units/Au 10211
-                             :credits 51}
+                             :credits 51}]
+                           [:crux.tx/put
                             ;; New doc
                             {:crux.db/id :gold-harmony
                              :company-name "Gold Harmony"
@@ -419,7 +425,8 @@
                              :units/Au 211
                              :credits 51}]
 
-                           [:crux.tx/cas
+                           [:crux.tx/match
+                            :encompass-trade
                             ;; Old doc
                             {:crux.db/id :encompass-trade
                              :company-name "Encompass Trade"
@@ -428,7 +435,8 @@
                              :units/Au 10
                              :units/Pu 5
                              :units/CH4 211
-                             :credits 100002}
+                             :credits 100002}]
+                           [:crux.tx/put
                             ;; New doc
                             {:crux.db/id :encompass-trade
                              :company-name "Encompass Trade"
@@ -445,13 +453,13 @@
     (t/is (= '("Name: Encompass Trade, Funds: 1002, :units/Au 10")
              (format-stock-check (stock-check :encompass-trade :units/Au))))
 
-    (fapi/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "CAS"])]])
+    (fapi/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"])]])
 
     (t/is (= {:crux.db/id :manifest,
               :pilot-name "Johanna",
               :id/rocket "SB002-sol",
               :id/employee "22910x2",
-              :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "CAS"],
+              :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
              (crux/entity (crux/db *api*) :manifest))))
 
