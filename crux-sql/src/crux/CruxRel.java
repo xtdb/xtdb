@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
+import clojure.lang.Keyword;
 
 public interface CruxRel extends RelNode {
     void implement(Implementor implementor);
@@ -18,20 +19,7 @@ public interface CruxRel extends RelNode {
 
     class Implementor {
         RelOptTable table;
-        CruxTable cruxTable;
-        int offset = 0;
-        int fetch = -1;
-        final List<Map.Entry<Integer, RelFieldCollation.Direction>> sort = new ArrayList<>();
-        final List<Object> clauses = new ArrayList<>();
-
-        public void add(Object clause) {
-            clauses.add(clause);
-        }
-
-        public void addSort(Integer field, RelFieldCollation.Direction direction) {
-            Objects.requireNonNull(field, "field");
-            sort.add(new Pair<>(field, direction));
-        }
+        Map<Keyword, Object> schema;
 
         public void visitChild(int ordinal, RelNode input) {
             assert ordinal == 0;

@@ -6,13 +6,19 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rex.RexNode;
+import clojure.lang.Keyword;
+import clojure.lang.IFn;
 import java.util.List;
+import java.util.Map;
 
 public class CruxFilter extends Filter implements CruxRel {
+    private final IFn filterFn;
+
     CruxFilter(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RexNode condition) {
         super(cluster, traitSet, child, condition);
         assert getConvention() == CruxRel.CONVENTION;
         assert getConvention() == child.getConvention();
+        this.filterFn = CruxUtils.resolve("crux.calcite/enrich-filter");
     }
 
     @Override public Filter copy(RelTraitSet relTraitSet, RelNode input, RexNode condition) {
@@ -22,7 +28,6 @@ public class CruxFilter extends Filter implements CruxRel {
     @SuppressWarnings("unchecked")
     @Override public void implement(Implementor implementor) {
         implementor.visitChild(0, getInput());
-        List<String> newClauses = (List<String>) CruxUtils.resolve("crux.calcite/filter->clause").invoke(implementor.cruxTable.schema, condition);
-        implementor.clauses.addAll(newClauses);
+        implementor.schema = (Map<Keyword, Object>) filterFn.invoke(implementor.schema, condition);
     }
 }

@@ -14,7 +14,7 @@
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            org.apache.calcite.linq4j.Enumerable
-           org.apache.calcite.rel.RelFieldCollation$Direction
+           org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
@@ -88,38 +88,39 @@
     SqlKind/IS_NOT_NULL
     [[(list 'boolean (first (->operands schema filter*)))]]))
 
-(defn filter->clause [schema ^RexNode filter]
-  (doto (map prn-str (->crux-where-clauses schema filter)) log/debug))
+(defn enrich-filter [schema ^RexNode filter]
+  (update-in schema [:crux.sql.table/query :where] (comp vec concat) (->crux-where-clauses schema filter)))
 
-(defn- sort-by->crux [find sort-fields]
-  (when (seq sort-fields)
-    {:order-by (mapv #(vector (nth find (key %))
-                              (if (= (.-shortString ^RelFieldCollation$Direction (val %)) "DESC") :desc :asc))
-                     sort-fields)}))
+(defn enrich-sort-by [schema sort-fields]
+  (assoc-in schema [:crux.sql.table/query :order-by]
+            (mapv (fn [^RelFieldCollation f]
+                    [(nth (get-in schema [:crux.sql.table/query :find]) (.getFieldIndex f))
+                     (if (= (.-shortString (.getDirection f)) "DESC") :desc :asc)])
+                  sort-fields)))
 
-(defn- ->crux-query
-  [schema filters projects limit sort-fields]
-  (try
-    (let [{:keys [crux.sql.table/columns crux.sql.table/query]} schema
-          {:keys [find where]} query]
-      (merge {:find (if (seq projects) (mapv find projects) find)
-              :where (vec (concat filters where))}
-             (when (and limit (not= limit -1)) {:limit limit})
-             (sort-by->crux find sort-fields)))
-    (catch Throwable e
-      (log/error e)
-      (throw e))))
+(defn enrich-limit [schema ^RexNode limit]
+  (if limit
+    (assoc-in schema [:crux.sql.table/query :limit] (RexLiteral/intValue limit))
+    schema))
+
+(defn enrich-offset [schema ^RexNode offset]
+  (if offset
+    (assoc-in schema [:crux.sql.table/query :offset] (RexLiteral/intValue offset))
+    schema))
+
+(defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
+  (-> schema (enrich-limit limit) (enrich-offset offset)))
 
 (defn- transform-result [tuple]
   (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple))
 
-(defn- perform-query [node offset q]
+(defn- perform-query [node q]
   (let [db (crux/db node)]
     (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
         []
         (enumerator []
           (let [snapshot (crux/new-snapshot db)
-                results (atom (drop offset (crux/q db snapshot q)))
+                results (atom (crux/q db snapshot q))
                 current (atom nil)]
             (proxy [org.apache.calcite.linq4j.Enumerator]
                 []
@@ -134,12 +135,15 @@
               (close []
                 (.close snapshot))))))))
 
-(defn ^Enumerable scan [node table-schema filters offset limit sort-fields]
-  ;; TODO consider using projects here rather than bringing all columns back
-  ;; TODO don't use vars such as `find`
-  (let [filters (map edn/read-string filters)]
-    (->> (doto (->crux-query table-schema filters [] limit sort-fields) log/debug)
-         (perform-query node offset))))
+;;query (assoc query :find (if (seq projects) (mapv (:find query) projects) (:find query)))
+(defn ^Enumerable scan [node ^String schema]
+  (try
+    (log/debug schema)
+    (let [{:keys [crux.sql.table/query]} (edn/read-string schema)]
+      (perform-query node query))
+    (catch Throwable e
+      (log/error e)
+      (throw e))))
 
 (def ^:private mapped-types {:keyword :varchar})
 (def ^:private supported-types #{:boolean :bigint :double :float :integer :timestamp :varchar})

@@ -56,16 +56,12 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
                                               implementor.table
                                               .getExpression(CruxTable.CruxQueryable.class));
 
-        // TODO can we skip this washing in and out of EDN?
+        String schemaEdn = (String) CruxUtils.resolve("clojure.core/prn-str").invoke(implementor.schema);
+        final Expression schema = block.append("schema", Expressions.constant(schemaEdn));
 
-        //        final Expression clauses = block.append("clauses", Expressions.constant(implementor.clauses));
-        final Expression clauses = block.append("clauses", constantArrayList(implementor.clauses, String.class));
-        final Expression offset = block.append("offset", Expressions.constant(implementor.offset));
-        final Expression fetch = block.append("fetch", Expressions.constant(implementor.fetch));
-        final Expression sort = block.append("sort", constantArrayList(implementor.sort, Pair.class));
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, clauses, offset, fetch, sort));
+                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, schema));
 
         // if (CalciteSystemProperty.DEBUG.value()) {
         //     System.out.println("Mongo: " + opList);
@@ -74,31 +70,5 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
 
         block.add(Expressions.return_(null, enumerable));
         return relImplementor.result(physType, block.toBlock());
-
-        //        return (Result)CruxUtils.resolve("crux.calcite/->enumerable").invoke();
-    }
-
-    /** E.g. {@code constantArrayList("x", "y")} returns
-     * "Arrays.asList('x', 'y')".
-     *
-     * @param values List of values
-     * @param clazz Type of values
-     * @return expression
-     */
-    @SuppressWarnings("rawtypes")
-    private static <T> MethodCallExpression constantArrayList(List<T> values,
-                                                              Class clazz) {
-        return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
-                                Expressions.newArrayInit(clazz, constantList(values)));
-    }
-
-    /** E.g. {@code constantList("x", "y")} returns
-     * {@code {ConstantExpression("x"), ConstantExpression("y")}}.
-     * @param values list of elements
-     * @param <T> type of elements inside this list
-     * @return list of constant expressions
-     */
-    private static <T> List<Expression> constantList(List<T> values) {
-        return values.stream().map(Expressions::constant).collect(Collectors.toList());
     }
 }

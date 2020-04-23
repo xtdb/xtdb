@@ -9,6 +9,7 @@ import org.apache.calcite.plan.RelOptRule;
 import java.util.Objects;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.rel.core.TableScan;
+import clojure.lang.Keyword;
 
 public class CruxTableScan extends TableScan implements CruxRel {
     private final CruxTable cruxTable;
@@ -32,7 +33,7 @@ public class CruxTableScan extends TableScan implements CruxRel {
     }
 
     @Override public void implement(Implementor implementor) {
-        implementor.cruxTable = cruxTable;
         implementor.table = table;
+        implementor.schema = cruxTable.schema;
     }
 }

@@ -79,12 +79,10 @@ class CruxRules {
 
         public RelNode convert(RelNode rel) {
             final Sort sort = (Sort) rel;
-            final RelTraitSet traitSet =
-                sort.getTraitSet().replace(out)
-                .replace(sort.getCollation());
+            final RelTraitSet traitSet = sort.getTraitSet().replace(out).replace(sort.getCollation());
             return new CruxSort(rel.getCluster(), traitSet,
-                                 convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
-                                 sort.getCollation(), sort.offset, sort.fetch);
+                                convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
+                                sort.getCollation(), sort.offset, sort.fetch);
         }
     }
 }
