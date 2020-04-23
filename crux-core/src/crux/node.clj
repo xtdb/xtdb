@@ -90,7 +90,7 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [index-store (db/open-index-store indexer)]
-        (->> (idx/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
+        (->> (db/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
              (mapv c/entity-tx->edn)
              (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time))))))
 
