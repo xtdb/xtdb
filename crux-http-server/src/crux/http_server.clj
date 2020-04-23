@@ -398,7 +398,7 @@
       (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
       :else (str edn))))
 
-(defn- entity-state [^ICruxAPI crux-node request]
+(defn- entity-state [^ICruxAPI crux-node options request]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
     (let [eid (c/id-edn-reader encoded-eid)
           query-params (:query-params request)
@@ -424,8 +424,6 @@
            wrap? (str "[" param "]")
            :else param)]
      (c/read-edn-string-with-readers formatted-param))))
-
-(def ^:const default-query-result-limit 100)
 
 (defn- build-query
   [{:strs [find where args order-by limit offset full-results page]}
@@ -554,7 +552,7 @@
         "Next"]
        [:span "Next"])]]])
 
-(defn data-browser-query [^ICruxAPI crux-node request]
+(defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
   (let [query-params (:query-params request)]
     (cond
       (empty? query-params)
@@ -572,12 +570,10 @@
                 "submit me here"]])}
       :else
       (try
-        (let [default-limit (or (get-in crux-node [:options :crux.http-server/default-query-result])
-                                default-query-result-limit)
-              query (or (some-> (get query-params "q")
+        (let [query (or (some-> (get query-params "q")
                                 (edn/read-string)
-                                (build-query-q default-limit))
-                        (build-query query-params default-limit))
+                                (build-query-q query-result-page-limit))
+                        (build-query query-params query-result-page-limit))
               db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                                 (instant/read-instant-date))
                                             :transact-time (some-> (get query-params "transaction-time")
@@ -597,13 +593,13 @@
           {:status 400
            :body (.getMessage e)})))))
 
-(defn- data-browser-handler [crux-node request]
+(defn- data-browser-handler [crux-node options request]
   (condp check-path request
     [#"^/_entity/.+$" [:get]]
-    (entity-state crux-node request)
+    (entity-state crux-node options request)
 
     [#"^/_query" [:get]]
-    (data-browser-query crux-node request)
+    (data-browser-query crux-node options request)
     nil))
 
 (def ^:const default-server-port 3000)
@@ -654,7 +650,7 @@
                                                                 (p/wrap-params)
                                                                 (wrap-exception-handling))
 
-                                                            (-> (partial data-browser-handler node)
+                                                            (-> (partial data-browser-handler node options)
                                                                 (p/wrap-params)
                                                                 (wrap-format (assoc-in m/default-options
                                                                                        [:formats "text/html"]
@@ -677,7 +673,10 @@
              ;; to expose the functionality they need to? (JH)
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
-                            :default default-server-port}}}})
+                            :default default-server-port}
+                    ::query-result-page-limit {:crux.config/type :crux.config/nat-int
+                            :doc "Limit of query results per page"
+                            :default 100}}}})
 
 
 #_(comment
