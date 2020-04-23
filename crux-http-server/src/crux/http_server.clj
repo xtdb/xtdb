@@ -453,29 +453,14 @@
                         default-limit)]
     (assoc resolved-query :limit updated-limit)))
 
-(defn resolve-headers
-  [{:keys [find full-results?] :as query} results]
-  (if (and full-results? (= 1 (count (first results))))
-    (->> results
-         (mapv #(map keys %))
-         (flatten)
-         (into #{}))
-    find))
-
-(defn resolve-rows
-  [{:keys [find full-results?] :as query} results]
-  (if (and full-results? (= 1 (count (first results))))
-    (map first results)
-    (map #(zipmap find %) results)))
-
 (defn link-top-level-entities
   [db path rows]
   (reduce
    (fn [coll row]
      (merge
       coll
-      (reduce-kv
-       (fn [coll _ v]
+      (reduce
+       (fn [coll v]
          (if (and (c/valid-id? v)
                   (api/entity db v))
            (let [query-params (format "?valid-time=%s&transaction-time=%s"
@@ -553,7 +538,8 @@
        [:span "Next"])]]])
 
 (defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
-  (let [query-params (:query-params request)]
+  (let [query-params (:query-params request)
+        html? (= (get-in request [:muuntaja/response :format]) "text/html")]
     (cond
       (empty? query-params)
       {:status 200
@@ -570,10 +556,11 @@
                 "submit me here"]])}
       :else
       (try
-        (let [query (or (some-> (get query-params "q")
-                                (edn/read-string)
-                                (build-query-q query-result-page-limit))
-                        (build-query query-params query-result-page-limit))
+        (let [query (cond-> (or (some-> (get query-params "q")
+                                        (edn/read-string)
+                                        (build-query-q query-result-page-limit))
+                                (build-query query-params query-result-page-limit))
+                      html? (dissoc :full-results?))
               db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                                 (instant/read-instant-date))
                                             :transact-time (some-> (get query-params "transaction-time")
@@ -581,13 +568,13 @@
               results (api/q db query)]
           {:status 200
            :body (when results
-                   (if (= (get-in request [:muuntaja/response :format]) "text/html")
-                     (let [headers (resolve-headers query results)
-                           rows (resolve-rows query results)
-                           links (link-top-level-entities db  "/_entity" rows)
+                   (if html?
+                     (let [find (:find query)
+                           rows (map #(zipmap find %) results)
+                           links (link-top-level-entities db  "/_entity" results)
                            next-page? (= (:limit query) (count results))
                            prev-next-page (resolve-prev-next-page query-params next-page?)]
-                       (html5 (query->html links headers rows prev-next-page)))
+                       (html5 (query->html links find rows prev-next-page)))
                      results))})
         (catch Exception e
           {:status 400
