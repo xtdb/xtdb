@@ -8,6 +8,7 @@
             crux.db)
   (:import crux.calcite.CruxTable
            org.apache.calcite.util.Pair
+           crux.calcite.CruxTableScan
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
@@ -117,7 +118,27 @@
              (fn [existing-projects]
                (mapv (fn [^Pair p] (nth existing-projects (.getIndex ^RexInputRef (.-left p)))) projects))))
 
+
+(defn- merge-queries [s1 s2]
+  (let [s2-lvars (into {} (map #(vector % (gensym %))) (:find s2))
+        s2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) s2)]
+    (merge-with (comp vec concat) s1 s2)))
+
+(defn enrich-join [^CruxTableScan left ^CruxTableScan right join-type condition]
+  (def j join-type)
+  (def c condition)
+  (let [s1 (.-schema ^CruxTable (.getCruxTable left))
+        s2 (.-schema ^CruxTable (.getCruxTable right))
+        s3 (assoc s1 :crux.sql.table/query (merge-queries (:crux.sql.table/query s1) (:crux.sql.table/query s2)))]
+    (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->crux-where-clauses s3 condition))))
+    #_(doto (assoc-in s1 [:crux.sql.table/query :find] (vec (concat (get-in s1 [:crux.sql.table/query :find])
+                                                                  (get-in s2 [:crux.sql.table/query :find])))) prn))
+
+  ;; getCruxTable for class crux.calcite.CruxTableScan
+)
+
 (defn- transform-result [tuple]
+  ;; TODO, avoid washing dates into millis and back again
   (let [tuple (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple)]
     (if (= 1 (count tuple))
       (first tuple)

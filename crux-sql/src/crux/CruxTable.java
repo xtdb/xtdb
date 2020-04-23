@@ -27,7 +27,7 @@ import java.io.UncheckedIOException;
 
 public class CruxTable extends AbstractQueryableTable implements TranslatableTable {
     ICruxAPI node;
-    Map<Keyword, Object> schema;
+    public Map<Keyword, Object> schema;
     private final IFn scanFn;
 
     public CruxTable (ICruxAPI node, Map<Keyword, Object> schema) {
