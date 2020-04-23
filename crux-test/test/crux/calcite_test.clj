@@ -276,10 +276,11 @@
 (t/deftest test-simple-joins
   (f/transact! *api* '[{:crux.db/id :crux.sql.schema/person
                         :crux.sql.table/name "person"
-                        :crux.sql.table/query {:find [id name planet]
+                        :crux.sql.table/query {:find [id name planet age]
                                                :where [[id :name name]
-                                                       [id :planet planet]]}
-                        :crux.sql.table/columns {id :keyword, name :varchar planet :varchar}}
+                                                       [id :planet planet]
+                                                       [id :age age]]}
+                        :crux.sql.table/columns {id :keyword, name :varchar planet :varchar age :bigint}}
                        {:crux.db/id :crux.sql.schema/planet
                         :crux.sql.table/name "planet"
                         :crux.sql.table/query {:find [id name climate]
@@ -293,8 +294,8 @@
                                                        [id :captain captain]
                                                        [id :decks decks]]}
                         :crux.sql.table/columns {id :keyword, name :varchar captain :varchar decks :bigint}}])
-  (f/transact! *api* [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
-                      {:crux.db/id :person/malcolm :name "Malcolm" :planet "mars"}
+  (f/transact! *api* [{:crux.db/id :person/ivan :name "Ivan" :planet "earth" :age 21}
+                      {:crux.db/id :person/malcolm :name "Malcolm" :planet "mars" :age 21}
                       {:crux.db/id :planet/earth :name "earth" :climate "Hot"}
                       {:crux.db/id :ship/enterprise :name "enterprise" :captain "Ivan" :decks 13}])
 
@@ -302,42 +303,52 @@
     (t/is (= [{:id ":person/ivan",
                :name "Ivan",
                :planet "earth",
+               :age 21,
                :id0 ":planet/earth",
                :name0 "earth",
                :climate "Hot"}]
              (query q)))
     (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxJoin(condition=[=($2, $4)], joinType=[inner])\n"
+                  "  CruxJoin(condition=[=($2, $5)], joinType=[inner])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n"
                   "    CruxTableScan(table=[[crux, PLANET]])\n")
              (explain q))))
 
-  (let [q "SELECT PERSON.NAME AS PERSON, PLANET.NAME AS PLANET FROM PERSON INNER JOIN PLANET ON PERSON.PLANET = PLANET.NAME"]
-    (t/is (= [{:person "Ivan", :planet "earth"}]
-             (query q))))
+  (let [q "SELECT PERSON.ID, PERSON.NAME AS PERSON, PLANET.NAME AS PLANET FROM PERSON INNER JOIN PLANET ON PERSON.PLANET = PLANET.NAME"]
+    (t/is (= [{:id ":person/ivan", :person "Ivan", :planet "earth"}]
+             (query q)))
+
+    (t/is (= (str "EnumerableCalc(expr#0..3=[{inputs}], proj#0..1=[{exprs}], PLANET=[$t3])\n"
+                  "  CruxToEnumerableConverter\n"
+                  "    CruxJoin(condition=[=($2, $3)], joinType=[inner])\n"
+                  "      CruxProject(ID=[$0], NAME=[$1], PLANET=[$2])\n"
+                  "        CruxTableScan(table=[[crux, PERSON]])\n"
+                  "      CruxProject(NAME=[$1])\n"
+                  "        CruxTableScan(table=[[crux, PLANET]])\n")
+             (explain q))))
 
   (let [q (str "SELECT * FROM PERSON\n"
-               " INNER JOIN PLANET ON PERSON.PLANET = PLANET.NAME\n"
-               " INNER JOIN SHIP ON SHIP.CAPTAIN = PERSON.NAME")]
-    (t/is (= [{:id ":person/ivan",
-               :name "Ivan",
-               :planet "earth",
-               :id0 ":planet/earth",
-               :name0 "earth",
-               :climate "Hot",
-               :id1 ":ship/enterprise",
-               :name1 "enterprise",
-               :captain "Ivan",
-               :decks 13}]
-             (query q)))
-    (t/is (= (str "EnumerableHashJoin(condition=[=($1, $8)], joinType=[inner])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxJoin(condition=[=($2, $4)], joinType=[inner])\n"
-                  "      CruxTableScan(table=[[crux, PERSON]])\n"
-                  "      CruxTableScan(table=[[crux, PLANET]])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxTableScan(table=[[crux, SHIP]])\n")
-             (explain q)))))
+                 " INNER JOIN PLANET ON PERSON.PLANET = PLANET.NAME\n"
+                 " INNER JOIN SHIP ON SHIP.CAPTAIN = PERSON.NAME")]
+      (t/is (= [{:id ":person/ivan",
+                 :name "Ivan",
+                 :planet "earth",
+                 :age 21,
+                 :id0 ":planet/earth",
+                 :name0 "earth",
+                 :climate "Hot",
+                 :id1 ":ship/enterprise",
+                 :name1 "enterprise",
+                 :captain "Ivan",
+                 :decks 13}]
+               (query q)))
+      (t/is (= (str "CruxToEnumerableConverter\n"
+                    "  CruxJoin(condition=[=($9, $1)], joinType=[inner])\n"
+                    "    CruxJoin(condition=[=($2, $5)], joinType=[inner])\n"
+                    "      CruxTableScan(table=[[crux, PERSON]])\n"
+                    "      CruxTableScan(table=[[crux, PLANET]])\n"
+                    "    CruxTableScan(table=[[crux, SHIP]])\n")
+               (explain q)))))
 
 (t/deftest test-table-backed-by-query
   (f/transact! *api* [{:crux.db/id :crux.sql.schema/person

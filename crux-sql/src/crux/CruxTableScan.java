@@ -1,5 +1,6 @@
 package crux.calcite;
 
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
@@ -31,9 +32,9 @@ public class CruxTableScan extends TableScan implements CruxRel {
             planner.addRule(rule);
         }
 
-       // Following PigJoin's lead here:
+        // Following PigJoin's lead here:
         // Make sure planner picks CruxJoin over EnumerableHashJoin.
-        //planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
+        planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
     }
 
     @Override public void implement(Implementor implementor) {
