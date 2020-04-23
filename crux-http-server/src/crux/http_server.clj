@@ -640,9 +640,3 @@
                     ::query-result-page-limit {:crux.config/type :crux.config/nat-int
                             :doc "Limit of query results per page"
                             :default 100}}}})
-
-
-#_(comment
-    (def node (crux/start-node
-             {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-              :crux.http-server/port 3000})))
