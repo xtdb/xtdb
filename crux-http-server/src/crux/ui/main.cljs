@@ -1,3 +1,4 @@
 (ns crux.ui.main)
 
-(js/console.log "hello we are here")
+(set! (.-innerHTML (js/document.getElementById "app"))
+      "This is cljs")

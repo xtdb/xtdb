@@ -18,6 +18,6 @@
                              [com.bhauman/figwheel-main "0.2.4"]
                              [com.bhauman/rebel-readline-cljs "0.1.4"]]}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]}
-  :resource-paths ["target"]
+  :resource-paths ["target" "resources"]
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

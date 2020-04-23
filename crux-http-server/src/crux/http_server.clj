@@ -15,6 +15,7 @@
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.cors :refer [wrap-cors]]
+            [ring.middleware.resource :refer [wrap-resource]]
             [muuntaja.middleware :refer [wrap-format]]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
@@ -507,8 +508,10 @@
     [:meta
      {:name "viewport"
       :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
-    [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]]
-   [:body
+    [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
+    [:link {:rel "stylesheet" :href "css/style.css"}]
+    [:title "hello"]]
+   [:body#app
     (if (seq results)
       [:div
        [:table
@@ -634,6 +637,7 @@
 
                                                             (-> (partial data-browser-handler node options)
                                                                 (p/wrap-params)
+                                                                (wrap-resource "public")
                                                                 (wrap-format (assoc-in m/default-options
                                                                                        [:formats "text/html"]
                                                                                        (mfc/map->Format {:name "text/html"
@@ -641,9 +645,9 @@
                                                                 (wrap-exception-handling))
 
                                                             (fn [request]
-                                                              {:status 400
+                                                              {:status 404
                                                                :headers {"Content-Type" "text/plain"}
-                                                               :body "Unsupported method on this address."}))
+                                                               :body "Could not find resource."}))
                                                    {:port port
                                                     :join? false})]
                            (log/info "HTTP server started on port: " port)
@@ -657,5 +661,5 @@
                             :doc "Port to start the HTTP server on"
                             :default default-server-port}
                     ::query-result-page-limit {:crux.config/type :crux.config/nat-int
-                            :doc "Limit of query results per page"
-                            :default 100}}}})
+                                               :doc "Limit of query results per page"
+                                               :default 100}}}})
