@@ -40,10 +40,6 @@
   ;; bitemporal index
   (new-entity-as-of-index [this valid-time transact-time])
 
-  ;; can be rewritten in terms of the above
-  ;; (idx/entity-at entity-as-of-idx value)
-  ;; (idx/entities-at this [eid] valid-time transact-time)
-
   ;; history seqs, could be redone as lower-level indexes
 
   ;; valid time history
