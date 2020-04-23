@@ -542,18 +542,20 @@
         html? (= (get-in request [:muuntaja/response :format]) "text/html")]
     (cond
       (empty? query-params)
-      {:status 200
-       :body
-       (html5 [:form
-               {:action "/_query"}
-               [:textarea
-                {:name "q"
-                 :cols 40
-                 :rows 10}]
-               [:br]
-               [:button
-                {:type "submit"}
-                "submit me here"]])}
+      (if html?
+        {:status 200
+         :body (html5 [:form
+                       {:action "/_query"}
+                       [:textarea
+                        {:name "q"
+                         :cols 40
+                         :rows 10}]
+                       [:br]
+                       [:button
+                        {:type "submit"}
+                        "submit me here"]])}
+        {:status 400
+         :body "No query provided."})
       :else
       (try
         (let [query (cond-> (or (some-> (get query-params "q")
