@@ -454,24 +454,15 @@
     (assoc resolved-query :limit updated-limit)))
 
 (defn link-top-level-entities
-  [db path rows]
-  (reduce
-   (fn [coll row]
-     (merge
-      coll
-      (reduce
-       (fn [coll v]
-         (if (and (c/valid-id? v)
-                  (api/entity db v))
-           (let [query-params (format "?valid-time=%s&transaction-time=%s"
-                                      (.toInstant ^Date (api/valid-time db))
-                                      (.toInstant ^Date (api/transaction-time db)))]
-             (assoc coll v (str path "/" v query-params)))
-           coll))
-       {}
-       row)))
-   {}
-   rows))
+  [db path results]
+  (->> (apply concat results)
+       (filter (every-pred c/valid-id? #(api/entity db %)))
+       (map (fn [id]
+              (let [query-params (format "?valid-time=%s&transaction-time=%s"
+                                         (.toInstant ^Date (api/valid-time db))
+                                         (.toInstant ^Date (api/transaction-time db)))]
+                [id (str path "/" id query-params)])))
+       (into {})))
 
 (defn resolve-prev-next-page
   [query-params next-page?]
