@@ -8,7 +8,6 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.bus :as bus])
@@ -118,7 +117,7 @@
 
 (s/def ::timeout nat-int?)
 
-(declare normalize-query)
+(declare normalize-query open-index-store)
 
 (s/def ::query (s/and (s/conformer #'normalize-query)
                       (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by ::timeout ::full-results?])))
@@ -273,20 +272,20 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [snapshot {:keys [entity-as-of-idx]} binary-idx vars-in-join-order var->range-constraints]
+(defn- update-binary-index! [index-store {:keys [entity-as-of-idx]} binary-idx vars-in-join-order var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get var->range-constraints v)
         e-range-constraints (get var->range-constraints e)]
     (if (= (:v names) (first order))
-      (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
-            e-idx (-> (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)
+      (let [v-doc-idx (db/new-doc-attribute-value-entity-value-index index-store a)
+            e-idx (-> (db/new-doc-attribute-value-entity-entity-index index-store a v-doc-idx entity-as-of-idx)
                       (idx/wrap-with-range-constraints e-range-constraints))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
-      (let [e-doc-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
-            v-idx (-> (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
+      (let [e-doc-idx (db/new-doc-attribute-entity-value-entity-index index-store a entity-as-of-idx)
+            v-idx (-> (db/new-doc-attribute-entity-value-value-index index-store a e-doc-idx)
                       (idx/wrap-with-range-constraints v-range-constraints))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints e-doc-idx e-range-constraints) v-idx)))))
@@ -582,10 +581,10 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn pred-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results arg))
+                                      (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results arg))
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
@@ -605,9 +604,9 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [index-store {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
   (let [entity (get (first args) e)]
-    (when (idx/or-known-triple-fast-path snapshot entity a v valid-time transact-time)
+    (when (db/or-known-triple-fast-path index-store entity a v valid-time transact-time)
       [])))
 
 (defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
@@ -642,10 +641,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn or-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var)))
+                                (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -653,14 +652,16 @@
                                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
                                             cached-result (when cache-key
                                                             (get *recursion-table* cache-key))]]
-                                  (with-open [snapshot (lru/new-cached-snapshot snapshot false)]
+                                  ;; TODO: used to be (lru/new-cached-snapshot snapshot false)
+                                  ;; to reuse iterators between sub-queries.
+                                  (with-open [index-store ^Closeable (open-index-store db)]
                                     (cond
                                       cached-result
                                       cached-result
 
                                       single-e-var-triple?
                                       (or-single-e-var-triple-fast-path
-                                       snapshot
+                                       index-store
                                        db
                                        (get branch-index->single-e-var-triple-fast-path-clause-with-buffers branch-index)
                                        args)
@@ -670,12 +671,12 @@
                                                                     (assoc *recursion-table* cache-key [])
                                                                     *recursion-table*)]
                                         (let [{:keys [n-ary-join
-                                                      var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
+                                                      var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
                                           (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                             (if has-free-vars?
                                               (vec (for [[join-keys join-results] idx-seq]
                                                      (vec (for [var free-vars-in-join-order]
-                                                            (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))))))
+                                                            (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
                                               [])))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -703,7 +704,7 @@
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
-         (fn unification-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn unification-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
            (let [values (for [arg args]
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
@@ -727,21 +728,23 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-           (with-open [snapshot (lru/new-cached-snapshot snapshot false)]
+         (fn not-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+           ;; TODO: used to be (lru/new-cached-snapshot snapshot false)
+           ;; to reuse iterators between sub-queries.
+           (with-open [index-store ^Closeable (open-index-store db)]
              (let [args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var)))
+                                  (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
-                   {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules stats)]
+                   {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
                  join-results))))})))
 
-(defn- constrain-join-result-by-constraints [snapshot db idx-id->idx depth->constraints join-keys join-results]
+(defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys join-results]
   (reduce
    (fn [results constraint]
      (when results
-       (constraint snapshot db idx-id->idx join-keys results)))
+       (constraint index-store db idx-id->idx join-keys results)))
    join-results
    (get depth->constraints (count join-keys))))
 
@@ -966,7 +969,7 @@
             (assoc acc id (idx-fn))))
         {})))
 
-(defn- build-sub-query [snapshot {:keys [query-cache] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [index-store {:keys [query-cache] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
@@ -985,13 +988,13 @@
                                 (compile-sub-query where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx var->joins)
         constrain-result-fn (fn [join-keys join-results]
-                              (constrain-join-result-by-constraints snapshot db idx-id->idx depth->constraints join-keys join-results))
+                              (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys join-results))
         unary-join-index-groups (for [v vars-in-join-order]
                                   (for [{:keys [id idx-fn name] :as join} (get var->joins v)]
                                     (assoc (or (get idx-id->idx id) (idx-fn)) :name name)))]
     (doseq [[_ idx] idx-id->idx
             :when (instance? BinaryJoinLayeredVirtualIndex idx)]
-      (update-binary-index! snapshot db idx vars-in-join-order var->range-constraints))
+      (update-binary-index! index-store db idx vars-in-join-order var->range-constraints))
     (when (and (seq args) args-idx-id)
       (idx/update-relation-virtual-index!
        (get idx-id->idx args-idx-id)
@@ -1068,6 +1071,37 @@
            (db/get-single-object object-store snapshot (.content-hash ^EntityTx entity-tx))
            value))))
 
+(defrecord UnownedIndexStore [index-store]
+  Closeable
+  (close [_])
+
+  db/IndexStore
+  (new-doc-attribute-value-entity-value-index [this a]
+    (db/new-doc-attribute-value-entity-value-index index-store a))
+  (new-doc-attribute-value-entity-entity-index [this a v-doc-idx entity-as-of-idx]
+    (db/new-doc-attribute-value-entity-entity-index index-store a v-doc-idx entity-as-of-idx))
+  (new-doc-attribute-entity-value-entity-index [this a entity-as-of-idx]
+    (db/new-doc-attribute-entity-value-entity-index index-store a entity-as-of-idx))
+  (new-doc-attribute-entity-value-value-index [this a e-doc-idx]
+    (db/new-doc-attribute-entity-value-value-index index-store a e-doc-idx))
+  (or-known-triple-fast-path [this eid a v valid-time transact-time]
+    (db/or-known-triple-fast-path index-store eid a v valid-time transact-time))
+  (new-entity-as-of-index [this valid-time transact-time]
+    (db/new-entity-as-of-index index-store valid-time transact-time))
+  (entity-history-seq-ascending [this eid valid-time transact-time]
+    (db/entity-history-seq-ascending index-store eid valid-time transact-time))
+  (entity-history-seq-descending [this eid valid-time transact-time]
+    (db/entity-history-seq-descending index-store eid valid-time transact-time))
+  (entity-history [this eid]
+    (db/entity-history index-store eid))
+  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (db/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)))
+
+(defn open-index-store ^java.io.Closeable [{:keys [indexer index-store] :as db}]
+  (if index-store
+    (->UnownedIndexStore index-store)
+    (db/open-index-store indexer)))
+
 (def default-query-timeout 30000)
 
 (def default-entity-cache-size 10000)
@@ -1108,9 +1142,9 @@
          q (.q-normalized conformed-q)
          query-future (future
                         (try
-                          (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
+                          (with-open [index-store (open-index-store db)]
                             (let [result-coll-fn (if (:order-by q) vec set)
-                                  result (result-coll-fn (crux.query/q db snapshot conformed-q))]
+                                  result (result-coll-fn (crux.query/q db index-store conformed-q))]
                               (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                               (log/debug :query-result-size (count result))
                               result))
@@ -1135,23 +1169,23 @@
        (throw result)
        result)))
 
-  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot ^ConformedQuery conformed-q]
+  ([{:keys [object-store indexer valid-time transact-time] :as db} index-store ^ConformedQuery conformed-q]
    (let [q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-         stats (idx/read-meta kv :crux.kv/stats)]
+         stats (db/read-index-meta indexer :crux.kv/stats)]
      (log/debug :query (cio/pr-edn-str (-> q
                                            (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                            (dissoc :args))))
      (validate-args args)
-     (let [entity-as-of-idx (cond-> (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time)
+     (let [entity-as-of-idx (cond-> (db/new-entity-as-of-index index-store valid-time transact-time)
                               *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
 
            rule-name->rules (rule-name->rules rules)
 
            db (assoc db :entity-as-of-idx entity-as-of-idx)
            {:keys [n-ary-join
-                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
+                   var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
@@ -1167,9 +1201,9 @@
 
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var index-store object-store var->bindings join-keys join-results var))]]
                   (if full-results?
-                    (build-full-results db snapshot bound-result-tuple)
+                    (build-full-results db index-store bound-result-tuple)
                     (mapv #(.value ^BoundResult %) bound-result-tuple)))
 
          true (dedupe)
@@ -1177,50 +1211,39 @@
          offset (drop offset)
          limit (take limit))))))
 
-(defn entity-tx [{:keys [valid-time transact-time] :as db} snapshot eid]
-  (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time))))
+(defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
+  (some-> (db/new-entity-as-of-index index-store valid-time transact-time)
+          (idx/entity-at eid)
+          (c/entity-tx->edn)))
 
-(defn entity [{:keys [object-store] :as db} snapshot eid]
-  (let [entity-tx (entity-tx db snapshot eid)]
-    (-> (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx))
+(defn entity [{:keys [object-store] :as db} index-store eid]
+  (let [entity-tx (entity-tx db index-store eid)]
+    (-> (db/get-single-object object-store index-store (:crux.db/content-hash entity-tx))
         idx/keep-non-evicted-doc)))
 
-(defrecord UnownedSnapshot [snapshot]
-  Closeable
-  (close [_])
-
-  kv/KvSnapshot
-  (new-iterator [_] (kv/new-iterator snapshot))
-  (get-value [_ k] (kv/get-value snapshot k)))
-
-(defn open-snapshot ^java.io.Closeable [{:keys [kv snapshot] :as db}]
-  (if snapshot
-    (->UnownedSnapshot snapshot)
-    (lru/new-cached-snapshot (kv/new-snapshot kv) true)))
-
-(defrecord QueryDatasource [kv object-store bus
+(defrecord QueryDatasource [indexer object-store bus
                             query-cache conform-cache
                             valid-time transact-time
-                            snapshot entity-as-of-idx]
+                            index-store entity-as-of-idx]
   Closeable
   (close [_]
-    (when snapshot
-      (.close ^Closeable snapshot)))
+    (when index-store
+      (.close ^Closeable index-store)))
 
   ICruxDatasource
   (entity [this eid]
-    (with-open [snapshot (open-snapshot this)]
-      (entity this snapshot eid)))
+    (with-open [index-store (open-index-store this)]
+      (entity this index-store eid)))
 
-  (entity [this snapshot eid]
-    (entity this snapshot eid))
+  (entity [this index-store eid]
+    (entity this index-store eid))
 
   (entityTx [this eid]
-    (with-open [snapshot (open-snapshot this)]
-      (entity-tx this snapshot eid)))
+    (with-open [index-store (open-index-store this)]
+      (entity-tx this index-store eid)))
 
   (newSnapshot [this]
-    (open-snapshot this))
+    (open-index-store this))
 
   (q [this query]
     ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
@@ -1238,13 +1261,13 @@
                          ::query-id query-id}))
         ret)))
 
-  (q [this snapshot query]
+  (q [this index-store query]
     ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
     ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (q this snapshot (normalize-and-conform-query conform-cache query)))
+    (q this index-store (normalize-and-conform-query conform-cache query)))
 
   (openQuery [this query]
-    (let [snapshot (open-snapshot this)
+    (let [index-store (open-index-store this)
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
@@ -1253,44 +1276,40 @@
                        ::query safe-query
                        ::query-id query-id}))
       (cio/->cursor (fn []
-                      (.close snapshot)
+                      (.close index-store)
                       (when bus
                         (bus/send bus {:crux.bus/event-type ::completed-query
                                        ::query safe-query
                                        ::query-id query-id})))
-                    (q this snapshot conformed-query))))
+                    (q this index-store conformed-query))))
 
   (historyAscending [this eid]
     (with-open [history (.openHistoryAscending this eid)]
       (vec (iterator-seq history))))
 
   (historyAscending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+    (.historyAscending this eid))
 
   (openHistoryAscending [this eid]
-    (let [snapshot (open-snapshot this)
-          i (kv/new-iterator snapshot)]
-      (cio/->cursor #(run! cio/try-close [i snapshot])
-                    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending i eid valid-time transact-time)]
+    (let [index-store (open-index-store this)]
+      (cio/->cursor #(cio/try-close index-store)
+                    (for [^EntityTx entity-tx (db/entity-history-seq-ascending index-store eid valid-time transact-time)]
                       (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
+                             :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
 
   (historyDescending [this eid]
     (with-open [history (.openHistoryDescending this eid)]
       (vec (iterator-seq history))))
 
   (historyDescending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time)]
-      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
+    (.historyDescending this eid))
 
   (openHistoryDescending [this eid]
-    (let [snapshot (open-snapshot this)
-          i (kv/new-iterator snapshot)]
-      (cio/->cursor #(run! cio/try-close [i snapshot])
-                    (for [^EntityTx entity-tx (idx/entity-history-seq-descending i eid valid-time transact-time)]
+    (let [index-store (open-index-store this)]
+      (cio/->cursor #(cio/try-close index-store)
+                    (for [^EntityTx entity-tx (db/entity-history-seq-descending index-store eid valid-time transact-time)]
                       (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))))
+                             :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
 
   (validTime [_]
     valid-time)
@@ -1298,12 +1317,12 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource [kv object-store bus valid-time transact-time]
-  (->QueryDatasource kv
+(defn db ^crux.api.ICruxDatasource [indexer query-cache conform-cache object-store bus valid-time transact-time]
+  (->QueryDatasource indexer
                      object-store
                      bus
-                     (lru/get-named-cache kv ::query-cache)
-                     (lru/get-named-cache kv ::conform-cache)
+                     query-cache
+                     conform-cache
                      valid-time
                      transact-time
                      nil

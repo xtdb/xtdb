@@ -11,6 +11,7 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             crux.object-store
             [crux.query :as q]
             [crux.status :as status]
@@ -51,39 +52,45 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db kv-store object-store bus valid-time tx-time))))
+        (q/db indexer
+              (lru/get-named-cache kv-store ::query-cache)
+              (lru/get-named-cache kv-store ::conform-cache)
+              object-store
+              bus
+              valid-time
+              tx-time))))
 
   (openDB [this] (.openDB this nil nil))
   (openDB [this valid-time] (.openDB this valid-time nil))
   (openDB [this valid-time tx-time]
     (let [db (.db this valid-time tx-time)]
-      (assoc db :snapshot (q/open-snapshot db))))
+      (assoc db :index-store (q/open-index-store db))))
 
   (document [this content-hash]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (with-open [snapshot (kv/new-snapshot kv-store)]
-        (-> (db/get-single-object object-store snapshot (c/new-id content-hash))
+      (with-open [index-store (db/open-index-store indexer)]
+        (-> (db/get-single-object object-store index-store (c/new-id content-hash))
             (idx/keep-non-evicted-doc)))))
 
   (documents [this content-hash-set]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (with-open [snapshot (kv/new-snapshot kv-store)]
-        (->> (db/get-objects object-store snapshot (map c/new-id content-hash-set))
+      (with-open [index-store (db/open-index-store indexer)]
+        (->> (db/get-objects object-store index-store (map c/new-id content-hash-set))
              (into {} (remove (comp idx/evicted-doc? val)))))))
 
   (history [this eid]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (with-open [snapshot (kv/new-snapshot kv-store)]
-        (mapv c/entity-tx->edn (idx/entity-history snapshot eid)))))
+      (with-open [index-store (db/open-index-store indexer)]
+        (mapv c/entity-tx->edn (db/entity-history index-store eid)))))
 
   (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (with-open [snapshot (kv/new-snapshot kv-store)]
-        (->> (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
+      (with-open [index-store (db/open-index-store indexer)]
+        (->> (idx/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
              (mapv c/entity-tx->edn)
              (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time))))))
 
@@ -98,7 +105,7 @@
   (attributeStats [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (idx/read-meta kv-store :crux.kv/stats)))
+      (db/read-index-meta indexer :crux.kv/stats)))
 
   (submitTx [this tx-ops]
     (cio/with-read-lock lock
@@ -115,9 +122,8 @@
            (NodeOutOfSyncException.
             (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
             tx-time latest-tx-time))
-          (nil?
-           (kv/get-value (kv/new-snapshot kv-store)
-                         (c/encode-failed-tx-id-key-to nil tx-id)))))))
+          (with-open [index-store (db/open-index-store indexer)]
+            (db/tx-failed? index-store tx-id))))))
 
   (openTxLog ^ICursor [this after-tx-id with-ops?]
     (cio/with-read-lock lock
@@ -128,22 +134,19 @@
         (cio/->cursor #() [])
 
         (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
-              snapshot (kv/new-snapshot kv-store)
+              index-store (db/open-index-store indexer)
               tx-log (-> (iterator-seq tx-log-iterator)
-                         (->> (filter
-                               #(nil?
-                                 (kv/get-value snapshot
-                                               (c/encode-failed-tx-id-key-to nil (:crux.tx/tx-id %))))))
+                         (->> (filter #(db/tx-failed? index-store (:crux.tx/tx-id %))))
                          (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
                                                               crux.tx.event/tx-events] :as tx-log-entry}]
                                                    (-> tx-log-entry
                                                        (dissoc :crux.tx.event/tx-events)
                                                        (assoc :crux.api/tx-ops
                                                               (->> tx-events
-                                                                   (mapv #(tx/tx-event->tx-op % snapshot object-store)))))))))]
+                                                                   (mapv #(tx/tx-event->tx-op % index-store object-store)))))))))]
 
           (cio/->cursor (fn []
-                          (.close snapshot)
+                          (.close index-store)
                           (.close tx-log-iterator))
                         tx-log)))))
 

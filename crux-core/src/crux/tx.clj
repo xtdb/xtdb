@@ -93,14 +93,14 @@
 (defn tx-event->doc-hashes [tx-event]
   (keep (conform-tx-event tx-event) [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
 
-(defn tx-event->tx-op [[op id & args] snapshot object-store]
+(defn tx-event->tx-op [[op id & args] index-store object-store]
   (doto (into [op]
               (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
                         [(c/new-id id)])
 
                       (for [arg args]
                         (or (when (satisfies? c/IdToBuffer arg)
-                              (or (db/get-single-object object-store snapshot arg)
+                              (or (db/get-single-object object-store index-store arg)
                                   {:crux.db/id (c/new-id id)
                                    :crux.db/evicted? true}))
                             arg))))
@@ -223,16 +223,16 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [kv-store object-store] :as deps}]
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [kv-store object-store indexer] :as deps}]
   ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
   ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
   {:pre-commit-fn (fn []
                     (let [content-hash (c/new-id v)]
-                      (assert (with-open [snapshot (kv/new-snapshot kv-store)]
-                                (or (idx/doc-indexed? snapshot k content-hash)
-                                    (idx/evicted-doc? (db/get-single-object object-store snapshot content-hash))))
-                              (format "Put, incorrect doc state for: '%s', tx-id '%s'"
-                                      content-hash (:crux.tx/tx-id tx)))
+                      (with-open [index-store (db/open-index-store indexer)]
+                        (assert (or (idx/doc-indexed? index-store k content-hash)
+                                    (idx/evicted-doc? (db/get-single-object object-store index-store content-hash)))
+                                (format "Put, incorrect doc state for: '%s', tx-id '%s'"
+                                        content-hash (:crux.tx/tx-id tx))))
                       true))
 
    :etxs (put-delete-etxs k start-valid-time end-valid-time (c/new-id v) tx deps)})
@@ -252,7 +252,7 @@
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {:crux.tx/keys [tx-time tx-id] :as tx}
-                                        {:keys [object-store history snapshot] :as deps}]
+                                        {:keys [object-store history index-store] :as deps}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
@@ -260,9 +260,9 @@
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
                        ;; can't rely on the old content-hashing returning the same hash for the same document
                        (if (or (= (c/new-id content-hash) (c/new-id old-v))
-                               (= (db/get-single-object object-store snapshot (c/new-id content-hash))
-                                  (db/get-single-object object-store snapshot (c/new-id old-v))))
-                         (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
+                               (= (db/get-single-object object-store index-store (c/new-id content-hash))
+                                  (db/get-single-object object-store index-store (c/new-id old-v))))
+                         (let [correct-state? (not (nil? (db/get-single-object object-store index-store (c/new-id new-v))))]
                            (when-not correct-state?
                              (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
                            correct-state?)
@@ -301,16 +301,22 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [object-store kv-store indexer tx-log snapshot nested-fn-args], :as deps}]
+                                       {:keys [object-store kv-store indexer tx-log index-store nested-fn-args], :as deps}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db kv-store object-store nil tx-time tx-time)
-        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db snapshot fn-id)
+        db (q/db indexer
+                 (lru/get-named-cache kv-store ::query-cache)
+                 (lru/get-named-cache kv-store ::conform-cache)
+                 object-store
+                 nil
+                 tx-time
+                 tx-time)
+        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
                                                  (or (get nested-fn-args arg-id)
-                                                     (db/get-single-object object-store snapshot arg-id)))
+                                                     (db/get-single-object object-store index-store arg-id)))
         args-id (:crux.db/id args-doc)
 
         {:keys [tx-ops fn-error]} (try
@@ -373,6 +379,12 @@
   (close [_]
     (cio/try-close snapshot))
 
+  kv/KvSnapshot
+  (new-iterator ^java.io.Closeable [this]
+    (kv/new-iterator snapshot))
+  (get-value [this k]
+    (kv/get-value snapshot k))
+
   db/IndexStore
   ;; AVE
   (new-doc-attribute-value-entity-value-index [this a]
@@ -411,7 +423,11 @@
   (entity-history [this eid]
     (idx/entity-history snapshot eid))
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end)))
+    (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
+
+  ;; for hasTxCommitted
+  (tx-failed? [this tx-id]
+    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
 
 (defrecord KvIndexer [object-store kv-store bus ^ExecutorService stats-executor]
   Closeable
@@ -430,12 +446,22 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
 
+<<<<<<< 13e29c25a09270ee57346407b40a128d6a113da3
       (when-let [docs-to-upsert (->> docs
                                      (into {} (remove (fn [[k doc]]
                                                         (or (idx/doc-indexed? snapshot (:crux.db/id doc) k)
                                                             (idx/evicted-doc? doc)))))
                                      not-empty)]
         (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
+=======
+          docs-to-remove (when (seq docs-to-evict)
+                           (with-open [index-store (db/open-index-store this)]
+                             (let [existing-docs (->> (db/get-objects object-store index-store (keys docs-to-evict))
+                                                      (remove (comp idx/evicted-doc? val)))]
+                               (->> existing-docs
+                                    (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
+                                    (idx/delete-doc-idx-keys kv-store))
+>>>>>>> Removing all direct usage of the kv store inside crux.query, using the IndexStore protocol instead. Far from clean, but tests pass.
 
         (let [doc-idx-keys (when (seq docs-to-upsert)
                              (->> docs-to-upsert
@@ -462,13 +488,12 @@
     (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
     (bus/send bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
 
-    (with-open [snapshot (kv/new-snapshot kv-store)]
+    (with-open [index-store (db/open-index-store this)]
       (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
         (let [deps {:object-store object-store
                     :kv-store kv-store
-                    :indexer this
-                    :snapshot snapshot}
-
+                    :index-store index-store
+                    :indexer this}
               res (reduce (fn [{:keys [history] :as acc} tx-event]
                             (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc deps :history history))]
                               (if (and pre-commit-fn (not (pre-commit-fn)))
@@ -477,7 +502,7 @@
                                     (update :history with-etxs etxs)
                                     (update :tombstones merge tombstones)))))
 
-                          {:history (->Snapshot+NewETXs snapshot {})
+                          {:history (->Snapshot+NewETXs index-store {})
                            :tombstones {}}
 
                           tx-events)

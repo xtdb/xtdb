@@ -52,7 +52,10 @@
 
   ;; full history
   (entity-history [this eid])
-  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]))
+  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
+
+  ;; for hasTxCommitted
+  (tx-failed? [this tx-id]))
 ;; end::IndexStore[]
 
 ;; tag::TxLog[]
