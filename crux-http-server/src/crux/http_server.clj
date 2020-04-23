@@ -478,7 +478,7 @@
     {:prev-url prev-url
      :next-url next-url}))
 
-(defn query->html [links headers rows {:keys [prev-url next-url]}]
+(defn query->html [links {headers :find} results {:keys [prev-url next-url]}]
   [:html
    {:lang "en"}
    [:head
@@ -489,7 +489,7 @@
       :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
     [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]]
    [:body
-    (if (seq rows)
+    (if (seq results)
       [:div
        [:table
         [:thead
@@ -497,7 +497,7 @@
           (for [header headers]
             [:th header])]]
         [:tbody
-         (for [row rows]
+         (for [row (map #(zipmap headers %) results)]
            [:tr
             (for [header headers]
               (let [cell-value (get row header)]
@@ -550,12 +550,10 @@
               results (api/q db query)]
           {:status 200
            :body (if html?
-                   (let [find (:find query)
-                         rows (map #(zipmap find %) results)
-                         links (link-top-level-entities db  "/_entity" results)
+                   (let [links (link-top-level-entities db  "/_entity" results)
                          next-page? (= (:limit query) (count results))
                          prev-next-page (resolve-prev-next-page query-params next-page?)]
-                     (html5 (query->html links find rows prev-next-page)))
+                     (html5 (query->html links query results prev-next-page)))
                    results)})
         (catch Exception e
           {:status 400
