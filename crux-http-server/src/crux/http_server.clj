@@ -603,15 +603,10 @@
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data charset]
-      (.getBytes
-       ^String (pr-str data)
-       ^String charset))
+      (throw (UnsupportedOperationException.)))
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ data charset]
-      (fn [^OutputStream output-stream]
-        (.write output-stream (.getBytes
-                               ^String (pr-str data)
-                               ^String charset))))))
+      (throw (UnsupportedOperationException.)))))
 
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
