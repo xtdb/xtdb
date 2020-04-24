@@ -4,23 +4,24 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
-           org.apache.calcite.util.Pair
-           crux.calcite.CruxTableScan
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
+           org.apache.calcite.DataContext
            org.apache.calcite.linq4j.Enumerable
            org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
-           [org.apache.calcite.rex RexCall RexInputRef RexLiteral RexNode]
+           [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
-           org.apache.calcite.sql.type.SqlTypeName))
+           org.apache.calcite.sql.type.SqlTypeName
+           org.apache.calcite.util.Pair))
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
@@ -32,7 +33,7 @@
   (operand->v [this schema]
     (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
 
-  org.apache.calcite.rex.RexCall
+  RexCall
   (operand->v [this schema]
     (case (str (.-op this))
       "CRUXID"
@@ -41,7 +42,11 @@
 
   RexLiteral
   (operand->v [this schema]
-    (.getValue2 this)))
+    (.getValue2 this))
+
+  RexDynamicParam
+  (operand->v [this schema]
+    this))
 
 (defn- ->operands [schema ^RexCall filter*]
   (->> (.getOperands filter*)
@@ -91,7 +96,17 @@
     [[(list 'boolean (first (->operands schema filter*)))]]))
 
 (defn enrich-filter [schema ^RexNode filter]
-  (update-in schema [:crux.sql.table/query :where] (comp vec concat) (->crux-where-clauses schema filter)))
+  (let [args (atom {})
+        clauses (postwalk (fn [x] (if (instance? RexDynamicParam x)
+                                    (let [sym (gensym)]
+                                      (swap! args assoc (.getName ^RexDynamicParam x) sym)
+                                      sym)
+                                    x))
+                          (->crux-where-clauses schema filter))]
+    (-> schema
+        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
+        ;; Todo consider case of multiple arg maps
+        (update-in [:crux.sql.table/query :args] merge @args))))
 
 (defn enrich-sort-by [schema sort-fields]
   (assoc-in schema [:crux.sql.table/query :order-by]
@@ -154,11 +169,13 @@
               (close []
                 (.close snapshot))))))))
 
-;;query (assoc query :find (if (seq projects) (mapv (:find query) projects) (:find query)))
-(defn ^Enumerable scan [node ^String schema]
+(defn ^Enumerable scan [node ^String schema ^DataContext data-context]
   (try
     (log/debug schema)
-    (let [{:keys [crux.sql.table/query]} (edn/read-string schema)]
+    (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
+          query (update query :args (fn [args] [(into {} (map (fn [[k v]]
+                                                                [v (.get data-context k)])
+                                                              args))]))]
       (perform-query node query))
     (catch Throwable e
       (log/error e)

@@ -2,7 +2,8 @@
   (:require [crux.calcite :as cal]
             [crux.fixtures.api :as fapi]
             [crux.node :as n])
-  (:import java.sql.DriverManager))
+  (:import java.sql.DriverManager
+           java.sql.PreparedStatement))
 
 (def ^:dynamic ^java.sql.Connection *conn*)
 
@@ -26,6 +27,14 @@
   (with-open [stmt (.createStatement *conn*)
               rs (.executeQuery stmt q)]
     (->> rs resultset-seq (into []))))
+
+(defn prepared-query [q & args]
+  (let [p ^PreparedStatement (.prepareStatement *conn* q)]
+    (doseq [[i v] args]
+      (if (string? v)
+        (.setString p i v)))
+    (with-open [rs (.executeQuery p)]
+      (->> rs resultset-seq (into [])))))
 
 (defn explain [q]
   (:plan (first (query (str "explain plan for " q)))))
