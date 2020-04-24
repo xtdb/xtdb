@@ -386,11 +386,11 @@
     (kv/get-value snapshot k))
 
   db/IndexStore
-  (new-doc-attribute-value-entity-index-pair [this a entity-as-of-idx]
+  (new-attribute-value-entity-index-pair [this a entity-as-of-idx]
     (let [v-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
           e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-idx entity-as-of-idx)]
       [v-idx e-idx]))
-  (new-doc-attribute-entity-value-index-pair [this a entity-as-of-idx]
+  (new-attribute-entity-value-index-pair [this a entity-as-of-idx]
     (let [e-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
           v-idx (idx/new-doc-attribute-entity-value-value-index snapshot a e-idx)]
       [e-idx v-idx]))

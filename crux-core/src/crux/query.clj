@@ -279,12 +279,12 @@
         v-range-constraints (get var->range-constraints v)
         e-range-constraints (get var->range-constraints e)]
     (if (= (:v names) (first order))
-      (let [[v-idx e-idx] (db/new-doc-attribute-value-entity-index-pair index-store a entity-as-of-idx)]
+      (let [[v-idx e-idx] (db/new-attribute-value-entity-index-pair index-store a entity-as-of-idx)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints v-idx v-range-constraints)
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)))
-      (let [[e-idx v-idx] (db/new-doc-attribute-entity-value-index-pair index-store a entity-as-of-idx)]
+      (let [[e-idx v-idx] (db/new-attribute-entity-value-index-pair index-store a entity-as-of-idx)]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)
