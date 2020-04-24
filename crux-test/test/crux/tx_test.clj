@@ -773,14 +773,15 @@
 
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
-        !latch (promise)]
-    (bus/listen (get-in (meta *api*) [::n/topology ::n/bus])
-                {::bus/event-types #{::tx/indexing-docs ::tx/indexed-docs
-                                     ::tx/indexing-tx ::tx/indexed-tx}}
-                #(do
-                   (swap! !events conj %)
-                   (when (= ::tx/indexed-tx (::bus/event-type %))
-                     (deliver !latch @!events))))
+        !latch (promise)
+        bus (get-in (meta *api*) [::n/topology ::n/bus])]
+    (doseq [event-type #{::tx/indexing-docs ::tx/indexed-docs
+                         ::tx/indexing-tx ::tx/indexed-tx}]
+      (bus/listen bus {:crux/event-type event-type}
+                  (fn [evt]
+                    (swap! !events conj evt)
+                    (when (= ::tx/indexed-tx (:crux/event-type evt))
+                      (deliver !latch @!events)))))
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
@@ -789,12 +790,12 @@
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
 
-      (t/is (= [{::bus/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
-                {::bus/event-type ::tx/indexed-docs
+      (t/is (= [{:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
+                {:crux/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
                  :av-count 4}
-                {::bus/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
-                {::bus/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
+                {:crux/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
+                {:crux/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
                (-> (vec @!events)
                    (update 1 dissoc :bytes-indexed)))))))
 

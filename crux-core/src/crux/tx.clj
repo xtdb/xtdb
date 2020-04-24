@@ -467,7 +467,7 @@
                                                       (or (idx/keep-non-evicted-doc (db/get-single-object object-store index-store (c/new-id k)))
                                                           (idx/evicted-doc? doc)))))
                                    not-empty)]
-      (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
+      (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
       (let [bytes-indexed (db/index-docs indexer docs-to-upsert)
             docs-stats (->> (vals docs-to-upsert)
@@ -475,7 +475,7 @@
 
         (db/put-objects object-store docs-to-upsert)
 
-        (bus/send bus {::bus/event-type ::indexed-docs,
+        (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids (set (keys docs))
                        :av-count (->> (vals docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})
@@ -486,7 +486,7 @@
   (s/assert :crux.tx.event/tx-events tx-events)
 
   (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
-  (bus/send bus {::bus/event-type ::indexing-tx, ::submitted-tx tx})
+  (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
   (with-open [index-store (db/open-index-store indexer)]
     (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
@@ -517,7 +517,7 @@
             (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
             (db/mark-tx-as-failed indexer tx)))
 
-        (bus/send bus {::bus/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
+        (bus/send bus {:crux/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
 
         {:tombstones (when committed?
                        (:tombstones res))}))))
