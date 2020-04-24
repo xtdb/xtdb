@@ -7,7 +7,7 @@
            [java.util.concurrent ExecutorService Executors TimeUnit]))
 
 (defprotocol EventSource
-  (listen [_ listen-ops f]))
+  (listen ^java.io.Closeable [_ listen-ops f]))
 
 (defprotocol EventSink
   (send [_ event]))
@@ -23,24 +23,25 @@
 (defrecord EventBus [!listeners]
   EventSource
   (listen [this listen-ops f]
-    (let [{:crux/keys [event-type]} listen-ops]
-      (swap! !listeners
-             conj {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
-                   :f f
-                   :crux/event-type event-type})
-      nil))
+    (let [{:crux/keys [event-type]} listen-ops
+          listener {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
+                    :f f
+                    :crux/event-type event-type}]
+      (swap! !listeners update event-type (fnil conj #{}) listener)
+      (reify Closeable
+        (close [_]
+          (swap! !listeners update event-type disj listener)))))
 
   EventSink
   (send [_ {:crux/keys [event-type] :as event}]
     (s/assert ::event event)
 
-    (doseq [{:keys [^ExecutorService executor f] :as listener} @!listeners]
-      (when (= event-type (:crux/event-type listener))
-        (.submit executor ^Runnable #(f event)))))
+    (doseq [{:keys [^ExecutorService executor f] :as listener} (get @!listeners event-type)]
+      (.submit executor ^Runnable #(f event))))
 
   Closeable
   (close [_]
-    (doseq [{:keys [^ExecutorService executor]} @!listeners]
+    (doseq [{:keys [^ExecutorService executor]} (->> @!listeners (mapcat val))]
       (try
         (.shutdown executor)
         (or (.awaitTermination executor 5 TimeUnit/SECONDS)
@@ -51,4 +52,4 @@
 
 (def bus
   {:start-fn (fn [deps args]
-               (->EventBus (atom #{})))})
+               (->EventBus (atom {})))})
