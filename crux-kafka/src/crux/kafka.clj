@@ -223,7 +223,7 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{::n/keys [kv-store object-store], :keys [!error]}
+(defn- index-doc-log [{::n/keys [kv-store indexer], :keys [!error]}
                       {:keys [::doc-topic ::group-id kafka-config]}]
   (let [tp-offsets (read-doc-offsets kv-store)]
     (try
@@ -233,7 +233,7 @@
         (loop [tp-offsets tp-offsets]
           (let [tp-offsets (->> (consumer-seqs consumer (Duration/ofSeconds 1))
                                 (reduce (fn [tp-offsets doc-records]
-                                          (db/put-objects object-store (->> doc-records (into {} (map doc-record->id+doc))))
+                                          (db/index-docs indexer (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
                                             (->> (store-doc-offsets kv-store))))
                                         tp-offsets))]
@@ -313,7 +313,7 @@
                  (->KafkaDocumentStore producer doc-topic
                                        kv-store object-store
                                        indexing-thread !indexing-error)))
-   :deps [::producer ::admin-client ::n/kv-store ::n/object-store]
+   :deps [::producer ::admin-client ::n/kv-store ::n/object-store ::n/indexer]
    :args default-options})
 
 (def topology

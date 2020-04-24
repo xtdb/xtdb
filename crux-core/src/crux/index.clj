@@ -317,7 +317,7 @@
 
 (defn evicted-doc?
   [{:crux.db/keys [id evicted?] :as doc}]
-  (or (= :crux.db/evicted id) evicted?))
+  (boolean (or (= :crux.db/evicted id) evicted?)))
 
 (defn keep-non-evicted-doc [doc]
   (when-not (evicted-doc? doc)
