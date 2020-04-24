@@ -34,9 +34,6 @@
   (new-doc-attribute-entity-value-entity-index [this a entity-as-of-idx])
   (new-doc-attribute-entity-value-value-index [this a e-doc-idx])
 
-  ;; optimisation, not strictly necessary, can be implemented in other ways
-  (or-known-triple-fast-path [this eid a v valid-time transact-time])
-
   ;; bitemporal index
   (new-entity-as-of-index [this valid-time transact-time])
 

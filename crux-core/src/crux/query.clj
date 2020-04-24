@@ -604,21 +604,12 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [index-store {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
-  (let [entity (get (first args) e)]
-    (when (db/or-known-triple-fast-path index-store entity a v valid-time transact-time)
-      [])))
-
-(defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
-  (->> (for [[branch-index {:keys [where
-                                   single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
-             :when single-e-var-triple?
-             :let [[[_ clause]] where]]
-         [branch-index
-          (-> clause
-              (update :a c/->id-buffer)
-              (update :v c/->value-buffer))])
-       (into {})))
+(defn- or-single-e-var-triple-fast-path [index-store {:keys [object-store entity-as-of-idx] :as db} {:keys [e a v] :as clause} args]
+  (let [eid (get (first args) e)]
+    (when-let [^EntityTx entity-tx (idx/entity-at entity-as-of-idx eid)]
+      (let [doc (db/get-single-object object-store index-store (.content-hash entity-tx))]
+        (when (contains? (set (idx/vectorize-value (get doc a))) v)
+          [])))))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
@@ -635,9 +626,7 @@
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               has-free-vars? (boolean (seq free-vars))
-              {:keys [rule-name]} (meta clause)
-              branch-index->single-e-var-triple-fast-path-clause-with-buffers
-              (build-branch-index->single-e-var-triple-fast-path-clause-with-buffers or-branches)]]
+              {:keys [rule-name]} (meta clause)]]
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
@@ -658,11 +647,12 @@
                                       cached-result
 
                                       single-e-var-triple?
-                                      (or-single-e-var-triple-fast-path
-                                       index-store
-                                       db
-                                       (get branch-index->single-e-var-triple-fast-path-clause-with-buffers branch-index)
-                                       args)
+                                      (let [[[_ clause]] where]
+                                        (or-single-e-var-triple-fast-path
+                                         index-store
+                                         db
+                                         clause
+                                         args))
 
                                       :else
                                       (binding [*recursion-table* (if cache-key

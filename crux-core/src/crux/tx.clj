@@ -396,9 +396,6 @@
   (new-doc-attribute-entity-value-value-index [this a e-doc-idx]
     (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx))
 
-  (or-known-triple-fast-path [this eid a v valid-time transact-time]
-    (idx/or-known-triple-fast-path snapshot eid a v valid-time transact-time))
-
   (new-entity-as-of-index [this valid-time transact-time]
     (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time))
 

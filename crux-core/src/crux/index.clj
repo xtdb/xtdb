@@ -709,17 +709,6 @@
 (defn new-or-virtual-index [indexes]
   (->OrVirtualIndex indexes (object-array (count indexes))))
 
-(defn or-known-triple-fast-path [snapshot e a v valid-time transact-time]
-  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] valid-time transact-time)]
-    (let [version-k (c/encode-aecv-key-to
-                     nil
-                     a
-                     (c/->id-buffer (.eid entity-tx))
-                     (c/->id-buffer (.content-hash entity-tx))
-                     v)]
-      (when (kv/get-value snapshot version-k)
-        entity-tx))))
-
 (defn- new-unary-join-iterator-state [idx [value results]]
   (let [result-name (:name idx)]
     (UnaryJoinIteratorState.
