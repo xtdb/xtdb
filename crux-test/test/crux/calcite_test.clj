@@ -3,7 +3,7 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
-            [crux.fixtures.calcite :as cf :refer [query explain]]
+            [crux.fixtures.calcite :as cf :refer [query prepared-query explain]]
             [crux.fixtures.kv :as kvf]
             [crux.fixtures.standalone :as fs]))
 
@@ -227,6 +227,11 @@
                   "    CruxFilter(condition=[=($1, 'Ivan')])\n"
                   "      CruxTableScan(table=[[crux, PERSON]])\n")
              (explain q)))))
+
+(t/deftest test-prepare-statement
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name" Malcolm" :homeworld "Mars" :age 25 :alive false}])
+  (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE NAME = ?" [1 "Ivan"]))))
 
 (t/deftest test-sort
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}

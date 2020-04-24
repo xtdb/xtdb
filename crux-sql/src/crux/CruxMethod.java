@@ -4,9 +4,10 @@ import org.apache.calcite.linq4j.tree.Types;
 import com.google.common.collect.ImmutableMap;
 import java.lang.reflect.Method;
 import java.util.List;
+import org.apache.calcite.DataContext;
 
 public enum CruxMethod {
-    CRUX_QUERYABLE_FIND(CruxTable.CruxQueryable.class, "find", String.class);
+    CRUX_QUERYABLE_FIND(CruxTable.CruxQueryable.class, "find", String.class, DataContext.class);
 
     public final Method method;
     public static final ImmutableMap<Method, CruxMethod> MAP;

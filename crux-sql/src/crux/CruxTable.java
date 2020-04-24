@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.List;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import org.apache.calcite.DataContext;
 
 public class CruxTable extends AbstractQueryableTable implements TranslatableTable {
     ICruxAPI node;
@@ -42,8 +43,8 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
     }
 
     @SuppressWarnings("unchecked")
-    public Enumerable<Object> find(String schema) {
-        return (Enumerable<Object>) scanFn.invoke(node, schema);
+    public Enumerable<Object> find(String schema, DataContext context) {
+        return (Enumerable<Object>) scanFn.invoke(node, schema, context);
     }
 
     @Override public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema, String tableName) {
@@ -69,8 +70,8 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
             return (CruxTable) table;
         }
 
-        public Enumerable<Object> find(String schema) {
-            return getTable().find(schema);
+        public Enumerable<Object> find(String schema, DataContext context) {
+            return getTable().find(schema, context);
         }
     }
 }

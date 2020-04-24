@@ -20,6 +20,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.Pair;
+import org.apache.calcite.DataContext;
 
 // import java.util.AbstractList;
 import java.util.List;
@@ -61,7 +62,7 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
 
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, schema));
+                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, schema, DataContext.ROOT));
 
         // if (CalciteSystemProperty.DEBUG.value()) {
         //     System.out.println("Mongo: " + opList);
