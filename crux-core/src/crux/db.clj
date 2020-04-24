@@ -25,15 +25,8 @@
 
 ;; tag::IndexStore[]
 (defprotocol IndexStore
-  ;; AVE
-  (new-doc-attribute-value-entity-value-index [this a])
-  ;; this way of passing other indexes into each other could be hidden
-  ;; by having a function that creates both.
-  (new-doc-attribute-value-entity-entity-index [this a v-doc-idx entity-as-of-idx])
-  ;; AEV
-  (new-doc-attribute-entity-value-entity-index [this a entity-as-of-idx])
-  (new-doc-attribute-entity-value-value-index [this a e-doc-idx])
-
+  (new-doc-attribute-value-entity-index-pair [this a entity-as-of-idx])
+  (new-doc-attribute-entity-value-index-pair [this a entity-as-of-idx])
   ;; bitemporal index
   (new-entity-as-of-index [this valid-time transact-time])
 

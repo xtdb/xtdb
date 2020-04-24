@@ -279,16 +279,16 @@
         v-range-constraints (get var->range-constraints v)
         e-range-constraints (get var->range-constraints e)]
     (if (= (:v names) (first order))
-      (let [v-doc-idx (db/new-doc-attribute-value-entity-value-index index-store a)
-            e-idx (-> (db/new-doc-attribute-value-entity-entity-index index-store a v-doc-idx entity-as-of-idx)
-                      (idx/wrap-with-range-constraints e-range-constraints))]
+      (let [[v-idx e-idx] (db/new-doc-attribute-value-entity-index-pair index-store a entity-as-of-idx)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
-        (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
-      (let [e-doc-idx (db/new-doc-attribute-entity-value-entity-index index-store a entity-as-of-idx)
-            v-idx (-> (db/new-doc-attribute-entity-value-value-index index-store a e-doc-idx)
-                      (idx/wrap-with-range-constraints v-range-constraints))]
+        (idx/update-binary-join-order! binary-idx
+                                       (idx/wrap-with-range-constraints v-idx v-range-constraints)
+                                       (idx/wrap-with-range-constraints e-idx e-range-constraints)))
+      (let [[e-idx v-idx] (db/new-doc-attribute-entity-value-index-pair index-store a entity-as-of-idx)]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
-        (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints e-doc-idx e-range-constraints) v-idx)))))
+        (idx/update-binary-join-order! binary-idx
+                                       (idx/wrap-with-range-constraints e-idx e-range-constraints)
+                                       (idx/wrap-with-range-constraints v-idx v-range-constraints))))))
 
 (defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
   (let [var->frequency (->> (concat (map :e triple-clauses)
