@@ -435,12 +435,16 @@
       full-results (assoc :full-results? true))))
 
 (defn build-query-q
-  [resolved-query default-limit]
+  [resolved-query {:strs [offset page]} default-limit]
   (let [limit (:limit resolved-query)
         updated-limit (if (and limit (<= limit default-limit))
                         limit
-                        default-limit)]
-    (assoc resolved-query :limit updated-limit)))
+                        default-limit)
+        page (if page (dec (Integer/parseInt page)) 0)
+        page-offset (if offset
+                      (Integer/parseInt offset)
+                      (* updated-limit page))]
+    (assoc resolved-query :limit updated-limit :offset page-offset)))
 
 (defn link-top-level-entities
   [db path results]
@@ -540,7 +544,7 @@
       (try
         (let [query (cond-> (or (some-> (get query-params "q")
                                         (edn/read-string)
-                                        (build-query-q query-result-page-limit))
+                                        (build-query-q query-params query-result-page-limit))
                                 (build-query query-params query-result-page-limit))
                       html? (dissoc :full-results?))
               db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
