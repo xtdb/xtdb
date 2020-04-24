@@ -10,6 +10,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.instant :as instant]
+            [clojure.data :as data]
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.tx :as tx]
@@ -384,6 +385,27 @@
                  :else links)))]
     (recur-on-result result {})))
 
+
+(defn get-entity-history [node eid]
+  (->> (api/history node eid)
+       (reverse)
+       (mapv (fn [val]
+               {:valid-time (:crux.db/valid-time val)
+                :tx-time (:crux.tx/tx-time val)
+                :document (api/document node (:crux.db/content-hash val))}))))
+
+(defn get-history-diffs [history]
+  (map-indexed
+   (fn [idx {:keys [document] :as val}]
+     (if (> idx 0)
+       (let [[in-old-map in-new-map _] (data/diff
+                                        (get-in history [(- idx 1) :document])
+                                        document)]
+         (assoc val :diff {:plus in-new-map
+                           :minus in-old-map}))
+       val))
+   history))
+
 (defn- entity->html [links edn]
   (if-let [href (get links edn)]
     [:a {:href href} (str edn)]
@@ -398,21 +420,44 @@
       (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
       :else (str edn))))
 
+(defn- entity-history->html [edn]
+  (mapcat
+   (fn [{:keys [valid-time tx-time document diff] :as history-val}]
+     [[:p [:b "Valid-time: "] (str valid-time)]
+      [:p [:b "Transaction-time: "] (str valid-time)]
+      (if diff
+        (into [:div#diff [:b "Diff:"]]
+              (cond-> []
+                (:plus diff) (conj [:div [:b "+ "] (entity->html [] (:plus diff))])
+                (:minus diff) (conj [:div [:b "- "] (entity->html [] (:minus diff))])
+                (not (or (:plus diff) (:minus diff))) (conj [:b "Nil"])))
+        [:div#document [:b "Document:"] (entity->html [] document)])
+      [:br]])
+   edn))
+
 (defn- entity-state [^ICruxAPI crux-node options request]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
     (let [eid (c/id-edn-reader encoded-eid)
-          query-params (:query-params request)
-          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
-                                                            (instant/read-instant-date))
-                                        :transact-time (some-> (get query-params "transaction-time")
-                                                               (instant/read-instant-date))})
-          entity-map (api/entity db eid)]
-      {:status (if (some? entity-map) 200 404)
-       :body (when entity-map
-               (if (= (get-in request [:muuntaja/response :format]) "text/html")
-                 (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                   (html5 (entity->html linked-entities entity-map)))
-                 entity-map))})))
+          query-params (:query-params request)]
+      (if (= "true" (get query-params "history"))
+        (let [history (cond-> (get-entity-history crux-node eid)
+                        (= "true" (get query-params "history-diffs")) (get-history-diffs))]
+          {:status (if (some? history) 200 404)
+           :body (when history
+                   (if (= (get-in request [:muuntaja/response :format]) "text/html")
+                     (html5 (entity-history->html history))
+                     history))})
+        (let [db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                                (instant/read-instant-date))
+                                            :transact-time (some-> (get query-params "transaction-time")
+                                                                   (instant/read-instant-date))})
+              entity-map (api/entity db eid)]
+          {:status (if (some? entity-map) 200 404)
+           :body (when entity-map
+                   (if (= (get-in request [:muuntaja/response :format]) "text/html")
+                     (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
+                       (html5 (entity->html linked-entities entity-map)))
+                     entity-map))})))))
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
