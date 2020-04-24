@@ -417,19 +417,18 @@
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
 
-(defn- build-query [{:strs [find where args order-by limit offset full-results page]} default-limit]
-  (let [page (if page (dec (Integer/parseInt page)) 0)
-        limit (when limit (Integer/parseInt limit))
+(defn- build-query [{:strs [find where args order-by limit offset full-results]} default-limit]
+  (let [limit (when limit (Integer/parseInt limit))
         page-limit (if (and limit (<= limit default-limit))
                      limit
                      default-limit)
-        page-offset (if offset
-                      (Integer/parseInt offset)
-                      (* page-limit page))]
+        new-offset (if offset
+                     (Integer/parseInt offset)
+                     0)]
     (cond-> {:find (c/read-edn-string-with-readers find)
              :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
              :limit page-limit
-             :offset page-offset}
+             :offset new-offset}
       args (assoc :args (c/read-edn-string-with-readers args))
       order-by (assoc :order-by (->> order-by vectorize-param (mapv c/read-edn-string-with-readers)))
       full-results (assoc :full-results? true))))
@@ -439,12 +438,10 @@
   (let [limit (:limit resolved-query)
         updated-limit (if (and limit (<= limit default-limit))
                         limit
-                        default-limit)
-        page (if page (dec (Integer/parseInt page)) 0)
-        page-offset (if offset
-                      (Integer/parseInt offset)
-                      (* updated-limit page))]
-    (assoc resolved-query :limit updated-limit :offset page-offset)))
+                        default-limit)]
+    (cond-> (assoc resolved-query :limit updated-limit)
+      (not (:offset resolved-query)) (assoc :offset 0)
+      offset (assoc :offset (Integer/parseInt offset)))))
 
 (defn link-top-level-entities
   [db path results]
@@ -457,28 +454,18 @@
                 [id (str path "/" id query-params)])))
        (into {})))
 
-(defn resolve-prev-next-page
-  [query-params next-page?]
-  (let [parsed-page (if-let [page (get query-params "page")]
-                      (Integer/parseInt page)
-                      1)
-        ;; Rebuild query-string from query-params This is not using directly
-        ;; query-string because there's no safe way to remove the 'page' query
-        ;; param from the query-string without incurring into edge case
-        ;; scenarions i.e. the user chooses to name a clause in the find param
-        ;; as 'page'
-        url (str "/_query?"
+(defn resolve-prev-next-offset
+  [query-params prev-offset next-offset]
+  (let [url (str "/_query?"
                  (subs
-                  (->> (dissoc query-params "page")
+                  (->> (dissoc query-params "offset")
                        (reduce-kv (fn [coll k v]
                                     (if (vector? v)
                                       (apply str coll (mapv #(str "&" k "=" %) v))
                                       (str coll "&" k "=" v))) ""))
                   1))
-        prev-url (when (>= parsed-page 2)
-                   (str url "&page=" (dec parsed-page)))
-        next-url (when next-page?
-                   (str url "&page=" (inc parsed-page)))]
+        prev-url (when prev-offset (str url "&offset=" prev-offset))
+        next-url (when next-offset (str url "&offset=" next-offset))]
     {:prev-url prev-url
      :next-url next-url}))
 
@@ -555,8 +542,13 @@
           {:status 200
            :body (if html?
                    (let [links (link-top-level-entities db  "/_entity" results)
-                         next-page? (= (:limit query) (count results))
-                         prev-next-page (resolve-prev-next-page query-params next-page?)]
+                         {:keys [limit offset]} query
+                         prev-offset (when-not (zero? offset)
+                                       (let [prev (- offset limit)]
+                                         (max 0 prev)))
+                         next-offset (when (= limit (count results))
+                                       (+ offset limit))
+                         prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
                      (html5 (query->html links query results prev-next-page)))
                    results)})
         (catch Exception e
