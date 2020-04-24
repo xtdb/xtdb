@@ -406,9 +406,6 @@
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
-  (tx-failed? [this tx-id]
-    (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))
-
   (open-nested-index-store [this]
     (->KvIndexStore (lru/new-cached-snapshot snapshot false))))
 
@@ -519,6 +516,10 @@
 
   (latest-completed-tx [this]
     (db/read-index-meta this ::latest-completed-tx))
+
+  (tx-failed? [this tx-id]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
     (->KvIndexStore (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))

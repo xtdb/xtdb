@@ -20,6 +20,7 @@
   (store-index-meta [this k v])
   (read-index-meta [this k])
   (latest-completed-tx [this])
+  (tx-failed? [this tx-id])
   (open-index-store ^java.io.Closeable [this]))
 ;; end::Indexer[]
 
@@ -28,11 +29,8 @@
   (new-doc-attribute-value-entity-index-pair [this a entity-as-of-idx])
   (new-doc-attribute-entity-value-index-pair [this a entity-as-of-idx])
   (new-entity-as-of-index [this valid-time transact-time])
-
   (entity-valid-time-history [this eid start-valid-time transact-time ascending?])
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
-
-  (tx-failed? [this tx-id])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 
