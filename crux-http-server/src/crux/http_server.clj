@@ -488,24 +488,20 @@
           (for [header headers]
             [:th header])]]
         [:tbody
-         (for [row (map #(zipmap headers %) results)]
+         (for [row results]
            [:tr
-            (for [header headers]
-              (let [cell-value (get row header)]
-                [:td
-                 (if-let [href (get links cell-value)]
-                   [:a {:href href}
-                    (str cell-value)]
-                   (str cell-value))]))])]]]
+            (for [[header cell-value] (map vector headers row)]
+              [:td
+               (if-let [href (get links cell-value)]
+                 [:a {:href href} (str cell-value)]
+                 (str cell-value))])])]]]
       [:div "No results found"])
     [:div
      (if prev-url
-       [:a {:href prev-url}
-        "Prev"]
+       [:a {:href prev-url} "Prev"]
        [:span "Prev"])
      (if next-url
-       [:a {:href next-url}
-        "Next"]
+       [:a {:href next-url} "Next"]
        [:span "Next"])]]])
 
 (defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
@@ -527,6 +523,7 @@
                         "submit me here"]])}
         {:status 400
          :body "No query provided."})
+
       :else
       (try
         (let [query (cond-> (or (some-> (get query-params "q")
@@ -544,8 +541,7 @@
                    (let [links (link-top-level-entities db  "/_entity" results)
                          {:keys [limit offset]} query
                          prev-offset (when-not (zero? offset)
-                                       (let [prev (- offset limit)]
-                                         (max 0 prev)))
+                                       (max 0 (- offset limit)))
                          next-offset (when (= limit (count results))
                                        (+ offset limit))
                          prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
