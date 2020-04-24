@@ -398,13 +398,11 @@
   (new-entity-as-of-index [this valid-time transact-time]
     (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time))
 
-  (entity-history-seq-ascending [this eid valid-time transact-time]
-    (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time))
-  (entity-history-seq-descending [this eid valid-time transact-time]
-    (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time))
+  (entity-valid-time-history [this eid start-valid-time transact-time ascending?]
+    (if ascending?
+      (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid start-valid-time transact-time)
+      (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid start-valid-time transact-time)))
 
-  (entity-history [this eid]
-    (idx/entity-history snapshot eid))
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 

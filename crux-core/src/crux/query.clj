@@ -1253,7 +1253,7 @@
   (openHistoryAscending [this eid]
     (let [index-store (open-index-store this)]
       (cio/->cursor #(cio/try-close index-store)
-                    (for [^EntityTx entity-tx (db/entity-history-seq-ascending index-store eid valid-time transact-time)]
+                    (for [^EntityTx entity-tx (db/entity-valid-time-history index-store eid valid-time transact-time true)]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
 
@@ -1267,7 +1267,7 @@
   (openHistoryDescending [this eid]
     (let [index-store (open-index-store this)]
       (cio/->cursor #(cio/try-close index-store)
-                    (for [^EntityTx entity-tx (db/entity-history-seq-descending index-store eid valid-time transact-time)]
+                    (for [^EntityTx entity-tx (db/entity-valid-time-history index-store eid valid-time transact-time false)]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
 

@@ -81,10 +81,7 @@
              (into {} (remove (comp idx/evicted-doc? val)))))))
 
   (history [this eid]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (with-open [index-store (db/open-index-store indexer)]
-        (mapv c/entity-tx->edn (db/entity-history index-store eid)))))
+    (reverse (.historyRange this eid nil nil nil nil)))
 
   (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (cio/with-read-lock lock

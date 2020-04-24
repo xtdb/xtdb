@@ -27,23 +27,12 @@
 (defprotocol IndexStore
   (new-doc-attribute-value-entity-index-pair [this a entity-as-of-idx])
   (new-doc-attribute-entity-value-index-pair [this a entity-as-of-idx])
-  ;; bitemporal index
   (new-entity-as-of-index [this valid-time transact-time])
 
-  ;; history seqs, could be redone as lower-level indexes
-
-  ;; valid time history
-  (entity-history-seq-ascending [this eid valid-time transact-time])
-  (entity-history-seq-descending [this eid valid-time transact-time])
-
-  ;; full history
-  (entity-history [this eid])
+  (entity-valid-time-history [this eid start-valid-time transact-time ascending?])
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
 
-  ;; for hasTxCommitted
   (tx-failed? [this tx-id])
-
-  ;; to allow nested scoping of resources, maybe not needed
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 
