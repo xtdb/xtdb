@@ -21,6 +21,7 @@
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            java.io.Closeable
            java.util.Date
+           java.util.function.Consumer
            [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
 
@@ -161,6 +162,17 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (tx/await-tx indexer tx-consumer submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
+
+  (listen [this {:crux/keys [event-type] :as event-opts} consumer]
+    (case event-type
+      :crux/indexed-tx
+      (bus/listen bus
+                  (assoc event-opts :crux/event-type ::tx/indexed-tx)
+                  (fn [{:keys [::tx/submitted-tx] :as ev}]
+                    (.accept ^Consumer consumer
+                             (merge {:crux/event-type :crux/indexed-tx}
+                                    (select-keys ev [:committed?])
+                                    (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])))))))
 
   (latestCompletedTx [this]
     (db/latest-completed-tx indexer))

@@ -260,6 +260,9 @@
     (api-request-sync (cond-> (str url "/await-tx?tx-id=" (:crux.tx/tx-id tx))
                         timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
 
+  (listen [_ opts f]
+    (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))
+
   (latestCompletedTx [_]
     (api-request-sync (str url "/latest-completed-tx") nil {:method :get}))
 

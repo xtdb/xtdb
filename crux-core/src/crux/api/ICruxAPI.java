@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.time.Duration;
 import java.util.Set;
+import java.util.function.Consumer;
 import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
 
 /**
  *  Provides API access to Crux.
@@ -171,6 +173,11 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
 
+    @SuppressWarnings("unchecked")
+    public static final Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
+        .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/tx-indexed"));
+
+    public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
 
     /**
        @return the latest transaction to have been indexed by this node.

@@ -392,3 +392,27 @@
   (api/sync *api*)
 
   (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))
+
+(t/deftest test-listen-for-indexed-txs
+  (when-not (contains? (set t/*testing-contexts*) (str :remote))
+    (let [!events (atom [])]
+      (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+
+      (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:crux/event-type :crux/indexed-tx}
+                                                      (fn [evt]
+                                                        (swap! !events conj evt)))]
+
+                              (let [bar-tx (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :bar}]])
+                                    baz-tx (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :baz}]])]
+
+                                (Thread/sleep 100)
+
+                                [bar-tx baz-tx]))]
+
+        (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan}]])
+
+        (Thread/sleep 100)
+
+        (t/is (= [(merge {:crux/event-type :crux/indexed-tx, :committed? true} bar-tx)
+                  (merge {:crux/event-type :crux/indexed-tx, :committed? true} baz-tx)]
+                 @!events))))))

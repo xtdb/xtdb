@@ -8,7 +8,8 @@
             ICruxAsyncIngestAPI ICruxDatasource ICursor]
            java.io.Closeable
            java.util.Date
-           java.time.Duration))
+           java.time.Duration
+           java.util.function.Consumer))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 (s/def :crux.db/evicted? boolean?)
@@ -167,6 +168,9 @@
   supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
   node.")
 
+  (listen ^java.lang.AutoCloseable [node event-opts f]
+    "TODO doc")
+
   (latest-completed-tx [node]
     "Returns the latest transaction to have been indexed by this node.")
 
@@ -183,8 +187,6 @@
   tx-ops datalog style transactions.
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
-
-  ;; returning an iterator
 
   (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
@@ -237,6 +239,11 @@
   (await-tx-time
     ([this tx-time] (await-tx-time this tx-time nil))
     ([this tx-time timeout] (.awaitTxTime this tx-time timeout)))
+
+  (listen [this event-opts f]
+    (.listen this event-opts (reify Consumer
+                               (accept [_ evt]
+                                 (f evt)))))
 
   (latest-completed-tx [node] (.latestCompletedTx node))
   (latest-submitted-tx [node] (.latestSubmittedTx node))
