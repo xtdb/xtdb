@@ -536,24 +536,24 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn- bound-result-for-var ^crux.query.BoundResult [snapshot object-store var->bindings join-keys join-results var]
+(defn- bound-result-for-var ^crux.query.BoundResult [snapshot var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
       (BoundResult. var (get join-results (.result-name binding)) nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (let [value-buffer (get join-keys (.result-index binding))
-              content-hash (.content-hash entity-tx)
-              doc (db/get-single-object object-store snapshot content-hash)
-              values (idx/vectorize-value (get doc (.attr binding)))
-              value (if (or (nil? value-buffer)
-                            (= (count values) 1))
-                      (first values)
-                      (loop [[x & xs] values]
-                        (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
-                          x
-                          (when xs
-                            (recur xs)))))]
-          (BoundResult. var value doc))))))
+        (let [value (-> (if-let [value-buffer (get join-keys (.result-index binding))]
+                          (kv/get-value snapshot (c/encode-cav-key-to (.get value-buffer-tl)
+                                                                      (c/->id-buffer (.content-hash entity-tx))
+                                                                      (c/->id-buffer (.attr binding))
+                                                                      value-buffer))
+                          (with-open [i (kv/new-iterator snapshot)]
+                            (kv/seek i (c/encode-cav-key-to (.get value-buffer-tl)
+                                                            (c/->id-buffer (.content-hash entity-tx))
+                                                            (c/->id-buffer (.attr binding))))
+                            (kv/value i)))
+                        idx/<-nippy-buffer
+                        second)]
+          (BoundResult. var value nil))))))
 
 (declare build-sub-query)
 
@@ -582,10 +582,10 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn pred-constraint [snapshot db idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results arg))
+                                      (.value (bound-result-for-var snapshot var->bindings join-keys join-results arg))
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
@@ -642,10 +642,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn or-constraint [snapshot db idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var)))
+                                (.value (bound-result-for-var snapshot var->bindings join-keys join-results var)))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -675,7 +675,7 @@
                                             (if has-free-vars?
                                               (vec (for [[join-keys join-results] idx-seq]
                                                      (vec (for [var free-vars-in-join-order]
-                                                            (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))))))
+                                                            (.value (bound-result-for-var snapshot var->bindings join-keys join-results var))))))
                                               [])))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -731,7 +731,7 @@
            (with-open [snapshot (lru/new-cached-snapshot snapshot false)]
              (let [args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var)))
+                                  (.value (bound-result-for-var snapshot var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
@@ -1167,7 +1167,7 @@
 
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var snapshot var->bindings join-keys join-results var))]]
                   (if full-results?
                     (build-full-results db snapshot bound-result-tuple)
                     (mapv #(.value ^BoundResult %) bound-result-tuple)))
