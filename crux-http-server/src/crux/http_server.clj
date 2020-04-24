@@ -2,7 +2,8 @@
   "HTTP API for Crux.
 
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
@@ -21,7 +22,7 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
-            [hiccup2.core :refer [html]]
+            [hiccup.page :refer [html5]]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
@@ -204,18 +205,6 @@
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
-(defn- entity-state [^ICruxAPI crux-node request]
-  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
-    (let [eid (c/id-edn-reader encoded-eid)
-          query-params (:query-params request)
-          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
-                                                            (instant/read-instant-date))
-                                        :transact-time (some-> (get query-params "transaction-time")
-                                                               (instant/read-instant-date))})
-          entity-map (api/entity db eid)]
-      {:status (if (some? entity-map) 200 404)
-       :body entity-map})))
-
 (defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
         db (db-for-request crux-node body)
@@ -380,13 +369,196 @@
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       nil)))
 
-(defn- data-browser-handler [crux-node request]
+(defn link-all-entities
+  [db path result]
+  (letfn [(recur-on-result [result links]
+             (if (and (c/valid-id? result)
+                      (api/entity db result))
+               (let [query-params (format "?valid-time=%s&transaction-time=%s"
+                                          (.toInstant ^Date (api/valid-time db))
+                                          (.toInstant ^Date (api/transaction-time db)))]
+                 (assoc links result (str path "/" result query-params)))
+               (cond
+                 (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
+                 (sequential? result) (apply merge (map #(recur-on-result % links) result))
+                 :else links)))]
+    (recur-on-result result {})))
+
+(defn- entity->html [links edn]
+  (if-let [href (get links edn)]
+    [:a {:href href} (str edn)]
+    (cond
+      (map? edn) (into [:dl]
+                       (mapcat
+                        (fn [[k v]]
+                          [[:dt (entity->html links k)]
+                           [:dd (entity->html links v)]])
+                        edn))
+      (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html links v)]) edn))
+      (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
+      :else (str edn))))
+
+(defn- entity-state [^ICruxAPI crux-node options request]
+  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
+    (let [eid (c/id-edn-reader encoded-eid)
+          query-params (:query-params request)
+          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                            (instant/read-instant-date))
+                                        :transact-time (some-> (get query-params "transaction-time")
+                                                               (instant/read-instant-date))})
+          entity-map (api/entity db eid)]
+      {:status (if (some? entity-map) 200 404)
+       :body (when entity-map
+               (if (= (get-in request [:muuntaja/response :format]) "text/html")
+                 (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
+                   (html5 (entity->html linked-entities entity-map)))
+                 entity-map))})))
+
+(defn- vectorize-param [param]
+  (if (vector? param) param [param]))
+
+(defn- build-query [{:strs [find where args order-by limit offset full-results]} default-limit]
+  (let [limit (when limit (Integer/parseInt limit))
+        page-limit (if (and limit (<= limit default-limit))
+                     limit
+                     default-limit)
+        new-offset (if offset
+                     (Integer/parseInt offset)
+                     0)]
+    (cond-> {:find (c/read-edn-string-with-readers find)
+             :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
+             :limit page-limit
+             :offset new-offset}
+      args (assoc :args (c/read-edn-string-with-readers args))
+      order-by (assoc :order-by (->> order-by vectorize-param (mapv c/read-edn-string-with-readers)))
+      full-results (assoc :full-results? true))))
+
+(defn build-query-q
+  [resolved-query {:strs [offset page]} default-limit]
+  (let [limit (:limit resolved-query)
+        updated-limit (if (and limit (<= limit default-limit))
+                        limit
+                        default-limit)]
+    (cond-> (assoc resolved-query :limit updated-limit)
+      (not (:offset resolved-query)) (assoc :offset 0)
+      offset (assoc :offset (Integer/parseInt offset)))))
+
+(defn link-top-level-entities
+  [db path results]
+  (->> (apply concat results)
+       (filter (every-pred c/valid-id? #(api/entity db %)))
+       (map (fn [id]
+              (let [query-params (format "?valid-time=%s&transaction-time=%s"
+                                         (.toInstant ^Date (api/valid-time db))
+                                         (.toInstant ^Date (api/transaction-time db)))]
+                [id (str path "/" id query-params)])))
+       (into {})))
+
+(defn resolve-prev-next-offset
+  [query-params prev-offset next-offset]
+  (let [url (str "/_query?"
+                 (subs
+                  (->> (dissoc query-params "offset")
+                       (reduce-kv (fn [coll k v]
+                                    (if (vector? v)
+                                      (apply str coll (mapv #(str "&" k "=" %) v))
+                                      (str coll "&" k "=" v))) ""))
+                  1))
+        prev-url (when prev-offset (str url "&offset=" prev-offset))
+        next-url (when next-offset (str url "&offset=" next-offset))]
+    {:prev-url prev-url
+     :next-url next-url}))
+
+(defn query->html [links {headers :find} results {:keys [prev-url next-url]}]
+  [:html
+   {:lang "en"}
+   [:head
+    [:meta {:charset "utf-8"}]
+    [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
+    [:meta
+     {:name "viewport"
+      :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
+    [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]]
+   [:body
+    (if (seq results)
+      [:div
+       [:table
+        [:thead
+         [:tr
+          (for [header headers]
+            [:th header])]]
+        [:tbody
+         (for [row results]
+           [:tr
+            (for [[header cell-value] (map vector headers row)]
+              [:td
+               (if-let [href (get links cell-value)]
+                 [:a {:href href} (str cell-value)]
+                 (str cell-value))])])]]]
+      [:div "No results found"])
+    [:div
+     (if prev-url
+       [:a {:href prev-url} "Prev"]
+       [:span "Prev"])
+     (if next-url
+       [:a {:href next-url} "Next"]
+       [:span "Next"])]]])
+
+(defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
+  (let [query-params (:query-params request)
+        html? (= (get-in request [:muuntaja/response :format]) "text/html")]
+    (cond
+      (empty? query-params)
+      (if html?
+        {:status 200
+         :body (html5 [:form
+                       {:action "/_query"}
+                       [:textarea
+                        {:name "q"
+                         :cols 40
+                         :rows 10}]
+                       [:br]
+                       [:button
+                        {:type "submit"}
+                        "submit me here"]])}
+        {:status 400
+         :body "No query provided."})
+
+      :else
+      (try
+        (let [query (cond-> (or (some-> (get query-params "q")
+                                        (edn/read-string)
+                                        (build-query-q query-params query-result-page-limit))
+                                (build-query query-params query-result-page-limit))
+                      html? (dissoc :full-results?))
+              db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
+                                                                (instant/read-instant-date))
+                                            :transact-time (some-> (get query-params "transaction-time")
+                                                                   (instant/read-instant-date))})
+              results (api/q db query)]
+          {:status 200
+           :body (if html?
+                   (let [links (link-top-level-entities db  "/_entity" results)
+                         {:keys [limit offset]} query
+                         prev-offset (when-not (zero? offset)
+                                       (max 0 (- offset limit)))
+                         next-offset (when (= limit (count results))
+                                       (+ offset limit))
+                         prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
+                     (html5 (query->html links query results prev-next-page)))
+                   results)})
+        (catch Exception e
+          {:status 400
+           :body (.getMessage e)})))))
+
+(defn- data-browser-handler [crux-node options request]
   (condp check-path request
     [#"^/_entity/.+$" [:get]]
-    (entity-state crux-node request)
+    (entity-state crux-node options request)
 
+    [#"^/_query" [:get]]
+    (data-browser-query crux-node options request)
     nil))
-
 
 (def ^:const default-server-port 3000)
 
@@ -416,36 +588,14 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
-(defn- edn->html [edn]
-  (cond
-    (map? edn) (into [:dl]
-                     (mapcat
-                      (fn [[k v]]
-                        [[:dt (edn->html k)]
-                         [:dd (edn->html v)]])
-                      edn))
-    (sequential? edn) (into [:ol] (map (fn [v] [:li (edn->html v)]) edn))
-    (set? edn) (into [:ul] (map (fn [v] [:li (edn->html v)]) edn))
-    :else (str edn)))
-
-(defn- entity->html [edn]
-  (str
-   (html
-    (edn->html edn))))
-
 (defn- html-encoder [_]
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data charset]
-      (.getBytes
-       ^String (entity->html data)
-       ^String charset))
+      (throw (UnsupportedOperationException.)))
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ data charset]
-      (fn [^OutputStream output-stream]
-        (.write output-stream (.getBytes
-                               ^String (entity->html data)
-                               ^String charset))))))
+      (throw (UnsupportedOperationException.)))))
 
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
@@ -453,7 +603,7 @@
                                                                 (p/wrap-params)
                                                                 (wrap-exception-handling))
 
-                                                            (-> (partial data-browser-handler node)
+                                                            (-> (partial data-browser-handler node options)
                                                                 (p/wrap-params)
                                                                 (wrap-format (assoc-in m/default-options
                                                                                        [:formats "text/html"]
@@ -476,4 +626,7 @@
              ;; to expose the functionality they need to? (JH)
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
-                            :default default-server-port}}}})
+                            :default default-server-port}
+                    ::query-result-page-limit {:crux.config/type :crux.config/nat-int
+                            :doc "Limit of query results per page"
+                            :default 100}}}})
