@@ -31,6 +31,7 @@
   (new-entity-as-of-index [this valid-time transact-time])
   (entity-valid-time-history [this eid start-valid-time transact-time ascending?])
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
+  (all-content-hashes [this eid])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 

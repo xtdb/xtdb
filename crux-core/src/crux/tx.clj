@@ -15,7 +15,7 @@
             [clojure.set :as set]
             [crux.status :as status]
             crux.tx.event)
-  (:import [crux.codec EntityTx EntityValueContentHash]
+  (:import crux.codec.EntityTx
            java.io.Closeable
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
            java.util.Date))
@@ -128,26 +128,26 @@
                0 (cons r (merge-histories keyfn compare more-left more-right))
                1 (cons r (merge-histories keyfn compare left more-right)))))))
 
-(defrecord Snapshot+NewETXs [snapshot etxs]
+(defrecord IndexStore+NewETXs [index-store etxs]
   EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time tx-time f]
-    (with-open [i (kv/new-iterator snapshot)]
+    (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt compare
-                          (idx/entity-history-seq-ascending i eid valid-time tx-time)
+                          (db/entity-valid-time-history nested-index-store eid valid-time tx-time true)
                           (->> (get etxs eid)
                                (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
   (with-entity-history-seq-descending [_ eid valid-time tx-time f]
-    (with-open [i (kv/new-iterator snapshot)]
+    (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt #(compare %2 %1)
-                          (idx/entity-history-seq-descending i eid valid-time tx-time)
+                          (db/entity-valid-time-history nested-index-store eid valid-time tx-time false)
                           (->> (reverse (get etxs eid))
                                (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 
   (entity-at [_ eid valid-time tx-time]
     (->> (merge-histories etx->vt #(compare %2 %1)
-                          (some->> (with-open [i (kv/new-iterator snapshot)]
-                                     (idx/entity-at (idx/new-entity-as-of-index i valid-time tx-time) eid))
+                          (some->> (with-open [nested-index-store (db/open-nested-index-store index-store)]
+                                     (idx/entity-at (db/new-entity-as-of-index nested-index-store valid-time tx-time) eid))
                                    vector)
                           (some->> (reverse (get etxs eid))
                                    (drop-while (comp pos? #(compare % valid-time) etx->vt))
@@ -156,18 +156,16 @@
          first))
 
   (all-content-hashes [_ eid]
-    (with-open [i (kv/new-iterator snapshot)]
-      (into (set (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to nil (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
-                      (map c/decode-aecv-key->evc-from)
-                      (map #(.content-hash ^EntityValueContentHash %))))
+    (with-open [nested-index-store (db/open-nested-index-store index-store)]
+      (into (set (db/all-content-hashes nested-index-store eid))
             (set (->> (get etxs eid)
                       (map #(.content-hash ^EntityTx %)))))))
 
   (with-etxs [_ new-etxs]
-    (->Snapshot+NewETXs snapshot
-                        (merge-with #(merge-histories etx->vt compare %1 %2)
-                                    etxs
-                                    (->> new-etxs (group-by #(.eid ^EntityTx %)))))))
+    (->IndexStore+NewETXs index-store
+                          (merge-with #(merge-histories etx->vt compare %1 %2)
+                                      etxs
+                                      (->> new-etxs (group-by #(.eid ^EntityTx %)))))))
 
 (defn etx->kvs [^EntityTx etx]
   [[(c/encode-entity+vt+tt+tx-id-key-to
@@ -382,6 +380,7 @@
   kv/KvSnapshot
   (new-iterator ^java.io.Closeable [this]
     (kv/new-iterator snapshot))
+
   (get-value [this k]
     (kv/get-value snapshot k))
 
@@ -390,6 +389,7 @@
     (let [v-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
           e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-idx entity-as-of-idx)]
       [v-idx e-idx]))
+
   (new-attribute-entity-value-index-pair [this a entity-as-of-idx]
     (let [e-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
           v-idx (idx/new-doc-attribute-entity-value-value-index snapshot a e-idx)]
@@ -405,6 +405,9 @@
 
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
+
+  (all-content-hashes [this eid]
+    (idx/all-content-hashes snapshot eid))
 
   (open-nested-index-store [this]
     (->KvIndexStore (lru/new-cached-snapshot snapshot false))))
@@ -482,7 +485,7 @@
                                     (update :history with-etxs etxs)
                                     (update :tombstones merge tombstones)))))
 
-                          {:history (->Snapshot+NewETXs index-store {})
+                          {:history (->IndexStore+NewETXs index-store {})
                            :tombstones {}}
 
                           tx-events)

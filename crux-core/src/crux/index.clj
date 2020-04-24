@@ -7,7 +7,7 @@
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IReduceInit Seqable Sequential]
            crux.api.IndexVersionOutOfSyncException
-           crux.codec.EntityTx
+           [crux.codec EntityValueContentHash EntityTx]
            [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
            [java.io Closeable DataInputStream]
            [java.util Collections Comparator Date]
@@ -361,11 +361,11 @@
   (let [k (c/->id-buffer :crux.db/id)
         eid (c/->id-buffer eid)
         content-hash (c/->id-buffer content-hash)]
-    (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
+    (boolean (kv/get-value snapshot (c/encode-aecv-key-to (.get seek-buffer-tl) k eid content-hash eid)))))
 
 (defn current-index-version [kv]
   (with-open [snapshot (kv/new-snapshot kv)]
-    (some->> (kv/get-value snapshot (c/encode-index-version-key-to nil))
+    (some->> (kv/get-value snapshot (c/encode-index-version-key-to (.get seek-buffer-tl)))
              (c/decode-index-version-value-from))))
 
 (defn check-and-store-index-version [kv]
@@ -643,6 +643,13 @@
      (->> (entity-history-seq i eid)
           (take n)
           (vec)))))
+
+(defn all-content-hashes [snapshot eid]
+  (with-open [i (kv/new-iterator snapshot)]
+    (->> (all-keys-in-prefix i (c/encode-aecv-key-to (.get seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
+         (map c/decode-aecv-key->evc-from)
+         (map #(.content-hash ^EntityValueContentHash %))
+         (set))))
 
 ;; Join
 
