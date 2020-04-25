@@ -23,7 +23,8 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
-            [hiccup.page :refer [html5]]
+            [hiccup.page :as page]
+            [hiccup2.core :as hiccup2]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
@@ -34,6 +35,23 @@
 
 ;; ---------------------------------------------------
 ;; Utils
+
+(defn- raw-html
+  [body]
+  (str (hiccup2/html
+        [:html
+         {:lang "en"}
+         [:head
+          [:meta {:charset "utf-8"}]
+          [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
+          [:meta
+           {:name "viewport"
+            :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
+          [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
+          [:script {:src "/js/redirect_to_ui.js"}]
+          [:link {:rel "stylesheet" :href "/css/style.css"}]
+          [:title "Crux Console"]
+          body]])))
 
 (defn- body->edn [request]
   (->> request
@@ -438,11 +456,12 @@
                                                                (instant/read-instant-date))})
           entity-map (api/entity db eid)]
       {:status (if (some? entity-map) 200 404)
-       :body (when entity-map
-               (if (= (get-in request [:muuntaja/response :format]) "text/html")
+       :body (if (= (get-in request [:muuntaja/response :format]) "text/html")
+               (if entity-map
                  (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                   (html5 (entity->html linked-entities entity-map)))
-                 entity-map))})))
+                   (raw-html (entity->html linked-entities entity-map)))
+                 (raw-html [:div "No entity found"]))
+               entity-map)})))
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
@@ -500,41 +519,30 @@
      :next-url next-url}))
 
 (defn query->html [links {headers :find} results {:keys [prev-url next-url]}]
-  [:html
-   {:lang "en"}
-   [:head
-    [:meta {:charset "utf-8"}]
-    [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
-    [:meta
-     {:name "viewport"
-      :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
-    [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
-    [:link {:rel "stylesheet" :href "css/style.css"}]
-    [:title "hello"]]
-   [:body#app
-    (if (seq results)
-      [:div
-       [:table
-        [:thead
-         [:tr
-          (for [header headers]
-            [:th header])]]
-        [:tbody
-         (for [row results]
-           [:tr
-            (for [[header cell-value] (map vector headers row)]
-              [:td
-               (if-let [href (get links cell-value)]
-                 [:a {:href href} (str cell-value)]
-                 (str cell-value))])])]]]
-      [:div "No results found"])
-    [:div
-     (if prev-url
-       [:a {:href prev-url} "Prev"]
-       [:span "Prev"])
-     (if next-url
-       [:a {:href next-url} "Next"]
-       [:span "Next"])]]])
+  [:body
+   (if (seq results)
+     [:div
+      [:table
+       [:thead
+        [:tr
+         (for [header headers]
+           [:th header])]]
+       [:tbody
+        (for [row results]
+          [:tr
+           (for [[header cell-value] (map vector headers row)]
+             [:td
+              (if-let [href (get links cell-value)]
+                [:a {:href href} (str cell-value)]
+                (str cell-value))])])]]]
+     [:div "No results found"])
+   [:div
+    (if prev-url
+      [:a {:href prev-url} "Prev"]
+      [:span "Prev"])
+    (if next-url
+      [:a {:href next-url} "Next"]
+      [:span "Next"])]])
 
 (defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
   (let [query-params (:query-params request)
@@ -543,16 +551,17 @@
       (empty? query-params)
       (if html?
         {:status 200
-         :body (html5 [:form
-                       {:action "/_query"}
-                       [:textarea
-                        {:name "q"
-                         :cols 40
-                         :rows 10}]
-                       [:br]
-                       [:button
-                        {:type "submit"}
-                        "submit me here"]])}
+         :body (raw-html
+                [:form
+                 {:action "/_query"}
+                 [:textarea
+                  {:name "q"
+                   :cols 40
+                   :rows 10}]
+                 [:br]
+                 [:button
+                  {:type "submit"}
+                  "submit me here"]])}
         {:status 400
          :body "No query provided."})
 
@@ -577,7 +586,7 @@
                          next-offset (when (= limit (count results))
                                        (+ offset limit))
                          prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
-                     (html5 (query->html links query results prev-next-page)))
+                     (raw-html (query->html links query results prev-next-page)))
                    results)})
         (catch Exception e
           {:status 400
