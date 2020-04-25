@@ -227,8 +227,7 @@
   {:pre-commit-fn (fn []
                     (let [content-hash (c/new-id v)]
                       (with-open [index-store (db/open-index-store indexer)]
-                        (assert (or (idx/doc-indexed? index-store k content-hash)
-                                    (idx/evicted-doc? (db/get-single-object object-store index-store content-hash)))
+                        (assert (db/get-single-object object-store index-store content-hash)
                                 (format "Put, incorrect doc state for: '%s', tx-id '%s'"
                                         content-hash (:crux.tx/tx-id tx))))
                       true))

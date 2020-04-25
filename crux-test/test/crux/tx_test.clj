@@ -352,8 +352,6 @@
     (db/index-docs (:indexer *api*) {content-hash picasso})
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-      (t/is (idx/doc-indexed? snapshot picasso-id content-hash))
-
       (t/is (= {content-hash picasso}
                (db/get-objects (:object-store *api*) snapshot #{content-hash})))
 
