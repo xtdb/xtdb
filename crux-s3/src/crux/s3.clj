@@ -11,7 +11,7 @@
            (software.amazon.awssdk.core ResponseBytes)
            (software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer)
            (software.amazon.awssdk.services.s3 S3AsyncClient)
-           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)))
+           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest NoSuchKeyException)))
 
 (defrecord S3DocumentStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
   db/DocumentStore
@@ -30,20 +30,27 @@
 
   (fetch-docs [_ ids]
     (->> (for [id ids]
-           [id (-> (.getObject client
-                               (-> (GetObjectRequest/builder)
-                                   (.bucket bucket)
-                                   (.key (str prefix id))
-                                   (->> (.configureGet configurator))
-                                   ^GetObjectRequest (.build))
-                               (AsyncResponseTransformer/toBytes))
+           (let [s3-key (str prefix id)]
+             [id (-> (.getObject client
+                                 (-> (GetObjectRequest/builder)
+                                     (.bucket bucket)
+                                     (.key s3-key)
+                                     (->> (.configureGet configurator))
+                                     ^GetObjectRequest (.build))
+                                 (AsyncResponseTransformer/toBytes))
 
-                   (.handle (reify BiFunction
-                              (apply [_ resp e]
-                                (if-not resp
-                                  (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix id))
-                                  (-> (.asByteArray ^ResponseBytes resp)
-                                      (->> (.thaw configurator))))))))])
+                     (.handle (reify BiFunction
+                                (apply [_ resp e]
+                                  (if e
+                                    (try
+                                      (throw (.getCause e))
+                                      (catch NoSuchKeyException e
+                                        (log/warn "S3 key not found: " s3-key))
+                                      (catch Exception e
+                                        (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix id))))
+
+                                    (-> (.asByteArray ^ResponseBytes resp)
+                                        (->> (.thaw configurator))))))))]))
 
          (into {})
          (into {} (keep (fn [[id ^CompletableFuture resp]]
