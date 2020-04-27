@@ -360,8 +360,8 @@
       (.submit stats-executor stats-fn)
       (stats-fn))))
 
-(defn- unindex-docs [tombstones {:keys [kv-store object-store snapshot] :as deps}]
-  (let [existing-docs (db/get-objects object-store snapshot (keys tombstones))]
+(defn- unindex-docs [tombstones {:keys [kv-store object-store index-store] :as deps}]
+  (let [existing-docs (db/get-objects object-store index-store (keys tombstones))]
     (db/put-objects object-store tombstones)
 
     (->> existing-docs
