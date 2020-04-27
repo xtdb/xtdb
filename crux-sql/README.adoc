@@ -4,8 +4,7 @@ SQL adapter for Crux, built on top of https://calcite.apache.org/[Apache Calcite
 
 == Setup
 
-`crux-sql` runs in-process as part of the Crux node as Crux
-module.
+`crux-sql` runs in-process as part of the Crux node as a Crux module.
 
 First, add the `crux-sql` dependency to your project:
 
@@ -61,7 +60,7 @@ So that:
 
 [source,clojure]
 ----
-(query "SELECT * PERSON.NAME FROM PERSON")
+(query "SELECT PERSON.NAME FROM PERSON")
 ----
 
 Returns:
@@ -104,6 +103,13 @@ You can then connect using the Avatica JDBC driver, for example:
 [source,clojure]
 ----
 (java.sql.DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")
+----
+
+To connect via the https://github.com/julianhyde/sqlline[SQLLine] CLI tool,
+install https://get-coursier.io/docs/cli-installation[Coursier] and run:
+[source,bash]
+----
+coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n crux -p crux -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf" -d org.apache.calcite.avatica.remote.Driver
 ----
 
 == Column Types

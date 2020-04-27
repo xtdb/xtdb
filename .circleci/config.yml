@@ -161,6 +161,10 @@ jobs:
           crux-edn: "crux.edn"
           deps-edn: "deps.edn"
           artifact-name: "crux-standalone"
+      - crux/deploy-artifacts:
+          crux-edn: "crux-sql.edn"
+          deps-edn: "sql-deps.edn"
+          artifact-name: "crux-standalone-sql"
 
   create-javadocs:
     docker:
