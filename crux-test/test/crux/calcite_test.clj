@@ -1,6 +1,5 @@
 (ns crux.calcite-test
   (:require [clojure.test :as t]
-            [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api*]]
             [crux.fixtures.calcite :as cf :refer [query prepared-query explain]]
