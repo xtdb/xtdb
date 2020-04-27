@@ -7,10 +7,8 @@
    [re-frame.core :as rf]))
 
 (defn view []
-  (rf/dispatch [::events/get-query-result])
-  (fn []
-    (let [query-data @(rf/subscribe [::subs/query-data])]
-      [:div
-       [:pre
-        (with-out-str
-          (pprint/pprint query-data))]])))
+  (let [metadata @(rf/subscribe [::subs/metadata])]
+    [:div
+     [:pre
+      (with-out-str
+        (pprint/pprint metadata))]]))

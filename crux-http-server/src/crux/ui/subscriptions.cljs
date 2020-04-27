@@ -3,6 +3,6 @@
    [re-frame.core :as rf]))
 
 (rf/reg-sub
- ::query-data
+ ::metadata
  (fn [db _]
-   (:query-data db)))
+   (:metadata db)))

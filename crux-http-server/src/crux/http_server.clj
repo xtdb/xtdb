@@ -37,7 +37,7 @@
 ;; Utils
 
 (defn- raw-html
-  [meta body]
+  [metadata body]
   (str (hiccup2/html
         [:html
          {:lang "en"}
@@ -49,13 +49,12 @@
             {:name "viewport"
              :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
            [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
-           ;[:script {:src "/js/redirect_to_ui.js"}]
+           [:meta {:title "result" :content (str metadata)}]
            [:link {:rel "stylesheet" :href "/css/style.css"}]
            [:title "Crux Console"]
-           body]
-          (map
-           (fn [[k v]]
-             [:meta {:name k :content (pr-str v)}]) meta))])))
+           [:body
+            [:div#app body]
+            [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])])))
 
 (defn- body->edn [request]
   (->> request

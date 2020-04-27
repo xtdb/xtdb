@@ -1,8 +1,18 @@
 (ns crux.ui.events
   (:require
    [ajax.edn :as ajax-edn]
+   [cljs.reader :refer [read-string]]
    [day8.re-frame.http-fx]
    [re-frame.core :as rf]))
+
+(rf/reg-event-db
+ ::inject-metadata
+ (fn [db [_ meta-title]]
+   (let [result-meta (js/document.querySelector
+                      (str "meta[title=" meta-title "]"))
+         string-content (.getAttribute result-meta "content")
+         edn-content (read-string string-content)]
+     (assoc db :metadata edn-content))))
 
 (rf/reg-event-fx
  ::get-query-result
