@@ -23,7 +23,7 @@
                            (.key (str prefix id))
                            (->> (.configurePut configurator))
                            ^PutObjectRequest (.build))
-                       (AsyncRequestBody/fromBytes (nippy/fast-freeze doc))))
+                       (AsyncRequestBody/fromBytes (.freeze configurator doc))))
          vec
          (run! (fn [^CompletableFuture req]
                  (.get req)))))
@@ -43,7 +43,7 @@
                                 (if-not resp
                                   (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix id))
                                   (-> (.asByteArray ^ResponseBytes resp)
-                                      (nippy/fast-thaw)))))))])
+                                      (->> (.thaw configurator))))))))])
 
          (into {})
          (into {} (keep (fn [[id ^CompletableFuture resp]]
