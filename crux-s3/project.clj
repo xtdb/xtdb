@@ -16,4 +16,11 @@
 
   :middleware [leiningen.project-version/middleware]
 
+  :java-source-paths ["src"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
+
   :pedantic? :warn)

@@ -5,14 +5,15 @@
             [taoensso.nippy :as nippy]
             [clojure.string :as string]
             [clojure.tools.logging :as log])
-  (:import (java.util.concurrent CompletableFuture)
+  (:import (crux.s3 S3Configurator)
+           (java.util.concurrent CompletableFuture)
            (java.util.function BiFunction)
            (software.amazon.awssdk.core ResponseBytes)
            (software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer)
            (software.amazon.awssdk.services.s3 S3AsyncClient)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)))
 
-(defrecord S3DocumentStore [^S3AsyncClient client bucket prefix]
+(defrecord S3DocumentStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
   db/DocumentStore
   (submit-docs [_ docs]
     (->> (for [[id doc] docs]
@@ -20,6 +21,7 @@
                        (-> (PutObjectRequest/builder)
                            (.bucket bucket)
                            (.key (str prefix id))
+                           (->> (.configurePut configurator))
                            ^PutObjectRequest (.build))
                        (AsyncRequestBody/fromBytes (nippy/fast-freeze doc))))
          vec
@@ -32,6 +34,7 @@
                                (-> (GetObjectRequest/builder)
                                    (.bucket bucket)
                                    (.key (str prefix id))
+                                   (->> (.configureGet configurator))
                                    ^GetObjectRequest (.build))
                                (AsyncResponseTransformer/toBytes))
 
@@ -51,8 +54,12 @@
 (s/def ::prefix string?)
 
 (def s3-doc-store
-  {::n/document-store {:start-fn (fn [deps {::keys [bucket prefix]}]
-                                   (->S3DocumentStore (S3AsyncClient/create)
+  {::configurator {:start-fn (fn [deps args]
+                               (reify S3Configurator))}
+
+   ::n/document-store {:start-fn (fn [{::keys [^S3Configurator configurator]} {::keys [bucket prefix]}]
+                                   (->S3DocumentStore configurator
+                                                      (.makeClient configurator)
                                                       bucket
                                                       (cond
                                                         (string/blank? prefix) ""
@@ -63,4 +70,5 @@
                                         :doc "S3 bucket"}
                               ::prefix {:required? false,
                                         :crux.config/type ::prefix
-                                        :doc "S3 prefix"}}}})
+                                        :doc "S3 prefix"}}
+                       :deps #{::configurator}}})
