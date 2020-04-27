@@ -37,21 +37,25 @@
 ;; Utils
 
 (defn- raw-html
-  [body]
+  [meta body]
   (str (hiccup2/html
         [:html
          {:lang "en"}
-         [:head
-          [:meta {:charset "utf-8"}]
-          [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
-          [:meta
-           {:name "viewport"
-            :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
-          [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
-          [:script {:src "/js/redirect_to_ui.js"}]
-          [:link {:rel "stylesheet" :href "/css/style.css"}]
-          [:title "Crux Console"]
-          body]])))
+         (into
+          [:head
+           [:meta {:charset "utf-8"}]
+           [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
+           [:meta
+            {:name "viewport"
+             :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
+           [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
+           ;[:script {:src "/js/redirect_to_ui.js"}]
+           [:link {:rel "stylesheet" :href "/css/style.css"}]
+           [:title "Crux Console"]
+           body]
+          (map
+           (fn [[k v]]
+             [:meta {:name k :content (pr-str v)}]) meta))])))
 
 (defn- body->edn [request]
   (->> request
@@ -459,8 +463,11 @@
        :body (if (= (get-in request [:muuntaja/response :format]) "text/html")
                (if entity-map
                  (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                   (raw-html (entity->html linked-entities entity-map)))
-                 (raw-html [:div "No entity found"]))
+                   (raw-html
+                    {"entity" entity-map
+                     "linked-entities" linked-entities}
+                    (entity->html linked-entities entity-map)))
+                 (raw-html {} [:div "No entity found"]))
                entity-map)})))
 
 (defn- vectorize-param [param]
@@ -552,6 +559,7 @@
       (if html?
         {:status 200
          :body (raw-html
+                {}
                 [:form
                  {:action "/_query"}
                  [:textarea
@@ -586,7 +594,12 @@
                          next-offset (when (= limit (count results))
                                        (+ offset limit))
                          prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
-                     (raw-html (query->html links query results prev-next-page)))
+                     (raw-html
+                      {"query-results" results
+                       "find-clause" (:find query)
+                       "prev-next-page" prev-next-page
+                       "linked-entities" links}
+                      (query->html links query results prev-next-page)))
                    results)})
         (catch Exception e
           {:status 400
