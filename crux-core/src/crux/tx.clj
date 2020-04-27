@@ -425,25 +425,16 @@
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
-    (with-open [snapshot (kv/new-snapshot kv-store)]
+    (with-open [index-store (db/open-index-store this)]
       (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
 
-<<<<<<< 13e29c25a09270ee57346407b40a128d6a113da3
       (when-let [docs-to-upsert (->> docs
                                      (into {} (remove (fn [[k doc]]
-                                                        (or (idx/doc-indexed? snapshot (:crux.db/id doc) k)
+                                                        (or (when-let [existing-doc (db/get-single-object object-store index-store (c/new-id k))]
+                                                              (not (idx/evicted-doc? existing-doc)))
                                                             (idx/evicted-doc? doc)))))
                                      not-empty)]
         (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
-=======
-          docs-to-remove (when (seq docs-to-evict)
-                           (with-open [index-store (db/open-index-store this)]
-                             (let [existing-docs (->> (db/get-objects object-store index-store (keys docs-to-evict))
-                                                      (remove (comp idx/evicted-doc? val)))]
-                               (->> existing-docs
-                                    (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-                                    (idx/delete-doc-idx-keys kv-store))
->>>>>>> Removing all direct usage of the kv store inside crux.query, using the IndexStore protocol instead. Far from clean, but tests pass.
 
         (let [doc-idx-keys (when (seq docs-to-upsert)
                              (->> docs-to-upsert
