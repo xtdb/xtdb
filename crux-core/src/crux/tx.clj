@@ -430,8 +430,7 @@
 
       (when-let [docs-to-upsert (->> docs
                                      (into {} (remove (fn [[k doc]]
-                                                        (or (when-let [existing-doc (db/get-single-object object-store index-store (c/new-id k))]
-                                                              (not (idx/evicted-doc? existing-doc)))
+                                                        (or (idx/keep-non-evicted-doc (db/get-single-object object-store index-store (c/new-id k)))
                                                             (idx/evicted-doc? doc)))))
                                      not-empty)]
         (bus/send bus {::bus/event-type ::indexing-docs, :doc-ids (set (keys docs))})
