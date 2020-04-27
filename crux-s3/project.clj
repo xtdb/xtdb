@@ -12,9 +12,13 @@
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
-                 [org.reactivestreams/reactive-streams "1.0.3"]]
+                 [org.reactivestreams/reactive-streams "1.0.3"]
+
+                 [juxt/crux-test "derived-from-git" :scope "test"]]
 
   :middleware [leiningen.project-version/middleware]
+
+  :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
 
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
