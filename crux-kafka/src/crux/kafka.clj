@@ -5,9 +5,7 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.node :as n]
             [crux.status :as status]
             [crux.tx :as tx]
@@ -176,7 +174,7 @@
   (.flush producer))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               kv-store object-store
+                               indexer object-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
@@ -191,8 +189,8 @@
     (loop [indexed {}]
       (let [missing-ids (set/difference (set ids) (set (keys indexed)))
             indexed (merge indexed (when (seq missing-ids)
-                                     (with-open [kv-snapshot (kv/new-snapshot kv-store)]
-                                       (db/get-objects object-store kv-snapshot missing-ids))))]
+                                     (with-open [index-store (db/open-index-store indexer)]
+                                       (db/get-objects object-store index-store missing-ids))))]
         (if (= (count indexed) (count ids))
           indexed
           (do
@@ -201,17 +199,17 @@
               (throw (RuntimeException. "Doc indexing error" error)))
             (recur indexed)))))))
 
-(defn- read-doc-offsets [kv-store]
-  (->> (idx/read-meta kv-store :crux.tx-log/consumer-state)
+(defn- read-doc-offsets [indexer]
+  (->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
        (into {} (map (fn [[k {:keys [next-offset]}]]
                        [(let [[_ t p] (re-matches #"(.+)-(\d+)" k)]
                           (TopicPartition. t (Long/parseLong p)))
                         next-offset])))))
 
-(defn- store-doc-offsets [kv-store tp-offsets]
-  (idx/store-meta kv-store :crux.tx-log/consumer-state (->> tp-offsets
-                                                            (into {} (map (fn [[k v]]
-                                                                            [(str k) {:next-offset v}]))))))
+(defn- store-doc-offsets [indexer tp-offsets]
+  (db/store-index-meta indexer :crux.tx-log/consumer-state (->> tp-offsets
+                                                                (into {} (map (fn [[k v]]
+                                                                                [(str k) {:next-offset v}]))))))
 
 (defn- update-doc-offsets [tp-offsets doc-records]
   (reduce (fn [tp-offsets ^ConsumerRecord record]
@@ -223,9 +221,9 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{::n/keys [kv-store indexer], :keys [!error]}
+(defn- index-doc-log [{::n/keys [indexer], :keys [!error]}
                       {:keys [::doc-topic ::group-id kafka-config]}]
-  (let [tp-offsets (read-doc-offsets kv-store)]
+  (let [tp-offsets (read-doc-offsets indexer)]
     (try
       (with-open [consumer (doto (create-consumer (assoc kafka-config
                                                     "group.id" (or group-id (str (UUID/randomUUID)))))
@@ -235,7 +233,7 @@
                                 (reduce (fn [tp-offsets doc-records]
                                           (db/index-docs indexer (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
-                                            (->> (store-doc-offsets kv-store))))
+                                            (->> (store-doc-offsets indexer))))
                                         tp-offsets))]
             (when (Thread/interrupted)
               (throw (InterruptedException.)))
@@ -300,7 +298,7 @@
    :args default-options})
 
 (def document-store
-  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [kv-store object-store] :as deps}
+  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [indexer object-store] :as deps}
                   {::keys [doc-topic doc-partitions] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      !indexing-error (atom nil)
@@ -311,9 +309,9 @@
                  (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
 
                  (->KafkaDocumentStore producer doc-topic
-                                       kv-store object-store
+                                       indexer object-store
                                        indexing-thread !indexing-error)))
-   :deps [::producer ::admin-client ::n/kv-store ::n/object-store ::n/indexer]
+   :deps [::producer ::admin-client ::n/object-store ::n/indexer]
    :args default-options})
 
 (def topology
