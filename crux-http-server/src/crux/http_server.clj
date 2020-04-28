@@ -67,8 +67,9 @@
       (try
         (handler request)
         (catch Exception e
-          (if (and (.getMessage e)
-                   (str/starts-with? (.getMessage e) "Spec assertion failed"))
+          (if (or (instance? IllegalArgumentException e)
+                  (and (.getMessage e)
+                       (str/starts-with? (.getMessage e) "Spec assertion failed")))
             (exception-response 400 e) ;; Valid edn, invalid content
             (do (log/error e "Exception while handling request:" (cio/pr-edn-str request))
                 (exception-response 500 e))))) ;; Valid content; something internal failed, or content validity is not properly checked

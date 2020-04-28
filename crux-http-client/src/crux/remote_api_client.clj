@@ -78,6 +78,11 @@
        (= 404 status)
        nil
 
+       (= 400 status)
+       (let [{:keys [^String cause data]} (edn/read-string body)]
+         (throw (IllegalArgumentException. cause (when data
+                                                   (ex-info cause data)))))
+
        (and (<= 200 status) (< status 400)
             (= "application/edn" (:content-type headers)))
        (if (string? body)
