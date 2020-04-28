@@ -16,7 +16,9 @@
 ;; tag::Indexer[]
 (defprotocol Indexer
   (index-docs [this docs])
-  (index-tx [this tx tx-events])
+  (unindex-docs [this docs])
+  (index-entity-txs [this tx entity-txs])
+  (mark-tx-as-failed [this tx])
   (store-index-meta [this k v])
   (read-index-meta [this k])
   (latest-completed-tx [this])
