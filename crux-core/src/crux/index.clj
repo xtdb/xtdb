@@ -308,11 +308,6 @@
                (DataInputStream.)
                (nippy/thaw-from-in!)))))
 
-(defn swap-meta [kv k f & args]
-  (let [ret (apply f (read-meta kv k) args)]
-    (store-meta kv k ret)
-    ret))
-
 ;; Object Store
 
 (defn evicted-doc?
@@ -332,9 +327,6 @@
   (->> (for [[k v] doc]
          [k (cond-> (count (vectorize-value v)) evicted? -)])
        (into {})))
-
-(defn update-predicate-stats [kv docs-stats]
-  (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
 
 (defn doc-idx-keys [content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
