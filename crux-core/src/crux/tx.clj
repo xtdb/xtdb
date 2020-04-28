@@ -356,6 +356,7 @@
 
 (def ^:dynamic *current-tx*)
 
+;; TODO: Rename :crux.kv/stats on next index bump.
 (defn- update-stats [{:keys [indexer ^ExecutorService stats-executor] :as tx-consumer} docs-stats]
   (let [stats-fn ^Runnable #(->> (apply merge-with + (db/read-index-meta indexer :crux.kv/stats) docs-stats)
                                  (db/store-index-meta indexer :crux.kv/stats))]
