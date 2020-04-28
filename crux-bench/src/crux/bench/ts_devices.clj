@@ -29,31 +29,34 @@
               :device-info/model model
               :device-info/os-name os-name})))))
 
+(def ^:dynamic *readings-limit* nil)
+
 (defn with-readings-docs [f]
   (when readings-csv-resource
     (with-open [rdr (io/reader readings-csv-resource)]
-      (f (for [reading (line-seq rdr)
-               :let [[time device-id battery-level battery-status
-                      battery-temperature bssid
-                      cpu-avg-1min cpu-avg-5min cpu-avg-15min
-                      mem-free mem-used rssi ssid] (str/split reading #",")]]
-           {:crux.db/id (keyword "reading" device-id)
-            :reading/time (inst/read-instant-date
-                            (-> time
-                                (str/replace " " "T")
-                                (str/replace #"-(\d\d)$" ".000-$1:00")))
-            :reading/device-id (keyword "device-info" device-id)
-            :reading/battery-level (Double/parseDouble battery-level)
-            :reading/battery-status (keyword battery-status)
-            :reading/battery-temperature (Double/parseDouble battery-temperature)
-            :reading/bssid bssid
-            :reading/cpu-avg-1min (Double/parseDouble cpu-avg-1min)
-            :reading/cpu-avg-5min (Double/parseDouble cpu-avg-5min)
-            :reading/cpu-avg-15min (Double/parseDouble cpu-avg-15min)
-            :reading/mem-free (Double/parseDouble mem-free)
-            :reading/mem-used (Double/parseDouble mem-used)
-            :reading/rssi (Double/parseDouble rssi)
-            :reading/ssid ssid})))))
+      (f (cond->> (for [reading (line-seq rdr)
+                        :let [[time device-id battery-level battery-status
+                               battery-temperature bssid
+                               cpu-avg-1min cpu-avg-5min cpu-avg-15min
+                               mem-free mem-used rssi ssid] (str/split reading #",")]]
+                    {:crux.db/id (keyword "reading" device-id)
+                     :reading/time (inst/read-instant-date
+                                    (-> time
+                                        (str/replace " " "T")
+                                        (str/replace #"-(\d\d)$" ".000-$1:00")))
+                     :reading/device-id (keyword "device-info" device-id)
+                     :reading/battery-level (Double/parseDouble battery-level)
+                     :reading/battery-status (keyword battery-status)
+                     :reading/battery-temperature (Double/parseDouble battery-temperature)
+                     :reading/bssid bssid
+                     :reading/cpu-avg-1min (Double/parseDouble cpu-avg-1min)
+                     :reading/cpu-avg-5min (Double/parseDouble cpu-avg-5min)
+                     :reading/cpu-avg-15min (Double/parseDouble cpu-avg-15min)
+                     :reading/mem-free (Double/parseDouble mem-free)
+                     :reading/mem-used (Double/parseDouble mem-used)
+                     :reading/rssi (Double/parseDouble rssi)
+                     :reading/ssid ssid})
+           *readings-limit* (take *readings-limit*))))))
 
 ;; Submits data from devices database into Crux node.
 (defn submit-ts-devices-data [node]
@@ -260,8 +263,9 @@
       (test-min-max-battery-level-per-hour node))))
 
 (comment
-  (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
-    (bench/with-bench-ns :ts-devices
-      (bench/with-crux-dimensions
-        (submit-ts-devices-data node)
-        (bench/compact-node node)))))
+  (binding [*readings-limit* 1000]
+    (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
+      (bench/with-bench-ns :ts-devices
+        (bench/with-crux-dimensions
+          (submit-ts-devices-data node)
+          (bench/compact-node node))))))
