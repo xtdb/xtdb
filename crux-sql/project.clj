@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [juxt/crux-core "derived-from-git"]
                  [cheshire "5.10.0"]
-                 [org.apache.calcite/calcite-core "1.21.0"]
+                 [org.apache.calcite/calcite-core "1.22.0"]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
 
                  ;; remove illegal reflective warnings:
