@@ -71,7 +71,7 @@
   (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}
         content-hash (str (c/new-id content-ivan))]
-    (t/is (thrown-with-msg? Exception (re-pattern  (str content-hash "|HTTP status 400"))
+    (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
                             (.submitTx *api* [[:crux.tx/put content-hash valid-time]])))))
 
 (t/deftest test-can-write-entity-using-map-as-id

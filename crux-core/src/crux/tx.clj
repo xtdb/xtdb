@@ -13,6 +13,7 @@
             [taoensso.nippy :as nippy]
             [clojure.set :as set]
             [crux.status :as status]
+            [crux.tx.conform :as txc]
             crux.tx.event)
   (:import [crux.codec EntityTx EntityValueContentHash]
            java.io.Closeable
@@ -30,49 +31,11 @@
 (s/def ::av-count nat-int?)
 (s/def ::bytes-indexed nat-int?)
 (s/def ::doc-ids (s/coll-of #(instance? crux.codec.Id %) :kind set?))
+
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
 (defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx], :req-un [::committed?]))
-
-(defmulti conform-tx-op first)
-
-(defmethod conform-tx-op ::put [tx-op]
-  (let [[op doc & args] tx-op
-        id (:crux.db/id doc)]
-    (into [::put id doc] args)))
-
-(defmethod conform-tx-op ::cas [tx-op]
-  (let [[op old-doc new-doc & args] tx-op
-        new-id (:crux.db/id new-doc)
-        old-id (:crux.db/id old-doc)]
-    (if (or (= nil old-id) (= new-id old-id))
-      (into [::cas new-id old-doc new-doc] args)
-      (throw (IllegalArgumentException.
-              (str "CAS, document ids do not match: " old-id " " new-id))))))
-
-(defmethod conform-tx-op :default [tx-op] tx-op)
-
-(defn tx-op->docs [tx-op]
-  (let [[op id & args] (conform-tx-op tx-op)]
-    (filter map? args)))
-
-(defn tx-ops->id-and-docs [tx-ops]
-  (when-not (s/valid? :crux.api/tx-ops tx-ops)
-    (throw (ex-info (str "Spec assertion failed\n" (s/explain-str :crux.api/tx-ops tx-ops)) (s/explain-data :crux.api/tx-ops tx-ops))))
-
-  (->> tx-ops
-       (into {} (comp (mapcat tx-op->docs)
-                      (map (juxt c/new-id identity))))))
-
-(defn tx-op->tx-event [tx-op]
-  (let [[op id & args] (conform-tx-op tx-op)]
-    (doto (into [op (str (c/new-id id))]
-                (for [arg args]
-                  (if (map? arg)
-                    (-> arg c/new-id str)
-                    arg)))
-      (->> (s/assert :crux.tx.event/tx-event)))))
 
 (defn- conform-tx-event [[op & args]]
   (-> (case op
@@ -93,17 +56,16 @@
   (keep (conform-tx-event tx-event) [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
 
 (defn tx-event->tx-op [[op id & args] snapshot object-store]
-  (doto (into [op]
-              (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
-                        [(c/new-id id)])
+  (into [op]
+        (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
+                  [(c/new-id id)])
 
-                      (for [arg args]
-                        (or (when (satisfies? c/IdToBuffer arg)
-                              (or (db/get-single-object object-store snapshot arg)
-                                  {:crux.db/id (c/new-id id)
-                                   :crux.db/evicted? true}))
-                            arg))))
-    (->> (s/assert :crux.api/tx-op))))
+                (for [arg args]
+                  (or (when (satisfies? c/IdToBuffer arg)
+                        (or (db/get-single-object object-store snapshot arg)
+                            {:crux.db/id (c/new-id id)
+                             :crux.db/evicted? true}))
+                      arg)))))
 
 (defprotocol EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time tx-time f])
@@ -312,15 +274,9 @@
                                                      (db/get-single-object object-store snapshot arg-id)))
         args-id (:crux.db/id args-doc)
 
-        {:keys [tx-ops fn-error]} (try
-                                    (let [tx-ops (apply (tx-fn-eval-cache body) db args)]
-                                      (when tx-ops
-                                        (when-not (s/valid? :crux.api/tx-ops tx-ops)
-                                          (throw (ex-info (str "Spec assertion failed\n"
-                                                               (s/explain-str :crux.api/tx-ops tx-ops))
-
-                                                          (s/explain-data :crux.api/tx-ops tx-ops)))))
-                                      {:tx-ops tx-ops})
+        {:keys [conformed-tx-ops fn-error]} (try
+                                              {:conformed-tx-ops (->> (apply (tx-fn-eval-cache body) db args)
+                                                                      (mapv txc/conform-tx-op))}
 
                                     (catch Throwable t
                                       {:fn-error t}))]
@@ -330,13 +286,14 @@
                         (log-tx-fn-error fn-error fn-id body args-id args)
                         false)}
 
-      (let [docs (mapcat tx-op->docs tx-ops)
-            {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)
-            _ (db/index-docs indexer (->> docs (into {} (map (juxt c/new-id identity)))))
-            op-results (vec (for [[op :as tx-event] (map tx-op->tx-event tx-ops)]
+      (let [docs (->> conformed-tx-ops
+                      (into {} (mapcat :docs)))
+            {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args val) docs)
+            _ (db/index-docs indexer (into {} docs))
+            op-results (vec (for [[op :as tx-event] (map txc/->tx-event conformed-tx-ops)]
                               (index-tx-event tx-event tx
                                               (-> deps
-                                                  (update :nested-fn-args (fnil into {}) (map (juxt c/new-id identity)) arg-docs)))))]
+                                                  (update :nested-fn-args (fnil into {}) arg-docs)))))]
         {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} op-results
                                              :when pre-commit-fn]
                                          (pre-commit-fn)))

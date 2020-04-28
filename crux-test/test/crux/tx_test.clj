@@ -558,9 +558,9 @@
               inc-ivans-age '{:crux.db/id :inc-ivans-age
                               :crux.db.fn/args [:ivan :age inc]}]
           (fapi/submit+await-tx [[:crux.tx/fn :update-attribute-fn inc-ivans-age]])
+          (t/is (nil? (latest-exception)))
           (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
           (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
-          (t/is (nil? (latest-exception)))
 
           (t/testing "resulting documents are indexed"
             (t/is (= #{[41]} (api/q (api/db *api*)
@@ -587,7 +587,7 @@
                                        '(fn [db]
                                           [[:crux.tx/foo]])}]])
               (fapi/submit+await-tx '[[:crux.tx/fn :invalid-fn]])
-              (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #"Spec assertion failed" (rethrow-latest-exception))))
+              (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op" (rethrow-latest-exception))))
 
             (t/testing "exception thrown"
               (fapi/submit+await-tx [[:crux.tx/put
@@ -648,7 +648,7 @@
             (let [submitted-tx (fapi/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
               (t/is (nil? (latest-exception)))
               (t/is (= {:crux.db/id :tx-metadata
-                        :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
+                        :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn :tx-metadata-fn]])}
                        (api/entity (api/db *api*) :tx-metadata))))))))))
 
 (t/deftest tx-log-evict-454 []

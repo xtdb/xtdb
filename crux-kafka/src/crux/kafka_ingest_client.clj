@@ -3,7 +3,8 @@
             [crux.kafka :as k]
             [crux.topology :as topo]
             [crux.node :as n]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.tx.conform :as txc])
   (:import crux.api.ICruxAsyncIngestAPI
            java.io.Closeable
            (org.apache.kafka.clients.producer KafkaProducer)))
@@ -11,8 +12,9 @@
 (defrecord CruxKafkaIngestClient [tx-log document-store close-fn]
   ICruxAsyncIngestAPI
   (submitTxAsync [_ tx-ops]
-    (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
-    (db/submit-tx tx-log (map tx/tx-op->tx-event tx-ops)))
+    (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+      (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+      (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))
 
   (submitTx [this tx-ops]
     @(.submitTxAsync this tx-ops))
