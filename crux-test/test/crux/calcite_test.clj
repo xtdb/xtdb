@@ -1,10 +1,11 @@
 (ns crux.calcite-test
   (:require [clojure.test :as t]
             [crux.fixtures :as f]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures.api :as fapi :refer [*api* submit+await-tx]]
             [crux.fixtures.calcite :as cf :refer [query prepared-query explain]]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.standalone :as fs]))
+            [crux.fixtures.standalone :as fs])
+  (:import crux.calcite.CruxJdbcDriver))
 
 ;; TODO align the test data/fixture code with people fixture
 
@@ -25,6 +26,20 @@
   (f))
 
 (t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node with-each-connection-type with-sql-schema)
+
+(t/deftest test-valid-time
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true} #inst "2015"]
+                    [:crux.tx/put {:crux.db/id :ivan :name "Ivana" :homeworld "Earth" :age 21 :alive true}]
+                    [:crux.tx/put {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]])
+
+  (let [q "VALIDTIME ('2016-12-01T10:13:30Z') SELECT PERSON.NAME FROM PERSON"]
+    (t/is (= [{:name "Ivan"}]
+             (query q))))
+
+  (let [q "SELECT PERSON.NAME FROM PERSON"]
+    (t/is (= [{:name "Ivana"}
+              {:name "Malcolm"}]
+             (query q)))))
 
 (t/deftest test-project
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}

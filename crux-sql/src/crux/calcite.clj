@@ -148,8 +148,8 @@
       (first tuple)
       (to-array tuple))))
 
-(defn- perform-query [node q]
-  (let [db (crux/db node)]
+(defn- perform-query [node valid-time q]
+  (let [db (if valid-time (crux/db node valid-time) (crux/db node))]
     (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
         []
         (enumerator []
@@ -176,7 +176,7 @@
           query (update query :args (fn [args] [(into {} (map (fn [[k v]]
                                                                 [v (.get data-context k)])
                                                               args))]))]
-      (perform-query node query))
+      (perform-query node (.get data-context "VALIDTIME") query))
     (catch Throwable e
       (log/error e)
       (throw e))))
@@ -254,7 +254,8 @@
 
 (defn ^java.sql.Connection jdbc-connection [node]
   (assert node)
-  (DriverManager/getConnection "jdbc:calcite:" (-> node meta :crux.node/topology ::server :node-uuid model-properties)))
+  (defonce registration (java.sql.DriverManager/registerDriver (crux.calcite.CruxJdbcDriver.)))
+  (DriverManager/getConnection "jdbc:crux:" (-> node meta :crux.node/topology ::server :node-uuid model-properties)))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
   (let [node-uuid (str (java.util.UUID/randomUUID))]
