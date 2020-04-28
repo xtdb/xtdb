@@ -18,7 +18,8 @@
             [crux.topology :as topo]
             [crux.tx :as tx]
             [crux.tx.event :as txe]
-            [crux.bus :as bus])
+            [crux.bus :as bus]
+            [crux.tx.conform :as txc])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            java.io.Closeable
            java.util.Date
@@ -103,8 +104,9 @@
   (submitTx [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
-      @(db/submit-tx tx-log (map tx/tx-op->tx-event tx-ops))))
+      (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+        (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+        @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
 
   (hasTxCommitted [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
@@ -182,8 +184,9 @@
   (submitTxAsync [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/submit-docs document-store (tx/tx-ops->id-and-docs tx-ops))
-      (db/submit-tx tx-log (map tx/tx-op->tx-event tx-ops))))
+      (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+        (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
 
   backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]

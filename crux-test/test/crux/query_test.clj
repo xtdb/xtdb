@@ -1279,10 +1279,8 @@
   (t/testing "entity ids cannot be raw strings"
     (let [id (UUID/randomUUID)
           id-str (str id)]
-      (t/is (thrown-with-msg?
-             RuntimeException
-             #"Spec assertion failed"
-             (f/transact! *api* (f/people [{:crux.db/id id-str :name "Ivan" :version 2}])))))))
+      (t/is (thrown-with-msg? IllegalArgumentException #"invalid entity id"
+                              (f/transact! *api* (f/people [{:crux.db/id id-str :name "Ivan" :version 2}])))))))
 
 (t/deftest test-arguments-bug-247
   (t/is (= #{} (api/q (api/db *api*)

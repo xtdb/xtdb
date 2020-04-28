@@ -53,8 +53,8 @@
                    :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
                    :crux.tx.event/tx-events
                    [[:crux.tx/put
-                     (str (c/new-id (:crux.db/id doc)))
-                     (str (c/new-id doc))]]}]
+                     (c/new-id (:crux.db/id doc))
+                     (c/new-id doc)]]}]
                  (iterator-seq tx-log-iterator)))))))
 
 (defn- docs [dbtype ds id]
