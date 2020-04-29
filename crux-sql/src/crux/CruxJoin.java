@@ -51,7 +51,6 @@ public class CruxJoin extends Join implements CruxRel {
         return getLeft().getTable();
     }
 
-    // todo, do we need?
     @Override public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         return planner.getCostFactory().makeZeroCost();
     }
