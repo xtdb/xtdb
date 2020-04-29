@@ -398,7 +398,8 @@
     (let [!events (atom [])]
       (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
 
-      (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:crux/event-type :crux/indexed-tx}
+      (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:crux/event-type :crux/indexed-tx
+                                                             :with-tx-ops? true}
                                                       (fn [evt]
                                                         (swap! !events conj evt)))]
 
@@ -413,6 +414,12 @@
 
         (Thread/sleep 100)
 
-        (t/is (= [(merge {:crux/event-type :crux/indexed-tx, :committed? true} bar-tx)
-                  (merge {:crux/event-type :crux/indexed-tx, :committed? true} baz-tx)]
+        (t/is (= [(merge {:crux/event-type :crux/indexed-tx,
+                          :committed? true
+                          :crux/tx-ops [[:crux.tx/put {:crux.db/id :bar}]]}
+                         bar-tx)
+                  (merge {:crux/event-type :crux/indexed-tx,
+                          :committed? true
+                          :crux/tx-ops [[:crux.tx/put {:crux.db/id :baz}]]}
+                         baz-tx)]
                  @!events))))))

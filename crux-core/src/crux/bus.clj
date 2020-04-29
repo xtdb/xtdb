@@ -17,8 +17,8 @@
 (defmulti event-spec :crux/event-type, :default ::default)
 (defmethod event-spec ::default [_] any?)
 
-(s/def ::event (s/and (s/keys :req [:crux/event-type])
-                      (s/multi-spec event-spec :crux/event-type)))
+(s/def ::event (s/merge (s/keys :req [:crux/event-type])
+                        (s/multi-spec event-spec :crux/event-type)))
 
 (defrecord EventBus [!listeners]
   EventSource

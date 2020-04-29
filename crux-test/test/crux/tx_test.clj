@@ -16,7 +16,8 @@
             [crux.query :as q]
             [crux.node :as n]
             [crux.io :as cio]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.tx.event :as txe])
   (:import [java.util Date]
            [java.time Duration]))
 
@@ -795,7 +796,15 @@
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
                  :av-count 4}
                 {:crux/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
-                {:crux/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
+                {:crux/event-type ::tx/indexed-tx,
+                 ::tx/submitted-tx submitted-tx,
+                 :committed? true
+                 ::txe/tx-events [[:crux.tx/put
+                                   "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
+                                   "974e28e6484fb6c66e5ca6444ec616207800d815"]
+                                  [:crux.tx/put
+                                   "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
+                                   "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
                    (update 1 dissoc :bytes-indexed)))))))
 

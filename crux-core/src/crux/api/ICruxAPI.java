@@ -175,7 +175,8 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
 
     @SuppressWarnings("unchecked")
     public static final Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
-        .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/tx-indexed"));
+        .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/tx-indexed"))
+        .assoc(Keyword.intern("with-tx-ops?"), true);
 
     public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
 

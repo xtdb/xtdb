@@ -14,7 +14,7 @@
             [taoensso.nippy :as nippy]
             [clojure.set :as set]
             [crux.status :as status]
-            crux.tx.event)
+            [crux.tx.event :as txe])
   (:import crux.codec.EntityTx
            java.io.Closeable
            [java.util.concurrent ExecutorService TimeoutException]
@@ -37,7 +37,7 @@
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
 (defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
-(defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx], :req-un [::committed?]))
+(defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
 
 (defmulti conform-tx-op first)
 
@@ -76,7 +76,7 @@
                   (if (map? arg)
                     (-> arg c/new-id str)
                     arg)))
-      (->> (s/assert :crux.tx.event/tx-event)))))
+      (->> (s/assert ::txe/tx-event)))))
 
 (defn- conform-tx-event [[op & args]]
   (-> (case op
@@ -483,13 +483,13 @@
         (update-stats tx-consumer docs-stats)))))
 
 (defn index-tx [{:keys [bus indexer object-store kv-store] :as tx-consumer} {:crux.tx/keys [tx-time tx-id] :as tx} tx-events]
-  (s/assert :crux.tx.event/tx-events tx-events)
+  (s/assert ::txe/tx-events tx-events)
 
   (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
   (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
   (with-open [index-store (db/open-index-store indexer)]
-    (binding [*current-tx* (assoc tx :crux.tx.event/tx-events tx-events)]
+    (binding [*current-tx* (assoc tx ::txe/tx-events tx-events)]
       (let [tx-consumer (assoc tx-consumer :index-store index-store)
             res (reduce (fn [{:keys [history] :as acc} tx-event]
                           (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
@@ -517,7 +517,10 @@
             (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
             (db/mark-tx-as-failed indexer tx)))
 
-        (bus/send bus {:crux/event-type ::indexed-tx, ::submitted-tx tx, :committed? committed?})
+        (bus/send bus {:crux/event-type ::indexed-tx,
+                       ::submitted-tx tx,
+                       :committed? committed?
+                       ::txe/tx-events tx-events})
 
         {:tombstones (when committed?
                        (:tombstones res))}))))

@@ -17,6 +17,7 @@
             [crux.status :as status]
             [crux.topology :as topo]
             [crux.tx :as tx]
+            [crux.tx.event :as txe]
             [crux.bus :as bus])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            java.io.Closeable
@@ -168,11 +169,14 @@
       :crux/indexed-tx
       (bus/listen bus
                   (assoc event-opts :crux/event-type ::tx/indexed-tx)
-                  (fn [{:keys [::tx/submitted-tx] :as ev}]
+                  (fn [{:keys [::tx/submitted-tx ::txe/tx-events] :as ev}]
                     (.accept ^Consumer consumer
                              (merge {:crux/event-type :crux/indexed-tx}
                                     (select-keys ev [:committed?])
-                                    (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])))))))
+                                    (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                                    (when (:with-tx-ops? event-opts)
+                                      (with-open [snapshot (kv/new-snapshot kv-store)]
+                                        {:crux/tx-ops (mapv #(tx/tx-event->tx-op % snapshot object-store) tx-events)}))))))))
 
   (latestCompletedTx [this]
     (db/latest-completed-tx indexer))
