@@ -20,12 +20,11 @@
                              [reagent "0.10.0"]
                              [re-frame "0.12.0"]
                              [day8.re-frame/http-fx "v0.2.0"]
-                             [crux-uikit "0.0.1-SNAPSHOT"]
                              [bidi "2.1.6"]
                              [kibu/pushy "0.3.8"]]}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]}
   :plugins [[yogthos/lein-sass "0.1.10"]]
   :resource-paths ["target" "resources"]
-  :sass {:source "resources/public/css" :target "target/public/css"}
+  :sass {:source "resources/public/scss/" :target "target/public/css/"}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)
