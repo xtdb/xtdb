@@ -20,6 +20,9 @@
            [java.util.concurrent ExecutorService TimeoutException]
            java.util.Date))
 
+;; TODO: move stuff in this namespace and consolidate with crux.index
+;; and crux.tx.consumer.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private date? (partial instance? Date))
