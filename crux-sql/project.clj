@@ -15,7 +15,8 @@
                  ;; dependency conflict resolution:
                  [org.apache.calcite.avatica/avatica-core "1.16.0"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.0"]
-                 [com.fasterxml.jackson.core/jackson-databind "2.10.0"]]
+                 [com.fasterxml.jackson.core/jackson-databind "2.10.0"]
+                 [commons-logging "1.2"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                   [io.airlift.tpch/tpch "0.10"]
 
