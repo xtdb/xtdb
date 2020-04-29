@@ -28,6 +28,7 @@
            [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
+           java.net.URLDecoder
            org.eclipse.jetty.server.Server))
 
 ;; ---------------------------------------------------
@@ -401,7 +402,7 @@
 
 (defn- entity-state [^ICruxAPI crux-node options request]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
-    (let [eid (c/id-edn-reader encoded-eid)
+    (let [eid (c/id-edn-reader (URLDecoder/decode encoded-eid))
           query-params (:query-params request)
           db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                             (instant/read-instant-date))
