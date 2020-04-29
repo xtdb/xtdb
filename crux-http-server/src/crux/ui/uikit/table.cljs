@@ -1,7 +1,7 @@
 (ns crux.ui.uikit.table
   (:require
    [clojure.pprint :as pprint]
-   [crux.uikit.utils :as utils]
+   [crux.ui.uikit.utils :as utils]
    [reagent.core :as r]))
 
 (defn pprint-str
