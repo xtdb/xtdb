@@ -1,0 +1,43 @@
+= crux-s3
+
+This Crux module allows you to use AWS's Simple Storage Service (S3) as Crux's 'document store'.
+
+== Getting started
+
+First, include `[juxt/crux-s3 "RELEASE"]` in your project.clj, or `{juxt/crux-s3 {:mvn/version "RELEASE"}}` in your deps.edn.
+
+Then, include `'crux.s3/s3-doc-store` in your topology - for example:
+
+[source,clojure]
+----
+{:crux.node/topology '[crux.kafka/topology
+                       crux.s3/s3-doc-store]
+
+ :crux.s3/bucket "your-bucket"
+
+ ;; (optional)
+ :crux.s3/prefix "path/to/docs"}
+----
+
+== Configuration
+
+While the above is sufficient to get `crux-s3` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
+We expose these via the https://github.com/juxt/crux/blob/master/crux-s3/src/crux/s3/S3Configurator.java[`crux.s3.S3Configurator`] interface - you can supply an instance using the following in your topology map:
+
+[source,clojure]
+----
+{:crux.node/topology '[...]
+ ...
+ :crux.s3/configurator {:start-fn (fn [deps args]
+                                    (reify S3Configurator
+                                      ...))}}
+----
+
+Through this interface, you can supply an `S3AsyncClient` for crux-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
+By default, we get credentials through the usual AWS credentials provider, and store documents using https://github.com/ptaoussanis/nippy[Nippy].
+
+== Bugs/PRs
+
+Please submit these through Github in the usual way - thanks!
+
+Help is available through our usual channels - https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip] and http://clojurians.net/[#crux on Clojurians Slack].
