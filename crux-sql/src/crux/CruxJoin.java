@@ -28,7 +28,7 @@ public class CruxJoin extends Join implements CruxRel {
 
     public CruxJoin(RelOptCluster cluster, RelTraitSet traitSet, RelNode left, RelNode right,
                     RexNode condition, JoinRelType joinType) {
-        super(cluster, traitSet, left, right, condition, ImmutableSet.of(), joinType);
+        super(cluster, traitSet, ImmutableList.of(), left, right, condition, ImmutableSet.of(), joinType);
         this.joinFn = CruxUtils.resolve("crux.calcite/enrich-join");
         assert getConvention() == CruxRel.CONVENTION;
     }

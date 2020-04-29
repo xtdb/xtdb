@@ -19,14 +19,14 @@ public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
     }
 
     @Override
-    public CalciteSignature prepareSql(Context context, Query query, Type elementType, long maxRowCount) {
+    public <T> CalciteSignature<T> prepareSql(Context context, Query<T> query, Type elementType, long maxRowCount) {
         if (query.sql != null) {
             Matcher matcher = VT_PATTERN.matcher(query.sql);
             if(matcher.matches()) {
                 ZonedDateTime zp = ZonedDateTime.parse(matcher.group(2));
                 Date date = Date.from(zp.toInstant());
                 query = CalcitePrepare.Query.of(matcher.group(3));
-                CalciteSignature sig = super.prepareSql(context, query, elementType, maxRowCount);
+                CalciteSignature<T> sig = super.prepareSql(context, query, elementType, maxRowCount);
                 sig.internalParameters.put("VALIDTIME", date);
                 return sig;
             }

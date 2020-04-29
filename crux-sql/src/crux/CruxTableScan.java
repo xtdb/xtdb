@@ -19,7 +19,7 @@ public class CruxTableScan extends TableScan implements CruxRel {
     protected CruxTableScan(RelOptCluster cluster, RelTraitSet traitSet,
                             RelOptTable table, CruxTable cruxTable,
                             RelDataType projectRowType) {
-        super(cluster, traitSet, table);
+        super(cluster, traitSet, ImmutableList.of(), table);
         this.cruxTable  = Objects.requireNonNull(cruxTable, "cruxTable");
         this.projectRowType = projectRowType;
 
