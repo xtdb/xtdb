@@ -17,7 +17,7 @@
 (defn cast-to-query-params
   [query]
   (let [{:keys [find where limit
-                offset args order-by]} (read-string query)]
+                offset args order-by]} query]
     (cond-> ""
       :find (str "find=" find)
       :where ((fn [x] (apply
@@ -30,23 +30,25 @@
                   (apply
                    str x
                    (map #(str "&order-by" %) order-by))))
-      true (str "&linked=true"))))
+      true (str "&link-entities?=true"))))
 
 (rf/reg-event-fx
  ::submit-query-box
  (fn [{:keys [db]} [_ query-value]]
-   (let [query-params (cast-to-query-params query-value)]
+   (let [query-map (read-string query-value)
+         query-params (cast-to-query-params query-map)]
      {:http-xhrio {:method :get
                    :uri (str "/_query?" query-params)
                    :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-submit-query-box query-params]
+                   :on-success [::success-submit-query-box query-params (:find query-map)]
                    :on-failure [::fail-submit-query-box]}})))
 
 (rf/reg-event-fx
  ::success-submit-query-box
- (fn [{:keys [db]} [_ query-params result]]
+ (fn [{:keys [db]} [_ query-params find-clause result]]
    (prn "submit query box success!")
-   {:db (assoc db :query-data result)
+   {:db (assoc db :query-data
+               (assoc result "find-clause" find-clause))
     :dispatch [:navigate {:page :query
                           :query-params query-params}]}))
 
