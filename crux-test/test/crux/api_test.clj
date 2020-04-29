@@ -33,7 +33,7 @@
                         (with-meta {::embedded-kafka? true}))
        :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts fs/with-standalone-doc-store kvf/with-kv-dir fapi/with-node])
                                    (with-meta {::embedded-kafka? true}))}
-      #_(select-keys [:local-standalone])
+      (select-keys [:local-standalone])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
 (defn- with-each-api-implementation [f]
@@ -383,10 +383,15 @@
                   {:crux.db/id :ivan :name "Ivan" :version 1}]
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
 
-(t/deftest test-db-throws-if-future-tx-time-provided
+(t/deftest test-db-throws-if-future-tx-time-provided-546
   (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
+
+(t/deftest test-history-range-throws-if-future-tx-time-provided-827
+  (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+        the-future (Date. (+ (.getTime tx-time) 10000))]
+    (t/is (thrown? NodeOutOfSyncException (api/history-range *api* :foo nil nil nil the-future)))))
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (.latestSubmittedTx *api*)))

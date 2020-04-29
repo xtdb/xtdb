@@ -83,6 +83,14 @@
   (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (cio/with-read-lock lock
       (ensure-node-open this)
+      (let [latest-tx-time (:crux.tx/tx-time (.latestCompletedTx this))]
+        (when (and transaction-time-end
+                   (or (nil? latest-tx-time)
+                       (pos? (compare transaction-time-end latest-tx-time))))
+          (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
+                                                  transaction-time-end latest-tx-time)
+                                          transaction-time-end latest-tx-time))))
+
       (with-open [index-store (db/open-index-store indexer)]
         (->> (db/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
              (mapv c/entity-tx->edn)
