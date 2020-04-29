@@ -284,6 +284,12 @@
     (URL. s)
     (catch MalformedURLException _)))
 
+(defn- maybe-map-str [s]
+  (try
+    (let [edn (edn/read-string s)]
+      (when (map? edn) edn))
+    (catch Exception _)))
+
 (extend-protocol IdToBuffer
   (class (byte-array 0))
   (id->buffer [this ^MutableDirectBuffer to]
@@ -330,9 +336,10 @@
         to)
       (if-let [id (or (maybe-uuid-str this)
                       (maybe-keyword-str this)
-                      (maybe-url-str this))]
+                      (maybe-url-str this)
+                      (maybe-map-str this))]
         (id->buffer id to)
-        (throw (IllegalArgumentException. (format "Not a %s hex, keyword, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
+        (throw (IllegalArgumentException. (format "Not a %s hex, keyword, EDN map, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
 
   Map
   (id->buffer [this to]
