@@ -457,6 +457,7 @@
                         edn))
       (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html links v)]) edn))
       (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
+      (nil? edn) [:code "nil"]
       :else (str edn))))
 
 (defn- entity-state [^ICruxAPI crux-node options request]
