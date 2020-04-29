@@ -94,16 +94,16 @@ class CruxRules {
             super(LogicalJoin.class, Convention.NONE, CruxRel.CONVENTION, "CruxJoinRule");
         }
 
+        // Note: this is modeled on org.apache.calcite.adapter.jdbc
+
         @Override public RelNode convert(RelNode rel) {
             final Join join = (Join) rel;
             switch (join.getJoinType()) {
-            case SEMI:
-            case ANTI:
-                // It's not possible to convert semi-joins or anti-joins. They have fewer columns
-                // than regular joins.
-                return null;
-            default:
+            case INNER:
                 return convert(join, true);
+            default:
+                // TODO exhaustive study/test of joins available in org.apache.calcite.sql.JoinType
+                return null;
             }
         }
 
@@ -111,9 +111,7 @@ class CruxRules {
             final List<RelNode> newInputs = new ArrayList<>();
             for (RelNode input : join.getInputs()) {
                 if (convertInputTraits && input.getConvention() != getOutTrait()) {
-                    input =
-                        convert(input,
-                                input.getTraitSet().replace(out));
+                    input = convert(input, input.getTraitSet().replace(out));
                 }
                 newInputs.add(input);
             }
@@ -121,13 +119,11 @@ class CruxRules {
                 return null;
             }
 
-            return new CruxJoin(
-                                join.getCluster(),
+            return new CruxJoin(join.getCluster(),
                                 join.getTraitSet().replace(out),
                                 newInputs.get(0),
                                 newInputs.get(1),
                                 join.getCondition(),
-                                //                                    join.getVariablesSet(),
                                 join.getJoinType());
         }
 

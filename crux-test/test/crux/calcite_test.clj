@@ -370,13 +370,15 @@
              (explain q))))
 
   (let [q "SELECT PERSON.NAME FROM PERSON LEFT OUTER JOIN PLANET ON PERSON.PLANET = PLANET.NAME"]
+    ;; Calcite handles OUTER_JOINS for now:
     (t/is (= [{:name "Ivan"} {:name "Malcolm"}]
              (query q)))
     (t/is (= (str "EnumerableCalc(expr#0..2=[{inputs}], NAME=[$t0])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxJoin(condition=[=($1, $2)], joinType=[left])\n"
+                  "  EnumerableHashJoin(condition=[=($1, $2)], joinType=[left])\n"
+                  "    CruxToEnumerableConverter\n"
                   "      CruxProject(NAME=[$1], PLANET=[$2])\n"
                   "        CruxTableScan(table=[[crux, PERSON]])\n"
+                  "    CruxToEnumerableConverter\n"
                   "      CruxProject(NAME=[$1])\n"
                   "        CruxTableScan(table=[[crux, PLANET]])\n")
              (explain q)))))
