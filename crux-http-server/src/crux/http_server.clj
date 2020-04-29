@@ -427,6 +427,9 @@
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       nil)))
 
+(defn html? [request]
+  (= (get-in request [:muuntaja/response :format]) "text/html"))
+
 (defn link-all-entities
   [db path result]
   (letfn [(recur-on-result [result links]
@@ -467,15 +470,15 @@
           entity-map (api/entity db eid)]
       {:status (if (some? entity-map) 200 404)
        :body (cond
-               (= (get-in request [:muuntaja/response :format]) "text/html") (if entity-map
-                                                                               (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                                                                                 (raw-html
-                                                                                  {:body (entity->html linked-entities entity-map)
-                                                                                   :title "/_entity"
-                                                                                   :options options}))
-                                                                               (raw-html {:body [:div "No entity found"]
-                                                                                          :title "/_entity"
-                                                                                          :options options}))
+               (html? request) (if entity-map
+                                 (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
+                                   (raw-html
+                                    {:body (entity->html linked-entities entity-map)
+                                     :title "/_entity"
+                                     :options options}))
+                                 (raw-html {:body [:div "No entity found"]
+                                            :title "/_entity"
+                                            :options options}))
                (get query-params "link-entities?") {"linked-entities" (link-all-entities db  "/_entity" entity-map)
                                                     "entity" entity-map}
                :else entity-map)})))
@@ -545,13 +548,12 @@
                "Nothing to show"]]])]]
     [:table.table__foot]]])
 
-(defn data-browser-query [^ICruxAPI crux-node options request]
+(defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
   (let [query-params (:query-params request)
-        link-entities? (get query-params "link-entities?")
-        html? (= (get-in request [:muuntaja/response :format]) "text/html")]
+        link-entities? (get query-params "link-entities?")]
     (cond
       (empty? query-params)
-      (if html?
+      (if (html? request)
         {:status 200
          :body (raw-html
                 {:body [:form
