@@ -4,7 +4,7 @@
    [crux.ui.events :as events]
    [crux.ui.subscriptions :as subs]
    [reagent.core :as r]
-   [crux.uikit.table :as table]
+   [crux.ui.uikit.table :as table]
    [re-frame.core :as rf]))
 
 (defn view []
