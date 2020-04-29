@@ -15,6 +15,11 @@
 (rf/reg-sub
  ::query-data
  (fn [db _]
+   (:query-data db)))
+
+(rf/reg-sub
+ ::query-data-table
+ (fn [db _]
    (let [{:strs [query-results find-clause linked-entities]}
          (:query-data db)
          columns (map (fn [column]

@@ -30,17 +30,18 @@
 
 (defn query-table
   []
-  (let [query-data @(rf/subscribe [::subs/query-data])]
-    [table/table query-data]))
+  (when-not @(rf/subscribe [::subs/query-data])
+    (rf/dispatch [::events/inject-metadata :query-data]))
+  (fn []
+    (let [query-data-table @(rf/subscribe [::subs/query-data-table])]
+      [table/table query-data-table])))
 
 (defn query-view
   []
-  (rf/dispatch [::events/inject-metadata :query-data])
-  (fn []
-    (let [{:keys [query-params]} @(rf/subscribe [::subs/current-page])]
-      (if (seq query-params)
-        [query-table]
-        [query-box]))))
+  (let [{:keys [query-params]} @(rf/subscribe [::subs/current-page])]
+    (if (seq query-params)
+      [query-table]
+      [query-box])))
 
 (defn view []
   (let [current-page @(rf/subscribe [::subs/current-page])]
