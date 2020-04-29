@@ -37,7 +37,7 @@
 ;; Utils
 
 (defn- raw-html
-  [metadata body]
+  [metadata body title]
   (str (hiccup2/html
         [:html
          {:lang "en"}
@@ -56,7 +56,11 @@
                    :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
            [:title "Crux Console"]
            [:body
-            [:div#app body]
+            [:nav.console-nav
+             [:div "Crux Console"]]
+            [:div.console
+             [:h1 title]
+             [:div#app body]]
             [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])])))
 
 (defn- body->edn [request]
@@ -468,8 +472,9 @@
                    (raw-html
                     {"entity" entity-map
                      "linked-entities" linked-entities}
-                    (entity->html linked-entities entity-map)))
-                 (raw-html {} [:div "No entity found"]))
+                    (entity->html linked-entities entity-map)
+                    "/_entity"))
+                 (raw-html {} [:div "No entity found"] "/_entity"))
                entity-map)})))
 
 (defn- vectorize-param [param]
@@ -529,22 +534,26 @@
 
 (defn query->html [links {headers :find} results {:keys [prev-url next-url]}]
   [:body
-   (if (seq results)
-     [:div
-      [:table
-       [:thead
-        [:tr
-         (for [header headers]
-           [:th header])]]
-       [:tbody
-        (for [row results]
-          [:tr
-           (for [[header cell-value] (map vector headers row)]
-             [:td
-              (if-let [href (get links cell-value)]
-                [:a {:href href} (str cell-value)]
-                (str cell-value))])])]]]
-     [:div "No results found"])
+   [:div.uikit-table
+    [:div.table__main
+     [:table.table
+      [:thead.table__head
+       [:tr
+        (for [header headers]
+          [:th.table__cell.head__cell
+           header])]]
+      (if (seq results)
+        [:tbody.table__body
+         (for [row results]
+           [:tr.table__row.body__row
+            (for [[header cell-value] (map vector headers row)]
+              [:td.table__cell.body__cell
+               (if-let [href (get links cell-value)]
+                 [:a {:href href} (str cell-value)]
+                 (str cell-value))])])]
+        [:tbody.table__body.table__no-data
+         [:tr [:td.td__no-data
+               "Nothing to show"]]])]]]
    [:div
     (if prev-url
       [:a {:href prev-url} "Prev"]
@@ -571,7 +580,8 @@
                  [:br]
                  [:button
                   {:type "submit"}
-                  "submit me here"]])}
+                  "submit me here"]]
+                "/_query")}
         {:status 400
          :body "No query provided."})
 
@@ -601,7 +611,7 @@
                        "find-clause" (:find query)
                        "prev-next-page" prev-next-page
                        "linked-entities" links}
-                      (query->html links query results prev-next-page)))
+                      (query->html links query results prev-next-page) "/_query"))
                    results)})
         (catch Exception e
           {:status 400

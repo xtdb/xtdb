@@ -9,7 +9,7 @@
 
 (defn view []
   (let [metadata @(rf/subscribe [::subs/metadata])]
-    [:div.container
+    [:div
      [table/table metadata]
      #_[:pre
       (with-out-str
