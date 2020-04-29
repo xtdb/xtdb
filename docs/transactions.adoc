@@ -64,8 +64,11 @@ into a valid ID. Use of `#crux/id` with a valid ID type will also work
 
 URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
 
+[#transactions-operations]
+== Operations
+
 [#transactions-put]
-== Put
+=== Put
 
 Put's a document into Crux. If a document already exists with the
 given `:crux.db/id`, a new version of this document will be created at
@@ -90,7 +93,7 @@ several versions or a range in time, one is required to submit a
 transaction containing several operations.
 
 [#transactions-delete]
-== Delete
+=== Delete
 
 Deletes a document at a given `valid time`.
 Historical versions of the document will still be available.
@@ -102,7 +105,7 @@ Historical versions of the document will still be available.
 ----
 
 [#transactions-match]
-== Match
+=== Match
 
 Match operations check the current state of an entity - if the entity doesn't match the provided doc, the transaction will not continue.
 You can also pass `nil` to check that the entity doesn't exist prior to your transaction.
@@ -121,7 +124,7 @@ You can also pass `nil` to check that the entity doesn't exist prior to your tra
 
 
 [#transactions-evict]
-== Evict
+=== Evict
 
 Evicts a document from Crux. Historical versions of the document will no longer be available.
 
@@ -129,3 +132,34 @@ Evicts a document from Crux. Historical versions of the document will no longer 
 ----
 [:crux.tx/evict :dbpedia.resource/Pablo-Picasso]
 ----
+
+== Events
+
+You can subscribe to Crux events using the `(crux.api/listen node event-opts f)` function.
+Currently we expose one event type, `:crux/indexed-tx`, called when Crux indexes a transaction.
+
+[source,clojure]
+----
+(require '[crux.api :as crux])
+
+(crux/listen node {:crux/event-type :crux/indexed-tx, :with-tx-ops? true}
+  (fn [ev]
+    (println "event received!")
+    (clojure.pprint/pprint ev)))
+
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
+----
+
+prints:
+
+[source,clojure]
+----
+event received!
+{:crux/event-type :crux/indexed-tx,
+ :crux.tx/tx-id ...,
+ :crux.tx/tx-time #inst "...",
+ :committed? true,
+ :crux/tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]]}
+----
+
+You can `.close` the return value from `(crux.api/listen ...)` to detach the listener, should you need to.
