@@ -642,30 +642,31 @@
                                             cached-result (when cache-key
                                                             (get *recursion-table* cache-key))]]
                                   (with-open [index-store ^Closeable (open-index-store db)]
-                                    (cond
-                                      cached-result
-                                      cached-result
+                                    (let [db (assoc db :index-store index-store)]
+                                      (cond
+                                        cached-result
+                                        cached-result
 
-                                      single-e-var-triple?
-                                      (let [[[_ clause]] where]
-                                        (or-single-e-var-triple-fast-path
-                                         index-store
-                                         db
-                                         clause
-                                         args))
+                                        single-e-var-triple?
+                                        (let [[[_ clause]] where]
+                                          (or-single-e-var-triple-fast-path
+                                           index-store
+                                           db
+                                           clause
+                                           args))
 
-                                      :else
-                                      (binding [*recursion-table* (if cache-key
-                                                                    (assoc *recursion-table* cache-key [])
-                                                                    *recursion-table*)]
-                                        (let [{:keys [n-ary-join
-                                                      var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
-                                          (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
-                                            (if has-free-vars?
-                                              (vec (for [[join-keys join-results] idx-seq]
-                                                     (vec (for [var free-vars-in-join-order]
-                                                            (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
-                                              [])))))))]
+                                        :else
+                                        (binding [*recursion-table* (if cache-key
+                                                                      (assoc *recursion-table* cache-key [])
+                                                                      *recursion-table*)]
+                                          (let [{:keys [n-ary-join
+                                                        var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
+                                            (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
+                                              (if has-free-vars?
+                                                (vec (for [[join-keys join-results] idx-seq]
+                                                       (vec (for [var free-vars-in-join-order]
+                                                              (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
+                                                []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
                  (let [free-results (->> branch-results
@@ -718,7 +719,8 @@
          :constraint-fn
          (fn not-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
            (with-open [index-store ^Closeable (open-index-store db)]
-             (let [args (when (seq not-vars)
+             (let [db (assoc db :index-store index-store)
+                   args (when (seq not-vars)
                           [(->> (for [var not-vars]
                                   (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
