@@ -540,7 +540,7 @@
       [:thead.table__head
        [:tr
         (for [header headers]
-          [:th.table__cell.head__cell
+          [:th.table__cell.head__cell.no-js-head__cell
            header])]]
       (if (seq results)
         [:tbody.table__body
@@ -553,14 +553,24 @@
                  (str cell-value))])])]
         [:tbody.table__body.table__no-data
          [:tr [:td.td__no-data
-               "Nothing to show"]]])]]]
-   [:div
-    (if prev-url
-      [:a {:href prev-url} "Prev"]
-      [:span "Prev"])
-    (if next-url
-      [:a {:href next-url} "Next"]
-      [:span "Next"])]])
+               "Nothing to show"]]])]]
+    [:table.table__foot
+     [:tfoot
+      [:tr
+       [:td.foot__pagination
+        [:div]
+        [:div]
+        [:div.pagination__arrow-group
+         [:a.pagination__arrow-nav.no-js-pagination__arrow-nav
+          {:class (when-not prev-url
+                    "pagination__arrow-nav--disabled")
+           :href prev-url}
+          [:i.fas.fa-chevron-left]]
+         [:a.pagination__arrow-nav.no-js-pagination__arrow-nav
+          {:class (when-not next-url
+                    "pagination__arrow-nav--disabled")
+           :href next-url}
+          [:i.fas.fa-chevron-right]]]]]]]]])
 
 (defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
   (let [query-params (:query-params request)

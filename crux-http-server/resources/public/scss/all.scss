@@ -25,3 +25,14 @@ html, body {
     max-width: 80%;
     margin: auto;
 }
+
+// override default table style for no js version
+.no-js-pagination__arrow-nav {
+    color: #bdbdbd;
+}
+
+.no-js-head__cell {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+    border-bottom: 1px solid #dbdbdb;
+}
