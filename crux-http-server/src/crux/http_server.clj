@@ -466,16 +466,18 @@
                                                                (instant/read-instant-date))})
           entity-map (api/entity db eid)]
       {:status (if (some? entity-map) 200 404)
-       :body (if (= (get-in request [:muuntaja/response :format]) "text/html")
-               (if entity-map
-                 (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                   (raw-html
-                    {"entity" entity-map
-                     "linked-entities" linked-entities}
-                    (entity->html linked-entities entity-map)
-                    "/_entity"))
-                 (raw-html {} [:div "No entity found"] "/_entity"))
-               entity-map)})))
+       :body (cond
+               (= (get-in request [:muuntaja/response :format]) "text/html") (if entity-map
+                                                                               (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
+                                                                                 (raw-html
+                                                                                  {"entity" entity-map
+                                                                                   "linked-entities" linked-entities}
+                                                                                  (entity->html linked-entities entity-map)
+                                                                                  "/_entity"))
+                                                                               (raw-html {} [:div "No entity found"] "/_entity"))
+               (get query-params "link-entities?") {"linked-entities" (link-all-entities db  "/_entity" entity-map)
+                                                    "entity" entity-map}
+               :else entity-map)})))
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
@@ -608,21 +610,23 @@
                                                                    (instant/read-instant-date))})
               results (api/q db query)]
           {:status 200
-           :body (if html?
-                   (let [links (link-top-level-entities db  "/_entity" results)
-                         {:keys [limit offset]} query
-                         prev-offset (when-not (zero? offset)
-                                       (max 0 (- offset limit)))
-                         next-offset (when (= limit (count results))
-                                       (+ offset limit))
-                         prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
-                     (raw-html
-                      {"query-results" results
-                       "find-clause" (:find query)
-                       "prev-next-page" prev-next-page
-                       "linked-entities" links}
-                      (query->html links query results prev-next-page) "/_query"))
-                   results)})
+           :body (cond
+                   html? (let [links (link-top-level-entities db  "/_entity" results)
+                               {:keys [limit offset]} query
+                               prev-offset (when-not (zero? offset)
+                                             (max 0 (- offset limit)))
+                               next-offset (when (= limit (count results))
+                                             (+ offset limit))
+                               prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
+                           (raw-html
+                            {"query-results" results
+                             "find-clause" (:find query)
+                             "prev-next-page" prev-next-page
+                             "linked-entities" links}
+                            (query->html links query results prev-next-page) "/_query"))
+                   (get query-params "link-entities?") {"linked-entities" (link-top-level-entities db  "/_entity" results)
+                                                        "query-results" results}
+                   :else results)})
         (catch Exception e
           {:status 400
            :body (.getMessage e)})))))
