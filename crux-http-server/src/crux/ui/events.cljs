@@ -7,29 +7,50 @@
 
 (rf/reg-event-db
  ::inject-metadata
- (fn [db [_ meta-title]]
+ (fn [db [_ handler]]
    (let [result-meta (js/document.querySelector
-                      (str "meta[title=" meta-title "]"))
+                      (str "meta[title=result]"))
          string-content (.getAttribute result-meta "content")
          edn-content (read-string string-content)]
-     (assoc db :metadata edn-content))))
+     (assoc db handler edn-content))))
+
+(defn cast-to-query-params
+  [query]
+  (let [{:keys [find where limit
+                offset args order-by]} (read-string query)]
+    (cond-> ""
+      :find (str "find=" find)
+      :where ((fn [x] (apply
+                       str x
+                       (map #(str "&where=" %) where))))
+      limit (str "&limit=" limit)
+      offset (str "&offset=" offset)
+      args (str "&args=" args)
+      order-by ((fn [x]
+                  (apply
+                   str x
+                   (map #(str "&order-by" %) order-by))))
+      true (str "&linked=true"))))
 
 (rf/reg-event-fx
- ::get-query-result
- (fn [{:keys [db]} _]
-   {:http-xhrio {:method :get
-                 :uri "/_query?find=[id]&where=[id :crux.db/id _]"
-                 :response-format (ajax-edn/edn-response-format)
-                 :on-success [::success-get-query-result]
-                 :on-failure [::fail-get-query-result]}}))
+ ::submit-query-box
+ (fn [{:keys [db]} [_ query-value]]
+   (let [query-params (cast-to-query-params query-value)]
+     {:http-xhrio {:method :get
+                   :uri (str "/_query?" query-params)
+                   :response-format (ajax-edn/edn-response-format)
+                   :on-success [::success-submit-query-box query-params]
+                   :on-failure [::fail-submit-query-box]}})))
+
+(rf/reg-event-fx
+ ::success-submit-query-box
+ (fn [{:keys [db]} [_ query-params result]]
+   (prn "submit query box success!")
+   {:db (assoc db :query-data result)
+    :dispatch [:navigate {:page :query
+                          :query-params query-params}]}))
 
 (rf/reg-event-db
- ::success-get-query-result
- (fn [db [_ result]]
-   (assoc db :query-data result)))
-
-(rf/reg-event-db
- ::fail-get-query-result
- (fn [db [_ result]]
+ ::fail-submit-query-box (fn [db [_ result]]
    (prn "Failure: get query result: " result)
    db))

@@ -1,20 +1,18 @@
 (ns ^:figwheel-hooks crux.ui.main
   (:require
    [crux.ui.events :as events]
-   [crux.ui.views :refer [view]]
+   [crux.ui.views :as views]
+   [crux.ui.navigation :as navigation]
    [reagent.dom :as r]
    [re-frame.core :as rf]))
 
 (defn mount-root
   []
   (when-let [section (js/document.getElementById "app")]
-    (let [path-name js/location.pathname]
-      ;; clear subscriptions when figwheel reloads js
-      (rf/clear-subscription-cache!)
-      (rf/dispatch [::events/inject-metadata "result"])
-      (case path-name
-        "/_query" (r/render [view] section)
-        "default"))))
+    ;; clear subscriptions when figwheel reloads js
+    (rf/clear-subscription-cache!)
+    (navigation/initialize-routes)
+    (r/render [views/view] section)))
 
 (defn ^:export init
   []

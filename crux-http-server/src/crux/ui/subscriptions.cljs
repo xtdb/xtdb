@@ -3,10 +3,20 @@
    [re-frame.core :as rf]))
 
 (rf/reg-sub
- ::metadata
+ :db
+ (fn [db _]
+   db))
+
+(rf/reg-sub
+ ::current-page
+ (fn [db _]
+   (:current-page db)))
+
+(rf/reg-sub
+ ::query-data
  (fn [db _]
    (let [{:strs [query-results find-clause linked-entities]}
-         (:metadata db)
+         (:query-data db)
          columns (map (fn [column]
                         {:column-key column
                          :column-name (str column)

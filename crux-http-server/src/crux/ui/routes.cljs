@@ -1,7 +1,7 @@
 (ns crux.ui.routes)
 
 (def routes
-  ["/ui"
-   [["" :homepage]
+  [""
+   [["/" :homepage]
     ["/_query" :query]
     [["/_entity/" [#".+" :entity-id]] :entity]]])

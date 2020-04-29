@@ -585,14 +585,15 @@
                 {}
                 [:form
                  {:action "/_query"}
-                 [:textarea
+                 [:textarea.textarea
                   {:name "q"
                    :cols 40
                    :rows 10}]
                  [:br]
-                 [:button
+                 [:br]
+                 [:button.button
                   {:type "submit"}
-                  "submit me here"]]
+                  "Submit Query"]]
                 "/_query")}
         {:status 400
          :body "No query provided."})
