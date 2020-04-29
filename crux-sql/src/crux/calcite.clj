@@ -252,16 +252,17 @@
     (.remove !crux-nodes node-uuid)
     (.stop server)))
 
+(defonce registration (java.sql.DriverManager/registerDriver (crux.calcite.CruxJdbcDriver.)))
+
 (defn ^java.sql.Connection jdbc-connection [node]
   (assert node)
-  (defonce registration (java.sql.DriverManager/registerDriver (crux.calcite.CruxJdbcDriver.)))
   (DriverManager/getConnection "jdbc:crux:" (-> node meta :crux.node/topology ::server :node-uuid model-properties)))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
   (let [node-uuid (str (java.util.UUID/randomUUID))]
     (.put !crux-nodes node-uuid node)
     (let [server (.build (doto (HttpServer$Builder.)
-                           (.withHandler (LocalService. (JdbcMeta. "jdbc:calcite:" (model-properties node-uuid)))
+                           (.withHandler (LocalService. (JdbcMeta. "jdbc:crux:" (model-properties node-uuid)))
                                          org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
                            (.withPort port)))]
       (.start server)
