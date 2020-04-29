@@ -169,7 +169,16 @@
   node.")
 
   (listen ^java.lang.AutoCloseable [node event-opts f]
-    "TODO doc")
+    "Attaches a listener to Crux's event bus.
+
+  `event-opts` should contain `:crux/event-type`, along with any other options the event-type requires.
+
+  We currently only support one public event-type: `:crux/indexed-tx`.
+  Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
+
+  `(.close ...)` the return value to detach the listener.
+
+  This is an experimental API, subject to change.")
 
   (latest-completed-tx [node]
     "Returns the latest transaction to have been indexed by this node.")
