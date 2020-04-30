@@ -557,9 +557,9 @@
               inc-ivans-age '{:crux.db/id :inc-ivans-age
                               :crux.db.fn/args [:ivan :age inc]}]
           (fapi/submit+await-tx [[:crux.tx/fn :update-attribute-fn inc-ivans-age]])
+          (t/is (nil? (latest-exception)))
           (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
           (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
-          (t/is (nil? (latest-exception)))
 
           (t/testing "resulting documents are indexed"
             (t/is (= #{[41]} (api/q (api/db *api*)
@@ -586,7 +586,7 @@
                                        '(fn [db]
                                           [[:crux.tx/foo]])}]])
               (fapi/submit+await-tx '[[:crux.tx/fn :invalid-fn]])
-              (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #"Spec assertion failed" (rethrow-latest-exception))))
+              (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op" (rethrow-latest-exception))))
 
             (t/testing "exception thrown"
               (fapi/submit+await-tx [[:crux.tx/put
@@ -647,7 +647,7 @@
             (let [submitted-tx (fapi/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
               (t/is (nil? (latest-exception)))
               (t/is (= {:crux.db/id :tx-metadata
-                        :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
+                        :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn :tx-metadata-fn]])}
                        (api/entity (api/db *api*) :tx-metadata))))))))))
 
 (t/deftest tx-log-evict-454 []
@@ -800,11 +800,11 @@
                  ::tx/submitted-tx submitted-tx,
                  :committed? true
                  ::txe/tx-events [[:crux.tx/put
-                                   "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
-                                   "974e28e6484fb6c66e5ca6444ec616207800d815"]
+                                   #crux/id "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
+                                   #crux/id "974e28e6484fb6c66e5ca6444ec616207800d815"]
                                   [:crux.tx/put
-                                   "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
-                                   "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
+                                   #crux/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
+                                   #crux/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
                    (update 1 dissoc :bytes-indexed)))))))
 
