@@ -695,7 +695,7 @@
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
-         (fn unification-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn unification-constraint [index-store db idx-id->idx join-keys join-results]
            (let [values (for [arg args]
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
