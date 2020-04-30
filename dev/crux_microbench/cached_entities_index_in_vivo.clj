@@ -93,7 +93,7 @@
     (crux.bench-test/duration-millis (api/q db query))))
 
 (defn- naively-bench-query [test-id query query-id cache-on?]
-  (binding [crux.query/*with-entities-cache?* cache-on?]
+  (binding [crux.query/*with-entity-cache?* cache-on?]
     (let [db (api/db *api*)
           durations (naive-durations-measure query db sample-size)
           avg (avg durations)

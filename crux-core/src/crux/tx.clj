@@ -303,18 +303,12 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [object-store indexer tx-log index-store nested-fn-args], :as tx-consumer}]
+                                       {:keys [object-store tx-log index-store nested-fn-args query-engine], :as tx-consumer}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db indexer
-                 (lru/get-named-cache tx-consumer ::query-cache)
-                 (lru/get-named-cache tx-consumer ::conform-cache)
-                 object-store
-                 nil
-                 tx-time
-                 tx-time)
+        db (q/db query-engine tx-time tx-time)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
                                                  (or (get nested-fn-args arg-id)

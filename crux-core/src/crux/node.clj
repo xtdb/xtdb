@@ -37,7 +37,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store bus
+(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer object-store bus query-engine
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
@@ -54,13 +54,7 @@
             tx-time (or tx-time latest-tx-time)
             valid-time (or valid-time (Date.))]
 
-        (q/db indexer
-              (lru/get-named-cache kv-store ::query-cache)
-              (lru/get-named-cache kv-store ::conform-cache)
-              object-store
-              bus
-              valid-time
-              tx-time))))
+        (q/db query-engine valid-time tx-time))))
 
   (openDB [this] (.openDB this nil nil))
   (openDB [this valid-time] (.openDB this valid-time nil))
@@ -207,7 +201,7 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store bus]} node-opts]
+  {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store bus query-engine]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
@@ -216,9 +210,10 @@
                                :document-store document-store
                                :object-store object-store
                                :bus bus
+                               :query-engine query-engine
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::object-store ::tx-log}
+   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::object-store ::tx-log ::query-engine}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})
@@ -229,6 +224,7 @@
    ::indexer 'crux.tx/kv-indexer
    ::tx-consumer 'crux.tx.consumer/tx-consumer
    ::bus 'crux.bus/bus
+   ::query-engine 'crux.query/query-engine
    ::node 'crux.node/node-component})
 
 (defn start ^crux.api.ICruxAPI [options]
