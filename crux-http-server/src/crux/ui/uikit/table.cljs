@@ -209,12 +209,12 @@
         [:div.pagination__arrow-group
          [:div.pagination__arrow-nav
           {:on-click #(when prev-query-params
-                        (rf/dispatch [::events/fetch-query-table prev-query-params]))
+                        (rf/dispatch [::events/prev-next-links prev-query-params]))
            :class (when (nil? prev-query-params) "pagination__arrow-nav--disabled")}
           [:i.fas.fa-chevron-left]]
          [:a.pagination__arrow-nav
           {:on-click #(when next-query-params
-                        (rf/dispatch [::events/fetch-query-table next-query-params]))
+                        (rf/dispatch [::events/prev-next-links next-query-params]))
            :class (when (nil? next-query-params) "pagination__arrow-nav--disabled")}
           [:i.fas.fa-chevron-right]]]]]]]))
 

@@ -1,6 +1,7 @@
 (ns crux.ui.navigation
   (:require
    [crux.ui.routes :as routes]
+   [crux.ui.pages :as pages]
    [re-frame.core :as rf]
    [bidi.bidi :as bidi]
    [pushy.core :as pushy]))
@@ -19,11 +20,14 @@
  (fn [{:keys [db]} [_ url]]
    (let [route-data (bidi/match-route routes/routes url)
          handler (:handler route-data)
-         query-params {:query-params
-                       (str (js/URLSearchParams. js/window.location.search))}]
-     {:db (assoc db :current-page (merge route-data
-                                         query-params))
-      ::scroll-top _})))
+         query-params {:query-params (str (js/URLSearchParams. js/window.location.search))}
+         new-page (get pages/pages handler)]
+     (merge
+      (when-let [dispatch (:dispatch new-page)]
+        {:dispatch dispatch})
+      {:db (assoc db :current-page (merge route-data
+                                          query-params))
+       ::scroll-top _}))))
 
 (defn- dispatch-route!
   [url]

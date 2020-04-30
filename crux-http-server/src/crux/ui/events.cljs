@@ -2,6 +2,7 @@
   (:require
    [ajax.edn :as ajax-edn]
    [cljs.reader :refer [read-string]]
+   [clojure.string :as string]
    [day8.re-frame.http-fx]
    [re-frame.core :as rf]))
 
@@ -43,9 +44,15 @@
                             :query-params query-params}]})))
 
 (rf/reg-event-fx
+ ::prev-next-links
+ (fn [{:keys [db]} [_ query-params]]
+   {:dispatch [:navigate {:page :query
+                          :query-params query-params}]}))
+
+(rf/reg-event-fx
  ::fetch-query-table
- (fn [{:keys [db]} [_ & [query-params]]]
-   (let [query-params (or query-params (get-in db [:current-page :query-params]))
+ (fn [{:keys [db]} _]
+   (let [query-params (str (js/URLSearchParams. js/window.location.search))
          find (read-string (.get (js/URLSearchParams. js/window.location.search) "find"))
          link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
      {:http-xhrio {:method :get
@@ -73,8 +80,10 @@
 (rf/reg-event-fx
  ::fetch-entity
  (fn [{:keys [db]} _]
-   (let [entity-id (get-in db [:current-page :route-params :entity-id])
-         query-params (get-in db [:current-page :query-params])
+   (let [entity-id (-> js/window.location.pathname
+                       (string/split #"/")
+                       last)
+         query-params (str (js/URLSearchParams. js/window.location.search))
          link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
      {:http-xhrio {:method :get
                    :uri (str "/_entity/" entity-id "?" query-params
@@ -87,10 +96,7 @@
  ::success-fetch-entity
  (fn [{:keys [db]} [_ entity-id query-params result]]
    (prn "fetch entity success!")
-   {:db (assoc db :entity-data result)
-    :dispatch [:navigate {:page :entity
-                          :path-params {:entity-id entity-id}
-                          :query-params query-params}]}))
+   {:db (assoc db :entity-data result)}))
 
 (rf/reg-event-db
  ::fail-fetch-entity

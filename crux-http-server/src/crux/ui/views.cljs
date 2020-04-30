@@ -31,10 +31,8 @@
 
 (defn query-table
   []
-  (rf/dispatch [::events/fetch-query-table])
-  (fn []
-    (let [query-data-table @(rf/subscribe [::sub/query-data-table])]
-      [table/table query-data-table])))
+  (let [query-data-table @(rf/subscribe [::sub/query-data-table])]
+    [table/table query-data-table]))
 
 (defn query-view
   []
@@ -48,8 +46,7 @@
 (defn- entity->hiccup
   [links edn]
   (if-let [href (get links edn)]
-    [:a {:href href
-         :on-click #(rf/dispatch [::events/fetch-entity])}
+    [:a {:href href}
      (str edn)]
     (cond
       (map? edn) (into [:dl]
@@ -64,13 +61,11 @@
 
 (defn entity-view
   []
-  (rf/dispatch [::events/fetch-entity])
-  (fn []
-    (let [{:keys [linked-entities entity-result]}
-          @(rf/subscribe [::sub/entity-view-data])]
-      [:<>
-       [:h1 "/_entity"]
-       [:div (entity->hiccup linked-entities entity-result)]])))
+  (let [{:keys [linked-entities entity-result]}
+        @(rf/subscribe [::sub/entity-view-data])]
+    [:<>
+     [:h1 "/_entity"]
+     [:div (entity->hiccup linked-entities entity-result)]]))
 
 (defn view []
   (let [current-page @(rf/subscribe [::sub/current-page])]
