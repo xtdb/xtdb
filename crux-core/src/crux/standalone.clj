@@ -15,8 +15,7 @@
            java.util.Date))
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
-                  {:keys [^ExecutorService tx-submit-executor, indexer event-log-kv-store]
-                   :as deps}]
+                  {:keys [^ExecutorService tx-submit-executor, event-log-kv-store]}]
   (when (.isShutdown tx-submit-executor)
     (deliver !submitted-tx ::closed))
 
@@ -29,8 +28,7 @@
 
     (deliver !submitted-tx next-tx)))
 
-(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor
-                            indexer event-log-kv-store]
+(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor, event-log-kv-store]
   db/TxLog
   (submit-tx [this tx-events]
     (when (.isShutdown tx-submit-executor)
@@ -65,8 +63,8 @@
         (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
           (->> (when k (tx-log (if after-tx-id (kv/next iterator) k)))
                (cio/->cursor (fn []
-                                          (cio/try-close iterator)
-                                          (cio/try-close snapshot))))))))
+                               (cio/try-close iterator)
+                               (cio/try-close snapshot))))))))
 
   Closeable
   (close [_]
@@ -78,9 +76,9 @@
     (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
         (log/warn "waited 5s for tx-submit-executor to exit, no dice."))))
 
-(defn- ->tx-log [{:keys [::n/indexer ::event-log]} _]
+(defn- ->tx-log [{:keys [::event-log]} _]
   (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "crux-standalone-tx-log"))
-                     indexer (:kv-store event-log)))
+                     (:kv-store event-log)))
 
 (defrecord StandaloneDocumentStore [event-log-kv-store event-log-object-store]
   db/DocumentStore
@@ -130,6 +128,6 @@
          {::event-log {:start-fn ->event-log
                        :args event-log-args}
           ::n/tx-log {:start-fn ->tx-log
-                      :deps [::n/indexer ::n/kv-store ::n/object-store ::n/document-store ::event-log]}
+                      :deps [::n/kv-store ::n/object-store ::n/document-store ::event-log]}
           ::n/document-store {:start-fn ->document-store
                               :deps [::event-log]}}))
