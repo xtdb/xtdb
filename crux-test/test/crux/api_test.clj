@@ -166,7 +166,8 @@
   (let [doc {:crux.db/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
         submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
     (api/await-tx *api* submitted-tx)
-    (t/is (api/entity (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))))
+    (t/is (api/entity (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))
+    (t/is (not-empty (api/history *api* {:user "Xwop1A7Xog4nD6AfhZaPgg"})))))
 
 (t/deftest test-content-hash-invalid
   (let [valid-time (Date.)
