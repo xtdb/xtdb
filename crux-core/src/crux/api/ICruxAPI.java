@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.time.Duration;
 import java.util.Set;
+import java.util.function.Consumer;
 import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
 
 /**
  *  Provides API access to Crux.
@@ -171,6 +173,27 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
 
+    /**
+     * Temporary helper value to pass to `listen`, to subscribe to tx-indexed events.
+     */
+    @SuppressWarnings("unchecked")
+    public static final Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
+        .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/tx-indexed"))
+        .assoc(Keyword.intern("with-tx-ops?"), true);
+
+    /**
+     * Attaches a listener to Crux's event bus.
+     *
+     * We currently only support one public event-type: `:crux/indexed-tx`.
+     * Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
+     * See/use {@link #TX_INDEXED_EVENT_OPTS TX_INDEXED_EVENT_OPTS}
+     *
+     * This is an experimental API, subject to change.
+     *
+     * @param event-opts should contain `:crux/event-type`, along with any other options the event-type requires.
+     * @return an AutoCloseable - closing the return value detaches the listener.
+     */
+    public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
 
     /**
        @return the latest transaction to have been indexed by this node.

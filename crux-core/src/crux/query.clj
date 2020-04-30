@@ -1213,12 +1213,12 @@
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
       (when bus
-        (bus/send bus {:crux.bus/event-type ::submitted-query
+        (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
       (let [ret (q this conformed-query)]
         (when bus
-          (bus/send bus {:crux.bus/event-type ::completed-query
+          (bus/send bus {:crux/event-type ::completed-query
                          ::query safe-query
                          ::query-id query-id}))
         ret)))
@@ -1234,13 +1234,13 @@
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
       (when bus
-        (bus/send bus {:crux.bus/event-type ::submitted-query
+        (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
       (cio/->cursor (fn []
                       (.close index-store)
                       (when bus
-                        (bus/send bus {:crux.bus/event-type ::completed-query
+                        (bus/send bus {:crux/event-type ::completed-query
                                        ::query safe-query
                                        ::query-id query-id})))
                     (q this index-store conformed-query))))

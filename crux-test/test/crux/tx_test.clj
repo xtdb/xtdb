@@ -16,7 +16,8 @@
             [crux.query :as q]
             [crux.node :as n]
             [crux.io :as cio]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.tx.event :as txe])
   (:import [java.util Date]
            [java.time Duration]))
 
@@ -773,14 +774,15 @@
 
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
-        !latch (promise)]
-    (bus/listen (get-in (meta *api*) [::n/topology ::n/bus])
-                {::bus/event-types #{::tx/indexing-docs ::tx/indexed-docs
-                                     ::tx/indexing-tx ::tx/indexed-tx}}
-                #(do
-                   (swap! !events conj %)
-                   (when (= ::tx/indexed-tx (::bus/event-type %))
-                     (deliver !latch @!events))))
+        !latch (promise)
+        bus (get-in (meta *api*) [::n/topology ::n/bus])]
+    (doseq [event-type #{::tx/indexing-docs ::tx/indexed-docs
+                         ::tx/indexing-tx ::tx/indexed-tx}]
+      (bus/listen bus {:crux/event-type event-type}
+                  (fn [evt]
+                    (swap! !events conj evt)
+                    (when (= ::tx/indexed-tx (:crux/event-type evt))
+                      (deliver !latch @!events)))))
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
@@ -789,12 +791,20 @@
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
 
-      (t/is (= [{::bus/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
-                {::bus/event-type ::tx/indexed-docs
+      (t/is (= [{:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
+                {:crux/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
                  :av-count 4}
-                {::bus/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
-                {::bus/event-type ::tx/indexed-tx, ::tx/submitted-tx submitted-tx, :committed? true}]
+                {:crux/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
+                {:crux/event-type ::tx/indexed-tx,
+                 ::tx/submitted-tx submitted-tx,
+                 :committed? true
+                 ::txe/tx-events [[:crux.tx/put
+                                   "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
+                                   "974e28e6484fb6c66e5ca6444ec616207800d815"]
+                                  [:crux.tx/put
+                                   "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
+                                   "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
                    (update 1 dissoc :bytes-indexed)))))))
 

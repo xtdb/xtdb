@@ -7,44 +7,41 @@
            [java.util.concurrent ExecutorService Executors TimeUnit]))
 
 (defprotocol EventSource
-  (listen [_ f] [_ listen-ops f]))
+  (listen ^java.io.Closeable [_ listen-ops f]))
 
 (defprotocol EventSink
   (send [_ event]))
 
-(s/def ::event-type keyword?)
-(s/def ::event-types (s/coll-of ::event-type :kind set?))
+(s/def :crux/event-type keyword?)
 
-(defmulti event-spec ::event-type, :default ::default)
+(defmulti event-spec :crux/event-type, :default ::default)
 (defmethod event-spec ::default [_] any?)
 
-(s/def ::event (s/and (s/keys :req [::event-type])
-                      (s/multi-spec event-spec ::event-type)))
+(s/def ::event (s/merge (s/keys :req [:crux/event-type])
+                        (s/multi-spec event-spec :crux/event-type)))
 
 (defrecord EventBus [!listeners]
   EventSource
   (listen [this listen-ops f]
-    (let [{::keys [event-types]} listen-ops]
-      (swap! !listeners
-             conj {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
-                   :f f
-                   ::event-types event-types})
-      nil))
-
-  (listen [this f]
-    (listen this {} f))
+    (let [{:crux/keys [event-type]} listen-ops
+          listener {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
+                    :f f
+                    :crux/event-type event-type}]
+      (swap! !listeners update event-type (fnil conj #{}) listener)
+      (reify Closeable
+        (close [_]
+          (swap! !listeners update event-type disj listener)))))
 
   EventSink
-  (send [_ {::keys [event-type] :as event}]
+  (send [_ {:crux/keys [event-type] :as event}]
     (s/assert ::event event)
 
-    (doseq [{:keys [^ExecutorService executor f ::event-types]} @!listeners]
-      (when (or (nil? event-types) (contains? event-types event-type))
-        (.submit executor ^Runnable #(f event)))))
+    (doseq [{:keys [^ExecutorService executor f] :as listener} (get @!listeners event-type)]
+      (.submit executor ^Runnable #(f event))))
 
   Closeable
   (close [_]
-    (doseq [{:keys [^ExecutorService executor]} @!listeners]
+    (doseq [{:keys [^ExecutorService executor]} (->> @!listeners (mapcat val))]
       (try
         (.shutdown executor)
         (or (.awaitTermination executor 5 TimeUnit/SECONDS)
@@ -55,4 +52,4 @@
 
 (def bus
   {:start-fn (fn [deps args]
-               (->EventBus (atom #{})))})
+               (->EventBus (atom {})))})

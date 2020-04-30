@@ -1,27 +1,23 @@
 (ns crux.bus-test
   (:require [crux.bus :as bus]
-            [clojure.test :as t])
-  (:import [crux.bus EventBus]))
+            [clojure.test :as t]
+            [crux.topology :as topo])
+  (:import (java.io Closeable)))
 
 (t/deftest test-bus
-  (let [!unfiltered-events (atom [])
-        !filtered-events (atom [])]
-    (with-open [bus ^EventBus (bus/->EventBus (atom #{}))]
-      (bus/send bus {::bus/event-type :foo, :value 1})
+  (let [!events (atom [])]
+    (with-open [bus ^Closeable (topo/start-component bus/bus {} {})]
+      (bus/send bus {:crux/event-type :foo, :value 1})
 
-      (bus/listen bus {::bus/event-types #{:foo}} #(swap! !filtered-events conj %))
-      (bus/listen bus #(swap! !unfiltered-events conj %))
+      (with-open [_ (bus/listen bus {:crux/event-type :foo} #(swap! !events conj %))]
+        (bus/send bus {:crux/event-type :foo, :value 2})
+        (bus/send bus {:crux/event-type :bar, :value 1}))
 
-      (bus/send bus {::bus/event-type :foo, :value 2})
-      (bus/send bus {::bus/event-type :bar, :value 1})
+      (bus/send bus {:crux/event-type :foo, :value 3})
 
       ;; just to ensure all the jobs are handled
       ;; - we don't guarantee this if the node is shut down
       (Thread/sleep 100))
 
-    (t/is (= [{::bus/event-type :foo, :value 2}
-              {::bus/event-type :bar, :value 1}]
-             @!unfiltered-events))
-
-    (t/is (= [{::bus/event-type :foo, :value 2}]
-             @!filtered-events))))
+    (t/is (= [{:crux/event-type :foo, :value 2}]
+             @!events))))

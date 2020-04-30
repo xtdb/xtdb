@@ -8,7 +8,8 @@
             ICruxAsyncIngestAPI ICruxDatasource ICursor]
            java.io.Closeable
            java.util.Date
-           java.time.Duration))
+           java.time.Duration
+           java.util.function.Consumer))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 (s/def :crux.db/evicted? boolean?)
@@ -167,6 +168,18 @@
   supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
   node.")
 
+  (listen ^java.lang.AutoCloseable [node event-opts f]
+    "Attaches a listener to Crux's event bus.
+
+  `event-opts` should contain `:crux/event-type`, along with any other options the event-type requires.
+
+  We currently only support one public event-type: `:crux/indexed-tx`.
+  Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
+
+  `(.close ...)` the return value to detach the listener.
+
+  This is an experimental API, subject to change.")
+
   (latest-completed-tx [node]
     "Returns the latest transaction to have been indexed by this node.")
 
@@ -183,8 +196,6 @@
   tx-ops datalog style transactions.
   Returns a map with details about the submitted transaction,
   including tx-time and tx-id.")
-
-  ;; returning an iterator
 
   (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
@@ -237,6 +248,11 @@
   (await-tx-time
     ([this tx-time] (await-tx-time this tx-time nil))
     ([this tx-time timeout] (.awaitTxTime this tx-time timeout)))
+
+  (listen [this event-opts f]
+    (.listen this event-opts (reify Consumer
+                               (accept [_ evt]
+                                 (f evt)))))
 
   (latest-completed-tx [node] (.latestCompletedTx node))
   (latest-submitted-tx [node] (.latestSubmittedTx node))
