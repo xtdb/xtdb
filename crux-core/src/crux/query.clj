@@ -1291,7 +1291,8 @@
 
 (defrecord QueryEngine [^ExecutorService query-executor
                         indexer object-store bus
-                        query-cache conform-cache]
+                        query-cache conform-cache
+                        options]
   Closeable
   (close [_]
     (when query-executor
