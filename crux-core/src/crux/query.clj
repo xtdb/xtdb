@@ -535,9 +535,8 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn- bound-result-for-var ^crux.query.BoundResult [{:keys [index-store query-engine]} var->bindings join-keys join-results var]
-  (let [{:keys [object-store]} query-engine
-        binding ^VarBinding (get var->bindings var)]
+(defn- bound-result-for-var ^crux.query.BoundResult [index-store object-store var->bindings join-keys join-results var]
+  (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
       (BoundResult. var (get join-results (.result-name binding)) nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
@@ -582,10 +581,10 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn pred-constraint [index-store object-store db idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (.value (bound-result-for-var db var->bindings join-keys join-results arg))
+                                      (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results arg))
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
@@ -632,10 +631,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn or-constraint [index-store object-store db idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (.value (bound-result-for-var db var->bindings join-keys join-results var)))
+                                (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -667,7 +666,7 @@
                                               (if has-free-vars?
                                                 (vec (for [[join-keys join-results] idx-seq]
                                                        (vec (for [var free-vars-in-join-order]
-                                                              (.value (bound-result-for-var db var->bindings join-keys join-results var))))))
+                                                              (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -695,7 +694,7 @@
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
-         (fn unification-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn unification-constraint [index-store object-store db idx-id->idx join-keys join-results]
            (let [values (for [arg args]
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
@@ -719,24 +718,25 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn not-constraint [index-store object-store db idx-id->idx join-keys join-results]
            (with-open [index-store ^Closeable (open-index-store db)]
              (let [db (assoc db :index-store index-store)
                    args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (.value (bound-result-for-var db var->bindings join-keys join-results var)))
+                                  (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
                  join-results))))})))
 
 (defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys join-results]
-  (reduce
-   (fn [results constraint]
-     (when results
-       (constraint index-store db idx-id->idx join-keys results)))
-   join-results
-   (get depth->constraints (count join-keys))))
+  (let [object-store (get-in db [:query-engine :object-store])]
+    (reduce
+     (fn [results constraint]
+       (when results
+         (constraint index-store object-store db idx-id->idx join-keys results)))
+     join-results
+     (get depth->constraints (count join-keys)))))
 
 (defn- potential-bpg-pair-vars [g vars]
   (for [var vars
@@ -1132,7 +1132,7 @@
        result)))
 
   ([{:keys [valid-time transact-time query-engine] :as db} index-store ^ConformedQuery conformed-q]
-   (let [{:keys [indexer options]} query-engine
+   (let [{:keys [indexer object-store options]} query-engine
          q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
@@ -1164,7 +1164,7 @@
 
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var db var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var index-store object-store var->bindings join-keys join-results var))]]
                   (if full-results?
                     (build-full-results db bound-result-tuple)
                     (mapv #(.value ^BoundResult %) bound-result-tuple)))
