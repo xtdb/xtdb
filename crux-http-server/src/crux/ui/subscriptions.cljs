@@ -13,11 +13,6 @@
    (:current-page db)))
 
 (rf/reg-sub
- ::query-data
- (fn [db _]
-   (:query-data db)))
-
-(rf/reg-sub
  ::query-data-table
  (fn [db _]
    (let [{:strs [query-results find-clause linked-entities]}
@@ -61,3 +56,9 @@
                        (+ offset limit))]
      {:prev-query-params (when prev-offset (set-query-param "offset" prev-offset))
       :next-query-params (when next-offset (set-query-param "offset" next-offset))})))
+
+(rf/reg-sub
+ ::entity-view-data
+ (fn [db _]
+   {:entity-result (get-in db [:entity-data "entity"])
+    :linked-entities (get-in db [:entity-data "linked-entities"])}))

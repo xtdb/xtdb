@@ -5,14 +5,16 @@
    [day8.re-frame.http-fx]
    [re-frame.core :as rf]))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  ::inject-metadata
- (fn [db [_ title handler]]
-   (let [result-meta (js/document.querySelector
-                      (str "meta[title=" title "]"))
-         string-content (.getAttribute result-meta "content")
-         edn-content (read-string string-content)]
-     (assoc db handler edn-content))))
+ (fn [{:keys [db]} [_ title handler]]
+   (let [result-meta (some-> (js/document.querySelector
+                              (str "meta[title=" title "]"))
+                             (.getAttribute "content"))
+         edn-content (read-string result-meta)]
+     (if edn-content
+       {:db (assoc db handler edn-content)}
+       {:db db}))))
 
 (defn cast-to-query-params
   [query]
@@ -33,52 +35,65 @@
       true (str "&link-entities?=true"))))
 
 (rf/reg-event-fx
- ::submit-query-box
+ ::go-to-query-table
  (fn [{:keys [db]} [_ query-value]]
    (let [query-map (read-string query-value)
          query-params (cast-to-query-params query-map)]
-     {:http-xhrio {:method :get
-                   :uri (str "/_query?" query-params)
-                   :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-submit-query-box query-params (:find query-map)]
-                   :on-failure [::fail-submit-query-box]}})))
+     {:dispatch [:navigate {:page :query
+                            :query-params query-params}]})))
 
 (rf/reg-event-fx
- ::success-submit-query-box
+ ::fetch-query-table
+ (fn [{:keys [db]} [_ & [query-params]]]
+   (let [query-params (or query-params (get-in db [:current-page :query-params]))
+         find (read-string (.get (js/URLSearchParams. js/window.location.search) "find"))
+         link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
+     {:http-xhrio {:method :get
+                   :uri (str "/_query?" query-params (when-not link-entities?
+                                                       "&link-entities?=true"))
+                   :response-format (ajax-edn/edn-response-format)
+                   :on-success [::success-fetch-query-table query-params find]
+                   :on-failure [::fail-fetch-query-table]}})))
+
+(rf/reg-event-fx
+ ::success-fetch-query-table
  (fn [{:keys [db]} [_ query-params find-clause result]]
-   (prn "submit query box success!")
+   (prn "fetch query table success!")
    {:db (assoc db :query-data
                (assoc result "find-clause" find-clause))
     :dispatch [:navigate {:page :query
                           :query-params query-params}]}))
 
 (rf/reg-event-db
- ::fail-submit-query-box
+ ::fail-fetch-query-table
  (fn [db [_ result]]
-   (prn "Failure: get query box result: " result)
+   (prn "Failure: get query table result: " result)
    db))
 
 (rf/reg-event-fx
- ::submit-query-table
- (fn [_ [_ query-params]]
-   (let [find (read-string (.get (js/URLSearchParams. js/window.location.search) "find"))]
+ ::fetch-entity
+ (fn [{:keys [db]} _]
+   (let [entity-id (get-in db [:current-page :route-params :entity-id])
+         query-params (get-in db [:current-page :query-params])
+         link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
      {:http-xhrio {:method :get
-                   :uri (str "/_query?" query-params)
+                   :uri (str "/_entity/" entity-id "?" query-params
+                             (when-not link-entities? "&link-entities?=true"))
                    :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-submit-query-table query-params find]
-                   :on-failure [::fail-submit-query-table]}})))
+                   :on-success [::success-fetch-entity entity-id query-params]
+                   :on-failure [::fail-fetch-entity]}})))
 
 (rf/reg-event-fx
- ::success-submit-query-table
- (fn [{:keys [db]} [_ query-params find-clause result]]
-   (prn "submit query table success!")
-   {:db (assoc db :query-data
-               (assoc result "find-clause" find-clause))
-    :dispatch [:navigate {:page :query
+ ::success-fetch-entity
+ (fn [{:keys [db]} [_ entity-id query-params result]]
+   (prn "fetch entity success!")
+   {:db (assoc db :entity-data result)
+    :dispatch [:navigate {:page :entity
+                          :path-params {:entity-id entity-id}
                           :query-params query-params}]}))
 
 (rf/reg-event-db
- ::fail-submit-query-table
+ ::fail-fetch-entity
  (fn [db [_ result]]
    (prn "Failure: get query table result: " result)
    db))

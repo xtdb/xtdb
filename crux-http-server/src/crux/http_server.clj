@@ -37,7 +37,7 @@
 ;; Utils
 
 (defn- raw-html
-  [metadata body {:keys [title options]}]
+  [{:keys [body title options]}]
   (str (hiccup2/html
         [:html
          {:lang "en"}
@@ -49,8 +49,7 @@
             {:name "viewport"
              :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
            [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
-           [:meta {:title "result" :content (str metadata)}]
-           [:meta {:title "options" :content (str options)}]
+           (when options [:meta {:title "options" :content (str options)}])
            [:link {:rel "stylesheet" :href "/css/all.css"}]
            [:link {:rel "stylesheet" :href "/css/table.css"}]
            [:link {:rel "stylesheet"
@@ -60,8 +59,9 @@
             [:nav.console-nav
              [:div "Crux Console"]]
             [:div.console
-             [:h1 title]
-             [:div#app body]]
+             [:div#app
+              [:h1 title]
+              body]]
             [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])])))
 
 (defn- body->edn [request]
@@ -471,13 +471,11 @@
                (= (get-in request [:muuntaja/response :format]) "text/html") (if entity-map
                                                                                (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
                                                                                  (raw-html
-                                                                                  {"entity" entity-map
-                                                                                   "linked-entities" linked-entities}
-                                                                                  (entity->html linked-entities entity-map)
-                                                                                  {:title "/_entity"
+                                                                                  {:body (entity->html linked-entities entity-map)
+                                                                                   :title "/_entity"
                                                                                    :options options}))
-                                                                               (raw-html {} [:div "No entity found"]
-                                                                                         {:title "/_entity"
+                                                                               (raw-html {:body [:div "No entity found"]
+                                                                                          :title "/_entity"
                                                                                           :options options}))
                (get query-params "link-entities?") {"linked-entities" (link-all-entities db  "/_entity" entity-map)
                                                     "entity" entity-map}
@@ -586,19 +584,18 @@
       (if html?
         {:status 200
          :body (raw-html
-                {}
-                [:form
-                 {:action "/_query"}
-                 [:textarea.textarea
-                  {:name "q"
-                   :cols 40
-                   :rows 10}]
-                 [:br]
-                 [:br]
-                 [:button.button
-                  {:type "submit"}
-                  "Submit Query"]]
-                {:title "/_query"
+                {:body [:form
+                        {:action "/_query"}
+                        [:textarea.textarea
+                         {:name "q"
+                          :cols 40
+                          :rows 10}]
+                        [:br]
+                        [:br]
+                        [:button.button
+                         {:type "submit"}
+                         "Submit Query"]]
+                 :title "/_query"
                  :options options})}
         {:status 400
          :body "No query provided."})
@@ -625,12 +622,8 @@
                                              (+ offset limit))
                                prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
                            (raw-html
-                            {"query-results" results
-                             "find-clause" (:find query)
-                             "prev-next-page" prev-next-page
-                             "linked-entities" links}
-                            (query->html links query results prev-next-page)
-                            {:title "/_query"
+                            {:body (query->html links query results prev-next-page)
+                             :title "/_query"
                              :options options}))
                    (get query-params "link-entities?") {"linked-entities" (link-top-level-entities db  "/_entity" results)
                                                         "query-results" results}

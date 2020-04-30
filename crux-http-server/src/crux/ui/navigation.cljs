@@ -20,7 +20,7 @@
    (let [route-data (bidi/match-route routes/routes url)
          handler (:handler route-data)
          query-params {:query-params
-                       js/window.location.search}]
+                       (str (js/URLSearchParams. js/window.location.search))}]
      {:db (assoc db :current-page (merge route-data
                                          query-params))
       ::scroll-top _})))
