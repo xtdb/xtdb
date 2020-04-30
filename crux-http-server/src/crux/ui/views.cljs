@@ -25,7 +25,8 @@
         [:br]
         [:br]
         [:button.button
-         {:type "submit"}
+         {:type "submit"
+          :disabled (empty? @query-value)}
          "Submit Query"]]])))
 
 (defn query-table
