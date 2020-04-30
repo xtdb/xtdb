@@ -8,7 +8,8 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
-           org.agrona.io.DirectBufferInputStream))
+           org.agrona.io.DirectBufferInputStream
+           crux.kv.KvSnapshot))
 
 (defn <-nippy-buffer [buf]
   (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
@@ -19,7 +20,7 @@
 (defrecord KvObjectStore [kv]
   db/ObjectStore
   (get-single-object [this snapshot k]
-    (if (satisfies? kv/KvSnapshot snapshot)
+    (if (instance? KvSnapshot snapshot)
       (let [doc-key (c/->id-buffer k)
             seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) doc-key)]
         (some->> (kv/get-value snapshot seek-k)
@@ -30,7 +31,7 @@
         (db/get-single-object this snapshot k))))
 
   (get-objects [this snapshot ks]
-    (if (satisfies? kv/KvSnapshot snapshot)
+    (if (instance? KvSnapshot snapshot)
       (->> (for [k ks
                  :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
                        doc (some-> (kv/get-value snapshot seek-k) <-nippy-buffer)]
