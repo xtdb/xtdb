@@ -1348,7 +1348,7 @@
   (let [ivan {:crux.db/id :ivan :name "Ivan"}
         number-of-docs 500
         id-slowdown-factor 2
-        entity-slowdown-factor 5
+        entity-slowdown-factor 10
         tx (api/submit-tx *api* (vec (for [n (range number-of-docs)]
                                        [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
         _ (api/await-tx *api* tx)

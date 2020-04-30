@@ -119,15 +119,7 @@
 (defn new-cached-snapshot ^crux.lru.CachedSnapshot [snapshot close-snapshot?]
   (->CachedSnapshot snapshot close-snapshot? (StampedLock.) (atom #{})))
 
-(defprotocol CacheProvider
-  (get-named-cache [this cache-name]))
-
-;; TODO: this should be changed to something more sensible, this is to
-;; simplify API usage, and the kv instance is the main
-;; object. Potentially these caches should simply just live in the
-;; main node directly, but that requires passing more stuff around
-;; to the lower levels.
-(defrecord CacheProvidingKvStore [kv cache-state cache-size]
+(defrecord CachedSnapshotKvStore [kv]
   kv/KvStore
   (new-snapshot [_] (new-cached-snapshot (kv/new-snapshot kv) true))
   (store [_ kvs] (kv/store kv kvs))
@@ -140,16 +132,15 @@
   (kv-name [_] (kv/kv-name kv))
 
   Closeable
-  (close [_] (.close ^Closeable kv))
+  (close [_] (.close ^Closeable kv)))
 
-  CacheProvider
-  (get-named-cache [this cache-name]
-    (get (swap! cache-state
-                update
-                cache-name
-                (fn [cache]
-                  (or cache (new-cache cache-size))))
-         cache-name)))
+;; TODO: The options are kept to avoid having to change all kv stores
+;; using wrap-lru-cache.
+(def options {})
+
+(defn wrap-lru-cache ^java.io.Closeable [kv _]
+  (cond-> kv
+    (not (instance? CachedSnapshotKvStore kv)) (->CachedSnapshotKvStore)))
 
 (defrecord CachedIndex [idx index-cache]
   db/Index
@@ -163,14 +154,3 @@
 
 (defn new-cached-index [idx cache-size]
   (->CachedIndex idx (new-cache cache-size)))
-
-(def ^:const default-query-cache-size 10240)
-
-(def options
-  {::query-cache-size {:doc "Query Cache Size"
-                       :default default-query-cache-size
-                       :crux.config/type :crux.config/nat-int}})
-
-(defn wrap-lru-cache ^java.io.Closeable [kv {:keys [crux.lru/query-cache-size]}]
-  (cond-> kv
-    (not (instance? CacheProvidingKvStore kv)) (->CacheProvidingKvStore (atom {}) query-cache-size)))

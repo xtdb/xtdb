@@ -17,9 +17,9 @@
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
            java.util.Comparator
-           java.util.concurrent.TimeoutException
            java.util.function.Supplier
            java.util.UUID
+           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
            org.agrona.ExpandableDirectByteBuffer))
 
 (defn- logic-var? [x]
@@ -535,8 +535,9 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn- bound-result-for-var ^crux.query.BoundResult [index-store object-store var->bindings join-keys join-results var]
-  (let [binding ^VarBinding (get var->bindings var)]
+(defn- bound-result-for-var ^crux.query.BoundResult [{:keys [index-store query-engine]} var->bindings join-keys join-results var]
+  (let [{:keys [object-store]} query-engine
+        binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
       (BoundResult. var (get join-results (.result-name binding)) nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
@@ -581,10 +582,10 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn pred-constraint [index-store db idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results arg))
+                                      (.value (bound-result-for-var db var->bindings join-keys join-results arg))
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
@@ -604,8 +605,9 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [index-store {:keys [object-store entity-as-of-idx] :as db} {:keys [e a v] :as clause} args]
-  (let [eid (get (first args) e)]
+(defn- or-single-e-var-triple-fast-path [index-store {:keys [query-engine entity-as-of-idx] :as db} {:keys [e a v] :as clause} args]
+  (let [{:keys [object-store]} query-engine
+        eid (get (first args) e)]
     (when-let [^EntityTx entity-tx (idx/entity-at entity-as-of-idx eid)]
       (let [doc (db/get-single-object object-store index-store (.content-hash entity-tx))]
         (when (contains? (set (idx/vectorize-value (get doc a))) v)
@@ -630,10 +632,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn or-constraint [index-store db idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
+                                (.value (bound-result-for-var db var->bindings join-keys join-results var)))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -665,7 +667,7 @@
                                               (if has-free-vars?
                                                 (vec (for [[join-keys join-results] idx-seq]
                                                        (vec (for [var free-vars-in-join-order]
-                                                              (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
+                                                              (.value (bound-result-for-var db var->bindings join-keys join-results var))))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -717,12 +719,12 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [index-store {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+         (fn not-constraint [index-store db idx-id->idx join-keys join-results]
            (with-open [index-store ^Closeable (open-index-store db)]
              (let [db (assoc db :index-store index-store)
                    args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
+                                  (.value (bound-result-for-var db var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
@@ -957,10 +959,11 @@
             (assoc acc id (idx-fn))))
         {})))
 
-(defn- build-sub-query [index-store {:keys [query-cache] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [index-store {:keys [query-engine] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
+        {:keys [query-cache]} query-engine
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
@@ -1051,24 +1054,19 @@
    (let [{:keys [where args rules]} (s/conform ::query q)]
      (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
-(defn- build-full-results [{:keys [object-store entity-as-of-idx]} index-store bound-result-tuple]
-  (vec (for [^BoundResult bound-result bound-result-tuple
-             :let [value (.value bound-result)]]
-         (if-let [entity-tx (and (c/valid-id? value)
-                                 (idx/entity-at entity-as-of-idx value))]
-           (db/get-single-object object-store index-store (.content-hash ^EntityTx entity-tx))
-           value))))
+(defn- build-full-results [{:keys [entity-as-of-idx index-store query-engine] :as db} bound-result-tuple]
+  (let [{:keys [object-store]} query-engine]
+    (vec (for [^BoundResult bound-result bound-result-tuple
+               :let [value (.value bound-result)]]
+           (if-let [entity-tx (and (c/valid-id? value)
+                                   (idx/entity-at entity-as-of-idx value))]
+             (db/get-single-object object-store index-store (.content-hash ^EntityTx entity-tx))
+             value)))))
 
-(defn open-index-store ^java.io.Closeable [{:keys [indexer index-store] :as db}]
+(defn open-index-store ^java.io.Closeable [{:keys [query-engine index-store] :as db}]
   (if index-store
     (db/open-nested-index-store index-store)
-    (db/open-index-store indexer)))
-
-(def default-query-timeout 30000)
-
-(def default-entity-cache-size 10000)
-
-(def ^:dynamic *with-entities-cache?* true)
+    (db/open-index-store (:indexer query-engine))))
 
 (defrecord ConformedQuery [q-normalized q-conformed])
 
@@ -1097,30 +1095,32 @@
             (assoc-in [:q-conformed :args] args)))
       conformed-query)))
 
-;; TODO: Move future here to a bounded thread pool.
 (defn q
-  ([{:keys [kv] :as db} ^ConformedQuery conformed-q]
-   (let [start-time (System/currentTimeMillis)
+  ([{:keys [valid-time transact-time query-engine] :as db} ^ConformedQuery conformed-q]
+   (let [{:keys [^ExecutorService query-executor object-store indexer options]} query-engine
+         start-time (System/currentTimeMillis)
          q (.q-normalized conformed-q)
-         query-future (future
-                        (try
-                          (with-open [index-store (open-index-store db)]
-                            (let [result-coll-fn (if (:order-by q) vec set)
-                                  result (result-coll-fn (crux.query/q db index-store conformed-q))]
-                              (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-                              (log/debug :query-result-size (count result))
-                              result))
-                          (catch ExceptionInfo e
-                            e)
-                          (catch IllegalArgumentException e
-                            e)
-                          (catch InterruptedException e
-                            e)
-                          (catch Throwable t
-                            (log/error t "Exception caught while executing query.")
-                            t)))
+         query-future (.submit query-executor
+                               ^Callable
+                               (fn []
+                                 (try
+                                   (with-open [index-store (open-index-store db)]
+                                     (let [result-coll-fn (if (:order-by q) vec set)
+                                           result (result-coll-fn (crux.query/q db index-store conformed-q))]
+                                       (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+                                       (log/debug :query-result-size (count result))
+                                       result))
+                                   (catch ExceptionInfo e
+                                     e)
+                                   (catch IllegalArgumentException e
+                                     e)
+                                   (catch InterruptedException e
+                                     e)
+                                   (catch Throwable t
+                                     (log/error t "Exception caught while executing query.")
+                                     t))))
          result (or (try
-                      (deref query-future (or (:timeout q) default-query-timeout) nil)
+                      (deref query-future (or (:timeout q) (::query-timeout options)) nil)
                       (catch InterruptedException e
                         (future-cancel query-future)
                         (throw e)))
@@ -1131,8 +1131,9 @@
        (throw result)
        result)))
 
-  ([{:keys [object-store indexer valid-time transact-time] :as db} index-store ^ConformedQuery conformed-q]
-   (let [q (.q-normalized conformed-q)
+  ([{:keys [valid-time transact-time query-engine] :as db} index-store ^ConformedQuery conformed-q]
+   (let [{:keys [indexer options]} query-engine
+         q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
          stats (db/read-index-meta indexer :crux.kv/stats)]
@@ -1141,11 +1142,11 @@
                                            (dissoc :args))))
      (validate-args args)
      (let [entity-as-of-idx (cond-> (db/new-entity-as-of-index index-store valid-time transact-time)
-                              *with-entities-cache?* (lru/new-cached-index default-entity-cache-size))
+                              (::entity-cache? options) (lru/new-cached-index (::entity-cache-size options)))
 
            rule-name->rules (rule-name->rules rules)
 
-           db (assoc db :entity-as-of-idx entity-as-of-idx)
+           db (assoc db :entity-as-of-idx entity-as-of-idx :index-store index-store)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
        (doseq [var find
@@ -1163,9 +1164,9 @@
 
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var index-store object-store var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var db var->bindings join-keys join-results var))]]
                   (if full-results?
-                    (build-full-results db index-store bound-result-tuple)
+                    (build-full-results db bound-result-tuple)
                     (mapv #(.value ^BoundResult %) bound-result-tuple)))
 
          true (dedupe)
@@ -1178,15 +1179,17 @@
           (idx/entity-at eid)
           (c/entity-tx->edn)))
 
-(defn entity [{:keys [object-store] :as db} index-store eid]
-  (let [entity-tx (entity-tx db index-store eid)]
+(defn entity [{:keys [query-engine] :as db} index-store eid]
+  (let [{:keys [object-store]} query-engine
+        entity-tx (entity-tx db index-store eid)]
     (-> (db/get-single-object object-store index-store (:crux.db/content-hash entity-tx))
         idx/keep-non-evicted-doc)))
 
-(defrecord QueryDatasource [indexer object-store bus
-                            query-cache conform-cache
-                            valid-time transact-time
-                            index-store entity-as-of-idx]
+(defrecord QueryDatasource [query-engine
+                            valid-time
+                            transact-time
+                            index-store
+                            entity-as-of-idx]
   Closeable
   (close [_]
     (when index-store
@@ -1209,7 +1212,8 @@
 
   (q [this query]
     ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
-    (let [conformed-query (normalize-and-conform-query conform-cache query)
+    (let [{:keys [conform-cache bus]} query-engine
+          conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
       (when bus
@@ -1226,10 +1230,11 @@
   (q [this index-store query]
     ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
     ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (q this index-store (normalize-and-conform-query conform-cache query)))
+    (q this index-store (normalize-and-conform-query (:conform-cache query-engine) query)))
 
   (openQuery [this query]
     (let [index-store (open-index-store this)
+          {:keys [bus conform-cache]} query-engine
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
@@ -1253,7 +1258,8 @@
     (.historyAscending this eid))
 
   (openHistoryAscending [this eid]
-    (let [index-store (open-index-store this)]
+    (let [index-store (open-index-store this)
+          {:keys [object-store]} query-engine]
       (cio/->cursor #(cio/try-close index-store)
                     (for [^EntityTx entity-tx (db/entity-valid-time-history index-store eid valid-time transact-time true)]
                       (assoc (c/entity-tx->edn entity-tx)
@@ -1267,7 +1273,8 @@
     (.historyDescending this eid))
 
   (openHistoryDescending [this eid]
-    (let [index-store (open-index-store this)]
+    (let [index-store (open-index-store this)
+          {:keys [object-store]} query-engine]
       (cio/->cursor #(cio/try-close index-store)
                     (for [^EntityTx entity-tx (db/entity-valid-time-history index-store eid valid-time transact-time false)]
                       (assoc (c/entity-tx->edn entity-tx)
@@ -1279,12 +1286,55 @@
   (transactionTime [_]
     transact-time))
 
-(defn db ^crux.api.ICruxDatasource [indexer query-cache conform-cache object-store bus valid-time transact-time]
-  (->QueryDatasource indexer
-                     object-store
-                     bus
-                     query-cache
-                     conform-cache
+;; TODO: only used by crux-microbench.cached-entities-index-in-vivo
+(def ^:dynamic *with-entity-cache?*)
+
+(defrecord QueryEngine [^ExecutorService query-executor
+                        indexer object-store bus
+                        query-cache conform-cache]
+  Closeable
+  (close [_]
+    (when query-executor
+      (doto query-executor
+        (.shutdown)
+        (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
+
+(def query-engine
+  {:start-fn (fn [{:crux.node/keys [indexer object-store bus]} {::keys [query-pool-size query-cache-size conform-cache-size] :as args}]
+               (let [query-executor (Executors/newFixedThreadPool query-pool-size (cio/thread-factory "crux.query.query-pool-thread"))]
+                 (map->QueryEngine
+                  {:indexer indexer
+                   :conform-cache (lru/new-cache conform-cache-size)
+                   :query-cache (lru/new-cache query-cache-size)
+                   :object-store object-store
+                   :bus bus
+                   :query-executor query-executor
+                   :options (update args ::entity-cache? (fn [x]
+                                                           (if (bound? #'*with-entity-cache?*)
+                                                             *with-entity-cache?*
+                                                             x)))})))
+   :deps [:crux.node/indexer :crux.node/object-store :crux.node/bus]
+   :args {::query-pool-size {:doc "Query Pool Size"
+                             :default 32
+                             :crux.config/type :crux.config/nat-int}
+          ::query-cache-size {:doc "Compiled Query Cache Size"
+                              :default 10240
+                              :crux.config/type :crux.config/nat-int}
+          ::conform-cache-size {:doc "Conformed Query Cache Size"
+                                :default 10240
+                                :crux.config/type :crux.config/nat-int}
+          ::entity-cache? {:doc "Enable Query Entity Cache"
+                           :default true
+                           :crux.config/type :crux.config/boolean}
+          ::entity-cache-size {:doc "Query Entity Cache Size"
+                               :default 10000
+                               :crux.config/type :crux.config/nat-int}
+          ::query-timeout {:doc "Query Timeout ms"
+                           :default 30000
+                           :crux.config/type :crux.config/nat-int}}})
+
+(defn db ^crux.api.ICruxDatasource [query-engine valid-time transact-time]
+  (->QueryDatasource query-engine
                      valid-time
                      transact-time
                      nil

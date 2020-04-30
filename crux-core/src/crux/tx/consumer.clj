@@ -57,13 +57,9 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log kv-store object-store bus]
+(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log object-store bus]
   db/TxConsumer
   (consumer-error [_] @!error)
-
-  lru/CacheProvider
-  (get-named-cache [_ cache-name]
-    (lru/get-named-cache kv-store cache-name))
 
   Closeable
   (close [_]
@@ -76,23 +72,23 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def tx-consumer
-  {:start-fn (fn [{::n/keys [indexer document-store tx-log kv-store object-store bus]} args]
+  {:start-fn (fn [{::n/keys [indexer document-store tx-log object-store bus query-engine]} args]
                (let [stats-executor (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))
                      tx-consumer (map->TxConsumer
                                   {:!error (atom nil)
                                    :indexer indexer
                                    :document-store document-store
                                    :tx-log tx-log
-                                   :kv-store kv-store
                                    :object-store object-store
                                    :bus bus
+                                   :query-engine query-engine
                                    :stats-executor stats-executor})]
                  (assoc tx-consumer
                         :executor-thread
                         (doto (Thread. #(index-tx-log tx-consumer args))
                           (.setName "crux-tx-consumer")
                           (.start)))))
-   :deps [::n/indexer ::n/document-store ::n/tx-log ::n/kv-store ::n/object-store ::n/bus]
+   :deps [::n/indexer ::n/document-store ::n/tx-log ::n/object-store ::n/bus ::n/query-engine]
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})
