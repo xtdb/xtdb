@@ -7,7 +7,7 @@
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IReduceInit Seqable Sequential]
            crux.api.IndexVersionOutOfSyncException
-           crux.codec.EntityTx
+           [crux.codec EntityValueContentHash EntityTx]
            [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
            [java.io Closeable DataInputStream]
            [java.util Collections Comparator Date]
@@ -308,11 +308,6 @@
                (DataInputStream.)
                (nippy/thaw-from-in!)))))
 
-(defn swap-meta [kv k f & args]
-  (let [ret (apply f (read-meta kv k) args)]
-    (store-meta kv k ret)
-    ret))
-
 ;; Object Store
 
 (defn evicted-doc?
@@ -332,9 +327,6 @@
   (->> (for [[k v] doc]
          [k (cond-> (count (vectorize-value v)) evicted? -)])
        (into {})))
-
-(defn update-predicate-stats [kv docs-stats]
-  (swap-meta kv :crux.kv/stats #(apply merge-with + % docs-stats)))
 
 (defn doc-idx-keys [content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
@@ -357,15 +349,9 @@
 
 ;; Utils
 
-(defn doc-indexed? [snapshot eid content-hash]
-  (let [k (c/->id-buffer :crux.db/id)
-        eid (c/->id-buffer eid)
-        content-hash (c/->id-buffer content-hash)]
-    (boolean (kv/get-value snapshot (c/encode-aecv-key-to nil k eid content-hash eid)))))
-
 (defn current-index-version [kv]
   (with-open [snapshot (kv/new-snapshot kv)]
-    (some->> (kv/get-value snapshot (c/encode-index-version-key-to nil))
+    (some->> (kv/get-value snapshot (c/encode-index-version-key-to (.get seek-buffer-tl)))
              (c/decode-index-version-value-from))))
 
 (defn check-and-store-index-version [kv]
@@ -644,6 +630,13 @@
           (take n)
           (vec)))))
 
+(defn all-content-hashes [snapshot eid]
+  (with-open [i (kv/new-iterator snapshot)]
+    (->> (all-keys-in-prefix i (c/encode-aecv-key-to (.get seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
+         (map c/decode-aecv-key->evc-from)
+         (map #(.content-hash ^EntityValueContentHash %))
+         (set))))
+
 ;; Join
 
 (extend-protocol db/LayeredIndex
@@ -708,17 +701,6 @@
 
 (defn new-or-virtual-index [indexes]
   (->OrVirtualIndex indexes (object-array (count indexes))))
-
-(defn or-known-triple-fast-path [snapshot e a v valid-time transact-time]
-  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] valid-time transact-time)]
-    (let [version-k (c/encode-aecv-key-to
-                     nil
-                     a
-                     (c/->id-buffer (.eid entity-tx))
-                     (c/->id-buffer (.content-hash entity-tx))
-                     v)]
-      (when (kv/get-value snapshot version-k)
-        entity-tx))))
 
 (defn- new-unary-join-iterator-state [idx [value results]]
   (let [result-name (:name idx)]

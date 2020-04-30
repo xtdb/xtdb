@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.kv.rocksdb.metrics
   (:require [clojure.string :as str]
             [crux.metrics.dropwizard :as dw])
-  (:import (org.rocksdb Statistics StatisticsCollector StatsCollectorInput StatisticsCollectorCallback TickerType)
+  (:import (org.rocksdb RocksDB Statistics StatisticsCollector StatsCollectorInput StatisticsCollectorCallback TickerType)
            (java.io Closeable)))
 
 (defn ticker-type-name [^TickerType ticker-type]
@@ -28,7 +28,7 @@
                                                   bin-size)
                                  .start)]
                  (dw/gauge registry ["rocksdb" "num-snapshots"]
-                           #(.getLongProperty (get-in kv-store [:kv :db]) "rocksdb.num-snapshots"))
+                           #(.getLongProperty ^RocksDB (get-in kv-store [:kv :db]) "rocksdb.num-snapshots"))
                  (reify Closeable
                    (close [_]
                      (.shutDown collector shutdown-timeout)))))

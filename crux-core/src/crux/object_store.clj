@@ -8,7 +8,8 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
-           org.agrona.io.DirectBufferInputStream))
+           org.agrona.io.DirectBufferInputStream
+           crux.kv.KvSnapshot))
 
 (defn <-nippy-buffer [buf]
   (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
@@ -19,20 +20,26 @@
 (defrecord KvObjectStore [kv]
   db/ObjectStore
   (get-single-object [this snapshot k]
-    (let [doc-key (c/->id-buffer k)
-          seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) doc-key)]
-      (some->> (kv/get-value snapshot seek-k)
-               (DirectBufferInputStream.)
-               (DataInputStream.)
-               (nippy/thaw-from-in!))))
+    (if (instance? KvSnapshot snapshot)
+      (let [doc-key (c/->id-buffer k)
+            seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) doc-key)]
+        (some->> (kv/get-value snapshot seek-k)
+                 (DirectBufferInputStream.)
+                 (DataInputStream.)
+                 (nippy/thaw-from-in!)))
+      (with-open [snapshot (kv/new-snapshot kv)]
+        (db/get-single-object this snapshot k))))
 
   (get-objects [this snapshot ks]
-    (->> (for [k ks
-               :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
-                     doc (some-> (kv/get-value snapshot seek-k) <-nippy-buffer)]
-               :when doc]
-           [k doc])
-         (into {})))
+    (if (instance? KvSnapshot snapshot)
+      (->> (for [k ks
+                 :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
+                       doc (some-> (kv/get-value snapshot seek-k) <-nippy-buffer)]
+                 :when doc]
+             [k doc])
+           (into {}))
+      (with-open [snapshot (kv/new-snapshot kv)]
+        (db/get-objects this snapshot ks))))
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
