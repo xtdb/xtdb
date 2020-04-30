@@ -59,26 +59,39 @@
        (let [~db (api/db ~@db-args)]
          ~@body))))
 
-(defn execute-sparql [^RepositoryConnection conn q]
-  (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
-    (set ((fn step []
-            (when (.hasNext tq)
-              (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
-                          (.next tq))
-                    (lazy-seq (step)))))))))
-
-(t/deftest test-content-hash-invalid
+(t/deftest test-single-id
   (let [valid-time (Date.)
-        content-ivan {:crux.db/id :ivan :name "Ivan"}
-        content-hash (str (c/new-id content-ivan))]
-    (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
-                            (.submitTx *api* [[:crux.tx/put content-hash valid-time]])))))
+        content-ivan {:crux.db/id :ivan :name "Ivan"}]
+    (t/testing "put"
+      (let [{::tx/keys [tx-time] :as tx} (api/submit-tx *api* [[:crux.tx/put content-ivan valid-time]])]
+        (api/await-tx *api* tx)
+        (t/is (= {:crux.db/id :ivan :name "Ivan"}
+                 (api/entity (api/db *api* valid-time tx-time) :ivan)))))
 
-(t/deftest test-can-write-entity-using-map-as-id
-  (let [doc {:crux.db/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
-        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.awaitTx *api* submitted-tx nil)
-    (t/is (.entity (.db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))))
+    (t/testing "delete"
+      (let [{::tx/keys [tx-time] :as delete-tx} (api/submit-tx *api* [[:crux.tx/delete :ivan valid-time]])]
+        (api/await-tx *api* delete-tx)
+        (t/is (nil? (api/entity (api/db *api* valid-time tx-time) :ivan)))))))
+
+(t/deftest test-empty-db
+  (t/is (api/db *api*))
+
+  (t/testing "syncing empty db"
+    (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))))
+
+(t/deftest test-status
+  (t/is (= (merge {:crux.index/index-version 6}
+                  (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+                    {:crux.zk/zk-active? true}))
+           (select-keys (api/status *api*) [:crux.index/index-version :crux.zk/zk-active?])))
+
+  (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
+    (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
+    (t/is (true? (api/tx-committed? *api* submitted-tx)))
+
+    (let [status-map (api/status *api*)]
+      (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
+      (t/is (= submitted-tx (api/latest-completed-tx *api*))))))
 
 (t/deftest test-can-use-crux-ids
   (let [id #crux/id :https://adam.com
@@ -87,96 +100,88 @@
     (.awaitTx *api* submitted-tx nil)
     (t/is (.entity (.db *api*) id))))
 
-(t/deftest test-single-id
+(t/deftest test-query
   (let [valid-time (Date.)
-        content-ivan {:crux.db/id :ivan :name "Ivan"}]
+        submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+    (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
+    (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
-    (t/testing "put works with no id"
-      (t/is
-       (let [{:crux.tx/keys [tx-time] :as tx} (.submitTx *api* [[:crux.tx/put content-ivan valid-time]])]
-         (.awaitTx *api* tx nil)
-         (.db *api* valid-time tx-time))))
+    (t/testing "query"
+      (t/is (= #{[:ivan]} (api/q (api/db *api*)
+                                 '{:find [e]
+                                   :where [[e :name "Ivan"]]})))
+      (t/is (= #{} (api/q (api/db *api* #inst "1999")
+                          '{:find [e]
+                            :where [[e :name "Ivan"]]})))
 
-    (t/testing "Delete works with id"
-      (t/is (.submitTx *api* [[:crux.tx/delete :ivan]])))))
+      (with-both-dbs [db (*api*)]
+        (t/testing "query string"
+          (t/is (= #{[:ivan]} (api/q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
 
-(t/deftest test-can-use-api-to-access-crux
-  (t/testing "status"
-    (t/is (= (merge {:crux.index/index-version 6}
-                    (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
-                      {:crux.zk/zk-active? true}))
-             (select-keys (.status *api*) [:crux.index/index-version :crux.zk/zk-active?]))))
+        (t/testing "query vector"
+          (t/is (= #{[:ivan]} (api/q db '[:find e
+                                          :where [e :name "Ivan"]]))))
 
-  (t/testing "empty db"
-    (t/is (api/db *api*)))
+        (t/testing "malformed query"
+          (t/is (thrown-with-msg? Exception
+                                  #"(status 400|Spec assertion failed)"
+                                  (api/q db '{:find [e]}))))
 
-  (t/testing "syncing empty db"
-    (t/is (nil? (api/sync *api* (Duration/ofSeconds 10)))))
+        (t/testing "query with streaming result"
+          (with-open [res (api/open-q db '{:find [e]
+                                           :where [[e :name "Ivan"]]})]
+            (t/is (= '([:ivan])
+                     (iterator-seq res)))))
 
+        (t/testing "query returning full results"
+          (with-open [res (api/open-q db '{:find [e]
+                                           :where [[e :name "Ivan"]]
+                                           :full-results? true})]
+            (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
+                     (iterator-seq res)))))))))
+
+(t/deftest test-history
   (t/testing "transaction"
     (let [valid-time (Date.)
-          {:crux.tx/keys [tx-time tx-id] :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
-      (t/is (= submitted-tx (.awaitTx *api* submitted-tx nil)))
-      (t/is (true? (.hasTxCommitted *api* submitted-tx)))
+          {::tx/keys [tx-time tx-id] :as submitted-tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+      (api/await-tx *api* submitted-tx)
+      (with-both-dbs [db (*api*)]
+        (let [entity-tx (api/entity-tx db :ivan)
+              ivan {:crux.db/id :ivan :name "Ivan"}
+              ivan-crux-id (c/new-id ivan)]
+          (t/is (= (merge submitted-tx
+                          {:crux.db/id (str (c/new-id :ivan))
+                           :crux.db/content-hash (str ivan-crux-id)
+                           :crux.db/valid-time valid-time})
+                   entity-tx))
+          (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
+          (t/is (= {ivan-crux-id ivan} (api/documents *api* #{(:crux.db/content-hash entity-tx)})))
+          (t/is (= [entity-tx] (api/history *api* :ivan)))
+          (t/is (= [entity-tx] (api/history-range *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
 
-      (let [status-map (.status *api*)]
-        (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
-        (t/is (= submitted-tx (.latestCompletedTx *api*))))
+          (t/is (nil? (api/document *api* (c/new-id :does-not-exist))))
+          (t/is (nil? (api/entity-tx (api/db *api* #inst "1999") :ivan))))))))
 
-      (t/testing "query"
-        (t/is (= #{[:ivan]} (.q (.db *api*)
-                                '{:find [e]
-                                  :where [[e :name "Ivan"]]})))
-        (t/is (= #{} (.q (.db *api* #inst "1999") '{:find  [e]
-                                                    :where [[e :name "Ivan"]]})))
+(t/deftest test-can-write-entity-using-map-as-id
+  (let [doc {:crux.db/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
+        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+    (api/await-tx *api* submitted-tx)
+    (t/is (api/entity (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))))
 
-        (with-both-dbs [db (*api*)]
-          (t/testing "query string"
-            (t/is (= #{[:ivan]} (.q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
+(t/deftest test-content-hash-invalid
+  (let [valid-time (Date.)
+        content-ivan {:crux.db/id :ivan :name "Ivan"}
+        content-hash (str (c/new-id content-ivan))]
+    (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
+                            (.submitTx *api* [[:crux.tx/put content-hash valid-time]])))))
 
-          (t/testing "query vector"
-            (t/is (= #{[:ivan]} (.q db '[:find e
-                                         :where [e :name "Ivan"]]))))
-
-          (t/testing "malformed query"
-            (t/is (thrown-with-msg? Exception
-                                    #"(status 400|Spec assertion failed)"
-                                    (.q db '{:find [e]}))))
-
-          (t/testing "query with streaming result"
-            (with-open [res (api/open-q db '{:find [e]
-                                             :where [[e :name "Ivan"]]})]
-              (t/is (= '([:ivan])
-                       (iterator-seq res)))))
-
-          (t/testing "query returning full results"
-            (with-open [res (api/open-q db '{:find [e]
-                                             :where [[e :name "Ivan"]]
-                                             :full-results? true})]
-              (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
-                       (iterator-seq res)))))
-
-          (t/testing "entity"
-            (t/is (= {:crux.db/id :ivan :name "Ivan"} (api/entity db :ivan)))
-            (with-both-dbs [db (*api* #inst "1999")]
-              (t/is (nil? (api/entity db :ivan)))))
-
-          (t/testing "entity-tx, document and history"
-            (let [entity-tx (api/entity-tx db :ivan)
-                  ivan {:crux.db/id :ivan :name "Ivan"}
-                  ivan-crux-id (c/new-id ivan)]
-              (t/is (= (merge submitted-tx
-                              {:crux.db/id (str (c/new-id :ivan))
-                               :crux.db/content-hash (str ivan-crux-id)
-                               :crux.db/valid-time valid-time})
-                       entity-tx))
-              (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
-              (t/is (= {ivan-crux-id ivan} (api/documents *api* #{(:crux.db/content-hash entity-tx)})))
-              (t/is (= [entity-tx] (api/history *api* :ivan)))
-              (t/is (= [entity-tx] (api/history-range *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
-
-              (t/is (nil? (api/document *api* (c/new-id :does-not-exist))))
-              (t/is (nil? (api/entity-tx (api/db *api* #inst "1999") :ivan))))))))))
+(defn execute-sparql [^RepositoryConnection conn q]
+  (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
+    (set ((fn step []
+            (when (.hasNext tq)
+              (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
+                          (.next tq))
+                    (lazy-seq (step)))))))))
 
 (t/deftest test-sparql
   (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
