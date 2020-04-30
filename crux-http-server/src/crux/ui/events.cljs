@@ -53,6 +53,32 @@
                           :query-params query-params}]}))
 
 (rf/reg-event-db
- ::fail-submit-query-box (fn [db [_ result]]
-   (prn "Failure: get query result: " result)
+ ::fail-submit-query-box
+ (fn [db [_ result]]
+   (prn "Failure: get query box result: " result)
+   db))
+
+(rf/reg-event-fx
+ ::submit-query-table
+ (fn [_ [_ query-params]]
+   (let [find (read-string (.get (js/URLSearchParams. js/window.location.search) "find"))]
+     {:http-xhrio {:method :get
+                   :uri (str "/_query?" query-params)
+                   :response-format (ajax-edn/edn-response-format)
+                   :on-success [::success-submit-query-table query-params find]
+                   :on-failure [::fail-submit-query-table]}})))
+
+(rf/reg-event-fx
+ ::success-submit-query-table
+ (fn [{:keys [db]} [_ query-params find-clause result]]
+   (prn "submit query table success!")
+   {:db (assoc db :query-data
+               (assoc result "find-clause" find-clause))
+    :dispatch [:navigate {:page :query
+                          :query-params query-params}]}))
+
+(rf/reg-event-db
+ ::fail-submit-query-table
+ (fn [db [_ result]]
+   (prn "Failure: get query table result: " result)
    db))
