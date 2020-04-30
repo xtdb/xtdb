@@ -8,12 +8,13 @@
 
 (defn mount-root
   []
-  (when-let [section (js/document.getElementById "app")]
-    ;; clear subscriptions when figwheel reloads js
-    (rf/clear-subscription-cache!)
-    (navigation/initialize-routes)
-    (rf/dispatch [::events/inject-metadata "options" :options])
-    (r/render [views/view] section)))
+  (when (= "/_query" js/window.location.pathname)
+    (when-let [section (js/document.getElementById "app")]
+      ;; clear subscriptions when figwheel reloads js
+      (rf/clear-subscription-cache!)
+      (navigation/initialize-routes)
+      (rf/dispatch [::events/inject-metadata "options" :options])
+      (r/render [views/view] section))))
 
 (defn ^:export init
   []
