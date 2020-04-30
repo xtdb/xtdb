@@ -116,7 +116,7 @@
 
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
-        history (.history crux-node (c/new-id eid))]
+        history (.history crux-node (c/new-id (URLDecoder/decode eid)))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
@@ -128,7 +128,7 @@
 
 (defn- history-range [^ICruxAPI crux-node request]
   (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
-        history (.historyRange crux-node (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
+        history (.historyRange crux-node (c/new-id (URLDecoder/decode eid)) valid-time-start transaction-time-start valid-time-end transaction-time-end)
         last-modified (:crux.tx/tx-time (last history))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (last history))))))
