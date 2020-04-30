@@ -7,6 +7,7 @@
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-test"
+   "crux-s3"
    "crux-cli"
    "crux-bench"])
 
@@ -82,6 +83,7 @@
                "crux-http-client/test"
                "crux-http-server/test"
                "crux-metrics/test"
+               "crux-s3/test"
                "crux-test/test"]
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
@@ -92,6 +94,7 @@
   :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
             "build" ["do" ["sub" "install"] ["sub" "test"]]}
 
-  :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}
+  :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
+             :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}}
 
   :pedantic? :warn)
