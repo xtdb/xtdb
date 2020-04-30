@@ -507,8 +507,7 @@
 
         (if committed?
           (do (when-let [tombstones (not-empty (:tombstones res))]
-                (let [existing-docs (with-open [index-store (db/open-index-store indexer)]
-                                      (db/get-objects object-store index-store (keys tombstones)))]
+                (let [existing-docs (db/get-objects object-store index-store (keys tombstones))]
                   (db/put-objects object-store tombstones)
                   (db/unindex-docs indexer existing-docs)
                   (update-stats tx-consumer (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true))))))
