@@ -28,6 +28,7 @@
            [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
+           java.net.URLDecoder
            org.eclipse.jetty.server.Server))
 
 ;; ---------------------------------------------------
@@ -115,7 +116,7 @@
 
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
-        history (.history crux-node (c/new-id eid))]
+        history (.history crux-node (c/new-id (URLDecoder/decode eid)))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
@@ -127,7 +128,7 @@
 
 (defn- history-range [^ICruxAPI crux-node request]
   (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
-        history (.historyRange crux-node (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
+        history (.historyRange crux-node (c/new-id (URLDecoder/decode eid)) valid-time-start transaction-time-start valid-time-end transaction-time-end)
         last-modified (:crux.tx/tx-time (last history))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (last history))))))
@@ -401,7 +402,7 @@
 
 (defn- entity-state [^ICruxAPI crux-node options request]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
-    (let [eid (c/id-edn-reader encoded-eid)
+    (let [eid (c/id-edn-reader (URLDecoder/decode encoded-eid))
           query-params (:query-params request)
           db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                             (instant/read-instant-date))
