@@ -194,22 +194,40 @@
         (add-last-modified (.transactionTime db)))))
 
 (s/def ::eid c/valid-id?)
-(s/def ::entity-map (s/and #(set/superset? #{:eid :valid-time :transact-time} (keys %))
-                           (s/keys :req-un [::eid]
-                                   :opt-un [::valid-time
-                                            ::transact-time])))
+(s/def ::entity-map (s/and (s/keys :opt-un [::valid-time ::transact-time])))
 
-;; TODO: Could support as-of now via path and GET.
-(defn- entity [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
-        db (db-for-request crux-node body)
+(defn- entity [^ICruxAPI crux-node {:keys [query-params] :as request}]
+  (let [body (doto (body->edn request) (validate-or-throw ::entity-map))
+        eid (or (:eid body)
+                (some-> (re-find #"^/entity/(.+)$" (req/path-info request))
+                        second
+                        c/id-edn-reader)
+                (throw (IllegalArgumentException. "missing eid")))
+        db (db-for-request crux-node {:valid-time (or (:valid-time body)
+                                                      (some-> (get query-params "valid-time")
+                                                              (instant/read-instant-date)))
+                                      :transact-time (or (:transact-time body)
+                                                         (some-> (get query-params "transaction-time")
+                                                                 (instant/read-instant-date)))})
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
-(defn- entity-tx [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
-        db (db-for-request crux-node body)
+(defn- entity-tx [^ICruxAPI crux-node {:keys [query-params] :as request}]
+  (let [body (doto (body->edn request) (validate-or-throw ::entity-map))
+        eid (or (:eid body)
+                (some-> (re-find #"^/entity-tx/(.+)$" (req/path-info request))
+                        second
+                        c/id-edn-reader)
+                (throw (IllegalArgumentException. "missing eid")))
+
+        db (db-for-request crux-node {:valid-time (or (:valid-time body)
+                                                      (some-> (get query-params "valid-time")
+                                                              (instant/read-instant-date)))
+                                      :transact-time (or (:transact-time body)
+                                                         (some-> (get query-params "transaction-time")
+                                                                 (instant/read-instant-date)))})
+
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response entity-tx)
         (add-last-modified tx-time))))
@@ -314,6 +332,12 @@
 
     [#"^/documents" [:post]]
     (documents crux-node request)
+
+    [#"^/entity/.+$" [:get]]
+    (entity crux-node request)
+
+    [#"^/entity-tx/.+$" [:get]]
+    (entity-tx crux-node request)
 
     [#"^/entity$" [:post]]
     (entity crux-node request)

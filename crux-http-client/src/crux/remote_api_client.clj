@@ -7,7 +7,6 @@
             [crux.query :as q])
   (:import (java.io Closeable InputStreamReader IOException PushbackReader)
            java.time.Duration
-           java.net.URLEncoder
            java.util.Date
            (crux.api Crux ICruxAPI ICruxDatasource NodeOutOfSyncException)))
 
@@ -113,12 +112,14 @@
 
   ICruxDatasource
   (entity [this eid]
-    (api-request-sync (str url "/entity")
-                      (assoc (as-of-map this) :eid eid)))
+    (api-request-sync (str url "/entity/" (str (c/new-id eid)))
+                      (as-of-map this)
+                      {:method :get}))
 
   (entityTx [this eid]
-    (api-request-sync (str url "/entity-tx")
-                      (assoc (as-of-map this) :eid eid)))
+    (api-request-sync (str url "/entity-tx/" (str (c/new-id eid)))
+                      (as-of-map this)
+                      {:method :get}))
 
   (newSnapshot [this]
     (->RemoteApiStream (atom [])))
@@ -210,10 +211,10 @@
     (api-request-sync (str url "/documents") content-hash-set {:method :post}))
 
   (history [_ eid]
-    (api-request-sync (str url "/history/" (URLEncoder/encode (pr-str eid))) nil {:method :get}))
+    (api-request-sync (str url "/history/" (str (c/new-id eid))) nil {:method :get}))
 
   (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (api-request-sync (str url "/history-range/" (URLEncoder/encode (pr-str eid)) "?"
+    (api-request-sync (str url "/history-range/" (str (c/new-id eid)) "?"
                            (str/join "&"
                                      (map (partial str/join "=")
                                           [["valid-time-start" (cio/format-rfc3339-date valid-time-start)]
