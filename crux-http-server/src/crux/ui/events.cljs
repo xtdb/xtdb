@@ -15,7 +15,7 @@
          edn-content (read-string result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
-       {:db db}))))
+       (js/console.warn "Metadata not found")))))
 
 (defn cast-to-query-params
   [query]
@@ -59,17 +59,15 @@
                    :uri (str "/_query?" query-params (when-not link-entities?
                                                        "&link-entities?=true"))
                    :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-fetch-query-table query-params find]
+                   :on-success [::success-fetch-query-table find]
                    :on-failure [::fail-fetch-query-table]}})))
 
 (rf/reg-event-fx
  ::success-fetch-query-table
- (fn [{:keys [db]} [_ query-params find-clause result]]
+ (fn [{:keys [db]} [_ find-clause result]]
    (prn "fetch query table success!")
    {:db (assoc db :query-data
-               (assoc result "find-clause" find-clause))
-    :dispatch [:navigate {:page :query
-                          :query-params query-params}]}))
+               (assoc result "find-clause" find-clause))}))
 
 (rf/reg-event-db
  ::fail-fetch-query-table
@@ -89,12 +87,12 @@
                    :uri (str "/_entity/" entity-id "?" query-params
                              (when-not link-entities? "&link-entities?=true"))
                    :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-fetch-entity entity-id query-params]
+                   :on-success [::success-fetch-entity]
                    :on-failure [::fail-fetch-entity]}})))
 
 (rf/reg-event-fx
  ::success-fetch-entity
- (fn [{:keys [db]} [_ entity-id query-params result]]
+ (fn [{:keys [db]} [_ result]]
    (prn "fetch entity success!")
    {:db (assoc db :entity-data result)}))
 
