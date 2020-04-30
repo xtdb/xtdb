@@ -7,9 +7,9 @@
 
 (rf/reg-event-db
  ::inject-metadata
- (fn [db [_ handler]]
+ (fn [db [_ title handler]]
    (let [result-meta (js/document.querySelector
-                      (str "meta[title=result]"))
+                      (str "meta[title=" title "]"))
          string-content (.getAttribute result-meta "content")
          edn-content (read-string string-content)]
      (assoc db handler edn-content))))

@@ -37,7 +37,7 @@
 ;; Utils
 
 (defn- raw-html
-  [metadata body title]
+  [metadata body {:keys [title options]}]
   (str (hiccup2/html
         [:html
          {:lang "en"}
@@ -50,6 +50,7 @@
              :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
            [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
            [:meta {:title "result" :content (str metadata)}]
+           [:meta {:title "options" :content (str options)}]
            [:link {:rel "stylesheet" :href "/css/all.css"}]
            [:link {:rel "stylesheet" :href "/css/table.css"}]
            [:link {:rel "stylesheet"
@@ -473,8 +474,11 @@
                                                                                   {"entity" entity-map
                                                                                    "linked-entities" linked-entities}
                                                                                   (entity->html linked-entities entity-map)
-                                                                                  "/_entity"))
-                                                                               (raw-html {} [:div "No entity found"] "/_entity"))
+                                                                                  {:title "/_entity"
+                                                                                   :options options}))
+                                                                               (raw-html {} [:div "No entity found"]
+                                                                                         {:title "/_entity"
+                                                                                          :options options}))
                (get query-params "link-entities?") {"linked-entities" (link-all-entities db  "/_entity" entity-map)
                                                     "entity" entity-map}
                :else entity-map)})))
@@ -594,7 +598,8 @@
                  [:button.button
                   {:type "submit"}
                   "Submit Query"]]
-                "/_query")}
+                {:title "/_query"
+                 :options options})}
         {:status 400
          :body "No query provided."})
 
@@ -624,7 +629,9 @@
                              "find-clause" (:find query)
                              "prev-next-page" prev-next-page
                              "linked-entities" links}
-                            (query->html links query results prev-next-page) "/_query"))
+                            (query->html links query results prev-next-page)
+                            {:title "/_query"
+                             :options options}))
                    (get query-params "link-entities?") {"linked-entities" (link-top-level-entities db  "/_entity" results)
                                                         "query-results" results}
                    :else results)})

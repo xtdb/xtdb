@@ -2,7 +2,7 @@
   (:require
    [clojure.pprint :as pprint]
    [crux.ui.events :as events]
-   [crux.ui.subscriptions :as subs]
+   [crux.ui.subscriptions :as sub]
    [reagent.core :as r]
    [crux.ui.uikit.table :as table]
    [re-frame.core :as rf]))
@@ -30,25 +30,25 @@
 
 (defn query-table
   []
-  (when-not @(rf/subscribe [::subs/query-data])
-    (rf/dispatch [::events/inject-metadata :query-data]))
+  (when-not @(rf/subscribe [::sub/query-data])
+    (rf/dispatch [::events/inject-metadata "result" :query-data]))
   (fn []
-    (let [query-data-table @(rf/subscribe [::subs/query-data-table])]
+    (let [query-data-table @(rf/subscribe [::sub/query-data-table])]
       [table/table query-data-table])))
 
 (defn query-view
   []
-  (let [{:keys [query-params]} @(rf/subscribe [::subs/current-page])]
+  (let [{:keys [query-params]} @(rf/subscribe [::sub/current-page])]
     (if (seq query-params)
       [query-table]
       [query-box])))
 
 (defn view []
-  (let [current-page @(rf/subscribe [::subs/current-page])]
+  (let [current-page @(rf/subscribe [::sub/current-page])]
     [:div
      (case (:handler current-page)
        :query [query-view]
        [:div "no matching"])
-#_     [:pre
+     #_[:pre
       (with-out-str
         (pprint/pprint @(rf/subscribe [:db])))]]))
