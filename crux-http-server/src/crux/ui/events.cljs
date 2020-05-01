@@ -52,10 +52,10 @@
 (rf/reg-event-fx
  ::fetch-query-table
  (fn [{:keys [db]} _]
-   (let [query-params (str (js/URLSearchParams. js/window.location.search))
-         find (read-string (.get (js/URLSearchParams. js/window.location.search) "find"))
-         link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
-     (when (seq query-params)
+   (let [query-params (doto (js/URLSearchParams. js/window.location.search) (.delete "full-results"))
+         find (read-string (.get query-params "find"))
+         link-entities? (.get query-params "link-entities")]
+     (when (seq (str query-params))
        {:http-xhrio {:method :get
                      :uri (str "/_query?" query-params (when-not link-entities?
                                                          "&link-entities?=true"))
@@ -82,8 +82,8 @@
    (let [entity-id (-> js/window.location.pathname
                        (string/split #"/")
                        last)
-         query-params (str (js/URLSearchParams. js/window.location.search))
-         link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
+         query-params (js/URLSearchParams. js/window.location.search)
+         link-entities? (.get query-params "link-entities")]
      {:http-xhrio {:method :get
                    :uri (str "/_entity/" entity-id "?" query-params
                              (when-not link-entities? "&link-entities?=true"))
