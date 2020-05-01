@@ -77,6 +77,7 @@
                           :on-blur handle-blur}]
            [:input.input {:type "time"
                           :name "valid-time"
+                          :step "any"
                           :value (get values "valid-time")
                           :on-change handle-change
                           :on-blur handle-blur}]]
@@ -91,6 +92,7 @@
            [:input.input {:type "time"
                           :name "transaction-time"
                           :value (get values "transaction-time")
+                          :step "any"
                           :on-change handle-change
                           :on-blur handle-blur}]]]
          [:button.button
