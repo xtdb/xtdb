@@ -82,6 +82,14 @@
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
              (explain q))))
 
+  (let [q "SELECT MAX(PERSON.AGE) AS MAX_AGE FROM PERSON"]
+    (t/is (= [{:max_age 25}]
+             (query q)))
+    (t/is (= (str "EnumerableAggregate(group=[{}], MAX_AGE=[MAX($3)])\n"
+                  "  CruxToEnumerableConverter\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
 
 (t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
