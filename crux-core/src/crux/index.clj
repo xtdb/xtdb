@@ -370,17 +370,21 @@
 ;; iterator call.
 
 (defn all-keys-in-prefix
-  ([i prefix] (all-keys-in-prefix i prefix false))
+  ([i prefix] (all-keys-in-prefix i prefix prefix {}))
+  ([i prefix seek-k] (all-keys-in-prefix i prefix seek-k {}))
 
-  ([i ^DirectBuffer prefix entries?]
+  ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
    (letfn [(step [k]
              (lazy-seq
               (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
                 (cons (if entries?
                         [(mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i))]
                         (mem/copy-to-unpooled-buffer k))
-                      (step (kv/next i))))))]
-     (step (kv/seek i prefix)))))
+                      (step (if reverse? (kv/prev i) (kv/next i)))))))]
+     (step (if reverse?
+             (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
+               (kv/prev i))
+             (kv/seek i seek-k))))))
 
 (defn idx->series
   [idx]
@@ -561,25 +565,15 @@
            (not-empty)
            (map second)))))
 
-;; TODO: Entity history would need to be able to use the Z order index
-;; for us to be able to remove the old index. Outstanding questions
-;; around how and if LITMAX would work together with seeks and prev
-;; for ascending search.
-
-(defn- entity-history-step [i seek-k f-cons f-next]
-  (lazy-seq
-   (let [k (f-cons)]
-     (when (and k (mem/buffers=? seek-k k (+ c/index-id-size c/id-size)))
-       (cons
-        (-> (c/decode-entity+vt+tt+tx-id-key-from k)
-            (safe-entity-tx)
-            (enrich-entity-tx (kv/value i)))
-        (entity-history-step i seek-k f-next f-next))))))
+(defn- ->entity-tx [[k v]]
+  (-> (c/decode-entity+vt+tt+tx-id-key-from k)
+      (enrich-entity-tx v)))
 
 (defn entity-history-seq-ascending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-valid-time))))]
-    (->> (entity-history-step i seek-k #(when-let [k (kv/seek i seek-k)]
-                                          (kv/prev i)) #(kv/prev i))
+  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
+    (->> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
+                             {:reverse? true, :entries? true})
+         (map ->entity-tx)
          (drop-while (fn [^EntityTx entity-tx]
                        (neg? (compare (.vt entity-tx) from-valid-time))))
          (partition-by :vt)
@@ -593,7 +587,9 @@
 
 (defn entity-history-seq-descending [i eid ^Date from-valid-time ^Date transaction-time]
   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
-    (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/next i))
+    (->> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
+                             {:entries? true})
+         (map ->entity-tx)
          (partition-by :vt)
          (map (fn [group]
                 (->> group
@@ -606,8 +602,8 @@
 ;; from a point in the right order.
 
 (defn- entity-history-seq [i eid]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid))]
-    (for [[k v] (all-keys-in-prefix i seek-k true)]
+  (let [prefix (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid))]
+    (for [[k v] (all-keys-in-prefix i prefix prefix {:entries? true})]
       (-> (c/decode-entity+vt+tt+tx-id-key-from k)
           (enrich-entity-tx v)))))
 
