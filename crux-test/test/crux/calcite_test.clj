@@ -2,12 +2,9 @@
   (:require [clojure.test :as t]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api* submit+await-tx]]
-            [crux.fixtures.calcite :as cf :refer [query prepared-query explain]]
+            [crux.fixtures.calcite :as cf :refer [explain prepared-query query]]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.standalone :as fs])
-  (:import crux.calcite.CruxJdbcDriver))
-
-;; TODO align the test data/fixture code with people fixture
+            [crux.fixtures.standalone :as fs]))
 
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection f)
@@ -78,8 +75,8 @@
              (query q)))))
 
 (t/deftest test-sql-query
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
-                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
 
   (t/testing "retrieve data"
     (let [q "SELECT PERSON.NAME FROM PERSON"]
@@ -187,7 +184,7 @@
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
 (t/deftest test-keywords
-  (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
+  (f/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
 
   (t/testing "select keywords"
     (t/is (= [{:id ":human/ivan"}] (query "SELECT ID FROM PERSON"))))
@@ -196,14 +193,14 @@
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')")))))
 
 (t/deftest test-equality-of-columns
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Ivan" :age 21 :alive true}
-                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Ivan" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
   (t/is (= [{:name "Ivan"}]
            (query "SELECT PERSON.NAME FROM PERSON WHERE NAME = HOMEWORLD"))))
 
 (t/deftest test-query-for-null
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld nil :age 21 :alive true}
-                                {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]))
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld nil :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
   (t/is (= [{:name "Ivan"}]
            (query "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD IS NULL")))
   (t/is (= [{:name "Malcolm"}]
@@ -396,8 +393,8 @@
                                                       ['id :planet 'planet]
                                                       ['id :planet "earth"]]}
                        :crux.sql.table/columns {'id :keyword, 'name :varchar 'planet :varchar}}])
-  (f/transact! *api* (f/people [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
-                                {:crux.db/id :person/igor :name "Igor" :planet "not-earth"}]))
+  (f/transact! *api* [{:crux.db/id :person/ivan :name "Ivan" :planet "earth"}
+                      {:crux.db/id :person/igor :name "Igor" :planet "not-earth"}])
   (t/testing "retrieve data"
     (t/is (= #{{:id ":person/ivan", :name "Ivan", :planet "earth"}}
              (set (query "SELECT * FROM PERSON"))))))
