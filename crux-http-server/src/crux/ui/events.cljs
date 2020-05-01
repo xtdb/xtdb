@@ -55,12 +55,13 @@
    (let [query-params (str (js/URLSearchParams. js/window.location.search))
          find (read-string (.get (js/URLSearchParams. js/window.location.search) "find"))
          link-entities? (.get (js/URLSearchParams. query-params) "link-entities")]
-     {:http-xhrio {:method :get
-                   :uri (str "/_query?" query-params (when-not link-entities?
-                                                       "&link-entities?=true"))
-                   :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-fetch-query-table find]
-                   :on-failure [::fail-fetch-query-table]}})))
+     (when (seq query-params)
+       {:http-xhrio {:method :get
+                     :uri (str "/_query?" query-params (when-not link-entities?
+                                                         "&link-entities?=true"))
+                     :response-format (ajax-edn/edn-response-format)
+                     :on-success [::success-fetch-query-table find]
+                     :on-failure [::fail-fetch-query-table]}}))))
 
 (rf/reg-event-fx
  ::success-fetch-query-table
