@@ -33,7 +33,7 @@
       order-by ((fn [x]
                   (apply
                    str x
-                   (map #(str "&order-by" %) order-by))))
+                   (map #(str "&order-by=" %) order-by))))
       valid-time (str "&valid-time=" valid-time)
       transaction-time (str "&transaction-time=" transaction-time))))
 
