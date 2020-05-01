@@ -564,13 +564,6 @@
            (not-empty)
            (map second)))))
 
-(defn all-entities [snapshot valid-time transact-time]
-  (with-open [i (kv/new-iterator snapshot)]
-    (let [eids (->> (all-keys-in-prefix i (c/encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)))
-                    (map (comp :eid c/decode-entity+vt+tt+tx-id-key-from))
-                    (distinct))]
-      (entities-at snapshot eids valid-time transact-time))))
-
 ;; TODO: Entity history would need to be able to use the Z order index
 ;; for us to be able to remove the old index. Outstanding questions
 ;; around how and if LITMAX would work together with seeks and prev

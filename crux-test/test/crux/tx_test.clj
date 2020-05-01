@@ -49,16 +49,11 @@
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/testing "can see entity at transact and valid time"
         (t/is (= expected-entities
-                 (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
-        (t/is (= expected-entities
-                 (idx/all-entities snapshot tx-time tx-time))))
+                 (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
 
       (t/testing "cannot see entity before valid or transact time"
         (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" tx-time)))
-        (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time #inst "2018-05-20")))
-
-        (t/is (empty? (idx/all-entities snapshot #inst "2018-05-20" tx-time)))
-        (t/is (empty? (idx/all-entities snapshot tx-time #inst "2018-05-20"))))
+        (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time #inst "2018-05-20"))))
 
       (t/testing "can see entity after valid or transact time"
         (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" tx-time)))
@@ -81,17 +76,12 @@
             (fapi/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash new-content-hash
-                                      :vt           new-valid-time
-                                      :tt           new-tx-time
-                                      :tx-id        new-tx-id})]
+                                      :vt new-valid-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                      :content-hash new-content-hash
-                                      :vt           new-valid-time
-                                      :tt           new-tx-time
-                                      :tx-id        new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
 
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
@@ -104,23 +94,18 @@
             (fapi/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash new-content-hash
-                                      :vt           new-valid-time
-                                      :tt           new-tx-time
-                                      :tx-id        new-tx-id})]
+                                      :vt new-valid-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash content-hash
-                                      :vt           valid-time
-                                      :tt           tx-time
-                                      :tx-id        tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                      :content-hash new-content-hash
-                                      :vt           new-valid-time
-                                      :tt           new-tx-time
-                                      :tx-id        new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time))))
+                                      :vt valid-time
+                                      :tt tx-time
+                                      :tx-id tx-id})]
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time tx-time))))
 
         (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -133,17 +118,12 @@
                 (fapi/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
             (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-              (t/is (= [(c/map->EntityTx {:eid          picasso-eid
+              (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                           :content-hash new-content-hash
-                                          :vt           new-valid-time
-                                          :tt           new-tx-time
-                                          :tx-id        new-tx-id})]
+                                          :vt new-valid-time
+                                          :tt new-tx-time
+                                          :tx-id new-tx-id})]
                        (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-              (t/is (= [(c/map->EntityTx {:eid          picasso-eid
-                                          :content-hash new-content-hash
-                                          :vt           new-valid-time
-                                          :tt           new-tx-time
-                                          :tx-id        new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
 
               (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
