@@ -113,4 +113,25 @@ html, body {
     cursor: pointer;
 }
 
+.crux-time {
+    display: flex;
+}
+
+.valid-time {
+    margin-right: 2rem;
+}
+
+.input-group {
+    margin-top: 1rem;
+    max-width: 300px;
+}
+
+.input-group > * {
+    margin-bottom: 1rem;
+}
+
+.label {
+    font-weight: bold;
+}
+
 // END FORM ELEMENTS

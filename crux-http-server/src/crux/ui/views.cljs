@@ -1,33 +1,75 @@
 (ns crux.ui.views
   (:require
    [clojure.pprint :as pprint]
+   [clojure.string :as string]
    [crux.ui.events :as events]
    [crux.ui.subscriptions :as sub]
-   [reagent.core :as r]
    [crux.ui.uikit.table :as table]
-   [re-frame.core :as rf]))
+   [fork.core :as fork]
+   [reagent.core :as r]
+   [re-frame.core :as rf]
+   [tick.alpha.api :as t]))
 
 (defn query-box
   []
-  (let [query-value (r/atom nil)]
-    (fn []
-      [:div
-       [:form
-        {:on-submit #(do
-                       (.preventDefault %)
-                       (rf/dispatch [::events/go-to-query-table @query-value]))}
-        [:textarea.textarea
-         {:name "q"
-          :value @query-value
-          :on-change #(reset! query-value (-> % .-target .-value))
-          :cols 40
-          :rows 10}]
-        [:br]
-        [:br]
-        [:button.button
-         {:type "submit"
-          :disabled (empty? @query-value)}
-         "Submit Query"]]])))
+  (let [now-date (t/date)
+        now-time (t/time)]
+    [fork/form {:path :query
+                :form-id "query"
+                :prevent-default? true
+                :clean-on-unmount? true
+                :initial-values {"valid-date" now-date
+                                 "valid-time" now-time}
+                :on-submit #(rf/dispatch [::events/go-to-query-table %])}
+     (fn [{:keys [values
+                  state
+                  form-id
+                  handle-change
+                  handle-blur
+                  submitting?
+                  handle-submit]}]
+       [:div
+        #_(str (with-out-str (pprint/pprint @state)))
+        [:form
+         {:id form-id
+          :on-submit handle-submit}
+         [:textarea.textarea
+          {:name "q"
+           :value (get values "q")
+           :on-change handle-change
+           :on-blur handle-blur
+           :cols 40
+           :rows 10}]
+         [:div.crux-time
+          [:div.input-group.valid-time
+           [:div.label
+            [:label "Valid Time"]]
+           [:input.input {:type "date"
+                          :name "valid-date"
+                          :value (get values "valid-date")
+                          :on-change handle-change
+                          :on-blur handle-blur}]
+           [:input.input {:type "time"
+                          :name "valid-time"
+                          :value (get values "valid-time")
+                          :on-change handle-change
+                          :on-blur handle-blur}]]
+          [:div.input-group
+           [:div.label
+            [:label "Transaction Time"]]
+           [:input.input {:type "date"
+                          :name "transaction-date"
+                          :value (get values "transaction-date")
+                          :on-change handle-change
+                          :on-blur handle-blur}]
+           [:input.input {:type "time"
+                          :name "transaction-time"
+                          :value (get values "transaction-time")
+                          :on-change handle-change
+                          :on-blur handle-blur}]]]
+         [:button.button
+          {:type "submit"}
+          "Submit Query"]]])]))
 
 (defn query-table
   []

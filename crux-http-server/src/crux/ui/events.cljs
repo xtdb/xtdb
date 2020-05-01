@@ -4,7 +4,8 @@
    [cljs.reader :refer [read-string]]
    [clojure.string :as string]
    [day8.re-frame.http-fx]
-   [re-frame.core :as rf]))
+   [re-frame.core :as rf]
+   [tick.alpha.api :as t]))
 
 (rf/reg-event-fx
  ::inject-metadata
@@ -18,7 +19,7 @@
        (js/console.warn "Metadata not found")))))
 
 (defn cast-to-query-params
-  [query]
+  [query valid-time transaction-time]
   (let [{:keys [find where limit
                 offset args order-by]} query]
     (cond-> ""
@@ -33,13 +34,20 @@
                   (apply
                    str x
                    (map #(str "&order-by" %) order-by))))
-      true (str "&link-entities?=true"))))
+      valid-time (str "&valid-time=" valid-time)
+      transaction-time (str "&transaction-time=" transaction-time))))
 
 (rf/reg-event-fx
  ::go-to-query-table
- (fn [{:keys [db]} [_ query-value]]
-   (let [query-map (read-string query-value)
-         query-params (cast-to-query-params query-map)]
+ (fn [{:keys [db]} [_ {:keys [values]}]]
+   (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
+         query-map (read-string (get values "q"))
+         parsed-valid-time (when (and valid-date valid-time)
+                             (t/instant (str valid-date  "T" valid-time)))
+         parsed-transaction-time (when (and transaction-date transaction-time)
+                                   (t/instant (str transaction-date  "T"
+                                                   transaction-time)))
+         query-params (cast-to-query-params query-map parsed-valid-time parsed-transaction-time)]
      {:dispatch [:navigate {:page :query
                             :query-params query-params}]})))
 

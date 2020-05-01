@@ -19,8 +19,10 @@
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
                              [reagent "0.10.0"]
                              [re-frame "0.12.0"]
+                             [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
                              [bidi "2.1.6"]
+                             [tick "0.4.23-alpha"]
                              [kibu/pushy "0.3.8"]]}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"
