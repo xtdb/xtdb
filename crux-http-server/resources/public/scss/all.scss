@@ -117,6 +117,15 @@ html, body {
     display: flex;
 }
 
+.query-suggestions {
+    display: flex;
+    margin-bottom: 1rem;
+}
+
+.query-suggestions > *:not(last-child) {
+    margin-right: 1rem;
+}
+
 .valid-time {
     margin-right: 2rem;
 }

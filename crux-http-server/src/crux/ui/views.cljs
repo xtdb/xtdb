@@ -49,12 +49,13 @@
                   handle-submit]}]
        [:div
         #_(str (with-out-str (pprint/pprint @state)))
-        (for [[query-name query-map] saved-queries]
-          ^{:key query-name}
-          [:button.button
-           {:on-click #(swap! state assoc-in [:values "q"]
-                              (with-out-str (pprint/pprint query-map)))}
-           query-name])
+        [:div.query-suggestions
+         (for [[query-name query-map] saved-queries]
+           ^{:key query-name}
+           [:button.button
+            {:on-click #(swap! state assoc-in [:values "q"]
+                               (with-out-str (pprint/pprint query-map)))}
+            query-name])]
         [:form
          {:id form-id
           :on-submit handle-submit}
