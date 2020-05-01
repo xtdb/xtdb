@@ -87,8 +87,8 @@
    (let [entity-id (-> js/window.location.pathname
                        (string/split #"/")
                        last)
-         query-params (js/URLSearchParams. js/window.location.search)
-         link-entities? (.get query-params "link-entities?")]
+         query-params (str (js/URLSearchParams. js/window.location.search))
+         link-entities? (.get (js/URLSearchParams. query-params) "link-entities?")]
      {:http-xhrio {:method :get
                    :uri (str "/_entity/" entity-id "?" query-params
                              (when-not link-entities? "&link-entities?=true"))
