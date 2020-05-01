@@ -36,7 +36,7 @@
   RexCall
   (operand->v [this schema]
     (case (str (.-op this))
-      "CRUXID"
+      "KEYWORD"
       (keyword (operand->v (first (.-operands this)) schema))
       (operand->v (first (.-operands this)) schema)))
 
@@ -142,8 +142,11 @@
     (doto (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->crux-where-clauses s3 condition)))) prn)))
 
 (defn- transform-result [tuple]
-  ;; TODO, avoid washing dates into millis and back again
-  (let [tuple (map #(if (inst? %) (inst-ms %) (if (float? %) (double %) %)) tuple)]
+  (let [tuple (map #(or (and (float? %) (double %))
+                        ;; Calcite enumerator wants millis for timestamps:
+                        (and (inst? %) (inst-ms %))
+                        (and (keyword? %) (str %))
+                        %) tuple)]
     (if (= 1 (count tuple))
       (first tuple)
       (to-array tuple))))
@@ -181,7 +184,7 @@
       (log/error e)
       (throw e))))
 
-(def ^:private mapped-types {:keyword :varchar})
+(def ^:private mapped-types {:keyword SqlTypeName/OTHER})
 (def ^:private supported-types #{:boolean :bigint :double :float :integer :timestamp :varchar})
 
 ;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
@@ -191,7 +194,8 @@
                supported-types))
 
 (defn java-sql-types->calcite-sql-type [java-sql-type]
-  (or (some-> (get mapped-types java-sql-type java-sql-type) java-sql-types SqlTypeName/getNameForJdbcType)
+  (or (get mapped-types java-sql-type)
+      (some-> java-sql-type java-sql-types SqlTypeName/getNameForJdbcType)
       (throw (IllegalArgumentException. (str "Unrecognised java.sql.Types: " java-sql-type)))))
 
 (defn- ^String ->column-name [c]
@@ -238,7 +242,7 @@
    :schemas [{:name "crux",
               :type "custom",
               :factory "crux.calcite.CruxSchemaFactory",
-              :functions [{:name "CRUXID", :className "crux.calcite.CruxIdFn"}]}]})
+              :functions [{:name "KEYWORD", :className "crux.calcite.KeywordFn"}]}]})
 
 (defn- model-properties [node-uuid]
   (doto (Properties.)

@@ -186,9 +186,14 @@
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
-(t/deftest test-namespaced-keywords
+(t/deftest test-keywords
   (f/transact! *api* (f/people [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true}]))
-  (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = CRUXID('human/ivan')"))))
+
+  (t/testing "select keywords"
+    (t/is (= [{:id ":human/ivan"}] (query "SELECT ID FROM PERSON"))))
+
+  (t/testing "filter using keyword"
+    (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')")))))
 
 (t/deftest test-equality-of-columns
   (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :homeworld "Ivan" :age 21 :alive true}
