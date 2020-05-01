@@ -27,7 +27,6 @@ public class CruxTableScan extends TableScan implements CruxRel {
     }
 
     @Override public void register(RelOptPlanner planner) {
-        planner.addRule(CruxToEnumerableConverterRule.INSTANCE);
         for (RelOptRule rule: CruxRules.RULES) {
             planner.addRule(rule);
         }
