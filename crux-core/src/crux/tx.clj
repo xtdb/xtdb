@@ -346,8 +346,10 @@
 
   (entity-valid-time-history [this eid start-valid-time transact-time ascending?]
     (if ascending?
-      (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid start-valid-time transact-time)
-      (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid start-valid-time transact-time)))
+      (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid {:from {::db/valid-time start-valid-time}
+                                                                        :until {::tx-time transact-time}})
+      (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid {:from {::db/valid-time start-valid-time
+                                                                                ::tx-time transact-time}})))
 
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))

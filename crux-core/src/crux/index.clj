@@ -569,34 +569,36 @@
   (-> (c/decode-entity+vt+tt+tx-id-key-from k)
       (enrich-entity-tx v)))
 
-(defn entity-history-seq-ascending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
-    (->> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
-                             {:reverse? true, :entries? true})
-         (map ->entity-tx)
-         (drop-while (fn [^EntityTx entity-tx]
-                       (neg? (compare (.vt entity-tx) from-valid-time))))
-         (partition-by :vt)
-         (map (fn [group]
-                (->> group
-                     (reverse)
-                     (drop-while (fn [^EntityTx entity-tx]
-                                   (pos? (compare (.tt entity-tx) transaction-time))))
-                     (first))))
-         (remove nil?))))
+(defn entity-history-seq-ascending [i eid {{^Date from-vt :crux.db/valid-time, ^Date from-tt :crux.tx/tx-time} :from
+                                           {^Date until-vt :crux.db/valid-time, ^Date until-tt :crux.tx/tx-time} :until}]
 
-(defn entity-history-seq-descending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
-    (->> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
-                             {:entries? true})
-         (map ->entity-tx)
-         (partition-by :vt)
-         (map (fn [group]
-                (->> group
-                     (drop-while (fn [^EntityTx entity-tx]
-                                   (pos? (compare (.tt entity-tx) transaction-time))))
-                     (first))))
-         (remove nil?))))
+  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-vt)]
+    (-> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
+                            {:reverse? true, :entries? true})
+        (->> (map ->entity-tx))
+        (cond->> until-vt (take-while (fn [^EntityTx entity-tx]
+                                        (neg? (compare (.vt entity-tx) until-vt))))
+                 from-tt (filter (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) from-tt))))
+                 until-tt (remove (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) until-tt)))))
+        (->> (partition-by :vt)
+             (map last)))))
+
+(defn entity-history-seq-descending [i eid {{^Date from-vt :crux.db/valid-time, ^Date from-tt :crux.tx/tx-time} :from
+                                            {^Date until-vt :crux.db/valid-time, ^Date until-tt :crux.tx/tx-time} :until}]
+  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-vt)]
+    (-> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
+                            {:entries? true})
+        (->> (map ->entity-tx))
+        (cond->> until-vt (take-while (fn [^EntityTx entity-tx]
+                                        (pos? (compare (.vt entity-tx) until-vt))))
+                 from-tt (remove (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) from-tt))))
+                 until-tt (filter (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) until-tt)))))
+        (->> (partition-by :vt)
+             (map first)))))
 
 ;; TODO: This would need to change to simply walk the entire Z curve
 ;; from a point in the right order.
