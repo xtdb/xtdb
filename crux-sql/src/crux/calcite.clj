@@ -128,10 +128,32 @@
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
+(defprotocol OperandToFieldIndex
+  (operand->field-indexes [this]))
+
+(extend-protocol OperandToFieldIndex
+  Pair
+  (operand->field-indexes [this]
+    (operand->field-indexes (.-left this)))
+
+  RexInputRef
+  (operand->field-indexes [this]
+    [(.getIndex this)])
+
+  RexLiteral
+  (operand->field-indexes [this]
+    [])
+
+  RexCall
+  (operand->field-indexes [this]
+    (mapcat operand->field-indexes (.operands this))))
+
 (defn enrich-project [schema projects]
   (update-in schema [:crux.sql.table/query :find]
              (fn [existing-projects]
-               (mapv (fn [^Pair p] (nth existing-projects (.getIndex ^RexInputRef (.-left p)))) projects))))
+               (->> projects
+                    (mapcat operand->field-indexes)
+                    (mapv (fn [i] (nth existing-projects i)))))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (let [q1 (:crux.sql.table/query s1)
@@ -174,11 +196,11 @@
 
 (defn ^Enumerable scan [node ^String schema ^DataContext data-context]
   (try
-    (log/debug schema)
     (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
           query (update query :args (fn [args] [(into {} (map (fn [[k v]]
                                                                 [v (.get data-context k)])
                                                               args))]))]
+      (log/debug query)
       (perform-query node (.get data-context "VALIDTIME") query))
     (catch Throwable e
       (log/error e)
