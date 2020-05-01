@@ -62,7 +62,7 @@
  (fn [{:keys [db]} _]
    (let [query-params (doto (js/URLSearchParams. js/window.location.search) (.delete "full-results"))
          find (read-string (.get query-params "find"))
-         link-entities? (.get query-params "link-entities")]
+         link-entities? (.get query-params "link-entities?")]
      (when (seq (str query-params))
        {:http-xhrio {:method :get
                      :uri (str "/_query?" query-params (when-not link-entities?
@@ -91,7 +91,7 @@
                        (string/split #"/")
                        last)
          query-params (js/URLSearchParams. js/window.location.search)
-         link-entities? (.get query-params "link-entities")]
+         link-entities? (.get query-params "link-entities?")]
      {:http-xhrio {:method :get
                    :uri (str "/_entity/" entity-id "?" query-params
                              (when-not link-entities? "&link-entities?=true"))
