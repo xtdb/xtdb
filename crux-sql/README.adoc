@@ -127,6 +127,15 @@ We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.
 
 Note that `bigint` maps to `Long`.
 
+Keyword value are returned as Strings in results. If you need to
+filter against a keyword column, then you can use the `KEYWORD` SQL
+function, for example:
+
+[source,clojure]
+----
+SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')
+----
+
 == Column Names
 
 SQL table column names are mapped from the symbols used by the
