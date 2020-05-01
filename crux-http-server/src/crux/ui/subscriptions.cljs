@@ -17,6 +17,8 @@
  (fn [db _]
    (let [{:strs [query-results find-clause linked-entities]}
          (:query-data db)
+         offset (->> (or (.get (js/URLSearchParams. js/window.location.search) "offset") "0")
+                     (js/parseInt))
          columns (map (fn [column]
                         {:column-key column
                          :column-name (str column)
@@ -30,7 +32,8 @@
          rows (map #(zipmap find-clause %) query-results)]
      {:columns columns
       :rows rows
-      :loading? false
+      :offset offset
+      :loading? (not query-results)
       :filters {:input (into #{} find-clause)}})))
 
 (defn set-query-param

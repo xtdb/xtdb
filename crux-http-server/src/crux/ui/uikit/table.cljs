@@ -188,7 +188,7 @@
            [:i.fas.fa-times-circle]]))])])
 
 (defn pagination
-  [table-atom processed-rows]
+  [data table-atom processed-rows]
   (let [{:keys [prev-query-params next-query-params]}
         @(rf/subscribe [::sub/prev-next-query-params])]
     [:table.table__foot
@@ -203,9 +203,9 @@
             [:option {:value "10"} (str "10" " rows")]
             [:option {:value "50"} (str "50" " rows")]
             [:option {:value "100"} (str "100" " rows")]]]
-        [:div]
-        #_[:div.pagination__info (utils/pagination-current-and-total-pages @table-atom
-                                                                           processed-rows)]
+        [:div.pagination__info (when (seq processed-rows)
+                                 (str (+ (:offset data) 1) " - "
+                                      (+ (:offset data) (count processed-rows))))]
         [:div.pagination__arrow-group
          [:div.pagination__arrow-nav
           {:on-click #(when prev-query-params
@@ -230,10 +230,10 @@
            [filter-all table-atom]
            #_[actions data table-atom]]
           [active-filters data table-atom]]
-         (if (utils/loading? data)
+         (if (:loading? data)
            [loading-table data table-atom {:rows 7 :cols 4}]
            [:div.table__main
             [:table.table
              [header-columns data table-atom]
              [body-rows data table-atom processed-rows]]])
-         [pagination table-atom processed-rows]]))))
+         [pagination data table-atom processed-rows]]))))

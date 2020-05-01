@@ -259,10 +259,6 @@
         hidden (-> table :utils :hidden)]
     (remove #(get hidden (:column-key %)) columns)))
 
-(defn loading?
-  [data]
-  (:loading? data))
-
 (defn pagination-rows-per-page-on-change
   [evt table-atom]
   (swap! table-atom
