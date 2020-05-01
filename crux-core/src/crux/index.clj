@@ -370,20 +370,17 @@
 ;; iterator call.
 
 (defn all-keys-in-prefix
-  ([i prefix]
-   (all-keys-in-prefix i prefix false))
+  ([i prefix] (all-keys-in-prefix i prefix false))
+
   ([i ^DirectBuffer prefix entries?]
-   (all-keys-in-prefix i prefix prefix entries?))
-  ([i ^DirectBuffer seek-k prefix entries?]
-   ((fn step [f-cons f-next]
-      (lazy-seq
-       (let [k (f-cons)]
-         (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
-           (cons (if entries?
-                   [(mem/copy-to-unpooled-buffer k)
-                    (mem/copy-to-unpooled-buffer (kv/value i))]
-                   (mem/copy-to-unpooled-buffer k)) (step f-next f-next))))))
-    #(kv/seek i seek-k) #(kv/next i))))
+   (letfn [(step [k]
+             (lazy-seq
+              (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
+                (cons (if entries?
+                        [(mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i))]
+                        (mem/copy-to-unpooled-buffer k))
+                      (step (kv/next i))))))]
+     (step (kv/seek i prefix)))))
 
 (defn idx->series
   [idx]
