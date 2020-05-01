@@ -186,9 +186,9 @@
 
 ;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
 (def ^:private java-sql-types
-  (dissoc (into {} (for [^java.lang.reflect.Field f (.getFields Types)]
-                     [(keyword (.toLowerCase (.getName f))) (int ^Integer (.get f nil)) ]))
-          :date :time))
+  (select-keys (into {} (for [^java.lang.reflect.Field f (.getFields Types)]
+                          [(keyword (.toLowerCase (.getName f))) (int ^Integer (.get f nil)) ]))
+               supported-types))
 
 (defn java-sql-types->calcite-sql-type [java-sql-type]
   (or (some-> (get mapped-types java-sql-type java-sql-type) java-sql-types SqlTypeName/getNameForJdbcType)
