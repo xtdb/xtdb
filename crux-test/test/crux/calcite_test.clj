@@ -72,7 +72,16 @@
   (let [q "SELECT PERSON.NAME, PERSON.AGE FROM PERSON"]
     (t/is (= [{:name "Ivan" :age 21}
               {:name "Malcolm" :age 25}]
-             (query q)))))
+             (query q))))
+
+  (let [q "SELECT SUM(PERSON.AGE) AS TOTAL_AGE FROM PERSON"]
+    (t/is (= [{:total_age 46}]
+             (query q)))
+    (t/is (= (str "EnumerableAggregate(group=[{}], TOTAL_AGE=[SUM($3)])\n"
+                  "  CruxToEnumerableConverter\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
 
 (t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
