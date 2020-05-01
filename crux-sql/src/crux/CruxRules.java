@@ -24,10 +24,11 @@ import org.apache.calcite.rel.InvalidRelException;
 
 class CruxRules {
     static final RelOptRule[] RULES = {
+        CruxToEnumerableConverterRule.INSTANCE,
+        CruxJoinRule.INSTANCE,
+        CruxProjectRule.INSTANCE,
         CruxFilterRule.INSTANCE,
         CruxSortRule.INSTANCE,
-        CruxProjectRule.INSTANCE,
-        CruxJoinRule.INSTANCE,
     };
 
     abstract static class CruxConverterRule extends ConverterRule {
