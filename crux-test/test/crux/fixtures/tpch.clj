@@ -6,7 +6,7 @@
    TpchColumnType$Base/VARCHAR :varchar
    TpchColumnType$Base/IDENTIFIER :bigint
    TpchColumnType$Base/DOUBLE :double
-   TpchColumnType$Base/DATE :date})
+   TpchColumnType$Base/DATE :timestamp})
 
 (defn tpch-table->crux-sql-schema [^TpchTable t]
   {:crux.db/id (keyword "crux.sql.schema" (.getTableName t))
