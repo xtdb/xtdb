@@ -14,7 +14,6 @@
                  [juxt/crux-http-server "crux-git-version-alpha" :exclusions [commons-codec]]
                  [juxt/crux-metrics "crux-git-version-alpha"]
                  [juxt/crux-rdf "crux-git-version-alpha"]
-                 [juxt/crux-sql "crux-git-version-alpha"]
 
                  ;; JDBC
                  [com.zaxxer/HikariCP "3.3.1"]
@@ -30,9 +29,6 @@
 
                  ;; Uncomment to test Oracle, you'll need to locally install the JAR:
                  ;; [com.oracle/ojdbc "12.2.0.1"]
-
-                 ;; Calcite
-                 [io.airlift.tpch/tpch "0.10"]
 
                  ;; General:
                  [org.clojure/test.check "0.10.0"]
@@ -57,11 +53,7 @@
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                  [io.netty/netty-transport "4.1.45.Final"]
-                 [io.netty/netty-codec-http "4.1.45.Final"]
-                 [org.reactivestreams/reactive-streams "1.0.3"]
-                 [cheshire "5.10.0"]
-                 [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
-                 [org.apache.commons/commons-lang3 "3.8"]]
+                 [io.netty/netty-codec-http "4.1.45.Final"]]
 
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]

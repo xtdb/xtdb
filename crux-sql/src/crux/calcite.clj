@@ -161,7 +161,7 @@
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (assoc s1 :crux.sql.table/query (merge-with (comp vec concat) q1 q2))]
-    (doto (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->crux-where-clauses s3 condition)))) prn)))
+    (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->crux-where-clauses s3 condition))))))
 
 (defn- transform-result [tuple]
   (let [tuple (map #(or (and (float? %) (double %))
