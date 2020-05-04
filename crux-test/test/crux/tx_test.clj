@@ -291,9 +291,9 @@
     (t/testing "no docs evicted yet"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
                   i (kv/new-iterator snapshot)]
-        (t/is (seq (->> (db/fetch-objects (:document-store *api*)
-                                          (->> (idx/entity-history-seq-descending i picasso-id)
-                                               (keep :content-hash)))
+        (t/is (seq (->> (db/fetch-docs (:document-store *api*)
+                                       (->> (idx/entity-history-seq-descending i picasso-id)
+                                            (keep :content-hash)))
                         vals
                         (remove idx/evicted-doc?))))))
 
@@ -304,9 +304,9 @@
         (t/testing "eviction removes docs"
           (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
                       i (kv/new-iterator snapshot)]
-            (t/is (empty? (->> (db/fetch-objects (:document-store *api*)
-                                                 (->> (idx/entity-history-seq-descending i picasso-id)
-                                                      (keep :content-hash)))
+            (t/is (empty? (->> (db/fetch-docs (:document-store *api*)
+                                              (->> (idx/entity-history-seq-descending i picasso-id)
+                                                   (keep :content-hash)))
                                vals
                                (remove idx/evicted-doc?))))))))))
 
