@@ -321,8 +321,10 @@
     (tx/index-docs (:tx-consumer *api*) {(c/new-id ivan1) ivan1
                                          (c/new-id ivan2) ivan2})
 
-    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
-    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 2} [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
+    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1}
+                 [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
+    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 2}
+                 [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
                 i (kv/new-iterator snapshot)]
@@ -333,12 +335,11 @@
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
                (idx/entity-history-seq-descending i (c/new-id :ivan)
-                                                  {:from {::tx/tx-time t,::db/valid-time t}})))
+                                                  {:from {::tx/tx-time t, ::db/valid-time t}})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
                (idx/entity-history-seq-ascending i (c/new-id :ivan)
-                                                 {:from {::db/valid-time t}
-                                                  :until {::tx/tx-time t}}))))))
+                                                 {:from {::db/valid-time t}}))))))
 
 (t/deftest test-entity-history-seq-corner-cases
   (let [ivan {:crux.db/id :ivan}
@@ -365,38 +366,34 @@
                 (history-desc [opts]
                   (idx/entity-history-seq-descending i (c/new-id :ivan) opts))]
 
-          (t/testing "desc from is inclusive"
+          (t/testing "from is inclusive"
             (t/is (= [etx-v2-t2
                       etx-v1-t2]
                      (history-desc {:from {::tx/tx-time t2, ::db/valid-time t2}})))
 
             (t/is (= [etx-v1-t2]
-                     (history-desc {:from {::db/valid-time t1}}))))
+                     (history-desc {:from {::db/valid-time t1}})))
 
-          (t/testing "desc until is exclusive"
+            (t/is (= [etx-v1-t2 etx-v2-t2]
+                     (history-asc {:from {::tx/tx-time t2}})))
+
+            (t/is (= [etx-v1-t1 etx-v1-t2 etx-v2-t2]
+                     (history-asc {:from {::tx/tx-time t1
+                                          ::db/valid-time t1}
+                                   :with-corrections? true}))))
+
+          (t/testing "until is exclusive"
             (t/is (= [etx-v2-t2]
                      (history-desc {:from {::tx/tx-time t2, ::db/valid-time t2}
                                     :until {::tx/tx-time t1, ::db/valid-time t1}})))
 
             (t/is (= []
-                     (history-desc {:until {::db/valid-time t2}}))))
-
-          (t/testing "asc from is exclusive"
-            (t/is (= []
-                     (history-asc {:from {::tx/tx-time t2}})))
-
-            (t/is (= [etx-v1-t2
-                      etx-v2-t2]
-                     (history-asc {:from {::tx/tx-time t1
-                                          ::db/valid-time t1}}))))
-
-          (t/testing "asc until is inclusive"
-            (t/is (= [etx-v1-t2
-                      etx-v2-t2]
-                     (history-asc {:from {::db/valid-time t1},
-                                   :until {::tx/tx-time t2}})))
+                     (history-desc {:until {::db/valid-time t2}})))
 
             (t/is (= [etx-v1-t1]
+                     (history-asc {:until {::tx/tx-time t2}})))
+
+            (t/is (= []
                      (history-asc {:from {::db/valid-time t1},
                                    :until {::tx/tx-time t1}})))))))))
 
@@ -440,8 +437,7 @@
                                       [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
                                                                                            (assoc ivan :value value)))])
 
-                                    (->> (idx/entity-history-seq-ascending i eid {:from {::db/valid-time first-vt}
-                                                                                  :until last-tx})
+                                    (->> (idx/entity-history-seq-ascending i eid {:from {::db/valid-time first-vt}})
                                          (map (juxt :vt :tx-id :content-hash)))))))
 
     ;; pairs
@@ -791,8 +787,7 @@
                 i (kv/new-iterator snapshot)]
       (let [eid->history (fn [eid]
                            (->> (idx/entity-history-seq-ascending i (c/new-id eid)
-                                                                  {:until last-tx
-                                                                   :from {::db/valid-time #inst "2020-01-01"}})
+                                                                  {:from {::db/valid-time #inst "2020-01-01"}})
                                 (map (fn [{:keys [content-hash vt]}]
                                        [vt (:v (db/get-single-object (:object-store *api*) snapshot content-hash))]))))]
         ;; transaction functions, asserts both still apply at the start of the transaction
