@@ -46,16 +46,10 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
         final BlockBuilder block = new BlockBuilder();
         final CruxRel.Implementor implementor = new CruxRel.Implementor();
         implementor.visitChild(0, getInput());
-
         final RelDataType rowType = getRowType();
-        final PhysType physType =
-            PhysTypeImpl.of(
-                            relImplementor.getTypeFactory(), rowType,
-                            pref.prefer(JavaRowFormat.ARRAY));
+        final PhysType physType = PhysTypeImpl.of(relImplementor.getTypeFactory(), rowType, pref.prefer(JavaRowFormat.ARRAY));
 
-        final Expression table = block.append("table",
-                                              implementor.table
-                                              .getExpression(CruxTable.CruxQueryable.class));
+        final Expression table = block.append("table", implementor.table .getExpression(CruxTable.CruxQueryable.class));
 
         String schemaEdn = (String) CruxUtils.resolve("clojure.core/prn-str").invoke(implementor.schema);
         final Expression schema = block.append("schema", Expressions.constant(schemaEdn));
