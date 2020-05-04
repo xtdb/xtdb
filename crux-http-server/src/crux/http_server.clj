@@ -472,16 +472,26 @@
 
 (defn- entity->html [links edn]
   (if-let [href (get links edn)]
-    [:a {:href href} (str edn)]
+    [:a.entity-link
+     {:href href}
+     (str edn)]
     (cond
-      (map? edn) (into [:dl]
-                       (mapcat
-                        (fn [[k v]]
-                          [[:dt (entity->html links k)]
-                           [:dd (entity->html links v)]])
-                        edn))
-      (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html links v)]) edn))
-      (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
+      (map? edn) (for [[k v] edn]
+                   ^{:key (str (gensym))}
+                   [:div.entity-group
+                    [:div.entity-group__key
+                     (entity->html links k)]
+                    [:div.entity-group__value
+                     (entity->html links v)]])
+
+      (sequential? edn) [:ol.entity-group__value
+                         (for [v edn]
+                           ^{:key (str (gensym))}
+                           [:li (entity->html links v)])]
+      (set? edn) [:ul.entity-group__value
+                  (for [v edn]
+                    ^{:key v}
+                    [:li (entity->html links v)])]
       :else (str edn))))
 
 (defn- entity-state [^ICruxAPI crux-node options request]
