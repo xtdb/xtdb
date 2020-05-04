@@ -16,9 +16,8 @@
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
-           java.util.Comparator
+           (java.util Comparator Date UUID)
            java.util.function.Supplier
-           java.util.UUID
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
            org.agrona.ExpandableDirectByteBuffer))
 
@@ -1186,8 +1185,8 @@
         idx/keep-non-evicted-doc)))
 
 (defrecord QueryDatasource [query-engine
-                            valid-time
-                            transact-time
+                            ^Date valid-time
+                            ^Date transact-time
                             index-store
                             entity-as-of-idx]
   Closeable
@@ -1261,7 +1260,9 @@
     (let [index-store (open-index-store this)
           {:keys [object-store]} query-engine]
       (cio/->cursor #(cio/try-close index-store)
-                    (for [^EntityTx entity-tx (db/entity-valid-time-history index-store eid valid-time transact-time true)]
+                    (for [^EntityTx entity-tx (db/entity-history index-store eid :asc
+                                                                 {:from {:crux.db/valid-time valid-time}
+                                                                  :until {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
 
@@ -1276,7 +1277,9 @@
     (let [index-store (open-index-store this)
           {:keys [object-store]} query-engine]
       (cio/->cursor #(cio/try-close index-store)
-                    (for [^EntityTx entity-tx (db/entity-valid-time-history index-store eid valid-time transact-time false)]
+                    (for [^EntityTx entity-tx (db/entity-history index-store eid :desc
+                                                                 {:from {:crux.db/valid-time valid-time
+                                                                         :crux.tx/tx-time transact-time}})]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
 

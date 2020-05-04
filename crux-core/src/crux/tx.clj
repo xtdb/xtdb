@@ -98,14 +98,18 @@
   (with-entity-history-seq-ascending [_ eid valid-time tx-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt compare
-                          (db/entity-valid-time-history nested-index-store eid valid-time tx-time true)
+                          (db/entity-history nested-index-store eid :asc
+                                             {:from {:crux.db/valid-time valid-time}
+                                              :until {:crux.tx/tx-time tx-time}})
                           (->> (get etxs eid)
                                (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
   (with-entity-history-seq-descending [_ eid valid-time tx-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt #(compare %2 %1)
-                          (db/entity-valid-time-history nested-index-store eid valid-time tx-time false)
+                          (db/entity-history nested-index-store eid :desc
+                                             {:from {:crux.db/valid-time valid-time
+                                                     :crux.tx/tx-time tx-time}})
                           (->> (reverse (get etxs eid))
                                (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 
@@ -344,15 +348,13 @@
   (new-entity-as-of-index [this valid-time transact-time]
     (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time))
 
-  (entity-valid-time-history [this eid start-valid-time transact-time ascending?]
-    (if ascending?
-      (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid {:from {::db/valid-time start-valid-time}
-                                                                        :until {::tx-time transact-time}})
-      (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid {:from {::db/valid-time start-valid-time
-                                                                                ::tx-time transact-time}})))
-
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
+
+  (entity-history [this eid sort-order opts]
+    (case sort-order
+      :asc (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid opts)
+      :desc (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid opts)))
 
   (all-content-hashes [this eid]
     (idx/all-content-hashes snapshot eid))
