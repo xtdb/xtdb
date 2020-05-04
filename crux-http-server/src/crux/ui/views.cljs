@@ -101,8 +101,10 @@
 
 (defn query-table
   []
-  (let [query-data-table @(rf/subscribe [::sub/query-data-table])]
-    [table/table query-data-table]))
+  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])]
+    (if error
+      [:div.error-box error]
+      [table/table data])))
 
 (defn query-view
   []

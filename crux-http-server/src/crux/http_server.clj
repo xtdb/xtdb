@@ -634,7 +634,9 @@
           {:status 400
            :body (if html?
                    (raw-html
-                    {:body [:p (.getMessage e)]})
+                    {:title "/_query"
+                     :body
+                     [:div.error-box (.getMessage e)]})
                    (with-out-str
                      (pp/pprint (Throwable->map e))))})))))
 

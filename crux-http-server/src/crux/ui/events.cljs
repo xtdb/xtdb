@@ -82,7 +82,8 @@
  ::fail-fetch-query-table
  (fn [db [_ result]]
    (prn "Failure: get query table result: " result)
-   db))
+   (assoc-in db [:query-data :error]
+             (get-in result [:response :via 0 :message]))))
 
 (rf/reg-event-fx
  ::fetch-entity
@@ -107,6 +108,6 @@
 
 (rf/reg-event-db
  ::fail-fetch-entity
- (fn [db [_ result]]
-   (prn "Failure: get query table result: " result)
+ (fn [db [_ {:keys [message] :as result}]]
+   (prn "Failure: get fetch entity result: " result)
    db))
