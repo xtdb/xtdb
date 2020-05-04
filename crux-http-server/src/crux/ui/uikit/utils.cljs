@@ -259,6 +259,15 @@
         hidden (-> table :utils :hidden)]
     (remove #(get hidden (:column-key %)) columns)))
 
+(defn pagination-info
+  [data processed-rows]
+  (let [rows-count (count processed-rows)
+        offset (:offset data)
+        sum-rows-offset (+ rows-count offset)]
+    (if (zero? rows-count)
+      (str (inc offset) " - " (inc offset))
+      (str (inc offset) " - " sum-rows-offset))))
+
 (defn pagination-rows-per-page-on-change
   [evt table-atom]
   (swap! table-atom

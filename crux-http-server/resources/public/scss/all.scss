@@ -143,4 +143,18 @@ html, body {
     font-weight: bold;
 }
 
+.entity-link {
+    padding: 0.5em;
+    font-weight: bold;
+    background:#dfdfdf;
+    color: black;
+    white-space: nowrap;
+    text-decoration: none;
+    border-radius: 0.7em;
+}
+
+.entity-link:hover {
+    text-decoration: underline;
+}
+
 // END FORM ELEMENTS

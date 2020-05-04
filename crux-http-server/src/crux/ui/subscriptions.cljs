@@ -25,7 +25,7 @@
                          :render-fn
                          (fn [_ v]
                            (if-let [link (get linked-entities v)]
-                             [:a {:href link} v]
+                             [:a.entity-link {:href link} v]
                              v))
                          :render-only #{:filter :sort}})
                       find-clause)

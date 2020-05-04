@@ -553,7 +553,7 @@
             (for [[header cell-value] (map vector headers row)]
               [:td.table__cell.body__cell
                (if-let [href (get links cell-value)]
-                 [:a {:href href} (str cell-value)]
+                 [:a.entity-link {:href href} (str cell-value)]
                  (str cell-value))])])]
         [:tbody.table__body.table__no-data
          [:tr [:td.td__no-data

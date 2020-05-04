@@ -203,9 +203,7 @@
             [:option {:value "10"} (str "10" " rows")]
             [:option {:value "50"} (str "50" " rows")]
             [:option {:value "100"} (str "100" " rows")]]]
-        [:div.pagination__info (when (seq processed-rows)
-                                 (str (+ (:offset data) 1) " - "
-                                      (+ (:offset data) (count processed-rows))))]
+        [:div.pagination__info (utils/pagination-info data processed-rows)]
         [:div.pagination__arrow-group
          [:div.pagination__arrow-nav
           {:on-click #(when prev-query-params
