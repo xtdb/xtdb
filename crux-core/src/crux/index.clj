@@ -370,20 +370,20 @@
 ;; iterator call.
 
 (defn all-keys-in-prefix
-  ([i prefix]
-   (all-keys-in-prefix i prefix false))
-  ([i ^DirectBuffer prefix entries?]
-   (all-keys-in-prefix i prefix prefix entries?))
-  ([i ^DirectBuffer seek-k prefix entries?]
-   ((fn step [f-cons f-next]
-      (lazy-seq
-       (let [k (f-cons)]
-         (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
-           (cons (if entries?
-                   [(mem/copy-to-unpooled-buffer k)
-                    (mem/copy-to-unpooled-buffer (kv/value i))]
-                   (mem/copy-to-unpooled-buffer k)) (step f-next f-next))))))
-    #(kv/seek i seek-k) #(kv/next i))))
+  ([i prefix] (all-keys-in-prefix i prefix prefix {}))
+  ([i prefix seek-k] (all-keys-in-prefix i prefix seek-k {}))
+  ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
+   (letfn [(step [k]
+             (lazy-seq
+              (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
+                (cons (if entries?
+                        [(mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i))]
+                        (mem/copy-to-unpooled-buffer k))
+                      (step (if reverse? (kv/prev i) (kv/next i)))))))]
+     (step (if reverse?
+             (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
+               (kv/prev i))
+             (kv/seek i seek-k))))))
 
 (defn idx->series
   [idx]
@@ -564,71 +564,45 @@
            (not-empty)
            (map second)))))
 
-(defn all-entities [snapshot valid-time transact-time]
-  (with-open [i (kv/new-iterator snapshot)]
-    (let [eids (->> (all-keys-in-prefix i (c/encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)))
-                    (map (comp :eid c/decode-entity+vt+tt+tx-id-key-from))
-                    (distinct))]
-      (entities-at snapshot eids valid-time transact-time))))
+(defn- ->entity-tx [[k v]]
+  (-> (c/decode-entity+vt+tt+tx-id-key-from k)
+      (enrich-entity-tx v)))
 
-;; TODO: Entity history would need to be able to use the Z order index
-;; for us to be able to remove the old index. Outstanding questions
-;; around how and if LITMAX would work together with seeks and prev
-;; for ascending search.
+(defn entity-history-seq-ascending
+  ([i eid] ([i eid] (entity-history-seq-ascending i eid {})))
+  ([i eid {{^Date from-vt :crux.db/valid-time, ^Date from-tt :crux.tx/tx-time} :from
+           {^Date until-vt :crux.db/valid-time, ^Date until-tt :crux.tx/tx-time} :until
+           :keys [with-corrections?]}]
+   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-vt)]
+     (-> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
+                             {:reverse? true, :entries? true})
+         (->> (map ->entity-tx))
+         (cond->> until-vt (take-while (fn [^EntityTx entity-tx]
+                                         (neg? (compare (.vt entity-tx) until-vt))))
+                  from-tt (filter (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) from-tt))))
+                  until-tt (remove (fn [^EntityTx entity-tx]
+                                     (pos? (compare (.tt entity-tx) until-tt)))))
+         (cond-> (not with-corrections?) (->> (partition-by :vt)
+                                              (map last)))))))
 
-(defn- entity-history-step [i seek-k f-cons f-next]
-  (lazy-seq
-   (let [k (f-cons)]
-     (when (and k (mem/buffers=? seek-k k (+ c/index-id-size c/id-size)))
-       (cons
-        (-> (c/decode-entity+vt+tt+tx-id-key-from k)
-            (safe-entity-tx)
-            (enrich-entity-tx (kv/value i)))
-        (entity-history-step i seek-k f-next f-next))))))
-
-(defn entity-history-seq-ascending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-valid-time))))]
-    (->> (entity-history-step i seek-k #(when-let [k (kv/seek i seek-k)]
-                                          (kv/prev i)) #(kv/prev i))
-         (drop-while (fn [^EntityTx entity-tx]
-                       (neg? (compare (.vt entity-tx) from-valid-time))))
-         (partition-by :vt)
-         (map (fn [group]
-                (->> group
-                     (reverse)
-                     (drop-while (fn [^EntityTx entity-tx]
-                                   (pos? (compare (.tt entity-tx) transaction-time))))
-                     (first))))
-         (remove nil?))))
-
-(defn entity-history-seq-descending [i eid ^Date from-valid-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
-    (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/next i))
-         (partition-by :vt)
-         (map (fn [group]
-                (->> group
-                     (drop-while (fn [^EntityTx entity-tx]
-                                   (pos? (compare (.tt entity-tx) transaction-time))))
-                     (first))))
-         (remove nil?))))
-
-;; TODO: This would need to change to simply walk the entire Z curve
-;; from a point in the right order.
-
-(defn- entity-history-seq [i eid]
-  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid))]
-    (for [[k v] (all-keys-in-prefix i seek-k true)]
-      (-> (c/decode-entity+vt+tt+tx-id-key-from k)
-          (enrich-entity-tx v)))))
-
-(defn entity-history
-  ([snapshot eid]
-   (entity-history snapshot eid Long/MAX_VALUE))
-  ([snapshot eid n]
-   (with-open [i (kv/new-iterator snapshot)]
-     (->> (entity-history-seq i eid)
-          (take n)
-          (vec)))))
+(defn entity-history-seq-descending
+  ([i eid] (entity-history-seq-descending i eid {}))
+  ([i eid {{^Date from-vt :crux.db/valid-time, ^Date from-tt :crux.tx/tx-time} :from
+           {^Date until-vt :crux.db/valid-time, ^Date until-tt :crux.tx/tx-time} :until
+           :keys [with-corrections?]}]
+   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-vt)]
+     (-> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
+                             {:entries? true})
+         (->> (map ->entity-tx))
+         (cond->> until-vt (take-while (fn [^EntityTx entity-tx]
+                                         (pos? (compare (.vt entity-tx) until-vt))))
+                  from-tt (remove (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) from-tt))))
+                  until-tt (filter (fn [^EntityTx entity-tx]
+                                     (pos? (compare (.tt entity-tx) until-tt)))))
+         (cond-> (not with-corrections?) (->> (partition-by :vt)
+                                              (map first)))))))
 
 (defn all-content-hashes [snapshot eid]
   (with-open [i (kv/new-iterator snapshot)]
