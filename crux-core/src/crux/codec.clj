@@ -8,11 +8,12 @@
             [crux.io :as cio]
             [clojure.walk :as walk])
   (:import [clojure.lang IHashEq Keyword APersistentMap APersistentSet]
-           [java.io Closeable Writer]
+           [java.io Closeable DataInputStream Writer]
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
            [java.util Arrays Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           org.agrona.io.DirectBufferInputStream
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -766,3 +767,9 @@
   (assert (tx-event-key? k))
   {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
    :crux.tx/tx-time (reverse-time-ms->date (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
+
+(defn <-nippy-buffer [buf]
+  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+
+(defn ->nippy-buffer [v]
+  (mem/->off-heap (nippy/fast-freeze v)))

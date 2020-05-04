@@ -266,7 +266,7 @@
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
-          (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))
+          (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash picasso-history))
                              vals
                              (remove idx/evicted-doc?)))))))))
 
@@ -291,9 +291,9 @@
     (t/testing "no docs evicted yet"
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
                   i (kv/new-iterator snapshot)]
-        (t/is (seq (->> (db/get-objects (:object-store *api*) snapshot
-                                        (->> (idx/entity-history-seq-descending i picasso-id)
-                                             (keep :content-hash)))
+        (t/is (seq (->> (db/fetch-objects (:document-store *api*)
+                                          (->> (idx/entity-history-seq-descending i picasso-id)
+                                               (keep :content-hash)))
                         vals
                         (remove idx/evicted-doc?))))))
 
@@ -304,9 +304,9 @@
         (t/testing "eviction removes docs"
           (with-open [snapshot (kv/new-snapshot (:kv-store *api*))
                       i (kv/new-iterator snapshot)]
-            (t/is (empty? (->> (db/get-objects (:object-store *api*) snapshot
-                                               (->> (idx/entity-history-seq-descending i picasso-id)
-                                                    (keep :content-hash)))
+            (t/is (empty? (->> (db/fetch-objects (:document-store *api*)
+                                                 (->> (idx/entity-history-seq-descending i picasso-id)
+                                                      (keep :content-hash)))
                                vals
                                (remove idx/evicted-doc?))))))))))
 
@@ -404,15 +404,14 @@
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= {content-hash picasso}
-               (db/get-objects (:object-store *api*) snapshot #{content-hash})))
+               (db/fetch-docs (:document-store *api*) #{content-hash})))
 
       (t/testing "non existent docs are ignored"
         (t/is (= {content-hash picasso}
-                 (db/get-objects (:object-store *api*)
-                                 snapshot
-                                 [content-hash
-                                  "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot #{})))))))
+                 (db/fetch-docs (:document-store *api*)
+                                [content-hash
+                                 "090622a35d4b579d2fcfebf823821298711d3867"])))
+        (t/is (empty? (db/fetch-docs (:document-store *api*) #{})))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
@@ -786,7 +785,7 @@
                            (->> (idx/entity-history-seq-ascending i (c/new-id eid)
                                                                   {:from {::db/valid-time #inst "2020-01-01"}})
                                 (map (fn [{:keys [content-hash vt]}]
-                                       [vt (:v (db/get-single-object (:object-store *api*) snapshot content-hash))]))))]
+                                       [vt (get-in (db/fetch-docs (:document-store *api*) #{content-hash}) [content-hash :v])]))))]
         ;; transaction functions, asserts both still apply at the start of the transaction
         (t/is (= [[#inst "2020-01-08" 8]
                   [#inst "2020-01-09" 9]

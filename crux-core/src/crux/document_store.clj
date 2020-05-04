@@ -9,14 +9,7 @@
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
            java.util.function.Supplier
            org.agrona.ExpandableDirectByteBuffer
-           org.agrona.io.DirectBufferInputStream
            crux.kv.KvSnapshot))
-
-(defn <-nippy-buffer [buf]
-  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
-
-(defn ->nippy-buffer [v]
-  (mem/->off-heap (nippy/fast-freeze v)))
 
 (def ^:private ^ThreadLocal seek-buffer-tl
   (ThreadLocal/withInitial
@@ -30,7 +23,7 @@
     (with-open [snapshot (kv/new-snapshot kv)]
       (->> (for [k ids
                  :let [seek-k (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))
-                       doc (some-> (kv/get-value snapshot seek-k) (<-nippy-buffer))]
+                       doc (some-> (kv/get-value snapshot seek-k) (c/<-nippy-buffer))]
                  :when doc]
              [k doc])
            (into {}))))
@@ -38,7 +31,7 @@
   (submit-docs [this id-and-docs]
     (kv/store kv (for [[k v] id-and-docs]
                    [(c/encode-doc-key-to nil (c/->id-buffer k))
-                    (->nippy-buffer v)])))
+                    (c/->nippy-buffer v)])))
 
   Closeable
   (close [_]))

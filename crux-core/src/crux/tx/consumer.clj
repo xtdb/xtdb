@@ -57,7 +57,7 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log object-store bus]
+(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log bus]
   db/TxConsumer
   (consumer-error [_] @!error)
 
@@ -72,14 +72,13 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def tx-consumer
-  {:start-fn (fn [{::n/keys [indexer document-store tx-log object-store bus query-engine]} args]
+  {:start-fn (fn [{::n/keys [indexer document-store tx-log bus query-engine]} args]
                (let [stats-executor (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))
                      tx-consumer (map->TxConsumer
                                   {:!error (atom nil)
                                    :indexer indexer
                                    :document-store document-store
                                    :tx-log tx-log
-                                   :object-store object-store
                                    :bus bus
                                    :query-engine query-engine
                                    :stats-executor stats-executor})]
@@ -88,7 +87,7 @@
                         (doto (Thread. #(index-tx-log tx-consumer args))
                           (.setName "crux-tx-consumer")
                           (.start)))))
-   :deps [::n/indexer ::n/document-store ::n/tx-log ::n/object-store ::n/bus ::n/query-engine]
+   :deps [::n/indexer ::n/document-store ::n/tx-log ::n/bus ::n/query-engine]
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})

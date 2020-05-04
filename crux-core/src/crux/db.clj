@@ -50,14 +50,3 @@
 (defprotocol DocumentStore
   (submit-docs [this id-and-docs])
   (fetch-docs [this ids]))
-
-;; NOTE: The snapshot parameter here is an optimisation to avoid keep
-;; opening snapshots and allow caching of iterators. A non-KV backed
-;; object store could choose to ignore it, but it would be nice to
-;; hide it.
-;; tag::ObjectStore[]
-(defprotocol ObjectStore
-  (get-single-object [this snapshot k])
-  (get-objects [this snapshot ks])
-  (put-objects [this kvs]))
-;; end::ObjectStore[]
