@@ -484,14 +484,17 @@
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
 
+(defn- check-limit [limit max-limit]
+  (when (> limit max-limit)
+    (throw (IllegalArgumentException. (format "Specified a limit '%s', higher than the server allowed maximum, '%s'." limit max-limit)))))
+
 (defn- build-query [{:strs [find where args order-by limit offset full-results]} default-limit]
   (let [limit (when limit (Integer/parseInt limit))
-        page-limit (if (and limit (<= limit default-limit))
-                     limit
-                     default-limit)
+        page-limit (or limit default-limit)
         new-offset (if offset
                      (Integer/parseInt offset)
                      0)]
+    (check-limit page-limit default-limit)
     (cond-> {:find (c/read-edn-string-with-readers find)
              :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
              :limit page-limit
@@ -503,9 +506,8 @@
 (defn build-query-q
   [resolved-query {:strs [offset page]} default-limit]
   (let [limit (:limit resolved-query)
-        updated-limit (if (and limit (<= limit default-limit))
-                        limit
-                        default-limit)]
+        updated-limit (or limit default-limit)]
+    (check-limit updated-limit default-limit)
     (cond-> (assoc resolved-query :limit updated-limit)
       (not (:offset resolved-query)) (assoc :offset 0)
       offset (assoc :offset (Integer/parseInt offset)))))
