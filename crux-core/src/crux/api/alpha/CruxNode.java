@@ -98,6 +98,7 @@ public class CruxNode implements AutoCloseable {
      * @return Iterable set of Documents containing transaction information
      */
     public Iterable<Document> history(CruxId id) {
+        @SuppressWarnings("deprecation")
         List<Map<Keyword,Object>> history = node.history(id.toEdn());
         return history.stream()
             .map(this::document)

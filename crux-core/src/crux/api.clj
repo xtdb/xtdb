@@ -5,7 +5,8 @@
             [crux.codec :as c]
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ICursor]
+            ICruxAsyncIngestAPI ICruxDatasource ICursor
+            HistoryOptions HistoryOptions$SortOrder]
            java.io.Closeable
            java.util.Date
            java.time.Duration
@@ -163,6 +164,19 @@
 
   Returns an iterator of the TxLog"))
 
+(defn- ->HistoryOptions [sort-order
+                         {:keys [with-corrections? with-docs? start end]
+                          :or {with-corrections? false, with-docs false}}]
+  (HistoryOptions. (case sort-order
+                     :asc HistoryOptions$SortOrder/ASC
+                     :desc HistoryOptions$SortOrder/DESC)
+                   (boolean with-corrections?)
+                   (boolean with-docs?)
+                   (:crux.db/valid-time start)
+                   (:crux.tx/tx-time start)
+                   (:crux.db/valid-time end)
+                   (:crux.tx/tx-time end)))
+
 (extend-protocol PCruxNode
   ICruxAPI
   (db
@@ -294,6 +308,16 @@
   from and including the valid time of the db while respecting
   transaction time. Includes the documents.")
 
+  (entity-history
+    [node eid sort-order]
+    [node eid sort-order opts]
+    "TODO docstring")
+
+  (open-entity-history
+    ^crux.api.ICursor [node eid sort-order]
+    ^crux.api.ICursor [node eid sort-order opts]
+    "TODO docstring")
+
   (valid-time [db]
     "returns the valid time of the db.
   If valid time wasn't specified at the moment of the db value retrieval
@@ -337,6 +361,13 @@
     ([this snapshot eid] (.historyDescending this snapshot eid)))
 
   (open-history-descending [this eid] (.openHistoryDescending this eid))
+
+  (entity-history
+    ([this eid sort-order] (entity-history this eid sort-order {}))
+    ([this eid sort-order opts] (.entityHistory this eid (->HistoryOptions sort-order opts))))
+  (open-entity-history
+    ([this eid sort-order] (open-entity-history this eid sort-order {}))
+    ([this eid sort-order opts] (.openEntityHistory this eid (->HistoryOptions sort-order opts))))
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this)))

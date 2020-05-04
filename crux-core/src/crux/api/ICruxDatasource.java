@@ -118,6 +118,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a stream of history.
      */
+    @Deprecated
     public ICursor<Map<Keyword,?>> openHistoryAscending(Object eid);
 
     /**
@@ -128,6 +129,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid      an object that can be coerced into an entity id.
      * @return         the history of the given entity.
      */
+    @Deprecated
     public List<Map<Keyword,?>> historyDescending(Object eid);
 
     /**
@@ -150,7 +152,14 @@ public interface ICruxDatasource extends Closeable {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a stream of history.
      */
+    @Deprecated
     public ICursor<Map<Keyword,?>> openHistoryDescending(Object eid);
+
+    // TODO javadoc
+    public List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions opts);
+
+    // TODO javadoc
+    public ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions opts);
 
     /**
      * The valid time of this db.

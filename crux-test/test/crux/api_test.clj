@@ -301,6 +301,28 @@
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (= 2 (count result))))))))))
 
+(t/deftest test-history-api
+  (letfn [(submit-ivan [m valid-time]
+            (let [doc (merge {:crux.db/id :ivan, :name "Ivan"} m)]
+              (merge (fix/submit+await-tx [[:crux.tx/put doc valid-time]])
+                     {:crux.db/doc doc
+                      :crux.db/valid-time valid-time
+                      :crux.db/content-hash (c/new-id doc)})))]
+    (let [v1 (submit-ivan {:version 1} #inst "2019-02-01")
+          v2 (submit-ivan {:version 2} #inst "2019-02-02")
+          v3 (submit-ivan {:version 3} #inst "2019-02-03")
+          v2-corrected (submit-ivan {:version 2, :corrected? true} #inst "2019-02-02")]
+
+      (with-open [history-asc (api/open-entity-history (api/db *api*) :ivan :asc
+                                                       {:start {:crux.db/valid-time #inst "2019-02-03"}
+                                                        :with-docs? true})]
+        (t/is (= [v3] (iterator-seq history-asc))))
+
+      (with-open [history-desc (api/open-entity-history (api/db *api*) :ivan :desc
+                                                        {:start {:crux.db/valid-time #inst "2019-02-03"}
+                                                         :with-docs? true})]
+        (t/is (= [v3 v2-corrected v1] (iterator-seq history-desc)))))))
+
 (t/deftest test-db-history-api
   (let [version-1-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]]) nil)
                                         :crux.tx/tx-time)

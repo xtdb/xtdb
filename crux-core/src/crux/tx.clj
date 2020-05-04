@@ -98,18 +98,20 @@
 (defrecord IndexStore+NewETXs [index-store etxs]
   EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time f]
-    (with-open [nested-index-store (db/open-nested-index-store index-store)]
+    (with-open [nested-index-store (db/open-nested-index-store index-store)
+                history (db/entity-history nested-index-store eid :asc
+                                           {:start {:crux.db/valid-time valid-time}})]
       (f (merge-histories etx->vt compare
-                          (db/entity-history nested-index-store eid :asc
-                                             {:start {:crux.db/valid-time valid-time}})
+                          (iterator-seq history)
                           (->> (get etxs eid)
                                (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
   (with-entity-history-seq-descending [_ eid valid-time f]
-    (with-open [nested-index-store (db/open-nested-index-store index-store)]
+    (with-open [nested-index-store (db/open-nested-index-store index-store)
+                history (db/entity-history nested-index-store eid :desc
+                                           {:start {:crux.db/valid-time valid-time}})]
       (f (merge-histories etx->vt #(compare %2 %1)
-                          (db/entity-history nested-index-store eid :desc
-                                             {:start {:crux.db/valid-time valid-time}})
+                          (iterator-seq history)
                           (->> (reverse (get etxs eid))
                                (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 
@@ -358,9 +360,12 @@
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
   (entity-history [this eid sort-order opts]
-    (case sort-order
-      :asc (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid opts)
-      :desc (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid opts)))
+    (let [i (kv/new-iterator snapshot)
+          entity-history-seq (case sort-order
+                               :asc idx/entity-history-seq-ascending
+                               :desc idx/entity-history-seq-descending)]
+      (cio/->cursor #(.close i)
+                    (entity-history-seq i eid opts))))
 
   (all-content-hashes [this eid]
     (idx/all-content-hashes snapshot eid))

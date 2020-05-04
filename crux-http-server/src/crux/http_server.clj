@@ -278,6 +278,31 @@
     (-> (streamed-edn-response history (iterator-seq history))
         (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
+(defn- entity-history [^ICruxAPI node
+                       {{:strs [sort-order
+                                valid-time transaction-time
+                                start-valid-time start-transaction-time
+                                end-valid-time end-transaction-time
+                                with-corrections with-docs]} :query-params
+                        :as req}]
+  (let [db (db-for-request node {:valid-time (some-> valid-time (instant/read-instant-date))
+                                 :transact-time (some-> transaction-time (instant/read-instant-date))})
+        eid (or (some-> (re-find #"^/entity-history/(.+)$" (req/path-info req))
+                        second
+                        c/id-edn-reader)
+                (throw (IllegalArgumentException. "missing eid")))
+        sort-order (or (some-> sort-order keyword)
+                       (throw (IllegalArgumentException. "missing sort-order query parameter")))
+        opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
+              :with-docs? (some-> ^String with-docs Boolean/valueOf)
+              :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
+                      :crux.tx/tx-time (some-> start-transaction-time (instant/read-instant-date))}
+              :end {:crux.db/valid-time (some-> end-valid-time (instant/read-instant-date))
+                    :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
+        history (api/open-entity-history db eid sort-order opts)]
+    (-> (streamed-edn-response history (iterator-seq history))
+        (add-last-modified (:crux.tx/tx-time (api/latest-completed-tx node))))))
+
 (defn- transact [^ICruxAPI crux-node request]
   (let [tx-ops (body->edn request)
         {:keys [crux.tx/tx-time] :as submitted-tx} (.submitTx crux-node tx-ops)]
@@ -388,6 +413,9 @@
 
     [#"^/history-descending$" [:post]]
     (history-descending crux-node request)
+
+    [#"^/entity-history/.+$" [:get]]
+    (entity-history crux-node request)
 
     [#"^/query$" [:post]]
     (query crux-node request)
