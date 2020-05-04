@@ -72,8 +72,8 @@
                       arg)))))
 
 (defprotocol EntityHistory
-  (with-entity-history-seq-ascending [_ eid valid-time tx-time f])
-  (with-entity-history-seq-descending [_ eid valid-time tx-time f])
+  (with-entity-history-seq-ascending [_ eid valid-time f])
+  (with-entity-history-seq-descending [_ eid valid-time f])
   (all-content-hashes [_ eid])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
@@ -95,21 +95,19 @@
 
 (defrecord IndexStore+NewETXs [index-store etxs]
   EntityHistory
-  (with-entity-history-seq-ascending [_ eid valid-time tx-time f]
+  (with-entity-history-seq-ascending [_ eid valid-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt compare
                           (db/entity-history nested-index-store eid :asc
-                                             {:from {:crux.db/valid-time valid-time}
-                                              :until {:crux.tx/tx-time tx-time}})
+                                             {:from {:crux.db/valid-time valid-time}})
                           (->> (get etxs eid)
                                (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
-  (with-entity-history-seq-descending [_ eid valid-time tx-time f]
+  (with-entity-history-seq-descending [_ eid valid-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt #(compare %2 %1)
                           (db/entity-history nested-index-store eid :desc
-                                             {:from {:crux.db/valid-time valid-time
-                                                     :crux.tx/tx-time tx-time}})
+                                             {:from {:crux.db/valid-time valid-time}})
                           (->> (reverse (get etxs eid))
                                (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 
@@ -164,7 +162,7 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (with-entity-history-seq-descending history eid end-valid-time tx-time
+        (with-entity-history-seq-descending history eid end-valid-time
           (fn [entity-history]
             (into (->> (cons start-valid-time
                              (->> (map etx->vt entity-history)
@@ -181,7 +179,7 @@
       (->> (cons start-valid-time
                  (when-let [visible-entity (some-> (entity-at history eid start-valid-time tx-time)
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (with-entity-history-seq-ascending history eid start-valid-time tx-time
+                   (with-entity-history-seq-ascending history eid start-valid-time
                      (fn [entity-history]
                        (->> entity-history
                             (remove #{start-valid-time})
