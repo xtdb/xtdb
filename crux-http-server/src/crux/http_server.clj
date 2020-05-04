@@ -632,7 +632,11 @@
                    :else results)})
         (catch Exception e
           {:status 400
-           :body (.getMessage e)})))))
+           :body (if html?
+                   (raw-html
+                    {:body [:p (.getMessage e)]})
+                   (with-out-str
+                     (pp/pprint (Throwable->map e))))})))))
 
 (defn- data-browser-handler [crux-node options request]
   (condp check-path request
