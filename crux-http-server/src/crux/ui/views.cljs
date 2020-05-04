@@ -107,7 +107,10 @@
                          (for [v edn]
                            ^{:key (str (gensym))}
                            [:li (entity->hiccup links v)])]
-      (set? edn) (into [:ul] (map (fn [v] [:li (entity->hiccup links v)]) edn))
+      (set? edn) [:ul.entity-group__value
+                  (for [v edn]
+                    ^{:key v}
+                    [:li (entity->hiccup links v)])]
       :else (str edn))))
 
 (defn entity-view
@@ -117,11 +120,7 @@
     [:<>
      [:h1 "/_entity"]
      [:div.entity-map
-      (entity->hiccup {1 1} {:a 1 :b 2
-                          :c [1 2 3 4]
-                          :d #{1 2 3 4}
-                          :e {:a 1 :b 2}})
-      #_(entity->hiccup linked-entities entity-result)]]))
+      (entity->hiccup linked-entities entity-result)]]))
 
 (defn view []
   (let [current-page @(rf/subscribe [::sub/current-page])]

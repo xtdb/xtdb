@@ -144,13 +144,13 @@ html, body {
 }
 
 .entity-link {
-    padding: 0.5em;
+    padding: 0.5rem;
     font-weight: bold;
     background:#dfdfdf;
     color: black;
     white-space: nowrap;
     text-decoration: none;
-    border-radius: 0.7em;
+    border-radius: 0.7rem;
 }
 
 .entity-link:hover {
@@ -168,7 +168,7 @@ html, body {
 .entity-group {
     display: flex;
     align-items: flex-start;
-    margin: 1rem auto;
+    margin: 1.5rem auto;
 }
 
 .entity-group__key {
@@ -176,9 +176,18 @@ html, body {
 }
 
 ol.entity-group__value {
-    margin: 2em;
     list-style: none;
     counter-reset: my-counter;
+    padding-inline-start: 0;
+    margin-block-start: 0;
+    margin-block-end: 0;
+}
+
+ul.entity-group__value {
+    list-style: none;
+    padding-inline-start: 0;
+    margin-block-start: 0;
+    margin-block-end: 0;
 }
 
 ol.entity-group__value li {
@@ -186,15 +195,27 @@ ol.entity-group__value li {
 }
 
 ol.entity-group__value li::before {
-    content: counter(my-counter);
-    color: red;
+    content: counter(my-counter) ".";
+    color: grey;
     font-size: 0.765em;
-    margin-right: 1em;
+    margin-right: .5rem;
+    font-weight: bold;
+}
+
+ul.entity-group__value li::before {
+    content: "-";
+    color: grey;
+    font-size: 0.765em;
+    margin-right: .5rem;
     font-weight: bold;
 }
 
 // apply to only first level keys
 .entity-map > .entity-group > .entity-group__key {
-    margin-right: 1.5rem;
+    margin-right: 1rem;
     font-weight: bold;
+}
+
+.entity-group__value li:not(:last-child) {
+    margin-bottom: 1rem;
 }
