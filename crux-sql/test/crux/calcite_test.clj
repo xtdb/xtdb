@@ -88,7 +88,7 @@
     (t/is (= (str "EnumerableAggregate(group=[{}], MAX_AGE=[MAX($3)])\n"
                   "  CruxToEnumerableConverter\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
-             (explain q))))
+             (explain q)))))
 
 
 (t/deftest test-sql-query
