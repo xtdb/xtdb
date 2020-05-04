@@ -164,4 +164,37 @@ html, body {
     background:#dfdfdf;
     color: darkred;
     border-radius: 0.7em;
+
+.entity-group {
+    display: flex;
+    align-items: flex-start;
+    margin: 1rem auto;
+}
+
+.entity-group__key {
+    margin-right: 1rem;
+}
+
+ol.entity-group__value {
+    margin: 2em;
+    list-style: none;
+    counter-reset: my-counter;
+}
+
+ol.entity-group__value li {
+    counter-increment: my-counter;
+}
+
+ol.entity-group__value li::before {
+    content: counter(my-counter);
+    color: red;
+    font-size: 0.765em;
+    margin-right: 1em;
+    font-weight: bold;
+}
+
+// apply to only first level keys
+.entity-map > .entity-group > .entity-group__key {
+    margin-right: 1.5rem;
+    font-weight: bold;
 }

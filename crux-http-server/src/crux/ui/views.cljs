@@ -91,16 +91,22 @@
 (defn- entity->hiccup
   [links edn]
   (if-let [href (get links edn)]
-    [:a {:href href}
+    [:a.entity-link
+     {:href href}
      (str edn)]
     (cond
-      (map? edn) (into [:dl]
-                       (mapcat
-                        (fn [[k v]]
-                          [[:dt (entity->hiccup links k)]
-                           [:dd (entity->hiccup links v)]])
-                        edn))
-      (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->hiccup links v)]) edn))
+      (map? edn) (for [[k v] edn]
+                   ^{:key (str (gensym))}
+                   [:div.entity-group
+                    [:div.entity-group__key
+                     (entity->hiccup links k)]
+                    [:div.entity-group__value
+                     (entity->hiccup links v)]])
+
+      (sequential? edn) [:ol.entity-group__value
+                         (for [v edn]
+                           ^{:key (str (gensym))}
+                           [:li (entity->hiccup links v)])]
       (set? edn) (into [:ul] (map (fn [v] [:li (entity->hiccup links v)]) edn))
       :else (str edn))))
 
@@ -110,7 +116,12 @@
         @(rf/subscribe [::sub/entity-view-data])]
     [:<>
      [:h1 "/_entity"]
-     [:div (entity->hiccup linked-entities entity-result)]]))
+     [:div.entity-map
+      (entity->hiccup {1 1} {:a 1 :b 2
+                          :c [1 2 3 4]
+                          :d #{1 2 3 4}
+                          :e {:a 1 :b 2}})
+      #_(entity->hiccup linked-entities entity-result)]]))
 
 (defn view []
   (let [current-page @(rf/subscribe [::sub/current-page])]
