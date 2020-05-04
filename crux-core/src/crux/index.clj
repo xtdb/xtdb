@@ -372,7 +372,6 @@
 (defn all-keys-in-prefix
   ([i prefix] (all-keys-in-prefix i prefix prefix {}))
   ([i prefix seek-k] (all-keys-in-prefix i prefix seek-k {}))
-
   ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
    (letfn [(step [k]
              (lazy-seq
@@ -571,11 +570,9 @@
 
 (defn entity-history-seq-ascending
   ([i eid] ([i eid] (entity-history-seq-ascending i eid {})))
-
   ([i eid {{^Date from-vt :crux.db/valid-time, ^Date from-tt :crux.tx/tx-time} :from
            {^Date until-vt :crux.db/valid-time, ^Date until-tt :crux.tx/tx-time} :until
            :keys [with-corrections?]}]
-
    (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-vt)]
      (-> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
                              {:reverse? true, :entries? true})
@@ -591,7 +588,6 @@
 
 (defn entity-history-seq-descending
   ([i eid] (entity-history-seq-descending i eid {}))
-
   ([i eid {{^Date from-vt :crux.db/valid-time, ^Date from-tt :crux.tx/tx-time} :from
            {^Date until-vt :crux.db/valid-time, ^Date until-tt :crux.tx/tx-time} :until
            :keys [with-corrections?]}]
