@@ -30,7 +30,7 @@
                           ["run" "-m" "figwheel.main" "-O" "advanced" "-bo" "dev"]
                           ["sass"]]}
   :plugins [[yogthos/lein-sass "0.1.10"]]
-  :resource-paths ["target" "resources"]
-  :sass {:source "resources/public/scss/" :target "target/public/css/"}
+  :resource-paths ["resources" "cljs-target"]
+  :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

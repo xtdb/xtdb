@@ -72,6 +72,12 @@ jobs:
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
 
+      - run:
+          command: |
+            cd crux-http-server
+            export LEIN_JVM_OPTS=-Xmx2G
+            lein build:cljs
+
       - run: lein sub install
       - run: lein deps
       - save_cache:
