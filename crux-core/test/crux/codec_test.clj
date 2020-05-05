@@ -70,7 +70,7 @@
   (prop/for-all [v (gen/one-of [gen/large-integer
                                 (gen/double* {:NaN? false})
                                 (gen/fmap #(Date. (long %)) gen/large-integer)
-                                gen/string-alphanumeric])]
+                                gen/string])]
                 (let [buffer (c/->value-buffer v)]
                   (if (c/can-decode-value-buffer? buffer)
                     (t/is (= v (c/decode-value-buffer buffer))
