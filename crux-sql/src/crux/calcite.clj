@@ -216,6 +216,14 @@
       (log/error e)
       (throw e))))
 
+(defn clojure-helper-fn [f]
+  (fn [& args]
+    (try
+      (apply f args)
+      (catch Throwable t
+        (log/error t "Exception occured calling Clojure fn")
+        (throw t)))))
+
 (def ^:private mapped-types {:keyword SqlTypeName/OTHER})
 (def ^:private supported-types #{:boolean :bigint :double :float :integer :timestamp :varchar})
 
