@@ -48,10 +48,6 @@
   (->var [this schema]
     this))
 
-(defn- operands->vars [schema ^RexCall filter*]
-  (->> (.getOperands filter*)
-       (map #(->var % schema))))
-
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
@@ -61,39 +57,51 @@
                         (= sym (last clause))))
                  (get-in schema [:crux.sql.table/query :where]))))
 
-(defn- ->crux-where-clauses
-  [schema ^RexNode filter*]
-  (condp = (.getKind filter*)
-    SqlKind/EQUALS
-    (let [[o1 o2] (sort-by symbol? (operands->vars schema filter*))]
-      (if (and (symbol? o1) (not (symbol? o2)))
-        (let [[e a v] (sym-triple o1 schema)]
-          [e a o2])
-        [[(apply list '= (operands->vars schema filter*))]]))
-    SqlKind/NOT_EQUALS
-    [[(apply list 'not= (operands->vars schema filter*))]]
-    SqlKind/AND
-    (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*))
-    SqlKind/OR
-    [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
-    SqlKind/INPUT_REF
-    [[(list '= (->var filter* schema) true)]]
-    SqlKind/NOT
-    [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
-    SqlKind/GREATER_THAN
-    [[(apply list '> (operands->vars schema filter*))]]
-    SqlKind/GREATER_THAN_OR_EQUAL
-    [[(apply list '>= (operands->vars schema filter*))]]
-    SqlKind/LESS_THAN
-    [[(apply list '< (operands->vars schema filter*))]]
-    SqlKind/LESS_THAN_OR_EQUAL
-    [[(apply list '<= (operands->vars schema filter*))]]
-    SqlKind/LIKE
-    [[(apply list 'crux.calcite/-like (operands->vars schema filter*))]]
-    SqlKind/IS_NULL
-    [[(list 'nil? (first (operands->vars schema filter*)))]]
-    SqlKind/IS_NOT_NULL
-    [[(list 'boolean (first (operands->vars schema filter*)))]]))
+(defn- operands->vars [schema ^RexCall filter*]
+  (map #(->var % schema) (.getOperands filter*)))
+
+(defprotocol RexNodeToClauses
+  (->clauses [this schema]))
+
+(defn- operands->clauses [schema ^RexCall filter*]
+  (mapcat #(->clauses % schema) (.-operands ^RexCall filter*)))
+
+(extend-protocol RexNodeToClauses
+  RexInputRef
+  (->clauses [this schema]
+    [[(list '= (->var this schema) true)]])
+
+  RexCall
+  (->clauses [filter* schema]
+    (condp = (.getKind filter*)
+      SqlKind/AND
+      (operands->clauses schema filter*)
+      SqlKind/OR
+      [(apply list 'or (operands->clauses schema filter*))]
+      SqlKind/NOT
+      [(apply list 'not (operands->clauses schema filter*))]
+      SqlKind/EQUALS
+      (let [[o1 o2] (sort-by symbol? (operands->vars schema filter*))]
+        (if (and (symbol? o1) (not (symbol? o2)))
+          (let [[e a v] (sym-triple o1 schema)]
+            [e a o2])
+          [[(apply list '= (operands->vars schema filter*))]]))
+      SqlKind/NOT_EQUALS
+      [[(apply list 'not= (operands->vars schema filter*))]]
+      SqlKind/GREATER_THAN
+      [[(apply list '> (operands->vars schema filter*))]]
+      SqlKind/GREATER_THAN_OR_EQUAL
+      [[(apply list '>= (operands->vars schema filter*))]]
+      SqlKind/LESS_THAN
+      [[(apply list '< (operands->vars schema filter*))]]
+      SqlKind/LESS_THAN_OR_EQUAL
+      [[(apply list '<= (operands->vars schema filter*))]]
+      SqlKind/LIKE
+      [[(apply list 'crux.calcite/-like (operands->vars schema filter*))]]
+      SqlKind/IS_NULL
+      [[(list 'nil? (first (operands->vars schema filter*)))]]
+      SqlKind/IS_NOT_NULL
+      [[(list 'boolean (first (operands->vars schema filter*)))]])))
 
 (defn enrich-filter [schema ^RexNode filter]
   (let [args (atom {})
@@ -102,7 +110,7 @@
                                       (swap! args assoc (.getName ^RexDynamicParam x) sym)
                                       sym)
                                     x))
-                          (->crux-where-clauses schema filter))]
+                          (->clauses filter schema))]
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
         ;; Todo consider case of multiple arg maps
@@ -161,7 +169,7 @@
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (assoc s1 :crux.sql.table/query (merge-with (comp vec concat) q1 q2))]
-    (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->crux-where-clauses s3 condition))))))
+    (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->clauses condition s3))))))
 
 (defn- transform-result [tuple]
   (let [tuple (map #(or (and (float? %) (double %))
