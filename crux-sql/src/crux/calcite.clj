@@ -51,12 +51,6 @@
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
-(defn- sym-triple [sym schema]
-  (first (filter (fn [clause]
-                   (and (s/valid? :crux.query/triple clause)
-                        (= sym (last clause))))
-                 (get-in schema [:crux.sql.table/query :where]))))
-
 (defn- operands->vars [schema ^RexCall filter*]
   (map #(->var % schema) (.getOperands filter*)))
 
@@ -81,11 +75,7 @@
       SqlKind/NOT
       [(apply list 'not (operands->clauses schema filter*))]
       SqlKind/EQUALS
-      (let [[o1 o2] (sort-by symbol? (operands->vars schema filter*))]
-        (if (and (symbol? o1) (not (symbol? o2)))
-          (let [[e a v] (sym-triple o1 schema)]
-            [e a o2])
-          [[(apply list '= (operands->vars schema filter*))]]))
+      [[(apply list '= (operands->vars schema filter*))]]
       SqlKind/NOT_EQUALS
       [[(apply list 'not= (operands->vars schema filter*))]]
       SqlKind/GREATER_THAN
