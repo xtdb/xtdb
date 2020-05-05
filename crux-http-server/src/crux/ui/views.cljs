@@ -10,25 +10,6 @@
    [re-frame.core :as rf]
    [tick.alpha.api :as t]))
 
-(def saved-queries [["Orders"
-                     '{:find [order-id employee-id car-model status]
-                       :where [[order-id :employee employee-id]
-                               [order-id :car car-id]
-                               [car-id :model car-model]
-                               [order-id :status status]]}]
-                    ["Employees"
-                     '{:find [f-name l-name gender email dob pos street city country]
-                       :where [[eid :first-name f-name]
-                               [eid :last-name l-name]
-                               [eid :gender gender]
-                               [eid :email email]
-                               [eid :date-of-birth dob]
-                               [eid :position pos]
-                               [eid :address address-id]
-                               [address-id :street street]
-                               [address-id :city city]
-                               [address-id :country country]]}]])
-
 (defn query-box
   []
   (let [now-date (t/date)
@@ -48,14 +29,6 @@
                   submitting?
                   handle-submit]}]
        [:div
-        #_(str (with-out-str (pprint/pprint @state)))
-        [:div.query-suggestions
-         (for [[query-name query-map] saved-queries]
-           ^{:key query-name}
-           [:button.button
-            {:on-click #(swap! state assoc-in [:values "q"]
-                               (with-out-str (pprint/pprint query-map)))}
-            query-name])]
         [:form
          {:id form-id
           :on-submit handle-submit}
@@ -145,7 +118,4 @@
      (case (:handler current-page)
        :query [query-view]
        :entity [entity-view]
-       [:div "no matching"])
-     #_[:pre
-      (with-out-str
-        (pprint/pprint @(rf/subscribe [:db])))]]))
+       [:div "no matching"])]))

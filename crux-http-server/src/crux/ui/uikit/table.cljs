@@ -196,13 +196,6 @@
       [:tr
        [:td.foot__pagination
         [:div]
-        #_[:div.select.pagination__select
-           [:select
-            {:value (utils/pagination-rows-per-page @table-atom)
-             :on-change #(utils/pagination-rows-per-page-on-change % table-atom)}
-            [:option {:value "10"} (str "10" " rows")]
-            [:option {:value "50"} (str "50" " rows")]
-            [:option {:value "100"} (str "100" " rows")]]]
         [:div.pagination__info (utils/pagination-info data processed-rows)]
         [:div.pagination__arrow-group
          [:div.pagination__arrow-nav
@@ -222,11 +215,9 @@
     (fn [data]
       (let [[processed-rows paginated-rows] (utils/process-rows data @table-atom)]
         [:div.uikit-table
-         #_[pprint-state (dissoc @table-atom :rows)]
          [:div.table__top
           [:div.top__first-group
-           [filter-all table-atom]
-           #_[actions data table-atom]]
+           [filter-all table-atom]]
           [active-filters data table-atom]]
          (if (:loading? data)
            [loading-table data table-atom {:rows 7 :cols 4}]
