@@ -4,7 +4,6 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 #_[ch.qos.logback/logback-classic "1.2.3"]
                  [hiccup "2.0.0-alpha2"]
                  [juxt/crux-core "derived-from-git"]
                  [ring/ring-core "1.8.0"]
@@ -15,6 +14,7 @@
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev
              {:dependencies [[org.clojure/clojurescript "1.10.339"]
+                             [ch.qos.logback/logback-classic "1.2.3"]
                              [com.bhauman/figwheel-main "0.2.4"]
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
                              [reagent "0.10.0"]

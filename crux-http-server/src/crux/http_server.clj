@@ -41,28 +41,27 @@
   (str (hiccup2/html
         [:html
          {:lang "en"}
-         (into
-          [:head
-           [:meta {:charset "utf-8"}]
-           [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
-           [:meta
-            {:name "viewport"
-             :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
-           [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
-           (when options [:meta {:title "options" :content (str options)}])
-           [:link {:rel "stylesheet" :href "/css/all.css"}]
-           [:link {:rel "stylesheet" :href "/css/table.css"}]
-           [:link {:rel "stylesheet"
-                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
-           [:title "Crux Console"]
-           [:body
-            [:nav.console-nav
-             [:div "Crux Console"]]
-            [:div.console
-             [:div#app
-              [:h1 title]
-              body]]
-            [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])])))
+         [:head
+          [:meta {:charset "utf-8"}]
+          [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
+          [:meta
+           {:name "viewport"
+            :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
+          [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
+          (when options [:meta {:title "options" :content (str options)}])
+          [:link {:rel "stylesheet" :href "/css/all.css"}]
+          [:link {:rel "stylesheet" :href "/css/table.css"}]
+          [:link {:rel "stylesheet"
+                  :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
+          [:title "Crux Console"]]
+         [:body
+          [:nav.console-nav
+           [:div "Crux Console"]]
+          [:div.console
+           [:div#app
+            [:h1 title]
+            body]]
+          [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])))
 
 (defn- body->edn [request]
   (->> request

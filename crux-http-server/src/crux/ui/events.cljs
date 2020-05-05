@@ -22,20 +22,17 @@
   [query valid-time transaction-time]
   (let [{:keys [find where limit
                 offset args order-by]} query]
-    (cond-> ""
-      :find (str "find=" find)
-      :where ((fn [x] (apply
-                       str x
-                       (map #(str "&where=" %) where))))
-      limit (str "&limit=" limit)
-      offset (str "&offset=" offset)
-      args (str "&args=" args)
-      order-by ((fn [x]
-                  (apply
-                   str x
-                   (map #(str "&order-by=" %) order-by))))
-      valid-time (str "&valid-time=" valid-time)
-      transaction-time (str "&transaction-time=" transaction-time))))
+    (str
+     (cond-> (js/URLSearchParams.)
+       :find (doto (.append "find" find))
+       :where ((fn [params] (reduce (fn [params clause] (doto params (.append "where" clause))) params where)))
+       :else (doto prn)
+       limit (doto (.append "limit" limit))
+       offset (doto (.append "offset" offset))
+       args (doto (.append "args" args))
+       order-by ((fn [params] (reduce (fn [params clause] (doto params (.append "order-by" clause))) params order-by)))
+       valid-time (doto (.append "valid-time" valid-time))
+       transaction-time (doto (.append "transaction-time" transaction-time))))))
 
 (rf/reg-event-fx
  ::go-to-query-table
