@@ -39,7 +39,15 @@
 
   RexDynamicParam
   (->var [this schema]
-    this))
+    this)
+
+  RexCall
+  (->var [this schema]
+    (if (= SqlKind/OTHER_FUNCTION (.getKind this))
+      (if (= "KEYWORD" (str (.-op this)))
+        (keyword (->var (first (.-operands this)) schema))
+        (throw (IllegalArgumentException. (str "Unsupported custom fn: " this))))
+      (throw (IllegalArgumentException. (str "Unsupported fn: " this))))))
 
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
@@ -70,10 +78,7 @@
   (->clauses [filter* schema]
     (if-let [op (standard-ops (.getKind filter*))]
       (let [vars (for [o (.getOperands filter*)]
-                   (if (and (= SqlKind/OTHER_FUNCTION (.getKind o))
-                            (= "KEYWORD" (str (.-op o))))
-                     (keyword (->var (first (.-operands o)) schema))
-                     (->var o schema)))]
+                   (->var o schema))]
         [[(apply list op vars)]])
       (condp = (.getKind filter*)
         SqlKind/AND
