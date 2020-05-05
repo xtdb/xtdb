@@ -526,8 +526,6 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
-(defrecord BoundResult [var value doc])
-
 (def ^:private ^ThreadLocal value-buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
@@ -535,14 +533,14 @@
        (ExpandableDirectByteBuffer.)))))
 
 ;; TODO: Most of this should move into the IndexStore.
-(defn- bound-result-for-var ^crux.query.BoundResult [index-store object-store var->bindings join-keys join-results var]
+(defn- bound-result-for-var [index-store object-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
-      (BoundResult. var (get join-results (.result-name binding)) nil)
+      (get join-results (.result-name binding))
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
         (let [value-buffer (get join-keys (.result-index binding))]
           (if (c/can-decode-value-buffer? value-buffer)
-            (BoundResult. var (c/decode-value-buffer value-buffer) nil)
+            (c/decode-value-buffer value-buffer)
             (let [content-hash (.content-hash entity-tx)
                   doc (db/get-single-object object-store index-store content-hash)
                   values (idx/vectorize-value (get doc (.attr binding)))
@@ -554,7 +552,7 @@
                               x
                               (when xs
                                 (recur xs)))))]
-              (BoundResult. var value doc))))))))
+              value)))))))
 
 (declare build-sub-query)
 
@@ -586,7 +584,7 @@
          (fn pred-constraint [index-store object-store db idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results arg))
+                                      (bound-result-for-var index-store object-store var->bindings join-keys join-results arg)
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
@@ -636,7 +634,7 @@
          (fn or-constraint [index-store object-store db idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
+                                (bound-result-for-var index-store object-store var->bindings join-keys join-results var))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -668,7 +666,7 @@
                                               (if has-free-vars?
                                                 (vec (for [[join-keys join-results] idx-seq]
                                                        (vec (for [var free-vars-in-join-order]
-                                                              (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
+                                                              (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -725,7 +723,7 @@
              (let [db (assoc db :index-store index-store)
                    args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
+                                  (bound-result-for-var index-store object-store var->bindings join-keys join-results var))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
@@ -1058,8 +1056,7 @@
 
 (defn- build-full-results [{:keys [entity-as-of-idx index-store query-engine] :as db} bound-result-tuple]
   (let [{:keys [object-store]} query-engine]
-    (vec (for [^BoundResult bound-result bound-result-tuple
-               :let [value (.value bound-result)]]
+    (vec (for [value bound-result-tuple]
            (if-let [entity-tx (and (c/valid-id? value)
                                    (idx/entity-at entity-as-of-idx value))]
              (db/get-single-object object-store index-store (.content-hash ^EntityTx entity-tx))
@@ -1169,7 +1166,7 @@
                                                  (bound-result-for-var index-store object-store var->bindings join-keys join-results var))]]
                   (if full-results?
                     (build-full-results db bound-result-tuple)
-                    (mapv #(.value ^BoundResult %) bound-result-tuple)))
+                    (vec bound-result-tuple)))
 
          true (dedupe)
          order-by (cio/external-sort (order-by-comparator find order-by))
