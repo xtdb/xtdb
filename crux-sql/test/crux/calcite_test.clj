@@ -88,8 +88,15 @@
     (t/is (= (str "EnumerableAggregate(group=[{}], MAX_AGE=[MAX($3)])\n"
                   "  CruxToEnumerableConverter\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
-             (explain q)))))
+             (explain q))))
 
+  (let [q "SELECT PERSON.NAME, (2 * PERSON.AGE) AS DOUBLE_AGE FROM PERSON"]
+    (t/is (= [{:name "Ivan", :double_age 42} {:name "Malcolm", :double_age 50}]
+             (query q)))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxProject(NAME=[$1], DOUBLE_AGE=[*(2, $3)])\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q)))))
 
 (t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
@@ -210,7 +217,7 @@
                        :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?age :bigint, ?years_worked :bigint}}])
 
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :age 42 :years_worked 21}
-                      {:crux.db/id :malcolm :name "Malcolm" :age 42 :years_worked 20}])
+                      {:crux.db/id :malcolm :name "Malcolm" :age 22 :years_worked 10}])
 
   (t/is (= #{[:ivan]}  (c/q (c/db *api*) '{:find [e]
                                            :where [[e :age ?age]
@@ -239,8 +246,14 @@
                       "      CruxTableScan(table=[[crux, PERSON]])\n")
                  (explain q))))))
 
-  ;; TODO Add a project in
-  )
+  (t/testing "project"
+    (let [q "SELECT NAME, (PERSON.AGE * 2) AS AGE FROM PERSON"]
+      (t/is (= [{:name "Ivan", :age 84} {:name "Malcolm", :age 44}]
+               (query q)))
+      (t/is (= (str "CruxToEnumerableConverter\n"
+                    "  CruxProject(NAME=[$1], AGE=[*($2, 2)])\n"
+                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+               (explain q))))))
 
 (t/deftest test-keywords
   (f/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
