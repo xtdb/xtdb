@@ -33,7 +33,7 @@
                         (with-meta {::embedded-kafka? true}))
        :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts fs/with-standalone-doc-store kvf/with-kv-dir fapi/with-node])
                                    (with-meta {::embedded-kafka? true}))}
-      (select-keys [:local-standalone])
+      #_(select-keys [:local-standalone])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
 (defn- with-each-api-implementation [f]

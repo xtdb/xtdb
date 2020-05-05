@@ -214,14 +214,22 @@
     (api-request-sync (str url "/history/" (str (c/new-id eid))) nil {:method :get}))
 
   (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (api-request-sync (str url "/history-range/" (str (c/new-id eid)) "?"
-                           (str/join "&"
-                                     (map (partial str/join "=")
-                                          [["valid-time-start" (cio/format-rfc3339-date valid-time-start)]
-                                           ["transaction-time-start" (cio/format-rfc3339-date transaction-time-start)]
-                                           ["valid-time-end" (cio/format-rfc3339-date valid-time-end)]
-                                           ["transaction-time-end" (cio/format-rfc3339-date transaction-time-end)]])))
-                      nil {:method :get}))
+    (when transaction-time-end
+      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx") nil {:method :get})
+                               :crux.tx/tx-time)]
+        (when (or (nil? latest-tx-time) (pos? (compare transaction-time-end latest-tx-time)))
+          (throw (NodeOutOfSyncException.
+                  (format "Node hasn't indexed the transaction: requested: %s, available: %s" transaction-time-end latest-tx-time)
+                  transaction-time-end latest-tx-time)))
+
+        (api-request-sync (str url "/history-range/" (str (c/new-id eid)) "?"
+                               (str/join "&"
+                                         (map (partial str/join "=")
+                                              [["valid-time-start" (cio/format-rfc3339-date valid-time-start)]
+                                               ["transaction-time-start" (cio/format-rfc3339-date transaction-time-start)]
+                                               ["valid-time-end" (cio/format-rfc3339-date valid-time-end)]
+                                               ["transaction-time-end" (cio/format-rfc3339-date transaction-time-end)]])))
+                          nil {:method :get}))))
 
   (status [_]
     (api-request-sync url nil {:method :get}))

@@ -127,11 +127,14 @@
     (cons eid times)))
 
 (defn- history-range [^ICruxAPI crux-node request]
-  (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
-        history (.historyRange crux-node (c/new-id (URLDecoder/decode eid)) valid-time-start transaction-time-start valid-time-end transaction-time-end)
-        last-modified (:crux.tx/tx-time (last history))]
-    (-> (success-response history)
-        (add-last-modified (:crux.tx/tx-time (last history))))))
+  (try
+    (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
+          history (.historyRange crux-node (c/new-id (URLDecoder/decode eid)) valid-time-start transaction-time-start valid-time-end transaction-time-end)
+          last-modified (:crux.tx/tx-time (last history))]
+      (-> (success-response history)
+          (add-last-modified (:crux.tx/tx-time (last history)))))
+    (catch NodeOutOfSyncException e
+      (exception-response 400 e))))
 
 (defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
