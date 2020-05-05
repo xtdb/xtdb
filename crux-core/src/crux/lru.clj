@@ -6,6 +6,7 @@
   (:import [clojure.lang Counted ILookup]
            java.io.Closeable
            java.util.concurrent.locks.StampedLock
+           java.util.concurrent.atomic.AtomicBoolean
            java.util.function.Function
            java.util.LinkedHashMap))
 
@@ -56,11 +57,11 @@
       (count [_]
         (.size cache)))))
 
-(defn- ensure-iterator-open [closed-state]
-  (when @closed-state
+(defn- ensure-iterator-open [^AtomicBoolean closed-state]
+  (when (.get closed-state)
     (throw (IllegalStateException. "Iterator closed."))))
 
-(defrecord CachedIterator [i ^StampedLock lock closed-state]
+(defrecord CachedIterator [i ^StampedLock lock ^AtomicBoolean closed-state]
   kv/KvIterator
   (seek [_ k]
     (cio/with-read-lock lock
@@ -86,20 +87,20 @@
   (close [_]
     (cio/with-write-lock lock
       (ensure-iterator-open closed-state)
-      (reset! closed-state true))))
+      (.set closed-state true))))
 
 (defrecord CachedSnapshot [^Closeable snapshot close-snapshot? ^StampedLock lock iterators-state]
   kv/KvSnapshot
   (new-iterator [_]
     (if-let [^CachedIterator i (->> @iterators-state
                                     (filter (fn [^CachedIterator i]
-                                              @(.closed-state i)))
+                                              (.get ^AtomicBoolean (.closed-state i))))
                                     (first))]
-      (if (compare-and-set! (.closed-state i) true false)
+      (if (.compareAndSet ^AtomicBoolean (.closed-state i) true false)
         i
         (recur))
       (let [i (kv/new-iterator snapshot)
-            i (->CachedIterator i lock (atom false))]
+            i (->CachedIterator i lock (AtomicBoolean.))]
         (swap! iterators-state conj i)
         i)))
 
@@ -110,7 +111,7 @@
   (close [_]
     (doseq [^CachedIterator i @iterators-state]
       (cio/with-write-lock lock
-        (reset! (.closed-state i) true)
+        (.set ^AtomicBoolean (.closed-state i) true)
         (.close ^Closeable (.i i))))
 
     (when close-snapshot?
