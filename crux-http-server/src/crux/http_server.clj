@@ -521,7 +521,7 @@
     {:prev-url prev-url
      :next-url next-url}))
 
-(defn query->html [links {headers :find} results {:keys [prev-url next-url]}]
+(defn query->html [links {headers :find} results]
   [:body
    [:div.uikit-table
     [:div.table__main
@@ -543,23 +543,7 @@
         [:tbody.table__body.table__no-data
          [:tr [:td.td__no-data
                "Nothing to show"]]])]]
-    [:table.table__foot
-     [:tfoot
-      [:tr
-       [:td.foot__pagination
-        [:div]
-        [:div]
-        [:div.pagination__arrow-group
-         [:a.pagination__arrow-nav.no-js-pagination__arrow-nav
-          {:class (when-not prev-url
-                    "pagination__arrow-nav--disabled")
-           :href prev-url}
-          [:i.fas.fa-chevron-left]]
-         [:a.pagination__arrow-nav.no-js-pagination__arrow-nav
-          {:class (when-not next-url
-                    "pagination__arrow-nav--disabled")
-           :href next-url}
-          [:i.fas.fa-chevron-right]]]]]]]]])
+    [:table.table__foot]]])
 
 (defn data-browser-query [^ICruxAPI crux-node options request]
   (let [query-params (:query-params request)
@@ -599,16 +583,9 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [links (if link-entities? (link-top-level-entities db  "/_entity" results) [])
-                               offset (or (:offset query) 0)
-                               limit (or (:limit query) (count results))
-                               prev-offset (when-not (zero? offset)
-                                             (max 0 (- offset limit)))
-                               next-offset (when (= limit (count results))
-                                             (+ offset limit))
-                               prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
+                   html? (let [links (if link-entities? (link-top-level-entities db  "/_entity" results) [])]
                            (raw-html
-                            {:body (query->html links query results prev-next-page)
+                            {:body (query->html links query results)
                              :title "/_query"
                              :options options}))
                    link-entities? {"linked-entities" (link-top-level-entities db  "/_entity" results)
