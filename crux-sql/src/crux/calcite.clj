@@ -39,7 +39,8 @@
    SqlKind/IS_NULL 'nil?
    SqlKind/IS_NOT_NULL 'boolean
    SqlKind/TIMES '*
-   SqlKind/PLUS '+})
+   SqlKind/PLUS '+
+   SqlKind/MINUS '-})
 
 (defprotocol RexNodeToVar
   (->var [this schema]))
