@@ -1094,7 +1094,7 @@
             (assoc-in [:q-conformed :args] args)))
       conformed-query)))
 
-(defn q
+(defn query
   ([{:keys [valid-time transact-time query-engine] :as db} ^ConformedQuery conformed-q]
    (let [{:keys [^ExecutorService query-executor object-store indexer options]} query-engine
          start-time (System/currentTimeMillis)
@@ -1105,7 +1105,7 @@
                                  (try
                                    (with-open [index-store (open-index-store db)]
                                      (let [result-coll-fn (if (:order-by q) vec set)
-                                           result (result-coll-fn (crux.query/q db index-store conformed-q))]
+                                           result (result-coll-fn (query db index-store conformed-q))]
                                        (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                                        (log/debug :query-result-size (count result))
                                        result))
@@ -1210,6 +1210,9 @@
     (open-index-store this))
 
   (q [this query]
+    (.query this query))
+
+  (query [this query]
     ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
     (let [{:keys [conform-cache bus]} query-engine
           conformed-query (normalize-and-conform-query conform-cache query)
@@ -1219,7 +1222,7 @@
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (let [ret (q this conformed-query)]
+      (let [ret (crux.query/query this conformed-query)]
         (when bus
           (bus/send bus {:crux/event-type ::completed-query
                          ::query safe-query
@@ -1229,7 +1232,7 @@
   (q [this index-store query]
     ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
     ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (q this index-store (normalize-and-conform-query (:conform-cache query-engine) query)))
+    (crux.query/query this index-store (normalize-and-conform-query (:conform-cache query-engine) query)))
 
   (openQuery [this query]
     (let [index-store (open-index-store this)
@@ -1247,7 +1250,7 @@
                         (bus/send bus {:crux/event-type ::completed-query
                                        ::query safe-query
                                        ::query-id query-id})))
-                    (q this index-store conformed-query))))
+                    (crux.query/query this index-store conformed-query))))
 
   (historyAscending [this eid]
     (with-open [history (.openHistoryAscending this eid)]

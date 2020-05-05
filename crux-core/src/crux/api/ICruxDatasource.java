@@ -57,8 +57,18 @@ public interface ICruxDatasource extends Closeable {
      *
      * @param query the query in map, vector or string form.
      * @return      a set or vector of result tuples.
+     * @deprecated  renamed to {@link #query(Object)}
      */
+    @Deprecated
     public Collection<List<?>> q(Object query);
+
+    /**
+     * Queries the db.
+     *
+     * @param query the query in map, vector or string form.
+     * @return      a set or vector of result tuples.
+     */
+    public Collection<List<?>> query(Object query);
 
     /**
      * Queries the db lazily.

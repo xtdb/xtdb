@@ -90,32 +90,32 @@
       (let [valid-time (Date.)
             submitted-tx (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
         (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
-        (t/is (= #{[:ivan]} (.q (.db n)
-                                '{:find [e]
-                                  :where [[e :name "Ivan"]]}))))
+        (t/is (= #{[:ivan]} (.query (.db n)
+                                    '{:find [e]
+                                      :where [[e :name "Ivan"]]}))))
 
-      (t/is (= #{[:ivan]} (.q (.db n)
-                              '{:find [e]
-                                :where [[e :name "Ivan"]]})))
+      (t/is (= #{[:ivan]} (.query (.db n)
+                                  '{:find [e]
+                                    :where [[e :name "Ivan"]]})))
 
       (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
                                :crux.kv/db-dir (str (io/file data-dir "kv2"))
                                :crux.jdbc/dbtype "h2"
                                :crux.jdbc/dbname (str (io/file data-dir "cruxtest2"))})]
 
-        (t/is (= #{} (.q (.db n2)
-                         '{:find [e]
-                           :where [[e :name "Ivan"]]})))
+        (t/is (= #{} (.query (.db n2)
+                             '{:find [e]
+                               :where [[e :name "Ivan"]]})))
 
         (let [valid-time (Date.)
               submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
           (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
-          (t/is (= #{[:ivan]} (.q (.db n2)
-                                  '{:find [e]
-                                    :where [[e :name "Iva"]]}))))
+          (t/is (= #{[:ivan]} (.query (.db n2)
+                                      '{:find [e]
+                                        :where [[e :name "Iva"]]}))))
 
         (t/is n2))
 
-      (t/is (= #{[:ivan]} (.q (.db n)
-                              '{:find [e]
-                                :where [[e :name "Ivan"]]}))))))
+      (t/is (= #{[:ivan]} (.query (.db n)
+                                  '{:find [e]
+                                    :where [[e :name "Ivan"]]}))))))

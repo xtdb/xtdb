@@ -36,14 +36,14 @@ public class Database {
      * @see ResultTuple
      */
     public List<ResultTuple> query(Query query) {
-        Collection<List<?>> queryResult = db.q(query.toEdn());
+        Collection<List<?>> queryResult = db.query(query.toEdn());
         List<Symbol> symbols = query.findSymbols();
 
         return queryResult.stream().map(tuple -> resultTuple(symbols, tuple)).collect(Collectors.toList());
     }
 
     public Collection<List<?>> query(String query) {
-        return db.q(query);
+        return db.query(query);
     }
 
     /**

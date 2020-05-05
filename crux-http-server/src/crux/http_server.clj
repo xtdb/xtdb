@@ -186,7 +186,7 @@
   (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (db-for-request crux-node query-map)]
     (-> (success-response
-         (.q db (:query query-map)))
+         (.query db (:query query-map)))
         (add-last-modified (.transactionTime db)))))
 
 (defn- query-stream [^ICruxAPI crux-node request]

@@ -320,7 +320,7 @@
 
   (q
     ([this query]
-     (.q this query))
+     (.query this query))
     ([this snapshot query]
      (.q this snapshot query)))
 

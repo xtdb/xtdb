@@ -90,7 +90,7 @@
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
           db (.db crux-node)
-          results (.q db query-map)]
+          results (.query db query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond

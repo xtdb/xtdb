@@ -129,6 +129,11 @@
                       (assoc (as-of-map this)
                              :query (q/normalize-query q))))
 
+  (query [this q]
+    (api-request-sync (str url "/query")
+                      (assoc (as-of-map this)
+                             :query (q/normalize-query q))))
+
   (q [this snapshot q]
     (let [in (api-request-sync (str url "/query-stream")
                                (assoc (as-of-map this)
