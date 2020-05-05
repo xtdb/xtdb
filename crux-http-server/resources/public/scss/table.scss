@@ -309,7 +309,14 @@ $spacing: 0.5rem;
 	overflow-x: auto;
 	position: relative;
 	background: white;
-	height: 500px;
+	min-height: 500px;
+	max-height: 60vh;
+    }
+
+    .table__main--loading {
+	min-height: initial;
+	max-height: initial;
+	height: 300px;
     }
 
     .table__no-data {
@@ -542,6 +549,16 @@ $spacing: 0.5rem;
     }
 
     @media screen and (max-width: 767px) {
+	.table__main {
+	    min-height: initial;
+	    max-height: initial;
+	    height: 90%;
+	}
+
+	.table__main--loading {
+            height: 300px;
+	}
+
 	.top__first-group {
             flex-direction: column-reverse;
 	}

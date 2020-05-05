@@ -80,25 +80,22 @@
             columns))]))
 
 (defn loading-table
-  [data table-atom {:keys [rows cols]}]
-  (let [columns (:columns data)]
-    [:div.table__main
-     [:table.table
-      (if columns
-        [header-columns data table-atom]
-        [:thead
-         [:tr
-          (for [col (range cols)]
-            ^{:key col}
-            [:th [:span]])]])
-      [:tbody.table__body
-       (for [row (range rows)]
-         ^{:key row}
-         [:tr.loading
-          (for [col (range (or (count columns) cols))]
-            ^{:key col}
-            [:td.td-loading-bar
-             [:span.loading-bar__span]])])]]]))
+  [{:keys [rows cols]}]
+  [:div.table__main.table__main--loading
+   [:table.table
+    [:thead
+     [:tr
+      (for [col (range cols)]
+        ^{:key col}
+        [:th [:span]])]]
+    [:tbody.table__body
+     (for [row (range rows)]
+       ^{:key row}
+       [:tr.loading
+        (for [col (range cols)]
+          ^{:key col}
+          [:td.td-loading-bar
+           [:span.loading-bar__span]])])]]])
 
 (defn body-rows
   [data table-atom rows]
@@ -227,7 +224,7 @@
            [filter-all table-atom]]
           [active-filters data table-atom]]
          (if (:loading? data)
-           [loading-table data table-atom {:rows 7 :cols 4}]
+           [loading-table {:rows 7 :cols 4}]
            [:div.table__main
             [:table.table
              [header-columns data table-atom]
