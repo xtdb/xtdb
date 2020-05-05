@@ -176,7 +176,7 @@
 ;; TODO: Does not support fetching missing docs as it will block
 ;; waiting for missing keys. Has special handling for nil.
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               indexer backing-document-store
+                               indexer random-access-document-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
@@ -192,7 +192,7 @@
       (loop [indexed {}]
         (let [missing-ids (set/difference ids (set (keys indexed)))
               indexed (merge indexed (when (seq missing-ids)
-                                       (db/fetch-docs backing-document-store missing-ids)))]
+                                       (db/fetch-docs random-access-document-store missing-ids)))]
           (if (= (count indexed) (count ids))
             indexed
             (do
@@ -223,7 +223,7 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{:keys [bus backing-document-store indexer !error]}
+(defn- index-doc-log [{:keys [bus random-access-document-store indexer !error]}
                       {:keys [::doc-topic ::group-id kafka-config]}]
   (let [tp-offsets (read-doc-offsets indexer)]
     (try
@@ -233,7 +233,7 @@
         (loop [tp-offsets tp-offsets]
           (let [tp-offsets (->> (consumer-seqs consumer (Duration/ofSeconds 1))
                                 (reduce (fn [tp-offsets doc-records]
-                                          (db/submit-docs backing-document-store (->> doc-records (into {} (map doc-record->id+doc))))
+                                          (db/submit-docs random-access-document-store (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
                                             (->> (store-doc-offsets indexer))))
                                         tp-offsets))]
@@ -307,7 +307,7 @@
                                 {:producer producer
                                  :doc-topic doc-topic
                                  :indexer indexer
-                                 :backing-document-store (::backing-document-store deps)
+                                 :random-access-document-store (::random-access-document-store deps)
                                  :bus bus
                                  :!indexing-error (atom nil)})]
                  (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
@@ -316,14 +316,14 @@
                         (doto (Thread. #(index-doc-log doc-store (assoc options :kafka-config kafka-config)))
                           (.setName "crux-doc-consumer")
                           (.start)))))
-   :deps [::producer ::admin-client ::backing-document-store ::n/indexer ::n/bus]
+   :deps [::producer ::admin-client ::random-access-document-store ::n/indexer ::n/bus]
    :args default-options})
 
 (def topology
   (merge n/base-topology
          {:crux.node/tx-log tx-log
           :crux.node/document-store document-store
-          ::backing-document-store 'crux.document-store/kv-document-store
+          ::random-access-document-store 'crux.document-store/kv-document-store
           ::admin-client admin-client
           ::producer producer
           ::latest-submitted-tx-consumer latest-submitted-tx-consumer}))
