@@ -73,7 +73,7 @@ class CruxRules {
         }
     }
 
-    private static class CruxProjectRule extends ConverterRule {
+    private static class CruxProjectRule extends CruxConverterRule {
         private static final CruxProjectRule INSTANCE = new CruxProjectRule();
 
         private CruxProjectRule() {
@@ -83,7 +83,9 @@ class CruxRules {
         public RelNode convert(RelNode rel) {
             final LogicalProject project = (LogicalProject) rel;
             final RelTraitSet traitSet = project.getTraitSet().replace(CruxRel.CONVENTION);
-            return new CruxProject(project.getCluster(), traitSet, project.getInput(),
+            return new CruxProject(project.getCluster(), traitSet,
+                                   //                                   project.getInput(),
+                                   convert(project.getInput(), out),
                                    project.getProjects(), project.getRowType());
         }
     }
