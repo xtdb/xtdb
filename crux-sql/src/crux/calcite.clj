@@ -33,13 +33,6 @@
   (->var [this schema]
     (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
 
-  RexCall
-  (->var [this schema]
-    (case (str (.-op this))
-      "KEYWORD"
-      (keyword (->var (first (.-operands this)) schema))
-      (->var (first (.-operands this)) schema)))
-
   RexLiteral
   (->var [this schema]
     (.getValue2 this))
@@ -52,7 +45,11 @@
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
 (defn- operands->vars [schema ^RexCall filter*]
-  (map #(->var % schema) (.getOperands filter*)))
+  (for [o (.getOperands filter*)]
+    (if (and (= SqlKind/OTHER_FUNCTION (.getKind o))
+             (= "KEYWORD" (str (.-op o))))
+      (keyword (->var (first (.-operands o)) schema))
+      (->var o schema))))
 
 (defprotocol RexNodeToClauses
   (->clauses [this schema]))
