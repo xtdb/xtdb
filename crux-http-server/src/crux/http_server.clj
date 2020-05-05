@@ -508,7 +508,8 @@
                (= (get-in request [:muuntaja/response :format]) "text/html") (if entity-map
                                                                                (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
                                                                                  (raw-html
-                                                                                  {:body (entity->html linked-entities entity-map)
+                                                                                  {:body [:div.entity-map
+                                                                                          (entity->html linked-entities entity-map)]
                                                                                    :title "/_entity"
                                                                                    :options options}))
                                                                                (raw-html {:body [:div "No entity found"]

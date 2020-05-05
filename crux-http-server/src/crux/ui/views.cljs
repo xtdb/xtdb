@@ -124,7 +124,7 @@
 
 (defn view []
   (let [current-page @(rf/subscribe [::sub/current-page])]
-    [:div
+    [:div.container
      (case (:handler current-page)
        :query [query-view]
        :entity [entity-view]

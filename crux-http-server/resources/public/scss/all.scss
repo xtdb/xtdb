@@ -159,11 +159,17 @@ html, body {
 
 // END FORM ELEMENTS
 
+
 .error-box {
     padding: 1em;
     background:#dfdfdf;
     color: darkred;
     border-radius: 0.7em;
+
+.container {
+    margin: auto;
+}
+
 
 .entity-group {
     display: flex;
@@ -218,4 +224,11 @@ ul.entity-group__value li::before {
 
 .entity-group__value li:not(:last-child) {
     margin-bottom: 1rem;
+}
+
+.entity-map {
+    width: fit-content;
+    padding: 1rem;
+    border-radius: 0.7rem;
+    box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
 }
