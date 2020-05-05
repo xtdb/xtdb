@@ -9,7 +9,7 @@
            java.util.Date))
 
 (declare with-silent-test-check)
-(t/use-fixtures :each with-silent-test-check)
+(t/use-fixtures :each #'with-silent-test-check)
 
 (t/deftest test-ordering-of-values
   (t/testing "longs"
