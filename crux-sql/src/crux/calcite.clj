@@ -25,32 +25,32 @@
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
-(defprotocol OperandToCruxInput
-  (operand->v [this schema]))
+(defprotocol RexNodeToVar
+  (->var [this schema]))
 
-(extend-protocol OperandToCruxInput
+(extend-protocol RexNodeToVar
   RexInputRef
-  (operand->v [this schema]
+  (->var [this schema]
     (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
 
   RexCall
-  (operand->v [this schema]
+  (->var [this schema]
     (case (str (.-op this))
       "KEYWORD"
-      (keyword (operand->v (first (.-operands this)) schema))
-      (operand->v (first (.-operands this)) schema)))
+      (keyword (->var (first (.-operands this)) schema))
+      (->var (first (.-operands this)) schema)))
 
   RexLiteral
-  (operand->v [this schema]
+  (->var [this schema]
     (.getValue2 this))
 
   RexDynamicParam
-  (operand->v [this schema]
+  (->var [this schema]
     this))
 
-(defn- ->operands [schema ^RexCall filter*]
+(defn- operands->vars [schema ^RexCall filter*]
   (->> (.getOperands filter*)
-       (map #(operand->v % schema))))
+       (map #(->var % schema))))
 
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
@@ -65,35 +65,35 @@
   [schema ^RexNode filter*]
   (condp = (.getKind filter*)
     SqlKind/EQUALS
-    (let [[o1 o2] (sort-by symbol? (->operands schema filter*))]
+    (let [[o1 o2] (sort-by symbol? (operands->vars schema filter*))]
       (if (and (symbol? o1) (not (symbol? o2)))
         (let [[e a v] (sym-triple o1 schema)]
           [e a o2])
-        [[(apply list '= (->operands schema filter*))]]))
+        [[(apply list '= (operands->vars schema filter*))]]))
     SqlKind/NOT_EQUALS
-    [[(apply list 'not= (->operands schema filter*))]]
+    [[(apply list 'not= (operands->vars schema filter*))]]
     SqlKind/AND
     (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*))
     SqlKind/OR
     [(apply list 'or (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/INPUT_REF
-    [[(list '= (operand->v filter* schema) true)]]
+    [[(list '= (->var filter* schema) true)]]
     SqlKind/NOT
     [(apply list 'not (mapcat (partial ->crux-where-clauses schema) (.-operands ^RexCall filter*)))]
     SqlKind/GREATER_THAN
-    [[(apply list '> (->operands schema filter*))]]
+    [[(apply list '> (operands->vars schema filter*))]]
     SqlKind/GREATER_THAN_OR_EQUAL
-    [[(apply list '>= (->operands schema filter*))]]
+    [[(apply list '>= (operands->vars schema filter*))]]
     SqlKind/LESS_THAN
-    [[(apply list '< (->operands schema filter*))]]
+    [[(apply list '< (operands->vars schema filter*))]]
     SqlKind/LESS_THAN_OR_EQUAL
-    [[(apply list '<= (->operands schema filter*))]]
+    [[(apply list '<= (operands->vars schema filter*))]]
     SqlKind/LIKE
-    [[(apply list 'crux.calcite/-like (->operands schema filter*))]]
+    [[(apply list 'crux.calcite/-like (operands->vars schema filter*))]]
     SqlKind/IS_NULL
-    [[(list 'nil? (first (->operands schema filter*)))]]
+    [[(list 'nil? (first (operands->vars schema filter*)))]]
     SqlKind/IS_NOT_NULL
-    [[(list 'boolean (first (->operands schema filter*)))]]))
+    [[(list 'boolean (first (operands->vars schema filter*)))]]))
 
 (defn enrich-filter [schema ^RexNode filter]
   (let [args (atom {})
