@@ -28,6 +28,12 @@
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
+(defn -substring [c s l]
+  (org.apache.calcite.runtime.SqlFunctions/substring c s l))
+
+(def ^:private sql-fns
+  {"SUBSTRING" 'crux.calcite/-substring})
+
 (def ^:private standard-ops
   {SqlKind/EQUALS '=
    SqlKind/NOT_EQUALS 'not=
@@ -41,6 +47,11 @@
    SqlKind/TIMES '*
    SqlKind/PLUS '+
    SqlKind/MINUS '-})
+
+(defn- lookup-op [^RexCall c]
+  (if (= SqlKind/OTHER_FUNCTION (.getKind c))
+    (get sql-fns (.getName (.-op c)))
+    (get standard-ops (.getKind c))))
 
 (defprotocol RexNodeToVar
   (->var [this schema]))
@@ -68,7 +79,7 @@
     (if (and (= SqlKind/OTHER_FUNCTION (.getKind this))
              (= "KEYWORD" (str (.-op this))))
       [(keyword (first (->var (first (.-operands this)) schema)))]
-      (if-let [op (get standard-ops (.getKind this))]
+      (if-let [op (lookup-op this)]
         (let [s (gensym)]
           [s (assoc-in (->clauses this schema) [0 1] s)])
         (throw (IllegalArgumentException. (str "Unsupported fn: " this)))))))
@@ -83,9 +94,9 @@
 
   RexCall
   (->clauses [filter* schema]
-    (if-let [op (standard-ops (.getKind filter*))]
-      (let [vars (doall (for [o (.getOperands filter*)]
-                          (->var o schema)))]
+    (if-let [op (lookup-op filter*)]
+      (let [vars (for [o (.getOperands filter*)]
+                   (->var o schema))]
         (reduce into [[(apply list op (map first vars))]] (keep second vars)))
       (condp = (.getKind filter*)
         SqlKind/AND
