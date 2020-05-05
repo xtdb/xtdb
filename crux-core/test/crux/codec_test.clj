@@ -1,8 +1,15 @@
 (ns crux.codec-test
   (:require [clojure.test :as t]
             [crux.codec :as c]
-            [crux.memory :as mem])
-  (:import crux.codec.Id))
+            [crux.memory :as mem]
+            [clojure.test.check.clojure-test :as tcct]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop])
+  (:import crux.codec.Id
+           java.util.Date))
+
+(declare with-silent-test-check)
+(t/use-fixtures :each with-silent-test-check)
 
 (t/deftest test-ordering-of-values
   (t/testing "longs"
@@ -58,3 +65,19 @@
              #crux/id "http://xmlns.com/foaf/0.1/firstName"))
     (t/is (= (c/new-id "http://xmlns.com/foaf/0.1/firstName")
              #crux/id ":http://xmlns.com/foaf/0.1/firstName"))))
+
+(tcct/defspec test-generative-primitive-value-decoder 1000
+  (prop/for-all [v (gen/one-of [gen/large-integer
+                                (gen/double* {:NaN? false})
+                                (gen/fmap #(Date. (long %)) gen/large-integer)
+                                gen/string-alphanumeric])]
+                (let [buffer (c/->value-buffer v)]
+                  (if (c/can-decode-value-buffer? buffer)
+                    (t/is (= v (c/decode-value-buffer buffer))
+                          (str (pr-str v) " " (class v)))
+                    (t/is (= @#'c/object-value-type-id
+                             (.getByte (c/value-buffer-type-id buffer) 0)))))))
+
+(defn with-silent-test-check [f]
+  (binding [tcct/*report-completion* false]
+    (f)))

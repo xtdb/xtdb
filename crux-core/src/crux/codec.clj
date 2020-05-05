@@ -11,6 +11,7 @@
            [java.io Closeable Writer]
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
+           java.nio.charset.StandardCharsets
            [java.util Arrays Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
@@ -207,7 +208,7 @@
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
-            ub-in (mem/on-heap-buffer (.getBytes this "UTF-8"))
+            ub-in (mem/on-heap-buffer (.getBytes this StandardCharsets/UTF_8))
             length (.capacity ub-in)]
         (.putByte to 0 string-value-type-id)
         (loop [idx 0]
@@ -263,6 +264,44 @@
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/limit-buffer buffer value-type-id-size))
+
+(defn- decode-long ^long [^DirectBuffer buffer]
+  (bit-xor (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN) Long/MIN_VALUE))
+
+(defn- decode-double ^double [^DirectBuffer buffer]
+  (let [l (dec (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN))
+        l (bit-xor l (bit-or (bit-shift-right (bit-xor l Long/MIN_VALUE) (dec Long/SIZE)) Long/MIN_VALUE))]
+    (Double/longBitsToDouble l)))
+
+(defn- decode-string ^String [^DirectBuffer buffer]
+  (let [terminate-mark-size Byte/BYTES
+        offset (byte 2)
+        length (- (.capacity buffer) terminate-mark-size)
+        bs (byte-array (- length value-type-id-size))]
+    (loop [idx value-type-id-size]
+      (if (= idx length)
+        (String. bs StandardCharsets/UTF_8)
+        (let [b (.getByte buffer idx)]
+          (aset bs (dec idx) (unchecked-byte (- b offset)))
+          (recur (inc idx)))))))
+
+(defn can-decode-value-buffer? [^DirectBuffer buffer]
+  (when buffer
+    (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
+      (or (= type-id long-value-type-id)
+          (= type-id double-value-type-id)
+          (= type-id date-value-type-id)
+          (= type-id string-value-type-id)))))
+
+(defn decode-value-buffer [^DirectBuffer buffer]
+  (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
+    (cond
+      (= type-id long-value-type-id) (decode-long buffer)
+      (= type-id double-value-type-id) (decode-double buffer)
+      (= type-id date-value-type-id) (Date. (decode-long buffer))
+      (= type-id string-value-type-id) (decode-string buffer)
+      :else
+      (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))

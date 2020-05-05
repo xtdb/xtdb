@@ -534,24 +534,27 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
+;; TODO: Most of this should move into the IndexStore.
 (defn- bound-result-for-var ^crux.query.BoundResult [index-store object-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
       (BoundResult. var (get join-results (.result-name binding)) nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (let [value-buffer (get join-keys (.result-index binding))
-              content-hash (.content-hash entity-tx)
-              doc (db/get-single-object object-store index-store content-hash)
-              values (idx/vectorize-value (get doc (.attr binding)))
-              value (if (or (nil? value-buffer)
-                            (= (count values) 1))
-                      (first values)
-                      (loop [[x & xs] values]
-                        (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
-                          x
-                          (when xs
-                            (recur xs)))))]
-          (BoundResult. var value doc))))))
+        (let [value-buffer (get join-keys (.result-index binding))]
+          (if (c/can-decode-value-buffer? value-buffer)
+            (BoundResult. var (c/decode-value-buffer value-buffer) nil)
+            (let [content-hash (.content-hash entity-tx)
+                  doc (db/get-single-object object-store index-store content-hash)
+                  values (idx/vectorize-value (get doc (.attr binding)))
+                  value (if (or (nil? value-buffer)
+                                (= (count values) 1))
+                          (first values)
+                          (loop [[x & xs] values]
+                            (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
+                              x
+                              (when xs
+                                (recur xs)))))]
+              (BoundResult. var value doc))))))))
 
 (declare build-sub-query)
 
