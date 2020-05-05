@@ -39,30 +39,6 @@
          :loading? (not query-results)
          :filters {:input (into #{} find-clause)}}}))))
 
-(defn set-query-param
-  [q-param value]
-  (->
-   (js/URL. js/window.location.href)
-   (.-search)
-   (js/URLSearchParams.)
-   (doto (.set q-param value))))
-
-(rf/reg-sub
- ::prev-next-query-params
- (fn [db _]
-   (let [results (get-in db [:query-data "query-results"])
-         limit (->> (or (.get (js/URLSearchParams. js/window.location.search) "limit")
-                        (get-in db [:options :crux.http-server/query-result-page-limit]))
-                    (js/parseInt))
-         offset (->> (or (.get (js/URLSearchParams. js/window.location.search) "offset") "0")
-                     (js/parseInt))
-         prev-offset (when-not (zero? offset)
-                       (max 0 (- offset limit)))
-         next-offset (when (= limit (count results))
-                       (+ offset limit))]
-     {:prev-query-params (when prev-offset (set-query-param "offset" prev-offset))
-      :next-query-params (when next-offset (set-query-param "offset" next-offset))})))
-
 (rf/reg-sub
  ::entity-view-data
  (fn [db _]

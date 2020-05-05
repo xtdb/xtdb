@@ -188,26 +188,33 @@
            [:i.fas.fa-times-circle]]))])])
 
 (defn pagination
-  [data table-atom processed-rows]
-  (let [{:keys [prev-query-params next-query-params]}
-        @(rf/subscribe [::sub/prev-next-query-params])]
-    [:table.table__foot
-     [:tfoot
-      [:tr
-       [:td.foot__pagination
-        [:div]
-        [:div.pagination__info (utils/pagination-info data processed-rows)]
-        [:div.pagination__arrow-group
-         [:div.pagination__arrow-nav
-          {:on-click #(when prev-query-params
-                        (rf/dispatch [::events/prev-next-links prev-query-params]))
-           :class (when (nil? prev-query-params) "pagination__arrow-nav--disabled")}
-          [:i.fas.fa-chevron-left]]
-         [:a.pagination__arrow-nav
-          {:on-click #(when next-query-params
-                        (rf/dispatch [::events/prev-next-links next-query-params]))
-           :class (when (nil? next-query-params) "pagination__arrow-nav--disabled")}
-          [:i.fas.fa-chevron-right]]]]]]]))
+  [table-atom processed-rows]
+  [:table.table__foot
+   [:tfoot
+    [:tr
+     [:td.foot__pagination
+      [:div.select.pagination__select
+       [:select
+        {:value (utils/pagination-rows-per-page @table-atom)
+         :on-change #(utils/pagination-rows-per-page-on-change % table-atom)}
+        [:option {:value "10"} (str "10" " rows")]
+        [:option {:value "50"} (str "50" " rows")]
+        [:option {:value "100"} (str "100" " rows")]]]
+      [:div.pagination__info (utils/pagination-current-and-total-pages @table-atom
+                                                                       processed-rows)]
+      [:div.pagination__arrow-group
+       [:div.pagination__arrow-nav
+        {:class (when (<= (utils/pagination-current-page @table-atom) 0)
+                  "pagination__arrow-nav--disabled")
+         :on-click #(utils/pagination-dec-page table-atom)}
+        [:i.fas.fa-chevron-left]]
+       [:div.pagination__arrow-nav
+        {:class (when (utils/pagination-rows-exhausted? @table-atom
+                                                        processed-rows)
+                  "pagination__arrow-nav--disabled")
+         :on-click #(utils/pagination-inc-page table-atom
+                                               processed-rows)}
+        [:i.fas.fa-chevron-right]]]]]]])
 
 (defn table
   [data]
@@ -224,5 +231,5 @@
            [:div.table__main
             [:table.table
              [header-columns data table-atom]
-             [body-rows data table-atom processed-rows]]])
-         [pagination data table-atom processed-rows]]))))
+             [body-rows data table-atom paginated-rows]]])
+         [pagination table-atom processed-rows]]))))
