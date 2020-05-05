@@ -157,11 +157,9 @@
     (mapcat operand->field-indexes (.operands this))))
 
 (defn enrich-project [schema projects]
-  (update-in schema [:crux.sql.table/query :find]
-             (fn [existing-projects]
-               (->> projects
-                    (mapcat operand->field-indexes)
-                    (mapv (fn [i] (nth existing-projects i)))))))
+  (def s schema)
+  (def p projects)
+  (assoc-in schema [:crux.sql.table/query :find] (mapv #(->var % schema) (map #(.-left %) projects))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (let [q1 (:crux.sql.table/query s1)
