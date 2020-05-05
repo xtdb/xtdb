@@ -200,6 +200,48 @@
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
 
+(t/deftest test-calcs
+  (f/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                       :crux.sql.table/name "person"
+                       :crux.sql.table/query '{:find [?id ?name ?age ?years_worked]
+                                               :where [[?id :name ?name]
+                                                       [?id :age ?age]
+                                                       [?id :years_worked ?years_worked]]}
+                       :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?age :bigint, ?years_worked :bigint}}])
+
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :age 42 :years_worked 21}
+                      {:crux.db/id :malcolm :name "Malcolm" :age 42 :years_worked 20}])
+
+  (t/is (= #{[:ivan]}  (c/q (c/db *api*) '{:find [e]
+                                           :where [[e :age ?age]
+                                                   [e :years_worked years-worked?]
+                                                   [(* 2 years-worked?) ?bah]
+                                                   [(= ?age ?bah)]]})))
+
+
+  (t/testing "filter operators"
+    (let [q "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = (YEARS_WORKED * 2)"]
+      (t/is (= ["Ivan"]
+               (map :name (query q))))
+      (t/is (= (str "EnumerableCalc(expr#0..3=[{inputs}], NAME=[$t1], AGE=[$t2])\n"
+                    "  CruxToEnumerableConverter\n"
+                    "    CruxFilter(condition=[=($2, *($3, 2))])\n"
+                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+               (explain q))))
+
+    (t/testing "nested"
+      (let [q "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = (2 + (YEARS_WORKED * 2))"]
+        (t/is (= ["Malcolm"]
+                 (map :name (query q))))
+        (t/is (= (str "EnumerableCalc(expr#0..3=[{inputs}], NAME=[$t1], AGE=[$t2])\n"
+                      "  CruxToEnumerableConverter\n"
+                      "    CruxFilter(condition=[=($2, +(2, *($3, 2)))])\n"
+                      "      CruxTableScan(table=[[crux, PERSON]])\n")
+                 (explain q))))))
+
+  ;; TODO Add a project in
+  )
+
 (t/deftest test-keywords
   (f/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
 

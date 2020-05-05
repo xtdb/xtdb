@@ -70,7 +70,8 @@
    SqlKind/LIKE 'crux.calcite/-like
    SqlKind/IS_NULL 'nil?
    SqlKind/IS_NOT_NULL 'boolean
-   SqlKind/TIMES '*})
+   SqlKind/TIMES '*
+   SqlKind/PLUS '+})
 
 (extend-protocol RexNodeToClauses
   RexInputRef
@@ -82,7 +83,6 @@
     (if-let [op (standard-ops (.getKind filter*))]
       (let [vars (doall (for [o (.getOperands filter*)]
                           (->var o schema)))]
-        #_ [[(apply list op (map first vars))]]
         (reduce into [[(apply list op (map first vars))]] (keep second vars)))
       (condp = (.getKind filter*)
         SqlKind/AND
