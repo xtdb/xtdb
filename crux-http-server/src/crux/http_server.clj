@@ -484,33 +484,17 @@
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
 
-(defn- check-limit [limit max-limit]
-  (when (> limit max-limit)
-    (throw (IllegalArgumentException. (format "Specified a limit '%s', higher than the server allowed maximum, '%s'." limit max-limit)))))
-
-(defn- build-query [{:strs [find where args order-by limit offset full-results]} default-limit]
-  (let [limit (when limit (Integer/parseInt limit))
-        page-limit (or limit default-limit)
-        new-offset (if offset
+(defn- build-query [{:strs [find where args order-by limit offset full-results]}]
+  (let [new-offset (if offset
                      (Integer/parseInt offset)
                      0)]
-    (check-limit page-limit default-limit)
     (cond-> {:find (c/read-edn-string-with-readers find)
              :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
-             :limit page-limit
              :offset new-offset}
       args (assoc :args (c/read-edn-string-with-readers args))
       order-by (assoc :order-by (->> order-by vectorize-param (mapv c/read-edn-string-with-readers)))
+      limit (assoc :limit (Integer/parseInt limit))
       full-results (assoc :full-results? true))))
-
-(defn build-query-q
-  [resolved-query {:strs [offset page]} default-limit]
-  (let [limit (:limit resolved-query)
-        updated-limit (or limit default-limit)]
-    (check-limit updated-limit default-limit)
-    (cond-> (assoc resolved-query :limit updated-limit)
-      (not (:offset resolved-query)) (assoc :offset 0)
-      offset (assoc :offset (Integer/parseInt offset)))))
 
 (defn link-top-level-entities
   [db path results]
@@ -578,8 +562,9 @@
            :href next-url}
           [:i.fas.fa-chevron-right]]]]]]]]])
 
-(defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
+(defn data-browser-query [^ICruxAPI crux-node options request]
   (let [query-params (:query-params request)
+        link-entities? (get query-params "link-entities?")
         html? (= (get-in request [:muuntaja/response :format]) "text/html")]
     (cond
       (empty? query-params)
@@ -605,9 +590,8 @@
       :else
       (try
         (let [query (cond-> (or (some-> (get query-params "q")
-                                        (edn/read-string)
-                                        (build-query-q query-params query-result-page-limit))
-                                (build-query query-params query-result-page-limit))
+                                        (edn/read-string))
+                                (build-query query-params))
                       html? (dissoc :full-results?))
               db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                                 (instant/read-instant-date))
@@ -616,8 +600,9 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [links (link-top-level-entities db  "/_entity" results)
-                               {:keys [limit offset]} query
+                   html? (let [links (if link-entities? (link-top-level-entities db  "/_entity" results) [])
+                               offset (or (:offset query) 0)
+                               limit (or (:limit query) (count results))
                                prev-offset (when-not (zero? offset)
                                              (max 0 (- offset limit)))
                                next-offset (when (= limit (count results))
@@ -627,8 +612,8 @@
                             {:body (query->html links query results prev-next-page)
                              :title "/_query"
                              :options options}))
-                   (get query-params "link-entities?") {"linked-entities" (link-top-level-entities db  "/_entity" results)
-                                                        "query-results" results}
+                   link-entities? {"linked-entities" (link-top-level-entities db  "/_entity" results)
+                                   "query-results" results}
                    :else results)})
         (catch Exception e
           {:status 400
@@ -717,7 +702,4 @@
              ;; to expose the functionality they need to? (JH)
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
-                            :default default-server-port}
-                    ::query-result-page-limit {:crux.config/type :crux.config/nat-int
-                                               :doc "Limit of query results per page"
-                                               :default 100}}}})
+                            :default default-server-port}}}})
