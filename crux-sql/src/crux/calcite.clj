@@ -57,6 +57,17 @@
 (defn- operands->clauses [schema ^RexCall filter*]
   (mapcat #(->clauses % schema) (.-operands ^RexCall filter*)))
 
+(def ^:private standard-ops
+  {SqlKind/EQUALS '=
+   SqlKind/NOT_EQUALS 'not=
+   SqlKind/GREATER_THAN '>
+   SqlKind/GREATER_THAN_OR_EQUAL '>=
+   SqlKind/LESS_THAN '<
+   SqlKind/LESS_THAN_OR_EQUAL '<=
+   SqlKind/LIKE 'crux.calcite/-like
+   SqlKind/IS_NULL 'nil?
+   SqlKind/IS_NOT_NULL 'boolean})
+
 (extend-protocol RexNodeToClauses
   RexInputRef
   (->clauses [this schema]
@@ -64,31 +75,15 @@
 
   RexCall
   (->clauses [filter* schema]
-    (condp = (.getKind filter*)
-      SqlKind/AND
-      (operands->clauses schema filter*)
-      SqlKind/OR
-      [(apply list 'or (operands->clauses schema filter*))]
-      SqlKind/NOT
-      [(apply list 'not (operands->clauses schema filter*))]
-      SqlKind/EQUALS
-      [[(apply list '= (operands->vars schema filter*))]]
-      SqlKind/NOT_EQUALS
-      [[(apply list 'not= (operands->vars schema filter*))]]
-      SqlKind/GREATER_THAN
-      [[(apply list '> (operands->vars schema filter*))]]
-      SqlKind/GREATER_THAN_OR_EQUAL
-      [[(apply list '>= (operands->vars schema filter*))]]
-      SqlKind/LESS_THAN
-      [[(apply list '< (operands->vars schema filter*))]]
-      SqlKind/LESS_THAN_OR_EQUAL
-      [[(apply list '<= (operands->vars schema filter*))]]
-      SqlKind/LIKE
-      [[(apply list 'crux.calcite/-like (operands->vars schema filter*))]]
-      SqlKind/IS_NULL
-      [[(list 'nil? (first (operands->vars schema filter*)))]]
-      SqlKind/IS_NOT_NULL
-      [[(list 'boolean (first (operands->vars schema filter*)))]])))
+    (if-let [op (standard-ops (.getKind filter*))]
+      [[(apply list op (operands->vars schema filter*))]]
+      (condp = (.getKind filter*)
+        SqlKind/AND
+        (operands->clauses schema filter*)
+        SqlKind/OR
+        [(apply list 'or (operands->clauses schema filter*))]
+        SqlKind/NOT
+        [(apply list 'not (operands->clauses schema filter*))]))))
 
 (defn enrich-filter [schema ^RexNode filter]
   (let [args (atom {})
