@@ -26,6 +26,9 @@
 (defn query [^String s]
   (cf/query (.replace s "tpch." "")))
 
+(defn explain [^String s]
+  (cf/explain (.replace s "tpch." "")))
+
 (t/deftest test-tpch-schema
   (t/is (= 10 (count (query "SELECT * FROM tpch.customer"))))
   (t/is (= 10 (count (query "SELECT * FROM tpch.orders"))))
@@ -36,28 +39,36 @@
   (t/is (= 15 (count (query "SELECT * FROM tpch.region")))))
 
 (t/deftest test-001
-  (t/is (query (str "select\n"
-                    "  l_returnflag,\n"
-                    "  l_linestatus,\n"
-                    "  sum(l_quantity) as sum_qty,\n"
-                    "  sum(l_extendedprice) as sum_base_price,\n"
-                    "  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n"
-                    "  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n"
-                    "  avg(l_quantity) as avg_qty,\n"
-                    "  avg(l_extendedprice) as avg_price,\n"
-                    "  avg(l_discount) as avg_disc,\n"
-                    "  count(*) as count_order\n"
-                    "from\n"
-                    "  tpch.lineitem\n"
-                    "-- where\n"
-                    "--  l_shipdate <= date '1998-12-01' - interval '120' day (3)\n"
-                    "group by\n"
-                    "  l_returnflag,\n"
-                    "  l_linestatus\n"
-                    "\n"
-                    "order by\n"
-                    "  l_returnflag,\n"
-                    "  l_linestatus"))))
+  (let [q (str "select\n"
+               "  l_returnflag,\n"
+               "  l_linestatus,\n"
+               "  sum(l_quantity) as sum_qty,\n"
+               "  sum(l_extendedprice) as sum_base_price,\n"
+               "  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n"
+               "  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n"
+               "  avg(l_quantity) as avg_qty,\n"
+               "  avg(l_extendedprice) as avg_price,\n"
+               "  avg(l_discount) as avg_disc,\n"
+               "  count(*) as count_order\n"
+               "from\n"
+               "  tpch.lineitem\n"
+               "-- where\n"
+               "--  l_shipdate <= date '1998-12-01' - interval '120' day (3)\n"
+               "group by\n"
+               "  l_returnflag,\n"
+               "  l_linestatus\n"
+               "\n"
+               "order by\n"
+               "  l_returnflag,\n"
+               "  l_linestatus")]
+    (t/is (query q))
+    (t/is (= (str "EnumerableCalc(expr#0..12=[{inputs}], expr#13=[0], expr#14=[=($t3, $t13)], expr#15=[null:DOUBLE], expr#16=[CASE($t14, $t15, $t2)], expr#17=[=($t5, $t13)], expr#18=[CASE($t17, $t15, $t4)], expr#19=[=($t7, $t13)], expr#20=[CASE($t19, $t15, $t6)], expr#21=[=($t9, $t13)], expr#22=[CASE($t21, $t15, $t8)], expr#23=[/($t16, $t3)], expr#24=[/($t18, $t5)], expr#25=[=($t11, $t13)], expr#26=[CASE($t25, $t15, $t10)], expr#27=[/($t26, $t11)], proj#0..1=[{exprs}], SUM_QTY=[$t16], SUM_BASE_PRICE=[$t18], SUM_DISC_PRICE=[$t20], SUM_CHARGE=[$t22], AVG_QTY=[$t23], AVG_PRICE=[$t24], AVG_DISC=[$t27], COUNT_ORDER=[$t12])\n"
+                  "  EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC])\n"
+                  "    EnumerableAggregate(group=[{0, 1}], SUM_QTY=[$SUM0($2)], agg#1=[COUNT($2)], SUM_BASE_PRICE=[$SUM0($3)], agg#3=[COUNT($3)], SUM_DISC_PRICE=[$SUM0($4)], agg#5=[COUNT($4)], SUM_CHARGE=[$SUM0($5)], agg#7=[COUNT($5)], agg#8=[$SUM0($6)], agg#9=[COUNT($6)], COUNT_ORDER=[COUNT()])\n"
+                  "      CruxToEnumerableConverter\n"
+                  "        CruxProject(L_RETURNFLAG=[$8], L_LINESTATUS=[$9], L_QUANTITY=[$4], L_EXTENDEDPRICE=[$5], $f4=[*($5, -(1, $6))], $f5=[*(*($5, -(1, $6)), +(1, $7))], L_DISCOUNT=[$6])\n"
+                  "          CruxTableScan(table=[[crux, LINEITEM]])\n")
+             (explain q)))))
 
 ;; Skipping 2: Calcite: @Disabled("Infinite planning")
 
