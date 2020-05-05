@@ -31,23 +31,25 @@
 (extend-protocol RexNodeToVar
   RexInputRef
   (->var [this schema]
-    (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
+    [(get-in schema [:crux.sql.table/query :find (.getIndex this)])])
 
   RexLiteral
   (->var [this schema]
-    (.getValue2 this))
+    [(.getValue2 this)])
 
   RexDynamicParam
   (->var [this schema]
-    this)
+    [this])
 
   RexCall
   (->var [this schema]
-    (if (= SqlKind/OTHER_FUNCTION (.getKind this))
-      (if (= "KEYWORD" (str (.-op this)))
-        (keyword (->var (first (.-operands this)) schema))
-        (throw (IllegalArgumentException. (str "Unsupported custom fn: " this))))
-      (throw (IllegalArgumentException. (str "Unsupported fn: " this))))))
+    (if (and (= SqlKind/OTHER_FUNCTION (.getKind this))
+             (= "KEYWORD" (str (.-op this))))
+      [(keyword (first (->var (first (.-operands this)) schema)))]
+      (if-let [op (get standard-ops (.getKind this))]
+        (let [s (gensym)]
+          [s (assoc-in (->clauses this schema) [0 1] s)])
+        (throw (IllegalArgumentException. (str "Unsupported fn: " this)))))))
 
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
@@ -67,19 +69,21 @@
    SqlKind/LESS_THAN_OR_EQUAL '<=
    SqlKind/LIKE 'crux.calcite/-like
    SqlKind/IS_NULL 'nil?
-   SqlKind/IS_NOT_NULL 'boolean})
+   SqlKind/IS_NOT_NULL 'boolean
+   SqlKind/TIMES '*})
 
 (extend-protocol RexNodeToClauses
   RexInputRef
   (->clauses [this schema]
-    [[(list '= (->var this schema) true)]])
+    [[(list '= (first (->var this schema)) true)]])
 
   RexCall
   (->clauses [filter* schema]
     (if-let [op (standard-ops (.getKind filter*))]
-      (let [vars (for [o (.getOperands filter*)]
-                   (->var o schema))]
-        [[(apply list op vars)]])
+      (let [vars (doall (for [o (.getOperands filter*)]
+                          (->var o schema)))]
+        #_ [[(apply list op (map first vars))]]
+        (reduce into [[(apply list op (map first vars))]] (keep second vars)))
       (condp = (.getKind filter*)
         SqlKind/AND
         (operands->clauses schema filter*)
@@ -144,7 +148,7 @@
 (defn enrich-project [schema projects]
   (def s schema)
   (def p projects)
-  (assoc-in schema [:crux.sql.table/query :find] (mapv #(->var % schema) (map #(.-left %) projects))))
+  (assoc-in schema [:crux.sql.table/query :find] (mapv #(first (->var % schema)) (map #(.-left %) projects))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (let [q1 (:crux.sql.table/query s1)
