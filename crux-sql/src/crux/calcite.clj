@@ -25,8 +25,29 @@
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
+(defn -like [s pattern]
+  (org.apache.calcite.runtime.SqlFunctions/like s pattern))
+
+(def ^:private standard-ops
+  {SqlKind/EQUALS '=
+   SqlKind/NOT_EQUALS 'not=
+   SqlKind/GREATER_THAN '>
+   SqlKind/GREATER_THAN_OR_EQUAL '>=
+   SqlKind/LESS_THAN '<
+   SqlKind/LESS_THAN_OR_EQUAL '<=
+   SqlKind/LIKE 'crux.calcite/-like
+   SqlKind/IS_NULL 'nil?
+   SqlKind/IS_NOT_NULL 'boolean
+   SqlKind/TIMES '*
+   SqlKind/PLUS '+})
+
 (defprotocol RexNodeToVar
   (->var [this schema]))
+
+(defprotocol RexNodeToClauses
+  (->clauses [this schema]))
+
+;; Todo consider merging the two protocols
 
 (extend-protocol RexNodeToVar
   RexInputRef
@@ -51,27 +72,8 @@
           [s (assoc-in (->clauses this schema) [0 1] s)])
         (throw (IllegalArgumentException. (str "Unsupported fn: " this)))))))
 
-(defn -like [s pattern]
-  (org.apache.calcite.runtime.SqlFunctions/like s pattern))
-
-(defprotocol RexNodeToClauses
-  (->clauses [this schema]))
-
 (defn- operands->clauses [schema ^RexCall filter*]
   (mapcat #(->clauses % schema) (.-operands ^RexCall filter*)))
-
-(def ^:private standard-ops
-  {SqlKind/EQUALS '=
-   SqlKind/NOT_EQUALS 'not=
-   SqlKind/GREATER_THAN '>
-   SqlKind/GREATER_THAN_OR_EQUAL '>=
-   SqlKind/LESS_THAN '<
-   SqlKind/LESS_THAN_OR_EQUAL '<=
-   SqlKind/LIKE 'crux.calcite/-like
-   SqlKind/IS_NULL 'nil?
-   SqlKind/IS_NOT_NULL 'boolean
-   SqlKind/TIMES '*
-   SqlKind/PLUS '+})
 
 (extend-protocol RexNodeToClauses
   RexInputRef
