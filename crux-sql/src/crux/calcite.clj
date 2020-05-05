@@ -44,13 +44,6 @@
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
-(defn- operands->vars [schema ^RexCall filter*]
-  (for [o (.getOperands filter*)]
-    (if (and (= SqlKind/OTHER_FUNCTION (.getKind o))
-             (= "KEYWORD" (str (.-op o))))
-      (keyword (->var (first (.-operands o)) schema))
-      (->var o schema))))
-
 (defprotocol RexNodeToClauses
   (->clauses [this schema]))
 
@@ -76,7 +69,12 @@
   RexCall
   (->clauses [filter* schema]
     (if-let [op (standard-ops (.getKind filter*))]
-      [[(apply list op (operands->vars schema filter*))]]
+      (let [vars (for [o (.getOperands filter*)]
+                   (if (and (= SqlKind/OTHER_FUNCTION (.getKind o))
+                            (= "KEYWORD" (str (.-op o))))
+                     (keyword (->var (first (.-operands o)) schema))
+                     (->var o schema)))]
+        [[(apply list op vars)]])
       (condp = (.getKind filter*)
         SqlKind/AND
         (operands->clauses schema filter*)
