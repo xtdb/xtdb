@@ -122,23 +122,3 @@
  (fn [db [_ {:keys [message] :as result}]]
    (prn "Failure: get fetch entity result: " result)
    (dissoc db :entity-loading?)))
-
-(rf/reg-event-db
- ::query-pane-toggle
- (fn [db _]
-   (update db :query-pane-show? not)))
-
-(rf/reg-event-db
- ::set-query-view
- (fn [db [_ view]]
-   (assoc db :query-view view)))
-
-(rf/reg-event-db
- ::set-entity-view
- (fn [db [_ view]]
-   (assoc db :entity-view view)))
-
-(rf/reg-event-db
- ::set-search-view
- (fn [db [_ view]]
-   (assoc db :search-view view)))
