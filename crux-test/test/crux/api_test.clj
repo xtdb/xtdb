@@ -1,17 +1,13 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
-            [crux.standalone]
-            [crux.fixtures.standalone :as fs]
             [crux.codec :as c]
-            [crux.fixtures.api :refer [*api*] :as fapi]
-            [crux.fixtures.kv :as kvf]
+            [crux.fixtures :refer [*api*] :as fix]
             [crux.fixtures.kafka :as fk]
             crux.jdbc
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.http-server :as fh]
             [crux.rdf :as rdf]
             [crux.api :as api]
-            [crux.fixtures.api :as fapi]
             [crux.db :as db]
             [crux.query :as q]
             [crux.tx :as tx]
@@ -25,15 +21,23 @@
            org.eclipse.rdf4j.query.Binding))
 
 (def api-implementations
-  (-> {:local-standalone (t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fapi/with-node])
-       :remote (t/join-fixtures [fs/with-standalone-node kvf/with-kv-dir fh/with-http-server fapi/with-node fh/with-http-client])
-       :h2 (t/join-fixtures [#(fj/with-jdbc-node :h2 %) kvf/with-kv-dir fapi/with-node])
-       :sqlite (t/join-fixtures [#(fj/with-jdbc-node :sqlite %) kvf/with-kv-dir fapi/with-node])
-       :local-kafka (-> (t/join-fixtures [fk/with-cluster-node-opts kvf/with-kv-dir fapi/with-node])
+  (-> {:local-standalone (t/join-fixtures [fix/with-standalone-topology fix/with-kv-dir fix/with-node])
+       :remote (t/join-fixtures [fix/with-standalone-topology
+                                 fix/with-kv-dir
+                                 fh/with-http-server
+                                 fix/with-node
+                                 fh/with-http-client])
+       :h2 (t/join-fixtures [#(fj/with-jdbc-node :h2 %) fix/with-kv-dir fix/with-node])
+       :sqlite (t/join-fixtures [#(fj/with-jdbc-node :sqlite %) fix/with-kv-dir fix/with-node])
+       :local-kafka (-> (t/join-fixtures [fk/with-cluster-node-opts fix/with-kv-dir fix/with-node])
                         (with-meta {::embedded-kafka? true}))
-       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts fs/with-standalone-doc-store kvf/with-kv-dir fapi/with-node])
+       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts
+                                                     fix/with-standalone-doc-store
+                                                     fix/with-kv-dir
+                                                     fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
       #_(select-keys [:local-standalone])
+      #_(select-keys [:local-standalone :remote])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
 (defn- with-each-api-implementation [f]
@@ -63,8 +67,7 @@
   (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}]
     (t/testing "put"
-      (let [{::tx/keys [tx-time] :as tx} (api/submit-tx *api* [[:crux.tx/put content-ivan valid-time]])]
-        (api/await-tx *api* tx)
+      (let [{::tx/keys [tx-time] :as tx} (fix/submit+await-tx [[:crux.tx/put content-ivan valid-time]])]
         (t/is (= {:crux.db/id :ivan :name "Ivan"}
                  (api/entity (api/db *api* valid-time tx-time) :ivan)))))
 
@@ -229,13 +232,13 @@
         (t/is (= 0 (:name stats)))))))
 
 (t/deftest test-adding-back-evicted-document
-  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo))
 
-  (fapi/submit+await-tx [[:crux.tx/evict :foo]])
+  (fix/submit+await-tx [[:crux.tx/evict :foo]])
   (t/is (nil? (api/entity (api/db *api*) :foo)))
 
-  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo)))
 
 (t/deftest test-document-bug-123
@@ -256,7 +259,7 @@
 
 (t/deftest test-tx-log
   (let [valid-time (Date.)
-        tx1 (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+        tx1 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
 
     (t/testing "tx-log"
       (with-open [tx-log-iterator (.openTxLog *api* nil false)]
@@ -281,7 +284,7 @@
           (t/is (empty? (iterator-seq tx-log-iterator))))))
 
     (t/testing "tx log skips failed transactions"
-      (let [tx2 (fapi/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan2"}]
+      (let [tx2 (fix/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan2"}]
                                        [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
         (t/is (false? (api/tx-committed? *api* tx2)))
 
@@ -291,7 +294,7 @@
                         :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))))
 
-        (let [tx3 (fapi/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan"}]
+        (let [tx3 (fix/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan"}]
                                          [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
           (t/is (true? (api/tx-committed? *api* tx3)))
           (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
@@ -384,12 +387,12 @@
                  (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided-546
-  (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (let [{:keys [^Date crux.tx/tx-time]} (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
 
 (t/deftest test-history-range-throws-if-future-tx-time-provided-827
-  (let [{:keys [^Date crux.tx/tx-time]} (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+  (let [{:keys [^Date crux.tx/tx-time]} (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/history-range *api* :foo nil nil nil the-future)))))
 
@@ -407,21 +410,21 @@
 (t/deftest test-listen-for-indexed-txs
   (when-not (contains? (set t/*testing-contexts*) (str :remote))
     (let [!events (atom [])]
-      (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+      (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
 
       (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:crux/event-type :crux/indexed-tx
                                                              :with-tx-ops? true}
                                                       (fn [evt]
                                                         (swap! !events conj evt)))]
 
-                              (let [bar-tx (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :bar}]])
-                                    baz-tx (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :baz}]])]
+                              (let [bar-tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :bar}]])
+                                    baz-tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :baz}]])]
 
                                 (Thread/sleep 100)
 
                                 [bar-tx baz-tx]))]
 
-        (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan}]])
+        (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan}]])
 
         (Thread/sleep 100)
 

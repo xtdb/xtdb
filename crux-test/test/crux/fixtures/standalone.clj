@@ -1,16 +1,11 @@
 (ns crux.fixtures.standalone
-  (:require [crux.fixtures.api :as fapi]
+  (:require [crux.fixtures :as fix]
             [crux.io :as cio]
             [crux.standalone :as standalone]
             [crux.node :as n]))
 
-(defn with-standalone-node [f]
-  (fapi/with-opts {::n/topology '[crux.standalone/topology]}
-    f))
+(defn ^:deprecated with-standalone-node [f]
+  (fix/with-standalone-topology f))
 
-(defn with-standalone-doc-store [f]
-  (fapi/with-opts (-> fapi/*opts*
-                      (update ::n/topology conj (-> standalone/topology
-                                                    (select-keys [::n/document-store
-                                                                  ::standalone/event-log]))))
-    f))
+(defn ^:deprecated with-standalone-doc-store [f]
+  (fix/with-standalone-doc-store f))

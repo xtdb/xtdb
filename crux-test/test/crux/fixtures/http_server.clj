@@ -1,8 +1,7 @@
 (ns crux.fixtures.http-server
-  (:require [crux.fixtures.api :refer [*api*]]
+  (:require [crux.fixtures :as fix :refer [*api*]]
             [crux.http-server :as srv]
-            [crux.io :as cio]
-            [crux.fixtures.api :as fapi])
+            [crux.io :as cio])
   (:import crux.api.Crux))
 
 (def ^:dynamic ^String *host* "localhost")
@@ -10,9 +9,9 @@
 
 (defn with-http-server [f]
   (let [server-port (cio/free-port)]
-    (fapi/with-opts (-> fapi/*opts*
-                        (update :crux.node/topology conj 'crux.http-server/module)
-                        (assoc :crux.http-server/port server-port))
+    (fix/with-opts (-> fix/*opts*
+                       (update :crux.node/topology conj 'crux.http-server/module)
+                       (assoc :crux.http-server/port server-port))
       (fn []
         (binding [*api-url* (str "http://" *host* ":" server-port)]
           (f))))))

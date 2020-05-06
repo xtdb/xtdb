@@ -1,15 +1,14 @@
 (ns crux.fixtures.kv
   (:require [crux.fixtures :as f]
-            [crux.fixtures.api :as apif]
             [crux.io :as cio]
-            [clojure.test :as t]))
+            [clojure.test :as t]
+            [crux.fixtures :as fix]))
 
-(defn with-kv-dir [f]
-  (f/with-tmp-dir "kv-store" [db-dir]
-    (apif/with-opts {:crux.kv/db-dir (str db-dir)} f)))
+(defn ^:deprecated with-kv-dir [f]
+  (fix/with-kv-dir f))
 
 (defn with-kv-store [kv-store f]
-  (apif/with-opts {:crux.node/kv-store kv-store} f))
+  (fix/with-opts {:crux.node/kv-store kv-store} f))
 
 (defn with-memdb [f]
   (with-kv-store 'crux.kv.memdb/kv

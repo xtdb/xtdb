@@ -11,7 +11,8 @@
             [crux.fixtures.standalone :as fs]
             [crux.query :as q]
             [crux.index :as i]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.fixtures.api :as fapi])
   (:import java.util.UUID))
 
 (t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node apif/with-node)
@@ -2304,7 +2305,7 @@
 
   (let [db-before (api/db *api*)]
     ;; parent(bob, john)-
-    (f/delete-entities! *api* [:bob])
+    (fapi/submit+await-tx [[:crux.tx/delete :bob]])
     ;; parent(A,B)?
     (t/is (= #{[:john :douglas]
                [:ebbon :bob]}
