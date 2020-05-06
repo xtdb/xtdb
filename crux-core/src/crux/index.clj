@@ -318,9 +318,12 @@
   (when-not (evicted-doc? doc)
     doc))
 
+(defn multiple-values? [v]
+  (or (vector? v) (set? v)))
+
 (defn vectorize-value [v]
   (cond-> v
-    (not (or (vector? v) (set? v)))
+    (not (multiple-values? v))
     (vector)))
 
 (defn doc-predicate-stats [doc evicted?]

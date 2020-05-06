@@ -17,9 +17,7 @@
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
            (java.util Comparator Date UUID)
-           java.util.function.Supplier
-           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
-           org.agrona.ExpandableDirectByteBuffer))
+           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -526,33 +524,12 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
-(def ^:private ^ThreadLocal value-buffer-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (ExpandableDirectByteBuffer.)))))
-
-;; TODO: Most of this should move into the IndexStore.
 (defn- bound-result-for-var [index-store object-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
       (get join-results (.result-name binding))
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (let [value-buffer (get join-keys (.result-index binding))]
-          (if (c/can-decode-value-buffer? value-buffer)
-            (c/decode-value-buffer value-buffer)
-            (let [content-hash (.content-hash entity-tx)
-                  doc (db/get-single-object object-store index-store content-hash)
-                  values (idx/vectorize-value (get doc (.attr binding)))
-                  value (if (or (nil? value-buffer)
-                                (= (count values) 1))
-                          (first values)
-                          (loop [[x & xs] values]
-                            (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
-                              x
-                              (when xs
-                                (recur xs)))))]
-              value)))))))
+        (db/decode-value index-store (.attr binding) (.content-hash entity-tx) (get join-keys (.result-index binding)))))))
 
 (declare build-sub-query)
 

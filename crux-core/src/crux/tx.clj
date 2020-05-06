@@ -19,7 +19,9 @@
   (:import crux.codec.EntityTx
            java.io.Closeable
            [java.util.concurrent ExecutorService TimeoutException]
-           java.util.Date))
+           java.util.function.Supplier
+           java.util.Date
+           org.agrona.ExpandableDirectByteBuffer))
 
 ;; TODO: move stuff in this namespace and consolidate with crux.index
 ;; and crux.tx.consumer.
@@ -320,7 +322,13 @@
       (.submit stats-executor stats-fn)
       (stats-fn))))
 
-(defrecord KvIndexStore [snapshot]
+(def ^:private ^ThreadLocal value-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer.)))))
+
+(defrecord KvIndexStore [object-store snapshot]
   Closeable
   (close [_]
     (cio/try-close snapshot))
@@ -357,10 +365,29 @@
   (all-content-hashes [this eid]
     (idx/all-content-hashes snapshot eid))
 
-  (open-nested-index-store [this]
-    (->KvIndexStore (lru/new-cached-snapshot snapshot false))))
+  (decode-value [this a content-hash value-buffer]
+    (if (c/can-decode-value-buffer? value-buffer)
+      (c/decode-value-buffer value-buffer)
+      (let [doc (db/get-single-object object-store this content-hash)
+            value-or-values (get doc a)]
+        (cond
+          (not (idx/multiple-values? value-or-values))
+          value-or-values
 
-(defrecord KvIndexer [kv-store]
+          (nil? value-buffer)
+          (first (idx/vectorize-value value-or-values))
+
+          :else
+          (loop [[x & xs] (idx/vectorize-value value-or-values)]
+            (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
+              x
+              (when xs
+                (recur xs))))))))
+
+  (open-nested-index-store [this]
+    (->KvIndexStore object-store (lru/new-cached-snapshot snapshot false))))
+
+(defrecord KvIndexer [kv-store object-store]
   db/Indexer
   (index-docs [this docs]
     (let [doc-idx-keys (when (seq docs)
@@ -399,7 +426,7 @@
       (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
-    (->KvIndexStore (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
+    (->KvIndexStore object-store (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
 
   status/Status
   (status-map [this]
@@ -479,9 +506,9 @@
                        (:tombstones res))}))))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [kv-store]} args]
-               (->KvIndexer kv-store))
-   :deps [:crux.node/kv-store]})
+  {:start-fn (fn [{:crux.node/keys [kv-store object-store]} args]
+               (->KvIndexer kv-store object-store))
+   :deps [:crux.node/kv-store :crux.node/object-store]})
 
 (defn await-tx [indexer tx-consumer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]
