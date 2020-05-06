@@ -5,14 +5,13 @@
             [clojure.java.io :as io]
             [docs.examples :as ex]
             [crux.io :as cio]
-            [crux.fixtures.api :as fapi]
-            [crux.fixtures :as f])
+            [crux.fixtures :as fix])
   (:import (java.io Closeable)))
 
 (def ^:dynamic *storage-dir*)
 
 (defn with-storage-dir [f]
-  (f/with-tmp-dir "storage" [storage-dir]
+  (fix/with-tmp-dir "storage" [storage-dir]
     (binding [*storage-dir* storage-dir]
       (f))))
 

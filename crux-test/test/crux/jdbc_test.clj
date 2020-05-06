@@ -3,10 +3,8 @@
             [clojure.java.io :as io]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.fixtures :as f]
-            [crux.fixtures.api :as apif :refer [*api*]]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
-            [crux.fixtures.kv :as kvf]
             [crux.fixtures.lubm :as fl]
             [crux.fixtures.postgres :as fp]
             [crux.api :as api]
@@ -15,7 +13,7 @@
             [next.jdbc.result-set :as jdbcr]))
 
 (defn- with-each-jdbc-node [f]
-  (f/with-tmp-dir "jdbc" [jdbc-dir]
+  (fix/with-tmp-dir "jdbc" [jdbc-dir]
     (t/testing "H2 Database"
       (fj/with-jdbc-node "h2" f {:crux.jdbc/dbname (str (io/file jdbc-dir "h2"))}))
     (t/testing "SQLite Database"
@@ -40,7 +38,7 @@
                                   :crux.jdbc/user "sa"
                                   :crux.jdbc/password "yourStrong(!)Password"})))
 
-(t/use-fixtures :each with-each-jdbc-node kvf/with-kv-dir apif/with-node)
+(t/use-fixtures :each with-each-jdbc-node fix/with-kv-dir fix/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}

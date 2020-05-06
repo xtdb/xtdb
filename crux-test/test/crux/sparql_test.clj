@@ -1,19 +1,16 @@
 (ns crux.sparql-test
   (:require [clojure.test :as t]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.api :as crux]
-            [crux.fixtures.kv :as fkv]
-            [crux.fixtures.api :as apif]
-            [crux.fixtures.standalone :as fs]
             [clojure.java.io :as io]
             [crux.sparql :as sparql]
             [crux.rdf :as rdf]))
 
-(t/use-fixtures :each fs/with-standalone-node fkv/with-kv-dir apif/with-node)
+(t/use-fixtures :each fix/with-standalone-topology fix/with-kv-dir fix/with-node)
 
 ;; https://jena.apache.org/tutorials/sparql.html
 (t/deftest test-can-transact-and-query-using-sparql
-  (fapi/submit+await-tx (->> (rdf/ntriples "crux/vc-db-1.nt") (rdf/->tx-ops) (rdf/->default-language)))
+  (fix/submit+await-tx (->> (rdf/ntriples "crux/vc-db-1.nt") (rdf/->tx-ops) (rdf/->default-language)))
 
   (t/testing "querying transacted data"
     (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}

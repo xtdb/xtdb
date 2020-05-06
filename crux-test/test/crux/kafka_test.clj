@@ -3,9 +3,8 @@
             [crux.api :as api]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.fixtures.api :as fapi :refer [*api* *opts*]]
+            [crux.fixtures :as fix :refer [*api* *opts*]]
             [crux.fixtures.kafka :as kf :refer [*ingest-client*]]
-            [crux.fixtures.kv :as kvf]
             [crux.kafka :as k]
             [crux.tx.consumer :as tc]
             [crux.rdf :as rdf]
@@ -15,10 +14,10 @@
            org.apache.kafka.clients.producer.ProducerRecord))
 
 (t/use-fixtures :once kf/with-embedded-kafka-cluster)
-(t/use-fixtures :each kf/with-cluster-node-opts kvf/with-kv-dir)
+(t/use-fixtures :each kf/with-cluster-node-opts fix/with-kv-dir)
 
 (t/deftest test-ingest-client
-  (fapi/with-node
+  (fix/with-node
     (fn []
       (kf/with-ingest-client
         (fn []
@@ -53,7 +52,7 @@
 (def after-evict-doc {:crux.db/id :after-evict :personal "private"})
 
 (defn submit-txs-to-compact []
-  (fapi/with-node
+  (fix/with-node
     (fn []
       (with-open [doc-consumer (doto (kf/open-consumer)
                                  (k/subscribe-consumer #{kf/*doc-topic*} {}))]
@@ -85,14 +84,14 @@
 
 (defn with-compacted-node [{:keys [compacted-docs submitted-tx]} f]
   (t/testing "compaction"
-    (fapi/with-opts {:crux.node/topology ['crux.kafka/topology 'crux.kv.memdb/kv-store]
-                     ::k/doc-topic (str "compacted-" kf/*doc-topic*)
-                     ::k/group-id (str "compacted-" (java.util.UUID/randomUUID))}
+    (fix/with-opts {:crux.node/topology ['crux.kafka/topology 'crux.kv.memdb/kv-store]
+                    ::k/doc-topic (str "compacted-" kf/*doc-topic*)
+                    ::k/group-id (str "compacted-" (java.util.UUID/randomUUID))}
 
       (fn []
-        (kvf/with-kv-dir
+        (fix/with-kv-dir
           (fn []
-            (fapi/with-node
+            (fix/with-node
               (fn []
                 (t/testing "new node can pick-up"
                   (db/submit-docs (:document-store *api*) compacted-docs)

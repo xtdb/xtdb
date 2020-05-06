@@ -1,15 +1,13 @@
 (ns crux.metrics-test
   (:require [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures.api :as fapi :refer [*api*]]
-            [crux.fixtures.kv :as kvf]
-            [crux.fixtures.standalone :as fs]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.query :as query-metrics]
             [crux.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
 
-(t/use-fixtures :each kvf/with-kv-dir fs/with-standalone-node fapi/with-node)
+(t/use-fixtures :each fix/with-kv-dir fix/with-standalone-topology fix/with-node)
 
 (t/deftest test-indexer-metrics
   (let [{:crux.node/keys [node bus indexer]} (:crux.node/topology (meta *api*))
@@ -20,7 +18,7 @@
       (t/is (zero? (dropwizard/meter-count (:docs-ingested-meter mets))))
       (t/is (zero? (dropwizard/meter-count (:tx-ingest-timer mets)))))
 
-    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
     (.close ^Closeable bus)
 
     (t/testing "post ingest values"
@@ -37,7 +35,7 @@
     (t/testing "initial query timer values"
       (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))
 
-    (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
 
     (api/q (api/db *api*) {:find ['e] :where [['e :crux.db/id '_]]})
 

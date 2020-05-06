@@ -2,10 +2,9 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
-            [crux.fixtures.api :refer [*api*] :as apif]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.lubm :as fl]
-            [crux.fixtures.kv :as kvf]
             [crux.api :as api]))
 
 ;; See:
@@ -34,8 +33,8 @@
 (t/use-fixtures :once
   fk/with-embedded-kafka-cluster
   fk/with-cluster-node-opts
-  kvf/with-kv-dir
-  apif/with-node
+  fix/with-kv-dir
+  fix/with-node
   fl/with-lubm-data)
 
 ;; This query bears large input and high selectivity. It queries about just one class and

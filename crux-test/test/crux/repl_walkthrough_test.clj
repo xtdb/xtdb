@@ -2,12 +2,11 @@
   (:require [crux.api :as crux]
             [clojure.pprint :as pp]
             [clojure.test :as t]
-            [crux.fixtures.api :as fapi :refer [*api*]]
-            [clojure.java.io :as io]
-            [crux.fixtures.standalone :as fs])
+            [crux.fixtures :as fix :refer [*api*]]
+            [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)))
 
-(t/use-fixtures :each fs/with-standalone-node fapi/with-node)
+(t/use-fixtures :each fix/with-standalone-topology fix/with-node)
 
 (def nodes
   (for [n [{:user/name :User1, :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
@@ -30,7 +29,7 @@
     (assoc n :crux.db/id (some n [:user/name :group/name :role/name :roleInGroup/name]))))
 
 (t/deftest graph-traversal-test
-  (fapi/submit+await-tx (mapv (fn [n] [:crux.tx/put n]) nodes))
+  (fix/submit+await-tx (mapv (fn [n] [:crux.tx/put n]) nodes))
 
   (let [db (crux/db *api*)]
     (t/is (= #{[:Role2] [:Role3]}
@@ -65,34 +64,34 @@
                          :args '[{?user :User1}]})))))
 
 (t/deftest walkthrough-test
-  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                                        :name "Pablo"
-                                        :last-name "Picasso"
-                                        :location "Spain"}
-                          #inst "1881-10-25T09:20:27.966-00:00"]
-                         [:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                                        :name "Pablo"
-                                        :last-name "Picasso"
-                                        :location "Sain2"}
-                          #inst "1881-10-25T09:20:27.966-00:00"]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                                       :name "Pablo"
+                                       :last-name "Picasso"
+                                       :location "Spain"}
+                         #inst "1881-10-25T09:20:27.966-00:00"]
+                        [:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                                       :name "Pablo"
+                                       :last-name "Picasso"
+                                       :location "Sain2"}
+                         #inst "1881-10-25T09:20:27.966-00:00"]])
 
-  (fapi/submit+await-tx [[:crux.tx/match
-                          :dbpedia.resource/Pablo-Picasso
-                          {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                           :name "Pablo"
-                           :last-name "Picasso"
-                           :location "Spain"}
-                          #inst "1973-04-08T09:20:27.966-00:00"]
-                         [:crux.tx/put
-                          {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                           :name "Pablo"
-                           :last-name "Picasso"
-                           :height 1.63
-                           :location "France"}
-                          #inst "1973-04-08T09:20:27.966-00:00"]])
+  (fix/submit+await-tx [[:crux.tx/match
+                         :dbpedia.resource/Pablo-Picasso
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :location "Spain"}
+                         #inst "1973-04-08T09:20:27.966-00:00"]
+                        [:crux.tx/put
+                         {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                          :name "Pablo"
+                          :last-name "Picasso"
+                          :height 1.63
+                          :location "France"}
+                         #inst "1973-04-08T09:20:27.966-00:00"]])
 
-  (fapi/submit+await-tx [[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
-                          #inst "1973-04-08T09:20:27.966-00:00"]])
+  (fix/submit+await-tx [[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
+                         #inst "1973-04-08T09:20:27.966-00:00"]])
 
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
            (crux/q
@@ -101,19 +100,19 @@
               :where [[e :name "Pablo"]]
               :full-results? true})))
 
-  (fapi/submit+await-tx [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
+  (fix/submit+await-tx [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
 
   (t/is (empty? (crux/q (crux/db *api*)
                         '{:find [e]
                           :where [[e :name "Pablo"]]
                           :full-results? true})))
 
-  (fapi/submit+await-tx [[:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
-                                        :name "Pablo"
-                                        :last-name "Picasso"
-                                        :height 1.63
-                                        :location "France"}
-                          #inst "1973-04-08T09:20:27.966-00:00"]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
+                                       :name "Pablo"
+                                       :last-name "Picasso"
+                                       :height 1.63
+                                       :location "France"}
+                         #inst "1973-04-08T09:20:27.966-00:00"]])
 
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso
                :name "Pablo"

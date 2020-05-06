@@ -1,12 +1,11 @@
 (ns crux.fixtures.kafka
   (:require [clojure.java.io :as io]
-            [crux.fixtures.api :as apif]
             [crux.fixtures.kv-only :refer [*kv-module*]]
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
             [crux.api :as api]
-            [crux.fixtures :as f])
+            [crux.fixtures :as fix])
   (:import [java.util Properties UUID]
            crux.api.ICruxAsyncIngestAPI
            org.apache.kafka.clients.admin.AdminClient
@@ -30,8 +29,8 @@
 (def ^:dynamic ^AdminClient *admin-client*)
 
 (defn with-embedded-kafka-cluster [f]
-  (f/with-tmp-dir "zk" [zk-data-dir]
-    (f/with-tmp-dir "kafka-log" [kafka-log-dir]
+  (fix/with-tmp-dir "zk" [zk-data-dir]
+    (fix/with-tmp-dir "kafka-log" [kafka-log-dir]
       (write-kafka-meta-properties kafka-log-dir ek/*broker-id*)
 
       (let [zookeeper-port (cio/free-port)
@@ -75,12 +74,12 @@
   (let [test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
-      (apif/with-opts {:crux.node/topology ['crux.kafka/topology]
-                       :crux.node/kv-store *kv-module*
-                       :crux.kafka/group-id (str test-id)
-                       :crux.kafka/tx-topic *tx-topic*
-                       :crux.kafka/doc-topic *doc-topic*
-                       :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
+      (fix/with-opts {:crux.node/topology ['crux.kafka/topology]
+                      :crux.node/kv-store *kv-module*
+                      :crux.kafka/group-id (str test-id)
+                      :crux.kafka/tx-topic *tx-topic*
+                      :crux.kafka/doc-topic *doc-topic*
+                      :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
 
 (def ^:dynamic ^ICruxAsyncIngestAPI *ingest-client*)
 

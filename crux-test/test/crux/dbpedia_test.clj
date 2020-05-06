@@ -1,21 +1,19 @@
 (ns crux.dbpedia-test
   (:require [clojure.test :as t]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.api :as crux]
-            [crux.fixtures.kv :as fkv]
-            [crux.fixtures.api :as apif]
             [crux.rdf :as rdf]
             [clojure.java.io :as io]
             [crux.sparql :as sparql]))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fk/with-cluster-node-opts fkv/with-kv-dir apif/with-node)
+(t/use-fixtures :each fk/with-cluster-node-opts fix/with-kv-dir fix/with-node)
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
-  (fapi/submit+await-tx (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
-                                     (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
-                             (rdf/->default-language)))
+  (fix/submit+await-tx (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
+                                    (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
+                            (rdf/->default-language)))
 
   (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
            (crux/q (crux/db *api*)
