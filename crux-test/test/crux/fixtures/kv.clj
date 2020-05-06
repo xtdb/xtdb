@@ -4,9 +4,6 @@
             [clojure.test :as t]
             [crux.fixtures :as fix]))
 
-(defn ^:deprecated with-kv-dir [f]
-  (fix/with-kv-dir f))
-
 (defn with-kv-store [kv-store f]
   (fix/with-opts {:crux.node/kv-store kv-store} f))
 

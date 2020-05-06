@@ -2,9 +2,7 @@
   (:require [criterium.core :as crit]
             [crux.api :as api]
             [crux.db :as db]
-            [crux.fixtures :as f]
-            [crux.fixtures.standalone :as fs]
-            [crux.fixtures.api :refer [*api*] :as apif]
+            [crux.fixtures :refer [*api*] :as fix]
             [crux.fixtures.kv :as fkv]
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
@@ -44,10 +42,10 @@
       (double (/ (- (System/nanoTime) start#) 1e6)))))
 
 (defn- insert-docs [ts docs]
-  (api/submit-tx *api* (f/maps->tx-ops docs ts)))
+  (api/submit-tx *api* (fix/maps->tx-ops docs ts)))
 
 (defn- insert-data [n batch-size ts]
-  (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
+  (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly fix/random-person))))]
     (insert-docs ts people)))
 
 (defn- perform-query [ts query]
@@ -103,11 +101,11 @@
      :lmdb fkv/with-lmdb
      :mem fkv/with-memdb)
    (fn []
-     (fkv/with-kv-dir
+     (fix/with-kv-dir
        (fn []
-         (fs/with-standalone-node
+         (fix/with-standalone-topology
            (fn []
-             (apif/with-node
+             (fix/with-node
                (fn []
                  (when verbose (print ":insert... ") (flush))
                  (when preload
@@ -125,14 +123,14 @@
 (comment
   (bench)
 
-  (bench :verbose true :preload [(assoc (f/random-person)
+  (bench :verbose true :preload [(assoc (fix/random-person)
                                         :crux.db/id :hardcoded-id
                                         :name "davros")]
          :n 10000
          :samples 10000
          :query :hardcoded-name) ;;2.5
 
-  (bench :verbose true :preload [(assoc (f/random-person)
+  (bench :verbose true :preload [(assoc (fix/random-person)
                                         :crux.db/id :hardcoded-id
                                         :name "davros")]
          :n 10000

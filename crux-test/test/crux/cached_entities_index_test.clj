@@ -8,17 +8,13 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.kv :as kv]
-            [crux.fixtures :as f]
-            [crux.fixtures.kv :as kvf]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.standalone :as fs]
-            [crux.fixtures.api :as apif]))
+            [crux.fixtures :as fix :refer [*api*]]))
 
-(t/use-fixtures :each fs/with-standalone-node kvf/with-kv-dir apif/with-node)
+(t/use-fixtures :each fix/with-standalone-topology fix/with-kv-dir fix/with-node)
 
 (t/deftest test-cached-index
   (t/testing "cached index sanity"
-    (f/transact! *api* [{:crux.db/id :currency.id/eur}])
+    (fix/transact! *api* [{:crux.db/id :currency.id/eur}])
     (let [db (api/db *api*)
           d (java.util.Date.)]
       (t/is (api/entity db :currency.id/eur))

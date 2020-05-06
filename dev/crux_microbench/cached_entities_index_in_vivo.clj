@@ -3,15 +3,11 @@
   With some naive file persistence, as test can take a long time and sometimes crash.
   `bench-with-data-plane` should just work"
   (:require [clojure.test :as t]
-            [crux.fixtures :as f]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux-microbench.ticker-data-gen :as data-gen]
             [crux.api :as api]
             [crux.bench-test]
-            [crux.fixtures :as f]
-            [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.standalone :as fs]
-            [crux.fixtures.api :as f-api]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [crux.io :as cio])
@@ -73,9 +69,9 @@
                             (doseq [stocks-batch (partition-all 1000 stocks-batch)]
                               (swap! ctr inc)
                               (println "day " (inc i) "\t" "partition " @ctr "/" partitions-total)
-                              (api/submit-tx crux-node (f/maps->tx-ops stocks-batch)))
+                              (api/submit-tx crux-node (fix/maps->tx-ops stocks-batch)))
 
-                            (api/submit-tx crux-node (f/maps->tx-ops t-currencies date))))
+                            (api/submit-tx crux-node (fix/maps->tx-ops t-currencies date))))
                         nil
                         (range history-days))]
     (println "Txes submitted, synchronizing...")
@@ -151,7 +147,7 @@
   (let [f'
           (->>
             (partial with-tickers-and-history f)
-            (partial f-api/with-node)
+            (partial fix/with-node)
             (partial fk/with-cluster-node-opts)
             (partial fk/with-kafka-client)
             (partial fk/with-embedded-kafka-cluster))]

@@ -1,7 +1,6 @@
 (ns crux-microbench.cached-entities-index-in-vitro
   "Microbench for cached entities index in vacuum"
   (:require [clojure.test :as t]
-            [crux.fixtures :as f]
             [crux.api :as api]
             [crux.index :as idx]
             [crux.lru :as lru]
@@ -9,13 +8,12 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux-microbench.ticker-data-gen :as data-gen]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.standalone :as fs]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.kv :as kv])
   (:import (java.util Date)))
 
 (defn- -microbench-cached-index []
-  (f/transact! *api* data-gen/currencies)
+  (fix/transact! *api* data-gen/currencies)
   (let [db (api/db *api*)
         d (Date.)]
     (println "cache hit gains")
@@ -46,7 +44,7 @@
 
   (let [db (api/db *api*)
         tickers (data-gen/gen-tickers 1000)
-        _ (f/transact! *api* tickers)
+        _ (fix/transact! *api* tickers)
         d (Date.)]
     (println "cache miss overhead")
     (with-open [snapshot (api/new-snapshot db)
@@ -77,7 +75,7 @@
         nil))))
 
 (defn ^:microbench microbench-cached-index []
-  (fs/with-standalone-node -microbench-cached-index))
+  (fix/with-standalone-topology -microbench-cached-index))
 
 (comment
   (microbench-cached-index))

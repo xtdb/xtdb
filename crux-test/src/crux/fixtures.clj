@@ -6,9 +6,9 @@
             [crux.standalone :as standalone]
             [crux.tx :as tx])
   (:import crux.api.ICruxAPI
-           java.util.UUID
-           [java.io File]
-           [java.nio.file Files FileVisitResult SimpleFileVisitor]
+           (java.util ArrayList List UUID)
+           (java.io File)
+           (java.nio.file Files FileVisitResult SimpleFileVisitor)
            java.nio.file.attribute.FileAttribute))
 
 (defn with-silent-test-check [f]
@@ -88,3 +88,8 @@
 
 (defn people [people-mixins]
   (->> people-mixins (map merge (repeatedly random-person))))
+
+;; Literal vectors aren't type hinted as List in Clojure, and cannot
+;; be type hinted without via a var.
+(defn vec->array-list ^java.util.List [^List v]
+  (ArrayList. v))

@@ -1,15 +1,14 @@
 (ns crux.java-api-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
-            [crux.fixtures.api :as apif]
-            [crux.fixtures :as f]
+            [crux.fixtures :as fix]
             [clojure.java.io :as io])
   (:import [crux.api.alpha CruxNode StandaloneTopology KafkaTopology
             Document PutOperation CasOperation CruxId Database Query
             DeleteOperation EvictOperation]))
 
 (t/deftest test-java-api
-  (f/with-tmp-dir "data" [data-dir]
+  (fix/with-tmp-dir "data" [data-dir]
     (t/testing "Can create node, transact to node, and query node"
       (let [node (-> (StandaloneTopology/standaloneTopology)
                      (.withDbDir (str (io/file data-dir "db-dir-1")))
@@ -42,16 +41,16 @@
                 (t/is evictOp))
 
               (t/testing "Can submit Transactions"
-                (t/is (.submitTx node (apif/vec->array-list [putOp])))
+                (t/is (.submitTx node (fix/vec->array-list [putOp])))
                 (Thread/sleep 300)
 
-                (t/is (.submitTx node (apif/vec->array-list [casOp])))
+                (t/is (.submitTx node (fix/vec->array-list [casOp])))
                 (Thread/sleep 300)
 
-                (t/is (.submitTx node (apif/vec->array-list [delOp])))
+                (t/is (.submitTx node (fix/vec->array-list [delOp])))
                 (Thread/sleep 300)
 
-                (t/is (.submitTx node (apif/vec->array-list [evictOp])))
+                (t/is (.submitTx node (fix/vec->array-list [evictOp])))
                 (Thread/sleep 300)))))
 
         (t/testing "Queries"

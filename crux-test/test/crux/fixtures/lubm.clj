@@ -1,5 +1,5 @@
 (ns crux.fixtures.lubm
-  (:require [crux.fixtures.api :refer [*api*]]
+  (:require [crux.fixtures :refer [*api*]]
             [crux.api :as api]
             [crux.rdf :as rdf]))
 
