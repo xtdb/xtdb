@@ -579,10 +579,10 @@
          (->> (map ->entity-tx))
          (cond->> until-vt (take-while (fn [^EntityTx entity-tx]
                                          (neg? (compare (.vt entity-tx) until-vt))))
-                  from-tt (filter (fn [^EntityTx entity-tx]
-                                    (pos? (compare (.tt entity-tx) from-tt))))
-                  until-tt (remove (fn [^EntityTx entity-tx]
-                                     (pos? (compare (.tt entity-tx) until-tt)))))
+                  from-tt (remove (fn [^EntityTx entity-tx]
+                                    (neg? (compare (.tt entity-tx) from-tt))))
+                  until-tt (filter (fn [^EntityTx entity-tx]
+                                     (neg? (compare (.tt entity-tx) until-tt)))))
          (cond-> (not with-corrections?) (->> (partition-by :vt)
                                               (map last)))))))
 

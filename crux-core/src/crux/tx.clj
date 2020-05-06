@@ -72,8 +72,8 @@
                       arg)))))
 
 (defprotocol EntityHistory
-  (with-entity-history-seq-ascending [_ eid valid-time tx-time f])
-  (with-entity-history-seq-descending [_ eid valid-time tx-time f])
+  (with-entity-history-seq-ascending [_ eid valid-time f])
+  (with-entity-history-seq-descending [_ eid valid-time f])
   (all-content-hashes [_ eid])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
@@ -95,17 +95,19 @@
 
 (defrecord IndexStore+NewETXs [index-store etxs]
   EntityHistory
-  (with-entity-history-seq-ascending [_ eid valid-time tx-time f]
+  (with-entity-history-seq-ascending [_ eid valid-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt compare
-                          (db/entity-valid-time-history nested-index-store eid valid-time tx-time true)
+                          (db/entity-history nested-index-store eid :asc
+                                             {:from {:crux.db/valid-time valid-time}})
                           (->> (get etxs eid)
                                (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
-  (with-entity-history-seq-descending [_ eid valid-time tx-time f]
+  (with-entity-history-seq-descending [_ eid valid-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt #(compare %2 %1)
-                          (db/entity-valid-time-history nested-index-store eid valid-time tx-time false)
+                          (db/entity-history nested-index-store eid :desc
+                                             {:from {:crux.db/valid-time valid-time}})
                           (->> (reverse (get etxs eid))
                                (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 
@@ -160,7 +162,7 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (with-entity-history-seq-descending history eid end-valid-time tx-time
+        (with-entity-history-seq-descending history eid end-valid-time
           (fn [entity-history]
             (into (->> (cons start-valid-time
                              (->> (map etx->vt entity-history)
@@ -177,7 +179,7 @@
       (->> (cons start-valid-time
                  (when-let [visible-entity (some-> (entity-at history eid start-valid-time tx-time)
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (with-entity-history-seq-ascending history eid start-valid-time tx-time
+                   (with-entity-history-seq-ascending history eid start-valid-time
                      (fn [entity-history]
                        (->> entity-history
                             (remove #{start-valid-time})
@@ -344,15 +346,13 @@
   (new-entity-as-of-index [this valid-time transact-time]
     (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time))
 
-  (entity-valid-time-history [this eid start-valid-time transact-time ascending?]
-    (if ascending?
-      (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid {:from {::db/valid-time start-valid-time}
-                                                                        :until {::tx-time transact-time}})
-      (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid {:from {::db/valid-time start-valid-time
-                                                                                ::tx-time transact-time}})))
-
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
+
+  (entity-history [this eid sort-order opts]
+    (case sort-order
+      :asc (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid opts)
+      :desc (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid opts)))
 
   (all-content-hashes [this eid]
     (idx/all-content-hashes snapshot eid))
