@@ -80,6 +80,8 @@ jobs:
           key: v1-dependencies-{{ checksum "project.clj" }}
 
       - run: lein do version, sub test, check
+      - store_test_results:
+          path: "crux-test/target/test-results"
 
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh

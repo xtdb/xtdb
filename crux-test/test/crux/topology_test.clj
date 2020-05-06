@@ -1,7 +1,9 @@
 (ns crux.topology-test
   (:require [crux.topology :as topo]
             [clojure.spec.alpha :as s]
-            [clojure.test :as t]))
+            [clojure.test :as t]
+            crux.kv.rocksdb
+            crux.jdbc))
 
 (t/deftest test-properties-to-topology
   (let [t (topo/options->topology {:crux.node/topology ['crux.jdbc/topology]

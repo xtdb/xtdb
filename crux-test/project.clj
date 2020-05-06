@@ -51,4 +51,10 @@
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :profiles {:dev {:dependencies [[circleci/circleci.test "0.4.3"]]}}
+
+  :aliases {"test" ["run" "-m" "circleci.test/dir" :project/test-paths]
+            "tests" ["run" "-m" "circleci.test"]
+            "retest" ["run" "-m" "circleci.test.retest"]})
