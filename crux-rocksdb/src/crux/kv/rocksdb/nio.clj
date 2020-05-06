@@ -20,7 +20,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- read-value [^ToIntFunction f]
-  (loop [limit 64]
+  (loop [limit 32]
     (let [out (.byteBuffer ^DirectBuffer (mem/allocate-buffer limit))
           result (.applyAsInt f out)]
       (cond
@@ -31,7 +31,7 @@
         (recur result)
 
         :else
-        (mem/->off-heap out)))))
+        (mem/as-buffer out)))))
 
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
