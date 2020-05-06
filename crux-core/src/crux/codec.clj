@@ -100,9 +100,7 @@
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
 (def nil-id-buffer
-  (memoize
-   (fn []
-     (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))))
+  (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
 
 (def ^:dynamic ^:private *sort-unordered-colls* false)
 
@@ -285,22 +283,36 @@
           (aset bs (dec idx) (unchecked-byte (- b offset)))
           (recur (inc idx)))))))
 
+;; TODO: Booleans should really have their own value type and encode
+;; as single bytes, but this change would require an index bump.
+
+(def ^:private true-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer true)))
+(def ^:private false-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer false)))
+
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when buffer
-    (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
-      (or (= type-id long-value-type-id)
-          (= type-id double-value-type-id)
-          (= type-id date-value-type-id)
-          (= type-id string-value-type-id)))))
+    (case (.getByte (value-buffer-type-id buffer) 0)
+      0 (= buffer nil-id-buffer)
+      (1 2 3 4) true
+      6 (or (= buffer true-value-buffer)
+            (= buffer false-value-buffer))
+      false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
   (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
-    (cond
-      (= type-id long-value-type-id) (decode-long buffer)
-      (= type-id double-value-type-id) (decode-double buffer)
-      (= type-id date-value-type-id) (Date. (decode-long buffer))
-      (= type-id string-value-type-id) (decode-string buffer)
-      :else
+    (case type-id
+      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
+          nil
+          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
+      1 (decode-long buffer) ;; long-value-type-id
+      2 (decode-double buffer) ;; double-value-type-id
+      3 (Date. (decode-long buffer)) ;; date-value-type-id
+      4 (decode-string buffer) ;; string-value-type-id
+      6 (cond ;; object-value-type-id
+          (= buffer true-value-buffer) true
+          (= buffer false-value-buffer) false
+          :else
+          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
       (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
 (def ^:private hex-id-pattern
@@ -387,7 +399,7 @@
 
   nil
   (id->buffer [this to]
-    (id->buffer (nil-id-buffer) to)))
+    (id->buffer nil-id-buffer to)))
 
 (deftype Id [^org.agrona.DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBuffer
@@ -444,10 +456,10 @@
 
   nil
   (->id-buffer [this]
-    (nil-id-buffer))
+    nil-id-buffer)
 
   (new-id [this]
-    (Id. (nil-id-buffer) (.hashCode ^DirectBuffer (nil-id-buffer))))
+    (Id. nil-id-buffer (.hashCode ^DirectBuffer nil-id-buffer)))
 
   Object
   (->id-buffer [this]

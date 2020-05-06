@@ -174,7 +174,7 @@
                      (-> entity-to-restore
                          (assoc :vt end-valid-time))
 
-                     (c/->EntityTx eid end-valid-time tx-time tx-id (c/nil-id-buffer)))]))))
+                     (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))]))))
 
       (->> (cons start-valid-time
                  (when-let [visible-entity (some-> (entity-at history eid start-valid-time tx-time)

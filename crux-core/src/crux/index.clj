@@ -432,7 +432,7 @@
           (if (morton/morton-number-within-range? min max z)
             (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
                   v (kv/value i)]
-              (if-not (mem/buffers=? (c/nil-id-buffer) v)
+              (if-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)
                  z]
@@ -480,7 +480,7 @@
           (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
                 v (kv/value i)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
-              (when-not (mem/buffers=? (c/nil-id-buffer) v)
+              (when-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)])
               (if morton/*use-space-filling-curve-index?*
@@ -622,8 +622,8 @@
 (def ^:private sorted-virtual-index-key-comparator
   (reify Comparator
     (compare [_ [a] [b]]
-      (mem/compare-buffers (or a (c/nil-id-buffer))
-                           (or b (c/nil-id-buffer))))))
+      (mem/compare-buffers (or a c/nil-id-buffer)
+                           (or b c/nil-id-buffer)))))
 
 (defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
   db/Index
@@ -680,7 +680,7 @@
   (let [result-name (:name idx)]
     (UnaryJoinIteratorState.
      idx
-     (or value (c/nil-id-buffer))
+     (or value c/nil-id-buffer)
      (when (and result-name results)
        {result-name results}))))
 
