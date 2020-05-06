@@ -178,6 +178,12 @@ html, body {
     margin: 1.5rem auto;
 }
 
+.entity-group__separator {
+    border: 0;
+    height: 1px;
+    background: #333;
+}
+
 .entity-group__key {
     margin-right: 1rem;
 }

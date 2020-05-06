@@ -496,11 +496,17 @@
                                   [:li (resolve-entity-map linked-entities v)])]
                     :else (str entity-map))))]
     [:div.entity-map__container
-      [:div.entity-map
-       (if entity-map
-         (nodes (linked-entities) entity-map)
-         [:div
-          [:strong (str eid)] " entity not found"])]
+     (if entity-map
+       [:div.entity-map
+        [:div.entity-group
+         [:div.entity-group__key
+          ":crux.db/id"]
+         [:div.entity-group__value
+          (str (:crux.db/id entity-map))]]
+        [:hr.entity-group__separator]
+        (nodes (linked-entities) (dissoc entity-map :crux.db/id))]
+       [:div.enttiy-map
+        [:strong (str eid)] " entity not found"])
       [:div.entity-vt-tt
        [:div.entity-vt-tt__title
         "Valid Time"]

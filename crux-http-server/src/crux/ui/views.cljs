@@ -127,7 +127,16 @@
         [:<>
          [:div.entity-map
           (if entity-result
-            (entity->hiccup linked-entities entity-result entity-name)
+            [:<>
+             [:div.entity-group
+              [:div.entity-group__key
+               ":crux.db/id"]
+              [:div.entity-group__value
+               (str (:crux.db/id entity-result))]]
+             [:hr.entity-group__separator]
+             (entity->hiccup linked-entities
+                             (dissoc entity-result :crux.db/id)
+                             entity-name)]
             [:<> [:strong entity-name] " entity not found"])]
          [:div.entity-vt-tt
           [:div.entity-vt-tt__title
