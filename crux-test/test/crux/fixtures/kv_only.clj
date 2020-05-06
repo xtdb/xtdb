@@ -38,6 +38,11 @@
     (t/testing "RocksDB"
       (f))))
 
+(defn with-rocksdb-nio [f]
+  (binding [*kv-module* 'crux.kv.rocksdb.nio/kv]
+    (t/testing "RocksDBNIO"
+      (f))))
+
 (defn with-rocksdb-jnr [f]
   (binding [*kv-module* 'crux.kv.rocksdb.jnr/kv]
     (t/testing "RocksJNRDB"
@@ -54,5 +59,5 @@
       (f))))
 
 (defn with-each-kv-store-implementation [f]
-  (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-rocksdb-jnr with-lmdb with-lmdb-jnr]]
+  (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-rocksdb-jnr with-rocksdb-nio with-lmdb with-lmdb-jnr]]
     (with-kv-store-implementation f)))
