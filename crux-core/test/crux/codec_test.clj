@@ -68,12 +68,14 @@
 
 (tcct/defspec test-generative-primitive-value-decoder 1000
   (prop/for-all [v (gen/one-of [gen/large-integer
-                                (gen/double* {:NaN? false})
+                                gen/double
                                 (gen/fmap #(Date. (long %)) gen/large-integer)
                                 gen/string])]
                 (let [buffer (c/->value-buffer v)]
                   (if (c/can-decode-value-buffer? buffer)
-                    (t/is (= v (c/decode-value-buffer buffer))
+                    (t/is (if (and (double? v) (Double/isNaN v))
+                            (Double/isNaN (c/decode-value-buffer buffer))
+                            (= v (c/decode-value-buffer buffer)))
                           (str (pr-str v) " " (class v)))
                     (t/is (= @#'c/object-value-type-id
                              (.getByte (c/value-buffer-type-id buffer) 0)))))))
