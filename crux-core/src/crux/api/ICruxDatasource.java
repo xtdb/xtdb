@@ -155,11 +155,37 @@ public interface ICruxDatasource extends Closeable {
     @Deprecated
     public ICursor<Map<Keyword,?>> openHistoryDescending(Object eid);
 
-    // TODO javadoc
-    public List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions opts);
+    /**
+     * Eagerly retrieves entity history for the given entity.
+     *
+     * Each entry in the result contains the following keys:
+     * * `:crux.db/valid-time`,
+     * * `:crux.db/tx-time`,
+     * * `:crux.tx/tx-id`,
+     * * `:crux.db/content-hash`
+     * * `:crux.db/doc` (if {@link HistoryOptions#withDocs(boolean) withDocs} is set on the options).
+     *
+     * If {@link HistoryOptions#withCorrections(boolean) withCorrections} is set
+     * on the options, bitemporal corrections are also included in the sequence,
+     * sorted first by valid-time, then transaction-time.
+     *
+     * No matter what `start` and `end` parameters you specify, you won't receive
+     * results later than the valid-time and transact-time of this DB value.
+     *
+     * @param eid The entity id to return history for
+     * @return an eagerly-evaluated sequence of changes to the given entity.
+     */
+    public List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions options);
 
-    // TODO javadoc
-    public ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions opts);
+    /**
+     * Lazily retrieves entity history for the given entity.
+     * Don't forget to close the cursor when you've consumed enough history!
+     *
+     * @see {@link entityHistory(Object, HistoryOptions)}
+     * @param eid The entity id to return history for
+     * @return a cursor of changes to the given entity.
+     */
+    public ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions options);
 
     /**
      * The valid time of this db.

@@ -8,12 +8,49 @@ public class HistoryOptions {
     }
 
     public final SortOrder sortOrder;
+
+    /**
+     * Specifies whether to return bitemporal corrections in the history response.
+     *
+     * If this is set to `true`, corrections will be returned within the
+     * sequence, sorted first by valid-time, then transaction-time.
+     */
     public final boolean withCorrections;
+
+    /**
+     * Specifies whether to return documents in the history response.
+     *
+     * If this is set to `true`, documents will be included under the
+     * `:crux.db/doc` key.
+     */
     public final boolean withDocs;
 
+    /**
+     * Sets the starting valid time.
+     *
+     * The history response will include entries starting at this valid time (inclusive).
+     */
     public final Date startValidTime;
+
+    /**
+     * Sets the starting transaction time.
+     *
+     * The history response will include entries starting at this transaction time (inclusive).
+     */
     public final Date startTransactionTime;
+
+    /**
+     * Sets the end valid time.
+     *
+     * The history response will include entries up to this valid time (exclusive).
+     */
     public final Date endValidTime;
+
+    /**
+     * Sets the end transaction time.
+     *
+     * The history response will include entries up to this transaction time (exclusive).
+     */
     public final Date endTransactionTime;
 
     public HistoryOptions(SortOrder sortOrder) {

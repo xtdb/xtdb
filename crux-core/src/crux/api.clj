@@ -311,12 +311,31 @@
   (entity-history
     [node eid sort-order]
     [node eid sort-order opts]
-    "TODO docstring")
+    "Eagerly retrieves entity history for the given entity.
+
+  Options:
+  * `sort-order` (parameter): `#{:asc :desc}`
+  * `:with-docs?`: specifies whether to include documents in the entries
+  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
+  * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
+  * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
+
+  No matter what `:start` and `:end` parameters you specify, you won't receive
+  results later than the valid-time and transact-time of this DB value.
+
+  Each entry in the result contains the following keys:
+   * `:crux.db/valid-time`,
+   * `:crux.db/tx-time`,
+   * `:crux.tx/tx-id`,
+   * `:crux.db/content-hash`
+   * `:crux.db/doc` (see `with-docs?`).")
 
   (open-entity-history
     ^crux.api.ICursor [node eid sort-order]
     ^crux.api.ICursor [node eid sort-order opts]
-    "TODO docstring")
+    "Lazily retrieves entity history for the given entity.
+  Don't forget to close the cursor when you've consumed enough history!
+  See `entity-history` for all the options")
 
   (valid-time [db]
     "returns the valid time of the db.
@@ -327,6 +346,15 @@
     "returns the time of the latest transaction applied to this db value.
   If a tx time was specified when db value was acquired then returns
   the specified time."))
+
+(let [arglists '(^crux.api.ICursor
+                 [db eid sort-order]
+                 ^crux.api.ICursor
+                 [db eid sort-order {:keys [with-docs? with-corrections?]
+                                     {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
+                                     {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}])]
+  (alter-meta! #'entity-history assoc :arglists arglists)
+  (alter-meta! #'open-entity-history assoc :arglists arglists))
 
 (extend-protocol PCruxDatasource
   ICruxDatasource
