@@ -101,7 +101,7 @@
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt compare
                           (db/entity-history nested-index-store eid :asc
-                                             {:from {:crux.db/valid-time valid-time}})
+                                             {:start {:crux.db/valid-time valid-time}})
                           (->> (get etxs eid)
                                (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
 
@@ -109,7 +109,7 @@
     (with-open [nested-index-store (db/open-nested-index-store index-store)]
       (f (merge-histories etx->vt #(compare %2 %1)
                           (db/entity-history nested-index-store eid :desc
-                                             {:from {:crux.db/valid-time valid-time}})
+                                             {:start {:crux.db/valid-time valid-time}})
                           (->> (reverse (get etxs eid))
                                (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
 

@@ -1236,8 +1236,8 @@
     (let [index-store (open-index-store this)]
       (cio/->cursor #(cio/try-close index-store)
                     (for [^EntityTx entity-tx (db/entity-history index-store eid :asc
-                                                                 {:from {:crux.db/valid-time valid-time}
-                                                                  :until {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
+                                                                 {:start {:crux.db/valid-time valid-time}
+                                                                  :end {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
 
@@ -1252,8 +1252,8 @@
     (let [index-store (open-index-store this)]
       (cio/->cursor #(cio/try-close index-store)
                     (for [^EntityTx entity-tx (db/entity-history index-store eid :desc
-                                                                 {:from {:crux.db/valid-time valid-time
-                                                                         :crux.tx/tx-time transact-time}})]
+                                                                 {:start {:crux.db/valid-time valid-time
+                                                                          :crux.tx/tx-time transact-time}})]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
 
