@@ -1,3 +1,4 @@
+;; from https://neo4j.com/graphgist/know-more-about-james-bond-movie with love
 [
  {:film/director :john-glen, :film/bond :roger-moore, :film/vehicles [:jeep-cherokee :bronco :ltd :chevrolet-corvette-c4 :cadillac-fleetwood-75-limousine :silver-cloud-ii], :film/box "321172633", :film/bond-girls [:mary-stävin :grace-jones :fiona-fullerton :tanya-roberts], :type :film, :film/name "A View to a Kill", :film/year "1985", :crux.db/id :a-view-to-a-kill}
  {:film/director :martin-campbell, :film/bond :daniel-craig, :film/vehicles [:dbs-v12 :db5 :crown-victoria-police-interceptor :mondeo-25-litre-st :xj8 :xj9 :range-rover-sport], :film/box "669789482", :film/bond-girls [:eva-green], :type :film, :film/name "Casino Royale", :film/year "2006", :crux.db/id :casino-royale}
