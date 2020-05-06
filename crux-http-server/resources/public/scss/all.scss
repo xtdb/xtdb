@@ -256,3 +256,61 @@ ul.entity-group__value li::before {
 .entity-vt-tt__value:not(:last-child) {
     margin-bottom: 1rem;
 }
+
+.entity__navigated-pages {
+    margin-bottom: 2rem;
+}
+
+.entity__navigated-page {
+    text-decoration: none;
+}
+
+.entity__navigated-page:hover {
+    color: red;
+}
+
+.navigated-pages__seperator {
+    margin: auto .5em;
+}
+
+.entity__navigated-page--active {
+    font-weight: bold;
+}
+
+@keyframes rotating {
+    from {
+	transform: rotate(0deg);
+	-o-transform: rotate(0deg);
+	-ms-transform: rotate(0deg);
+	-moz-transform: rotate(0deg);
+	-webkit-transform: rotate(0deg);
+    }
+    to {
+	transform: rotate(360deg);
+	-o-transform: rotate(360deg);
+	-ms-transform: rotate(360deg);
+	-moz-transform: rotate(360deg);
+	-webkit-transform: rotate(360deg);
+    }
+}
+@-webkit-keyframes rotating {
+    from {
+	transform: rotate(0deg);
+	-webkit-transform: rotate(0deg);
+    }
+    to {
+	transform: rotate(360deg);
+	-webkit-transform: rotate(360deg);
+    }
+}
+.rotating {
+    -webkit-animation: rotating 1s linear infinite;
+    -moz-animation: rotating 1s linear infinite;
+    -ms-animation: rotating 1s linear infinite;
+    -o-animation: rotating 1s linear infinite;
+    animation: rotating 1s linear infinite;
+}
+
+.entity-map__load-icon {
+    @extend .rotating;
+}

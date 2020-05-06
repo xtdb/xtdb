@@ -49,3 +49,8 @@
       :entity-name (get-in db [:current-page :route-params :entity-id])
       :entity-result (get-in db [:entity-data "entity"])
       :linked-entities (get-in db [:entity-data "linked-entities"])})))
+
+(rf/reg-sub
+ ::entity-loading?
+ (fn [db _]
+   (:entity-loading? db)))

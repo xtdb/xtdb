@@ -116,21 +116,26 @@
 (defn entity-view
   []
   (let [{:keys [linked-entities entity-result entity-name vt tt]}
-        @(rf/subscribe [::sub/entity-view-data])]
+        @(rf/subscribe [::sub/entity-view-data])
+        loading? @(rf/subscribe [::sub/entity-loading?])]
     [:<>
      [:h1 "/_entity"]
      [:div.entity-map__container
-      [:div.entity-map
-       (if entity-result
-         (entity->hiccup linked-entities entity-result)
-         [:<> [:strong entity-name] " entity not found"])]
-      [:div.entity-vt-tt
-       [:div.entity-vt-tt__title
-        "Valid Time"]
-       [:div.entity-vt-tt__value vt]
-       [:div.entity-vt-tt__title
-        "Transaction Time"]
-       [:div.entity-vt-tt__value tt]]]]))
+      (if loading?
+        [:div.entity-map.entity-map--loading
+         [:i.fas.fa-spinner.entity-map__load-icon]]
+        [:<>
+         [:div.entity-map
+          (if entity-result
+            (entity->hiccup linked-entities entity-result entity-name)
+            [:<> [:strong entity-name] " entity not found"])]
+         [:div.entity-vt-tt
+          [:div.entity-vt-tt__title
+           "Valid Time"]
+          [:div.entity-vt-tt__value vt]
+          [:div.entity-vt-tt__title
+           "Transaction Time"]
+          [:div.entity-vt-tt__value tt]]])]]))
 
 (defn view []
   (let [current-page @(rf/subscribe [::sub/current-page])]

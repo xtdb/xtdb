@@ -89,7 +89,8 @@
                        last)
          query-params (js/URLSearchParams. js/window.location.search)]
      (.set query-params "link-entities?" true)
-     {:http-xhrio {:method :get
+     {:db (assoc db :entity-loading? true)
+      :http-xhrio {:method :get
                    :uri (str "/_entity/" entity-id "?" query-params)
                    :response-format (ajax-edn/edn-response-format)
                    :on-success [::success-fetch-entity]
@@ -99,10 +100,12 @@
  ::success-fetch-entity
  (fn [{:keys [db]} [_ result]]
    (prn "fetch entity success!")
-   {:db (assoc db :entity-data result)}))
+   {:db (-> db
+            (assoc :entity-data result)
+            (dissoc :entity-loading?))}))
 
 (rf/reg-event-db
  ::fail-fetch-entity
  (fn [db [_ {:keys [message] :as result}]]
    (prn "Failure: get fetch entity result: " result)
-   db))
+   (dissoc db :entity-loading?)))
