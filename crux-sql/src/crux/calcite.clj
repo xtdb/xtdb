@@ -6,12 +6,15 @@
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
+            crux.calcite.types
             crux.db)
   (:import crux.calcite.CruxTable
+           crux.calcite.types.SQLFunction
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
+           java.util.List
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            org.apache.calcite.DataContext
@@ -59,36 +62,32 @@
 (defprotocol RexNodeToClauses
   (->clauses [this schema]))
 
-;; Todo consider merging the two protocols
+(defn- rex->keyword [^RexCall r schema]
+  (keyword (->var (first (.-operands r)) schema)))
 
 (extend-protocol RexNodeToVar
   RexInputRef
   (->var [this schema]
-    [(get-in schema [:crux.sql.table/query :find (.getIndex this)])])
+    (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
 
   RexLiteral
   (->var [this schema]
-    [(.getValue2 this)])
+    (.getValue2 this))
 
   RexDynamicParam
   (->var [this schema]
-    [this])
+    this)
 
   RexCall
   (->var [this schema]
     (if (and (= SqlKind/OTHER_FUNCTION (.getKind this))
              (= "KEYWORD" (str (.-op this))))
-      [(keyword (first (->var (first (.-operands this)) schema)))]
+      (rex->keyword this schema)
       (if-let [op (lookup-op this)]
-        (let [s (gensym)]
-          [s (assoc-in (->clauses this schema) [0 1] s)])
+        (SQLFunction. (gensym) op (map #(->var % schema) (.getOperands this)))
         (throw (IllegalArgumentException. (str "Unsupported fn: " this)))))))
 
-(defn- operands->clauses [schema ^RexCall filter*]
-  (mapcat #(->clauses % schema) (.-operands ^RexCall filter*)))
-
 (defn- ground-vars [or-statement]
-  (def o or-statement)
   (let [vars (distinct (mapcat #(filter symbol? (rest (first %))) or-statement))]
     (vec
      (for [clause or-statement]
@@ -97,34 +96,54 @@
 (extend-protocol RexNodeToClauses
   RexInputRef
   (->clauses [this schema]
-    [[(list '= (first (->var this schema)) true)]])
+    [[(list '= (->var this schema) true)]])
 
   RexCall
   (->clauses [filter* schema]
     (if-let [op (lookup-op filter*)]
-      (let [vars (for [o (.getOperands filter*)]
-                   (->var o schema))]
-        (reduce into [[(apply list op (map first vars))]] (keep second vars)))
+      [[(apply list op (map #(->var % schema) (.getOperands filter*)))]]
       (condp = (.getKind filter*)
         SqlKind/AND
-        (operands->clauses schema filter*)
+        (->clauses (.-operands filter*) schema)
         SqlKind/OR
-        [(apply list 'or (ground-vars (operands->clauses schema filter*)))]
+        [(apply list 'or (ground-vars (->clauses (.-operands filter*) schema)))]
         SqlKind/NOT
-        [(apply list 'not (operands->clauses schema filter*))]))))
+        [(apply list 'not (->clauses (.-operands filter*) schema))])))
+
+  java.util.List
+  (->clauses [this schema]
+    (mapcat #(->clauses % schema) this)))
+
+(defn- post-process [clauses]
+  (let [args (atom {})
+        sql-ops (atom [])
+        clauses (postwalk (fn [x]
+                            (condp instance? x
+
+                              SQLFunction
+                              (do
+                                (swap! sql-ops conj x)
+                                (.sym x))
+
+                              RexDynamicParam
+                              (let [sym (gensym)]
+                                (swap! args assoc (.getName ^RexDynamicParam x) sym)
+                                sym)
+
+                              x))
+                          clauses)
+        calc-clauses (for [op ^SQLOperation @sql-ops]
+                       [(apply list (.op op) (.operands op)) (.sym op)])]
+    {:clauses clauses
+     :calc-clauses calc-clauses
+     :args @args}))
 
 (defn enrich-filter [schema ^RexNode filter]
-  (let [args (atom {})
-        clauses (postwalk (fn [x] (if (instance? RexDynamicParam x)
-                                    (let [sym (gensym)]
-                                      (swap! args assoc (.getName ^RexDynamicParam x) sym)
-                                      sym)
-                                    x))
-                          (->clauses filter schema))]
+  (let [{:keys [clauses calc-clauses args]} (post-process (->clauses filter schema))]
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
+        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses calc-clauses)
         ;; Todo consider case of multiple arg maps
-        (update-in [:crux.sql.table/query :args] merge @args))))
+        (update-in [:crux.sql.table/query :args] merge args))))
 
 (defn enrich-sort-by [schema sort-fields]
   (assoc-in schema [:crux.sql.table/query :order-by]
@@ -146,31 +165,12 @@
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
-(defprotocol OperandToFieldIndex
-  (operand->field-indexes [this]))
-
-(extend-protocol OperandToFieldIndex
-  Pair
-  (operand->field-indexes [this]
-    (operand->field-indexes (.-left this)))
-
-  RexInputRef
-  (operand->field-indexes [this]
-    [(.getIndex this)])
-
-  RexLiteral
-  (operand->field-indexes [this]
-    [])
-
-  RexCall
-  (operand->field-indexes [this]
-    (mapcat operand->field-indexes (.operands this))))
-
 (defn enrich-project [schema projects]
-  (let [ps (mapv #(->var % schema) (map #(.-left %) projects))]
+  (let [{:keys [clauses calc-clauses]} (post-process (mapv #(->var (.-left %) schema) projects))]
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) (reduce into [] (mapv second ps)))
-        (assoc-in [:crux.sql.table/query :find] (mapv first ps)))))
+        ;; any calcs..
+        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
+        (assoc-in [:crux.sql.table/query :find] clauses))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (let [q1 (:crux.sql.table/query s1)
