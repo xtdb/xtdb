@@ -65,45 +65,11 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
-     * Returns the transaction history of an entity, in reverse
-     * chronological order. Includes corrections, but does not include
-     * the actual documents.
-     *
-     * @param eid an object that can be coerced into an entity id.
-     * @return    the transaction history.
-     */
-    @Deprecated
-    public List<Map<Keyword,Object>> history(Object eid);
-    // todo elaborate about corrections contents
-
-    /**
-     * Returns the transaction history of an entity, ordered by valid
-     * time / transaction time in chronological order, earliest
-     * first. Includes corrections, but does not include the actual
-     * documents.
-     *
-     * Giving null as any of the date arguments makes the range open
-     * ended for that value.
-     *
-     * @param eid                  an object that can be coerced into an entity id.
-     * @param validTimeStart       the start valid time or null.
-     * @param transactionTimeStart the start transaction time or null.
-     * @param validTimeEnd         the end valid time or null, inclusive.
-     * @param transactionTimeEnd   the start transaction time or null, inclusive.
-     * @return                     the transaction history.
-     */
-    @Deprecated
-    public List<Map<Keyword,?>> historyRange(Object eid, Date validTimeStart, Date transactionTimeStart, Date validTimeEnd, Date transactionTimeEnd);
-    // todo elaborate
-
-    /**
      * Returns the status of this node as a map.
      *
      * @return the status map.
      */
     public Map<Keyword,?> status();
-    // TODO elaborate
-
 
     /**
      * Checks if a submitted tx was successfully committed.
@@ -126,12 +92,6 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return the latest known transaction time.
      */
     public Date sync(Duration timeout);
-
-    /**
-     * @deprecated see {@link #awaitTxTime}
-     */
-    @Deprecated
-    public Date sync(Date txTime, Duration timeout);
 
     /**
      * Blocks until the node has indexed a transaction that is past the supplied
