@@ -13,8 +13,9 @@
                  [com.taoensso/encore "2.114.0"]
                  [org.agrona/agrona "1.0.7"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]]
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [org.clojure/test.check "0.10.0"]]}}
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+             :test {:dependencies [[juxt/crux-test "derived-from-git" :scope "test"]
+                                   [org.clojure/test.check "0.10.0"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
