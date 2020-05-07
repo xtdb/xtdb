@@ -178,7 +178,7 @@
     (UnsafeBuffer. (->off-heap b tmp) 0 (capacity b))))
 
 (defn direct-byte-buffer ^java.nio.ByteBuffer [b]
-  (let [b ^DirectBuffer (->off-heap b)]
+  (let [b (->off-heap b)]
     (-> (.byteBuffer b)
         (.position 0)
         (.limit (.capacity b)))))

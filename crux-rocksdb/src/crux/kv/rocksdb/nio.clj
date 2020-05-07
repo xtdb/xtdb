@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.kv.rocksdb.nio
-  "RocksDB KV backend for Crux."
+  "RocksDB KV backend for Crux using direct ByteBuffers:
+  https://github.com/facebook/rocksdb/pull/2283"
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
@@ -10,8 +11,6 @@
   (:import java.io.Closeable
            java.nio.ByteBuffer
            java.util.function.ToIntFunction
-           clojure.lang.MapEntry
-           org.agrona.DirectBuffer
            (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
                         Options ReadOptions RocksDB RocksIterator
                         BlockBasedTableConfig WriteBatch WriteOptions
@@ -21,7 +20,7 @@
 
 (defn- read-value [^ToIntFunction f]
   (loop [limit 32]
-    (let [out (.byteBuffer ^DirectBuffer (mem/allocate-buffer limit))
+    (let [out (mem/direct-byte-buffer (mem/allocate-buffer limit))
           result (.applyAsInt f out)]
       (cond
         (= result RocksDB/NOT_FOUND)
@@ -39,7 +38,7 @@
                   (applyAsInt [_ out]
                     (.key i ^ByteBuffer out))))))
 
-(defrecord RocksKvIterator [^RocksIterator i]
+(defrecord RocksNIOKvIterator [^RocksIterator i]
   kv/KvIterator
   (seek [this k]
     (.seek i (mem/direct-byte-buffer k))
@@ -62,10 +61,10 @@
   (close [this]
     (.close i)))
 
-(defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
+(defrecord RocksNIOKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
   (new-iterator [this]
-    (->RocksKvIterator (.newIterator db read-options)))
+    (->RocksNIOKvIterator (.newIterator db read-options)))
 
   (get-value [this k]
     (read-value (reify ToIntFunction
@@ -90,15 +89,15 @@
                              (.setPinL0FilterAndIndexBlocksInCache true)))
     (.setIncreaseParallelism (max (.availableProcessors (Runtime/getRuntime)) 2))))
 
-(defrecord RocksKv [db-dir]
+(defrecord RocksNIOKv [db-dir]
   kv/KvStore
   (new-snapshot [{:keys [^RocksDB db]}]
     (let [snapshot (.getSnapshot db)]
-      (->RocksKvSnapshot db
-                         (doto (ReadOptions.)
-                           (.setPinData true)
-                           (.setSnapshot snapshot))
-                         snapshot)))
+      (->RocksNIOKvSnapshot db
+                            (doto (ReadOptions.)
+                              (.setPinData true)
+                              (.setSnapshot snapshot))
+                            snapshot)))
 
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]
@@ -163,11 +162,11 @@
                      write-opts (doto (WriteOptions.)
                                   (.setSync (boolean sync?))
                                   (.setDisableWAL (boolean disable-wal?)))]
-                 (-> (map->RocksKv {:db-dir db-dir
-                                    :db db
-                                    :options opts
-                                    :stats stats
-                                    :write-options write-opts})
+                 (-> (map->RocksNIOKv {:db-dir db-dir
+                                       :db db
+                                       :options opts
+                                       :stats stats
+                                       :write-options write-opts})
                      (cond-> check-and-store-index-version idx/check-and-store-index-version)
                      (lru/wrap-lru-cache options))))
 
