@@ -130,17 +130,17 @@
                        :->jwt-token ->jwt-token}))
 
   (query [this q]
-    (api-request-sync (str url "/query")
-                      {:body (assoc (as-of-map this)
-                                    :query (q/normalize-query q))
-                       :->jwt-token ->jwt-token}))
+    (with-open [res (.openQuery this q)]
+      (if (:order-by q)
+        (vec (iterator-seq res))
+        (set (iterator-seq res)))))
 
   (openQuery [this q]
-    (let [in (api-request-sync (str url "/query-stream")
+    (let [in (api-request-sync (str url "/query")
                                {:body (assoc (as-of-map this)
                                              :query (q/normalize-query q))
-                                :http-opts {:as :stream}
-                                :->jwt-token ->jwt-token})]
+                                :->jwt-token ->jwt-token
+                                :http-opts {:as :stream}})]
       (cio/->cursor #(.close ^Closeable in)
                     (edn-list->lazy-seq in))))
 
