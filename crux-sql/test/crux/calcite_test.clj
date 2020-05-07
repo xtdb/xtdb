@@ -1,14 +1,16 @@
 (ns crux.calcite-test
   (:require [clojure.test :as t]
+            [crux.api :as c]
             [crux.fixtures :as f]
             [crux.fixtures.api :as fapi :refer [*api* submit+await-tx]]
             [crux.fixtures.calcite :as cf :refer [explain prepared-query query]]
             [crux.fixtures.kv :as kvf]
-            [crux.fixtures.standalone :as fs]))
+            [crux.fixtures.standalone :as fs]
+            [crux.query :as q]))
 
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection f)
-  (t/testing "With Avatica Connection"
+  #_(t/testing "With Avatica Connection"
     (cf/with-avatica-connection f)))
 
 (defn- with-sql-schema [f]
@@ -221,13 +223,6 @@
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :age 42 :years_worked 21}
                       {:crux.db/id :malcolm :name "Malcolm" :age 22 :years_worked 10}])
 
-  (t/is (= #{[:ivan]}  (c/q (c/db *api*) '{:find [e]
-                                           :where [[e :age ?age]
-                                                   [e :years_worked years-worked?]
-                                                   [(* 2 years-worked?) ?bah]
-                                                   [(= ?age ?bah)]]})))
-
-
   (t/testing "filter operators"
     (let [q "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = (YEARS_WORKED * 2)"]
       (t/is (= ["Ivan"]
@@ -255,12 +250,18 @@
       (t/is (= (str "CruxToEnumerableConverter\n"
                     "  CruxProject(NAME=[$1], AGE=[*($2, 2)])\n"
                     "    CruxTableScan(table=[[crux, PERSON]])\n")
-               (explain q)))))
+               (explain q))))
 
-  (t/testing "tphc-022-example-substring"
-    (let [q "SELECT NAME FROM PERSON WHERE substring(name from 1 for 1) in ('I', 'V')"]
-      (t/is (= [{:name "Ivan"}]
-               (query q))))))
+    (t/testing "nested"
+      (let [q "SELECT NAME, ((PERSON.AGE * 2) * 3) AS AGE FROM PERSON"]
+        (t/is (= [{:name "Ivan", :age 252} {:name "Malcolm", :age 132}]
+                 (query q))))))
+
+  ;; (t/testing "tphc-022-example-substring"
+  ;;   (let [q "SELECT NAME FROM PERSON WHERE substring(name from 1 for 1) in ('I', 'V')"]
+  ;;     (t/is (= [{:name "Ivan"}]
+  ;;              (query q)))))
+  )
 
 (t/deftest test-keywords
   (f/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
