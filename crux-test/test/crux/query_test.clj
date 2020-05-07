@@ -2646,12 +2646,12 @@
     (t/is (not (api/entity db :a)))
     (t/is (api/entity (api/db *api*) :a))
 
-    (with-open [snapshot (api/new-snapshot db)]
-      (t/is (empty? (api/q db snapshot '{:find [x] :where [[x :arbitrary-key _]]}))))
+    (with-open [res (api/open-q db '{:find [x] :where [[x :arbitrary-key _]]})]
+      (t/is (empty? (iterator-seq res))))
 
     (let [db (api/db *api*)]
-      (with-open [snapshot (api/new-snapshot db)]
-        (t/is (first (api/q db snapshot '{:find [x] :where [[x :crux.db/id _]]})))))))
+      (with-open [res (api/open-q db '{:find [x] :where [[x :crux.db/id _]]})]
+        (t/is (first (iterator-seq res)))))))
 
 (t/deftest test-can-use-cons-in-query-377
   (fix/transact! *api* [{:crux.db/id :issue-377-test :name "TestName"}])
@@ -2779,9 +2779,9 @@
                (api/q db '{:find [a] :where [[_ :age a]], :order-by [[a :desc]]}))))
 
     (t/testing "lazy query returns distinct results"
-      (with-open [snapshot (api/new-snapshot db)]
+      (with-open [res (api/open-q db '{:find [a] :where [[_ :age a]]})]
         (t/is (= [[20] [25] [30]]
-                 (sort (api/q db snapshot '{:find [a] :where [[_ :age a]]}))))))))
+                 (sort (iterator-seq res))))))))
 
 (t/deftest test-unsorted-args-697
   (fix/transact! *api* [{:crux.db/id :foo-some-bar-nil, :bar nil, :foo true}
