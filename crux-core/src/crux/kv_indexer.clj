@@ -98,6 +98,15 @@
 (defn- inc-unsigned-prefix-buffer [buffer prefix-size]
   (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer buffer prefix-size (.get idx/seek-buffer-tl)) prefix-size)))
 
+(defn ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
+  (assoc entity-tx :content-hash (when (pos? (.capacity content-hash))
+                                   (c/safe-id (c/new-id content-hash)))))
+
+(defn safe-entity-tx ^crux.codec.EntityTx [entity-tx]
+  (-> entity-tx
+      (update :eid c/safe-id)
+      (update :content-hash c/safe-id)))
+
 (defn- find-first-entity-tx-within-range [i min max eid]
   (let [prefix-size (+ c/index-id-size c/id-size)
         seek-k (c/encode-entity+z+tx-id-key-to
@@ -108,11 +117,11 @@
       (when (and k (mem/buffers=? seek-k k prefix-size))
         (let [z (c/decode-entity+z+tx-id-key-as-z-number-from k)]
           (if (morton/morton-number-within-range? min max z)
-            (let [entity-tx (idx/safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
+            (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
                   v (kv/value i)]
               (if-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
-                 (idx/enrich-entity-tx entity-tx v)
+                 (enrich-entity-tx entity-tx v)
                  z]
                 [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
@@ -141,7 +150,7 @@
 
 (defn- ->entity-tx [[k v]]
   (-> (c/decode-entity+vt+tt+tx-id-key-from k)
-      (idx/enrich-entity-tx v)))
+      (enrich-entity-tx v)))
 
 (defn entity-history-seq-ascending
   ([i eid] ([i eid] (entity-history-seq-ascending i eid {})))
@@ -293,20 +302,17 @@
                     nil)]
         (loop [k (kv/seek i seek-k)]
           (when (and k (mem/buffers=? seek-k k prefix-size))
-            (let [entity-tx (idx/safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
+            (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
                   v (kv/value i)]
               (if (<= (compare (.tt entity-tx) transact-time) 0)
                 (when-not (mem/buffers=? c/nil-id-buffer v)
-                  (idx/enrich-entity-tx entity-tx v))
+                  (enrich-entity-tx entity-tx v))
                 (if morton/*use-space-filling-curve-index?*
                   (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
                     (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
                       (when-not (= ::deleted-entity k)
                         v)))
                   (recur (kv/next i))))))))))
-
-  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
   (open-entity-history [this eid sort-order opts]
     (let [i (kv/new-iterator snapshot)
