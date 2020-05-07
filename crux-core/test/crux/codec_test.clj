@@ -2,14 +2,14 @@
   (:require [clojure.test :as t]
             [crux.codec :as c]
             [crux.memory :as mem]
-            [crux.fixtures :as fix]
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop])
   (:import crux.codec.Id
            java.util.Date))
 
-(t/use-fixtures :each fix/with-silent-test-check)
+(declare with-silent-test-check)
+(t/use-fixtures :each #'with-silent-test-check)
 
 (t/deftest test-ordering-of-values
   (t/testing "longs"
@@ -83,3 +83,7 @@
                                (> (count v) @#'c/max-string-index-length)
                                (= @#'c/object-value-type-id
                                   (.getByte (c/value-buffer-type-id buffer) 0))))))))
+
+(defn with-silent-test-check [f]
+  (binding [tcct/*report-completion* false]
+    (f)))
