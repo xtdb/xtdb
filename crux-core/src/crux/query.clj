@@ -1194,18 +1194,9 @@
     (with-open [index-store (open-index-store this)]
       (entity this index-store eid)))
 
-  (entity [this index-store eid]
-    (entity this index-store eid))
-
   (entityTx [this eid]
     (with-open [index-store (open-index-store this)]
       (entity-tx this index-store eid)))
-
-  (newSnapshot [this]
-    (open-index-store this))
-
-  (q [this query]
-    (.query this query))
 
   (query [this query]
     ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
@@ -1224,11 +1215,6 @@
                          ::query-id query-id}))
         ret)))
 
-  (q [this index-store query]
-    ;; TODO this doesn't report query metrics because we can't know when the query's completed (it's lazy)
-    ;; when the snapshot gets refactored away (#410), if we return a 'closeable', we can call it at that point
-    (crux.query/query this index-store (normalize-and-conform-query (:conform-cache query-engine) query)))
-
   (openQuery [this query]
     (let [index-store (open-index-store this)
           {:keys [bus conform-cache]} query-engine
@@ -1246,40 +1232,6 @@
                                        ::query safe-query
                                        ::query-id query-id})))
                     (crux.query/query this index-store conformed-query))))
-
-  (historyAscending [this eid]
-    (with-open [history (.openHistoryAscending this eid)]
-      (vec (iterator-seq history))))
-
-  (historyAscending [this snapshot eid]
-    (.historyAscending this eid))
-
-  (openHistoryAscending [this eid]
-    (let [index-store (open-index-store this)
-          history (db/open-entity-history index-store eid :asc
-                                          {:start {:crux.db/valid-time valid-time}
-                                           :end {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
-      (cio/->cursor #(run! cio/try-close [history index-store])
-                    (for [^EntityTx entity-tx (iterator-seq history)]
-                      (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
-
-  (historyDescending [this eid]
-    (with-open [history (.openHistoryDescending this eid)]
-      (vec (iterator-seq history))))
-
-  (historyDescending [this snapshot eid]
-    (.historyDescending this eid))
-
-  (openHistoryDescending [this eid]
-    (let [index-store (open-index-store this)
-          history (db/open-entity-history index-store eid :desc
-                                          {:start {:crux.db/valid-time valid-time
-                                                   :crux.tx/tx-time transact-time}})]
-      (cio/->cursor #(run! cio/try-close [history index-store])
-                    (for [^EntityTx entity-tx (iterator-seq history)]
-                      (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
 
   (entityHistory [this eid opts]
     (with-open [history (.openEntityHistory this eid opts)]
@@ -1325,11 +1277,8 @@
                               :crux.db/content-hash (.content-hash etx)}
                        with-docs? (assoc :crux.db/doc (db/get-document index-store (.content-hash etx)))))))))))
 
-  (validTime [_]
-    valid-time)
-
-  (transactionTime [_]
-    transact-time))
+  (validTime [_] valid-time)
+  (transactionTime [_] transact-time))
 
 (defrecord QueryEngine [^ExecutorService query-executor
                         indexer bus
