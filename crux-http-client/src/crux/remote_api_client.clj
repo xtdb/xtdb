@@ -125,12 +125,13 @@
                       {:method :get}))
 
   (query [this q]
-    (api-request-sync (str url "/query")
-                      (assoc (as-of-map this)
-                             :query (q/normalize-query q))))
+    (with-open [res (.openQuery this q)]
+      (if (:order-by q)
+        (vec (iterator-seq res))
+        (set (iterator-seq res)))))
 
   (openQuery [this q]
-    (let [in (api-request-sync (str url "/query-stream")
+    (let [in (api-request-sync (str url "/query")
                                (assoc (as-of-map this)
                                       :query (q/normalize-query q))
                                {:as :stream})]
