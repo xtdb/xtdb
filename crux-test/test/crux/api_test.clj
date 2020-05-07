@@ -153,12 +153,11 @@
               ivan {:crux.db/id :ivan :name "Ivan"}
               ivan-crux-id (c/new-id ivan)]
           (t/is (= (merge submitted-tx
-                          {:crux.db/id (str (c/new-id :ivan))
-                           :crux.db/content-hash (str ivan-crux-id)
+                          {:crux.db/id (c/new-id :ivan)
+                           :crux.db/content-hash ivan-crux-id
                            :crux.db/valid-time valid-time})
                    entity-tx))
-          (t/is (= [entity-tx] (api/history *api* :ivan)))
-          (t/is (= [entity-tx] (api/history-range *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
+          (t/is (= [(dissoc entity-tx :crux.db/id)] (api/entity-history db :ivan :asc)))
 
           (t/is (nil? (api/entity-tx (api/db *api* #inst "1999") :ivan))))))))
 
@@ -167,7 +166,7 @@
         submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
     (api/await-tx *api* submitted-tx)
     (t/is (api/entity (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))
-    (t/is (not-empty (api/history *api* {:user "Xwop1A7Xog4nD6AfhZaPgg"})))))
+    (t/is (not-empty (api/entity-history (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"} :asc)))))
 
 (t/deftest test-invalid-doc
   (t/is (thrown? IllegalArgumentException
@@ -293,110 +292,65 @@
           v3 (submit-ivan {:version 3} #inst "2019-02-03")
           v2-corrected (submit-ivan {:version 2, :corrected? true} #inst "2019-02-02")]
 
-      (with-open [history-asc (api/open-entity-history (api/db *api*) :ivan :asc
-                                                       {:start {:crux.db/valid-time #inst "2019-02-03"}
-                                                        :with-docs? true})]
-        (t/is (= [v3] (iterator-seq history-asc))))
+      (with-both-dbs [db (*api* #inst "2019-02-03")]
+        (t/is (= [v1 v2-corrected v3]
+                 (api/entity-history db :ivan :asc {:with-docs? true})))
 
-      (with-open [history-desc (api/open-entity-history (api/db *api*) :ivan :desc
-                                                        {:start {:crux.db/valid-time #inst "2019-02-03"}
-                                                         :with-docs? true})]
-        (t/is (= [v3 v2-corrected v1] (iterator-seq history-desc)))))))
+        (t/is (= [v3 v2-corrected v1]
+                 (api/entity-history db :ivan :desc {:with-docs? true})))
 
-(t/deftest test-db-history-api
-  (let [version-1-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]]) nil)
-                                        :crux.tx/tx-time)
-        version-2-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]]) nil)
-                                        :crux.tx/tx-time)
-        version-3-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]]) nil)
-                                        :crux.tx/tx-time)
-        version-2-corrected-submitted-tx-time (-> (.awaitTx *api* (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true} #inst "2019-02-02"]]) nil)
-                                                  :crux.tx/tx-time)]
+        (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
+                    history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
+          (t/is (= [v1 v2-corrected v3]
+                   (iterator-seq history-asc)))
+          (t/is (= [v3 v2-corrected v1]
+                   (iterator-seq history-desc)))))
 
-    (let [history (.history *api* :ivan)]
-      (t/is (= 4 (count history))))
+      (with-both-dbs [db (*api* #inst "2019-02-02")]
+        (t/is (= [v1 v2-corrected]
+                 (api/entity-history db :ivan :asc {:with-docs? true})))
+        (t/is (= [v2-corrected v1]
+                 (api/entity-history db :ivan :desc {:with-docs? true}))))
 
-    (with-both-dbs [db (*api* #inst "2019-02-03")]
-      (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
-               (map :crux.db/doc (api/history-ascending db :ivan))))
+      (with-both-dbs [db (*api* #inst "2019-01-31")]
+        (t/is (empty? (api/entity-history db :ivan :asc)))
+        (t/is (empty? (api/entity-history db :ivan :desc)))
 
-      (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
-                {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                {:crux.db/id :ivan :name "Ivan" :version 1}]
-               (map :crux.db/doc (api/history-descending db :ivan))))
+        (with-open [history-asc (api/open-entity-history db :ivan :asc)
+                    history-desc (api/open-entity-history db :ivan :desc)]
+          (t/is (empty? (iterator-seq history-asc)))
+          (t/is (empty? (iterator-seq history-desc)))))
 
-      (with-open [history-asc (api/open-history-ascending db :ivan)
-                  history-desc (api/open-history-descending db :ivan)]
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (->> (iterator-seq history-asc) (map :crux.db/doc))))
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
-                  {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                  {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (->> (iterator-seq history-desc) (map :crux.db/doc))))))
+      (with-both-dbs [db (*api* #inst "2019-02-04")]
+        (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
+                    history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
+          (t/is (= [v1 v2-corrected v3]
+                   (iterator-seq history-asc)))
+          (t/is (= [v3 v2-corrected v1]
+                   (iterator-seq history-desc)))))
 
-    (with-both-dbs [db (*api* #inst "2019-02-02")]
-      (with-open [snapshot (.newSnapshot db)]
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                  {:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (map :crux.db/doc (api/history-ascending db snapshot :ivan))))
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                  {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc (api/history-descending db snapshot :ivan))))))
+      (with-both-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
+        (t/is (empty? (api/entity-history db :ivan :asc)))
+        (t/is (empty? (api/entity-history db :ivan :desc))))
 
-    (with-both-dbs [db (*api* #inst "2019-01-31")]
-      (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
-                {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                {:crux.db/id :ivan :name "Ivan" :version 3}]
-               (map :crux.db/doc (api/history-ascending db :ivan))))
-      (t/is (empty? (map :crux.db/doc (api/history-descending db :ivan))))
+      (with-both-dbs [db (*api* #inst "2019-02-02" (:crux.tx/tx-time v2))]
+        (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
+                    history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
+          (t/is (= [v1 v2]
+                   (iterator-seq history-asc)))
+          (t/is (= [v2 v1]
+                   (iterator-seq history-desc)))))
 
-      (with-open [history-asc (api/open-history-ascending db :ivan)
-                  history-desc (api/open-history-descending db :ivan)]
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
-                  {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                  {:crux.db/id :ivan :name "Ivan" :version 3}]
-                 (->> (iterator-seq history-asc) (map :crux.db/doc))))
-        (t/is (empty? (iterator-seq history-desc)))))
-
-    (with-both-dbs [db (*api* #inst "2019-02-04")]
-      (with-open [history-asc (api/open-history-ascending db :ivan)
-                  history-desc (api/open-history-descending db :ivan)]
-        (t/is (empty? (iterator-seq history-asc)))
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
-                  {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                  {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (->> (iterator-seq history-desc) (map :crux.db/doc))))))
-
-    (with-both-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
-      (with-open [snapshot (.newSnapshot db)]
-        (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-        (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
-
-    (with-both-dbs [db (*api* #inst "2019-02-02" version-2-submitted-tx-time)]
-      (with-open [history-asc (api/open-history-ascending db :ivan)
-                  history-desc (api/open-history-descending db :ivan)]
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}]
-                 (->> (iterator-seq history-asc) (map :crux.db/doc))))
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
-                  {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (->> (iterator-seq history-desc) (map :crux.db/doc))))))
-
-    (with-both-dbs [db (*api* #inst "2019-02-03" version-2-submitted-tx-time)]
-      (with-open [snapshot (.newSnapshot db)]
-        (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
-                  {:crux.db/id :ivan :name "Ivan" :version 1}]
-                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
+      (with-both-dbs [db (*api* #inst "2019-02-03" (:crux.tx/tx-time v2))]
+        (t/is (= [v1 v2]
+                 (api/entity-history db :ivan :asc {:with-docs? true})))
+        (t/is (= [v2 v1]
+                 (api/entity-history db :ivan :desc {:with-docs? true})))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided-546
   (let [{:keys [^Date crux.tx/tx-time]} (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
-
-(t/deftest test-history-range-throws-if-future-tx-time-provided-827
-  (let [{:keys [^Date crux.tx/tx-time]} (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
-        the-future (Date. (+ (.getTime tx-time) 10000))]
-    (t/is (thrown? NodeOutOfSyncException (api/history-range *api* :foo nil nil nil the-future)))))
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (.latestSubmittedTx *api*)))
