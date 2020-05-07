@@ -604,11 +604,13 @@
                    (with-out-str
                      (pp/pprint (Throwable->map e))))})))))
 
-(defn data-browser-status [^ICruxAPI crux-node _ request]
+(defn data-browser-status [^ICruxAPI crux-node options request]
   (let [status (api/status crux-node)]
     {:status 200
      :body (if (html? request)
-             (html5 (entity->html nil status))
+             (raw-html {:body (entity->html nil status)
+                        :title "/_status"
+                        :options options})
              status)}))
 
 (defn- data-browser-handler [crux-node options request]
