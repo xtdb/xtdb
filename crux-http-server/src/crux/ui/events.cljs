@@ -26,7 +26,6 @@
      (cond-> (js/URLSearchParams.)
        :find (doto (.append "find" find))
        :where ((fn [params] (reduce (fn [params clause] (doto params (.append "where" clause))) params where)))
-       :else (doto prn)
        limit (doto (.append "limit" limit))
        offset (doto (.append "offset" offset))
        args (doto (.append "args" args))
