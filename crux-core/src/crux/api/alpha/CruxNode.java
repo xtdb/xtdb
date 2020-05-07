@@ -3,6 +3,9 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.ICruxAPI;
+import crux.api.HistoryOptions;
+import crux.api.ICursor;
+import crux.api.HistoryOptions.SortOrder;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -10,7 +13,10 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
