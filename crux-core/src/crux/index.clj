@@ -28,12 +28,12 @@
   kv/KvIterator
   (seek [_ k]
     (when-let [k (kv/seek i k)]
-      (when (mem/buffers=? k prefix (mem/capacity prefix))
+      (when (mem/buffers=? k prefix (.capacity prefix))
         k)))
 
   (next [_]
     (when-let [k (kv/next i)]
-      (when (mem/buffers=? k prefix (mem/capacity prefix))
+      (when (mem/buffers=? k prefix (.capacity prefix))
         k)))
 
   (value [_]
@@ -72,7 +72,7 @@
 
   (next-values [this]
     (when-let [last-k (.last-k peek-state)]
-      (let [prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
+      (let [prefix-size (- (.capacity ^DirectBuffer last-k) c/id-size c/id-size)]
         (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                               (kv/seek i))]
           (attribute-value+placeholder k peek-state))))))
@@ -84,7 +84,7 @@
 
 (defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   (loop [k current-k]
-    (let [limit (- (mem/capacity k) c/id-size)]
+    (let [limit (- (.capacity k) c/id-size)]
       (set! (.peek peek-state) (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
     (or (let [eid (.eid (c/decode-avec-key->evc-from k))
               eid-buffer (c/->id-buffer eid)
@@ -279,8 +279,8 @@
                                           v)))))
 
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (mem/capacity prefix-v))
-        pred (value-comparsion-predicate zero? prefix-v (mem/capacity prefix-v))]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (.capacity prefix-v))
+        pred (value-comparsion-predicate zero? prefix-v (.capacity prefix-v))]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred k)
                                           k
@@ -318,9 +318,12 @@
   (when-not (evicted-doc? doc)
     doc))
 
+(defn multiple-values? [v]
+  (or (vector? v) (set? v)))
+
 (defn vectorize-value [v]
   (cond-> v
-    (not (or (vector? v) (set? v)))
+    (not (multiple-values? v))
     (vector)))
 
 (defn doc-predicate-stats [doc evicted?]
@@ -335,7 +338,7 @@
                :let [k (c/->id-buffer k)]
                v (vectorize-value v)
                :let [v (c/->value-buffer v)]
-               :when (pos? (mem/capacity v))]
+               :when (pos? (.capacity v))]
            [(c/encode-avec-key-to nil k v id content-hash)
             (c/encode-aecv-key-to nil k id content-hash v)])
          (apply concat))))
@@ -375,7 +378,7 @@
   ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
    (letfn [(step [k]
              (lazy-seq
-              (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
+              (when (and k (mem/buffers=? prefix k (.capacity prefix)))
                 (cons (if entries?
                         [(mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i))]
                         (mem/copy-to-unpooled-buffer k))
@@ -412,7 +415,7 @@
 ;; Entities
 
 (defn- ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
-  (assoc entity-tx :content-hash (when (pos? (mem/capacity content-hash))
+  (assoc entity-tx :content-hash (when (pos? (.capacity content-hash))
                                    (c/safe-id (c/new-id content-hash)))))
 
 (defn- safe-entity-tx ^crux.codec.EntityTx [entity-tx]
@@ -432,7 +435,7 @@
           (if (morton/morton-number-within-range? min max z)
             (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
                   v (kv/value i)]
-              (if-not (mem/buffers=? (c/nil-id-buffer) v)
+              (if-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)
                  z]
@@ -480,7 +483,7 @@
           (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
                 v (kv/value i)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
-              (when-not (mem/buffers=? (c/nil-id-buffer) v)
+              (when-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)])
               (if morton/*use-space-filling-curve-index?*
@@ -622,8 +625,8 @@
 (def ^:private sorted-virtual-index-key-comparator
   (reify Comparator
     (compare [_ [a] [b]]
-      (mem/compare-buffers (or a (c/nil-id-buffer))
-                           (or b (c/nil-id-buffer))))))
+      (mem/compare-buffers (or a c/nil-id-buffer)
+                           (or b c/nil-id-buffer)))))
 
 (defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
   db/Index
@@ -680,7 +683,7 @@
   (let [result-name (:name idx)]
     (UnaryJoinIteratorState.
      idx
-     (or value (c/nil-id-buffer))
+     (or value c/nil-id-buffer)
      (when (and result-name results)
        {result-name results}))))
 

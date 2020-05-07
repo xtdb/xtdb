@@ -19,7 +19,9 @@
   (:import crux.codec.EntityTx
            java.io.Closeable
            [java.util.concurrent ExecutorService TimeoutException]
-           java.util.Date))
+           java.util.function.Supplier
+           java.util.Date
+           org.agrona.ExpandableDirectByteBuffer))
 
 ;; TODO: move stuff in this namespace and consolidate with crux.index
 ;; and crux.tx.consumer.
@@ -59,14 +61,14 @@
 (defn tx-event->doc-hashes [tx-event]
   (keep (conform-tx-event tx-event) [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
 
-(defn tx-event->tx-op [[op id & args] index-store object-store]
+(defn tx-event->tx-op [[op id & args] index-store]
   (into [op]
         (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
                   [(c/new-id id)])
 
                 (for [arg args]
                   (or (when (satisfies? c/IdToBuffer arg)
-                        (or (db/get-single-object object-store index-store arg)
+                        (or (db/get-document index-store arg)
                             {:crux.db/id (c/new-id id)
                              :crux.db/evicted? true}))
                       arg)))))
@@ -174,7 +176,7 @@
                      (-> entity-to-restore
                          (assoc :vt end-valid-time))
 
-                     (c/->EntityTx eid end-valid-time tx-time tx-id (c/nil-id-buffer)))]))))
+                     (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))]))))
 
       (->> (cons start-valid-time
                  (when-let [visible-entity (some-> (entity-at history eid start-valid-time tx-time)
@@ -194,7 +196,7 @@
   {:pre-commit-fn (fn []
                     (let [content-hash (c/new-id v)]
                       (with-open [index-store (db/open-index-store indexer)]
-                        (assert (db/get-single-object object-store index-store content-hash)
+                        (assert (db/get-document index-store content-hash)
                                 (format "Put, incorrect doc state for: '%s', tx-id '%s'"
                                         content-hash (:crux.tx/tx-id tx))))
                       true))
@@ -224,9 +226,9 @@
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
                        ;; can't rely on the old content-hashing returning the same hash for the same document
                        (if (or (= (c/new-id content-hash) (c/new-id old-v))
-                               (= (db/get-single-object object-store index-store (c/new-id content-hash))
-                                  (db/get-single-object object-store index-store (c/new-id old-v))))
-                         (let [correct-state? (not (nil? (db/get-single-object object-store index-store (c/new-id new-v))))]
+                               (= (db/get-document index-store (c/new-id content-hash))
+                                  (db/get-document index-store (c/new-id old-v))))
+                         (let [correct-state? (not (nil? (db/get-document index-store (c/new-id new-v))))]
                            (when-not correct-state?
                              (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
                            correct-state?)
@@ -276,7 +278,7 @@
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
                                                  (or (get nested-fn-args arg-id)
-                                                     (db/get-single-object object-store index-store arg-id)))
+                                                     (db/get-document index-store arg-id)))
         args-id (:crux.db/id args-doc)
 
         {:keys [conformed-tx-ops fn-error]} (try
@@ -320,7 +322,13 @@
       (.submit stats-executor stats-fn)
       (stats-fn))))
 
-(defrecord KvIndexStore [snapshot]
+(def ^:private ^ThreadLocal value-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer.)))))
+
+(defrecord KvIndexStore [object-store snapshot]
   Closeable
   (close [_]
     (cio/try-close snapshot))
@@ -357,10 +365,32 @@
   (all-content-hashes [this eid]
     (idx/all-content-hashes snapshot eid))
 
-  (open-nested-index-store [this]
-    (->KvIndexStore (lru/new-cached-snapshot snapshot false))))
+  (decode-value [this a content-hash value-buffer]
+    (if (c/can-decode-value-buffer? value-buffer)
+      (c/decode-value-buffer value-buffer)
+      (let [doc (db/get-document this content-hash)
+            value-or-values (get doc a)]
+        (cond
+          (not (idx/multiple-values? value-or-values))
+          value-or-values
 
-(defrecord KvIndexer [kv-store]
+          (nil? value-buffer)
+          (first (idx/vectorize-value value-or-values))
+
+          :else
+          (loop [[x & xs] (idx/vectorize-value value-or-values)]
+            (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
+              x
+              (when xs
+                (recur xs))))))))
+
+  (get-document [this content-hash]
+    (db/get-single-object object-store snapshot content-hash))
+
+  (open-nested-index-store [this]
+    (->KvIndexStore object-store (lru/new-cached-snapshot snapshot false))))
+
+(defrecord KvIndexer [kv-store object-store]
   db/Indexer
   (index-docs [this docs]
     (let [doc-idx-keys (when (seq docs)
@@ -399,7 +429,7 @@
       (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
-    (->KvIndexStore (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
+    (->KvIndexStore object-store (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
 
   status/Status
   (status-map [this]
@@ -417,7 +447,7 @@
 
     (when-let [docs-to-upsert (->> docs
                                    (into {} (remove (fn [[k doc]]
-                                                      (or (idx/keep-non-evicted-doc (db/get-single-object object-store index-store (c/new-id k)))
+                                                      (or (idx/keep-non-evicted-doc (db/get-document index-store (c/new-id k)))
                                                           (idx/evicted-doc? doc)))))
                                    not-empty)]
       (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
@@ -479,9 +509,9 @@
                        (:tombstones res))}))))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [kv-store]} args]
-               (->KvIndexer kv-store))
-   :deps [:crux.node/kv-store]})
+  {:start-fn (fn [{:crux.node/keys [kv-store object-store]} args]
+               (->KvIndexer kv-store object-store))
+   :deps [:crux.node/kv-store :crux.node/object-store]})
 
 (defn await-tx [indexer tx-consumer {::keys [tx-id] :as tx} timeout]
   (let [seen-tx (atom nil)]

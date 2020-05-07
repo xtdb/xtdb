@@ -34,6 +34,8 @@
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
   (entity-history [this eid sort-order opts])
   (all-content-hashes [this eid])
+  (decode-value [this a content-hash value])
+  (get-document [this content-hash])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 

@@ -17,9 +17,7 @@
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
            (java.util Comparator Date UUID)
-           java.util.function.Supplier
-           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
-           org.agrona.ExpandableDirectByteBuffer))
+           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -526,32 +524,12 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
-(defrecord BoundResult [var value doc])
-
-(def ^:private ^ThreadLocal value-buffer-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (ExpandableDirectByteBuffer.)))))
-
-(defn- bound-result-for-var ^crux.query.BoundResult [index-store object-store var->bindings join-keys join-results var]
+(defn- bound-result-for-var [index-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
-      (BoundResult. var (get join-results (.result-name binding)) nil)
+      (get join-results (.result-name binding))
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (let [value-buffer (get join-keys (.result-index binding))
-              content-hash (.content-hash entity-tx)
-              doc (db/get-single-object object-store index-store content-hash)
-              values (idx/vectorize-value (get doc (.attr binding)))
-              value (if (or (nil? value-buffer)
-                            (= (count values) 1))
-                      (first values)
-                      (loop [[x & xs] values]
-                        (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
-                          x
-                          (when xs
-                            (recur xs)))))]
-          (BoundResult. var value doc))))))
+        (db/decode-value index-store (.attr binding) (.content-hash entity-tx) (get join-keys (.result-index binding)))))))
 
 (declare build-sub-query)
 
@@ -580,10 +558,10 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [index-store object-store db idx-id->idx join-keys join-results]
+         (fn pred-constraint [index-store db idx-id->idx join-keys join-results]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results arg))
+                                      (bound-result-for-var index-store var->bindings join-keys join-results arg)
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
@@ -604,10 +582,9 @@
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-triple-fast-path [index-store {:keys [query-engine entity-as-of-idx] :as db} {:keys [e a v] :as clause} args]
-  (let [{:keys [object-store]} query-engine
-        eid (get (first args) e)]
+  (let [eid (get (first args) e)]
     (when-let [^EntityTx entity-tx (idx/entity-at entity-as-of-idx eid)]
-      (let [doc (db/get-single-object object-store index-store (.content-hash entity-tx))]
+      (let [doc (db/get-document index-store (.content-hash entity-tx))]
         (when (contains? (set (idx/vectorize-value (get doc a))) v)
           [])))))
 
@@ -630,10 +607,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [index-store object-store db idx-id->idx join-keys join-results]
+         (fn or-constraint [index-store db idx-id->idx join-keys join-results]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
+                                (bound-result-for-var index-store var->bindings join-keys join-results var))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -665,7 +642,7 @@
                                               (if has-free-vars?
                                                 (vec (for [[join-keys join-results] idx-seq]
                                                        (vec (for [var free-vars-in-join-order]
-                                                              (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var))))))
+                                                              (bound-result-for-var index-store var->bindings join-keys join-results var)))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -693,7 +670,7 @@
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
-         (fn unification-constraint [index-store object-store db idx-id->idx join-keys join-results]
+         (fn unification-constraint [index-store db idx-id->idx join-keys join-results]
            (let [values (for [arg args]
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
@@ -717,25 +694,24 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [index-store object-store db idx-id->idx join-keys join-results]
+         (fn not-constraint [index-store db idx-id->idx join-keys join-results]
            (with-open [index-store ^Closeable (open-index-store db)]
              (let [db (assoc db :index-store index-store)
                    args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (.value (bound-result-for-var index-store object-store var->bindings join-keys join-results var)))
+                                  (bound-result-for-var index-store var->bindings join-keys join-results var))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
                  join-results))))})))
 
 (defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys join-results]
-  (let [object-store (get-in db [:query-engine :object-store])]
-    (reduce
-     (fn [results constraint]
-       (when results
-         (constraint index-store object-store db idx-id->idx join-keys results)))
-     join-results
-     (get depth->constraints (count join-keys)))))
+  (reduce
+   (fn [results constraint]
+     (when results
+       (constraint index-store db idx-id->idx join-keys results)))
+   join-results
+   (get depth->constraints (count join-keys))))
 
 (defn- potential-bpg-pair-vars [g vars]
   (for [var vars
@@ -1053,14 +1029,12 @@
    (let [{:keys [where args rules]} (s/conform ::query q)]
      (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
-(defn- build-full-results [{:keys [entity-as-of-idx index-store query-engine] :as db} bound-result-tuple]
-  (let [{:keys [object-store]} query-engine]
-    (vec (for [^BoundResult bound-result bound-result-tuple
-               :let [value (.value bound-result)]]
-           (if-let [entity-tx (and (c/valid-id? value)
-                                   (idx/entity-at entity-as-of-idx value))]
-             (db/get-single-object object-store index-store (.content-hash ^EntityTx entity-tx))
-             value)))))
+(defn- build-full-results [{:keys [entity-as-of-idx index-store] :as db} bound-result-tuple]
+  (vec (for [value bound-result-tuple]
+         (if-let [entity-tx (and (c/valid-id? value)
+                                 (idx/entity-at entity-as-of-idx value))]
+           (db/get-document index-store (.content-hash ^EntityTx entity-tx))
+           value))))
 
 (defn open-index-store ^java.io.Closeable [{:keys [query-engine index-store] :as db}]
   (if index-store
@@ -1096,7 +1070,7 @@
 
 (defn query
   ([{:keys [valid-time transact-time query-engine] :as db} ^ConformedQuery conformed-q]
-   (let [{:keys [^ExecutorService query-executor object-store indexer options]} query-engine
+   (let [{:keys [^ExecutorService query-executor indexer options]} query-engine
          start-time (System/currentTimeMillis)
          q (.q-normalized conformed-q)
          query-future (.submit query-executor
@@ -1131,7 +1105,7 @@
        result)))
 
   ([{:keys [valid-time transact-time query-engine] :as db} index-store ^ConformedQuery conformed-q]
-   (let [{:keys [indexer object-store options]} query-engine
+   (let [{:keys [indexer options]} query-engine
          q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
@@ -1163,10 +1137,10 @@
 
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var index-store object-store var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var index-store var->bindings join-keys join-results var))]]
                   (if full-results?
                     (build-full-results db bound-result-tuple)
-                    (mapv #(.value ^BoundResult %) bound-result-tuple)))
+                    (vec bound-result-tuple)))
 
          true (dedupe)
          order-by (cio/external-sort (order-by-comparator find order-by))
@@ -1179,10 +1153,9 @@
           (c/entity-tx->edn)))
 
 (defn entity [{:keys [query-engine] :as db} index-store eid]
-  (let [{:keys [object-store]} query-engine
-        entity-tx (entity-tx db index-store eid)]
-    (-> (db/get-single-object object-store index-store (:crux.db/content-hash entity-tx))
-        idx/keep-non-evicted-doc)))
+  (let [entity-tx (entity-tx db index-store eid)]
+    (-> (db/get-document index-store (:crux.db/content-hash entity-tx))
+        (idx/keep-non-evicted-doc))))
 
 (defrecord QueryDatasource [query-engine
                             ^Date valid-time
@@ -1260,14 +1233,13 @@
     (.historyAscending this eid))
 
   (openHistoryAscending [this eid]
-    (let [index-store (open-index-store this)
-          {:keys [object-store]} query-engine]
+    (let [index-store (open-index-store this)]
       (cio/->cursor #(cio/try-close index-store)
                     (for [^EntityTx entity-tx (db/entity-history index-store eid :asc
                                                                  {:from {:crux.db/valid-time valid-time}
                                                                   :until {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
                       (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
+                             :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
 
   (historyDescending [this eid]
     (with-open [history (.openHistoryDescending this eid)]
@@ -1277,14 +1249,13 @@
     (.historyDescending this eid))
 
   (openHistoryDescending [this eid]
-    (let [index-store (open-index-store this)
-          {:keys [object-store]} query-engine]
+    (let [index-store (open-index-store this)]
       (cio/->cursor #(cio/try-close index-store)
                     (for [^EntityTx entity-tx (db/entity-history index-store eid :desc
                                                                  {:from {:crux.db/valid-time valid-time
                                                                          :crux.tx/tx-time transact-time}})]
                       (assoc (c/entity-tx->edn entity-tx)
-                             :crux.db/doc (db/get-single-object object-store index-store (.content-hash entity-tx)))))))
+                             :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
 
   (validTime [_]
     valid-time)
@@ -1296,7 +1267,7 @@
 (def ^:dynamic *with-entity-cache?*)
 
 (defrecord QueryEngine [^ExecutorService query-executor
-                        indexer object-store bus
+                        indexer bus
                         query-cache conform-cache
                         options]
   Closeable
@@ -1307,20 +1278,19 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def query-engine
-  {:start-fn (fn [{:crux.node/keys [indexer object-store bus]} {::keys [query-pool-size query-cache-size conform-cache-size] :as args}]
+  {:start-fn (fn [{:crux.node/keys [indexer bus]} {::keys [query-pool-size query-cache-size conform-cache-size] :as args}]
                (let [query-executor (Executors/newFixedThreadPool query-pool-size (cio/thread-factory "crux.query.query-pool-thread"))]
                  (map->QueryEngine
                   {:indexer indexer
                    :conform-cache (lru/new-cache conform-cache-size)
                    :query-cache (lru/new-cache query-cache-size)
-                   :object-store object-store
                    :bus bus
                    :query-executor query-executor
                    :options (update args ::entity-cache? (fn [x]
                                                            (if (bound? #'*with-entity-cache?*)
                                                              *with-entity-cache?*
                                                              x)))})))
-   :deps [:crux.node/indexer :crux.node/object-store :crux.node/bus]
+   :deps [:crux.node/indexer :crux.node/bus]
    :args {::query-pool-size {:doc "Query Pool Size"
                              :default 32
                              :crux.config/type :crux.config/nat-int}

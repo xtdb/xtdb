@@ -11,6 +11,7 @@
            [java.io Closeable Writer]
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
+           java.nio.charset.StandardCharsets
            [java.util Arrays Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
@@ -99,9 +100,7 @@
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
 (def nil-id-buffer
-  (memoize
-   (fn []
-     (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))))
+  (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
 
 (def ^:dynamic ^:private *sort-unordered-colls* false)
 
@@ -207,7 +206,7 @@
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
-            ub-in (mem/on-heap-buffer (.getBytes this "UTF-8"))
+            ub-in (mem/on-heap-buffer (.getBytes this StandardCharsets/UTF_8))
             length (.capacity ub-in)]
         (.putByte to 0 string-value-type-id)
         (loop [idx 0]
@@ -263,6 +262,58 @@
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/limit-buffer buffer value-type-id-size))
+
+(defn- decode-long ^long [^DirectBuffer buffer]
+  (bit-xor (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN) Long/MIN_VALUE))
+
+(defn- decode-double ^double [^DirectBuffer buffer]
+  (let [l (dec (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN))
+        l (bit-xor l (bit-or (bit-shift-right (bit-xor l Long/MIN_VALUE) (dec Long/SIZE)) Long/MIN_VALUE))]
+    (Double/longBitsToDouble l)))
+
+(defn- decode-string ^String [^DirectBuffer buffer]
+  (let [terminate-mark-size Byte/BYTES
+        offset (byte 2)
+        length (- (.capacity buffer) terminate-mark-size)
+        bs (byte-array (- length value-type-id-size))]
+    (loop [idx value-type-id-size]
+      (if (= idx length)
+        (String. bs StandardCharsets/UTF_8)
+        (let [b (.getByte buffer idx)]
+          (aset bs (dec idx) (unchecked-byte (- b offset)))
+          (recur (inc idx)))))))
+
+;; TODO: Booleans should really have their own value type and encode
+;; as single bytes, but this change would require an index bump.
+
+(def ^:private true-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer true)))
+(def ^:private false-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer false)))
+
+(defn can-decode-value-buffer? [^DirectBuffer buffer]
+  (when buffer
+    (case (.getByte (value-buffer-type-id buffer) 0)
+      0 (= buffer nil-id-buffer)
+      (1 2 3 4) true
+      6 (or (= buffer true-value-buffer)
+            (= buffer false-value-buffer))
+      false)))
+
+(defn decode-value-buffer [^DirectBuffer buffer]
+  (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
+    (case type-id
+      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
+          nil
+          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
+      1 (decode-long buffer) ;; long-value-type-id
+      2 (decode-double buffer) ;; double-value-type-id
+      3 (Date. (decode-long buffer)) ;; date-value-type-id
+      4 (decode-string buffer) ;; string-value-type-id
+      6 (cond ;; object-value-type-id
+          (= buffer true-value-buffer) true
+          (= buffer false-value-buffer) false
+          :else
+          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
+      (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))
@@ -348,7 +399,7 @@
 
   nil
   (id->buffer [this to]
-    (id->buffer (nil-id-buffer) to)))
+    (id->buffer nil-id-buffer to)))
 
 (deftype Id [^org.agrona.DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBuffer
@@ -405,10 +456,10 @@
 
   nil
   (->id-buffer [this]
-    (nil-id-buffer))
+    nil-id-buffer)
 
   (new-id [this]
-    (Id. (nil-id-buffer) (.hashCode ^DirectBuffer (nil-id-buffer))))
+    (Id. nil-id-buffer (.hashCode ^DirectBuffer nil-id-buffer)))
 
   Object
   (->id-buffer [this]

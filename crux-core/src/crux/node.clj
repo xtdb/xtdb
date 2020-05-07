@@ -145,7 +145,7 @@
                                                        (dissoc :crux.tx.event/tx-events)
                                                        (assoc :crux.api/tx-ops
                                                               (->> tx-events
-                                                                   (mapv #(tx/tx-event->tx-op % index-store object-store)))))))))]
+                                                                   (mapv #(tx/tx-event->tx-op % index-store)))))))))]
 
           (cio/->cursor (fn []
                           (.close index-store)
@@ -179,8 +179,8 @@
                                     (select-keys ev [:committed?])
                                     (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
                                     (when (:with-tx-ops? event-opts)
-                                      (with-open [snapshot (kv/new-snapshot kv-store)]
-                                        {:crux/tx-ops (mapv #(tx/tx-event->tx-op % snapshot object-store) tx-events)}))))))))
+                                      (with-open [index-store (db/open-index-store indexer)]
+                                        {:crux/tx-ops (mapv #(tx/tx-event->tx-op % index-store) tx-events)}))))))))
 
   (latestCompletedTx [this]
     (db/latest-completed-tx indexer))
