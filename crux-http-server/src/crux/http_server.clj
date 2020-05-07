@@ -177,16 +177,7 @@
   (when-not (s/valid? spec body-edn)
     (throw (ex-info (str "Spec assertion failed\n" (s/explain-str spec body-edn)) (s/explain-data spec body-edn)))))
 
-;; TODO: Potentially require both valid and transaction time sent by
-;; the client?
 (defn- query [^ICruxAPI crux-node request]
-  (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
-        db (db-for-request crux-node query-map)]
-    (-> (success-response
-         (.query db (:query query-map)))
-        (add-last-modified (.transactionTime db)))))
-
-(defn- query-stream [^ICruxAPI crux-node request]
   (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (db-for-request crux-node query-map)
         result (api/open-q db (:query query-map))]
@@ -355,9 +346,6 @@
 
     [#"^/query$" [:post]]
     (query crux-node request)
-
-    [#"^/query-stream$" [:post]]
-    (query-stream crux-node request)
 
     [#"^/attribute-stats" [:get]]
     (attribute-stats crux-node)
