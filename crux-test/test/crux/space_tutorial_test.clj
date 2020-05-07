@@ -488,7 +488,7 @@
              (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
     ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
-    (with-open [history (crux/open-history-ascending (crux/db *api*) :kaarlang/clients)]
+    (with-open [history (crux/open-entity-history (crux/db *api*) :kaarlang/clients :asc)]
       (t/is history))
 
     (fix/submit+await-tx [[:crux.tx/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
@@ -496,7 +496,7 @@
     (t/is nil? (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients))
 
     ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
-    (with-open [history (crux/open-history-ascending (crux/db *api*) :kaarlang/clients)]
+    (with-open [history (crux/open-entity-history (crux/db *api*) :kaarlang/clients :asc)]
       (t/is history))))
 
 (t/deftest Oumuamua-test
@@ -550,14 +550,14 @@
   (t/is empty? (full-query *api*))
 
   ;; Check not nil, history constantly changing so it is hard to check otherwise
-  (with-open [history (crux/open-history-descending (crux/db *api*) :person/kaarlang)]
+  (with-open [history (crux/open-entity-history (crux/db *api*) :person/kaarlang :desc)]
     (t/is history))
 
-  (with-open [history (crux/open-history-descending (crux/db *api*) :person/ilex)]
+  (with-open [history (crux/open-entity-history (crux/db *api*) :person/ilex :desc)]
     (t/is history))
 
-  (with-open [history (crux/open-history-descending (crux/db *api*) :person/thadd)]
+  (with-open [history (crux/open-entity-history (crux/db *api*) :person/thadd :desc)]
     (t/is history))
 
-  (with-open [history (crux/open-history-descending (crux/db *api*) :person/johanna)]
+  (with-open [history (crux/open-entity-history (crux/db *api*) :person/johanna :desc)]
     (t/is history)))
