@@ -267,26 +267,6 @@ ul.entity-group__value li::before {
     margin-bottom: 1rem;
 }
 
-.entity__navigated-pages {
-    margin-bottom: 2rem;
-}
-
-.entity__navigated-page {
-    text-decoration: none;
-}
-
-.entity__navigated-page:hover {
-    color: red;
-}
-
-.navigated-pages__seperator {
-    margin: auto .5em;
-}
-
-.entity__navigated-page--active {
-    font-weight: bold;
-}
-
 @keyframes rotating {
     from {
 	transform: rotate(0deg);
