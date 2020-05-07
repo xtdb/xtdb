@@ -66,9 +66,11 @@ jobs:
     steps:
       - checkout
 
+      - run: md5sum **/project.clj > .circleci-cache-key
+
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "project.clj" }}
+          - v1-dependencies-{{ checksum ".circleci-cache-key" }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
 
@@ -80,11 +82,6 @@ jobs:
 
       - run: lein sub install
       - run: lein deps
-      - save_cache:
-          paths:
-            - ~/.m2
-          key: v1-dependencies-{{ checksum "project.clj" }}
-
       - run: lein do version, sub test, check
       - store_test_results:
           path: "crux-test/target/test-results"
@@ -94,6 +91,12 @@ jobs:
       - persist_to_workspace:
           root: ~/
           paths: ./
+
+      - run: rm -rf ~/.m2/juxt/crux-*
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
 
   deploy-commit:
     docker:
