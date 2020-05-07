@@ -161,7 +161,9 @@
 
   (t/testing "or"
     (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
-             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'")))))
+             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan' OR NAME = 'Malcolm'"))))
+    (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
+             (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan' OR AGE = 25")))))
 
   (t/testing "boolean"
     (t/is (= #{{:name "Ivan"}}
@@ -253,7 +255,12 @@
       (t/is (= (str "CruxToEnumerableConverter\n"
                     "  CruxProject(NAME=[$1], AGE=[*($2, 2)])\n"
                     "    CruxTableScan(table=[[crux, PERSON]])\n")
-               (explain q))))))
+               (explain q)))))
+
+  (t/testing "tphc-022-example-substring"
+    (let [q "SELECT NAME FROM PERSON WHERE substring(name from 1 for 1) in ('I', 'V')"]
+      (t/is (= [{:name "Ivan"}]
+               (query q))))))
 
 (t/deftest test-keywords
   (f/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])

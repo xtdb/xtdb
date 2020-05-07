@@ -87,6 +87,13 @@
 (defn- operands->clauses [schema ^RexCall filter*]
   (mapcat #(->clauses % schema) (.-operands ^RexCall filter*)))
 
+(defn- ground-vars [or-statement]
+  (def o or-statement)
+  (let [vars (distinct (mapcat #(filter symbol? (rest (first %))) or-statement))]
+    (vec
+     (for [clause or-statement]
+       (apply list 'and clause  (map #(vector (list 'identity %)) vars))))))
+
 (extend-protocol RexNodeToClauses
   RexInputRef
   (->clauses [this schema]
@@ -102,7 +109,7 @@
         SqlKind/AND
         (operands->clauses schema filter*)
         SqlKind/OR
-        [(apply list 'or (operands->clauses schema filter*))]
+        [(apply list 'or (ground-vars (operands->clauses schema filter*)))]
         SqlKind/NOT
         [(apply list 'not (operands->clauses schema filter*))]))))
 
