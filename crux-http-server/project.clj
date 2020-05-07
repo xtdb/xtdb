@@ -3,14 +3,34 @@
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[hiccup "2.0.0-alpha2"]
-                 [org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.1"]
+                 [hiccup "2.0.0-alpha2"]
                  [juxt/crux-core "derived-from-git"]
                  [ring/ring-core "1.8.0"]
                  [ring/ring-jetty-adapter "1.8.0"]
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]
                  [metosin/muuntaja "0.6.6"]]
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
+  :clean-targets ^{:protect false} ["target"]
+  :profiles {:dev
+             {:dependencies [[org.clojure/clojurescript "1.10.339"]
+                             [ch.qos.logback/logback-classic "1.2.3"]
+                             [com.bhauman/figwheel-main "0.2.4"]
+                             [com.bhauman/rebel-readline-cljs "0.1.4"]
+                             [reagent "0.10.0"]
+                             [re-frame "0.12.0"]
+                             [fork "1.2.5"]
+                             [day8.re-frame/http-fx "v0.2.0"]
+                             [bidi "2.1.6"]
+                             [tick "0.4.23-alpha"]
+                             [kibu/pushy "0.3.8"]]}}
+  :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
+            "build:cljs" ["do"
+                          ["clean"]
+                          ["run" "-m" "figwheel.main" "-O" "advanced" "-bo" "dev"]
+                          ["sass"]]}
+  :plugins [[yogthos/lein-sass "0.1.10"]]
+  :resource-paths ["resources" "cljs-target"]
+  :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

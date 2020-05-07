@@ -15,6 +15,7 @@
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.cors :refer [wrap-cors]]
+            [ring.middleware.resource :refer [wrap-resource]]
             [muuntaja.middleware :refer [wrap-format]]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
@@ -22,7 +23,8 @@
             [ring.util.io :as rio]
             [ring.util.request :as req]
             [ring.util.time :as rt]
-            [hiccup.page :refer [html5]]
+            [hiccup.page :as page]
+            [hiccup2.core :as hiccup2]
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
@@ -33,6 +35,33 @@
 
 ;; ---------------------------------------------------
 ;; Utils
+
+(defn- raw-html
+  [{:keys [body title options]}]
+  (str (hiccup2/html
+        [:html
+         {:lang "en"}
+         [:head
+          [:meta {:charset "utf-8"}]
+          [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
+          [:meta
+           {:name "viewport"
+            :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
+          [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
+          (when options [:meta {:title "options" :content (str options)}])
+          [:link {:rel "stylesheet" :href "/css/all.css"}]
+          [:link {:rel "stylesheet" :href "/css/table.css"}]
+          [:link {:rel "stylesheet"
+                  :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
+          [:title "Crux Console"]]
+         [:body
+          [:nav.console-nav
+           [:div "Crux Console"]]
+          [:div.console
+           [:div#app
+            [:h1 title]
+            body]]
+          [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])))
 
 (defn- body->edn [request]
   (->> request
@@ -437,40 +466,34 @@
                                                                (instant/read-instant-date))})
           entity-map (api/entity db eid)]
       {:status (if (some? entity-map) 200 404)
-       :body (when entity-map
-               (if (= (get-in request [:muuntaja/response :format]) "text/html")
-                 (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                   (html5 (entity->html linked-entities entity-map)))
-                 entity-map))})))
+       :body (cond
+               (= (get-in request [:muuntaja/response :format]) "text/html") (if entity-map
+                                                                               (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
+                                                                                 (raw-html
+                                                                                  {:body (entity->html linked-entities entity-map)
+                                                                                   :title "/_entity"
+                                                                                   :options options}))
+                                                                               (raw-html {:body [:div "No entity found"]
+                                                                                          :title "/_entity"
+                                                                                          :options options}))
+               (get query-params "link-entities?") {"linked-entities" (link-all-entities db  "/_entity" entity-map)
+                                                    "entity" entity-map}
+               :else entity-map)})))
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
 
-(defn- build-query [{:strs [find where args order-by limit offset full-results]} default-limit]
-  (let [limit (when limit (Integer/parseInt limit))
-        page-limit (if (and limit (<= limit default-limit))
-                     limit
-                     default-limit)
-        new-offset (if offset
+(defn- build-query [{:strs [find where args order-by limit offset full-results]}]
+  (let [new-offset (if offset
                      (Integer/parseInt offset)
                      0)]
     (cond-> {:find (c/read-edn-string-with-readers find)
              :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
-             :limit page-limit
              :offset new-offset}
       args (assoc :args (c/read-edn-string-with-readers args))
       order-by (assoc :order-by (->> order-by vectorize-param (mapv c/read-edn-string-with-readers)))
+      limit (assoc :limit (Integer/parseInt limit))
       full-results (assoc :full-results? true))))
-
-(defn build-query-q
-  [resolved-query {:strs [offset page]} default-limit]
-  (let [limit (:limit resolved-query)
-        updated-limit (if (and limit (<= limit default-limit))
-                        limit
-                        default-limit)]
-    (cond-> (assoc resolved-query :limit updated-limit)
-      (not (:offset resolved-query)) (assoc :offset 0)
-      offset (assoc :offset (Integer/parseInt offset)))))
 
 (defn link-top-level-entities
   [db path results]
@@ -498,67 +521,60 @@
     {:prev-url prev-url
      :next-url next-url}))
 
-(defn query->html [links {headers :find} results {:keys [prev-url next-url]}]
-  [:html
-   {:lang "en"}
-   [:head
-    [:meta {:charset "utf-8"}]
-    [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge,chrome=1"}]
-    [:meta
-     {:name "viewport"
-      :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
-    [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]]
-   [:body
-    (if (seq results)
-      [:div
-       [:table
-        [:thead
-         [:tr
-          (for [header headers]
-            [:th header])]]
-        [:tbody
+(defn query->html [links {headers :find} results]
+  [:body
+   [:div.uikit-table
+    [:div.table__main
+     [:table.table
+      [:thead.table__head
+       [:tr
+        (for [header headers]
+          [:th.table__cell.head__cell.no-js-head__cell
+           header])]]
+      (if (seq results)
+        [:tbody.table__body
          (for [row results]
-           [:tr
+           [:tr.table__row.body__row
             (for [[header cell-value] (map vector headers row)]
-              [:td
+              [:td.table__cell.body__cell
                (if-let [href (get links cell-value)]
-                 [:a {:href href} (str cell-value)]
-                 (str cell-value))])])]]]
-      [:div "No results found"])
-    [:div
-     (if prev-url
-       [:a {:href prev-url} "Prev"]
-       [:span "Prev"])
-     (if next-url
-       [:a {:href next-url} "Next"]
-       [:span "Next"])]]])
+                 [:a.entity-link {:href href} (str cell-value)]
+                 (str cell-value))])])]
+        [:tbody.table__body.table__no-data
+         [:tr [:td.td__no-data
+               "Nothing to show"]]])]]
+    [:table.table__foot]]])
 
-(defn data-browser-query [^ICruxAPI crux-node {::keys [query-result-page-limit] :as options} request]
+(defn data-browser-query [^ICruxAPI crux-node options request]
   (let [query-params (:query-params request)
+        link-entities? (get query-params "link-entities?")
         html? (= (get-in request [:muuntaja/response :format]) "text/html")]
     (cond
       (empty? query-params)
       (if html?
         {:status 200
-         :body (html5 [:form
-                       {:action "/_query"}
-                       [:textarea
-                        {:name "q"
-                         :cols 40
-                         :rows 10}]
-                       [:br]
-                       [:button
-                        {:type "submit"}
-                        "submit me here"]])}
+         :body (raw-html
+                {:body [:form
+                        {:action "/_query"}
+                        [:textarea.textarea
+                         {:name "q"
+                          :cols 40
+                          :rows 10}]
+                        [:br]
+                        [:br]
+                        [:button.button
+                         {:type "submit"}
+                         "Submit Query"]]
+                 :title "/_query"
+                 :options options})}
         {:status 400
          :body "No query provided."})
 
       :else
       (try
         (let [query (cond-> (or (some-> (get query-params "q")
-                                        (edn/read-string)
-                                        (build-query-q query-params query-result-page-limit))
-                                (build-query query-params query-result-page-limit))
+                                        (edn/read-string))
+                                (build-query query-params))
                       html? (dissoc :full-results?))
               db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
                                                                 (instant/read-instant-date))
@@ -566,19 +582,24 @@
                                                                    (instant/read-instant-date))})
               results (api/q db query)]
           {:status 200
-           :body (if html?
-                   (let [links (link-top-level-entities db  "/_entity" results)
-                         {:keys [limit offset]} query
-                         prev-offset (when-not (zero? offset)
-                                       (max 0 (- offset limit)))
-                         next-offset (when (= limit (count results))
-                                       (+ offset limit))
-                         prev-next-page (resolve-prev-next-offset query-params prev-offset next-offset)]
-                     (html5 (query->html links query results prev-next-page)))
-                   results)})
+           :body (cond
+                   html? (let [links (if link-entities? (link-top-level-entities db  "/_entity" results) [])]
+                           (raw-html
+                            {:body (query->html links query results)
+                             :title "/_query"
+                             :options options}))
+                   link-entities? {"linked-entities" (link-top-level-entities db  "/_entity" results)
+                                   "query-results" results}
+                   :else results)})
         (catch Exception e
           {:status 400
-           :body (.getMessage e)})))))
+           :body (if html?
+                   (raw-html
+                    {:title "/_query"
+                     :body
+                     [:div.error-box (.getMessage e)]})
+                   (with-out-str
+                     (pp/pprint (Throwable->map e))))})))))
 
 (defn- data-browser-handler [crux-node options request]
   (condp check-path request
@@ -587,6 +608,7 @@
 
     [#"^/_query" [:get]]
     (data-browser-query crux-node options request)
+
     nil))
 
 (def ^:const default-server-port 3000)
@@ -634,6 +656,7 @@
 
                                                             (-> (partial data-browser-handler node options)
                                                                 (p/wrap-params)
+                                                                (wrap-resource "public")
                                                                 (wrap-format (assoc-in m/default-options
                                                                                        [:formats "text/html"]
                                                                                        (mfc/map->Format {:name "text/html"
@@ -641,9 +664,9 @@
                                                                 (wrap-exception-handling))
 
                                                             (fn [request]
-                                                              {:status 400
+                                                              {:status 404
                                                                :headers {"Content-Type" "text/plain"}
-                                                               :body "Unsupported method on this address."}))
+                                                               :body "Could not find resource."}))
                                                    {:port port
                                                     :join? false})]
                            (log/info "HTTP server started on port: " port)
@@ -655,7 +678,4 @@
              ;; to expose the functionality they need to? (JH)
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
-                            :default default-server-port}
-                    ::query-result-page-limit {:crux.config/type :crux.config/nat-int
-                            :doc "Limit of query results per page"
-                            :default 100}}}})
+                            :default default-server-port}}}})
