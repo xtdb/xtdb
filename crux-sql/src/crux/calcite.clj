@@ -10,6 +10,7 @@
             crux.db)
   (:import crux.calcite.CruxTable
            crux.calcite.types.SQLFunction
+           crux.calcite.types.CruxKeywordFn
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
@@ -62,9 +63,6 @@
 (defprotocol RexNodeToClauses
   (->clauses [this schema]))
 
-(defn- rex->keyword [^RexCall r schema]
-  (keyword (->var (first (.-operands r)) schema)))
-
 (extend-protocol RexNodeToVar
   RexInputRef
   (->var [this schema]
@@ -82,7 +80,7 @@
   (->var [this schema]
     (if (and (= SqlKind/OTHER_FUNCTION (.getKind this))
              (= "KEYWORD" (str (.-op this))))
-      (rex->keyword this schema)
+      (CruxKeywordFn. this)
       (if-let [op (lookup-op this)]
         (SQLFunction. (gensym) op (map #(->var % schema) (.getOperands this)))
         (throw (IllegalArgumentException. (str "Unsupported fn: " this)))))))
@@ -99,22 +97,22 @@
     [[(list '= (->var this schema) true)]])
 
   RexCall
-  (->clauses [filter* schema]
-    (if-let [op (lookup-op filter*)]
-      [[(apply list op (map #(->var % schema) (.getOperands filter*)))]]
-      (condp = (.getKind filter*)
+  (->clauses [n schema]
+    (if-let [op (lookup-op n)]
+      [[(apply list op (map #(->var % schema) (.getOperands n)))]]
+      (condp = (.getKind n)
         SqlKind/AND
-        (->clauses (.-operands filter*) schema)
+        (->clauses (.-operands n) schema)
         SqlKind/OR
-        [(apply list 'or (ground-vars (->clauses (.-operands filter*) schema)))]
+        [(apply list 'or (ground-vars (->clauses (.-operands n) schema)))]
         SqlKind/NOT
-        [(apply list 'not (->clauses (.-operands filter*) schema))])))
+        [(apply list 'not (->clauses (.-operands n) schema))])))
 
   java.util.List
   (->clauses [this schema]
     (mapcat #(->clauses % schema) this)))
 
-(defn- post-process [clauses]
+(defn- post-process [schema clauses]
   (let [args (atom {})
         sql-ops (atom [])
         clauses (postwalk (fn [x]
@@ -130,6 +128,9 @@
                                 (swap! args assoc (.getName ^RexDynamicParam x) sym)
                                 sym)
 
+                              CruxKeywordFn
+                              (keyword (->var (first (.-operands (.r ^CruxKeywordFn x))) schema))
+
                               x))
                           clauses)
         calc-clauses (for [op ^SQLOperation @sql-ops]
@@ -139,7 +140,7 @@
      :args @args}))
 
 (defn enrich-filter [schema ^RexNode filter]
-  (let [{:keys [clauses calc-clauses args]} (post-process (->clauses filter schema))]
+  (let [{:keys [clauses calc-clauses args]} (post-process schema (->clauses filter schema))]
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) clauses calc-clauses)
         ;; Todo consider case of multiple arg maps
@@ -166,7 +167,7 @@
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
 (defn enrich-project [schema projects]
-  (let [{:keys [clauses calc-clauses]} (post-process (mapv #(->var (.-left %) schema) projects))]
+  (let [{:keys [clauses calc-clauses]} (post-process schema (mapv #(->var (.-left %) schema) projects))]
     (-> schema
         ;; any calcs..
         (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
