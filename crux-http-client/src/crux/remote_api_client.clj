@@ -124,26 +124,10 @@
                       (as-of-map this)
                       {:method :get}))
 
-  (newSnapshot [this]
-    (->RemoteApiStream (atom [])))
-
-  (q [this q]
-    (api-request-sync (str url "/query")
-                      (assoc (as-of-map this)
-                             :query (q/normalize-query q))))
-
   (query [this q]
     (api-request-sync (str url "/query")
                       (assoc (as-of-map this)
                              :query (q/normalize-query q))))
-
-  (q [this snapshot q]
-    (let [in (api-request-sync (str url "/query-stream")
-                               (assoc (as-of-map this)
-                                      :query (q/normalize-query q))
-                               {:as :stream})]
-      (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in)))
 
   (openQuery [this q]
     (let [in (api-request-sync (str url "/query-stream")
@@ -151,42 +135,6 @@
                                       :query (q/normalize-query q))
                                {:as :stream})]
       (cio/->cursor #(.close ^Closeable in)
-                    (edn-list->lazy-seq in))))
-
-  (historyAscending [this eid]
-    (with-open [history (.openHistoryAscending this eid)]
-      (vec (iterator-seq history))))
-
-  (historyAscending [this snapshot eid]
-    (let [in (api-request-sync (str url "/history-ascending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
-      (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in)))
-
-  (openHistoryAscending [this eid]
-    (let [in (api-request-sync (str url "/history-ascending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
-      (cio/->cursor #(.close ^java.io.Closeable in)
-                    (edn-list->lazy-seq in))))
-
-  (historyDescending [this eid]
-    (with-open [history (.openHistoryDescending this eid)]
-      (vec (iterator-seq history))))
-
-  (historyDescending [this snapshot eid]
-    (let [in (api-request-sync (str url "/history-descending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
-      (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in)))
-
-  (openHistoryDescending [this eid]
-    (let [in (api-request-sync (str url "/history-descending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
-      (cio/->cursor #(.close ^java.io.Closeable in)
                     (edn-list->lazy-seq in))))
 
   (entityHistory [this eid opts]
@@ -238,27 +186,6 @@
   (openDB [this valid-time] (.db this valid-time))
   (openDB [this valid-time tx-time] (.db this valid-time tx-time))
 
-  (history [_ eid]
-    (api-request-sync (str url "/history/" (str (c/new-id eid))) nil {:method :get}))
-
-  (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (when transaction-time-end
-      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx") nil {:method :get})
-                               :crux.tx/tx-time)]
-        (when (or (nil? latest-tx-time) (pos? (compare transaction-time-end latest-tx-time)))
-          (throw (NodeOutOfSyncException.
-                  (format "Node hasn't indexed the transaction: requested: %s, available: %s" transaction-time-end latest-tx-time)
-                  transaction-time-end latest-tx-time)))
-
-        (api-request-sync (str url "/history-range/" (str (c/new-id eid)) "?"
-                               (str/join "&"
-                                         (map (partial str/join "=")
-                                              [["valid-time-start" (cio/format-rfc3339-date valid-time-start)]
-                                               ["transaction-time-start" (cio/format-rfc3339-date transaction-time-start)]
-                                               ["valid-time-end" (cio/format-rfc3339-date valid-time-end)]
-                                               ["transaction-time-end" (cio/format-rfc3339-date transaction-time-end)]])))
-                          nil {:method :get}))))
-
   (status [_]
     (api-request-sync url nil {:method :get}))
 
@@ -297,11 +224,6 @@
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")
                         timeout (str "?timeout=" (.toMillis timeout))) nil {:method :get}))
-
-  (sync [_ transaction-time timeout]
-    (api-request-sync (cond-> (str url "/sync")
-                        transaction-time (str "?transactionTime=" (cio/format-rfc3339-date transaction-time))
-                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
 
   (awaitTxTime [_ tx-time timeout]
     (api-request-sync (cond-> (str url "/await-tx-time?tx-time=" (cio/format-rfc3339-date tx-time))
