@@ -49,9 +49,9 @@ otherwise restrict the execution of queries.
 |<<#rest-home,`/`>>|GET|returns various details about the state of the database
 |<<#rest-document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
 |<<#rest-documents, `/documents`>>|POST|returns a map of document ids and respective documents for a given set of content hashes submitted in the request body
-|<<#rest-entity, `/entity`>>|POST|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
-|<<#rest-entity-tx, `/entity-tx`>>|POST|Returns the `:put` transaction that most recently set a key
-|<<#rest-history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
+|<<#rest-entity, `/entity/[:key]`>>|GET|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
+|<<#rest-entity-tx, `/entity-tx/[:key]`>>|GET|Returns the transaction that most recently set a key
+|<<#rest-entity, `/entity-history/[:key]`>>|GET|Returns the history of the given entity and optional valid-time/transaction-time co-ordinates
 |<<#rest-query, `/query`>>|POST|Takes a datalog query and returns its results
 |<<#rest-query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
 |<<#rest-sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
@@ -99,11 +99,11 @@ Returns the document stored under that hash, if it exists.
 ----
 curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
 ----
-[source,clj]
+[source,clojure]
 ----
 {:crux.db/id :foobar, :name "FooBar"}
 ----
-NOTE: Hashes for older versions of a document can be obtained with `/history-range` or `/history`, under the `:crux.db/content-hash` keys.
+NOTE: Hashes for older versions of a document can be obtained with `/entity-history`, under the `:crux.db/content-hash` keys.
 
 [#rest-documents]
 === GET/POST `/documents`
@@ -124,7 +124,7 @@ curl -X POST $nodeURL/documents \
 ----
 
 [#rest-entity]
-=== POST `/entity`
+=== GET `/entity/[:key]`
 
 Takes a key and, optionally, a `:valid-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
 
@@ -132,10 +132,9 @@ See <<#bitemporality, Bitemporality>> for more information.
 
 [source,bash]
 ----
-curl -X POST \
+curl -X GET \
      -H "Content-Type: application/edn" \
-     -d '{:eid :tommy}' \
-     $nodeURL/entity
+     $nodeURL/entity/:tommy
 ----
 
 [source,clj]
@@ -145,10 +144,9 @@ curl -X POST \
 
 [source,bash]
 ----
-curl -X POST \
+curl -X GET \
      -H "Content-Type: application/edn" \
-     -d '{:eid :tommy :valid-time #inst "1999-01-08T14:03:27.254-00:00"}' \
-     $nodeURL/entity
+     $nodeURL/entity/:tommy?valid-time=1999-01-08T14%3A03%3A27%3A254-00%3A00
 ----
 
 [source,clj]
@@ -157,7 +155,7 @@ nil
 ----
 
 [#rest-entity-tx]
-=== POST `/entity-tx`
+=== GET `/entity-tx`
 
 Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` transaction that most recently set that key at those times.
 
@@ -165,10 +163,9 @@ See <<#bitemporality, Bitemporality>> for more information.
 
 [source,bash]
 ----
-curl -X POST \
+curl -X GET \
      -H "Content-Type: application/edn" \
-     -d '{:eid :foobar}' \
-     $nodeURL/entity-tx
+     $nodeURL/entity-tx/:foobar
 ----
 [source,clj]
 ----
@@ -179,15 +176,21 @@ curl -X POST \
  :crux.tx/tx-time #inst "2019-01-08T16:34:47.738-00:00"}
 ----
 
-[#rest-history]
-=== GET/POST `/history/[:key]`
+[#rest-entity-history]
+=== GET `/entity-history/[:key]`
 
-Returns the transaction history of a key, from newest to oldest transaction time.
+Returns the history for the given entity
 
 [source,bash]
 ----
-curl -X GET $nodeURL/history/:ivan
+curl -X GET $nodeURL/entity-history/:ivan?sort-order=desc
 ----
+
+Also accepts the following as optional query parameters:
+* `with-corrections` - includes bitemporal corrections in the response, inline, sorted by valid-time then transaction-time (default false)
+* `with-docs` - includes the documents in the response sequence, under the `:crux.db/doc` key (default false)
+* `start-valid-time`, `start-transaction-time` - bitemporal co-ordinates to start at (inclusive, default unbounded)
+* `end-valid-time`, `end-transaction-time` - bitemporal co-ordinates to stop at (exclusive, default unbounded)
 
 [source,clj]
 ----
@@ -195,7 +198,8 @@ curl -X GET $nodeURL/history/:ivan
   :crux.db/content-hash "c28f6d258397651106b7cb24bb0d3be234dc8bd1",
   :crux.db/valid-time #inst "2019-01-07T14:57:08.462-00:00",
   :crux.tx/tx-id 14,
-  :crux.tx/tx-time #inst "2019-01-07T16:51:55.185-00:00"}
+  :crux.tx/tx-time #inst "2019-01-07T16:51:55.185-00:00"
+  :crux.db/doc {...}}
 
  {...}]
 ----
