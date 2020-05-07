@@ -1,17 +1,17 @@
-== (ns crux.api)
+= (ns crux.api)
 :toc: macro
 
-`crux.api` exposes a union of methods from `ICruxNode` and `ICruxDatasource`,
+`crux.api` exposes a union of methods from `ICruxAPI` and `ICruxDatasource`,
 with few lifecycle members added.
 
 toc::[]
 
-[#clojure-api-icruxnode]
-=== ICruxNode
+[#clojure-api-icruxapi]
+== ICruxAPI
 
-==== db
+=== db
 
-[source,clj]
+[source,clojure]
 ----
   (db
     [node]
@@ -28,9 +28,9 @@ toc::[]
      transaction-time, this throws NodeOutOfSyncException")
 ----
 
-==== open-db
+=== open-db
 
-[source,clj]
+[source,clojure]
 ----
   (open-db
     [node]
@@ -51,46 +51,27 @@ toc::[]
      block)")
 ----
 
-==== document
+=== document
 
-[source,clj]
+[source,clojure]
 ----
   (document [node content-hash]
     "Reads a document from the document store based on its
     content hash.")
 ----
 
-==== history
+=== documents
 
-[source,clj]
+[source,clojure]
 ----
-  (history [node eid]
-    "Returns the transaction history of an entity, in reverse
-    chronological order. Includes corrections, but does not include
-    the actual documents.")
-----
-
-=== history-range
-
-[source,clj]
-----
-  (history-range [node eid
-                  ^Date valid-time-start
-                  ^Date transaction-time-start
-                  ^Date valid-time-end
-                  ^Date transaction-time-end]
-    "Returns the transaction history of an entity, ordered by valid
-    time / transaction time in chronological order, earliest
-    first. Includes corrections, but does not include the actual
-    documents.
-
-    Giving null as any of the date arguments makes the range open
-    ended for that value.")
+  (documents [node content-hash-set]
+    "Reads the set of documents from the document store based on their
+    respective content hashes. Returns a map content-hash->document")
 ----
 
 === status
 
-[source,clj]
+[source,clojure]
 ----
   (status [node]
     "Returns the status of this node as a map.")
@@ -98,7 +79,7 @@ toc::[]
 
 === submit-tx
 
-[source,clj]
+[source,clojure]
 ----
   (submit-tx [node tx-ops]
     "Writes transactions to the log for processing
@@ -109,7 +90,7 @@ toc::[]
 
 === tx-committed?
 
-[source,clj]
+[source,clojure]
 ----
   (tx-committed? [node submitted-tx]
     "Checks if a submitted tx was successfully committed.
@@ -121,7 +102,7 @@ toc::[]
 
 === await-tx
 
-[source,clj]
+[source,clojure]
 ----
   (await-tx
     [node tx]
@@ -133,7 +114,7 @@ toc::[]
 
 === await-tx-time
 
-[source,clj]
+[source,clojure]
 ----
   (await-tx-time
     [node ^Date tx-time]
@@ -145,7 +126,7 @@ toc::[]
 
 === sync
 
-[source,clj]
+[source,clojure]
 ----
  (sync
     [node]
@@ -162,7 +143,7 @@ toc::[]
 ----
 
 === listen
-[source,clj]
+[source,clojure]
 ----
   (listen ^java.lang.AutoCloseable [node event-opts f]
     "Attaches a listener to Crux's event bus.
@@ -179,7 +160,7 @@ toc::[]
 
 === tx-log
 
-[source,clj]
+[source,clojure]
 ----
 (open-tx-log ^ICursor [this after-tx-id with-ops?]
   "Reads the transaction log. Optionally includes
@@ -195,7 +176,7 @@ toc::[]
 
 === attribute-stats
 
-[source,clj]
+[source,clojure]
 ----
   (attribute-stats [node]
     "Returns frequencies of indexed attributes")
@@ -208,7 +189,7 @@ Represents the database as of a specific valid and transaction time.
 
 === entity
 
-[source,clj]
+[source,clojure]
 ----
   (entity [db eid]
     "queries a document map for an entity.
@@ -218,7 +199,7 @@ Represents the database as of a specific valid and transaction time.
 
 === entity-tx
 
-[source,clj]
+[source,clojure]
 ----
   (entity-tx [db eid]
     "returns the transaction details for an entity. Details
@@ -226,19 +207,9 @@ Represents the database as of a specific valid and transaction time.
     eid is an object that can be coerced into an entity id.")
 ----
 
-=== new-snapshot
-
-[source,clj]
-----
-  (new-snapshot ^java.io.Closeable [db]
-     "Returns a new implementation-specific snapshot allowing for multiple
-     entity calls to share the same KV store snapshot.
-     returns an implementation specific snapshot")
-----
-
 === q
 
-[source,clj]
+[source,clojure]
 ----
   (q
     [db query]
@@ -249,7 +220,7 @@ Represents the database as of a specific valid and transaction time.
 
 === open-q
 
-[source,clj]
+[source,clojure]
 ----
   (open-q
     [db query]
@@ -269,53 +240,52 @@ Represents the database as of a specific valid and transaction time.
      ")
 ----
 
-=== history-ascending
+=== entity-history
 
-[source,clj]
+[source,clojure]
 ----
-  (history-ascending
-    [db eid]
-    "Retrieves entity history in chronological order from and including the
-    valid time of the db while respecting transaction time. Includes the
-    documents.")
-----
+  (entity-history
+    [db eid sort-order]
+    [db eid sort-order {:keys [with-docs? with-corrections?]
+                        {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
+                        {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}]
+    "Eagerly retrieves entity history for the given entity.
 
-=== open-history-ascending
+    Options:
+    * `sort-order`: `#{:asc :desc}`
+    * `:with-docs?`: specifies whether to include documents in the entries
+    * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
+    * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
+    * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
 
-[source,clj]
-----
-  (open-history-ascending
-    [db eid]
-    "Retrieves entity history lazily in chronological order from and including
-    the valid time of the db while respecting transaction time. Includes the
-    documents.")
-----
+    No matter what `:start` and `:end` parameters you specify, you won't receive
+    results later than the valid-time and transact-time of this DB value.
 
-=== history-descending
-
-[source,clj]
-----
-  (history-descending
-    [db eid]
-    "Retrieves entity history in reverse chronological order from and including
-    the valid time of the db while respecting transaction time. Includes the
-    documents.")
+    Each entry in the result contains the following keys:
+     * `:crux.db/valid-time`,
+     * `:crux.db/tx-time`,
+     * `:crux.tx/tx-id`,
+     * `:crux.db/content-hash`
+     * `:crux.db/doc` (see `with-docs?`).")
 ----
 
-=== open-history-descending
+=== open-entity-history
 
-[source,clj]
+[source,clojure]
 ----
-  (open-history-descending
-    [db eid]
-    "Retrieves entity history lazily in reverse chronological order from and
-    including the valid time of the db while respecting transaction time.
-    Includes the documents.")
+  (open-entity-history
+    [db eid sort-order]
+    [db eid sort-order {:keys [with-docs? with-corrections?]
+                        {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
+                        {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}]
+    "Lazily retrieves entity history for the given entity.
+    Don't forget to close the cursor when you've consumed enough history!
+    See `entity-history` for all the options")
 ----
 
 === valid-time
 
-[source,clj]
+[source,clojure]
 ----
   (valid-time [db]
     "returns the valid time of the db.
@@ -325,7 +295,7 @@ Represents the database as of a specific valid and transaction time.
 
 === transaction-time
 
-[source,clj]
+[source,clojure]
 ----
   (transaction-time [db]
     "returns the time of the latest transaction applied to this db value.
@@ -338,7 +308,7 @@ Represents the database as of a specific valid and transaction time.
 
 === start-node
 
-[source,clj]
+[source,clojure]
 ----
 (defn start-node ^ICruxAPI [options])
 ----
@@ -347,7 +317,7 @@ NOTE: requires any dependendies on the classpath that the Crux modules may need.
 
 Options:
 
-[source,clj]
+[source,clojure]
 ----
 {:crux.node/topology ['crux.standalone/topology]}
 ----
@@ -366,7 +336,7 @@ last run. Only applicable when using the event log.
 
 === new-api-client
 
-[source,clj]
+[source,clojure]
 ----
 (defn new-api-client ^ICruxAPI [url])
 ----
@@ -385,7 +355,7 @@ Returns a remote API client.
 
 === new-ingest-client
 
-[source,clj]
+[source,clojure]
 ----
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options])
 ----
@@ -399,15 +369,15 @@ specified as keywords using their long format name, like
 
 Options:
 
-[source,clj]
+[source,clojure]
 ----
 {:crux.kafka/bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
-:crux.kafka/group-id           "group-id"
-:crux.kafka/tx-topic           "crux-transaction-log"
-:crux.kafka/doc-topic          "crux-docs"
-:crux.kafka/create-topics      true
-:crux.kafka/doc-partitions     1
-:crux.kafka/replication-factor 1}
+ :crux.kafka/group-id "group-id"
+ :crux.kafka/tx-topic "crux-transaction-log"
+ :crux.kafka/doc-topic "crux-docs"
+ :crux.kafka/create-topics true
+ :crux.kafka/doc-partitions 1
+ :crux.kafka/replication-factor 1}
 ----
 
 Returns a crux.api.ICruxIngestAPI component that implements
