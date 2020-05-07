@@ -84,7 +84,8 @@
        nil
 
        (= 400 status)
-       (let [{:keys [^String cause data]} (edn/read-string body)]
+       (let [{:keys [^String cause data]} (edn/read-string (cond-> body
+                                                             (= :stream (:as http-opts)) slurp))]
          (throw (IllegalArgumentException. cause (when data
                                                    (ex-info cause data)))))
 
