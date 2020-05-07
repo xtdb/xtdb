@@ -5,7 +5,7 @@
             [crux.memory :as mem]
             [crux.morton :as morton]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang IReduceInit Seqable Sequential]
+  (:import [clojure.lang IReduceInit MapEntry Seqable Sequential]
            crux.api.IndexVersionOutOfSyncException
            [crux.codec EntityValueContentHash EntityTx]
            [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
@@ -58,7 +58,7 @@
   (let [value (.value (c/decode-avec-key->evc-from k))]
     (set! (.last-k peek-state) k)
     (set! (.value peek-state) value)
-    [value :crux.index.binary-placeholder/value]))
+    (MapEntry/create value :crux.index.binary-placeholder/value)))
 
 (defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer attr ^ValueEntityValuePeekState peek-state]
   db/Index
@@ -98,7 +98,7 @@
                              eid-buffer
                              (c/->id-buffer (.content-hash entity-tx)))]
               (when (kv/get-value snapshot version-k)
-                [eid-buffer entity-tx]))))
+                (MapEntry/create eid-buffer entity-tx)))))
         (when-let [k (some->> (.peek peek-state) (kv/seek i))]
           (recur k)))))
 
@@ -145,7 +145,7 @@
     (set! (.last-k peek-state) k)
     (set! (.entity-tx peek-state) entity-tx)
     (if entity-tx
-      [(c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity]
+      (MapEntry/create (c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity)
       ::deleted-entity)))
 
 (defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
@@ -198,16 +198,16 @@
                          (c/->id-buffer (.content-hash entity-tx))
                          (or k c/empty-buffer))
                         (kv/seek i))]
-        [(mem/copy-buffer (.value (c/decode-aecv-key->evc-from k)))
-         entity-tx])))
+        (MapEntry/create (mem/copy-buffer (.value (c/decode-aecv-key->evc-from k)))
+                         entity-tx))))
 
   (next-values [this]
     (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
           entity-tx ^EntityTx (.entity-tx entity-tx+prefix-iterator)
           i (.prefix-iterator entity-tx+prefix-iterator)]
       (when-let [k (kv/next i)]
-        [(mem/copy-buffer (.value (c/decode-aecv-key->evc-from k)))
-         entity-tx]))))
+        (MapEntry/create (mem/copy-buffer (.value (c/decode-aecv-key->evc-from k)))
+                         entity-tx)))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
   (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->id-buffer attr) entity-value-entity-idx
@@ -377,7 +377,7 @@
              (lazy-seq
               (when (and k (mem/buffers=? prefix k (.capacity prefix)))
                 (cons (if entries?
-                        [(mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i))]
+                        (MapEntry/create (mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i)))
                         (mem/copy-to-unpooled-buffer k))
                       (step (if reverse? (kv/prev i) (kv/next i)))))))]
      (step (if reverse?
@@ -481,13 +481,13 @@
                 v (kv/value i)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (mem/buffers=? c/nil-id-buffer v)
-                [(c/->id-buffer (.eid entity-tx))
-                 (enrich-entity-tx entity-tx v)])
+                (MapEntry/create (c/->id-buffer (.eid entity-tx))
+                                 (enrich-entity-tx entity-tx v)))
               (if morton/*use-space-filling-curve-index?*
                 (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
                   (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid nil)]
                     (when-not (= ::deleted-entity k)
-                      [k v])))
+                      (MapEntry/create k v))))
                 (recur (kv/next i)))))))))
 
   (db/next-values [this]
@@ -518,8 +518,8 @@
           (if (morton/morton-number-within-range? min max z)
             (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
                   v (kv/value i)]
-              [(c/->id-buffer (.eid entity-tx))
-               (enrich-entity-tx entity-tx v)])
+              (MapEntry/create (c/->id-buffer (.eid entity-tx))
+                               (enrich-entity-tx entity-tx v)))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
               (when-not (neg? (.compareTo ^Comparable bigmin z))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
@@ -722,7 +722,7 @@
                                               (if (or (= :crux.index.binary-placeholder/entity y)
                                                       (= :crux.index.binary-placeholder/value y))
                                                 x y))))]
-                [max-k result]))
+                (MapEntry/create max-k result)))
             (recur))))))
 
   db/LayeredIndex
@@ -817,14 +817,14 @@
     (when-let [[value :as values] (db/seek-values n-ary-index k)]
       (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) values)]
         (do (set! (.last state) result)
-            [value (second (last result))])
+            (MapEntry/create value (second (last result))))
         (db/next-values this))))
 
   (next-values [this]
     (when-let [[value :as values] (db/next-values n-ary-index)]
       (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) values)]
         (do (set! (.last state) result)
-            [value (second (last result))])
+            (MapEntry/create value (second (last result))))
         (recur))))
 
   db/LayeredIndex
@@ -854,7 +854,7 @@
                                (for [result (idx->seq idx)
                                      :let [leaf-key (build-result max-ks result)]
                                      :when leaf-key]
-                                 [leaf-key (last result)]))
+                                 (MapEntry/create leaf-key (last result))))
           step (fn step [max-ks ^long depth needs-seek?]
                  (when (Thread/interrupted)
                    (throw (InterruptedException.)))
@@ -891,7 +891,7 @@
         (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
         (set! (.needs-seek? state) false)
         (when k
-          [k (.value nested-index-state)]))))
+          (MapEntry/create k (.value nested-index-state))))))
 
   (next-values [this]
     (if (.needs-seek? state)
@@ -900,7 +900,7 @@
         (let [[k ^RelationNestedIndexState nested-index-state] (db/next-values idx)]
           (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
           (when k
-            [k (.value nested-index-state)])))))
+            (MapEntry/create k (.value nested-index-state)))))))
 
   db/LayeredIndex
   (open-level [this]
@@ -926,11 +926,11 @@
   (-> (new-sorted-virtual-index
        (for [prefix (vals (group-by first tuples))
              :let [value (ffirst prefix)]]
-         [(encode-value-fn value)
-          (RelationNestedIndexState.
-           value
-           (when (seq (next (first prefix)))
-             (build-nested-index encode-value-fn (map next prefix) next-range-constraints)))]))
+         (MapEntry/create (encode-value-fn value)
+                          (RelationNestedIndexState.
+                           value
+                           (when (seq (next (first prefix)))
+                             (build-nested-index encode-value-fn (map next prefix) next-range-constraints))))))
       (wrap-with-range-constraints range-constraints)))
 
 (defn update-relation-virtual-index!
