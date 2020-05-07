@@ -29,6 +29,9 @@
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
+(defn- vectorize-value [v]
+  (if (or (not (vector? v)) (= 1 (count v))) (vector v) v))
+
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
@@ -94,23 +97,23 @@
 (extend-protocol RexNodeToClauses
   RexInputRef
   (->clauses [this schema]
-    [[(list '= (->var this schema) true)]])
+    [(list '= (->var this schema) true)])
 
   RexCall
   (->clauses [n schema]
     (if-let [op (lookup-op n)]
-      [[(apply list op (map #(->var % schema) (.getOperands n)))]]
+      [(apply list op (map #(->var % schema) (.getOperands n)))]
       (condp = (.getKind n)
         SqlKind/AND
         (->clauses (.-operands n) schema)
         SqlKind/OR
-        [(apply list 'or (ground-vars (->clauses (.-operands n) schema)))]
+        (apply list 'or (ground-vars (->clauses (.-operands n) schema)))
         SqlKind/NOT
-        [(apply list 'not (->clauses (.-operands n) schema))])))
+        (apply list 'not (->clauses (.-operands n) schema)))))
 
   java.util.List
   (->clauses [this schema]
-    (mapcat #(->clauses % schema) this)))
+    (mapv #(->clauses % schema) this)))
 
 (defn- post-process [schema clauses]
   (let [args (atom {})
@@ -141,8 +144,9 @@
 
 (defn enrich-filter [schema ^RexNode filter]
   (let [{:keys [clauses calc-clauses args]} (post-process schema (->clauses filter schema))]
+    (log/debug "Enriching join with" (vectorize-value clauses) calc-clauses)
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses calc-clauses)
+        (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value clauses) calc-clauses)
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args))))
 
@@ -179,7 +183,8 @@
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (assoc s1 :crux.sql.table/query (merge-with (comp vec concat) q1 q2))]
-    (update-in s3 [:crux.sql.table/query :where] #(vec (concat % (->clauses condition s3))))))
+    (log/debug "Enriching join with" (->clauses condition s3))
+    (update-in s3 [:crux.sql.table/query :where] (comp vec concat) (vectorize-value (->clauses condition s3)))))
 
 (defn- transform-result [tuple]
   (let [tuple (map #(or (and (float? %) (double %))
@@ -218,7 +223,7 @@
           query (update query :args (fn [args] [(into {} (map (fn [[k v]]
                                                                 [v (.get data-context k)])
                                                               args))]))]
-      (log/debug query)
+      (log/debug "Executing query:" query)
       (perform-query node (.get data-context "VALIDTIME") query))
     (catch Throwable e
       (log/error e)
@@ -256,7 +261,7 @@
             col-type ^SqlTypeName (java-sql-types->calcite-sql-type (columns c))]
         (when-not col-type
           (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
-        (log/debug "Adding column" col-name col-type)
+        (log/trace "Adding column" col-name col-type)
         (doto field-info
           (.add col-name col-type)
           (.nullable true))))
