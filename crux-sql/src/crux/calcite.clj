@@ -6,16 +6,13 @@
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
-            crux.calcite.types
             crux.db)
   (:import crux.calcite.CruxTable
-           crux.calcite.types.SQLFunction
-           crux.calcite.types.CruxKeywordFn
+           [crux.calcite.types CruxKeywordFn SQLFunction]
            java.lang.reflect.Field
            [java.sql DriverManager Types]
-           [java.util Properties WeakHashMap]
+           [java.util List Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
-           java.util.List
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            org.apache.calcite.DataContext
@@ -24,8 +21,7 @@
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
-           org.apache.calcite.sql.type.SqlTypeName
-           org.apache.calcite.util.Pair))
+           org.apache.calcite.sql.type.SqlTypeName))
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
@@ -38,10 +34,7 @@
 (defn -substring [c s l]
   (org.apache.calcite.runtime.SqlFunctions/substring c s l))
 
-(def ^:private sql-fns
-  {"SUBSTRING" 'crux.calcite/-substring})
-
-(def ^:private standard-ops
+(def ^:private pred-fns
   {SqlKind/EQUALS '=
    SqlKind/NOT_EQUALS 'not=
    SqlKind/GREATER_THAN '>
@@ -50,43 +43,38 @@
    SqlKind/LESS_THAN_OR_EQUAL '<=
    SqlKind/LIKE 'crux.calcite/-like
    SqlKind/IS_NULL 'nil?
-   SqlKind/IS_NOT_NULL 'boolean
-   SqlKind/TIMES '*
+   SqlKind/IS_NOT_NULL 'boolean})
+
+(def ^:private std-operator-fns
+  {SqlKind/TIMES '*
    SqlKind/PLUS '+
    SqlKind/MINUS '-})
 
-(defn- lookup-op [^RexCall c]
-  (if (= SqlKind/OTHER_FUNCTION (.getKind c))
-    (get sql-fns (.getName (.-op c)))
-    (get standard-ops (.getKind c))))
-
-(defprotocol RexNodeToVar
-  (->var [this schema]))
+(def ^:private sql-fns
+  {"SUBSTRING" 'crux.calcite/-substring})
 
 (defprotocol RexNodeToClauses
   (->clauses [this schema]))
 
-(extend-protocol RexNodeToVar
-  RexInputRef
-  (->var [this schema]
-    (get-in schema [:crux.sql.table/query :find (.getIndex this)]))
+(defn ->operand [o schema]
+  (if (instance? RexInputRef o)
+    (get-in schema [:crux.sql.table/query :find (.getIndex o)])
+    (->clauses o schema)))
 
-  RexLiteral
-  (->var [this schema]
-    (.getValue2 this))
+(defn- ->keyword-fn [c schema]
+  (when (and (= SqlKind/OTHER_FUNCTION (.getKind c))
+             (= "KEYWORD" (str (.-op c))))
+    (keyword (->operand (first (.-operands c)) schema))))
 
-  RexDynamicParam
-  (->var [this schema]
-    this)
+(defn- ->operator-fn [^RexCall c schema]
+  (when-let [op (if (= SqlKind/OTHER_FUNCTION (.getKind c))
+                  (get sql-fns (.getName (.-op c)))
+                  (get std-operator-fns (.getKind c)))]
+    (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands c)))))
 
-  RexCall
-  (->var [this schema]
-    (if (and (= SqlKind/OTHER_FUNCTION (.getKind this))
-             (= "KEYWORD" (str (.-op this))))
-      (CruxKeywordFn. this)
-      (if-let [op (lookup-op this)]
-        (SQLFunction. (gensym) op (map #(->var % schema) (.getOperands this)))
-        (throw (IllegalArgumentException. (str "Unsupported fn: " this)))))))
+(defn- ->pred-fn [n schema]
+  (when-let [op (pred-fns (.getKind n))]
+    [(apply list op (map #(->operand % schema) (.getOperands n)))]))
 
 (defn- ground-vars [or-statement]
   (let [vars (distinct (mapcat #(filter symbol? (rest (first %))) or-statement))]
@@ -95,21 +83,30 @@
        (apply list 'and clause  (map #(vector (list 'identity %)) vars))))))
 
 (extend-protocol RexNodeToClauses
+  RexLiteral
+  (->clauses [this schema]
+    (.getValue2 this))
+
+  RexDynamicParam
+  (->clauses [this schema]
+    this)
+
   RexInputRef
   (->clauses [this schema]
-    [(list '= (->var this schema) true)])
+    [(list '= (->operand this schema) true)])
 
   RexCall
   (->clauses [n schema]
-    (if-let [op (lookup-op n)]
-      [(apply list op (map #(->var % schema) (.getOperands n)))]
-      (condp = (.getKind n)
-        SqlKind/AND
-        (->clauses (.-operands n) schema)
-        SqlKind/OR
-        (apply list 'or (ground-vars (->clauses (.-operands n) schema)))
-        SqlKind/NOT
-        (apply list 'not (->clauses (.-operands n) schema)))))
+    (or (->pred-fn n schema)
+        (->keyword-fn n schema)
+        (->operator-fn n schema)
+        (condp = (.getKind n)
+          SqlKind/AND
+          (->clauses (.-operands n) schema)
+          SqlKind/OR
+          (apply list 'or (ground-vars (->clauses (.-operands n) schema)))
+          SqlKind/NOT
+          (apply list 'not (->clauses (.-operands n) schema)))))
 
   java.util.List
   (->clauses [this schema]
@@ -130,9 +127,6 @@
                               (let [sym (gensym)]
                                 (swap! args assoc (.getName ^RexDynamicParam x) sym)
                                 sym)
-
-                              CruxKeywordFn
-                              (keyword (->var (first (.-operands (.r ^CruxKeywordFn x))) schema))
 
                               x))
                           clauses)
@@ -171,9 +165,9 @@
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
 (defn enrich-project [schema projects]
-  (let [{:keys [clauses calc-clauses]} (post-process schema (mapv #(->var (.-left %) schema) projects))]
+  (log/debug "Enriching project with" projects)
+  (let [{:keys [clauses calc-clauses]} (post-process schema (mapv #(->operand (.-left %) schema) projects))]
     (-> schema
-        ;; any calcs..
         (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
         (assoc-in [:crux.sql.table/query :find] clauses))))
 
@@ -224,6 +218,7 @@
                                                                 [v (.get data-context k)])
                                                               args))]))]
       (log/debug "Executing query:" query)
+      (prn query)
       (perform-query node (.get data-context "VALIDTIME") query))
     (catch Throwable e
       (log/error e)
