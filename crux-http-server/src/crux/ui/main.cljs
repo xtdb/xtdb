@@ -11,7 +11,7 @@
   (when-let [section (js/document.getElementById "app")]
     ;; clear subscriptions when figwheel reloads js
     (rf/clear-subscription-cache!)
-    (navigation/initialize-routes)
+    (navigation/init-routes!)
     (rf/dispatch [::events/inject-metadata "options" :options])
     (r/render [views/view] section)))
 

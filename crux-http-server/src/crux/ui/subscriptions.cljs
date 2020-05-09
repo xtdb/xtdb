@@ -9,9 +9,9 @@
    db))
 
 (rf/reg-sub
- ::current-page
+ ::current-route
  (fn [db _]
-   (:current-page db)))
+   (:current-route db)))
 
 (rf/reg-sub
  ::query-data-table
@@ -55,3 +55,23 @@
  ::entity-loading?
  (fn [db _]
    (:entity-loading? db)))
+
+(rf/reg-sub
+ ::query-pane-show?
+ (fn [db _]
+   (:query-pane-show? db)))
+
+(rf/reg-sub
+ ::query-view
+ (fn [db _]
+   (get db :query-view :table)))
+
+(rf/reg-sub
+ ::entity-view
+ (fn [db _]
+   (get db :entity-view :document)))
+
+(rf/reg-sub
+ ::search-view
+ (fn [db _]
+   (get db :search-view :query)))

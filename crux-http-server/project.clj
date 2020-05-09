@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [hiccup "2.0.0-alpha2"]
                  [juxt/crux-core "derived-from-git"]
+                 [metosin/reitit "0.4.2"]
                  [ring/ring-core "1.8.0"]
                  [ring/ring-jetty-adapter "1.8.0"]
                  [ring/ring-codec "1.1.2"]
