@@ -257,11 +257,15 @@
         (t/is (= [{:name "Ivan", :age 252} {:name "Malcolm", :age 132}]
                  (query q))))))
 
-  ;; (t/testing "tphc-022-example-substring"
-  ;;   (let [q "SELECT NAME FROM PERSON WHERE substring(name from 1 for 1) in ('I', 'V')"]
-  ;;     (t/is (= [{:name "Ivan"}]
-  ;;              (query q)))))
-  )
+  (t/testing "in OR conditional with args"
+    (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Malcolm' OR AGE = (2 * 21)"]
+      (t/is (= [{:name "Ivan"} {:name "Malcolm"}]
+               (query q)))))
+
+  (t/testing "tphc-022-example-substring"
+    (let [q "SELECT NAME FROM PERSON WHERE substring(name from 1 for 1) in ('I', 'V')"]
+      (t/is (= [{:name "Ivan"}]
+               (query q))))))
 
 (t/deftest test-keywords
   (f/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
@@ -502,3 +506,9 @@
   (t/testing "retrieve data"
     (t/is (= #{{:id ":person/ivan", :name "Ivan", :planet "earth"}}
              (set (query "SELECT * FROM PERSON"))))))
+
+
+(comment
+  (import '[ch.qos.logback.classic Level Logger]
+          'org.slf4j.LoggerFactory)
+  (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))

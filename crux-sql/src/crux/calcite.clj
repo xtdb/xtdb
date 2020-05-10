@@ -8,10 +8,10 @@
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
-           [crux.calcite.types CruxKeywordFn SQLFunction]
+           [crux.calcite.types SQLCondition SQLFunction SQLPredicate]
            java.lang.reflect.Field
            [java.sql DriverManager Types]
-           [java.util List Properties WeakHashMap]
+           [java.util Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
@@ -19,7 +19,7 @@
            org.apache.calcite.linq4j.Enumerable
            org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
-           [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode]
+           [org.apache.calcite.rex RexDynamicParam RexInputRef RexLiteral RexNode]
            org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName))
 
@@ -53,28 +53,8 @@
 (def ^:private sql-fns
   {"SUBSTRING" 'crux.calcite/-substring})
 
-(defprotocol RexNodeToClauses
-  (->clauses [this schema]))
-
-(defn ->operand [o schema]
-  (if (instance? RexInputRef o)
-    (get-in schema [:crux.sql.table/query :find (.getIndex o)])
-    (->clauses o schema)))
-
-(defn- ->keyword-fn [c schema]
-  (when (and (= SqlKind/OTHER_FUNCTION (.getKind c))
-             (= "KEYWORD" (str (.-op c))))
-    (keyword (->operand (first (.-operands c)) schema))))
-
-(defn- ->operator-fn [^RexCall c schema]
-  (when-let [op (if (= SqlKind/OTHER_FUNCTION (.getKind c))
-                  (get sql-fns (.getName (.-op c)))
-                  (get std-operator-fns (.getKind c)))]
-    (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands c)))))
-
-(defn- ->pred-fn [n schema]
-  (when-let [op (pred-fns (.getKind n))]
-    [(apply list op (map #(->operand % schema) (.getOperands n)))]))
+(defn input-ref->attr [^RexInputRef i schema]
+  (get-in schema [:crux.sql.table/query :find (.getIndex i)]))
 
 (defn- ground-vars [or-statement]
   (let [vars (distinct (mapcat #(filter symbol? (rest (first %))) or-statement))]
@@ -82,35 +62,30 @@
      (for [clause or-statement]
        (apply list 'and clause  (map #(vector (list 'identity %)) vars))))))
 
-(extend-protocol RexNodeToClauses
-  RexLiteral
-  (->clauses [this schema]
-    (.getValue2 this))
+(declare ->ast)
 
-  RexDynamicParam
-  (->clauses [this schema]
-    this)
+(defn- ->operand [o schema]
+  (if (instance? RexInputRef o)
+    (input-ref->attr o schema)
+    (->ast o schema)))
 
-  RexInputRef
-  (->clauses [this schema]
-    [(list '= (->operand this schema) true)])
+(defn- ->ast [^RexNode n schema]
+  (or (when-let [op (pred-fns (.getKind n))]
+        (SQLPredicate. op (map #(->operand % schema) (.getOperands n))))
 
-  RexCall
-  (->clauses [n schema]
-    (or (->pred-fn n schema)
-        (->keyword-fn n schema)
-        (->operator-fn n schema)
-        (condp = (.getKind n)
-          SqlKind/AND
-          (->clauses (.-operands n) schema)
-          SqlKind/OR
-          (apply list 'or (ground-vars (->clauses (.-operands n) schema)))
-          SqlKind/NOT
-          (apply list 'not (->clauses (.-operands n) schema)))))
+      (when (and (= SqlKind/OTHER_FUNCTION (.getKind n))
+                 (= "KEYWORD" (str (.-op n))))
+        (keyword (.getValue2 ^RexLiteral (first (.-operands n)))))
 
-  java.util.List
-  (->clauses [this schema]
-    (mapv #(->clauses % schema) this)))
+      (when-let [op (if (= SqlKind/OTHER_FUNCTION (.getKind n))
+                      (get sql-fns (.getName (.-op n)))
+                      (get std-operator-fns (.getKind n)))]
+        (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands n))))
+
+      (and (#{SqlKind/AND SqlKind/OR SqlKind/NOT} (.getKind n))
+           (SQLCondition. (.getKind n) (mapv #(->ast % schema) (.-operands n))))
+
+      n))
 
 (defn- post-process [schema clauses]
   (let [args (atom {})
@@ -128,6 +103,26 @@
                                 (swap! args assoc (.getName ^RexDynamicParam x) sym)
                                 sym)
 
+                              RexLiteral
+                              (.getValue2 x)
+
+                              ;; If used as an argument, the literal should already have been extracted,
+                              ;; so we can assume it's being used in a conditional (OR/AND/NOT)
+                              RexInputRef
+                              [(list '= (input-ref->attr x schema) true)]
+
+                              SQLPredicate
+                              [(apply list (.op x) (.operands x))]
+
+                              SQLCondition
+                              (condp = (.c x)
+                                  SqlKind/AND
+                                  (.clauses x)
+                                  SqlKind/OR
+                                  (apply list 'or (ground-vars (.clauses x)))
+                                  SqlKind/NOT
+                                  (apply list 'not (.clauses x)))
+
                               x))
                           clauses)
         calc-clauses (for [op ^SQLOperation @sql-ops]
@@ -137,7 +132,7 @@
      :args @args}))
 
 (defn enrich-filter [schema ^RexNode filter]
-  (let [{:keys [clauses calc-clauses args]} (post-process schema (->clauses filter schema))]
+  (let [{:keys [clauses calc-clauses args]} (post-process schema (->ast filter schema))]
     (log/debug "Enriching join with" (vectorize-value clauses) calc-clauses)
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value clauses) calc-clauses)
@@ -177,8 +172,9 @@
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (assoc s1 :crux.sql.table/query (merge-with (comp vec concat) q1 q2))]
-    (log/debug "Enriching join with" (->clauses condition s3))
-    (update-in s3 [:crux.sql.table/query :where] (comp vec concat) (vectorize-value (->clauses condition s3)))))
+
+    (log/debug "Enriching join with" condition)
+    (enrich-filter s3 condition)))
 
 (defn- transform-result [tuple]
   (let [tuple (map #(or (and (float? %) (double %))
@@ -218,7 +214,6 @@
                                                                 [v (.get data-context k)])
                                                               args))]))]
       (log/debug "Executing query:" query)
-      (prn query)
       (perform-query node (.get data-context "VALIDTIME") query))
     (catch Throwable e
       (log/error e)

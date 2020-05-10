@@ -4,3 +4,7 @@
 (defrecord SQLFunction [sym op operands])
 
 (defrecord CruxKeywordFn [^RexCall r])
+
+(defrecord SQLCondition [c clauses])
+
+(defrecord SQLPredicate [op operands])
