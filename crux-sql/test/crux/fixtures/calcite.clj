@@ -1,6 +1,6 @@
 (ns crux.fixtures.calcite
   (:require [crux.calcite :as cal]
-            [crux.fixtures.api :as fapi]
+            [crux.fixtures :as fix]
             [crux.node :as n])
   (:import java.sql.DriverManager
            java.sql.PreparedStatement))
@@ -8,7 +8,7 @@
 (def ^:dynamic ^java.sql.Connection *conn*)
 
 (defn with-calcite-connection [f]
-  (with-open [conn (cal/jdbc-connection fapi/*api*)]
+  (with-open [conn (cal/jdbc-connection fix/*api*)]
     (binding [*conn* conn]
       (f))))
 
@@ -18,9 +18,9 @@
       (f))))
 
 (defn with-calcite-module [f]
-  (fapi/with-opts (-> fapi/*opts*
-                      (update ::n/topology conj cal/module)
-                      (assoc :crux.calcite/port 1503))
+  (fix/with-opts (-> fix/*opts*
+                     (update ::n/topology conj cal/module)
+                     (assoc :crux.calcite/port 1503))
     f))
 
 (defn query [q]

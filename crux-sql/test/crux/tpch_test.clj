@@ -1,10 +1,7 @@
 (ns crux.tpch-test
   (:require [clojure.test :as t]
-            [crux.fixtures :as f]
-            [crux.fixtures.api :as fapi :refer [*api*]]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.calcite :as cf]
-            [crux.fixtures.kv :as kvf]
-            [crux.fixtures.standalone :as fs]
             [crux.fixtures.tpch :as tf])
   (:import io.airlift.tpch.TpchTable))
 
@@ -12,16 +9,16 @@
 ;; http://www.tpc.org/
 
 (defn- with-tpch-schema [f]
-  (f/transact! *api* (tf/tpch-tables->crux-sql-schemas))
+  (fix/transact! *api* (tf/tpch-tables->crux-sql-schemas))
   (f))
 
 (defn- with-tpch-dataset [f]
   (doseq [^TpchTable t (TpchTable/getTables)]
     ;; Using a scale-factor of .005 and no take, takes ~3 mins combined for all tests
-    (f/transact! *api* (take 10 (tf/tpch-table->docs t))))
+    (fix/transact! *api* (take 10 (tf/tpch-table->docs t))))
   (f))
 
-(t/use-fixtures :each fs/with-standalone-node cf/with-calcite-module kvf/with-kv-dir fapi/with-node cf/with-calcite-connection with-tpch-schema with-tpch-dataset)
+(t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node cf/with-calcite-connection with-tpch-schema with-tpch-dataset)
 
 (defn query [^String s]
   (cf/query (.replace s "tpch." "")))
