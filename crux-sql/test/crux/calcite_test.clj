@@ -383,12 +383,14 @@
                           {:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :born born :afloat afloat}])
     (t/is (= [{:id ":human/ivan", :name "Ivan" :born born :afloat afloat}] (query "SELECT * FROM PERSON"))))
   (t/testing "restricted types"
-    (t/is (thrown-with-msg? java.lang.IllegalArgumentException #"Unrecognised java.sql.Types: :time"
-                            (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
-                                                   :crux.sql.table/name "person"
-                                                   :crux.sql.table/query '{:find [?id ?name ?born]}
-                                                   :crux.sql.table/columns '{?id :keyword
-                                                                             ?born :time}}])))))
+    (t/is (thrown-with-msg? java.lang.Exception #"Unrecognised java.sql.Types: :time"
+                            (do
+                              (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                                                     :crux.sql.table/name "person"
+                                                     :crux.sql.table/query '{:find [?id ?name ?born]}
+                                                     :crux.sql.table/columns '{?id :keyword
+                                                                               ?born :time}}])
+                              (query "SELECT * FROM PERSON"))))))
 
 (t/deftest test-simple-joins
   (fix/transact! *api* '[{:crux.db/id :crux.sql.schema/person

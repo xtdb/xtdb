@@ -2,7 +2,7 @@
   (:import [io.airlift.tpch TpchColumn TpchColumnType TpchColumnType$Base TpchEntity TpchTable]))
 
 (def tpch-column-types->crux-calcite-type
-  {TpchColumnType$Base/INTEGER :integer
+  {TpchColumnType$Base/INTEGER :bigint
    TpchColumnType$Base/VARCHAR :varchar
    TpchColumnType$Base/IDENTIFIER :bigint
    TpchColumnType$Base/DOUBLE :double
