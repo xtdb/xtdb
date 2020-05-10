@@ -98,11 +98,21 @@
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(NAME=[$1], DOUBLE_AGE=[*(2, $3)])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
-             (explain q))))
+             (explain q)))))
 
-  (t/testing "tpch-016 boolean literal in projection"
-    (t/is (= #{{:name "Ivan"}}
-             (set (query "SELECT NAME, TRUE FROM PERSON WHERE ALIVE = TRUE"))))))
+(t/deftest test-project-literals-tpch-016
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                      {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
+
+  (t/testing "tpch-016 project literals"
+    (t/is (= #{{:name "Ivan" :t true}}
+             (set (query "SELECT NAME, TRUE AS T FROM PERSON WHERE ALIVE = TRUE"))))
+    (t/is (= #{{:name "Ivan" :t false}}
+             (set (query "SELECT NAME, FALSE AS T FROM PERSON WHERE ALIVE = TRUE"))))
+    (t/is (= #{{:name "Ivan" :t 1}}
+             (set (query "SELECT NAME, 1 AS T FROM PERSON WHERE ALIVE = TRUE"))))
+    (t/is (= #{{:name "Ivan" :t "h"}}
+             (set (query "SELECT NAME, 'h' AS T FROM PERSON WHERE ALIVE = TRUE"))))))
 
 (t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}

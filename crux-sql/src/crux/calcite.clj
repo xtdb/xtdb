@@ -9,7 +9,7 @@
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
-           [crux.calcite.types SQLCondition SQLFunction SQLPredicate]
+           [crux.calcite.types SQLCondition SQLFunction SQLPredicate WrapLiteral]
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
@@ -126,15 +126,15 @@
 
                               x))
                           clauses)
-        calc-clauses (for [op ^SQLOperation @sql-ops]
+        calc-clauses (for [op ^SQLFunction @sql-ops]
                        [(apply list (.op op) (.operands op)) (.sym op)])]
     {:clauses clauses
      :calc-clauses calc-clauses
      :args @args}))
 
 (defn enrich-filter [schema ^RexNode filter]
+  (log/debug "Enriching with filter" filter)
   (let [{:keys [clauses calc-clauses args]} (post-process schema (->ast filter schema))]
-    (log/debug "Enriching join with" (vectorize-value clauses) calc-clauses)
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value clauses) calc-clauses)
         ;; Todo consider case of multiple arg maps
@@ -160,14 +160,25 @@
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
+(defn -literal [v]
+  (WrapLiteral. v))
+
 (defn enrich-project [schema projects]
   (log/debug "Enriching project with" projects)
-  (let [{:keys [clauses calc-clauses]} (post-process schema (mapv #(->operand (.-left %) schema) projects))]
+  (def p projects)
+  (def s schema)
+  (let [{:keys [clauses calc-clauses]}
+        (->> (for [rex-node (map #(.-left %) projects)]
+               (if (instance? RexLiteral rex-node)
+                 (SQLFunction. (gensym) 'crux.calcite/-literal [rex-node])
+                 (->operand rex-node schema)))
+             (post-process schema))]
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
-        (assoc-in [:crux.sql.table/query :find] clauses))))
+        (assoc-in [:crux.sql.table/query :find] (vec clauses)))))
 
 (defn enrich-join [s1 s2 join-type condition]
+  (log/debug "Enriching join with" condition)
   (let [q1 (:crux.sql.table/query s1)
         q2 (:crux.sql.table/query s2)
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
@@ -175,15 +186,19 @@
         s3 (-> s1
                (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
                (update-in [:crux.sql.table/query :args] (partial apply merge)))]
-    (log/debug "Enriching join with" condition)
     (enrich-filter s3 condition)))
 
 (defn- transform-result [tuple]
-  (let [tuple (map #(or (and (float? %) (double %))
-                        ;; Calcite enumerator wants millis for timestamps:
-                        (and (inst? %) (inst-ms %))
-                        (and (keyword? %) (str %))
-                        %) tuple)]
+  (let [tuple (map #(if (instance? WrapLiteral %)
+                      ;; literal numbers expected to be ints:
+                      (if (int? (.l %)) (int (.l %)) (.l %))
+                      (or (and (float? %) (double %))
+                          ;; Calcite enumerator wants millis for timestamps:
+                          (and (inst? %) (inst-ms %))
+                          (and (keyword? %) (str %))
+                          (and (instance? WrapLiteral %) (.l %))
+                          %))
+                   tuple)]
     (if (= 1 (count tuple))
       (first tuple)
       (to-array tuple))))
