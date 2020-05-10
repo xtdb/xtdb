@@ -8,7 +8,7 @@
 
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection f)
-  #_(t/testing "With Avatica Connection"
+  (t/testing "With Avatica Connection"
     (cf/with-avatica-connection f)))
 
 (defn- with-sql-schema [f]
