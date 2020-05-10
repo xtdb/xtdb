@@ -98,7 +98,11 @@
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(NAME=[$1], DOUBLE_AGE=[*(2, $3)])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
-             (explain q)))))
+             (explain q))))
+
+  (t/testing "tpch-016 boolean literal in projection"
+    (t/is (= #{{:name "Ivan"}}
+             (set (query "SELECT NAME, TRUE FROM PERSON WHERE ALIVE = TRUE"))))))
 
 (t/deftest test-sql-query
   (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}

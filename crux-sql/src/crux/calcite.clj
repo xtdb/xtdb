@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
+            [crux.calcite.types]
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
@@ -171,8 +172,9 @@
         q2 (:crux.sql.table/query s2)
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
-        s3 (assoc s1 :crux.sql.table/query (merge-with (comp vec concat) q1 q2))]
-
+        s3 (-> s1
+               (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
+               (update-in [:crux.sql.table/query :args] (partial apply merge)))]
     (log/debug "Enriching join with" condition)
     (enrich-filter s3 condition)))
 
