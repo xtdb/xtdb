@@ -14,6 +14,21 @@
    (:current-route db)))
 
 (rf/reg-sub
+ ::initial-date-time
+ (fn [db _]
+   (let [{:keys [valid-time transaction-time] :or {valid-time (t/now)}}
+         (get-in db [:current-route :query-params])
+         _ (prn valid-time transaction-time)
+         vt-date (t/date valid-time)
+         vt-time (t/time valid-time)
+         tt-date (when (seq transaction-time) (t/date transaction-time))
+         tt-time (when (seq transaction-time) (t/time transaction-time))]
+     {:valid-date vt-date
+      :valid-time vt-time
+      :transaction-date tt-date
+      :transaction-time tt-time})))
+
+(rf/reg-sub
  ::query-data-table
  (fn [db _]
    (if-let [error (get-in db [:query-data :error])]

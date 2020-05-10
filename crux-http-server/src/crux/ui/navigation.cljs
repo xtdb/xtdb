@@ -13,7 +13,7 @@
    (apply rfe/push-state route)))
 
 (rf/reg-event-fx
- ::navigate
+ :navigate
  (fn [_ [_ & route]]
    {::navigate! route}))
 

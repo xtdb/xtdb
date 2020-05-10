@@ -1,11 +1,9 @@
 (ns crux.ui.http
   (:require
    [ajax.edn :as ajax-edn]
-   [clojure.string :as string]
+   [crux.ui.common :as common]
    [day8.re-frame.http-fx]
-   [re-frame.core :as rf]
-   [tick.alpha.api :as t]))
-
+   [re-frame.core :as rf]))
 
 (rf/reg-event-fx
  ::fetch-query-table
@@ -40,18 +38,16 @@
                  (get-in result [:response :via 0 :message]))
        (assoc :table-loading? false))))
 
-
 (rf/reg-event-fx
  ::fetch-entity
  (fn [{:keys [db]} _]
-   (let [entity-id (-> js/window.location.pathname
-                       (string/split #"/")
-                       last)
-         query-params (js/URLSearchParams. js/window.location.search)]
-     (.set query-params "link-entities?" true)
+   (prn "in here")
+   (let [eid (get-in db [:current-route :path-params :eid])
+         query-params (assoc (get-in db [:current-route :query-params])
+                             :link-entities? true)]
      {:db (assoc db :entity-loading? true)
       :http-xhrio {:method :get
-                   :uri (str "/_entity/" entity-id "?" query-params)
+                   :uri (common/route->url :entity {:eid eid} query-params)
                    :response-format (ajax-edn/edn-response-format)
                    :on-success [::success-fetch-entity]
                    :on-failure [::fail-fetch-entity]}})))

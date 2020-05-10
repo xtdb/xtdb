@@ -11,27 +11,60 @@
    [re-frame.core :as rf]
    [tick.alpha.api :as t]))
 
-(defn query-box
+(defn vt-tt-inputs
+  [{:keys [values handle-change handle-blur]}]
+  [:div.crux-time
+   [:div.input-group.valid-time
+    [:div.label
+     [:label "Valid Time"]]
+    [:input.input {:type "date"
+                   :name "valid-date"
+                   :value (get values "valid-date")
+                   :on-change handle-change
+                   :on-blur handle-blur}]
+    [:input.input {:type "time"
+                   :name "valid-time"
+                   :step "any"
+                   :value (get values "valid-time")
+                   :on-change handle-change
+                   :on-blur handle-blur}]]
+   [:div.input-group
+    [:div.label
+     [:label "Transaction Time"]]
+    [:input.input {:type "date"
+                   :name "transaction-date"
+                   :value (get values "transaction-date")
+                   :on-change handle-change
+                   :on-blur handle-blur}]
+    [:input.input {:type "time"
+                   :name "transaction-time"
+                   :value (get values "transaction-time")
+                   :step "any"
+                   :on-change handle-change
+                   :on-blur handle-blur}]]])
+
+(defn query-form
   []
-  (let [now-date (t/date)
-        now-time (t/time)
-        search-view @(rf/subscribe [::sub/search-view])]
+  (let [{{:keys [path-params]} :data} @(rf/subscribe [::sub/current-route])
+        {:keys [valid-date valid-time
+                transaction-date transaction-time]}
+        @(rf/subscribe [::sub/initial-date-time])]
     [fork/form {:path :query
                 :form-id "query"
                 :prevent-default? true
                 :clean-on-unmount? true
-                :initial-values {"valid-date" now-date
-                                 "valid-time" now-time}
-                :on-submit #(if (= :query search-view)
-                              (rf/dispatch [::events/go-to-query %])
-                              (rf/dispatch [::events/go-to-entity %]))}
+                :initial-values {"eid" (:eid path-params)
+                                 "valid-date" valid-date
+                                 "valid-time" valid-time
+                                 "transaction-date" transaction-date
+                                 "transaction-time" transaction-time}
+                :on-submit #(rf/dispatch [::events/go-to-query %])}
      (fn [{:keys [values
-                  state
                   form-id
                   handle-change
                   handle-blur
                   submitting?
-                  handle-submit]}]
+                  handle-submit] :as props}]
        [:<>
         [:form
          {:id form-id
@@ -41,40 +74,55 @@
            :value (get values "q")
            :on-change handle-change
            :on-blur handle-blur
-           :cols 40
            :rows 10}]
-         [:div.crux-time
-          [:div.input-group.valid-time
-           [:div.label
-            [:label "Valid Time"]]
-           [:input.input {:type "date"
-                          :name "valid-date"
-                          :value (get values "valid-date")
-                          :on-change handle-change
-                          :on-blur handle-blur}]
-           [:input.input {:type "time"
-                          :name "valid-time"
-                          :step "any"
-                          :value (get values "valid-time")
-                          :on-change handle-change
-                          :on-blur handle-blur}]]
-          [:div.input-group
-           [:div.label
-            [:label "Transaction Time"]]
-           [:input.input {:type "date"
-                          :name "transaction-date"
-                          :value (get values "transaction-date")
-                          :on-change handle-change
-                          :on-blur handle-blur}]
-           [:input.input {:type "time"
-                          :name "transaction-time"
-                          :value (get values "transaction-time")
-                          :step "any"
-                          :on-change handle-change
-                          :on-blur handle-blur}]]]
+         [vt-tt-inputs props]
          [:button.button
           {:type "submit"}
           "Submit Query"]]])]))
+
+(defn entity-form
+  []
+  (let [{:keys [path-params]} @(rf/subscribe [::sub/current-route])
+        {:keys [valid-date valid-time
+                transaction-date transaction-time]}
+        @(rf/subscribe [::sub/initial-date-time])]
+    [fork/form {:path :entity
+                :form-id "entity"
+                :prevent-default? true
+                :clean-on-unmount? true
+                :initial-values {"eid" (:eid path-params)
+                                 "valid-date" valid-date
+                                 "valid-time" valid-time
+                                 "transaction-date" transaction-date
+                                 "transaction-time" transaction-time}
+                :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
+     (fn [{:keys [values
+                  form-id
+                  state
+                  handle-change
+                  handle-blur
+                  submitting?
+                  handle-submit] :as props}]
+       [:<>
+        [:form
+         {:id form-id
+          :on-submit handle-submit}
+         [:textarea.textarea
+          {:name "eid"
+           :value (get values "eid")
+           :on-change handle-change
+           :on-blur handle-blur}]
+         [vt-tt-inputs props]
+         [:button.button
+          {:type "submit"}
+          "Submit Entity"]]])]))
+
+(defn form
+  []
+  (let [search-view @(rf/subscribe [::sub/search-view])]
+    (if (= :query search-view)
+      [query-form]
+      [entity-form])))
 
 (defn query-table
   []
@@ -219,19 +267,21 @@
                   "pane-nav__tab--hover")
          :on-click #(rf/dispatch [::events/set-search-view :entity])}
         "Entity"]]
-      [query-box]]]))
+      [form]]]))
 
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
-    [:div.container.page-pane
-     [left-pane]
-     [:div.right-pane
-      [:div.back-button
-       [:a
-        {:on-click common/back-page}
-        [:i.fas.fa-chevron-left]
-        [:span.back-button__text "Back"]]]
-      (case name
-        :query [query-view]
-        :entity [entity-view]
-        [:div "no matching"])]]))
+    [:<>
+     [:pre (with-out-str (pprint/pprint @(rf/subscribe [::sub/current-route])))]
+     [:div.container.page-pane
+      [left-pane]
+      [:div.right-pane
+       [:div.back-button
+        [:a
+         {:on-click common/back-page}
+         [:i.fas.fa-chevron-left]
+         [:span.back-button__text "Back"]]]
+       (case name
+         :query [query-view]
+         :entity [entity-view]
+         [:div "no matching"])]]]))

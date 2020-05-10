@@ -1,4 +1,6 @@
-(ns crux.ui.routes)
+(ns crux.ui.routes
+  (:require
+   [re-frame.core :as rf]))
 
 (def routes
   [""
@@ -14,9 +16,16 @@
      :controllers
      [{:start (fn [& params] (js/console.log "Entering sub-page 1"))
        :stop (fn [& params] (js/console.log "Leaving sub-page 1"))}]}]
-   ["/_entity/:entity-id"
+   ["/_entity/:eid"
     {:name :entity
      :link-text "Entity"
      :controllers
-     [{:start (fn [& params] (js/console.log "Entering sub-page 2"))
+     [;; events are triggered when leaving the view or when path-params or
+      ;; query-params change
+      {:params #(do [(get-in % [:path-params :eid])
+                     (get-in % [:query-params])
+                     ;; TBD we might want to always fetch even if url doesn't
+                     ;; change. Discuss this on Monday.
+                     (gensym)])
+       :start #(rf/dispatch [:crux.ui.http/fetch-entity])
        :stop (fn [& params] (js/console.log "Leaving sub-page 2"))}]}]])
