@@ -22,10 +22,10 @@
      :controllers
      [;; events are triggered when leaving the view or when path-params or
       ;; query-params change
-      {:params #(do [(get-in % [:path-params :eid])
-                     (get-in % [:query-params])
-                     ;; TBD we might want to always fetch even if url doesn't
-                     ;; change. Discuss this on Monday.
-                     (gensym)])
+      {:identity #(do [(get-in % [:path-params :eid])
+                       (get-in % [:query-params])
+                       ;; TBD we might want to always fetch even if url doesn't
+                       ;; change. Discuss this on Monday.
+                       (gensym)])
        :start #(rf/dispatch [:crux.ui.http/fetch-entity])
        :stop (fn [& params] (js/console.log "Leaving sub-page 2"))}]}]])

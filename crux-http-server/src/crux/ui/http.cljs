@@ -41,11 +41,10 @@
 (rf/reg-event-fx
  ::fetch-entity
  (fn [{:keys [db]} _]
-   (prn "in here")
    (let [eid (get-in db [:current-route :path-params :eid])
          query-params (assoc (get-in db [:current-route :query-params])
                              :link-entities? true)]
-     {:db (assoc db :entity-loading? true)
+     {:dispatch [:crux.ui.events/set-entity-right-pane-loading true]
       :http-xhrio {:method :get
                    :uri (common/route->url :entity {:eid eid} query-params)
                    :response-format (ajax-edn/edn-response-format)
@@ -56,12 +55,11 @@
  ::success-fetch-entity
  (fn [{:keys [db]} [_ result]]
    (prn "fetch entity success!")
-   {:db (-> db
-            (assoc :entity-data result)
-            (dissoc :entity-loading?))}))
+   {:db (assoc-in db [:entity :http] result)
+    :dispatch [:crux.ui.events/set-entity-right-pane-loading false]}))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  ::fail-fetch-entity
- (fn [db [_ {:keys [message] :as result}]]
+ (fn [{:keys [db]} [_ {:keys [message] :as result}]]
    (prn "Failure: get fetch entity result: " result)
-   (dissoc db :entity-loading?)))
+   {:dispatch [:crux.ui.events/set-entity-right-pane-loading false]}))

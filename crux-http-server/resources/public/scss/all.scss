@@ -115,6 +115,7 @@ nhtml, body {
 
 .crux-time {
     display: flex;
+    flex-direction: column;
 }
 
 .query-suggestions {
@@ -126,21 +127,18 @@ nhtml, body {
     margin-right: 1rem;
 }
 
-.valid-time {
-    margin-right: 2rem;
-}
-
 .input-group {
-    margin-top: 1rem;
-    max-width: 300px;
-}
-
-.input-group > * {
     margin-bottom: 1rem;
+    max-width: 300px;
 }
 
 .label {
     font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.input-group__textarea {
+    margin-bottom: 1rem;
 }
 
 .entity-link {

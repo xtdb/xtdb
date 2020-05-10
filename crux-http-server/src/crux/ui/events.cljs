@@ -39,7 +39,7 @@
        transaction-time (doto (.append "transaction-time" transaction-time))))))
 
 (rf/reg-event-fx
- ::go-to-query
+ ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
    (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
          query-map (reader/read-string (get values "q"))
@@ -86,41 +86,37 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
-         eid (reader/read-string (get values "eid"))
-         ;; reitit casts keywords to strings so we need to return a string for
-         ;; the router
-         parsed-eid (if (keyword? eid) (str ":" (name eid)) eid)
-         parsed-valid-time (when (and valid-date valid-time)
-                             {:valid-time
-                              (t/instant (str valid-date  "T" valid-time))})
-         parsed-transaction-time (when (and transaction-date transaction-time)
-                                   {:transaction-time
-                                    (t/instant (str transaction-date  "T"
-                                                    transaction-time))})]
-     {:dispatch [:navigate :entity
-                 {:eid parsed-eid}
-                 (merge
-                  parsed-valid-time
-                  parsed-transaction-time)]})))
+ (fn [{:keys [db]} [_ {{:strs [vt tt eid]} :values}]]
+   (let [query-params {:valid-time (common/instant->date-time vt)
+                       :transaction-time (common/instant->date-time tt)}]
+     {:db db
+      :dispatch [:navigate :entity
+                 {:eid eid}
+                 (->> query-params
+                      (remove #(nil? (second %)))
+                      (into {}))]})))
 
 (rf/reg-event-db
- ::query-pane-toggle
+ ::set-query-right-pane-view
+ (fn [db [_ view]]
+   (assoc-in db [:query :right-pane :view] view)))
+
+(rf/reg-event-db
+ ::set-entity-right-pane-view
+ (fn [db [_ view]]
+   (assoc-in db [:entity :right-pane :view] view)))
+
+(rf/reg-event-db
+ ::set-entity-right-pane-loading
+ (fn [db [_ bool]]
+   (assoc-in db [:entity :right-pane :loading?] bool)))
+
+(rf/reg-event-db
+ ::toggle-left-pane
  (fn [db _]
-   (update db :query-pane-show? not)))
+   (update-in db [:left-pane :visible?] not)))
 
 (rf/reg-event-db
- ::set-query-view
+ ::set-left-pane-view
  (fn [db [_ view]]
-   (assoc db :query-view view)))
-
-(rf/reg-event-db
- ::set-entity-view
- (fn [db [_ view]]
-   (assoc db :entity-view view)))
-
-(rf/reg-event-db
- ::set-search-view
- (fn [db [_ view]]
-   (assoc db :search-view view)))
+   (assoc-in  db [:left-pane :view] view)))
