@@ -10,6 +10,7 @@
             crux.db)
   (:import crux.calcite.CruxTable
            [crux.calcite.types SQLCondition SQLFunction SQLPredicate WrapLiteral]
+           org.apache.calcite.util.Pair
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
@@ -20,7 +21,7 @@
            org.apache.calcite.linq4j.Enumerable
            org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
-           [org.apache.calcite.rex RexDynamicParam RexInputRef RexLiteral RexNode]
+           [org.apache.calcite.rex RexDynamicParam RexInputRef RexLiteral RexNode RexCall]
            org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName))
 
@@ -32,7 +33,7 @@
 (defn -like [s pattern]
   (org.apache.calcite.runtime.SqlFunctions/like s pattern))
 
-(defn -substring [c s l]
+(defn -substring [^String c ^Integer s ^Integer l]
   (org.apache.calcite.runtime.SqlFunctions/substring c s l))
 
 (def ^:private pred-fns
@@ -72,19 +73,19 @@
 
 (defn- ->ast [^RexNode n schema]
   (or (when-let [op (pred-fns (.getKind n))]
-        (SQLPredicate. op (map #(->operand % schema) (.getOperands n))))
+        (SQLPredicate. op (map #(->operand % schema) (.-operands ^RexCall n))))
 
       (when (and (= SqlKind/OTHER_FUNCTION (.getKind n))
-                 (= "KEYWORD" (str (.-op n))))
-        (keyword (.getValue2 ^RexLiteral (first (.-operands n)))))
+                 (= "KEYWORD" (str (.-op ^RexCall n))))
+        (keyword (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
 
       (when-let [op (if (= SqlKind/OTHER_FUNCTION (.getKind n))
-                      (get sql-fns (.getName (.-op n)))
+                      (get sql-fns (.getName (.-op ^RexCall n)))
                       (get std-operator-fns (.getKind n)))]
-        (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands n))))
+        (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands ^RexCall n))))
 
       (and (#{SqlKind/AND SqlKind/OR SqlKind/NOT} (.getKind n))
-           (SQLCondition. (.getKind n) (mapv #(->ast % schema) (.-operands n))))
+           (SQLCondition. (.getKind n) (mapv #(->ast % schema) (.-operands ^RexCall n))))
 
       n))
 
@@ -97,7 +98,7 @@
                               SQLFunction
                               (do
                                 (swap! sql-ops conj x)
-                                (.sym x))
+                                (.sym ^SQLFunction x))
 
                               RexDynamicParam
                               (let [sym (gensym)]
@@ -105,7 +106,7 @@
                                 sym)
 
                               RexLiteral
-                              (.getValue2 x)
+                              (.getValue2 ^RexLiteral x)
 
                               ;; If used as an argument, the literal should already have been extracted,
                               ;; so we can assume it's being used in a conditional (OR/AND/NOT)
@@ -113,20 +114,20 @@
                               [(list '= (input-ref->attr x schema) true)]
 
                               SQLPredicate
-                              [(apply list (.op x) (.operands x))]
+                              [(apply list (.op ^SQLPredicate x) (.operands ^SQLPredicate x))]
 
                               SQLCondition
-                              (condp = (.c x)
+                              (condp = (.c ^SQLCondition x)
                                   SqlKind/AND
-                                  (.clauses x)
+                                  (.clauses ^SQLCondition x)
                                   SqlKind/OR
-                                  (apply list 'or (ground-vars (.clauses x)))
+                                  (apply list 'or (ground-vars (.clauses ^SQLCondition x)))
                                   SqlKind/NOT
-                                  (apply list 'not (.clauses x)))
+                                  (apply list 'not (.clauses ^SQLCondition x)))
 
                               x))
                           clauses)
-        calc-clauses (for [op ^SQLFunction @sql-ops]
+        calc-clauses (for [^SQLFunction op @sql-ops]
                        [(apply list (.op op) (.operands op)) (.sym op)])]
     {:clauses clauses
      :calc-clauses calc-clauses
@@ -165,10 +166,8 @@
 
 (defn enrich-project [schema projects]
   (log/debug "Enriching project with" projects)
-  (def p projects)
-  (def s schema)
   (let [{:keys [clauses calc-clauses]}
-        (->> (for [rex-node (map #(.-left %) projects)]
+        (->> (for [rex-node (map #(.-left ^Pair %) projects)]
                (if (instance? RexLiteral rex-node)
                  (SQLFunction. (gensym) 'crux.calcite/-literal [rex-node])
                  (->operand rex-node schema)))
@@ -191,12 +190,11 @@
 (defn- transform-result [tuple]
   (let [tuple (map #(if (instance? WrapLiteral %)
                       ;; literal numbers expected to be ints:
-                      (if (int? (.l %)) (int (.l %)) (.l %))
+                      (if (int? (.l ^WrapLiteral %)) (int (.l ^WrapLiteral %)) (.l ^WrapLiteral %))
                       (or (and (float? %) (double %))
                           ;; Calcite enumerator wants millis for timestamps:
                           (and (inst? %) (inst-ms %))
                           (and (keyword? %) (str %))
-                          (and (instance? WrapLiteral %) (.l %))
                           %))
                    tuple)]
     (if (= 1 (count tuple))

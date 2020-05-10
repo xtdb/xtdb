@@ -38,4 +38,5 @@
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
+  :global-vars {*warn-on-reflection* true}
   :pedantic? :warn)
