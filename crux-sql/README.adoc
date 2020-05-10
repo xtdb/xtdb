@@ -120,7 +120,6 @@ We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.
 * `:boolean`
 * `:double`
 * `:float`
-* `:integer`
 * `:timestamp`
 * `:varchar`
 * `:keyword`

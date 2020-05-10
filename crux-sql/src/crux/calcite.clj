@@ -243,7 +243,7 @@
         (throw t)))))
 
 (def ^:private mapped-types {:keyword SqlTypeName/OTHER})
-(def ^:private supported-types #{:boolean :bigint :double :float :integer :timestamp :varchar})
+(def ^:private supported-types #{:boolean :bigint :double :float :timestamp :varchar})
 
 ;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
 (def ^:private java-sql-types
