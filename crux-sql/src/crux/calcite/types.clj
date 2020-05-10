@@ -8,3 +8,5 @@
 (defrecord SQLCondition [c clauses])
 
 (defrecord SQLPredicate [op operands])
+
+(defrecord WrapLiteral [l])
