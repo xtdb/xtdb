@@ -320,3 +320,12 @@ ul.entity-group__value li::before {
 .entity-map__load-icon {
     @extend .rotating;
 }
+
+.back-button {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.back-button__text {
+    margin-left: 0.5em;
+}

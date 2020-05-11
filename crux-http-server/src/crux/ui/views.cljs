@@ -119,6 +119,10 @@
         @(rf/subscribe [::sub/entity-view-data])
         loading? @(rf/subscribe [::sub/entity-loading?])]
     [:<>
+     [:a.back-button
+      {:on-click #(js/window.history.back)}
+      [:i.fas.fa-chevron-left]
+      [:span.back-button__text "Back"]]
      [:h1 "/_entity"]
      [:div.entity-map__container
       (if loading?
@@ -135,8 +139,7 @@
                (str (:crux.db/id entity-result))]]
              [:hr.entity-group__separator]
              (entity->hiccup linked-entities
-                             (dissoc entity-result :crux.db/id)
-                             entity-name)]
+                             (dissoc entity-result :crux.db/id))]
             [:<> [:strong entity-name] " entity not found"])]
          [:div.entity-vt-tt
           [:div.entity-vt-tt__title
