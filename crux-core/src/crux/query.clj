@@ -239,6 +239,9 @@
                                   arg))
                            or-join-vars)}))
 
+;; TODO: Get rid of assumption that value-buffer-type-id is always one
+;; byte. Or better, move construction or handling of ranges to the
+;; IndexStore and remove the need for the type-prefix completely.
 (defn- build-var-range-constraints [encode-value-fn e-vars range-clauses]
   (let [var->range-clauses (->> (for [{:keys [op sym] :as clause} range-clauses]
                                   (if (and (contains? e-vars sym)
@@ -250,13 +253,18 @@
                                 (group-by :sym))]
     (->> (for [[var clauses] var->range-clauses]
            [var (->> (for [{:keys [op val sym]} clauses
-                           :let [val (encode-value-fn val)]]
+                           :let [val (encode-value-fn val)
+                                 type-prefix (c/value-buffer-type-id val)]]
                        (case op
                          = #(idx/new-equals-virtual-index % val)
-                         < #(idx/new-less-than-virtual-index % val)
-                         <= #(idx/new-less-than-equal-virtual-index % val)
-                         > #(idx/new-greater-than-virtual-index % val)
-                         >= #(idx/new-greater-than-equal-virtual-index % val)))
+                         < #(-> (idx/new-less-than-virtual-index % val)
+                                (idx/new-prefix-equal-virtual-index type-prefix))
+                         <= #(-> (idx/new-less-than-equal-virtual-index % val)
+                                 (idx/new-prefix-equal-virtual-index type-prefix))
+                         > #(-> (idx/new-greater-than-virtual-index % val)
+                                (idx/new-prefix-equal-virtual-index type-prefix))
+                         >= #(-> (idx/new-greater-than-equal-virtual-index % val)
+                                 (idx/new-prefix-equal-virtual-index type-prefix))))
                      (apply comp))])
          (into {}))))
 

@@ -236,7 +236,7 @@
        (and value (compare-pred (mem/compare-buffers value compare-v max-length))))
      (constantly true))))
 
-(defn- new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
+(defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
   (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (.capacity prefix-v))
         pred (value-comparsion-predicate zero? prefix-v (.capacity prefix-v))]
     (->PredicateVirtualIndex idx pred (fn [k]
@@ -244,26 +244,20 @@
                                           k
                                           prefix-v)))))
 
-;; TODO: Get rid of assumption that value-buffer-type-id is always one
-;; byte. Later, move construction or handling of ranges to the
-;; IndexStore and remove the need for type id completely.
 (defn new-less-than-equal-virtual-index [idx ^DirectBuffer max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
-    (-> (->PredicateVirtualIndex idx pred identity)
-        (new-prefix-equal-virtual-index (c/value-buffer-type-id max-v)))))
+    (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-less-than-virtual-index [idx ^DirectBuffer max-v]
   (let [pred (value-comparsion-predicate neg? max-v)]
-    (-> (->PredicateVirtualIndex idx pred identity)
-        (new-prefix-equal-virtual-index (c/value-buffer-type-id max-v)))))
+    (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-greater-than-equal-virtual-index [idx ^DirectBuffer min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
-    (-> (->PredicateVirtualIndex idx pred (fn [k]
-                                            (if (pred k)
-                                              k
-                                              min-v)))
-        (new-prefix-equal-virtual-index (c/value-buffer-type-id min-v)))))
+    (->PredicateVirtualIndex idx pred (fn [k]
+                                        (if (pred k)
+                                          k
+                                          min-v)))))
 
 (defrecord GreaterThanVirtualIndex [idx]
   db/Index
@@ -280,8 +274,7 @@
                                                 (if (pred k)
                                                   k
                                                   min-v)))]
-    (-> (->GreaterThanVirtualIndex idx)
-        (new-prefix-equal-virtual-index (c/value-buffer-type-id min-v)))))
+    (->GreaterThanVirtualIndex idx)))
 
 (defn new-equals-virtual-index [idx ^DirectBuffer v]
   (let [pred (value-comparsion-predicate zero? v)]
