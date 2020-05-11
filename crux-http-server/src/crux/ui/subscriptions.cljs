@@ -16,6 +16,27 @@
    (:current-route db)))
 
 (rf/reg-sub
+ ::initial-values-query
+ (fn [db _]
+   (let [query-params (get-in db [:current-route :query-params])
+         handler (get-in db [:current-route :data :name])]
+     (when (= :query handler)
+       {"q" (common/query-params->formatted-edn-string
+             (dissoc query-params :valid-time :transaction-time))
+        "vt" (common/instant->date-time (:valid-time query-params (t/now)))
+        "tt" (common/instant->date-time (:transaction-time query-params))}))))
+
+(rf/reg-sub
+ ::initial-values-entity
+ (fn [db _]
+   (let [query-params (get-in db [:current-route :query-params])
+         handler (get-in db [:current-route :data :name])]
+     (when (= :entity handler)
+       {"eid" (get-in db [:current-route :path-params :eid])
+        "vt" (common/instant->date-time (:valid-time query-params (t/now)))
+        "tt" (common/instant->date-time (:transaction-time query-params))}))))
+
+(rf/reg-sub
  ::query-data-table
  (fn [db _]
    (if-let [error (get-in db [:query-data :error])]
