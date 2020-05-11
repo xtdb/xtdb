@@ -87,29 +87,8 @@
   []
   (let [query-view @(rf/subscribe [::sub/query-view])]
     [:<>
-     [:div.pane-nav
-      [:div.pane-nav__tab
-       {:class (if (= query-view :table)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-query-view :table])}
-       "Table"]
-      [:div.pane-nav__tab
-       {:class (if (= query-view :graph)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-query-view :graph])}
-       "Graph"]
-      [:div.pane-nav__tab
-       {:class (if (= query-view :range)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-query-view :range])}
-       "Range"]]
      (case query-view
-       :table [query-table]
-       :graph [:div "this is graph"]
-       :range [:div "this is range"])]))
+       :table [query-table])]))
 
 (defn- entity->hiccup
   [links edn]
@@ -176,13 +155,7 @@
                  "pane-nav__tab--active"
                  "pane-nav__tab--hover")
         :on-click #(rf/dispatch [::events/set-entity-view :document])}
-       "Document"]
-      [:div.pane-nav__tab
-       {:class (if (= entity-view :history)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-view :history])}
-       "History"]]
+       "Document"]]
      (case entity-view
        :document [entity-document]
        :history [:div "this is history"])]))
