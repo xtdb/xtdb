@@ -12,7 +12,7 @@
             [crux.memory :as mem]
             [crux.bus :as bus])
   (:import clojure.lang.ExceptionInfo
-           crux.api.ICruxDatasource
+           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
@@ -1233,11 +1233,12 @@
     (.historyAscending this eid))
 
   (openHistoryAscending [this eid]
-    (let [index-store (open-index-store this)]
-      (cio/->cursor #(cio/try-close index-store)
-                    (for [^EntityTx entity-tx (db/entity-history index-store eid :asc
-                                                                 {:from {:crux.db/valid-time valid-time}
-                                                                  :until {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
+    (let [index-store (open-index-store this)
+          history (db/entity-history index-store eid :asc
+                                     {:start {:crux.db/valid-time valid-time}
+                                      :end {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
+      (cio/->cursor #(run! cio/try-close [history index-store])
+                    (for [^EntityTx entity-tx (iterator-seq history)]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
 
@@ -1249,13 +1250,58 @@
     (.historyDescending this eid))
 
   (openHistoryDescending [this eid]
-    (let [index-store (open-index-store this)]
-      (cio/->cursor #(cio/try-close index-store)
-                    (for [^EntityTx entity-tx (db/entity-history index-store eid :desc
-                                                                 {:from {:crux.db/valid-time valid-time
-                                                                         :crux.tx/tx-time transact-time}})]
+    (let [index-store (open-index-store this)
+          history (db/entity-history index-store eid :desc
+                                     {:start {:crux.db/valid-time valid-time
+                                              :crux.tx/tx-time transact-time}})]
+      (cio/->cursor #(run! cio/try-close [history index-store])
+                    (for [^EntityTx entity-tx (iterator-seq history)]
                       (assoc (c/entity-tx->edn entity-tx)
                              :crux.db/doc (db/get-document index-store (.content-hash entity-tx)))))))
+
+  (entityHistory [this eid opts]
+    (with-open [history (.openEntityHistory this eid opts)]
+      (into [] (iterator-seq history))))
+
+  (openEntityHistory [this eid opts]
+    (letfn [(inc-date [^Date d] (Date. (inc (.getTime d))))
+            (with-upper-bound [^Date d, ^Date upper-bound]
+              (if (and d (neg? (compare d upper-bound))) d upper-bound))]
+      (let [sort-order (condp = (.sortOrder opts)
+                         HistoryOptions$SortOrder/ASC :asc
+                         HistoryOptions$SortOrder/DESC :desc)
+            with-docs? (.withDocs opts)
+            index-store (db/open-index-store (:indexer query-engine))
+
+            opts (cond-> {:with-corrections? (.withCorrections opts)
+                          :with-docs? with-docs?
+                          :start {:crux.db/valid-time (.startValidTime opts)
+                                  :crux.tx/tx-time (.startTransactionTime opts)}
+                          :end {:crux.db/valid-time (.endValidTime opts)
+                                :crux.tx/tx-time (.endTransactionTime opts)}}
+                   (= sort-order :asc)
+                   (-> (update-in [:end :crux.db/valid-time]
+                                  with-upper-bound (inc-date valid-time))
+                       (update-in [:end :crux.tx/tx-time]
+                                  with-upper-bound (inc-date transact-time)))
+
+                   (= sort-order :desc)
+                   (-> (update-in [:start :crux.db/valid-time]
+                                  with-upper-bound valid-time)
+                       (update-in [:start :crux.tx/tx-time]
+                                  with-upper-bound transact-time)))
+
+            history (db/entity-history index-store eid sort-order opts)]
+
+        (cio/->cursor
+         #(run! cio/try-close [history index-store])
+         (->> (iterator-seq history)
+              (map (fn [^EntityTx etx]
+                     (cond-> {:crux.tx/tx-time (.tt etx)
+                              :crux.tx/tx-id (.tx-id etx)
+                              :crux.db/valid-time (.vt etx)
+                              :crux.db/content-hash (.content-hash etx)}
+                       with-docs? (assoc :crux.db/doc (db/get-document index-store (.content-hash etx)))))))))))
 
   (validTime [_]
     valid-time)

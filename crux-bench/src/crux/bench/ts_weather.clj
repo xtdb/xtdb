@@ -298,7 +298,7 @@
                                           (reduce into []))
                        db (api/db node #inst "1970")
                        histories (for [c condition-ids]
-                                   (api/open-history-ascending db c))]
+                                   (api/open-entity-history db c :asc))]
                    (try
                      (->> (for [history histories]
                             (for [entity-tx history]

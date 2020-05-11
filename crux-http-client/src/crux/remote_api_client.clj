@@ -8,7 +8,8 @@
   (:import (java.io Closeable InputStreamReader IOException PushbackReader)
            java.time.Duration
            java.util.Date
-           (crux.api Crux ICruxAPI ICruxDatasource NodeOutOfSyncException)))
+           (crux.api Crux ICruxAPI ICruxDatasource NodeOutOfSyncException
+                     HistoryOptions HistoryOptions$SortOrder)))
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
@@ -185,6 +186,32 @@
                                {:as :stream})]
       (cio/->cursor #(.close ^java.io.Closeable in)
                     (edn-list->lazy-seq in))))
+
+  (entityHistory [this eid opts]
+    (with-open [history (.openEntityHistory this eid opts)]
+      (vec (iterator-seq history))))
+
+  (openEntityHistory [this eid opts]
+    (let [qps (->> {:sort-order (condp = (.sortOrder opts)
+                                  HistoryOptions$SortOrder/ASC (name :asc)
+                                  HistoryOptions$SortOrder/DESC (name :desc))
+                    :with-corrections (.withCorrections opts)
+                    :with-docs (.withDocs opts)
+                    :start-valid-time (some-> (.startValidTime opts) (cio/format-rfc3339-date))
+                    :start-transaction-time (some-> (.startTransactionTime opts) (cio/format-rfc3339-date))
+                    :end-valid-time (some-> (.endValidTime opts) (cio/format-rfc3339-date))
+                    :end-transaction-time (some-> (.endTransactionTime opts) (cio/format-rfc3339-date))
+                    :valid-time (cio/format-rfc3339-date valid-time)
+                    :transaction-time (cio/format-rfc3339-date transact-time)}
+                   (into {} (remove (comp nil? val))))]
+      (if-let [in (api-request-sync (str url "/entity-history/" (c/new-id eid))
+                                    nil
+                                    {:as :stream,
+                                     :method :get
+                                     :query-params qps})]
+        (cio/->cursor #(.close ^java.io.Closeable in)
+                      (edn-list->lazy-seq in))
+        (cio/->cursor #() []))))
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time))

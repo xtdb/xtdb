@@ -92,6 +92,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the transaction history.
      */
+    @Deprecated
     public List<Map<Keyword,Object>> history(Object eid);
     // todo elaborate about corrections contents
 
@@ -111,6 +112,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param transactionTimeEnd   the start transaction time or null, inclusive.
      * @return                     the transaction history.
      */
+    @Deprecated
     public List<Map<Keyword,?>> historyRange(Object eid, Date validTimeStart, Date transactionTimeStart, Date validTimeEnd, Date transactionTimeEnd);
     // todo elaborate
 

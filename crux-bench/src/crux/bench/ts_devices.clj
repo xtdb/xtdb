@@ -223,7 +223,7 @@
                                         (reduce into []))
                        db (crux/db node #inst "1970")
                        histories (for [r reading-ids]
-                                   (crux/open-history-ascending db r))]
+                                   (crux/open-entity-history db r :asc))]
                    (try
                      (->> (for [history histories]
                             (for [entity-tx history]

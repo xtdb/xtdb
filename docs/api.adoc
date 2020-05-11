@@ -15,4 +15,4 @@ include::rest.adoc[leveloffset=+1]
 [#clojureapi]
 == Clojure
 
-include::clojure_api.adoc[leveloffset=+1]
+include::clojure_api.adoc[leveloffset=+2]

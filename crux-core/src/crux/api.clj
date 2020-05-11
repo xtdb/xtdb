@@ -5,7 +5,8 @@
             [crux.codec :as c]
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ICursor]
+            ICruxAsyncIngestAPI ICruxDatasource ICursor
+            HistoryOptions HistoryOptions$SortOrder]
            java.io.Closeable
            java.util.Date
            java.time.Duration
@@ -163,6 +164,19 @@
 
   Returns an iterator of the TxLog"))
 
+(defn- ->HistoryOptions [sort-order
+                         {:keys [with-corrections? with-docs? start end]
+                          :or {with-corrections? false, with-docs false}}]
+  (HistoryOptions. (case sort-order
+                     :asc HistoryOptions$SortOrder/ASC
+                     :desc HistoryOptions$SortOrder/DESC)
+                   (boolean with-corrections?)
+                   (boolean with-docs?)
+                   (:crux.db/valid-time start)
+                   (:crux.tx/tx-time start)
+                   (:crux.db/valid-time end)
+                   (:crux.tx/tx-time end)))
+
 (extend-protocol PCruxNode
   ICruxAPI
   (db
@@ -294,6 +308,35 @@
   from and including the valid time of the db while respecting
   transaction time. Includes the documents.")
 
+  (entity-history
+    [node eid sort-order]
+    [node eid sort-order opts]
+    "Eagerly retrieves entity history for the given entity.
+
+  Options:
+  * `sort-order` (parameter): `#{:asc :desc}`
+  * `:with-docs?`: specifies whether to include documents in the entries
+  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
+  * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
+  * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
+
+  No matter what `:start` and `:end` parameters you specify, you won't receive
+  results later than the valid-time and transact-time of this DB value.
+
+  Each entry in the result contains the following keys:
+   * `:crux.db/valid-time`,
+   * `:crux.db/tx-time`,
+   * `:crux.tx/tx-id`,
+   * `:crux.db/content-hash`
+   * `:crux.db/doc` (see `with-docs?`).")
+
+  (open-entity-history
+    ^crux.api.ICursor [node eid sort-order]
+    ^crux.api.ICursor [node eid sort-order opts]
+    "Lazily retrieves entity history for the given entity.
+  Don't forget to close the cursor when you've consumed enough history!
+  See `entity-history` for all the options")
+
   (valid-time [db]
     "returns the valid time of the db.
   If valid time wasn't specified at the moment of the db value retrieval
@@ -303,6 +346,15 @@
     "returns the time of the latest transaction applied to this db value.
   If a tx time was specified when db value was acquired then returns
   the specified time."))
+
+(let [arglists '(^crux.api.ICursor
+                 [db eid sort-order]
+                 ^crux.api.ICursor
+                 [db eid sort-order {:keys [with-docs? with-corrections?]
+                                     {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
+                                     {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}])]
+  (alter-meta! #'entity-history assoc :arglists arglists)
+  (alter-meta! #'open-entity-history assoc :arglists arglists))
 
 (extend-protocol PCruxDatasource
   ICruxDatasource
@@ -337,6 +389,13 @@
     ([this snapshot eid] (.historyDescending this snapshot eid)))
 
   (open-history-descending [this eid] (.openHistoryDescending this eid))
+
+  (entity-history
+    ([this eid sort-order] (entity-history this eid sort-order {}))
+    ([this eid sort-order opts] (.entityHistory this eid (->HistoryOptions sort-order opts))))
+  (open-entity-history
+    ([this eid sort-order] (open-entity-history this eid sort-order {}))
+    ([this eid sort-order opts] (.openEntityHistory this eid (->HistoryOptions sort-order opts))))
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this)))
