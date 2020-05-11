@@ -22,7 +22,7 @@ html, body {
 }
 
 .console {
-    max-width: 80%;
+    max-width: 95%;
     margin: auto;
 }
 
@@ -171,6 +171,10 @@ html, body {
     margin: auto;
 }
 
+.page-pane {
+    display: flex;
+}
+
 
 .entity-group {
     display: flex;
@@ -283,6 +287,7 @@ ul.entity-group__value li::before {
     font-weight: bold;
 }
 
+
 @keyframes rotating {
     from {
 	transform: rotate(0deg);
@@ -324,8 +329,75 @@ ul.entity-group__value li::before {
 .back-button {
     cursor: pointer;
     font-weight: bold;
+    margin-bottom: 1rem;
 }
 
 .back-button__text {
     margin-left: 0.5em;
+}
+
+.left-pane {
+    margin-right: 1rem;
+    max-width: 30%;
+}
+
+.hide-button {
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.hidden-pane {
+    display: flex;
+    min-width: 3rem;
+    margin-bottom: 1em;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.hidden-pane:hover {
+    background: darkgray;
+}
+
+.right-pane {
+    flex-grow: 1;
+}
+
+.pane-toggled {
+    display: block;
+}
+
+.pane-untoggled {
+    display: none;
+}
+
+.pane-nav {
+    display: flex;
+    margin-bottom: 1rem;
+    -webkit-box-shadow: 0px 0px 15px -8px rgba(0,0,0,0.51);
+    -moz-box-shadow: 0px 0px 15px -8px rgba(0,0,0,0.51);
+    box-shadow: 0px 0px 15px -8px rgba(0,0,0,0.51);
+}
+
+.pane-nav__tab {
+    flex-grow: 1;
+    cursor: pointer;
+    padding: 0.5rem;
+    text-align: center;
+    font-weight: bold;
+    margin: auto;
+}
+
+.pane-nav__tab--hover:hover {
+    background: #dfdfdf;
+}
+
+.pane-nav__tab--active {
+    color: white;
+    background: #979797;
+
 }
