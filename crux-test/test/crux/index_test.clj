@@ -211,7 +211,8 @@
                                                [9]
                                                [11]
                                                [12]]
-                                              1)
+                                              1
+                                              c/->value-buffer)
         b-idx (idx/new-relation-virtual-index :b
                                               [[0]
                                                [2]
@@ -220,7 +221,8 @@
                                                [8]
                                                [9]
                                                [12]]
-                                              1)
+                                              1
+                                              c/->value-buffer)
         c-idx (idx/new-relation-virtual-index :c
                                               [[2]
                                                [4]
@@ -228,7 +230,8 @@
                                                [8]
                                                [10]
                                                [12]]
-                                              1)]
+                                              1
+                                              c/->value-buffer)]
 
     (t/is (= [{:x 8}
               {:x 12}]
@@ -254,7 +257,8 @@
                                            [1 4]
                                            [1 5]
                                            [3 5]]
-                                          2)
+                                          2
+                                          c/->value-buffer)
         s (idx/new-relation-virtual-index :s
                                           [[3 4]
                                            [3 5]
@@ -262,7 +266,8 @@
                                            [4 8]
                                            [4 9]
                                            [5 2]]
-                                          2)
+                                          2
+                                          c/->value-buffer)
         t (idx/new-relation-virtual-index :t
                                           [[1 4]
                                            [1 5]
@@ -271,7 +276,8 @@
                                            [1 9]
                                            [1 2]
                                            [3 2]]
-                                          2)]
+                                          2
+                                          c/->value-buffer)]
     (t/testing "n-ary join"
       (let [index-groups [[(assoc r :name :a) (assoc t :name :a)]
                           [(assoc r :name :b) (assoc s :name :b)]
@@ -313,7 +319,8 @@
                                            [3]
                                            [4]
                                            [5]]
-                                          1)]
+                                          1
+                                          c/->value-buffer)]
 
     (t/is (= [1 2 3 4 5]
              (->> (idx/idx->seq r)
@@ -325,41 +332,41 @@
                    (idx/idx->series r))))
 
     (t/is (= [1 2 3]
-             (->> (idx/idx->seq (idx/new-less-than-virtual-index r 4))
+             (->> (idx/idx->seq (idx/new-less-than-virtual-index r (c/->value-buffer 4)))
                   (map second))))
 
     (t/is (= [1 2 3 4]
-             (->> (idx/idx->seq (idx/new-less-than-equal-virtual-index r 4))
+             (->> (idx/idx->seq (idx/new-less-than-equal-virtual-index r (c/->value-buffer 4)))
                   (map second))))
 
     (t/is (= [3 4 5]
-             (->> (idx/idx->seq (idx/new-greater-than-virtual-index r 2))
+             (->> (idx/idx->seq (idx/new-greater-than-virtual-index r (c/->value-buffer 2)))
                   (map second))))
 
     (t/is (= [2 3 4 5]
-             (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r 2))
+             (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r (c/->value-buffer 2)))
                   (map second))))
 
     (t/is (= [2]
-             (->> (idx/idx->seq (idx/new-equals-virtual-index r 2))
+             (->> (idx/idx->seq (idx/new-equals-virtual-index r (c/->value-buffer 2)))
                   (map second))))
 
-    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r 0))))
-    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r 6))))
+    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (c/->value-buffer 0)))))
+    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (c/->value-buffer 6)))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/->value-buffer nil)))))
-      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/->value-buffer 1))))))
+      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r (c/->value-buffer 2)) (c/->value-buffer nil)))))
+      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r (c/->value-buffer 2)) (c/->value-buffer 1))))))
 
     (t/testing "combining indexes"
       (t/is (= [2 3 4]
                (->> (idx/idx->seq (-> r
-                                      (idx/new-greater-than-equal-virtual-index 2)
-                                      (idx/new-less-than-virtual-index 5)))
+                                      (idx/new-greater-than-equal-virtual-index (c/->value-buffer 2))
+                                      (idx/new-less-than-virtual-index (c/->value-buffer 5))))
                     (map second)))))
 
     (t/testing "incompatible type"
-      (t/is (empty? (->> (idx/idx->seq (-> (idx/new-greater-than-equal-virtual-index r "foo")))
+      (t/is (empty? (->> (idx/idx->seq (-> (idx/new-greater-than-equal-virtual-index r (c/->value-buffer "foo"))))
                          (map second)))))))
 
 (t/deftest test-or-virtual-index
@@ -425,20 +432,23 @@
                                               [[7 4]
                                                ;; extra sanity check
                                                [8 4]]
-                                              2)
+                                              2
+                                              c/->value-buffer)
         s-idx (idx/new-relation-virtual-index :s
                                               [[4 0]
                                                [4 1]
                                                [4 2]
                                                [4 3]]
-                                              2)
+                                              2
+                                              c/->value-buffer)
         t-idx (idx/new-relation-virtual-index :t
                                               [[7 0]
                                                [7 1]
                                                [7 2]
                                                [8 1]
                                                [8 2]]
-                                              2)
+                                              2
+                                              c/->value-buffer)
         index-groups [[(assoc r-idx :name :a)
                        (assoc t-idx :name :a)]
                       [(assoc r-idx :name :b)
@@ -462,17 +472,20 @@
                                               [[1]
                                                [2]
                                                [3]]
-                                              1)
+                                              1
+                                              c/->value-buffer)
         q-idx (idx/new-relation-virtual-index :q
                                               [[2]
                                                [3]
                                                [4]]
-                                              1)
+                                              1
+                                              c/->value-buffer)
         r-idx (idx/new-relation-virtual-index :r
                                               [[3]
                                                [4]
                                                [5]]
-                                              1)]
+                                              1
+                                              c/->value-buffer)]
     (t/testing "conjunction"
       (let [unary-and-idx (idx/new-unary-join-virtual-index [(assoc p-idx :name :x)
                                                              (assoc q-idx :name :x)
@@ -504,12 +517,14 @@
                                               [[1 3]
                                                [2 4]
                                                [2 20]]
-                                              2)
+                                              2
+                                              c/->value-buffer)
         q-idx (idx/new-relation-virtual-index :q
                                               [[1 10]
                                                [2 20]
                                                [3 30]]
-                                              2)
+                                              2
+                                              c/->value-buffer)
         index-groups [[(assoc p-idx :name :x)
                        (assoc q-idx :name :x)]
                       [(assoc p-idx :name :y)]
@@ -528,7 +543,8 @@
     (t/testing "disjunction"
       (let [zero-idx (idx/new-relation-virtual-index :zero
                                                      [[0]]
-                                                     1)
+                                                     1
+                                                     c/->value-buffer)
             lhs-index (idx/new-n-ary-join-layered-virtual-index
                        [(idx/new-unary-join-virtual-index [(assoc p-idx :name :x)])
                         (idx/new-unary-join-virtual-index [(assoc p-idx :name :y)])

@@ -389,6 +389,9 @@
               (when xs
                 (recur xs))))))))
 
+  (encode-value [this value]
+    (c/->value-buffer value))
+
   (get-document [this content-hash]
     (db/get-single-object object-store snapshot content-hash))
 

@@ -43,7 +43,7 @@
                                 (apply [_ resp e]
                                   (if e
                                     (try
-                                      (throw (.getCause e))
+                                      (throw (.getCause ^Throwable e))
                                       (catch NoSuchKeyException e
                                         (log/warn "S3 key not found: " s3-key))
                                       (catch Exception e
