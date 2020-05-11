@@ -21,7 +21,7 @@ as semi-immutable logs.
 This decoupled design enables Crux to be maintained as a small and efficient
 core that can be scaled and evolved to support a large variety of use-cases.
 
-image::crux-node-1.svg?sanitize=true[Crux Kafka Node Diagram,970,443]
+image::https://raw.githubusercontent.com/juxt/crux/7686dd011d37e7bb0426cb9a4a508fd26b8bd032/docs/img/crux-node-1.svg?sanitize=true[Crux Kafka Node Diagram,970,443]
 
 Crux is an open source document database with bitemporal graph queries.
 
