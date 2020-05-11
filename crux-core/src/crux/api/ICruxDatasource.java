@@ -181,7 +181,7 @@ public interface ICruxDatasource extends Closeable {
      * Lazily retrieves entity history for the given entity.
      * Don't forget to close the cursor when you've consumed enough history!
      *
-     * @see {@link entityHistory(Object, HistoryOptions)}
+     * @see #entityHistory(Object, HistoryOptions)
      * @param eid The entity id to return history for
      * @return a cursor of changes to the given entity.
      */

@@ -192,7 +192,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * This is an experimental API, subject to change.
      *
-     * @param event-opts should contain `:crux/event-type`, along with any other options the event-type requires.
+     * @param eventOpts should contain `:crux/event-type`, along with any other options the event-type requires.
      * @return an AutoCloseable - closing the return value detaches the listener.
      */
     public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
