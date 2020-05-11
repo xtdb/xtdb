@@ -22,6 +22,7 @@
             [ring.middleware.params :as p]
             [ring.util.io :as rio]
             [ring.util.request :as req]
+            [ring.util.response :as resp]
             [ring.util.time :as rt]
             [hiccup.page :as page]
             [hiccup2.core :as hiccup2]
@@ -385,7 +386,7 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn- handler [crux-node request]
+(defn- handler [request {:keys [crux-node ::read-only?]}]
   (condp check-path request
     [#"^/$" [:get]]
     (status crux-node)
@@ -445,7 +446,10 @@
     (tx-log crux-node request)
 
     [#"^/tx-log$" [:post]]
-    (transact crux-node request)
+    (if read-only?
+      (-> (resp/response "forbidden: read-only HTTP node")
+          (resp/status 403))
+      (transact crux-node request))
 
     [#"^/tx-committed$" [:get]]
     (tx-committed? crux-node request)
@@ -718,8 +722,8 @@
       (throw (UnsupportedOperationException.)))))
 
 (def module
-  {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port] :as options}]
-                         (let [server (j/run-jetty (some-fn (-> (partial handler node)
+  {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port read-only?] :as options}]
+                         (let [server (j/run-jetty (some-fn (-> #(handler % {:crux-node node, ::read-only? read-only?})
                                                                 (p/wrap-params)
                                                                 (wrap-exception-handling))
 
@@ -747,4 +751,8 @@
              ;; to expose the functionality they need to? (JH)
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
-                            :default default-server-port}}}})
+                            :default default-server-port}
+
+                    ::read-only? {:crux.config/type :crux.config/boolean
+                                  :doc "Whether to start the Crux HTTP server in read-only mode"
+                                  :default false}}}})

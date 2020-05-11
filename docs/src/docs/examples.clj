@@ -29,7 +29,9 @@
 (defn start-standalone-http-node [port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
                     :crux.kv/db-dir (str (io/file storage-dir "db"))
-                    :crux.http-server/port port}))
+                    :crux.http-server/port port
+                    ;; by default, the HTTP server is read-write - set this flag to make it read-only
+                    :crux.http-server/read-only? false}))
 ;; end::start-standalone-http-node[]
 
 ;; tag::ek-example[]

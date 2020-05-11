@@ -4,7 +4,8 @@
             [crux.io :as cio]
             [crux.db :as db]
             [crux.codec :as c]
-            [crux.query :as q])
+            [crux.query :as q]
+            [clojure.string :as string])
   (:import (java.io Closeable InputStreamReader IOException PushbackReader)
            java.time.Duration
            java.util.Date
@@ -270,7 +271,14 @@
     (api-request-sync (str url "/attribute-stats") nil {:method :get}))
 
   (submitTx [_ tx-ops]
-    (api-request-sync (str url "/tx-log") tx-ops))
+    (try
+      (api-request-sync (str url "/tx-log") tx-ops)
+      (catch Exception e
+        (let [data (ex-data e)]
+          (when (and (= 403 (:status data))
+                     (string/includes? (:body data) "read-only HTTP node"))
+            (throw (UnsupportedOperationException. "read-only HTTP node")))
+          (throw e)))))
 
   (hasTxCommitted [_ submitted-tx]
     (api-request-sync (str url "/tx-committed?tx-id=" (:crux.tx/tx-id submitted-tx)) nil {:method :get}))
@@ -287,6 +295,7 @@
                                nil
                                {:method :get
                                 :as :stream})]
+
       (cio/->cursor #(.close ^Closeable in)
                     (edn-list->lazy-seq in))))
 
