@@ -23,83 +23,38 @@
        {:db (assoc db handler edn-content)}
        (js/console.warn "Metadata not found")))))
 
-(defn cast-to-query-params
-  [query valid-time transaction-time]
-  (let [{:keys [find where limit
-                offset args order-by]} query]
-    (str
-     (cond-> (js/URLSearchParams.)
-       find (doto (.append "find" find))
-       where ((fn [params] (reduce (fn [params clause] (doto params (.append "where" clause))) params where)))
-       limit (doto (.append "limit" limit))
-       offset (doto (.append "offset" offset))
-       args (doto (.append "args" args))
-       order-by ((fn [params] (reduce (fn [params clause] (doto params (.append "order-by" clause))) params order-by)))
-       valid-time (doto (.append "valid-time" valid-time))
-       transaction-time (doto (.append "transaction-time" transaction-time))))))
-
-(rf/reg-event-fx
- ::go-to-query-view
- (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
-         query-map (reader/read-string (get values "q"))
-         parsed-valid-time (when (and valid-date valid-time)
-                             (t/instant (str valid-date "T" valid-time)))
-         parsed-transaction-time (when (and transaction-date transaction-time)
-                                   (t/instant (str transaction-date "T" transaction-time)))
-         query-params (cast-to-query-params query-map parsed-valid-time parsed-transaction-time)]
-     {:dispatch [:navigate {:page :query
-                            :query-params query-params}]})))
-
-(rf/reg-event-fx
- ::fetch-query-table
- (fn [{:keys [db]} _]
-   (let [query-params (doto (js/URLSearchParams. js/window.location.search) (.delete "full-results"))
-         find (reader/read-string (.get query-params "find"))
-         link-entities? (.get query-params "link-entities?")]
-     (when (seq (str query-params))
-       {:db (assoc db :table-loading? true)
-        :http-xhrio {:method :get
-                     :uri (str "/_query?" query-params (when-not link-entities?
-                                                         "&link-entities?=true"))
-                     :response-format (ajax-edn/edn-response-format)
-                     :on-success [::success-fetch-query-table find]
-                     :on-failure [::fail-fetch-query-table]}}))))
-
-(rf/reg-event-fx
- ::success-fetch-query-table
- (fn [{:keys [db]} [_ find-clause result]]
-   (prn "fetch query table success!")
-   {:db (-> db
-            (assoc :query-data
-                   (assoc result "find-clause" find-clause))
-            (assoc :table-loading? false))}))
+(rf/reg-event-db
+ ::toggle-left-pane
+ (fn [db _]
+   (update-in db [:left-pane :visible?] not)))
 
 (rf/reg-event-db
- ::fail-fetch-query-table
- (fn [db [_ result]]
-   (prn "Failure: get query table result: " result)
-   (-> db
-       (assoc-in [:query-data :error]
-                 (get-in result [:response :via 0 :message]))
-       (assoc :table-loading? false))))
-
-(rf/reg-event-fx
- ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [vt tt eid]} :values}]]
-   (let [query-params {:valid-time (common/instant->date-time vt)
-                       :transaction-time (common/instant->date-time tt)}]
-     {:db db
-      :dispatch [:navigate :entity
-                 {:eid eid}
-                 (->> query-params
-                      (remove #(nil? (second %)))
-                      (into {}))]})))
+ ::set-left-pane-view
+ (fn [db [_ view]]
+   (assoc-in  db [:left-pane :view] view)))
 
 (rf/reg-event-db
  ::set-query-right-pane-view
  (fn [db [_ view]]
    (assoc-in db [:query :right-pane :view] view)))
+
+(rf/reg-event-db
+ ::set-query-right-pane-loading
+ (fn [db [_ bool]]
+   (assoc-in db [:query :right-pane :loading?] bool)))
+
+(rf/reg-event-fx
+ ::go-to-query-view
+ (fn [{:keys [db]} [_ {:keys [values]}]]
+   (let [{:strs [q vt tt]} values
+         query-params (->>
+                       (merge
+                        (common/edn->query-params (reader/read-string q))
+                        {:valid-time (common/instant->date-time vt)
+                         :transaction-time (common/instant->date-time tt)})
+                       (remove #(nil? (second %)))
+                       (into {}))]
+     {:dispatch [:navigate :query {} query-params]})))
 
 (rf/reg-event-db
  ::set-entity-right-pane-view
@@ -111,12 +66,13 @@
  (fn [db [_ bool]]
    (assoc-in db [:entity :right-pane :loading?] bool)))
 
-(rf/reg-event-db
- ::toggle-left-pane
- (fn [db _]
-   (update-in db [:left-pane :visible?] not)))
-
-(rf/reg-event-db
- ::set-left-pane-view
- (fn [db [_ view]]
-   (assoc-in  db [:left-pane :view] view)))
+(rf/reg-event-fx
+ ::go-to-entity-view
+ (fn [{:keys [db]} [_ {{:strs [vt tt eid]} :values}]]
+   (let [query-params (->>
+                       {:valid-time (common/instant->date-time vt)
+                        :transaction-time (common/instant->date-time tt)}
+                       (remove #(nil? (second %)))
+                       (into {}))]
+     {:db db
+      :dispatch [:navigate :entity {:eid eid} query-params]})))

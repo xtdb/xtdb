@@ -14,18 +14,13 @@
     {:name :query
      :link-text "Query"
      :controllers
-     [{:start (fn [& params] (js/console.log "Entering sub-page 1"))
+     [{:identity #(gensym)
+       :start #(rf/dispatch [:crux.ui.http/fetch-query-table])
        :stop (fn [& params] (js/console.log "Leaving sub-page 1"))}]}]
    ["/_entity/:eid"
     {:name :entity
      :link-text "Entity"
      :controllers
-     [;; events are triggered when leaving the view or when path-params or
-      ;; query-params change
-      {:identity #(do [(get-in % [:path-params :eid])
-                       (get-in % [:query-params])
-                       ;; TBD we might want to always fetch even if url doesn't
-                       ;; change. Discuss this on Monday.
-                       (gensym)])
+     [{:identity #(gensym)
        :start #(rf/dispatch [:crux.ui.http/fetch-entity])
        :stop (fn [& params] (js/console.log "Leaving sub-page 2"))}]}]])

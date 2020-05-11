@@ -1,5 +1,6 @@
 (ns crux.ui.subscriptions
   (:require
+   [cljs.reader :as reader]
    [clojure.pprint :as p]
    [crux.ui.common :as common]
    [re-frame.core :as rf]
@@ -15,35 +16,15 @@
    (:current-route db)))
 
 (rf/reg-sub
- ::initial-values-query
- (fn [db _]
-   (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])]
-     (when (= :query handler)
-       {"q" (common/query-params->formatted-edn-string
-             (dissoc query-params :valid-time :transaction-time))
-        "vt" (common/instant->date-time (:valid-time query-params (t/now)))
-        "tt" (common/instant->date-time (:transaction-time query-params))}))))
-
-(rf/reg-sub
- ::initial-values-entity
- (fn [db _]
-   (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])]
-     (when (= :entity handler)
-       {"eid" (get-in db [:current-route :path-params :eid])
-        "vt" (common/instant->date-time (:valid-time query-params (t/now)))
-        "tt" (common/instant->date-time (:transaction-time query-params))}))))
-
-(rf/reg-sub
  ::query-data-table
  (fn [db _]
    (if-let [error (get-in db [:query-data :error])]
      {:error error}
-     (let [{:strs [query-results find-clause linked-entities]}
-           (:query-data db)
+     (let [{:strs [query-results linked-entities]}
+           (get-in db [:query :http])
+           find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
            table-loading? (:table-loading? db)
-           offset (->> (or (.get (js/URLSearchParams. js/window.location.search) "offset") "0")
+           offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
            columns (map (fn [column]
                           {:column-key column
@@ -67,6 +48,11 @@
  ::query-right-pane-view
  (fn [db _]
    (or (get-in db [:query :right-pane :view]) :table)))
+
+(rf/reg-sub
+ ::query-right-pane-loading?
+ (fn [db _]
+   (get-in db [:query :right-pane :loading?])))
 
 (rf/reg-sub
  ::entity-right-pane-loading?

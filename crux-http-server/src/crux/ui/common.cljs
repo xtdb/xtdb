@@ -45,6 +45,16 @@
         pprint/code-dispatch
         (pprint/pprint formatted)))))
 
+(defn edn->query-params
+  [edn]
+  (->> edn
+       (map
+        (fn [[k v]]
+          [k (if (vector? (first v))
+               (mapv str v)
+               (str v))]))
+       (into {})))
+
 (defn back-page
   []
   (js/window.history.back))

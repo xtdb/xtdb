@@ -33,73 +33,67 @@
 
 (defn query-form
   []
-  (let [initial-values @(rf/subscribe [::sub/initial-values-query])]
-    [fork/form {:form-id "form-query"
-                :prevent-default? true
-                :clean-on-unmount? true
-                :initial-values initial-values
-                :on-submit #(rf/dispatch [::events/go-to-query-view %])}
-     (fn [{:keys [values
-                  state
-                  form-id
-                  handle-change
-                  handle-blur
-                  handle-submit] :as props}]
-       (let [loading? false]
-         [:<>
-          [:pre (with-out-str (pprint/pprint @state))]
-          [:form
-           {:id form-id
-            :on-submit handle-submit}
-           [:textarea.textarea.input-group__textarea
-            {:name "q"
-             :value (get values "q")
-             :on-change handle-change
-             :on-blur handle-blur
-             :rows 10}]
-           [vt-tt-inputs props]
-           [:button.button
-            {:type "submit"
-             :disabled loading?}
-            "Submit Entity"]]]))]))
+  [fork/form {:form-id "form-query"
+              :prevent-default? true
+              :clean-on-unmount? true
+              :on-submit #(rf/dispatch [::events/go-to-query-view %])}
+   (fn [{:keys [values
+                state
+                form-id
+                handle-change
+                handle-blur
+                handle-submit] :as props}]
+     (let [loading? @(rf/subscribe [::sub/query-right-pane-loading?])]
+       [:<>
+        [:form
+         {:id form-id
+          :on-submit handle-submit}
+         [:textarea.textarea.input-group__textarea
+          {:name "q"
+           :value (get values "q")
+           :on-change handle-change
+           :on-blur handle-blur
+           :rows 10}]
+         [vt-tt-inputs props]
+         [:button.button
+          {:type "submit"
+           :disabled loading?}
+          "Submit Entity"]]]))])
 
 (defn entity-form
   []
-  (let [initial-values @(rf/subscribe [::sub/initial-values-entity])]
-    [fork/form {:form-id "form-entity"
-                :prevent-default? true
-                :clean-on-unmount? true
-                :initial-values initial-values
-                :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
-     (fn [{:keys [values
-                  form-id
-                  state
-                  handle-change
-                  handle-blur
-                  handle-submit] :as props}]
-       (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
-         [:<>
-          [:pre (with-out-str (pprint/pprint @state))]
-          [:form
-           {:id form-id
-            :on-submit handle-submit}
-           [:textarea.textarea.input-group__textarea
-            {:name "eid"
-             :value (get values "eid")
-             :on-change handle-change
-             :on-blur handle-blur}]
-           [vt-tt-inputs props]
-           [:button.button
-            {:type "submit"
-             :disabled loading?}
-            "Submit Entity"]]]))]))
+  [fork/form {:form-id "form-entity"
+              :prevent-default? true
+              :clean-on-unmount? true
+              :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
+   (fn [{:keys [values
+                form-id
+                state
+                handle-change
+                handle-blur
+                handle-submit] :as props}]
+     (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
+       [:<>
+        [:form
+         {:id form-id
+          :on-submit handle-submit}
+         [:textarea.textarea.input-group__textarea
+          {:name "eid"
+           :value (get values "eid")
+           :on-change handle-change
+           :on-blur handle-blur}]
+         [vt-tt-inputs props]
+         [:button.button
+          {:type "submit"
+           :disabled loading?}
+          "Submit Entity"]]]))])
 
 (defn form
   []
   (let [left-pane-view @(rf/subscribe [::sub/left-pane-view])]
-    (if (= :query left-pane-view)
-      [query-form]
-      [entity-form])))
+    (case left-pane-view
+      :query [query-form]
+      :entity [entity-form])))
 
 (defn query-table
   []
@@ -109,29 +103,19 @@
        [:div.error-box error]
        [table/table data])]))
 
-(defn query-view
+(defn query-right-pane
   []
   (let [right-pane-view @(rf/subscribe [::sub/query-right-pane-view])]
     [:<>
      [:div.pane-nav
       [:div.pane-nav__tab
-       {:class (if (= right-pane-view :table)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-query-right-pane-view :table])}
        "Table"]
-      [:div.pane-nav__tab
+      #_[:div.pane-nav__tab
        {:class (if (= right-pane-view :graph)
                  "pane-nav__tab--active"
                  "pane-nav__tab--hover")
         :on-click #(rf/dispatch [::events/set-query-right-pane-view :graph])}
-       "Graph"]
-      [:div.pane-nav__tab
-       {:class (if (= right-pane-view :range)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-query-right-pane-view :range])}
-       "Range"]]
+         "Graph"]]
      (case right-pane-view
        :table [query-table]
        :graph [:div "this is graph"]
@@ -195,12 +179,8 @@
     [:<>
      [:div.pane-nav
       [:div.pane-nav__tab
-       {:class (if (= right-pane-view :document)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-view :document])}
        "Document"]
-      [:div.pane-nav__tab
+      #_[:div.pane-nav__tab
        {:class (if (= right-pane-view :history)
                  "pane-nav__tab--active"
                  "pane-nav__tab--hover")
@@ -246,9 +226,8 @@
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:<>
-     [:pre (with-out-str (pprint/pprint @(rf/subscribe [:db])))]
      [:div.container.page-pane
-      (when name [left-pane])
+      [left-pane]
       [:div.right-pane
        [:div.back-button
         [:a
@@ -256,6 +235,6 @@
          [:i.fas.fa-chevron-left]
          [:span.back-button__text "Back"]]]
        (case name
-         :query [query-view]
+         :query [query-right-pane]
          :entity [entity-right-pane]
          [:div "no matching"])]]]))
