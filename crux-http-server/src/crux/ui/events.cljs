@@ -31,7 +31,12 @@
 (rf/reg-event-db
  ::set-left-pane-view
  (fn [db [_ view]]
-   (assoc-in  db [:left-pane :view] view)))
+   (assoc-in db [:left-pane :view] view)))
+
+(rf/reg-event-db
+ ::query-table-error
+ (fn [db [_ error]]
+   (assoc-in db [:query :error] error)))
 
 (rf/reg-event-db
  ::set-query-right-pane-view
@@ -46,12 +51,12 @@
 (rf/reg-event-fx
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [q vt tt]} values
+   (let [{:strs [q vtd vtt ttd ttt]} values
          query-params (->>
                        (merge
                         (common/edn->query-params (reader/read-string q))
-                        {:valid-time (common/instant->date-time vt)
-                         :transaction-time (common/instant->date-time tt)})
+                        {:valid-time (common/date-time->datetime vtd vtt)
+                         :transaction-time (common/date-time->datetime ttd ttt)})
                        (remove #(nil? (second %)))
                        (into {}))]
      {:dispatch [:navigate :query {} query-params]})))
@@ -68,10 +73,10 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [vt tt eid]} :values}]]
+ (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values :as v}]]
    (let [query-params (->>
-                       {:valid-time (common/instant->date-time vt)
-                        :transaction-time (common/instant->date-time tt)}
+                       {:valid-time (common/date-time->datetime vtd vtt)
+                        :transaction-time (common/date-time->datetime ttd ttt)}
                        (remove #(nil? (second %)))
                        (into {}))]
      {:db db

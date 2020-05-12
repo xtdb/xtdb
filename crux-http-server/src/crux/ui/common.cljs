@@ -24,13 +24,19 @@
   [url]
   (reitit/match-by-path (navigation/router) url))
 
-(defn instant->date-time
-  [t]
-  (when t (str (t/date-time (t/instant t)))))
+(defn date-time->datetime
+  "d: 2020-04-28
+  t: 15:45:45.935"
+  [d t]
+  (when (and (not-empty d) (not-empty t))
+    (str (t/date d) "T" (t/time t))))
 
-(defn date-time->instant
-  [t]
-  (when t (str (t/instant (t/date-time t)))))
+(defn datetime->date-time
+  "dt: 2020-04-28T15:45:45.935"
+  [dt]
+  (when (not-empty dt)
+    {:date (str (t/date dt))
+     :time (str (t/time dt))}))
 
 (defn query-params->formatted-edn-string
   [query-params-map]

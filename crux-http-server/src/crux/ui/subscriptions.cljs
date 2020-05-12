@@ -19,32 +19,45 @@
  ::initial-values-query
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])]
+         handler (get-in db [:current-route :data :name])
+         valid-time (common/datetime->date-time
+                     (str (:valid-time query-params (t/now))))
+         transaction-time (common/datetime->date-time
+                           (:transaction-time query-params))]
      (when (= :query handler)
        {"q" (common/query-params->formatted-edn-string
              (dissoc query-params :valid-time :transaction-time))
-        "vt" (common/instant->date-time (:valid-time query-params (t/now)))
-        "tt" (common/instant->date-time (:transaction-time query-params))}))))
+        "vtd" (:date valid-time)
+        "vtt" (:time valid-time)
+        "ttd" (:date transaction-time)
+        "ttt" (:time transaction-time)}))))
 
 (rf/reg-sub
  ::initial-values-entity
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])]
+         handler (get-in db [:current-route :data :name])
+         valid-time (common/datetime->date-time
+                     (str (:valid-time query-params (t/now))))
+         transaction-time (common/datetime->date-time
+                           (:transaction-time query-params))]
      (when (= :entity handler)
        {"eid" (get-in db [:current-route :path-params :eid])
-        "vt" (common/instant->date-time (:valid-time query-params (t/now)))
-        "tt" (common/instant->date-time (:transaction-time query-params))}))))
+        "vtd" (:date valid-time)
+        "vtt" (:time valid-time)
+        "ttd" (:date transaction-time)
+        "ttt" (:time transaction-time)}))))
 
+;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
  ::query-data-table
  (fn [db _]
-   (if-let [error (get-in db [:query-data :error])]
+   (if-let [error (get-in db [:query :error])]
      {:error error}
      (let [{:strs [query-results linked-entities]}
            (get-in db [:query :http])
            find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
-           table-loading? (:table-loading? db)
+           table-loading? (get-in db [:query :right-pane :loading?])
            offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
            columns (map (fn [column]
@@ -53,7 +66,8 @@
                            :render-fn
                            (fn [_ v]
                              (if-let [link (get linked-entities v)]
-                               [:a.entity-link {:href link} v]
+                               [:a.entity-link {:href link}
+                                (str v)]
                                v))
                            :render-only #{:filter :sort}})
                         find-clause)
@@ -100,7 +114,8 @@
 (rf/reg-sub
  ::left-pane-view
  (fn [db _]
-   (or (get-in db [:left-pane :view]) :query)))
+   (or (get-in db [:left-pane :view])
+       (get-in db [:current-route :data :name]))))
 
 (rf/reg-sub
  ::left-pane-visible?

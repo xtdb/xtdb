@@ -1,5 +1,6 @@
 (ns crux.ui.views
   (:require
+   [clojure.string :as string]
    [clojure.pprint :as pprint]
    [crux.ui.events :as events]
    [crux.ui.common :as common]
@@ -12,88 +13,149 @@
    [tick.alpha.api :as t]))
 
 (defn vt-tt-inputs
-  [{:keys [values handle-change handle-blur]}]
+  [{:keys [values touched errors handle-change handle-blur]}]
   [:div.crux-time
    [:div.input-group
     [:div.label
      [:label "Valid Time"]]
-    [:input.input {:type "datetime-local"
-                   :name "vt"
-                   :value (get values "vt")
-                   :on-change handle-change
-                   :on-blur handle-blur}]]
+    [:input.input.input-time
+     {:type "date"
+      :name "vtd"
+      :value (get values "vtd")
+      :on-change handle-change
+      :on-blur handle-blur}]
+    [:input.input
+     {:type "time"
+      :name "vtt"
+      :value (get values "vtt")
+      :on-change handle-change
+      :on-blur handle-blur}]
+    (when (and (or (get touched "vtd")
+                   (get touched "vtt"))
+               (get errors "vt"))
+      [:p.input-error (get errors "vt")])]
    [:div.input-group
     [:div.label
-     [:label "Transaction Time"]]
-    [:input.input {:type "datetime-local"
-                   :name "tt"
-                   :value (get values "tt")
-                   :on-change handle-change
-                   :on-blur handle-blur}]]])
+     [:label "Transaction Time" ]]
+    [:input.input.input-time
+     {:type "date"
+      :name "ttd"
+      :value (get values "ttd")
+      :on-change handle-change
+      :on-blur handle-blur}]
+    [:input.input
+     {:type "time"
+      :name "ttt"
+      :value (get values "ttt")
+      :on-change handle-change
+      :on-blur handle-blur}]
+    (when (and (or (get touched "ttd")
+                   (get touched "ttt"))
+               (get errors "tt"))
+      [:p.input-error (get errors "tt")])]])
+
+(defn query-validation
+  [values]
+  (let [invalid? #(empty? (string/trim (or (get values %) "")))
+        validation {"q" (when (invalid? "q") "Query box is empty")
+                    "vt" (when (apply not= ((juxt #(% "vtd")
+                                                  #(% "vtt")) invalid?))
+                           "Fill out both inputs or none")
+                    "tt" (when (apply not= ((juxt #(% "ttd")
+                                                  #(% "ttt")) invalid?))
+                           "Fill out both inputs or none")}]
+    (when (some some? (vals validation)) validation)))
 
 (defn query-form
   []
   [fork/form {:form-id "form-query"
+              :validation query-validation
               :prevent-default? true
               :clean-on-unmount? true
+              :initial-values @(rf/subscribe [::sub/initial-values-query])
               :on-submit #(rf/dispatch [::events/go-to-query-view %])}
    (fn [{:keys [values
                 state
+                errors
+                touched
                 form-id
                 handle-change
                 handle-blur
                 handle-submit] :as props}]
      (let [loading? @(rf/subscribe [::sub/query-right-pane-loading?])]
-       [:<>
-        [:form
-         {:id form-id
-          :on-submit handle-submit}
-         [:textarea.textarea.input-group__textarea
+       [:form
+        {:id form-id
+         :on-submit handle-submit}
+        [:div.input-group
+         [:textarea.textarea
           {:name "q"
            :value (get values "q")
            :on-change handle-change
            :on-blur handle-blur
            :rows 10}]
-         [vt-tt-inputs props]
-         [:button.button
-          {:type "submit"
-           :disabled loading?}
-          "Submit Entity"]]]))])
+         (when (and (get touched "q")
+                    (get errors "q"))
+           [:p.input-error (get errors "q")])]
+        [vt-tt-inputs props]
+        [:button.button
+         {:type "submit"
+          :disabled (or loading? (some some? (vals errors)))}
+         "Submit Query"]]))])
+
+(defn entity-validation
+  [values]
+  (let [invalid? #(empty? (string/trim (or (get values %) "")))
+        validation {"eid" (when (invalid? "eid") "Entity id is empty")
+                    "vt" (when (apply not= ((juxt #(% "vtd")
+                                                  #(% "vtt")) invalid?))
+                           "Fill out both inputs or none")
+                    "tt" (when (apply not= ((juxt #(% "ttd")
+                                                  #(% "ttt")) invalid?))
+                           "Fill out both inputs or none")}]
+    (when (some some? (vals validation)) validation)))
 
 (defn entity-form
   []
   [fork/form {:form-id "form-entity"
               :prevent-default? true
               :clean-on-unmount? true
+              :validation entity-validation
+              :initial-values @(rf/subscribe [::sub/initial-values-entity])
               :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
    (fn [{:keys [values
+                touched
+                errors
                 form-id
                 state
                 handle-change
                 handle-blur
                 handle-submit] :as props}]
      (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
-       [:<>
-        [:form
-         {:id form-id
-          :on-submit handle-submit}
-         [:textarea.textarea.input-group__textarea
+       [:form
+        {:id form-id
+         :on-submit handle-submit}
+        [:div.input-group
+         [:textarea.textarea
           {:name "eid"
            :value (get values "eid")
            :on-change handle-change
            :on-blur handle-blur}]
-         [vt-tt-inputs props]
-         [:button.button
-          {:type "submit"
-           :disabled loading?}
-          "Submit Entity"]]]))])
+         (when (and (get touched "eid")
+                    (get errors "eid"))
+           [:p.input-error (get errors "eid")])]
+        [vt-tt-inputs props]
+        [:button.button
+         {:type "submit"
+          :disabled (or loading? (some some? (vals errors)))}
+         "Submit Entity"]]))])
 
 (defn form
   []
   (let [left-pane-view @(rf/subscribe [::sub/left-pane-view])]
     (case left-pane-view
       :query [query-form]
-      :entity [entity-form])))
+      :entity [entity-form]
+      nil)))
 
 (defn query-table
   []
@@ -119,7 +181,7 @@
      (case right-pane-view
        :table [query-table]
        :graph [:div "this is graph"]
-       :range [:div "this is range"])]))
+       nil)]))
 
 (defn- entity->hiccup
   [links edn]
@@ -188,7 +250,8 @@
        "History"]]
      (case right-pane-view
        :document [entity-document]
-       :history [:div "this is history"])]))
+       :history [:div "this is history"]
+       nil)]))
 
 (defn left-pane
   []
@@ -226,6 +289,7 @@
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:<>
+     #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
      [:div.container.page-pane
       [left-pane]
       [:div.right-pane

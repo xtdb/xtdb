@@ -1,4 +1,4 @@
-nhtml, body {
+html, body {
     margin: auto;
     background-color: white;
     height: 100%;
@@ -132,16 +132,24 @@ nhtml, body {
     max-width: 300px;
 }
 
+.input-time:not(:last-child) {
+    margin-bottom: 1rem;
+}
+
 .label {
     font-weight: bold;
     margin-bottom: 0.5rem;
 }
 
-.input-group__textarea {
-    margin-bottom: 1rem;
+.input-error {
+    font-size: 0.8rem;
+    color: darkred;
+    margin-top: 0.5rem;
 }
 
 .entity-link {
+    font-family: "monospace";
+    font-size: 0.7rem;
     padding: 0.5rem;
     font-weight: bold;
     background:#dfdfdf;

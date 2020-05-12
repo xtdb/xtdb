@@ -10,7 +10,8 @@
  (fn [{:keys [db]} _]
    (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)]
      (when (seq query-params)
-       {:dispatch [:crux.ui.events/set-query-right-pane-loading true]
+       {:dispatch-n [[:crux.ui.events/set-query-right-pane-loading true]
+                     [:crux.ui.events/query-table-error nil]]
         :http-xhrio {:method :get
                      :uri (common/route->url :query
                                              {}
