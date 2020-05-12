@@ -278,7 +278,7 @@
 
 (defn pagination-rows-per-page
   [table]
-  (get-in table [:utils :pagination :rows-per-page] 15))
+  (get-in table [:utils :pagination :rows-per-page] 10))
 
 (defn pagination-current-page
   [table]
@@ -445,7 +445,6 @@
   [data table]
   (let [rows (:rows data)]
     (->> rows
-         ;; V
          (resolve-hidden-columns table)
          (resolve-sorting data table)
          (resolve-column-filtering data table)
