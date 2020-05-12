@@ -91,30 +91,67 @@
 (defn- entity->hiccup
   [links edn]
   (if-let [href (get links edn)]
-    [:a {:href href}
+    [:a.entity-link
+     {:href href}
      (str edn)]
     (cond
-      (map? edn) (into [:dl]
-                       (mapcat
-                        (fn [[k v]]
-                          [[:dt (entity->hiccup links k)]
-                           [:dd (entity->hiccup links v)]])
-                        edn))
-      (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->hiccup links v)]) edn))
-      (set? edn) (into [:ul] (map (fn [v] [:li (entity->hiccup links v)]) edn))
+      (map? edn) (for [[k v] edn]
+                   ^{:key (str (gensym))}
+                   [:div.entity-group
+                    [:div.entity-group__key
+                     (entity->hiccup links k)]
+                    [:div.entity-group__value
+                     (entity->hiccup links v)]])
+
+      (sequential? edn) [:ol.entity-group__value
+                         (for [v edn]
+                           ^{:key (str (gensym))}
+                           [:li (entity->hiccup links v)])]
+      (set? edn) [:ul.entity-group__value
+                  (for [v edn]
+                    ^{:key v}
+                    [:li (entity->hiccup links v)])]
       :else (str edn))))
 
 (defn entity-view
   []
-  (let [{:keys [linked-entities entity-result]}
-        @(rf/subscribe [::sub/entity-view-data])]
+  (let [{:keys [linked-entities entity-result entity-name vt tt]}
+        @(rf/subscribe [::sub/entity-view-data])
+        loading? @(rf/subscribe [::sub/entity-loading?])]
     [:<>
+     [:a.back-button
+      {:on-click #(js/window.history.back)}
+      [:i.fas.fa-chevron-left]
+      [:span.back-button__text "Back"]]
      [:h1 "/_entity"]
-     [:div (entity->hiccup linked-entities entity-result)]]))
+     [:div.entity-map__container
+      (if loading?
+        [:div.entity-map.entity-map--loading
+         [:i.fas.fa-spinner.entity-map__load-icon]]
+        [:<>
+         [:div.entity-map
+          (if entity-result
+            [:<>
+             [:div.entity-group
+              [:div.entity-group__key
+               ":crux.db/id"]
+              [:div.entity-group__value
+               (str (:crux.db/id entity-result))]]
+             [:hr.entity-group__separator]
+             (entity->hiccup linked-entities
+                             (dissoc entity-result :crux.db/id))]
+            [:<> [:strong entity-name] " entity not found"])]
+         [:div.entity-vt-tt
+          [:div.entity-vt-tt__title
+           "Valid Time"]
+          [:div.entity-vt-tt__value vt]
+          [:div.entity-vt-tt__title
+           "Transaction Time"]
+          [:div.entity-vt-tt__value tt]]])]]))
 
 (defn view []
   (let [current-page @(rf/subscribe [::sub/current-page])]
-    [:div
+    [:div.container
      (case (:handler current-page)
        :query [query-view]
        :entity [entity-view]

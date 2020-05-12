@@ -470,43 +470,78 @@
                  :else links)))]
     (recur-on-result result {})))
 
-(defn- entity->html [links edn]
-  (if-let [href (get links edn)]
-    [:a {:href href} (str edn)]
-    (cond
-      (map? edn) (into [:dl]
-                       (mapcat
-                        (fn [[k v]]
-                          [[:dt (entity->html links k)]
-                           [:dd (entity->html links v)]])
-                        edn))
-      (sequential? edn) (into [:ol] (map (fn [v] [:li (entity->html links v)]) edn))
-      (set? edn) (into [:ul] (map (fn [v] [:li (entity->html links v)]) edn))
-      :else (str edn))))
+(defn- entity->html [eid linked-entities entity-map vt tt]
+  (let [nodes (fn resolve-entity-map
+                [linked-entities entity-map]
+                (if-let [href (get linked-entities entity-map)]
+                  [:a.entity-link
+                   {:href href}
+                   (str entity-map)]
+                  (cond
+                    (map? entity-map) (for [[k v] entity-map]
+                                        ^{:key (str (gensym))}
+                                        [:div.entity-group
+                                         [:div.entity-group__key
+                                          (resolve-entity-map linked-entities k)]
+                                         [:div.entity-group__value
+                                          (resolve-entity-map linked-entities v)]])
+
+                    (sequential? entity-map) [:ol.entity-group__value
+                                       (for [v entity-map]
+                                         ^{:key (str (gensym))}
+                                         [:li (resolve-entity-map linked-entities v)])]
+                    (set? entity-map) [:ul.entity-group__value
+                                (for [v entity-map]
+                                  ^{:key v}
+                                  [:li (resolve-entity-map linked-entities v)])]
+                    :else (str entity-map))))]
+    [:div.entity-map__container
+     (if entity-map
+       [:div.entity-map
+        [:div.entity-group
+         [:div.entity-group__key
+          ":crux.db/id"]
+         [:div.entity-group__value
+          (str (:crux.db/id entity-map))]]
+        [:hr.entity-group__separator]
+        (nodes (linked-entities) (dissoc entity-map :crux.db/id))]
+       [:div.enttiy-map
+        [:strong (str eid)] " entity not found"])
+      [:div.entity-vt-tt
+       [:div.entity-vt-tt__title
+        "Valid Time"]
+       [:div.entity-vt-tt__value
+        (str (or vt (java.util.Date.)))]
+       [:div.entity-vt-tt__title
+        "Transaction Time"]
+       [:div.entity-vt-tt__value
+        (str (or tt "Not Specified"))]]]))
 
 (defn- entity-state [^ICruxAPI crux-node options request]
-  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))]
-    (let [eid (c/id-edn-reader (URLDecoder/decode encoded-eid))
-          query-params (:query-params request)
-          db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
-                                                            (instant/read-instant-date))
-                                        :transact-time (some-> (get query-params "transaction-time")
-                                                               (instant/read-instant-date))})
-          entity-map (api/entity db eid)]
-      {:status (if (some? entity-map) 200 404)
-       :body (cond
-               (= (get-in request [:muuntaja/response :format]) "text/html") (if entity-map
-                                                                               (let [linked-entities (link-all-entities db  "/_entity" entity-map)]
-                                                                                 (raw-html
-                                                                                  {:body (entity->html linked-entities entity-map)
-                                                                                   :title "/_entity"
-                                                                                   :options options}))
-                                                                               (raw-html {:body [:div "No entity found"]
-                                                                                          :title "/_entity"
-                                                                                          :options options}))
-               (get query-params "link-entities?") {"linked-entities" (link-all-entities db  "/_entity" entity-map)
-                                                    "entity" entity-map}
-               :else entity-map)})))
+  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))
+        eid (c/id-edn-reader (URLDecoder/decode encoded-eid))
+        query-params (:query-params request)
+        vt (some-> (get query-params "valid-time")
+                   (instant/read-instant-date))
+        tt (some-> (get query-params "transaction-time")
+                   (instant/read-instant-date))
+        db (db-for-request crux-node {:valid-time vt
+                                      :transact-time tt})
+        entity-map (api/entity db eid)
+        linked-entities #(link-all-entities db  "/_entity" entity-map)]
+    {:status (if (some? entity-map) 200 404)
+     :body (cond
+             (= (get-in request [:muuntaja/response :format]) "text/html")
+             (raw-html
+              {:body (entity->html encoded-eid linked-entities entity-map vt tt)
+               :title "/_entity"
+               :options options})
+
+             (get query-params "link-entities?")
+             {"linked-entities" (linked-entities)
+              "entity" entity-map}
+
+             :else entity-map)}))
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))

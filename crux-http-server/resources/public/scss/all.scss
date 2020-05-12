@@ -144,13 +144,13 @@ html, body {
 }
 
 .entity-link {
-    padding: 0.5em;
+    padding: 0.5rem;
     font-weight: bold;
     background:#dfdfdf;
     color: black;
     white-space: nowrap;
     text-decoration: none;
-    border-radius: 0.7em;
+    border-radius: 0.7rem;
 }
 
 .entity-link:hover {
@@ -159,9 +159,173 @@ html, body {
 
 // END FORM ELEMENTS
 
+
 .error-box {
     padding: 1em;
     background:#dfdfdf;
     color: darkred;
     border-radius: 0.7em;
+}
+
+.container {
+    margin: auto;
+}
+
+
+.entity-group {
+    display: flex;
+    align-items: flex-start;
+    margin: 1.5rem auto;
+}
+
+.entity-group__separator {
+    border: 0;
+    height: 1px;
+    background: #333;
+}
+
+.entity-group__key {
+    margin-right: 1rem;
+}
+
+ol.entity-group__value {
+    list-style: none;
+    counter-reset: my-counter;
+    padding-inline-start: 0;
+    margin-block-start: 0;
+    margin-block-end: 0;
+}
+
+ul.entity-group__value {
+    list-style: none;
+    padding-inline-start: 0;
+    margin-block-start: 0;
+    margin-block-end: 0;
+}
+
+ol.entity-group__value li {
+    counter-increment: my-counter;
+}
+
+ol.entity-group__value li::before {
+    content: counter(my-counter) ".";
+    color: grey;
+    font-size: 0.765em;
+    margin-right: .5rem;
+    font-weight: bold;
+}
+
+ul.entity-group__value li::before {
+    content: "-";
+    color: grey;
+    font-size: 0.765em;
+    margin-right: .5rem;
+    font-weight: bold;
+}
+
+// apply to only first level keys
+.entity-map > .entity-group > .entity-group__key {
+    margin-right: 1rem;
+    font-weight: bold;
+}
+
+.entity-group__value li:not(:last-child) {
+    margin-bottom: 1rem;
+}
+
+.entity-map__container {
+    display: flex;
+    align-items: flex-start;
+}
+
+.common-entity-box {
+    padding: 1rem;
+    border-radius: 0.7rem;
+    box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
+}
+
+.entity-map {
+    width: fit-content;
+    margin-right: 4rem;
+    @extend .common-entity-box;
+}
+
+.entity-vt-tt {
+    @extend .common-entity-box;
+}
+
+.entity-vt-tt__title {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.entity-vt-tt__value:not(:last-child) {
+    margin-bottom: 1rem;
+}
+
+.entity__navigated-pages {
+    margin-bottom: 2rem;
+}
+
+.entity__navigated-page {
+    text-decoration: none;
+}
+
+.entity__navigated-page:hover {
+    color: red;
+}
+
+.navigated-pages__seperator {
+    margin: auto .5em;
+}
+
+.entity__navigated-page--active {
+    font-weight: bold;
+}
+
+@keyframes rotating {
+    from {
+	transform: rotate(0deg);
+	-o-transform: rotate(0deg);
+	-ms-transform: rotate(0deg);
+	-moz-transform: rotate(0deg);
+	-webkit-transform: rotate(0deg);
+    }
+    to {
+	transform: rotate(360deg);
+	-o-transform: rotate(360deg);
+	-ms-transform: rotate(360deg);
+	-moz-transform: rotate(360deg);
+	-webkit-transform: rotate(360deg);
+    }
+}
+@-webkit-keyframes rotating {
+    from {
+	transform: rotate(0deg);
+	-webkit-transform: rotate(0deg);
+    }
+    to {
+	transform: rotate(360deg);
+	-webkit-transform: rotate(360deg);
+    }
+}
+.rotating {
+    -webkit-animation: rotating 1s linear infinite;
+    -moz-animation: rotating 1s linear infinite;
+    -ms-animation: rotating 1s linear infinite;
+    -o-animation: rotating 1s linear infinite;
+    animation: rotating 1s linear infinite;
+}
+
+.entity-map__load-icon {
+    @extend .rotating;
+}
+
+.back-button {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.back-button__text {
+    margin-left: 0.5em;
 }
