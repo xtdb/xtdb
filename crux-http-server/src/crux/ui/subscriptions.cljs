@@ -20,6 +20,7 @@
      {:error error}
      (let [{:strs [query-results find-clause linked-entities]}
            (:query-data db)
+           table-loading? (:table-loading? db)
            offset (->> (or (.get (js/URLSearchParams. js/window.location.search) "offset") "0")
                        (js/parseInt))
            columns (map (fn [column]
@@ -37,7 +38,7 @@
         {:columns columns
          :rows rows
          :offset offset
-         :loading? (not query-results)
+         :loading? table-loading?
          :filters {:input (into #{} find-clause)}}}))))
 
 (rf/reg-sub
@@ -54,3 +55,23 @@
  ::entity-loading?
  (fn [db _]
    (:entity-loading? db)))
+
+(rf/reg-sub
+ ::query-pane-show?
+ (fn [db _]
+   (:query-pane-show? db)))
+
+(rf/reg-sub
+ ::query-view
+ (fn [db _]
+   (get db :query-view :table)))
+
+(rf/reg-sub
+ ::entity-view
+ (fn [db _]
+   (get db :entity-view :document)))
+
+(rf/reg-sub
+ ::search-view
+ (fn [db _]
+   (get db :search-view :query)))
