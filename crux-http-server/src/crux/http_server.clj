@@ -479,12 +479,12 @@
                    (str entity-map)]
                   (cond
                     (map? entity-map) (for [[k v] entity-map]
-                                 ^{:key (str (gensym))}
-                                 [:div.entity-group
-                                  [:div.entity-group__key
-                                   (resolve-entity-map linked-entities k)]
-                                  [:div.entity-group__value
-                                   (resolve-entity-map linked-entities v)]])
+                                        ^{:key (str (gensym))}
+                                        [:div.entity-group
+                                         [:div.entity-group__key
+                                          (resolve-entity-map linked-entities k)]
+                                         [:div.entity-group__value
+                                          (resolve-entity-map linked-entities v)]])
 
                     (sequential? entity-map) [:ol.entity-group__value
                                        (for [v entity-map]
