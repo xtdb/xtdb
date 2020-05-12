@@ -4,6 +4,7 @@
             [clojure.walk :as w]
             [clojure.test :as t]
             [crux.api :as api]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.query :as q]
@@ -2803,7 +2804,7 @@
                                    :where '[[e :foo/type "type"]
                                             [e :foo/id m]]
                                    :args [{'m 1}]}
-
+                                  c/->value-buffer
                                   {})
                 :vars-in-join-order
                 (filter #{'m 'e})))))

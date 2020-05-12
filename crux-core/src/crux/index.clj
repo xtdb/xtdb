@@ -236,17 +236,24 @@
        (and value (compare-pred (mem/compare-buffers value compare-v max-length))))
      (constantly true))))
 
-(defn new-less-than-equal-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate (comp not pos?) (c/->value-buffer max-v))]
+(defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (.capacity prefix-v))
+        pred (value-comparsion-predicate zero? prefix-v (.capacity prefix-v))]
+    (->PredicateVirtualIndex idx pred (fn [k]
+                                        (if (seek-k-pred k)
+                                          k
+                                          prefix-v)))))
+
+(defn new-less-than-equal-virtual-index [idx ^DirectBuffer max-v]
+  (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-less-than-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate neg? (c/->value-buffer max-v))]
+(defn new-less-than-virtual-index [idx ^DirectBuffer max-v]
+  (let [pred (value-comparsion-predicate neg? max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-greater-than-equal-virtual-index [idx min-v]
-  (let [min-v (c/->value-buffer min-v)
-        pred (value-comparsion-predicate (comp not neg?) min-v)]
+(defn new-greater-than-equal-virtual-index [idx ^DirectBuffer min-v]
+  (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
@@ -261,30 +268,20 @@
   (next-values [this]
     (db/next-values idx)))
 
-(defn new-greater-than-virtual-index [idx min-v]
-  (let [min-v (c/->value-buffer min-v)
-        pred (value-comparsion-predicate pos? min-v)
+(defn new-greater-than-virtual-index [idx ^DirectBuffer min-v]
+  (let [pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred k)
                                                   k
                                                   min-v)))]
     (->GreaterThanVirtualIndex idx)))
 
-(defn new-equals-virtual-index [idx v]
-  (let [v (c/->value-buffer v)
-        pred (value-comparsion-predicate zero? v)]
+(defn new-equals-virtual-index [idx ^DirectBuffer v]
+  (let [pred (value-comparsion-predicate zero? v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
                                           v)))))
-
-(defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (.capacity prefix-v))
-        pred (value-comparsion-predicate zero? prefix-v (.capacity prefix-v))]
-    (->PredicateVirtualIndex idx pred (fn [k]
-                                        (if (seek-k-pred k)
-                                          k
-                                          prefix-v)))))
 
 (defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints
@@ -625,8 +622,8 @@
 (def ^:private sorted-virtual-index-key-comparator
   (reify Comparator
     (compare [_ [a] [b]]
-      (mem/compare-buffers (or a c/nil-id-buffer)
-                           (or b c/nil-id-buffer)))))
+      (mem/compare-buffers (or a c/empty-buffer)
+                           (or b c/empty-buffer)))))
 
 (defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
   db/Index
@@ -683,7 +680,7 @@
   (let [result-name (:name idx)]
     (UnaryJoinIteratorState.
      idx
-     (or value c/nil-id-buffer)
+     (or value c/empty-buffer)
      (when (and result-name results)
        {result-name results}))))
 
@@ -886,7 +883,7 @@
 (defn- relation-virtual-index-depth ^long [^RelationIteratorsState iterators-state]
   (dec (count (.indexes iterators-state))))
 
-(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints ^RelationIteratorsState state]
+(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints encode-value-fn ^RelationIteratorsState state]
   db/Index
   (seek-values [this k]
     (when-let [idx (last (.indexes state))]
@@ -925,15 +922,15 @@
   (max-depth [this]
     max-depth))
 
-(defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
+(defn- build-nested-index [encode-value-fn tuples [range-constraints & next-range-constraints]]
   (-> (new-sorted-virtual-index
        (for [prefix (vals (group-by first tuples))
              :let [value (ffirst prefix)]]
-         [(c/->value-buffer value)
+         [(encode-value-fn value)
           (RelationNestedIndexState.
            value
            (when (seq (next (first prefix)))
-             (build-nested-index (map next prefix) next-range-constraints)))]))
+             (build-nested-index encode-value-fn (map next prefix) next-range-constraints)))]))
       (wrap-with-range-constraints range-constraints)))
 
 (defn update-relation-virtual-index!
@@ -942,14 +939,14 @@
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
    (let [state ^RelationIteratorsState (.state relation)]
      (set! (.indexes state) [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                               (build-nested-index tuples layered-range-constraints))])
+                               (build-nested-index (.encode-value-fn relation) tuples layered-range-constraints))])
      (set! (.child-idx state) nil)
      (set! (.needs-seek? state) false))
    relation))
 
 (defn new-relation-virtual-index
-  ([relation-name tuples max-depth]
-   (new-relation-virtual-index relation-name tuples max-depth nil))
-  ([relation-name tuples max-depth layered-range-constraints]
+  ([relation-name tuples max-depth encode-value-fn]
+   (new-relation-virtual-index relation-name tuples max-depth encode-value-fn nil))
+  ([relation-name tuples max-depth encode-value-fn layered-range-constraints]
    (let [iterators-state (RelationIteratorsState. nil nil false)]
-     (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
+     (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints encode-value-fn iterators-state) tuples))))
