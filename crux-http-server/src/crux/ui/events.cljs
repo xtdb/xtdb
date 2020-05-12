@@ -39,10 +39,9 @@
    (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
          query-map (read-string (get values "q"))
          parsed-valid-time (when (and valid-date valid-time)
-                             (t/instant (str valid-date  "T" valid-time)))
+                             (t/instant (str valid-date "T" valid-time)))
          parsed-transaction-time (when (and transaction-date transaction-time)
-                                   (t/instant (str transaction-date  "T"
-                                                   transaction-time)))
+                                   (t/instant (str transaction-date "T" transaction-time)))
          query-params (cast-to-query-params query-map parsed-valid-time parsed-transaction-time)]
      {:dispatch [:navigate {:page :query
                             :query-params query-params}]})))
