@@ -309,8 +309,8 @@
   transaction time. Includes the documents.")
 
   (entity-history
-    [node eid sort-order]
-    [node eid sort-order opts]
+    [db eid sort-order]
+    [db eid sort-order opts]
     "Eagerly retrieves entity history for the given entity.
 
   Options:
@@ -331,8 +331,8 @@
    * `:crux.db/doc` (see `with-docs?`).")
 
   (open-entity-history
-    ^crux.api.ICursor [node eid sort-order]
-    ^crux.api.ICursor [node eid sort-order opts]
+    ^crux.api.ICursor [db eid sort-order]
+    ^crux.api.ICursor [db eid sort-order opts]
     "Lazily retrieves entity history for the given entity.
   Don't forget to close the cursor when you've consumed enough history!
   See `entity-history` for all the options")
