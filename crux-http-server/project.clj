@@ -23,12 +23,17 @@
                              [day8.re-frame/http-fx "v0.2.0"]
                              [bidi "2.1.6"]
                              [tick "0.4.23-alpha"]
-                             [kibu/pushy "0.3.8"]]}}
+                             [kibu/pushy "0.3.8"]]}
+             :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
+                                     :target "crux-http-server/cljs-target/public/css/"}}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"
                           ["clean"]
                           ["run" "-m" "figwheel.main" "-O" "advanced" "-bo" "dev"]
-                          ["sass"]]}
+                          ["sass"]]
+            "install" ["do"
+                       ["with-profiles" "+sass-from-root" "build:cljs"]
+                       "install"]}
   :plugins [[yogthos/lein-sass "0.1.10"]]
   :resource-paths ["resources" "cljs-target"]
   :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
