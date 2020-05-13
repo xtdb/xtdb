@@ -82,9 +82,11 @@
                 handle-change
                 handle-blur
                 handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/query-right-pane-loading?])]
-       [:form
-        {:id form-id
+     (let [loading? @(rf/subscribe [::sub/query-right-pane-loading?])
+           query-pane? (= :query @(rf/subscribe [::sub/left-pane-view]))]
+       [:form.hidden
+        {:class (when query-pane? "visible")
+         :id form-id
          :on-submit handle-submit}
         [:div.input-group
          [:textarea.textarea
@@ -130,9 +132,11 @@
                 handle-change
                 handle-blur
                 handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
-       [:form
-        {:id form-id
+     (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])
+           entity-pane? (= :entity @(rf/subscribe [::sub/left-pane-view]))]
+       [:form.hidden
+        {:class (when entity-pane? "visible")
+         :id form-id
          :on-submit handle-submit}
         [:div.input-group
          [:textarea.textarea
@@ -148,14 +152,6 @@
          {:type "submit"
           :disabled (or loading? (some some? (vals errors)))}
          "Submit Entity"]]))])
-
-(defn form
-  []
-  (let [left-pane-view @(rf/subscribe [::sub/left-pane-view])]
-    (case left-pane-view
-      :query [query-form]
-      :entity [entity-form]
-      nil)))
 
 (defn query-table
   []
@@ -284,14 +280,15 @@
                   "pane-nav__tab--hover")
          :on-click #(rf/dispatch [::events/set-left-pane-view :entity])}
         "Entity"]]
-      [form]]]))
+      [query-form]
+      [entity-form]]]))
 
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:<>
      #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
      [:div.container.page-pane
-      [left-pane]
+      (when name [left-pane])
       [:div.right-pane
        [:div.back-button
         [:a

@@ -384,5 +384,11 @@ ul.entity-group__value li::before {
 .pane-nav__tab--active {
     color: white;
     background: #979797;
-
 }
+
+.hidden {
+    display: none;
+}
+
+.visible {
+    display: block;}
