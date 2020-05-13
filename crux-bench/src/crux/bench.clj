@@ -108,11 +108,14 @@
 
 (defn post-to-slack [message]
   (if-let [slack-url (System/getenv "SLACK_URL")]
-    (client/post (-> slack-url
-                     (json/read-str)
-                     (get "slack-url"))
-                 {:body (json/write-str {:text message})
-                  :content-type :json})
+    (try
+      (client/post (-> slack-url
+                       (json/read-str)
+                       (get "slack-url"))
+                   {:body (json/write-str {:text message})
+                    :content-type :json})
+      (catch Exception e
+        (println "Failed to post to slack, error: " e)))
 
     (println "Would post to Slack:\n" message)))
 
