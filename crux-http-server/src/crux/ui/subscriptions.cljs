@@ -97,7 +97,7 @@
 (rf/reg-sub
  ::entity-right-pane-view
  (fn [db _]
-   (or (get-in db [:entity :right-pane :view]) :document)))
+   (if (get-in db [:current-route :query-params :history]) :history :document)))
 
 (rf/reg-sub
  ::entity-right-pane-document
@@ -112,6 +112,12 @@
         :document document
         :document-no-eid (dissoc document :crux.db/id)
         :linked-entities (get-in db [:entity :http "linked-entities"])}))))
+
+(rf/reg-sub
+ ::entity-right-pane-history
+ (fn [db _]
+   {:eid (get-in db [:current-route :path-params :eid])
+    :entity-history (get-in db [:entity :http])}))
 
 (rf/reg-sub
  ::left-pane-view

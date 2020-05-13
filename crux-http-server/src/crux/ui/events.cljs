@@ -61,10 +61,24 @@
                        (into {}))]
      {:dispatch [:navigate :query {} query-params]})))
 
-(rf/reg-event-db
- ::set-entity-right-pane-view
- (fn [db [_ view]]
-   (assoc-in db [:entity :right-pane :view] view)))
+(rf/reg-event-fx
+ ::set-entity-right-pane-document
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:current-route :path-params :eid])
+         query-params (-> (get-in db [:current-route :query-params])
+                          (select-keys [:valid-time :transaction-time]))]
+     {:dispatch [:navigate :entity {:eid eid} query-params]})))
+
+(rf/reg-event-fx
+ ::set-entity-right-pane-history
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:current-route :path-params :eid])
+         query-params (-> (get-in db [:current-route :query-params])
+                          (assoc :history true)
+                          (assoc :with-docs true)
+                          (assoc :sort-order "asc"))]
+     {:dispatch [:navigate :entity {:eid eid} query-params]})))
+
 
 (rf/reg-event-db
  ::set-entity-right-pane-loading

@@ -589,7 +589,8 @@
                    {:body (entity-history->html encoded-eid entity-history)
                     :title "/_entity?history"
                     :options options})
-                  entity-history)})
+                  ;; Stringifying #crux/id values, caused issues with AJAX
+                  (map #(update % :crux.db/content-hash str) entity-history))})
       (let [entity-map (api/entity db eid)
             linked-entities #(link-all-entities db  "/_entity" entity-map)]
         {:status (if (some? entity-map) 200 404)
