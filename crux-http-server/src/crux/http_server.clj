@@ -31,7 +31,7 @@
            [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
-           java.net.URLDecoder
+           [java.net URLDecoder URLEncoder]
            org.eclipse.jetty.server.Server
            [com.nimbusds.jose.jwk JWK JWKSet KeyType RSAKey ECKey]
            com.nimbusds.jose.JWSObject
@@ -476,8 +476,9 @@
                       (api/entity db result))
                (let [query-params (format "?valid-time=%s&transaction-time=%s"
                                           (.toInstant ^Date (api/valid-time db))
-                                          (.toInstant ^Date (api/transaction-time db)))]
-                 (assoc links result (str path "/" result query-params)))
+                                          (.toInstant ^Date (api/transaction-time db)))
+                     encoded-eid (URLEncoder/encode (str result) "UTF-8")]
+                 (assoc links result (str path "/" encoded-eid query-params)))
                (cond
                  (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
                  (sequential? result) (apply merge (map #(recur-on-result % links) result))
@@ -541,7 +542,7 @@
                                                           with-corrections with-docs link-entities?]} :query-params
                                                   :as request}]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))
-        eid (or (some-> encoded-eid c/id-edn-reader)
+        eid (or (some-> encoded-eid URLDecoder/decode c/id-edn-reader)
                 (throw (IllegalArgumentException. "missing eid")))
         vt (some-> valid-time
                    (instant/read-instant-date))
@@ -598,8 +599,9 @@
        (map (fn [id]
               (let [query-params (format "?valid-time=%s&transaction-time=%s"
                                          (.toInstant ^Date (api/valid-time db))
-                                         (.toInstant ^Date (api/transaction-time db)))]
-                [id (str path "/" id query-params)])))
+                                         (.toInstant ^Date (api/transaction-time db)))
+                    encoded-eid (URLEncoder/encode (str id) "UTF-8")]
+                [id (str path "/" encoded-eid query-params)])))
        (into {})))
 
 (defn resolve-prev-next-offset
