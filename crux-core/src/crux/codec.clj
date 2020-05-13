@@ -693,19 +693,6 @@
   (id->buffer [this to]
     (id->buffer eid to)))
 
-;; TODO: Not sure why these are needed, external sorting thaws
-;; incompatible records without it.
-(nippy/extend-freeze
- EntityTx
- :crux.codec/entity-tx
- [x data-output]
- (nippy/-freeze-without-meta! (into {} x) data-output))
-
-(nippy/extend-thaw
- :crux.codec/entity-tx
- [data-input]
- (map->EntityTx (nippy/thaw-from-in! data-input)))
-
 (defn decode-entity+vt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (let [index-id (.getByte k 0)]
