@@ -485,52 +485,74 @@
                  :else links)))]
     (recur-on-result result {})))
 
-(defn- entity->html [eid linked-entities entity-map vt tt]
-  (let [nodes (fn resolve-entity-map
-                [linked-entities entity-map]
-                (if-let [href (get linked-entities entity-map)]
-                  [:a.entity-link
-                   {:href href}
-                   (str entity-map)]
-                  (cond
-                    (map? entity-map) (for [[k v] entity-map]
-                                        ^{:key (str (gensym))}
-                                        [:div.entity-group
-                                         [:div.entity-group__key
-                                          (resolve-entity-map linked-entities k)]
-                                         [:div.entity-group__value
-                                          (resolve-entity-map linked-entities v)]])
+(defn resolve-entity-map [linked-entities entity-map]
+  (if-let [href (get linked-entities entity-map)]
+    [:a.entity-link
+     {:href href}
+     (str entity-map)]
+    (cond
+      (map? entity-map) (for [[k v] entity-map]
+                          ^{:key (str (gensym))}
+                          [:div.entity-group
+                           [:div.entity-group__key
+                            (resolve-entity-map linked-entities k)]
+                           [:div.entity-group__value
+                            (resolve-entity-map linked-entities v)]])
 
-                    (sequential? entity-map) [:ol.entity-group__value
-                                       (for [v entity-map]
-                                         ^{:key (str (gensym))}
-                                         [:li (resolve-entity-map linked-entities v)])]
-                    (set? entity-map) [:ul.entity-group__value
+      (sequential? entity-map) [:ol.entity-group__value
                                 (for [v entity-map]
-                                  ^{:key v}
+                                  ^{:key (str (gensym))}
                                   [:li (resolve-entity-map linked-entities v)])]
-                    :else (str entity-map))))]
-    [:div.entity-map__container
-     (if entity-map
-       [:div.entity-map
-        [:div.entity-group
-         [:div.entity-group__key
-          ":crux.db/id"]
-         [:div.entity-group__value
-          (str (:crux.db/id entity-map))]]
-        [:hr.entity-group__separator]
-        (nodes (linked-entities) (dissoc entity-map :crux.db/id))]
-       [:div.enttiy-map
-        [:strong (str eid)] " entity not found"])
-      [:div.entity-vt-tt
-       [:div.entity-vt-tt__title
-        "Valid Time"]
-       [:div.entity-vt-tt__value
-        (str (or vt (java.util.Date.)))]
-       [:div.entity-vt-tt__title
-        "Transaction Time"]
-       [:div.entity-vt-tt__value
-        (str (or tt "Not Specified"))]]]))
+      (set? entity-map) [:ul.entity-group__value
+                         (for [v entity-map]
+                           ^{:key v}
+                           [:li (resolve-entity-map linked-entities v)])]
+      :else (str entity-map))))
+
+(defn- entity->html [eid linked-entities entity-map vt tt]
+  [:div.entity-map__container
+   (if entity-map
+     [:div.entity-map
+      [:div.entity-group
+       [:div.entity-group__key
+        ":crux.db/id"]
+       [:div.entity-group__value
+        (str (:crux.db/id entity-map))]]
+      [:hr.entity-group__separator]
+      (resolve-entity-map (linked-entities) (dissoc entity-map :crux.db/id))]
+     [:div.entity-map
+      [:strong (str eid)] " entity not found"])
+   [:div.entity-vt-tt
+    [:div.entity-vt-tt__title
+     "Valid Time"]
+    [:div.entity-vt-tt__value
+     (str (or vt (java.util.Date.)))]
+    [:div.entity-vt-tt__title
+     "Transaction Time"]
+    [:div.entity-vt-tt__value
+     (str (or tt "Not Specified"))]]])
+
+(defn- history-elem->div [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc] :as history-elem}]
+  [:div.entity-history__container
+   [:div.entity-history
+    (resolve-entity-map [] doc)]
+   [:div.entity-vt-tt
+    [:div.entity-vt-tt__title
+     "Valid Time"]
+    [:div.entity-vt-tt__value
+     (str valid-time)]
+    [:div.entity-vt-tt__title
+     "Transaction Time"]
+    [:div.entity-vt-tt__value
+     (str tx-time)]]])
+
+(defn- entity-history->html [eid entity-history]
+  (let [entity-histories (map history-elem->div entity-history)]
+    [:div.entity-histories__container
+     (if (not-empty entity-history)
+       (into [:div.entity-histories] entity-histories)
+       [:div.entity-histories
+        [:strong (str eid)] " entity not found"])]))
 
 (defn html-request? [request]
   (= (get-in request [:muuntaja/response :format]) "text/html"))
@@ -562,7 +584,12 @@
                                 :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
             entity-history (api/entity-history db eid sort-order history-opts)]
         {:status (if (not-empty entity-history) 200 404)
-         :body entity-history})
+         :body  (if html?
+                  (raw-html
+                   {:body (entity-history->html encoded-eid entity-history)
+                    :title "/_entity?history"
+                    :options options})
+                  entity-history)})
       (let [entity-map (api/entity db eid)
             linked-entities #(link-all-entities db  "/_entity" entity-map)]
         {:status (if (some? entity-map) 200 404)

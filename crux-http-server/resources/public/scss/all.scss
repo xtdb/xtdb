@@ -228,6 +228,11 @@ ul.entity-group__value li::before {
     font-weight: bold;
 }
 
+.entity-history > .entity-group > .entity-group__key {
+    margin-right: 1rem;
+    font-weight: bold;
+}
+
 .entity-group__value li:not(:last-child) {
     margin-bottom: 1rem;
 }
@@ -237,13 +242,27 @@ ul.entity-group__value li::before {
     align-items: flex-start;
 }
 
+.entity-histories__container {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+}
+
+.entity-history__container {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    justify-content: space-between;
+}
+
 .common-entity-box {
     padding: 1rem;
     border-radius: 0.7rem;
+    white-space: pre-wrap;
     box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
 }
 
-.entity-map {
+.entity-map, .entity-history {
     width: fit-content;
     margin-right: 4rem;
     @extend .common-entity-box;
