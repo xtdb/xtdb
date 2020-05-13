@@ -17,7 +17,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:const ^:private initial-read-buffer-limit 32)
+(def ^:const ^:private initial-read-buffer-limit 128)
 
 (defn- read-value [^ToIntFunction f]
   (loop [limit initial-read-buffer-limit]
