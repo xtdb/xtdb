@@ -22,7 +22,6 @@
             [crux.tx.conform :as txc])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            java.io.Closeable
-           java.util.Date
            java.util.function.Consumer
            [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
@@ -52,8 +51,8 @@
                 (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
                                                         tx-time latest-tx-time)
                                                 tx-time latest-tx-time)))
-            tx-time (or tx-time latest-tx-time)
-            valid-time (or valid-time (Date.))]
+            valid-time (or valid-time (cio/next-monotonic-date))
+            tx-time (or tx-time latest-tx-time valid-time)]
 
         (q/db query-engine valid-time tx-time))))
 
