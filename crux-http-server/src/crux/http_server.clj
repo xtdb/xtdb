@@ -652,7 +652,7 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [links (if link-entities? (link-top-level-entities db  "/_entity" results) [])]
+                   html? (let [links (link-top-level-entities db  "/_entity" results)]
                            (raw-html
                             {:body (query->html links query results)
                              :title "/_query"
