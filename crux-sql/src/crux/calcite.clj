@@ -4,13 +4,12 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [clojure.walk :refer [postwalk]]
             [crux.calcite.types]
+            [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
             crux.db)
   (:import crux.calcite.CruxTable
            [crux.calcite.types SQLCondition SQLFunction SQLPredicate WrapLiteral]
-           org.apache.calcite.util.Pair
            java.lang.reflect.Field
            [java.sql DriverManager Types]
            [java.util Properties WeakHashMap]
@@ -21,9 +20,12 @@
            org.apache.calcite.linq4j.Enumerable
            org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
-           [org.apache.calcite.rex RexDynamicParam RexInputRef RexLiteral RexNode RexCall]
-           org.apache.calcite.sql.SqlKind
-           org.apache.calcite.sql.type.SqlTypeName))
+           [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode]
+           org.apache.calcite.runtime.SqlFunctions
+           [org.apache.calcite.sql SqlFunction SqlKind SqlOperator]
+           org.apache.calcite.sql.fun.SqlStdOperatorTable
+           org.apache.calcite.sql.type.SqlTypeName
+           [org.apache.calcite.util BuiltInMethod Pair]))
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
@@ -31,10 +33,10 @@
   (if (or (not (vector? v)) (= 1 (count v))) (vector v) v))
 
 (defn -like [s pattern]
-  (org.apache.calcite.runtime.SqlFunctions/like s pattern))
+  (SqlFunctions/like s pattern))
 
 (defn -substring [^String c ^Integer s ^Integer l]
-  (org.apache.calcite.runtime.SqlFunctions/substring c s l))
+  (SqlFunctions/substring c s l))
 
 (def ^:private pred-fns
   {SqlKind/EQUALS '=
@@ -47,13 +49,29 @@
    SqlKind/IS_NULL 'nil?
    SqlKind/IS_NOT_NULL 'boolean})
 
-(def ^:private std-operator-fns
+(def ^:private arithmetic-fns
   {SqlKind/TIMES '*
    SqlKind/PLUS '+
    SqlKind/MINUS '-})
 
-(def ^:private sql-fns
-  {"SUBSTRING" 'crux.calcite/-substring})
+(def ^:private calcite-built-in-fns
+  (let [calcite-built-in-fns (->> (BuiltInMethod/values)
+                                  (map #(vector (.name ^BuiltInMethod %) %))
+                                  (into {}))]
+    (->> (.getFields SqlStdOperatorTable)
+         (filter #(.isAssignableFrom SqlFunction (.getType ^Field %)))
+         (keep (fn [^Field f]
+                 (when-let [built-in-fn ^BuiltInMethod (calcite-built-in-fns (.getName f))]
+                   (let [o ^SqlOperator (.get f (SqlStdOperatorTable/instance))]
+                     [(.getName o) built-in-fn]))))
+         (into {}))))
+
+(comment
+  (sort (keys calcite-built-in-fns)))
+
+(defn -built-in [id & args]
+  (let [built-in-fn ^BuiltInMethod (calcite-built-in-fns id)]
+    (crux.calcite.CruxUtils/invokeStaticMethod (.method built-in-fn) (into-array Object args))))
 
 (defn input-ref->attr [^RexInputRef i schema]
   (get-in schema [:crux.sql.table/query :find (.getIndex i)]))
@@ -79,13 +97,17 @@
                  (= "KEYWORD" (str (.-op ^RexCall n))))
         (keyword (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
 
-      (when-let [op (if (= SqlKind/OTHER_FUNCTION (.getKind n))
-                      (get sql-fns (.getName (.-op ^RexCall n)))
-                      (get std-operator-fns (.getKind n)))]
+      (when-let [op (get arithmetic-fns (.getKind n))]
         (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands ^RexCall n))))
 
       (and (#{SqlKind/AND SqlKind/OR SqlKind/NOT} (.getKind n))
            (SQLCondition. (.getKind n) (mapv #(->ast % schema) (.-operands ^RexCall n))))
+
+      (if (instance? RexCall n)
+        (if-let [f (calcite-built-in-fns (.getName (.op ^RexCall n)))]
+          (let [operands (cons (.getName (.op ^RexCall n)) (map #(->operand % schema) (.getOperands ^RexCall n)))]
+            (SQLFunction. (gensym) 'crux.calcite/-built-in operands))
+          (throw (IllegalArgumentException. (str "Can't understand call " n)))))
 
       n))
 
