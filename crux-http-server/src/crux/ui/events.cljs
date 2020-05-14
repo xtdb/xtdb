@@ -80,4 +80,9 @@
                        (remove #(nil? (second %)))
                        (into {}))]
      {:db db
-      :dispatch [:navigate :entity {:eid eid} query-params]})))
+      :dispatch [:navigate :entity {:eid (string/trim eid)} query-params]})))
+
+(rf/reg-event-db
+ ::entity-right-pane-document-error
+ (fn [db [_ error]]
+   (assoc-in db [:entity :error] error)))

@@ -205,31 +205,30 @@
 
 (defn entity-document
   []
-  (let [{:keys [eid vt tt document document-no-eid linked-entities]}
+  (let [{:keys [eid vt tt document document-no-eid linked-entities error]}
         @(rf/subscribe [::sub/entity-right-pane-document])
         loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
     [:div.entity-map__container
      (if loading?
        [:div.entity-map.entity-map--loading
         [:i.fas.fa-spinner.entity-map__load-icon]]
-       [:<>
-        [:div.entity-map
-         (if document
-           [:<>
-            [:div.entity-group
-             [:div.entity-group__key
-              ":crux.db/id"]
-             [:div.entity-group__value (str eid)]]
-            [:hr.entity-group__separator]
-            (entity->hiccup linked-entities document-no-eid)]
-           [:<> [:strong eid] " entity not found"])]
-        [:div.entity-vt-tt
-         [:div.entity-vt-tt__title
-          "Valid Time"]
-         [:div.entity-vt-tt__value vt]
-         [:div.entity-vt-tt__title
-          "Transaction Time"]
-         [:div.entity-vt-tt__value tt]]])]))
+       (if error
+         [:div.error-box error]
+         [:<>
+          [::div.entity-map
+           [:div.entity-group
+            [:div.entity-group__key
+             ":crux.db/id"]
+            [:div.entity-group__value (str eid)]]
+           [:hr.entity-group__separator]
+           (entity->hiccup linked-entities document-no-eid)]
+          [:div.entity-vt-tt
+           [:div.entity-vt-tt__title
+            "Valid Time"]
+           [:div.entity-vt-tt__value vt]
+           [:div.entity-vt-tt__title
+            "Transaction Time"]
+           [:div.entity-vt-tt__value tt]]]))]))
 
 (defn entity-right-pane
   []

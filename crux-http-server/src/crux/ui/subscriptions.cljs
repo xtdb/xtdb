@@ -102,14 +102,16 @@
 (rf/reg-sub
  ::entity-right-pane-document
  (fn [db _]
-   (let [query-params (get-in db [:current-route :query-params])
-         document (get-in db [:entity :http "entity"])]
-     {:eid (get-in db [:current-route :path-params :eid])
-      :vt (or (:valid-time query-params) (str (t/now)))
-      :tt (or (:transaction-time query-params) "Not Specified")
-      :document document
-      :document-no-eid (dissoc document :crux.db/id)
-      :linked-entities (get-in db [:entity :http "linked-entities"])})))
+   (if-let [error (get-in db [:entity :error])]
+     {:error error}
+     (let [query-params (get-in db [:current-route :query-params])
+           document (get-in db [:entity :http "entity"])]
+       {:eid (get-in db [:current-route :path-params :eid])
+        :vt (or (:valid-time query-params) (str (t/now)))
+        :tt (or (:transaction-time query-params) "Not Specified")
+        :document document
+        :document-no-eid (dissoc document :crux.db/id)
+        :linked-entities (get-in db [:entity :http "linked-entities"])}))))
 
 (rf/reg-sub
  ::left-pane-view
