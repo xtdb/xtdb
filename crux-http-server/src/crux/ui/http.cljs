@@ -53,8 +53,9 @@
  ::success-fetch-entity
  (fn [{:keys [db]} [_ result]]
    (prn "fetch entity success!")
-   {:db (assoc-in db [:entity :http] result)
-    :dispatch [:crux.ui.events/set-entity-right-pane-loading false]}))
+   (let [right-pane-view (if (get-in db [:current-route :query-params :history]) :history :document)]
+     {:db (assoc-in db [:entity :http right-pane-view] result)
+      :dispatch [:crux.ui.events/set-entity-right-pane-loading false]})))
 
 (rf/reg-event-fx
  ::fail-fetch-entity

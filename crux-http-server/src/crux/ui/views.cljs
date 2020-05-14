@@ -231,6 +231,7 @@
            [:div.entity-vt-tt__value tt]]]))]))
 
 (defn- history-elem->div [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc] :as history-elem}]
+  ^{:key history-elem}
   [:div.entity-history__container
    [:div.entity-history
     (entity->hiccup [] doc)]
@@ -245,18 +246,35 @@
      (str tx-time)]]])
 
 (defn- entity-history-document []
-  (let [{:keys [eid entity-history]} @(rf/subscribe [::sub/entity-right-pane-history])
+  (let [show-diffs? @(rf/subscribe [::sub/entity-right-pane-history-diffs?])
+        {:keys [eid entity-history]} (if show-diffs?
+                                       @(rf/subscribe [::sub/entity-right-pane-history-diffs])
+                                       @(rf/subscribe [::sub/entity-right-pane-history]))
         loading? @(rf/subscribe [::sub/entity-right-pane-loading?])
         entity-histories (map history-elem->div entity-history)]
-    [:div.entity-histories__container
-     (if loading?
-       [:div.entity-map.entity-map--loading
-        [:i.fas.fa-spinner.entity-map__load-icon]]
-       [:div.entity-histories
-        [:<>
-         (if (not-empty entity-history)
-           [:<> entity-histories]
-           [:div.entity-history__container [:strong eid] " not found"])]])]))
+    [:<>
+     [:div.pane-nav
+      [:div.pane-nav__tab
+       {:class (if (not show-diffs?)
+                 "pane-nav__tab--active"
+                 "pane-nav__tab--hover")
+        :on-click #(rf/dispatch [::events/set-entity-right-pane-history-diffs? false])}
+       "Documents"]
+      [:div.pane-nav__tab
+       {:class (if show-diffs?
+                 "pane-nav__tab--active"
+                 "pane-nav__tab--hover")
+        :on-click #(rf/dispatch [::events/set-entity-right-pane-history-diffs? true])}
+       "Diffs"]]
+     [:div.entity-histories__container
+      (if loading?
+        [:div.entity-map.entity-map--loading
+         [:i.fas.fa-spinner.entity-map__load-icon]]
+        [:div.entity-histories
+         [:<>
+          (if (not-empty entity-history)
+            [:<> entity-histories]
+            [:div.entity-history__container [:strong eid] " not found"])]])]]))
 
 (defn entity-right-pane []
   (let [right-pane-view @(rf/subscribe [::sub/entity-right-pane-view])]

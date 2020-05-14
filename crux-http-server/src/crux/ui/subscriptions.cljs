@@ -4,7 +4,8 @@
    [clojure.pprint :as p]
    [crux.ui.common :as common]
    [re-frame.core :as rf]
-   [tick.alpha.api :as t]))
+   [tick.alpha.api :as t]
+   [clojure.data :as data]))
 
 (rf/reg-sub
  :db
@@ -105,19 +106,46 @@
    (if-let [error (get-in db [:entity :error])]
      {:error error}
      (let [query-params (get-in db [:current-route :query-params])
-           document (get-in db [:entity :http "entity"])]
-       {:eid (get-in db [:current-route :path-params :eid])
-        :vt (or (:valid-time query-params) (str (t/now)))
-        :tt (or (:transaction-time query-params) "Not Specified")
-        :document document
-        :document-no-eid (dissoc document :crux.db/id)
-        :linked-entities (get-in db [:entity :http "linked-entities"])}))))
+         document (get-in db [:entity :http :document "entity"])]
+     {:eid (get-in db [:current-route :path-params :eid])
+      :vt (or (:valid-time query-params) (str (t/now)))
+      :tt (or (:transaction-time query-params) "Not Specified")
+      :document document
+      :document-no-eid (dissoc document :crux.db/id)
+      :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
 
 (rf/reg-sub
  ::entity-right-pane-history
  (fn [db _]
    {:eid (get-in db [:current-route :path-params :eid])
-    :entity-history (get-in db [:entity :http])}))
+    :entity-history (get-in db [:entity :http :history])}))
+
+(rf/reg-sub
+ ::entity-right-pane-history-diffs?
+ (fn [db _]
+   (or (get-in db [:entity :right-pane :diffs?]) false)))
+
+(defn- history-docs->diffs [entity-history]
+  (map-indexed
+   (fn [idx {:keys [crux.db/doc] :as val}]
+     (if (> idx 0)
+       (let [[in-old-map in-new-map _] (data/diff
+                                        (get-in entity-history [(- idx 1) :crux.db/doc])
+                                        doc)]
+         (assoc val :crux.db/doc {"Plus" in-new-map
+                                  "Minus" in-old-map}))
+       val))
+   entity-history))
+
+(rf/reg-sub
+ ::entity-right-pane-history-diffs
+ (fn [db _]
+   (let [entity-history (-> (get-in db [:entity :http :history])
+                            vec
+                            history-docs->diffs)]
+     {:eid (get-in db [:current-route :path-params :eid])
+      :entity-history entity-history})))
+
 
 (rf/reg-sub
  ::left-pane-view

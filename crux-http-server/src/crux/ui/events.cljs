@@ -100,3 +100,8 @@
  ::entity-right-pane-document-error
  (fn [db [_ error]]
    (assoc-in db [:entity :error] error)))
+
+(rf/reg-event-db
+ ::set-entity-right-pane-history-diffs?
+ (fn [db [_ bool]]
+   (assoc-in db [:entity :right-pane :diffs?] bool)))
