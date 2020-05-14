@@ -9,21 +9,10 @@ html, body {
     box-sizing: border-box;
 }
 
-.console-nav {
-    height: 3rem;
-    background: black;
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-bottom: 3rem;
-    padding-left: 1rem;
-    font-size: 1.5rem;
-}
-
 .console {
     max-width: 95%;
     margin: auto;
+    margin-top: 2rem;
 }
 
 // override default table style for no js version
@@ -391,4 +380,5 @@ ul.entity-group__value li::before {
 }
 
 .visible {
-    display: block;}
+    display: block;
+}

@@ -55,8 +55,6 @@
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
           [:title "Crux Console"]]
          [:body
-          [:nav.console-nav
-           [:div "Crux Console"]]
           [:div.console
            [:div#app
             [:h1 title]
