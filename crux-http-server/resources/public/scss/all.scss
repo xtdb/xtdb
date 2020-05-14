@@ -207,6 +207,41 @@ ul.entity-group__value {
     margin-bottom: 0;
 }
 
+.entity-map li {
+    padding-left: 1rem;
+}
+
+.list-element {
+    position: absolute;
+    left: 0;
+    display: flex;
+    align-items: center;
+    height: 1.2rem;
+    color: grey;
+    font-size: 0.765em;
+    margin-right: 0.5rem;
+    font-weight: bold;
+}
+
+ol.entity-group__value  li::before {
+    content: counter(my-counter) ".";
+    @extend .list-element;
+}
+
+ul.entity-group__value li::before {
+    content: "-";
+    @extend .list-element;
+}
+
+.entity-group__value .entity-group {
+    margin: 0;
+    margin-bottom: 1rem;
+}
+
+.entity-group__value .entity-group:last-child {
+    margin-bottom: 0;
+}
+
 .entity-group__value .entity-group:first-child::before {
     content: "{";
     color: grey;
@@ -220,14 +255,15 @@ ul.entity-group__value {
 
 .entity-group__value .entity-group:last-child::after {
     content: "}";
-    align-self: flex-end;
+    display: flex;
+    height: 100%;
     color: grey;
     margin-left: 0.6rem;
     font-weight: bold;
 }
 
-// apply to only first level keys
-.entity-map > .entity-group > .entity-group__key {
+    // apply to only first level keys
+    .entity-map > .entity-group > .entity-group__key {
     margin-right: 1rem;
     font-weight: bold;
 }

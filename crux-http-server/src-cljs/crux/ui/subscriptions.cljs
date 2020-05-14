@@ -155,6 +155,28 @@
    (partition 2 1 entity-history)))
 
 (rf/reg-sub
+ ::entity-right-pane-history-diffs?
+ (fn [db _]
+   (or (get-in db [:entity :right-pane :diffs?]) false)))
+
+(rf/reg-sub
+ ::entity-right-pane-history
+ (fn [db _]
+   (let [error (get-in db [:entity :error])
+         diffs? (or (get-in db [:entity :right-pane :diffs?]) false)
+         eid (get-in db [:current-route :path-params :eid])
+         history (get-in db [:entity :http :history])]
+     (cond
+       error {:error error}
+       diffs? (let [entity-history (-> history
+                                       vec
+                                       history-docs->diffs)]
+                {:eid eid
+                 :entity-history entity-history})
+       :else {:eid eid
+              :entity-history history}))))
+
+(rf/reg-sub
  ::entity-right-pane-history-diffs
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
