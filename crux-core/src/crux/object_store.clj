@@ -6,16 +6,11 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.index :as idx])
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
            org.agrona.io.DirectBufferInputStream
            crux.kv.KvSnapshot))
-
-(defn <-nippy-buffer [buf]
-  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
-
-(defn ->nippy-buffer [v]
-  (mem/->off-heap (nippy/fast-freeze v)))
 
 (defrecord KvObjectStore [kv]
   db/ObjectStore
@@ -34,7 +29,7 @@
     (if (instance? KvSnapshot snapshot)
       (->> (for [k ks
                  :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
-                       doc (some-> (kv/get-value snapshot seek-k) <-nippy-buffer)]
+                       doc (some-> (kv/get-value snapshot seek-k) idx/<-nippy-buffer)]
                  :when doc]
              [k doc])
            (into {}))
@@ -44,7 +39,7 @@
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
                    [(c/encode-doc-key-to nil (c/->id-buffer k))
-                    (->nippy-buffer v)])))
+                    (idx/->nippy-buffer v)])))
 
   Closeable
   (close [_]))
