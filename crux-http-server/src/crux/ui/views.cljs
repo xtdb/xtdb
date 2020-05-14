@@ -203,6 +203,16 @@
                     [:li (entity->hiccup links v)])]
       :else (str edn))))
 
+(defn vt-tt-entity-box
+  [vt tt]
+  [:div.entity-vt-tt
+   [:div.entity-vt-tt__title
+    "Valid Time"]
+   [:div.entity-vt-tt__value (str vt)]
+   [:div.entity-vt-tt__title
+    "Transaction Time"]
+   [:div.entity-vt-tt__value (str tt)]])
+
 (defn entity-document
   []
   (let [{:keys [eid vt tt document document-no-eid linked-entities error]}
@@ -222,46 +232,23 @@
             [:div.entity-group__value (str eid)]]
            [:hr.entity-group__separator]
            (entity->hiccup linked-entities document-no-eid)]
-          [:div.entity-vt-tt
-           [:div.entity-vt-tt__title
-            "Valid Time"]
-           [:div.entity-vt-tt__value vt]
-           [:div.entity-vt-tt__title
-            "Transaction Time"]
-           [:div.entity-vt-tt__value tt]]]))]))
-
-(defn- history-elem->div [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc] :as history-elem}]
-  ^{:key history-elem}
-  [:div.entity-history__container
-   [:div.entity-history
-    (entity->hiccup [] doc)]
-   [:div.entity-vt-tt
-    [:div.entity-vt-tt__title
-     "Valid Time"]
-    [:div.entity-vt-tt__value
-     (str valid-time)]
-    [:div.entity-vt-tt__title
-     "Transaction Time"]
-    [:div.entity-vt-tt__value
-     (str tx-time)]]])
+          [vt-tt-entity-box vt tt]]))]))
 
 (defn- entity-history-document []
-  (let [show-diffs? @(rf/subscribe [::sub/entity-right-pane-history-diffs?])
-        {:keys [eid entity-history]} (if show-diffs?
-                                       @(rf/subscribe [::sub/entity-right-pane-history-diffs])
-                                       @(rf/subscribe [::sub/entity-right-pane-history]))
-        loading? @(rf/subscribe [::sub/entity-right-pane-loading?])
-        entity-histories (map history-elem->div entity-history)]
+  (let [
+        {:keys [error eid entity-history]} @(rf/subscribe [::sub/entity-right-pane-history])
+        diffs-tab? @(rf/subscribe [::sub/entity-right-pane-history-diffs?])
+        loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
     [:<>
      [:div.pane-nav
       [:div.pane-nav__tab
-       {:class (if (not show-diffs?)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
+       {:class (if diffs-tab?
+                 "pane-nav__tab--hover"
+                 "pane-nav__tab--active")
         :on-click #(rf/dispatch [::events/set-entity-right-pane-history-diffs? false])}
        "Documents"]
       [:div.pane-nav__tab
-       {:class (if show-diffs?
+       {:class (if diffs-tab?
                  "pane-nav__tab--active"
                  "pane-nav__tab--hover")
         :on-click #(rf/dispatch [::events/set-entity-right-pane-history-diffs? true])}
@@ -270,11 +257,16 @@
       (if loading?
         [:div.entity-map.entity-map--loading
          [:i.fas.fa-spinner.entity-map__load-icon]]
-        [:div.entity-histories
-         [:<>
-          (if (not-empty entity-history)
-            [:<> entity-histories]
-            [:div.entity-history__container [:strong eid] " not found"])]])]]))
+        (if error
+          [:div.error-box error]
+          [:div.entity-histories
+           (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
+                  :as history-elem} entity-history]
+             ^{:key history-elem}
+             [:div.entity-history__container
+              [:div.entity-map
+               (entity->hiccup {} doc)]
+              [vt-tt-entity-box valid-time tx-time]])]))]]))
 
 (defn entity-right-pane []
   (let [right-pane-view @(rf/subscribe [::sub/entity-right-pane-view])]

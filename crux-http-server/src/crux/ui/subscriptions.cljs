@@ -114,17 +114,6 @@
       :document-no-eid (dissoc document :crux.db/id)
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
 
-(rf/reg-sub
- ::entity-right-pane-history
- (fn [db _]
-   {:eid (get-in db [:current-route :path-params :eid])
-    :entity-history (get-in db [:entity :http :history])}))
-
-(rf/reg-sub
- ::entity-right-pane-history-diffs?
- (fn [db _]
-   (or (get-in db [:entity :right-pane :diffs?]) false)))
-
 (defn- history-docs->diffs [entity-history]
   (map-indexed
    (fn [idx {:keys [crux.db/doc] :as val}]
@@ -136,6 +125,28 @@
                                   "Minus" in-old-map}))
        val))
    entity-history))
+
+(rf/reg-sub
+ ::entity-right-pane-history-diffs?
+ (fn [db _]
+   (or (get-in db [:entity :right-pane :diffs?]) false)))
+
+(rf/reg-sub
+ ::entity-right-pane-history
+ (fn [db _]
+   (let [error (get-in db [:entity :error])
+         diffs? (or (get-in db [:entity :right-pane :diffs?]) false)
+         eid (get-in db [:current-route :path-params :eid])
+         history (get-in db [:entity :http :history])]
+     (cond
+       error {:error error}
+       diffs? (let [entity-history (-> history
+                                       vec
+                                       history-docs->diffs)]
+                {:eid eid
+                 :entity-history entity-history})
+       :else {:eid eid
+              :entity-history history}))))
 
 (rf/reg-sub
  ::entity-right-pane-history-diffs
