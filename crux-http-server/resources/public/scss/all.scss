@@ -382,3 +382,28 @@ ul.entity-group__value li::before {
 .visible {
     display: block;
 }
+
+.footer {
+    overflow: hidden;
+    margin-top: 10rem;
+    padding: 1rem;
+    background: #333333;
+    height: 300px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.footer-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.footer__juxt-logo {
+    width: 4rem;
+    margin-bottom: 1rem;
+}
+
+.footer__juxt-info {
+    font-size: 0.6rem;
+    color: white;
+}

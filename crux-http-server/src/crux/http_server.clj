@@ -56,9 +56,17 @@
           [:title "Crux Console"]]
          [:body
           [:div.console
-           [:div#app
-            [:h1 title]
-            body]]
+           [:div#app body]]
+          [:footer.footer
+           [:section.footer-section
+            [:img.footer__juxt-logo {:src "https://www.opencrux.com/images/juxt-logo-white.svg"}]
+            [:div.footer__juxt-info
+             [:p "Copyright © JUXT LTD 2012-2019"]
+             [:p [:strong "Headquarters:"]]
+             [:p "Technology House, 151 Silbury Blvd."]
+             [:p "Milton Keynes, MK9 1LH"]
+             [:p "United Kingdom"]
+             [:p "Company registration: 08457399"]]]]
           [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])))
 
 (defn- body->edn [request]
