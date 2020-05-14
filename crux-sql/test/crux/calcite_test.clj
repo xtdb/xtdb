@@ -529,9 +529,7 @@
 
   (t/is (= [{:lname "ivan"}] (query "SELECT LOWER(NAME) AS LNAME FROM PERSON")))
 
-  ;; TODO:
-;;  (t/is (= [{:id ":human/ivan"}] (query "SELECT current_date FROM PERSON")))
-  )
+  (t/is (:current_date (first (query "SELECT current_date FROM PERSON")))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]

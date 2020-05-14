@@ -69,8 +69,9 @@
 (comment
   (sort (keys calcite-built-in-fns)))
 
-(defn -built-in [id & args]
-  (let [built-in-fn ^BuiltInMethod (calcite-built-in-fns id)]
+(defn -built-in [id data-context & args]
+  (let [built-in-fn ^BuiltInMethod (calcite-built-in-fns id)
+        args (if (= DataContext (first (.getParameterTypes (.method built-in-fn)))) [data-context] args)]
     (crux.calcite.CruxUtils/invokeStaticMethod (.method built-in-fn) (into-array Object args))))
 
 (defn input-ref->attr [^RexInputRef i schema]
@@ -105,7 +106,8 @@
 
       (if (instance? RexCall n)
         (if-let [f (calcite-built-in-fns (.getName (.op ^RexCall n)))]
-          (let [operands (cons (.getName (.op ^RexCall n)) (map #(->operand % schema) (.getOperands ^RexCall n)))]
+          (let [operands (into [(.getName (.op ^RexCall n)) 'data-context]
+                               (map #(->operand % schema) (.getOperands ^RexCall n)))]
             (SQLFunction. (gensym) 'crux.calcite/-built-in operands))
           (throw (IllegalArgumentException. (str "Can't understand call " n)))))
 
@@ -247,9 +249,10 @@
 (defn ^Enumerable scan [node ^String schema ^DataContext data-context]
   (try
     (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
-          query (update query :args (fn [args] [(into {} (map (fn [[k v]]
-                                                                [v (.get data-context k)])
-                                                              args))]))]
+          query (update query :args (fn [args] [(into {:data-context data-context}
+                                                      (map (fn [[k v]]
+                                                             [v (.get data-context k)])
+                                                           args))]))]
       (log/debug "Executing query:" query)
       (perform-query node (.get data-context "VALIDTIME") query))
     (catch Throwable e
