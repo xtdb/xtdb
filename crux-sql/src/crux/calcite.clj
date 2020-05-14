@@ -308,7 +308,8 @@
                             :full-results? true}))))
 
 (defn create-schema [parent-schema name operands]
-  (let [node (get !crux-nodes (get operands "CRUX_NODE"))]
+  (let [node (get !crux-nodes (get operands "CRUX_NODE"))
+        scan-only? (get operands "SCAN_ONLY")]
     (assert node)
     (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
       (getTableMap []
@@ -317,7 +318,7 @@
                 (do (when-not (s/valid? ::table table-schema)
                       (throw (IllegalStateException. (str "Invalid table schema: " (prn-str table-schema)))))
                     [(string/upper-case (:crux.sql.table/name table-schema))
-                     (CruxTable. node table-schema)])))))))
+                     (CruxTable. node table-schema scan-only?)])))))))
 
 (def ^:private model
   {:version "1.0",
@@ -327,10 +328,11 @@
               :factory "crux.calcite.CruxSchemaFactory",
               :functions [{:name "KEYWORD", :className "crux.calcite.KeywordFn"}]}]})
 
-(defn- model-properties [node-uuid]
+(defn- model-properties [node-uuid scan-only?]
   (doto (Properties.)
     (.put "model" (str "inline:" (-> model
                                      (update-in [:schemas 0 :operand] assoc "CRUX_NODE" node-uuid)
+                                     (update-in [:schemas 0 :operand] assoc "SCAN_ONLY" scan-only?)
                                      json/generate-string)))))
 
 (defrecord CalciteAvaticaServer [^HttpServer server node-uuid]
@@ -341,15 +343,17 @@
 
 (defonce registration (java.sql.DriverManager/registerDriver (crux.calcite.CruxJdbcDriver.)))
 
-(defn ^java.sql.Connection jdbc-connection [node]
-  (assert node)
-  (DriverManager/getConnection "jdbc:crux:" (-> node meta :crux.node/topology ::server :node-uuid model-properties)))
+(defn ^java.sql.Connection jdbc-connection
+  ([node] (jdbc-connection node false))
+  ([node scan-only?]
+   (assert node)
+   (DriverManager/getConnection "jdbc:crux:" (-> node meta :crux.node/topology ::server :node-uuid (model-properties scan-only?)))))
 
-(defn start-server [{:keys [:crux.node/node]} {:keys [::port]}]
+(defn start-server [{:keys [:crux.node/node]} {:keys [::port ::scan-only?]}]
   (let [node-uuid (str (java.util.UUID/randomUUID))]
     (.put !crux-nodes node-uuid node)
     (let [server (.build (doto (HttpServer$Builder.)
-                           (.withHandler (LocalService. (JdbcMeta. "jdbc:crux:" (model-properties node-uuid)))
+                           (.withHandler (LocalService. (JdbcMeta. "jdbc:crux:" (model-properties node-uuid scan-only?)))
                                          org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
                            (.withPort port)))]
       (.start server)
@@ -358,5 +362,8 @@
 (def module {::server {:start-fn start-server
                        :args {::port {:doc "JDBC Server Port"
                                       :default 1501
-                                      :crux.config/type :crux.config/nat-int}}
+                                      :crux.config/type :crux.config/nat-int}
+                              ::scan-only? {:doc "Crux Table Scan Only"
+                                            :default false
+                                            :crux.config/type :crux.config/boolean}}
                        :deps #{:crux.node/node}}})

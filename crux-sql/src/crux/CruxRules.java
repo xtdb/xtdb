@@ -31,6 +31,13 @@ class CruxRules {
         CruxSortRule.INSTANCE,
     };
 
+    static final RelOptRule[] SCAN_ONLY_RULES = {
+        CruxToEnumerableConverterRule.INSTANCE,
+        CruxFilterRule.INSTANCE,
+        CruxSortRule.INSTANCE,
+    };
+
+
     abstract static class CruxConverterRule extends ConverterRule {
         final Convention out;
 

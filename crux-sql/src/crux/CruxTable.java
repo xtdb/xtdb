@@ -30,12 +30,14 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
     ICruxAPI node;
     public Map<Keyword, Object> schema;
     private final IFn scanFn;
+    private final boolean scanOnly;
 
-    public CruxTable (ICruxAPI node, Map<Keyword, Object> schema) {
+    public CruxTable (ICruxAPI node, Map<Keyword, Object> schema, boolean scanOnly) {
         super(Object[].class);
         this.node = node;
         this.schema = schema;
         this.scanFn = CruxUtils.resolve("crux.calcite/scan");
+        this.scanOnly = scanOnly;
     }
 
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
@@ -53,7 +55,7 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
 
     @Override public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
         final RelOptCluster cluster = context.getCluster();
-        return new CruxTableScan(cluster, cluster.traitSetOf(CruxRel.CONVENTION), relOptTable, this, null);
+        return new CruxTableScan(cluster, cluster.traitSetOf(CruxRel.CONVENTION), relOptTable, this, null, scanOnly);
     }
 
     public static class CruxQueryable<T> extends AbstractTableQueryable<T> {
