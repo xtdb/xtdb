@@ -15,20 +15,29 @@ import clojure.lang.Keyword;
 public class CruxTableScan extends TableScan implements CruxRel {
     private final CruxTable cruxTable;
     private final RelDataType projectRowType;
+    private final boolean scanOnly;
 
     protected CruxTableScan(RelOptCluster cluster, RelTraitSet traitSet,
                             RelOptTable table, CruxTable cruxTable,
-                            RelDataType projectRowType) {
+                            RelDataType projectRowType,
+                            boolean scanOnly) {
         super(cluster, traitSet, ImmutableList.of(), table);
         this.cruxTable  = Objects.requireNonNull(cruxTable, "cruxTable");
         this.projectRowType = projectRowType;
+        this.scanOnly = scanOnly;
 
         assert getConvention() == CruxRel.CONVENTION;
     }
 
     @Override public void register(RelOptPlanner planner) {
-        for (RelOptRule rule: CruxRules.RULES) {
-            planner.addRule(rule);
+        if (scanOnly) {
+            for (RelOptRule rule: CruxRules.SCAN_ONLY_RULES) {
+                planner.addRule(rule);
+            }
+        } else {
+            for (RelOptRule rule: CruxRules.RULES) {
+                planner.addRule(rule);
+            }
         }
     }
 

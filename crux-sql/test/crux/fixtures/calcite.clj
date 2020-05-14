@@ -12,6 +12,11 @@
     (binding [*conn* conn]
       (f))))
 
+(defn with-calcite-connection-scan-only [f]
+  (with-open [conn (cal/jdbc-connection fix/*api* true)]
+    (binding [*conn* conn]
+      (f))))
+
 (defn with-avatica-connection [f]
   (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1503;serialization=protobuf")]
     (binding [*conn* conn]
@@ -21,6 +26,10 @@
   (fix/with-opts (-> fix/*opts*
                      (update ::n/topology conj cal/module)
                      (assoc :crux.calcite/port 1503))
+    f))
+
+(defn with-scan-only [f]
+  (fix/with-opts {:crux.calcite/scan-only? true}
     f))
 
 (defn query [q]
