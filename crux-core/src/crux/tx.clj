@@ -117,7 +117,7 @@
 
   (entity-at [_ eid valid-time tx-time]
     (->> (merge-histories etx->vt #(compare %2 %1)
-                          (some->> (db/entity-as-of index-store valid-time tx-time eid)
+                          (some->> (db/entity-as-of index-store eid valid-time tx-time)
                                    vector)
                           (some->> (reverse (get etxs eid))
                                    (drop-while (comp pos? #(compare % valid-time) etx->vt))

@@ -1135,7 +1135,7 @@
                                            (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                            (dissoc :args))))
      (validate-args args)
-     (let [entity-resolver-fn (cond-> (partial db/entity-as-of index-store valid-time transact-time)
+     (let [entity-resolver-fn (cond-> #(db/entity-as-of index-store % valid-time transact-time)
                                 (::entity-cache? options) (with-entity-resolver-cache options))
            rule-name->rules (rule-name->rules rules)
 
@@ -1168,7 +1168,7 @@
          limit (take limit))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
-  (some-> (db/entity-as-of index-store valid-time transact-time eid)
+  (some-> (db/entity-as-of index-store eid valid-time transact-time)
           (c/entity-tx->edn)))
 
 (defn entity [db index-store eid]

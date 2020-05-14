@@ -464,7 +464,7 @@
 (def ^:private min-date (Date. Long/MIN_VALUE))
 (def ^:private max-date (Date. Long/MAX_VALUE))
 
-(defn entity-as-of [i valid-time transact-time eid]
+(defn entity-as-of [i eid valid-time transact-time]
   (let [prefix-size (+ c/index-id-size c/id-size)
         eid-buffer (c/->id-buffer eid)
         seek-k (c/encode-entity+vt+tt+tx-id-key-to
@@ -491,7 +491,7 @@
 (defn entities-at [snapshot eids valid-time transact-time]
   (with-open [i (kv/new-iterator snapshot)]
     (some->> (for [eid eids
-                   :let [entity-tx (entity-as-of i valid-time transact-time eid)]
+                   :let [entity-tx (entity-as-of i eid valid-time transact-time)]
                    :when entity-tx]
                entity-tx)
              (not-empty)
