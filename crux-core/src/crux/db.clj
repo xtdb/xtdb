@@ -28,9 +28,9 @@
 
 ;; tag::IndexStore[]
 (defprotocol IndexStore
-  (new-attribute-value-entity-index-pair [this a entity-as-of-idx])
-  (new-attribute-entity-value-index-pair [this a entity-as-of-idx])
-  (new-entity-as-of-index [this valid-time transact-time])
+  (new-attribute-value-entity-index-pair [this a entity-resolver])
+  (new-attribute-entity-value-index-pair [this a entity-resolver])
+  (entity-as-of [this valid-time transact-time eid])
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
   (entity-history ^crux.api.ICursor [this eid sort-order opts])
   (all-content-hashes [this eid])

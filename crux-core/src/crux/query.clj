@@ -272,19 +272,19 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [index-store {:keys [entity-as-of-idx]} binary-idx vars-in-join-order var->range-constraints]
+(defn- update-binary-index! [index-store {:keys [entity-resolver-fn]} binary-idx vars-in-join-order var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get var->range-constraints v)
         e-range-constraints (get var->range-constraints e)]
     (if (= (:v names) (first order))
-      (let [[v-idx e-idx] (db/new-attribute-value-entity-index-pair index-store a entity-as-of-idx)]
+      (let [[v-idx e-idx] (db/new-attribute-value-entity-index-pair index-store a entity-resolver-fn)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints v-idx v-range-constraints)
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)))
-      (let [[e-idx v-idx] (db/new-attribute-entity-value-index-pair index-store a entity-as-of-idx)]
+      (let [[e-idx v-idx] (db/new-attribute-entity-value-index-pair index-store a entity-resolver-fn)]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)
@@ -598,9 +598,9 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-as-of-idx] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
   (let [eid (get (first args) e)]
-    (when-let [^EntityTx entity-tx (idx/entity-at entity-as-of-idx eid)]
+    (when-let [^EntityTx entity-tx (entity-resolver-fn eid)]
       (let [doc (db/get-document index-store (.content-hash entity-tx))]
         (when (contains? (set (idx/vectorize-value (get doc a))) v)
           [])))))
@@ -1045,10 +1045,10 @@
   (let [{:keys [where args rules]} (s/conform ::query q)]
     (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
 
-(defn- build-full-results [{:keys [entity-as-of-idx index-store] :as db} bound-result-tuple]
+(defn- build-full-results [{:keys [entity-resolver-fn index-store] :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
          (if-let [entity-tx (and (c/valid-id? value)
-                                 (idx/entity-at entity-as-of-idx value))]
+                                 (entity-resolver-fn value))]
            (db/get-document index-store (.content-hash ^EntityTx entity-tx))
            value))))
 
@@ -1083,6 +1083,11 @@
             (assoc-in [:q-normalized :args] args)
             (assoc-in [:q-conformed :args] args)))
       conformed-query)))
+
+(defn- with-entity-resolver-cache [entity-resolver-fn options]
+  (let [entity-cache (lru/new-cache (::entity-cache-size options))]
+    (fn [k]
+      (lru/compute-if-absent entity-cache k identity entity-resolver-fn))))
 
 (defn query
   ([{:keys [valid-time transact-time query-engine] :as db} ^ConformedQuery conformed-q]
@@ -1130,12 +1135,11 @@
                                            (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                            (dissoc :args))))
      (validate-args args)
-     (let [entity-as-of-idx (cond-> (db/new-entity-as-of-index index-store valid-time transact-time)
-                              (::entity-cache? options) (lru/new-cached-index (::entity-cache-size options)))
-
+     (let [entity-resolver-fn (cond-> (partial db/entity-as-of index-store valid-time transact-time)
+                                (::entity-cache? options) (with-entity-resolver-cache options))
            rule-name->rules (rule-name->rules rules)
 
-           db (assoc db :entity-as-of-idx entity-as-of-idx :index-store index-store)
+           db (assoc db :entity-resolver-fn entity-resolver-fn :index-store index-store)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
        (doseq [var find
@@ -1164,8 +1168,7 @@
          limit (take limit))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
-  (some-> (db/new-entity-as-of-index index-store valid-time transact-time)
-          (idx/entity-at eid)
+  (some-> (db/entity-as-of index-store valid-time transact-time eid)
           (c/entity-tx->edn)))
 
 (defn entity [db index-store eid]
@@ -1177,7 +1180,7 @@
                             ^Date valid-time
                             ^Date transact-time
                             index-store
-                            entity-as-of-idx]
+                            entity-resolver-fn]
   Closeable
   (close [_]
     (when index-store
@@ -1325,9 +1328,6 @@
   (transactionTime [_]
     transact-time))
 
-;; TODO: only used by crux-microbench.cached-entities-index-in-vivo
-(def ^:dynamic *with-entity-cache?*)
-
 (defrecord QueryEngine [^ExecutorService query-executor
                         indexer bus
                         query-cache conform-cache
@@ -1348,10 +1348,7 @@
                    :query-cache (lru/new-cache query-cache-size)
                    :bus bus
                    :query-executor query-executor
-                   :options (update args ::entity-cache? (fn [x]
-                                                           (if (bound? #'*with-entity-cache?*)
-                                                             *with-entity-cache?*
-                                                             x)))})))
+                   :options args})))
    :deps [:crux.node/indexer :crux.node/bus]
    :args {::query-pool-size {:doc "Query Pool Size"
                              :default 32

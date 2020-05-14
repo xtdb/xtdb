@@ -142,16 +142,3 @@
 (defn wrap-lru-cache ^java.io.Closeable [kv _]
   (cond-> kv
     (not (instance? CachedSnapshotKvStore kv)) (->CachedSnapshotKvStore)))
-
-(defrecord CachedIndex [idx index-cache]
-  db/Index
-  (db/seek-values [this k]
-    (compute-if-absent index-cache k identity
-                       (fn [k]
-                           (db/seek-values idx k))))
-
-  (db/next-values [this]
-    (throw (UnsupportedOperationException.))))
-
-(defn new-cached-index [idx cache-size]
-  (->CachedIndex idx (new-cache cache-size)))
