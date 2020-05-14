@@ -38,13 +38,27 @@
     {:date (str (t/date dt))
      :time (str (t/time dt))}))
 
+(defn vectorize
+  [ks m]
+  (map (fn [[k v]]
+         (if (and (some #(= k %) ks)
+                  (string? v))
+           [k (vector v)]
+           [k v])) m))
+
 (defn query-params->formatted-edn-string
   [query-params-map]
   (when-let [formatted
              (not-empty
               (try
-                (reader/read-string
-                 (string/replace (str query-params-map)  "\"" ""))
+                (->> (dissoc query-params-map
+                             :valid-time :transaction-time)
+                     (vectorize [:where :args :order-by])
+                     (map (fn [[k v]]
+                            (if (vector? v)
+                              [k (mapv #(reader/read-string %) v)]
+                              [k (reader/read-string v)])))
+                     (into {}))
                 (catch :default _ {})))]
     (with-out-str
       (pprint/with-pprint-dispatch
@@ -56,7 +70,7 @@
   (->> edn
        (map
         (fn [[k v]]
-          [k (if (vector? (first v))
+          [k (if (or (= :where k) (= :args k) (= :order-by k))
                (mapv str v)
                (str v))]))
        (into {})))

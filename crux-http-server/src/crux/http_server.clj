@@ -553,7 +553,7 @@
     (cond-> {:find (c/read-edn-string-with-readers find)
              :where (->> where vectorize-param (mapv c/read-edn-string-with-readers))
              :offset new-offset}
-      args (assoc :args (c/read-edn-string-with-readers args))
+      args (assoc :args (->> args vectorize-param (mapv c/read-edn-string-with-readers)))
       order-by (assoc :order-by (->> order-by vectorize-param (mapv c/read-edn-string-with-readers)))
       limit (assoc :limit (Integer/parseInt limit))
       full-results (assoc :full-results? true))))
