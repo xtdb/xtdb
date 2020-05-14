@@ -521,6 +521,18 @@
     (t/is (= #{{:id ":person/ivan", :name "Ivan", :planet "earth"}}
              (set (query "SELECT * FROM PERSON"))))))
 
+(t/deftest test-calcite-built-in-fns
+  (fix/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
+
+  ;; TODO ensure we have basic arithmetic
+  ;;(t/is (= [{:id ":human/ivan"}] (query "SELECT (AGE / 2) FROM PERSON")))
+
+  (t/is (= [{:lname "ivan"}] (query "SELECT LOWER(NAME) AS LNAME FROM PERSON")))
+
+  ;; TODO:
+;;  (t/is (= [{:id ":human/ivan"}] (query "SELECT current_date FROM PERSON")))
+  )
+
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
