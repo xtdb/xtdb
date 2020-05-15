@@ -172,6 +172,10 @@
     (t/is (api/entity (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))
     (t/is (not-empty (api/history *api* {:user "Xwop1A7Xog4nD6AfhZaPgg"})))))
 
+(t/deftest test-invalid-doc
+  (t/is (thrown? IllegalArgumentException
+                 (api/submit-tx *api* [[:crux.tx/put {}]]))))
+
 (t/deftest test-content-hash-invalid
   (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}
