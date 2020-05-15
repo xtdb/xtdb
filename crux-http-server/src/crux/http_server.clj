@@ -509,6 +509,18 @@
                            [:li (resolve-entity-map linked-entities v)])]
       :else (str entity-map))))
 
+(defn vt-tt-entity-box
+  [vt tt]
+  [:div.entity-vt-tt
+    [:div.entity-vt-tt__title
+     "Valid Time"]
+    [:div.entity-vt-tt__value
+     (str (or vt (java.util.Date.)))]
+    [:div.entity-vt-tt__title
+     "Transaction Time"]
+    [:div.entity-vt-tt__value
+     (str (or tt "Not Specified"))]])
+
 (defn- entity->html [eid linked-entities entity-map vt tt]
   [:div.entity-map__container
    (if entity-map
@@ -522,37 +534,19 @@
       (resolve-entity-map (linked-entities) (dissoc entity-map :crux.db/id))]
      [:div.entity-map
       [:strong (str eid)] " entity not found"])
-   [:div.entity-vt-tt
-    [:div.entity-vt-tt__title
-     "Valid Time"]
-    [:div.entity-vt-tt__value
-     (str (or vt (java.util.Date.)))]
-    [:div.entity-vt-tt__title
-     "Transaction Time"]
-    [:div.entity-vt-tt__value
-     (str (or tt "Not Specified"))]]])
-
-(defn- history-elem->div [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc] :as history-elem}]
-  [:div.entity-history__container
-   [:div.entity-history
-    (resolve-entity-map [] doc)]
-   [:div.entity-vt-tt
-    [:div.entity-vt-tt__title
-     "Valid Time"]
-    [:div.entity-vt-tt__value
-     (str valid-time)]
-    [:div.entity-vt-tt__title
-     "Transaction Time"]
-    [:div.entity-vt-tt__value
-     (str tx-time)]]])
+   (vt-tt-entity-box vt tt)])
 
 (defn- entity-history->html [eid entity-history]
-  (let [entity-histories (map history-elem->div entity-history)]
-    [:div.entity-histories__container
-     (if (not-empty entity-history)
-       (into [:div.entity-histories] entity-histories)
-       [:div.entity-histories
-        [:strong (str eid)] " entity not found"])]))
+  [:div.entity-histories__container
+   [:div.entity-histories
+    (if (not-empty entity-history)
+      (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
+        [:div.entity-history__container
+         [:div.entity-map
+          (resolve-entity-map {} doc)]
+         (vt-tt-entity-box valid-time tx-time)])
+      [:div.entity-histories
+       [:strong (str eid)] " entity not found"])]])
 
 (defn html-request? [request]
   (= (get-in request [:muuntaja/response :format]) "text/html"))
@@ -587,7 +581,7 @@
          :body  (if html?
                   (raw-html
                    {:body (entity-history->html encoded-eid entity-history)
-                    :title "/_entity?history"
+                    :title "/_entity?history=true"
                     :options options})
                   ;; Stringifying #crux/id values, caused issues with AJAX
                   (map #(update % :crux.db/content-hash str) entity-history))})
