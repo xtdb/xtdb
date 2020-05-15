@@ -1253,9 +1253,9 @@
 
   (openHistoryAscending [this eid]
     (let [index-store (open-index-store this)
-          history (db/entity-history index-store eid :asc
-                                     {:start {:crux.db/valid-time valid-time}
-                                      :end {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
+          history (db/open-entity-history index-store eid :asc
+                                          {:start {:crux.db/valid-time valid-time}
+                                           :end {:crux.tx/tx-time (Date. (inc (.getTime transact-time)))}})]
       (cio/->cursor #(run! cio/try-close [history index-store])
                     (for [^EntityTx entity-tx (iterator-seq history)]
                       (assoc (c/entity-tx->edn entity-tx)
@@ -1270,9 +1270,9 @@
 
   (openHistoryDescending [this eid]
     (let [index-store (open-index-store this)
-          history (db/entity-history index-store eid :desc
-                                     {:start {:crux.db/valid-time valid-time
-                                              :crux.tx/tx-time transact-time}})]
+          history (db/open-entity-history index-store eid :desc
+                                          {:start {:crux.db/valid-time valid-time
+                                                   :crux.tx/tx-time transact-time}})]
       (cio/->cursor #(run! cio/try-close [history index-store])
                     (for [^EntityTx entity-tx (iterator-seq history)]
                       (assoc (c/entity-tx->edn entity-tx)
@@ -1310,7 +1310,7 @@
                        (update-in [:start :crux.tx/tx-time]
                                   with-upper-bound transact-time)))
 
-            history (db/entity-history index-store eid sort-order opts)]
+            history (db/open-entity-history index-store eid sort-order opts)]
 
         (cio/->cursor
          #(run! cio/try-close [history index-store])

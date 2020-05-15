@@ -99,8 +99,8 @@
   EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)
-                history (db/entity-history nested-index-store eid :asc
-                                           {:start {:crux.db/valid-time valid-time}})]
+                history (db/open-entity-history nested-index-store eid :asc
+                                                {:start {:crux.db/valid-time valid-time}})]
       (f (merge-histories etx->vt compare
                           (iterator-seq history)
                           (->> (get etxs eid)
@@ -108,8 +108,8 @@
 
   (with-entity-history-seq-descending [_ eid valid-time f]
     (with-open [nested-index-store (db/open-nested-index-store index-store)
-                history (db/entity-history nested-index-store eid :desc
-                                           {:start {:crux.db/valid-time valid-time}})]
+                history (db/open-entity-history nested-index-store eid :desc
+                                                {:start {:crux.db/valid-time valid-time}})]
       (f (merge-histories etx->vt #(compare %2 %1)
                           (iterator-seq history)
                           (->> (reverse (get etxs eid))
@@ -349,7 +349,7 @@
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
-  (entity-history [this eid sort-order opts]
+  (open-entity-history [this eid sort-order opts]
     (let [i (kv/new-iterator snapshot)
           entity-history-seq (case sort-order
                                :asc idx/entity-history-seq-ascending

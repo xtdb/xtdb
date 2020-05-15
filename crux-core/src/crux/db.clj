@@ -32,7 +32,7 @@
   (new-attribute-entity-value-index-pair [this a entity-resolver])
   (entity-as-of [this eid valid-time transact-time])
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
-  (entity-history ^crux.api.ICursor [this eid sort-order opts])
+  (open-entity-history ^crux.api.ICursor [this eid sort-order opts])
   (all-content-hashes [this eid])
   (decode-value [this a content-hash value-buffer])
   (encode-value [this value])
