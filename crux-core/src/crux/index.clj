@@ -82,13 +82,13 @@
         prefix (c/encode-avec-key-to nil attr)]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ValueEntityValuePeekState. nil nil))))
 
-(defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
+(defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k attr value entity-resolver-fn peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   (loop [k current-k]
     (let [limit (- (.capacity k) c/id-size)]
       (set! (.peek peek-state) (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
     (or (let [eid (.eid (c/decode-avec-key->evc-from k))
               eid-buffer (c/->id-buffer eid)
-              [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
+              ^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
           (when entity-tx
             (let [eid-buffer (c/->id-buffer (.eid entity-tx))
                   version-k (c/encode-avec-key-to
@@ -109,7 +109,7 @@
         prefix (c/encode-avec-key-to prefix-eb attr value)]
     (ValueAndPrefixIterator. value (new-prefix-kv-iterator i prefix))))
 
-(defrecord DocAttributeValueEntityEntityIndex [snapshot i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
+(defrecord DocAttributeValueEntityEntityIndex [snapshot i ^DirectBuffer attr value-entity-value-idx entity-resolver-fn prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   db/Index
   (seek-values [this k]
     (when (c/valid-id? k)
@@ -122,33 +122,33 @@
                            value
                            (or k c/empty-buffer))
                           (kv/seek i))]
-          (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
+          (attribute-value-entity-entity+value snapshot i k attr value entity-resolver-fn peek-eb peek-state)))))
 
   (next-values [this]
     (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
           value (.value value+prefix-iterator)
           i (.prefix-iterator value+prefix-iterator)]
       (when-let [k (some->> (.peek peek-state) (kv/seek i))]
-        (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
+        (attribute-value-entity-entity+value snapshot i k attr value entity-resolver-fn peek-eb peek-state)))))
 
-(defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
+(defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-resolver-fn]
+  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-resolver-fn
                                         (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
                                         (DocAttributeValueEntityEntityIndexState. nil)))
 
 ;; AEV
 
-(defn- attribute-entity+placeholder [k attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
+(defn- attribute-entity+placeholder [k attr entity-resolver-fn ^EntityValueEntityPeekState peek-state]
   (let [eid (.eid (c/decode-aecv-key->evc-from k))
         eid-buffer (c/->id-buffer eid)
-        [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
+        ^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
     (set! (.last-k peek-state) k)
     (set! (.entity-tx peek-state) entity-tx)
     (if entity-tx
       (MapEntry/create (c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity)
       ::deleted-entity)))
 
-(defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
+(defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-resolver-fn ^EntityValueEntityPeekState peek-state]
   db/Index
   (seek-values [this k]
     (when (c/valid-id? k)
@@ -157,7 +157,7 @@
                          attr
                          (or k c/empty-buffer))
                         (kv/seek i))]
-        (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+        (let [placeholder (attribute-entity+placeholder k attr entity-resolver-fn peek-state)]
           (if (= ::deleted-entity placeholder)
             (db/next-values this)
             placeholder)))))
@@ -167,15 +167,15 @@
       (let [prefix-size (+ c/index-id-size c/id-size c/id-size)]
         (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                               (kv/seek i))]
-          (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+          (let [placeholder (attribute-entity+placeholder k attr entity-resolver-fn peek-state)]
             (if (= ::deleted-entity placeholder)
               (recur)
               placeholder)))))))
 
-(defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
+(defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-resolver-fn]
   (let [attr (c/->id-buffer attr)
         prefix (c/encode-aecv-key-to nil attr)]
-    (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
+    (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-resolver-fn
                                           (EntityValueEntityPeekState. nil nil))))
 
 (defrecord EntityTxAndPrefixIterator [entity-tx prefix-iterator])
@@ -464,51 +464,38 @@
 (def ^:private min-date (Date. Long/MIN_VALUE))
 (def ^:private max-date (Date. Long/MAX_VALUE))
 
-(defrecord EntityAsOfIndex [i valid-time transact-time]
-  db/Index
-  (db/seek-values [this k]
-    (let [eid k
-          prefix-size (+ c/index-id-size c/id-size)
-          seek-k (c/encode-entity+vt+tt+tx-id-key-to
-                  (.get seek-buffer-tl)
-                  k
-                  valid-time
-                  transact-time
-                  nil)]
-      (loop [k (kv/seek i seek-k)]
-        (when (and k (mem/buffers=? seek-k k prefix-size))
-          (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
-                v (kv/value i)]
-            (if (<= (compare (.tt entity-tx) transact-time) 0)
-              (when-not (mem/buffers=? c/nil-id-buffer v)
-                (MapEntry/create (c/->id-buffer (.eid entity-tx))
-                                 (enrich-entity-tx entity-tx v)))
-              (if morton/*use-space-filling-curve-index?*
-                (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
-                  (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid nil)]
-                    (when-not (= ::deleted-entity k)
-                      (MapEntry/create k v))))
-                (recur (kv/next i)))))))))
+(defn entity-as-of [i eid valid-time transact-time]
+  (let [prefix-size (+ c/index-id-size c/id-size)
+        eid-buffer (c/->id-buffer eid)
+        seek-k (c/encode-entity+vt+tt+tx-id-key-to
+                (.get seek-buffer-tl)
+                eid-buffer
+                valid-time
+                transact-time
+                nil)]
+    (loop [k (kv/seek i seek-k)]
+      (when (and k (mem/buffers=? seek-k k prefix-size))
+        (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
+              v (kv/value i)]
+          (if (<= (compare (.tt entity-tx) transact-time) 0)
+            (when-not (mem/buffers=? c/nil-id-buffer v)
+              (enrich-entity-tx entity-tx v))
+            (if morton/*use-space-filling-curve-index?*
+              (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
+                (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
+                  (when-not (= ::deleted-entity k)
+                    v)))
+              (recur (kv/next i)))))))))
 
-  (db/next-values [this]
-    (throw (UnsupportedOperationException.))))
-
-(defn new-entity-as-of-index ^crux.index.EntityAsOfIndex [iterator valid-time transaction-time]
-  (->EntityAsOfIndex iterator (or valid-time min-date) (or transaction-time min-date)))
-
-(defn entity-at [entity-as-of-idx eid]
-  (let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
-    entity-tx))
-
+;; TODO: Only used by tests.
 (defn entities-at [snapshot eids valid-time transact-time]
   (with-open [i (kv/new-iterator snapshot)]
-    (let [entity-as-of-idx (new-entity-as-of-index i valid-time transact-time)]
-      (some->> (for [eid eids
-                     :let [entity-tx (entity-at entity-as-of-idx eid)]
-                     :when entity-tx]
-                 entity-tx)
-               (not-empty)
-               (vec)))))
+    (some->> (for [eid eids
+                   :let [entity-tx (entity-as-of i eid valid-time transact-time)]
+                   :when entity-tx]
+               entity-tx)
+             (not-empty)
+             (vec))))
 
 (defn- entity-history-range-step [i min max ^EntityHistoryRangeState state k]
   (loop [k k]

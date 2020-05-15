@@ -117,8 +117,7 @@
 
   (entity-at [_ eid valid-time tx-time]
     (->> (merge-histories etx->vt #(compare %2 %1)
-                          (some->> (with-open [nested-index-store (db/open-nested-index-store index-store)]
-                                     (idx/entity-at (db/new-entity-as-of-index nested-index-store valid-time tx-time) eid))
+                          (some->> (db/entity-as-of index-store eid valid-time tx-time)
                                    vector)
                           (some->> (reverse (get etxs eid))
                                    (drop-while (comp pos? #(compare % valid-time) etx->vt))
@@ -343,18 +342,19 @@
     (kv/get-value snapshot k))
 
   db/IndexStore
-  (new-attribute-value-entity-index-pair [this a entity-as-of-idx]
+  (new-attribute-value-entity-index-pair [this a entity-resolver-fn]
     (let [v-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
-          e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-idx entity-as-of-idx)]
+          e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-idx entity-resolver-fn)]
       [v-idx e-idx]))
 
-  (new-attribute-entity-value-index-pair [this a entity-as-of-idx]
-    (let [e-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
+  (new-attribute-entity-value-index-pair [this a entity-resolver-fn]
+    (let [e-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-resolver-fn)
           v-idx (idx/new-doc-attribute-entity-value-value-index snapshot a e-idx)]
       [e-idx v-idx]))
 
-  (new-entity-as-of-index [this valid-time transact-time]
-    (idx/new-entity-as-of-index (kv/new-iterator snapshot) valid-time transact-time))
+  (entity-as-of [this valid-time transact-time eid]
+    (with-open [i (kv/new-iterator snapshot)]
+      (idx/entity-as-of i valid-time transact-time eid)))
 
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
