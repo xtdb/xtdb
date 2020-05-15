@@ -61,14 +61,6 @@
   be `.close`d when you've finished using it (for example, in a `with-open`
   block)")
 
-  (document [node content-hash]
-    "Reads a document from the document store based on its
-  content hash.")
-
-  (documents [node content-hashes-set]
-    "Reads the set of documents from the document store based on their
-  respective content hashes. Returns a map content-hash->document")
-
   (history [node eid]
     "Returns the transaction history of an entity, in reverse
   chronological order. Includes corrections, but does not include
@@ -188,9 +180,6 @@
     ([this] (.openDB this))
     ([this ^Date valid-time] (.openDB this valid-time))
     ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time)))
-
-  (document [this content-hash] (.document this content-hash))
-  (documents [this content-hash-set] (.documents this content-hash-set))
 
   (history [this eid] (.history this eid))
 
