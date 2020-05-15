@@ -252,17 +252,6 @@
   (openDB [this valid-time] (.db this valid-time))
   (openDB [this valid-time tx-time] (.db this valid-time tx-time))
 
-  (document [_ content-hash]
-    (api-request-sync (str url "/document/" content-hash)
-                      {:http-opts {:method :get}
-                       :->jwt-token ->jwt-token}))
-
-  (documents [_ content-hash-set]
-    (api-request-sync (str url "/documents")
-                      {:body content-hash-set
-                       :http-opts {:method :post}
-                       :->jwt-token ->jwt-token}))
-
   (history [_ eid]
     (api-request-sync (str url "/history/" (str (c/new-id eid)))
                       {:http-opts {:method :get}
