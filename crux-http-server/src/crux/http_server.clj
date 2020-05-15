@@ -138,27 +138,6 @@
                 {"Content-Type" "application/edn"}
                 (cio/pr-edn-str status-map)))))
 
-(defn- document [^ICruxAPI crux-node request]
-  (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
-    (success-response
-     (.document crux-node (c/new-id content-hash)))))
-
-(defn- stringify-keys [m]
-  (persistent!
-    (reduce-kv
-      (fn [m k v] (assoc! m (str k) v))
-      (transient {})
-      m)))
-
-(defn- documents [^ICruxAPI crux-node  {:keys [query-params] :as request}]
-  ; TODO support for GET
-  (let [preserve-ids? (Boolean/parseBoolean (get query-params "preserve-crux-ids" "false"))
-        content-hashes-set (body->edn request)
-        ids-set (set (map c/new-id content-hashes-set))]
-    (success-response
-      (cond-> (.documents crux-node ids-set)
-              (not preserve-ids?) stringify-keys))))
-
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
         history (.history crux-node (c/new-id (URLDecoder/decode eid)))]
@@ -402,12 +381,6 @@
 
     [#"^/_crux/status" [:get]]
     (status crux-node)
-
-    [#"^/document/.+$" [:get :post]]
-    (document crux-node request)
-
-    [#"^/documents" [:post]]
-    (documents crux-node request)
 
     [#"^/entity/.+$" [:get]]
     (entity crux-node request)
