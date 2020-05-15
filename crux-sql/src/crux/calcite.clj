@@ -49,10 +49,19 @@
    SqlKind/IS_NULL 'nil?
    SqlKind/IS_NOT_NULL 'boolean})
 
+(defn -divide [x y]
+  (let [z (/ x y)]
+    (if (ratio? z) (long z) z)))
+
+(defn -mod [x y]
+  (int (mod x y)))
+
 (def ^:private arithmetic-fns
   {SqlKind/TIMES '*
    SqlKind/PLUS '+
-   SqlKind/MINUS '-})
+   SqlKind/MINUS '-
+   SqlKind/DIVIDE 'crux.calcite/-divide
+   SqlKind/MOD 'crux.calcite/-mod})
 
 (def ^:private calcite-built-in-fns
   (let [calcite-built-in-fns (->> (BuiltInMethod/values)
