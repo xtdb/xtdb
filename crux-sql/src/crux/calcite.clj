@@ -35,9 +35,6 @@
 (defn -like [s pattern]
   (SqlFunctions/like s pattern))
 
-(defn -substring [^String c ^Integer s ^Integer l]
-  (SqlFunctions/substring c s l))
-
 (def ^:private pred-fns
   {SqlKind/EQUALS '=
    SqlKind/NOT_EQUALS 'not=
