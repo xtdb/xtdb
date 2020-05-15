@@ -307,6 +307,12 @@
 
 ;; Object Store
 
+(defn <-nippy-buffer [buf]
+  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+
+(defn ->nippy-buffer [v]
+  (mem/->off-heap (nippy/fast-freeze v)))
+
 (defn evicted-doc?
   [{:crux.db/keys [id evicted?] :as doc}]
   (boolean (or (= :crux.db/evicted id) evicted?)))

@@ -26,46 +26,46 @@
 
 (def ^:const index-id-size Byte/BYTES)
 
-; index for actual document store
+;; index for actual document store
 (def ^:const ^:private content-hash->doc-index-id 0)
 
 
-; two main indexes for querying
+;; two main indexes for querying
 (def ^:const ^:private avec-index-id 1)
 (def ^:const ^:private aecv-index-id 2)
 
-; how they work
+;; how they work
 (comment
   (api/submit-tx syst [:crux.tx/put {:crux.db/id :ids/ivan :name "ivan"}])
 
-  ; [roughly speaking] for queries by attr name and value
-  ; in avec-index-id
-  ; [:name "ivan" :ids/ivan "ivan-content-hash"]
+  ;; [roughly speaking] for queries by attr name and value
+  ;; in avec-index-id
+  ;; [:name "ivan" :ids/ivan "ivan-content-hash"]
 
-  ; [roughly speaking] for entity queries by id
-  ; in aecv-index-id
-  ; [:name :ids/ivan "ivan-content-hash" "ivan"]
+  ;; [roughly speaking] for entity queries by id
+  ;; in aecv-index-id
+  ;; [:name :ids/ivan "ivan-content-hash" "ivan"]
 
   (api/q db {:find ?e
              :where
              [?e :name "ivan"]}))
 
-; main bitemp index [reverse]
+;; main bitemp index [reverse]
 (def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 3)
 
-; for crux own needs
+;; for crux own needs
 (def ^:const ^:private meta-key->value-index-id 4)
 
-; Repurpose old id from internal tx-log used for testing for failed tx
-; ids.
+;; Repurpose old id from internal tx-log used for testing for failed tx
+;; ids.
 (def ^:const ^:private failed-tx-id-index-id 5)
 
-; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
+;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
 (def ^:const ^:private index-version-index-id 6)
 
-; second bitemp index [also reverse]
-; z combines vt and tt
-; used when a lookup by the first index fails
+;; second bitemp index [also reverse]
+;; z combines vt and tt
+;; used when a lookup by the first index fails
 (def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
 
 ;; used in standalone TxLog
@@ -692,19 +692,6 @@
   IdToBuffer
   (id->buffer [this to]
     (id->buffer eid to)))
-
-;; TODO: Not sure why these are needed, external sorting thaws
-;; incompatible records without it.
-(nippy/extend-freeze
- EntityTx
- :crux.codec/entity-tx
- [x data-output]
- (nippy/-freeze-without-meta! (into {} x) data-output))
-
-(nippy/extend-thaw
- :crux.codec/entity-tx
- [data-input]
- (map->EntityTx (nippy/thaw-from-in! data-input)))
 
 (defn decode-entity+vt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))

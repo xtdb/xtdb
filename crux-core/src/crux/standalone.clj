@@ -7,7 +7,6 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.node :as n]
-            [crux.object-store :as os]
             [crux.topology :as topo]
             [crux.tx :as tx])
   (:import java.io.Closeable
@@ -23,7 +22,7 @@
         tx-id (inc (or (idx/read-meta event-log-kv-store ::latest-submitted-tx-id) -1))
         next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
     (kv/store event-log-kv-store [[(c/encode-tx-event-key-to nil next-tx)
-                                   (os/->nippy-buffer tx-events)]
+                                   (idx/->nippy-buffer tx-events)]
                                   (idx/meta-kv ::latest-submitted-tx-id tx-id)])
 
     (deliver !submitted-tx next-tx)))
@@ -57,7 +56,7 @@
                 (lazy-seq
                   (when (some-> k c/tx-event-key?)
                     (cons (assoc (c/decode-tx-event-key-from k)
-                            :crux.tx.event/tx-events (os/<-nippy-buffer (kv/value iterator)))
+                            :crux.tx.event/tx-events (idx/<-nippy-buffer (kv/value iterator)))
                           (tx-log (kv/next iterator))))))]
 
         (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]

@@ -315,8 +315,8 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
-    (tx/index-docs (:tx-consumer *api*) {(c/new-id ivan1) ivan1
-                                         (c/new-id ivan2) ivan2})
+    (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
+                                     (c/new-id ivan2) ivan2})
 
     (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1}
                  [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
@@ -344,8 +344,8 @@
         ivan2 (assoc ivan :value 2)
         t1 #inst "2020-05-01"
         t2 #inst "2020-05-02"]
-    (tx/index-docs (:tx-consumer *api*) {(c/new-id ivan1) ivan1
-                                         (c/new-id ivan2) ivan2})
+    (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
+                                     (c/new-id ivan2) ivan2})
 
     (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t1, :crux.tx/tx-id 1}
                  [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
@@ -400,7 +400,7 @@
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
     (db/submit-docs (:document-store *api*) {content-hash picasso})
-    (tx/index-docs (:tx-consumer *api*) {content-hash picasso})
+    (db/index-docs (:indexer *api*) {content-hash picasso})
 
     (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= {content-hash picasso}

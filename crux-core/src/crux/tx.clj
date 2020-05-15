@@ -191,18 +191,8 @@
 
            (map ->new-entity-tx)))))
 
-(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx {:keys [object-store indexer] :as tx-consumer}]
-  ;; This check shouldn't be required, under normal operation - the ingester checks for this before indexing
-  ;; keeping this around _just in case_ - e.g. if we're refactoring the ingest code
-  {:pre-commit-fn (fn []
-                    (let [content-hash (c/new-id v)]
-                      (with-open [index-store (db/open-index-store indexer)]
-                        (assert (db/get-document index-store content-hash)
-                                (format "Put, incorrect doc state for: '%s', tx-id '%s'"
-                                        content-hash (:crux.tx/tx-id tx))))
-                      true))
-
-   :etxs (put-delete-etxs k start-valid-time end-valid-time (c/new-id v) tx tx-consumer)})
+(defmethod index-tx-event :crux.tx/put [[op k v start-valid-time end-valid-time] tx tx-consumer]
+  {:etxs (put-delete-etxs k start-valid-time end-valid-time (c/new-id v) tx tx-consumer)})
 
 (defmethod index-tx-event :crux.tx/delete [[op k start-valid-time end-valid-time] tx tx-consumer]
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx tx-consumer)})
@@ -407,6 +397,8 @@
 
           _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))]
 
+      (db/put-objects object-store docs)
+
       (->> doc-idx-keys (transduce (map mem/capacity) +))))
 
   (unindex-docs [this docs]
@@ -463,8 +455,6 @@
       (let [bytes-indexed (db/index-docs indexer docs-to-upsert)
             docs-stats (->> (vals docs-to-upsert)
                             (map #(idx/doc-predicate-stats % false)))]
-
-        (db/put-objects object-store docs-to-upsert)
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids (set (keys docs))
