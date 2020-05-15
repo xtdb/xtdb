@@ -62,20 +62,6 @@
     (let [db (.db this valid-time tx-time)]
       (assoc db :index-store (q/open-index-store db))))
 
-  (document [this content-hash]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (with-open [index-store (db/open-index-store indexer)]
-        (-> (db/get-single-object object-store index-store (c/new-id content-hash))
-            (idx/keep-non-evicted-doc)))))
-
-  (documents [this content-hash-set]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (with-open [index-store (db/open-index-store indexer)]
-        (->> (db/get-objects object-store index-store (map c/new-id content-hash-set))
-             (into {} (remove (comp idx/evicted-doc? val)))))))
-
   (history [this eid]
     (reverse (.historyRange this eid nil nil nil nil)))
 

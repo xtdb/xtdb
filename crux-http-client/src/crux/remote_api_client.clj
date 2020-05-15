@@ -237,12 +237,6 @@
   (openDB [this valid-time] (.db this valid-time))
   (openDB [this valid-time tx-time] (.db this valid-time tx-time))
 
-  (document [_ content-hash]
-    (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
-
-  (documents [_ content-hash-set]
-    (api-request-sync (str url "/documents") content-hash-set {:method :post}))
-
   (history [_ eid]
     (api-request-sync (str url "/history/" (str (c/new-id eid))) nil {:method :get}))
 
