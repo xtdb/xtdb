@@ -11,6 +11,7 @@ html, body {
 
 .console {
     max-width: 95%;
+    min-height: 60vh;
     margin: auto;
     margin-top: 2rem;
 }
@@ -190,49 +191,11 @@ html, body {
     position: relative;
 }
 
-ol.entity-group__value {
-    list-style: none;
-    counter-reset: my-counter;
-    padding-inline-start: 0;
-    margin-block-start: 0;
-    margin-block-end: 0;
-}
-
 ul.entity-group__value {
     list-style: none;
     padding-inline-start: 0;
     margin-block-start: 0;
     margin-block-end: 0;
-}
-
-ol.entity-group__value li {
-    counter-increment: my-counter;
-}
-
-.entity-map li {
-    padding-left: 1rem;
-}
-
-.list-element {
-    position: absolute;
-    left: 0;
-    display: flex;
-    align-items: center;
-    height: 1.2rem;
-    color: grey;
-    font-size: 0.765em;
-    margin-right: 0.5rem;
-    font-weight: bold;
-}
-
-ol.entity-group__value  li::before {
-    content: counter(my-counter) ".";
-    @extend .list-element;
-}
-
-ul.entity-group__value li::before {
-    content: "-";
-    @extend .list-element;
 }
 
 .entity-group__value .entity-group {
@@ -257,15 +220,14 @@ ul.entity-group__value li::before {
 
 .entity-group__value .entity-group:last-child::after {
     content: "}";
-    display: flex;
-    height: 100%;
+    align-self: flex-end;
     color: grey;
     margin-left: 0.6rem;
     font-weight: bold;
 }
 
-    // apply to only first level keys
-    .entity-map > .entity-group > .entity-group__key {
+// apply to only first level keys
+.entity-map > .entity-group > .entity-group__key {
     margin-right: 1rem;
     font-weight: bold;
 }
@@ -284,6 +246,15 @@ ul.entity-group__value li::before {
     align-items: flex-start;
 }
 
+.entity-history__toggle-buttons {
+    display: flex;
+    margin: 1rem 0;
+}
+
+.entity-history__toggle-buttons > *:not(last-child) {
+    margin-right: 1rem;
+}
+
 .entity-histories__container {
     display: flex;
     align-items: flex-start;
@@ -297,6 +268,12 @@ ul.entity-group__value li::before {
     justify-content: space-between;
 }
 
+.entity-map__diffs-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 2rem;
+}
+
 .common-entity-box {
     padding: 1rem;
     border-radius: 0.7rem;
@@ -305,7 +282,6 @@ ul.entity-group__value li::before {
 }
 
 .entity-map, .entity-history {
-    width: fit-content;
     margin-right: 4rem;
     @extend .common-entity-box;
 }

@@ -76,7 +76,7 @@
          query-params (-> (get-in db [:current-route :query-params])
                           (assoc :history true)
                           (assoc :with-docs true)
-                          (assoc :sort-order "asc"))]
+                          (assoc :sort-order "desc"))]
      {:dispatch [:navigate :entity {:eid eid} query-params]})))
 
 
@@ -87,7 +87,7 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values :as v}]]
+ (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values}]]
    (let [query-params (->>
                        {:valid-time (common/date-time->datetime vtd vtt)
                         :transaction-time (common/date-time->datetime ttd ttt)}
