@@ -46,7 +46,7 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
     }
 
     @SuppressWarnings("unchecked")
-    public <R> Enumerable<Object> find(String schema, DataContext context, Function<R> f) {
+    public <R> Enumerable<Object> find(String schema, DataContext context, Object f) {
         return (Enumerable<Object>) scanFn.invoke(node, schema, context, f);
     }
 
@@ -73,7 +73,7 @@ public class CruxTable extends AbstractQueryableTable implements TranslatableTab
             return (CruxTable) table;
         }
 
-        public <R> Enumerable<Object> find(String schema, DataContext context, Function<R> f) {
+        public <R> Enumerable<Object> find(String schema, DataContext context, Object f) {
             return getTable().find(schema, context, f);
         }
     }
