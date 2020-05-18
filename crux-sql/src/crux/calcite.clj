@@ -48,12 +48,12 @@
                       (= SqlTrimFunction$Flag/TRAILING f))
            p (Expressions/parameter String)
            m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/TRIM)
-                                            [(Expressions/constant left?)
-                                             (Expressions/constant right?)
-                                             (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
-                                             p
-                                             (Expressions/constant true)])]
-       (SqlLambda. (gensym) (Expressions/lambda m (java.util.Arrays/asList p)))))})
+                                            (into-array Expression [(Expressions/constant left?)
+                                                                    (Expressions/constant right?)
+                                                                    (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
+                                                                    p
+                                                                    (Expressions/constant true)]))]
+       (SqlLambda. (gensym) (Expressions/lambda m [p]))))})
 
 (defn -lambda [id lambdas & args]
   (let [^Function1 l (lambdas id)]
@@ -323,7 +323,8 @@
                              (Expressions/constant " ")
                              p
                              (Expressions/constant true)])]
-    (Expressions/lambda m [p])))
+    (Expressions/newArrayInit Function1 (list (Expressions/lambda m [p])
+                                              (Expressions/lambda m [p])))))
 
 (defn clojure-helper-fn [f]
   (fn [& args]
