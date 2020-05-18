@@ -12,6 +12,7 @@
            [crux.calcite.types SQLCondition SQLFunction SQLPredicate WrapLiteral SqlLambda]
            org.apache.calcite.linq4j.tree.Expressions
            org.apache.calcite.linq4j.function.Function1
+           java.util.List
            org.apache.calcite.linq4j.tree.Expression
            org.apache.calcite.linq4j.tree.ParameterExpression
            java.lang.reflect.Field
@@ -53,7 +54,7 @@
                                                                     (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
                                                                     p
                                                                     (Expressions/constant true)]))]
-       (SqlLambda. (gensym) (Expressions/lambda m [p]))))})
+       (SqlLambda. (gensym) (Expressions/lambda m ^Iterable (list p)))))})
 
 (defn -lambda [id lambdas & args]
   (let [^Function1 l (lambdas id)]
@@ -316,15 +317,7 @@
   (Expressions/constant (prn-str (dissoc schema :lambdas))))
 
 (defn ->fn [schema]
-  (let [p (Expressions/parameter String)
-        m (Expressions/call (.method BuiltInMethod/TRIM)
-                            [(Expressions/constant true)
-                             (Expressions/constant true)
-                             (Expressions/constant " ")
-                             p
-                             (Expressions/constant true)])]
-    (Expressions/newArrayInit Function1 (list (Expressions/lambda m [p])
-                                              (Expressions/lambda m [p])))))
+  (Expressions/newArrayInit Pair ^List (map (fn [[k ^Expression m]] (Expressions/constant (Pair. (str k) (.e ^SqlLambda m)))) (:lambdas schema))))
 
 (defn clojure-helper-fn [f]
   (fn [& args]
