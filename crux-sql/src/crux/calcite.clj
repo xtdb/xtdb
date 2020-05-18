@@ -11,6 +11,7 @@
   (:import crux.calcite.CruxTable
            [crux.calcite.types SQLCondition SQLFunction SQLPredicate WrapLiteral SqlLambda]
            org.apache.calcite.linq4j.tree.Expressions
+           org.apache.calcite.linq4j.function.Function1
            org.apache.calcite.linq4j.tree.Expression
            org.apache.calcite.linq4j.tree.ParameterExpression
            java.lang.reflect.Field
@@ -46,16 +47,16 @@
            right? (or (= SqlTrimFunction$Flag/BOTH f )
                       (= SqlTrimFunction$Flag/TRAILING f))
            p (Expressions/parameter String)
-           m (Expressions/call (.method BuiltInMethod/TRIM)
-                               ^java.util.List [(Expressions/constant left?)
-                                                (Expressions/constant right?)
-                                                (Expressions/constant (.getValue2 (nth (.getOperands n) 1)))
-                                                p
-                                                (Expressions/constant true)])]
-       (SqlLambda. (gensym) (.getFunction (Expressions/lambda m [p])))))})
+           m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/TRIM)
+                                            [(Expressions/constant left?)
+                                             (Expressions/constant right?)
+                                             (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
+                                             p
+                                             (Expressions/constant true)])]
+       (SqlLambda. (gensym) (Expressions/lambda m (java.util.Arrays/asList p)))))})
 
 (defn -lambda [id lambdas & args]
-  (let [l (lambdas id)]
+  (let [^Function1 l (lambdas id)]
     (.apply l args)))
 
 (defn -divide [x y]
@@ -163,7 +164,7 @@
 
                               SqlLambda
                               (do
-                                (swap! linq-lambdas assoc (.sym x) x)
+                                (swap! linq-lambdas assoc (.sym ^SqlLambda x) x)
                                 (.sym ^SqlLambda x))
 
                               SQLFunction
