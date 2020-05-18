@@ -1,6 +1,7 @@
 (ns ^:no-doc crux.tx.conform
   (:require [crux.codec :as c]
-            [crux.db :as db]))
+            [crux.db :as db])
+  (:import (java.util UUID)))
 
 (defn- check-eid [eid op]
   (when-not (and eid (c/valid-id? eid) (not (string? eid)))
@@ -83,14 +84,15 @@
   {:op :crux.tx/evict
    :eid eid})
 
-(defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid arg-doc :as op]]
+(defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid & args :as op]]
   (check-eid fn-eid op)
 
-  (let [arg-doc-id (c/new-id arg-doc)]
-    (merge {:op :crux.tx/fn
-            :fn-eid fn-eid}
-           (when arg-doc
-             (check-doc arg-doc op)
+  (merge {:op :crux.tx/fn
+          :fn-eid fn-eid}
+         (when (seq args)
+           (let [arg-doc {:crux.db/id (UUID/randomUUID)
+                          :crux.db.fn/args args}
+                 arg-doc-id (c/new-id arg-doc)]
              {:arg-doc-id arg-doc-id
               :docs {arg-doc-id arg-doc}}))))
 
@@ -160,10 +162,14 @@
   (zipmap [:op :fn-eid :args-content-hash] evt))
 
 (defn tx-events->docs [document-store tx-events]
-  (->> tx-events
-       (map <-tx-event)
-       (mapcat #(keep % [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
-       (db/fetch-docs document-store)))
+  (let [docs (->> tx-events
+                  (map <-tx-event)
+                  (mapcat #(keep % [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
+                  (db/fetch-docs document-store))]
+    (merge docs
+           (when-let [more-events (seq (->> (vals docs)
+                                            (mapcat :crux.db.fn/tx-events)))]
+             (tx-events->docs document-store more-events)))))
 
 (defn tx-events->tx-ops [document-store tx-events]
   (let [docs (tx-events->docs document-store tx-events)]
