@@ -463,7 +463,9 @@
 
         (update-stats tx-consumer docs-stats)))))
 
-(defn index-tx [{:keys [bus indexer object-store kv-store] :as tx-consumer} {:crux.tx/keys [tx-time tx-id] :as tx} tx-events]
+(defn index-tx [{:keys [bus indexer object-store kv-store document-store] :as tx-consumer}
+                {:crux.tx/keys [tx-time tx-id] :as tx}
+                tx-events]
   (s/assert ::txe/tx-events tx-events)
 
   (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
@@ -491,7 +493,8 @@
                 (let [existing-docs (db/get-objects object-store index-store (keys tombstones))]
                   (db/put-objects object-store tombstones)
                   (db/unindex-docs indexer existing-docs)
-                  (update-stats tx-consumer (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true))))))
+                  (update-stats tx-consumer (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true)))))
+                (db/submit-docs document-store tombstones))
               (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
           (do
@@ -501,10 +504,7 @@
         (bus/send bus {:crux/event-type ::indexed-tx,
                        ::submitted-tx tx,
                        :committed? committed?
-                       ::txe/tx-events tx-events})
-
-        {:tombstones (when committed?
-                       (:tombstones res))}))))
+                       ::txe/tx-events tx-events})))))
 
 (def kv-indexer
   {:start-fn (fn [{:crux.node/keys [kv-store object-store]} args]

@@ -36,9 +36,7 @@
 
                                   (doseq [{:keys [::txe/tx-events] :as tx} tx-log-entry
                                           :let [tx (select-keys tx [::tx/tx-time ::tx/tx-id])]]
-                                    (when-let [{:keys [tombstones]} (tx/index-tx tx-consumer tx tx-events)]
-                                      (when (seq tombstones)
-                                        (db/submit-docs document-store tombstones)))
+                                    (tx/index-tx tx-consumer tx tx-events)
 
                                     (when (Thread/interrupted)
                                       (throw (InterruptedException.)))))

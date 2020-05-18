@@ -225,12 +225,7 @@
           submitted-tx (api/submit-tx *api* [[:crux.tx/evict :ivan]])]
       (t/is (api/await-tx *api* submitted-tx))
 
-      ;; actual removal of the document happens asynchronously after
-      ;; the transaction has been processed so waiting on the
-      ;; submitted transaction time is not enough
-      (while (api/entity (api/db *api*) :ivan)
-        (assert (< (- (.getTime (Date.)) (.getTime now)) 4000))
-        (Thread/sleep 500))
+      (t/is (nil? (api/entity (api/db *api*) :ivan)))
 
       (let [stats (api/attribute-stats *api*)]
         (t/is (= 0 (:name stats)))))))
