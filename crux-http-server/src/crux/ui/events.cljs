@@ -1,11 +1,16 @@
 (ns crux.ui.events
   (:require
    [ajax.edn :as ajax-edn]
-   [cljs.reader :refer [read-string]]
+   [cljs.reader :as reader]
    [clojure.string :as string]
-   [day8.re-frame.http-fx]
+   [crux.ui.common :as common]
+   [crux.ui.http]
    [re-frame.core :as rf]
    [tick.alpha.api :as t]))
+
+(rf/reg-fx
+ :scroll-top
+ common/scroll-top)
 
 (rf/reg-event-fx
  ::inject-metadata
@@ -13,132 +18,71 @@
    (let [result-meta (some-> (js/document.querySelector
                               (str "meta[title=" title "]"))
                              (.getAttribute "content"))
-         edn-content (read-string result-meta)]
+         edn-content (reader/read-string result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
        (js/console.warn "Metadata not found")))))
 
-(defn cast-to-query-params
-  [query valid-time transaction-time]
-  (let [{:keys [find where limit
-                offset args order-by]} query]
-    (str
-     (cond-> (js/URLSearchParams.)
-       find (doto (.append "find" find))
-       where ((fn [params] (reduce (fn [params clause] (doto params (.append "where" clause))) params where)))
-       limit (doto (.append "limit" limit))
-       offset (doto (.append "offset" offset))
-       args (doto (.append "args" args))
-       order-by ((fn [params] (reduce (fn [params clause] (doto params (.append "order-by" clause))) params order-by)))
-       valid-time (doto (.append "valid-time" valid-time))
-       transaction-time (doto (.append "transaction-time" transaction-time))))))
-
-(rf/reg-event-fx
- ::go-to-query
- (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
-         query-map (read-string (get values "q"))
-         parsed-valid-time (when (and valid-date valid-time)
-                             (t/instant (str valid-date "T" valid-time)))
-         parsed-transaction-time (when (and transaction-date transaction-time)
-                                   (t/instant (str transaction-date "T" transaction-time)))
-         query-params (cast-to-query-params query-map parsed-valid-time parsed-transaction-time)]
-     {:dispatch [:navigate {:page :query
-                            :query-params query-params}]})))
-
-(rf/reg-event-fx
- ::fetch-query-table
- (fn [{:keys [db]} _]
-   (let [query-params (doto (js/URLSearchParams. js/window.location.search) (.delete "full-results"))
-         find (read-string (.get query-params "find"))
-         link-entities? (.get query-params "link-entities?")]
-     (when (seq (str query-params))
-       {:db (assoc db :table-loading? true)
-        :http-xhrio {:method :get
-                     :uri (str "/_query?" query-params (when-not link-entities?
-                                                         "&link-entities?=true"))
-                     :response-format (ajax-edn/edn-response-format)
-                     :on-success [::success-fetch-query-table find]
-                     :on-failure [::fail-fetch-query-table]}}))))
-
-(rf/reg-event-fx
- ::success-fetch-query-table
- (fn [{:keys [db]} [_ find-clause result]]
-   (prn "fetch query table success!")
-   {:db (-> db
-            (assoc :query-data
-                   (assoc result "find-clause" find-clause))
-            (assoc :table-loading? false))}))
-
 (rf/reg-event-db
- ::fail-fetch-query-table
- (fn [db [_ result]]
-   (prn "Failure: get query table result: " result)
-   (-> db
-       (assoc-in [:query-data :error]
-                 (get-in result [:response :via 0 :message]))
-       (assoc :table-loading? false))))
-
-(rf/reg-event-fx
- ::go-to-entity
- (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [valid-date valid-time transaction-date transaction-time]} values
-         eid (read-string (get values "q"))
-         parsed-valid-time (when (and valid-date valid-time)
-                             (t/instant (str valid-date  "T" valid-time)))
-         parsed-transaction-time (when (and transaction-date transaction-time)
-                                   (t/instant (str transaction-date  "T"
-                                                   transaction-time)))
-         query-params (cast-to-query-params {} parsed-valid-time parsed-transaction-time)]
-     {:dispatch [:navigate {:page :entity
-                            :path-params {:entity-id eid}
-                            :query-params query-params}]})))
-
-(rf/reg-event-fx
- ::fetch-entity
- (fn [{:keys [db]} _]
-   (let [entity-id (-> js/window.location.pathname
-                       (string/split #"/")
-                       last)
-         query-params (js/URLSearchParams. js/window.location.search)]
-     (.set query-params "link-entities?" true)
-     {:db (assoc db :entity-loading? true)
-      :http-xhrio {:method :get
-                   :uri (str "/_entity/" entity-id "?" query-params)
-                   :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-fetch-entity]
-                   :on-failure [::fail-fetch-entity]}})))
-
-(rf/reg-event-fx
- ::success-fetch-entity
- (fn [{:keys [db]} [_ result]]
-   (prn "fetch entity success!")
-   {:db (-> db
-            (assoc :entity-data result)
-            (dissoc :entity-loading?))}))
-
-(rf/reg-event-db
- ::fail-fetch-entity
- (fn [db [_ {:keys [message] :as result}]]
-   (prn "Failure: get fetch entity result: " result)
-   (dissoc db :entity-loading?)))
-
-(rf/reg-event-db
- ::query-pane-toggle
+ ::toggle-left-pane
  (fn [db _]
-   (update db :query-pane-show? not)))
+   (update-in db [:left-pane :visible?] not)))
 
 (rf/reg-event-db
- ::set-query-view
+ ::set-left-pane-view
  (fn [db [_ view]]
-   (assoc db :query-view view)))
+   (assoc-in db [:left-pane :view] view)))
 
 (rf/reg-event-db
- ::set-entity-view
- (fn [db [_ view]]
-   (assoc db :entity-view view)))
+ ::query-table-error
+ (fn [db [_ error]]
+   (assoc-in db [:query :error] error)))
 
 (rf/reg-event-db
- ::set-search-view
+ ::set-query-right-pane-view
  (fn [db [_ view]]
-   (assoc db :search-view view)))
+   (assoc-in db [:query :right-pane :view] view)))
+
+(rf/reg-event-db
+ ::set-query-right-pane-loading
+ (fn [db [_ bool]]
+   (assoc-in db [:query :right-pane :loading?] bool)))
+
+(rf/reg-event-fx
+ ::go-to-query-view
+ (fn [{:keys [db]} [_ {:keys [values]}]]
+   (let [{:strs [q vtd vtt ttd ttt]} values
+         query-params (->>
+                       (merge
+                        (common/edn->query-params (reader/read-string q))
+                        {:valid-time (common/date-time->datetime vtd vtt)
+                         :transaction-time (common/date-time->datetime ttd ttt)})
+                       (remove #(nil? (second %)))
+                       (into {}))]
+     {:dispatch [:navigate :query {} query-params]})))
+
+(rf/reg-event-db
+ ::set-entity-right-pane-view
+ (fn [db [_ view]]
+   (assoc-in db [:entity :right-pane :view] view)))
+
+(rf/reg-event-db
+ ::set-entity-right-pane-loading
+ (fn [db [_ bool]]
+   (assoc-in db [:entity :right-pane :loading?] bool)))
+
+(rf/reg-event-fx
+ ::go-to-entity-view
+ (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values :as v}]]
+   (let [query-params (->>
+                       {:valid-time (common/date-time->datetime vtd vtt)
+                        :transaction-time (common/date-time->datetime ttd ttt)}
+                       (remove #(nil? (second %)))
+                       (into {}))]
+     {:db db
+      :dispatch [:navigate :entity {:eid (string/trim eid)} query-params]})))
+
+(rf/reg-event-db
+ ::entity-right-pane-document-error
+ (fn [db [_ error]]
+   (assoc-in db [:entity :error] error)))

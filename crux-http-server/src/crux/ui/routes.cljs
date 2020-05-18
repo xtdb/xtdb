@@ -1,7 +1,26 @@
-(ns crux.ui.routes)
+(ns crux.ui.routes
+  (:require
+   [re-frame.core :as rf]))
 
 (def routes
   [""
-   [["/" :homepage]
-    ["/_query" :query]
-    [["/_entity/" [#".+" :entity-id]] :entity]]])
+   ["/"
+    {:name :homepage
+     :link-text "Home"
+     :controllers
+     [{:start (fn [& params])
+       :stop (fn [& params])}]}]
+   ["/_query"
+    {:name :query
+     :link-text "Query"
+     :controllers
+     [{:identity #(gensym)
+       :start #(rf/dispatch [:crux.ui.http/fetch-query-table])
+       :stop (fn [& params])}]}]
+   ["/_entity/:eid"
+    {:name :entity
+     :link-text "Entity"
+     :controllers
+     [{:identity #(gensym)
+       :start #(rf/dispatch [:crux.ui.http/fetch-entity])
+       :stop (fn [& params])}]}]])

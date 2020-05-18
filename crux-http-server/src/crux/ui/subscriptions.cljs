@@ -1,27 +1,64 @@
 (ns crux.ui.subscriptions
   (:require
+   [cljs.reader :as reader]
+   [clojure.pprint :as p]
+   [crux.ui.common :as common]
    [re-frame.core :as rf]
    [tick.alpha.api :as t]))
 
 (rf/reg-sub
  :db
- (fn [db _]
-   db))
+ (fn [db _] db))
 
 (rf/reg-sub
- ::current-page
+ ::current-route
  (fn [db _]
-   (:current-page db)))
+   (:current-route db)))
 
+(rf/reg-sub
+ ::initial-values-query
+ (fn [db _]
+   (let [query-params (get-in db [:current-route :query-params])
+         handler (get-in db [:current-route :data :name])
+         valid-time (common/datetime->date-time
+                     (str (:valid-time query-params (t/now))))
+         transaction-time (common/datetime->date-time
+                           (:transaction-time query-params))]
+     (when (= :query handler)
+       {"q" (common/query-params->formatted-edn-string
+             (dissoc query-params :valid-time :transaction-time))
+        "vtd" (:date valid-time)
+        "vtt" (:time valid-time)
+        "ttd" (:date transaction-time)
+        "ttt" (:time transaction-time)}))))
+
+(rf/reg-sub
+ ::initial-values-entity
+ (fn [db _]
+   (let [query-params (get-in db [:current-route :query-params])
+         handler (get-in db [:current-route :data :name])
+         valid-time (common/datetime->date-time
+                     (str (:valid-time query-params (t/now))))
+         transaction-time (common/datetime->date-time
+                           (:transaction-time query-params))]
+     (when (= :entity handler)
+       {"eid" (get-in db [:current-route :path-params :eid])
+        "vtd" (:date valid-time)
+        "vtt" (:time valid-time)
+        "ttd" (:date transaction-time)
+        "ttt" (:time transaction-time)}))))
+
+;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
  ::query-data-table
  (fn [db _]
-   (if-let [error (get-in db [:query-data :error])]
+   (if-let [error (get-in db [:query :error])]
      {:error error}
-     (let [{:strs [query-results find-clause linked-entities]}
-           (:query-data db)
-           table-loading? (:table-loading? db)
-           offset (->> (or (.get (js/URLSearchParams. js/window.location.search) "offset") "0")
+     (let [{:strs [query-results linked-entities]}
+           (get-in db [:query :http])
+           find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
+           table-loading? (get-in db [:query :right-pane :loading?])
+           offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
            columns (map (fn [column]
                           {:column-key column
@@ -29,7 +66,8 @@
                            :render-fn
                            (fn [_ v]
                              (if-let [link (get linked-entities v)]
-                               [:a.entity-link {:href link} v]
+                               [:a.entity-link {:href link}
+                                (str v)]
                                v))
                            :render-only #{:filter :sort}})
                         find-clause)
@@ -42,36 +80,46 @@
          :filters {:input (into #{} find-clause)}}}))))
 
 (rf/reg-sub
- ::entity-view-data
+ ::query-right-pane-view
  (fn [db _]
-   (let [get-param #(.get (js/URLSearchParams. js/window.location.search) %)]
-     {:vt (or (get-param "valid-time") (str (t/now)))
-      :tt (or (get-param "transaction-time") "Not Specified")
-      :entity-name (get-in db [:current-page :route-params :entity-id])
-      :entity-result (get-in db [:entity-data "entity"])
-      :linked-entities (get-in db [:entity-data "linked-entities"])})))
+   (or (get-in db [:query :right-pane :view]) :table)))
 
 (rf/reg-sub
- ::entity-loading?
+ ::query-right-pane-loading?
  (fn [db _]
-   (:entity-loading? db)))
+   (get-in db [:query :right-pane :loading?])))
 
 (rf/reg-sub
- ::query-pane-show?
+ ::entity-right-pane-loading?
  (fn [db _]
-   (:query-pane-show? db)))
+   (get-in db [:entity :right-pane :loading?])))
 
 (rf/reg-sub
- ::query-view
+ ::entity-right-pane-view
  (fn [db _]
-   (get db :query-view :table)))
+   (or (get-in db [:entity :right-pane :view]) :document)))
 
 (rf/reg-sub
- ::entity-view
+ ::entity-right-pane-document
  (fn [db _]
-   (get db :entity-view :document)))
+   (if-let [error (get-in db [:entity :error])]
+     {:error error}
+     (let [query-params (get-in db [:current-route :query-params])
+           document (get-in db [:entity :http "entity"])]
+       {:eid (get-in db [:current-route :path-params :eid])
+        :vt (or (:valid-time query-params) (str (t/now)))
+        :tt (or (:transaction-time query-params) "Not Specified")
+        :document document
+        :document-no-eid (dissoc document :crux.db/id)
+        :linked-entities (get-in db [:entity :http "linked-entities"])}))))
 
 (rf/reg-sub
- ::search-view
+ ::left-pane-view
  (fn [db _]
-   (get db :search-view :query)))
+   (or (get-in db [:left-pane :view])
+       (get-in db [:current-route :data :name]))))
+
+(rf/reg-sub
+ ::left-pane-visible?
+ (fn [db _]
+   (get-in db [:left-pane :visible?])))
