@@ -532,13 +532,13 @@
   (t/is (= [{:age 5}] (query "SELECT mod((AGE + 2), 6) AS AGE FROM PERSON"))))
 
 (t/deftest test-calcite-built-in-fns
-  (fix/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
+  (fix/transact! *api* [{:crux.db/id :human/ivan :name "Ivan " :homeworld "Earth" :alive true :age 21}])
 
   ;; (t/is (= [{:lname "ivan"}] (query "SELECT LOWER(NAME) AS LNAME FROM PERSON")))
 
   ;; (t/is (:current_date (first (query "SELECT current_date FROM PERSON"))))
 
-  (t/is (:current_date (first (query "SELECT TRIM(NAME) FROM PERSON")))))
+  (t/is (= "Ivan" (:name (first (query "SELECT TRIM(NAME) AS NAME FROM PERSON"))))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]

@@ -12,4 +12,4 @@
 
 (defrecord WrapLiteral [l])
 
-(defrecord SqlLambda [sym ^Expression e])
+(defrecord SqlLambda [sym ^Expression e operands])

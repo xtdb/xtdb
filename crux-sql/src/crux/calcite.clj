@@ -38,28 +38,6 @@
 (defn- vectorize-value [v]
   (if (or (not (vector? v)) (= 1 (count v))) (vector v) v))
 
-(def linq-lambdas
-  {SqlStdOperatorTable/TRIM
-   (fn [^RexCall n]
-     (def n n)
-     (let [f (.getValue ^RexLiteral (first (.getOperands n)))
-           left? (or (= SqlTrimFunction$Flag/BOTH f )
-                     (= SqlTrimFunction$Flag/LEADING f))
-           right? (or (= SqlTrimFunction$Flag/BOTH f )
-                      (= SqlTrimFunction$Flag/TRAILING f))
-           p (Expressions/parameter String)
-           m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/TRIM)
-                                            (into-array Expression [(Expressions/constant left?)
-                                                                    (Expressions/constant right?)
-                                                                    (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
-                                                                    p
-                                                                    (Expressions/constant true)]))]
-       (SqlLambda. (gensym) (Expressions/lambda m ^Iterable (list p)))))})
-
-(defn -lambda [id lambdas & args]
-  (let [^Function1 l (lambdas id)]
-    (.apply l args)))
-
 (defn -divide [x y]
   (let [z (/ x y)]
     (if (ratio? z) (long z) z)))
@@ -124,6 +102,30 @@
     (input-ref->attr o schema)
     (->ast o schema)))
 
+(def linq-lambdas
+  {SqlStdOperatorTable/TRIM
+   (fn [^RexCall n schema]
+     (let [f (.getValue ^RexLiteral (first (.getOperands n)))
+           left? (or (= SqlTrimFunction$Flag/BOTH f )
+                     (= SqlTrimFunction$Flag/LEADING f))
+           right? (or (= SqlTrimFunction$Flag/BOTH f )
+                      (= SqlTrimFunction$Flag/TRAILING f))
+           p (Expressions/parameter String)
+           m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/TRIM)
+                                            (into-array Expression [(Expressions/constant left?)
+                                                                    (Expressions/constant right?)
+                                                                    (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
+                                                                    p
+                                                                    (Expressions/constant true)]))]
+       (SqlLambda. (gensym) (Expressions/lambda m ^Iterable (list p)) [(->operand (nth (.getOperands n) 2) schema)])))})
+
+(defn -lambda [id lambdas & args]
+  (def id id)
+  (def l lambdas)
+  (def a args)
+  (let [^Function1 l (lambdas id)]
+    (.apply l (first args))))
+
 (defn- ->ast [^RexNode n schema]
   (or (when-let [op (pred-fns (.getKind n))]
         (SQLPredicate. op (map #(->operand % schema) (.-operands ^RexCall n))))
@@ -141,7 +143,7 @@
       (if (instance? RexCall n)
         (if-let [lambda-builder (linq-lambdas (.getOperator ^RexCall n))]
           (do
-            (def a (lambda-builder n))
+            (def a (lambda-builder n schema))
             a)
           (throw (IllegalArgumentException. (str "Can't understand call " n)))))
 
@@ -159,13 +161,13 @@
 (defn- post-process [schema clauses]
   (let [args (atom {})
         sql-ops (atom [])
-        linq-lambdas (atom {})
+        linq-lambdas (atom [])
         clauses (postwalk (fn [x]
                             (condp instance? x
 
                               SqlLambda
                               (do
-                                (swap! linq-lambdas assoc (.sym ^SqlLambda x) x)
+                                (swap! linq-lambdas conj x)
                                 (.sym ^SqlLambda x))
 
                               SQLFunction
@@ -191,17 +193,20 @@
 
                               SQLCondition
                               (condp = (.c ^SQLCondition x)
-                                  SqlKind/AND
-                                  (.clauses ^SQLCondition x)
-                                  SqlKind/OR
-                                  (apply list 'or (ground-vars (.clauses ^SQLCondition x)))
-                                  SqlKind/NOT
-                                  (apply list 'not (.clauses ^SQLCondition x)))
+                                SqlKind/AND
+                                (.clauses ^SQLCondition x)
+                                SqlKind/OR
+                                (apply list 'or (ground-vars (.clauses ^SQLCondition x)))
+                                SqlKind/NOT
+                                (apply list 'not (.clauses ^SQLCondition x)))
 
                               x))
                           clauses)
-        calc-clauses (for [^SQLFunction op @sql-ops]
-                       [(apply list (.op op) (.operands op)) (.sym op)])]
+        calc-clauses (concat
+                      (for [^SQLFunction op @sql-ops]
+                        [(apply list (.op op) (.operands op)) (.sym op)])
+                      (for [^SqlLambda op @linq-lambdas]
+                        [(apply list 'crux.calcite/-lambda (str (.sym op)) 'lambdas (.operands op)) (.sym op)]))]
     {:clauses clauses
      :calc-clauses calc-clauses
      :lambdas @linq-lambdas
@@ -214,7 +219,7 @@
         (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value clauses) calc-clauses)
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args)
-        (update :lambdas merge lambdas))))
+        (update :lambdas concat lambdas))))
 
 (defn enrich-sort-by [schema sort-fields]
   (assoc-in schema [:crux.sql.table/query :order-by]
@@ -250,7 +255,7 @@
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
         (assoc-in [:crux.sql.table/query :find] (vec clauses))
-        (update :lambdas merge lambdas))))
+        (update :lambdas concat lambdas))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (log/debug "Enriching join with" condition)
@@ -299,11 +304,11 @@
                 (.close snapshot))))))))
 
 (defn ^Enumerable scan [node ^String schema ^DataContext data-context x]
-  (def x x)
-  (println x)
   (try
     (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
-          query (update query :args (fn [args] [(into {:data-context data-context}
+          query (update query :args (fn [args] [(into {:data-context data-context
+                                                       :lambdas (zipmap (map #(.-left ^Pair %) x)
+                                                                        (map #(.-right ^Pair %) x))}
                                                       (map (fn [[k v]]
                                                              [v (.get data-context k)])
                                                            args))]))]
@@ -317,7 +322,9 @@
   (Expressions/constant (prn-str (dissoc schema :lambdas))))
 
 (defn ->fn [schema]
-  (Expressions/newArrayInit Pair ^List (map (fn [[k ^Expression m]] (Expressions/constant (Pair. (str k) (.e ^SqlLambda m)))) (:lambdas schema))))
+  (Expressions/newArrayInit Pair ^List (map (fn [^SqlLambda l]
+                                              (Expressions/constant (Pair. (str (.sym l)) (.e l))))
+                                            (:lambdas schema))))
 
 (defn clojure-helper-fn [f]
   (fn [& args]
