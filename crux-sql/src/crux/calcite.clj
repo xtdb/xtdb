@@ -4,32 +4,27 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.calcite.types]
             [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
+            [crux.calcite.types]
             crux.db)
   (:import crux.calcite.CruxTable
-           [crux.calcite.types SQLCondition SQLFunction SQLPredicate WrapLiteral SqlLambda]
-           org.apache.calcite.linq4j.tree.Expressions
-           org.apache.calcite.linq4j.function.Function1
-           java.util.List
-           org.apache.calcite.linq4j.tree.Expression
-           org.apache.calcite.linq4j.tree.ParameterExpression
+           [crux.calcite.types SQLCondition SQLFunction SqlLambda SQLPredicate WrapLiteral]
            java.lang.reflect.Field
            [java.sql DriverManager Types]
-           org.apache.calcite.sql.fun.SqlTrimFunction$Flag
-           [java.util Properties WeakHashMap]
+           [java.util List Properties WeakHashMap]
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            org.apache.calcite.DataContext
            org.apache.calcite.linq4j.Enumerable
+           org.apache.calcite.linq4j.function.Function1
+           [org.apache.calcite.linq4j.tree Expression Expressions]
            org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode]
-           org.apache.calcite.runtime.SqlFunctions
            [org.apache.calcite.sql SqlFunction SqlKind SqlOperator]
-           org.apache.calcite.sql.fun.SqlStdOperatorTable
+           [org.apache.calcite.sql.fun SqlStdOperatorTable SqlTrimFunction$Flag]
            org.apache.calcite.sql.type.SqlTypeName
            [org.apache.calcite.util BuiltInMethod Pair]))
 
