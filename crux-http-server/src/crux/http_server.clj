@@ -55,12 +55,18 @@
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
           [:title "Crux Console"]]
          [:body
-          [:nav.console-nav
-           [:div "Crux Console"]]
           [:div.console
-           [:div#app
-            [:h1 title]
-            body]]
+           [:div#app body]]
+          [:footer.footer
+           [:section.footer-section
+            [:img.footer__juxt-logo {:src "https://www.opencrux.com/images/juxt-logo-white.svg"}]
+            [:div.footer__juxt-info
+             [:p "Copyright © JUXT LTD 2012-2019"]
+             [:p [:strong "Headquarters:"]]
+             [:p "Technology House, 151 Silbury Blvd."]
+             [:p "Milton Keynes, MK9 1LH"]
+             [:p "United Kingdom"]
+             [:p "Company registration: 08457399"]]]]
           [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])))
 
 (defn- body->edn [request]
@@ -646,7 +652,7 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [links (if link-entities? (link-top-level-entities db  "/_entity" results) [])]
+                   html? (let [links (link-top-level-entities db  "/_entity" results)]
                            (raw-html
                             {:body (query->html links query results)
                              :title "/_query"
