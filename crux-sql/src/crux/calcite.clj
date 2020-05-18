@@ -112,7 +112,15 @@
                                                                     (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
                                                                     p
                                                                     (Expressions/constant true)]))]
-       (SqlLambda. (gensym) (Expressions/lambda m ^Iterable (list p)) [(->operand (nth (.getOperands n) 2) schema)])))})
+       (SqlLambda. (gensym) (Expressions/lambda m ^Iterable (list p)) [(->operand (nth (.getOperands n) 2) schema)])))
+   SqlStdOperatorTable/CONCAT
+   (fn [^RexCall n schema]
+     (let [p1 (Expressions/parameter String)
+           m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/STRING_CONCAT)
+                                            (into-array Expression [p1 (Expressions/constant "asd")]))]
+       (SqlLambda. (gensym)
+                   (Expressions/lambda m ^Iterable (list p1))
+                   [(->operand (nth (.getOperands n) 0) schema)])))})
 
 (defn -lambda [id lambdas & args]
   (def id id)
@@ -136,11 +144,13 @@
            (SQLCondition. (.getKind n) (mapv #(->ast % schema) (.-operands ^RexCall n))))
 
       (if (instance? RexCall n)
-        (if-let [lambda-builder (linq-lambdas (.getOperator ^RexCall n))]
-          (do
-            (def a (lambda-builder n schema))
-            a)
-          (throw (IllegalArgumentException. (str "Can't understand call " n)))))
+        (do
+          (def n n)
+          (if-let [lambda-builder (linq-lambdas (.getOperator ^RexCall n))]
+            (do
+              (def a (lambda-builder n schema))
+              a)
+            (throw (IllegalArgumentException. (str "Can't understand call " n))))))
 
       #_(if (instance? RexCall n)
         (do
