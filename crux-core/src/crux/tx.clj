@@ -233,11 +233,9 @@
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
-(declare index-docs)
-
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {::keys [tx-time tx-id] :as tx}
-                                       {:keys [object-store tx-log index-store nested-fn-args query-engine], :as tx-consumer}]
+                                       {:keys [indexer index-store nested-fn-args query-engine], :as tx-consumer}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
@@ -264,7 +262,7 @@
       (let [docs (->> conformed-tx-ops
                       (into {} (mapcat :docs)))
             {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args val) docs)
-            _ (index-docs tx-consumer (into {} docs))
+            _ (db/index-docs indexer (into {} docs))
             op-results (vec (for [[op :as tx-event] (map txc/->tx-event conformed-tx-ops)]
                               (index-tx-event tx-event tx
                                               (-> tx-consumer
