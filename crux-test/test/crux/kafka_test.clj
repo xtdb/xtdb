@@ -6,7 +6,6 @@
             [crux.fixtures :as fix :refer [*api* *opts*]]
             [crux.fixtures.kafka :as kf :refer [*ingest-client*]]
             [crux.kafka :as k]
-            [crux.tx.consumer :as tc]
             [crux.rdf :as rdf]
             [crux.tx :as tx])
   (:import java.time.Duration

@@ -231,8 +231,8 @@
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
    ::object-store 'crux.object-store/kv-object-store
-   ::indexer 'crux.tx/kv-indexer
-   ::tx-consumer 'crux.tx.consumer/tx-consumer
+   ::indexer 'crux.kv-indexer/kv-indexer
+   ::tx-consumer 'crux.tx/tx-consumer
    ::bus 'crux.bus/bus
    ::query-engine 'crux.query/query-engine
    ::node 'crux.node/node-component})
