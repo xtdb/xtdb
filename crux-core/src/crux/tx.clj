@@ -187,52 +187,78 @@
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
-(defn log-tx-fn-error [fn-result fn-id body args-id args]
-  (log/warn fn-result "Transaction function failure:" fn-id (cio/pr-edn-str body) args-id (cio/pr-edn-str args)))
+;; for tests
+(def ^:private !last-tx-fn-error (atom nil))
+
+(defn- reset-tx-fn-error []
+  (first (reset-vals! !last-tx-fn-error nil)))
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
-(defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
-                                       {::keys [tx-time tx-id] :as tx}
-                                       {:keys [indexer index-store document-store nested-fn-args query-engine], :as tx-consumer}]
+(defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
+                                       {:crux.tx/keys [tx-time tx-id] :as tx}
+                                       {:keys [index-store query-engine], :as tx-consumer}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
         db (q/db query-engine tx-time tx-time)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
-        {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
-                                                 (or (get nested-fn-args arg-id)
-                                                     (-> (db/fetch-docs document-store #{arg-id})
-                                                         (get arg-id))))
-        args-id (:crux.db/id args-doc)
+        {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
+        args-content-hash (c/new-id args-doc)
 
-        {:keys [conformed-tx-ops fn-error]} (try
-                                              {:conformed-tx-ops (->> (apply (tx-fn-eval-cache body) db args)
-                                                                      (mapv txc/conform-tx-op))}
+        res (cond
+              tx-events {:tx-events tx-events}
 
-                                    (catch Throwable t
-                                      {:fn-error t}))]
+              failed? (do
+                        (log/warn "Transaction function failed when originally evaluated:"
+                                  fn-id args-doc-id
+                                  (pr-str (select-keys args-doc [:crux.db.fn/exception
+                                                                 :crux.db.fn/message
+                                                                 :crux.db.fn/ex-data])))
+                        {:failed? true})
 
-    (if fn-error
-      {:pre-commit-fn (fn []
-                        (log-tx-fn-error fn-error fn-id body args-id args)
-                        false)}
+              :else (try
+                      (let [conformed-tx-ops (->> (apply (tx-fn-eval-cache body) db args)
+                                                  (mapv txc/conform-tx-op))
+                            tx-events (mapv txc/->tx-event conformed-tx-ops)]
+                        {:tx-events tx-events
+                         :docs (into {args-content-hash {:crux.db/id args-doc-id
+                                                         :crux.db.fn/tx-events tx-events}}
+                                     (mapcat :docs)
+                                     conformed-tx-ops)})
 
-      (let [docs (->> conformed-tx-ops
-                      (into {} (mapcat :docs)))
-            {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args val) docs)
-            _ (db/index-docs indexer (into {} docs))
-            _ (db/submit-docs document-store (into {} docs))
-            op-results (vec (for [[op :as tx-event] (map txc/->tx-event conformed-tx-ops)]
-                              (index-tx-event tx-event tx
-                                              (-> tx-consumer
-                                                  (update :nested-fn-args (fnil into {}) arg-docs)))))]
+                      (catch Throwable t
+                        (reset! !last-tx-fn-error t)
+                        (log/warn t "Transaction function failure:" fn-id args-doc-id)
+
+                        {:failed? true
+                         :fn-error t
+                         :docs {args-content-hash {:crux.db.fn/failed? true
+                                                   :crux.db.fn/exception (symbol (.getName (class t)))
+                                                   :crux.db.fn/message (ex-message t)
+                                                   :crux.db.fn/ex-data (ex-data t)}}})))
+
+        {:keys [tx-events docs failed?]} res]
+
+    (if failed?
+      {:pre-commit-fn (constantly false)
+       :docs docs}
+
+      (let [op-results (vec (for [[op & args :as tx-event] tx-events]
+                              (index-tx-event (case op
+                                                :crux.tx/fn (let [[fn-eid args-doc-id] args]
+                                                              (cond-> [op fn-eid]
+                                                                args-doc-id (conj (get docs args-doc-id))))
+                                                tx-event)
+                                              tx
+                                              tx-consumer)))]
         {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} op-results
                                              :when pre-commit-fn]
                                          (pre-commit-fn)))
-         :etxs (cond-> (mapcat :etxs op-results)
-                 args-doc (conj (c/->EntityTx args-id tx-time tx-time tx-id args-v)))
+         :etxs (mapcat :etxs op-results)
+
+         :docs (into docs (mapcat :docs op-results))
 
          :evict-eids (into #{} (mapcat :evict-eids) op-results)}))))
 
@@ -279,24 +305,38 @@
     (binding [*current-tx* (assoc tx ::txe/tx-events tx-events)]
       (let [tx-consumer (assoc tx-consumer :index-store index-store)
             res (reduce (fn [{:keys [history] :as acc} tx-event]
-                          (let [{:keys [pre-commit-fn etxs evict-eids]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
+                          (let [{:keys [pre-commit-fn etxs evict-eids docs]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
                             (if (and pre-commit-fn (not (pre-commit-fn)))
-                              (reduced ::aborted)
+                              (reduced {::aborted? true
+                                        :docs (merge (:docs acc) docs)})
                               (-> acc
                                   (update :history with-etxs etxs)
-                                  (update :evict-eids set/union evict-eids)))))
+                                  (update :evict-eids set/union evict-eids)
+                                  (update :docs merge docs)))))
 
                         {:history (->IndexStore+NewETXs index-store {})
-                         :evict-eids #{}}
+                         :evict-eids #{}
+                         :docs {}}
 
                         tx-events)
-            committed? (not= res ::aborted)]
+            committed? (not (::aborted? res))]
+
+        (db/submit-docs document-store
+                        (cond->> (:docs res)
+                          (not committed?) (into {} (filter (comp :crux.db.fn/failed? val)))))
 
         (if committed?
           (do
             (when-let [evict-eids (not-empty (:evict-eids res))]
               (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
                 (db/submit-docs document-store tombstones)))
+
+            (when-let [docs (not-empty (:docs res))]
+              (db/index-docs indexer docs)
+              (update-stats tx-consumer (->> (vals docs)
+                                             (map idx/doc-predicate-stats)))
+
+              (db/submit-docs document-store docs))
 
             (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
@@ -308,6 +348,14 @@
                        ::submitted-tx tx,
                        :committed? committed?
                        ::txe/tx-events tx-events})))))
+
+(defn with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
+  (case op
+    :crux.tx/fn (let [[fn-eid arg-doc-id] args]
+                  (cond-> [op fn-eid]
+                    arg-doc-id (conj (-> (db/fetch-docs document-store #{arg-doc-id})
+                                         (get arg-doc-id)))))
+    evt))
 
 (defn- index-tx-log [{:keys [!error tx-log indexer document-store] :as tx-consumer} {::keys [^Duration poll-sleep-duration]}]
   (log/info "Started tx-consumer")
@@ -332,7 +380,8 @@
 
                                   (doseq [{:keys [::txe/tx-events] :as tx} tx-log-entry
                                           :let [tx (select-keys tx [::tx-time ::tx-id])]]
-                                    (index-tx tx-consumer tx tx-events)
+                                    (index-tx tx-consumer tx (->> tx-events
+                                                                  (map #(with-tx-fn-args % tx-consumer))))
 
                                     (when (Thread/interrupted)
                                       (throw (InterruptedException.)))))
