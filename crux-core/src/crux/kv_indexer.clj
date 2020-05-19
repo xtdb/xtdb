@@ -75,18 +75,13 @@
     (idx/all-content-hashes snapshot eid))
 
   (decode-value [this a content-hash value-buffer]
+    (assert (some? value-buffer) (str a))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
       (let [doc (db/get-document this content-hash)
             value-or-values (get doc a)]
-        (cond
-          (not (idx/multiple-values? value-or-values))
+        (if-not (idx/multiple-values? value-or-values)
           value-or-values
-
-          (nil? value-buffer)
-          (first (idx/vectorize-value value-or-values))
-
-          :else
           (loop [[x & xs] (idx/vectorize-value value-or-values)]
             (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
               x
