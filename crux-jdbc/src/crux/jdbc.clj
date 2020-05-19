@@ -6,7 +6,6 @@
             [crux.index :as idx]
             [crux.node :as n]
             [crux.tx :as tx]
-            [crux.tx.consumer :as tc]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
