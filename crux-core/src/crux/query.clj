@@ -497,10 +497,11 @@
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index max-join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
+                   result-index (get var->values-result-index var)
                    join-depth (or (max (long (get var->values-result-index e -1))
-                                       (long (get var->values-result-index (get e->v-var e) -1)))
-                                  (dec (long max-join-depth)))
-                   result-index (get var->values-result-index var)]]
+                                       (long (get var->values-result-index (get e->v-var e) -1))
+                                       (long result-index))
+                                  (dec (long max-join-depth)))]]
          [var (map->VarBinding
                {:e-var e
                 :var var
