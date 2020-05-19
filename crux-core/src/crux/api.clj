@@ -234,7 +234,7 @@
     (.submitTx this (conform-tx-ops tx-ops)))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
-    (.openTxLog this after-tx-id with-ops?)))
+    (.openTxLog this after-tx-id (boolean with-ops?))))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
