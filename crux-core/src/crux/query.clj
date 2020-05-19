@@ -551,12 +551,15 @@
 
 (declare build-sub-query)
 
-(defn- calculate-constraint-join-depth [var->bindings vars]
-  (->> (for [var vars]
-         (get-in var->bindings [var :join-depth] -1))
-       (apply max -1)
-       (long)
-       (inc)))
+(defn- calculate-constraint-join-depth
+  ([var->bindings vars]
+   (calculate-constraint-join-depth var->bindings vars :join-depth))
+  ([var->bindings vars var-k]
+   (->> (for [var vars]
+          (get-in var->bindings [var var-k] -1))
+        (apply max -1)
+        (long)
+        (inc))))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
@@ -676,7 +679,7 @@
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unification-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars)
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)
               args (vec (for [arg args]
                           (if (logic-var? arg)
                             arg
