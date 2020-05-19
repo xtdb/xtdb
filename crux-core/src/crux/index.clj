@@ -747,9 +747,9 @@
               (when-let [result (->> new-results
                                      (apply merge-with
                                             (fn [x y]
-                                              (if (or (= :crux.index.binary-placeholder/entity y)
-                                                      (= :crux.index.binary-placeholder/value y))
-                                                x y))))]
+                                              (if (map? y)
+                                                y
+                                                x))))]
                 (MapEntry/create max-k result)))
             (recur))))))
 
