@@ -497,11 +497,11 @@
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index max-join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
-                   join-depth (or (max (long (get var->values-result-index e -1))
-                                       (long (get var->values-result-index (get e->v-var e) -1)))
-                                  (dec (long max-join-depth)))
                    result-index (get var->values-result-index var)
-                   join-depth (max (long join-depth) (long result-index))]]
+                   join-depth (or (max (long (get var->values-result-index e -1))
+                                       (long (get var->values-result-index (get e->v-var e) -1))
+                                       (long result-index))
+                                  (dec (long max-join-depth)))]]
          [var (map->VarBinding
                {:e-var e
                 :var var
@@ -551,9 +551,9 @@
 
 (declare build-sub-query)
 
-(defn- calculate-constraint-join-depth [var->bindings vars var-k]
+(defn- calculate-constraint-join-depth [var->bindings vars]
   (->> (for [var vars]
-         (get-in var->bindings [var var-k] -1))
+         (get-in var->bindings [var :join-depth] -1))
        (apply max -1)
        (long)
        (inc)))
@@ -569,7 +569,7 @@
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
-              pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars :join-depth)]]
+              pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars)]]
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
@@ -615,7 +615,7 @@
   [rule-name->rules or-clause+idx-id+or-branches
    var->bindings vars-in-join-order var->range-constraints stats]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
-        :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars :join-depth)
+        :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               has-free-vars? (boolean (seq free-vars))
               {:keys [rule-name]} (meta clause)]]
@@ -676,7 +676,7 @@
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unification-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars)
               args (vec (for [arg args]
                           (if (logic-var? arg)
                             arg
@@ -705,7 +705,7 @@
                                       :not-join [(:args not-clause)
                                                  (:body not-clause)])
               not-vars (remove blank-var? not-vars)
-              not-join-depth (calculate-constraint-join-depth var->bindings not-vars :join-depth)]]
+              not-join-depth (calculate-constraint-join-depth var->bindings not-vars)]]
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
