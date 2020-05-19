@@ -74,6 +74,9 @@
     :else
     c/empty-buffer))
 
+(defn- inc-unsigned-prefix-buffer [buffer prefix-size]
+  (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer buffer prefix-size (.get seek-buffer-tl)) prefix-size)))
+
 (defn av [index-store a min-v entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
         prefix (c/encode-avec-key-to nil attr-buffer)
@@ -88,10 +91,9 @@
                   (cons (MapEntry/create (.value (c/decode-avec-key->evc-from k))
                                          :crux.index.binary-placeholder/value)
                         (lazy-seq
-                         (let [prefix-size (- (.capacity k) c/id-size c/id-size)]
-                           (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k prefix-size (.get seek-buffer-tl)) prefix-size))
-                                                 (kv/seek i))]
-                             (step k)))))))))))
+                         (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size c/id-size))
+                                  (kv/seek i)
+                                  (step))))))))))
 
 (defn ave [index-store a v min-e entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
@@ -108,21 +110,20 @@
                 (when k
                   (let [eid (.eid (c/decode-avec-key->evc-from k))
                         eid-buffer (c/->id-buffer eid)]
-                    (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
-                      (let [version-k (c/encode-avec-key-to
-                                       (.get seek-buffer-tl)
-                                       attr-buffer
-                                       value-buffer
-                                       eid-buffer
-                                       (c/->id-buffer (.content-hash entity-tx)))]
-                        (concat
+                    (concat
+                     (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
+                       (let [version-k (c/encode-avec-key-to
+                                     (.get seek-buffer-tl)
+                                     attr-buffer
+                                     value-buffer
+                                     eid-buffer
+                                     (c/->id-buffer (.content-hash entity-tx)))]
                          (when (kv/get-value index-store version-k)
-                           [(MapEntry/create eid-buffer entity-tx)])
-                         (lazy-seq
-                          (let [limit (- (.capacity k) c/id-size)]
-                            (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit (.get seek-buffer-tl)) limit))
-                                                  (kv/seek i))]
-                              (step k))))))))))))))
+                           [(MapEntry/create eid-buffer entity-tx)])))
+                     (lazy-seq
+                      (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size))
+                               (kv/seek i)
+                               (step)))))))))))
 
 (defn ae [index-store a min-e entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
@@ -141,10 +142,9 @@
                      (when (entity-resolver-fn eid-buffer)
                        [(MapEntry/create eid-buffer :crux.index.binary-placeholder/entity)])
                      (lazy-seq
-                      (let [limit (- (.capacity k) c/id-size c/id-size)]
-                        (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit (.get seek-buffer-tl)) limit))
-                                              (kv/seek i))]
-                          (step k))))))))))))
+                      (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size c/id-size))
+                               (kv/seek i)
+                               (step)))))))))))
 
 (defn aev [index-store a e min-v entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
