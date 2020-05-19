@@ -1,7 +1,6 @@
 (ns ^:no-doc crux.index
   (:require [crux.codec :as c]
             [crux.db :as db]
-            [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.morton :as morton]
@@ -91,9 +90,7 @@
                         (let [prefix-size (- (.capacity k) c/id-size c/id-size)]
                           (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k prefix-size (.get seek-buffer-tl)) prefix-size))
                                                 (kv/seek i))]
-                            (lazy-seq (step k))))))))
-             (cio/->cursor #(cio/try-close i))
-             (iterator-seq))))
+                            (lazy-seq (step k)))))))))))
 
 (defn ave [index-store a v min-e entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
@@ -123,9 +120,7 @@
                          (let [limit (- (.capacity k) c/id-size)]
                            (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit (.get seek-buffer-tl)) limit))
                                                  (kv/seek i))]
-                             (lazy-seq (step k)))))))))))
-             (cio/->cursor #(cio/try-close i))
-             (iterator-seq))))
+                             (lazy-seq (step k))))))))))))))
 
 (defn ae [index-store a min-e entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
@@ -146,9 +141,7 @@
                      (let [limit (- (.capacity k) c/id-size c/id-size)]
                        (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit (.get seek-buffer-tl)) limit))
                                              (kv/seek i))]
-                         (lazy-seq (step k)))))))))
-             (cio/->cursor #(cio/try-close i))
-             (iterator-seq))))
+                         (lazy-seq (step k))))))))))))
 
 (defn aev [index-store a e min-v entity-resolver-fn]
   (let [attr-buffer (c/->id-buffer a)
@@ -168,9 +161,7 @@
                 (when k
                   (cons (MapEntry/create (.value (c/decode-aecv-key->evc-from k))
                                          entity-tx)
-                        (lazy-seq (step (kv/next i)))))))
-             (cio/->cursor #(cio/try-close i))
-             (iterator-seq))))
+                        (lazy-seq (step (kv/next i))))))))))
 
 ;; AVE
 
