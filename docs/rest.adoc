@@ -53,7 +53,6 @@ otherwise restrict the execution of queries.
 |<<#rest-entity-tx, `/entity-tx/[:key]`>>|GET|Returns the transaction that most recently set a key
 |<<#rest-entity, `/entity-history/[:key]`>>|GET|Returns the history of the given entity and optional valid-time/transaction-time co-ordinates
 |<<#rest-query, `/query`>>|POST|Takes a datalog query and returns its results
-|<<#rest-query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
 |<<#rest-sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
 |<<#rest-tx-log, `/tx-log`>>|GET| Returns a list of all transactions
 |<<#rest-tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
@@ -231,11 +230,6 @@ curl -X POST \
      -d '{:query {:find [e] :where [[e :crux.db/id _]] :full-results? true}}' \
      $nodeURL/query
 ----
-
-[#rest-query-stream]
-=== POST `/query-stream`
-
-Same as `/query` but the results are streamed.
 
 [#rest-sync]
 === GET `/sync`

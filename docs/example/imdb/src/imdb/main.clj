@@ -206,7 +206,7 @@
 
   (clojure.pprint/pprint
     (let [db (api/db crux)]
-      (with-open [snapshot (api/new-snapshot db)]
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
         (let [paths (find-id-paths db snapshot "nm0000001" "nm0000006")]
           (doall (map (partial ids->docs db snapshot) paths))))))
 
