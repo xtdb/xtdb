@@ -33,7 +33,6 @@
   (ae [this a min-e entity-resolver-fn])
   (aev [this a e min-v entity-resolver-fn])
   (entity-as-of [this eid valid-time transact-time])
-  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
   (open-entity-history ^crux.api.ICursor [this eid sort-order opts])
   (all-content-hashes [this eid])
   (decode-value [this a content-hash value-buffer])

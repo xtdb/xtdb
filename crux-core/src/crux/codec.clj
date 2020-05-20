@@ -751,8 +751,8 @@
 
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
-    {:crux.db/id (str (.eid entity-tx))
-     :crux.db/content-hash (str (.content-hash entity-tx))
+    {:crux.db/id (.eid entity-tx)
+     :crux.db/content-hash (.content-hash entity-tx)
      :crux.db/valid-time (.vt entity-tx)
      :crux.tx/tx-time (.tt entity-tx)
      :crux.tx/tx-id (.tx-id entity-tx)}))

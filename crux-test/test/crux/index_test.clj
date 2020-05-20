@@ -37,10 +37,10 @@
 (defn vt+tt+deleted?->vt+tt->entities [eid txs]
   (let [entities (vec (for [[tx-id [vt tt deleted?]] (map-indexed vector (sort-by second txs))
                             :let [content-hash (c/new-id (keyword (str tx-id)))]]
-                        {:crux.db/id (str (c/new-id eid))
+                        {:crux.db/id (c/new-id eid)
                          :crux.db/content-hash (if deleted?
-                                                 (str (c/new-id nil))
-                                                 (str content-hash))
+                                                 (c/new-id nil)
+                                                 content-hash)
                          :crux.db/valid-time vt
                          :crux.tx/tx-time tt
                          :crux.tx/tx-id tx-id}))]
@@ -74,11 +74,11 @@
                    (c/->id-buffer content-hash)]])))
 
 (defn- entities-with-range [vt+tt->entity vt-start tt-start vt-end tt-end]
-  (set (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt-end)
-                                                     (c/date->reverse-time-ms tt-end)])
-             :while (<= (compare vt-start (:crux.db/valid-time entity-tx)) 0)
-             :when (and (<= (compare tt-start (:crux.tx/tx-time entity-tx)) 0)
-                        (<= (compare (:crux.tx/tx-time entity-tx) tt-end) 0))]
+  (set (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt-start)
+                                                     (c/date->reverse-time-ms tt-start)])
+             :while (pos? (compare (:crux.db/valid-time entity-tx) vt-end))
+             :when (and (pos? (compare (:crux.tx/tx-time entity-tx) tt-end))
+                        (not (pos? (compare (:crux.tx/tx-time entity-tx) tt-start))))]
          entity-tx)))
 
 (defn- entity-as-of [vt+tt->entity vt tt]
@@ -122,15 +122,22 @@
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
                         (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
                         (with-open [snapshot (kv/new-snapshot *kv*)]
-                          (->> (for [[[vt-start tt-start] [vt-end tt-end]] (partition 2 (concat txs queries))
-                                     :let [[vt-start vt-end] (sort [vt-start vt-end])
-                                           [tt-start tt-end] (sort [tt-start tt-end])
-                                           expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
-                                           actual (->> (idx/entity-history-range snapshot eid vt-start tt-start vt-end tt-end)
-                                                       (map c/entity-tx->edn)
-                                                       (set))]]
-                                 (= expected actual))
-                               (every? true?)))))))))
+                          (let [index-store (kvi/map->KvIndexStore {:snapshot snapshot})]
+                            (->> (for [[[vt1 tt1] [vt2 tt2]] (partition 2 (concat txs queries))
+                                       :let [[vt-end vt-start] (sort [vt1 vt2])
+                                             [tt-end tt-start] (sort [tt1 tt2])
+                                             expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
+                                             actual (with-open [history (db/open-entity-history index-store
+                                                                                                eid :desc
+                                                                                                {:start {:crux.db/valid-time vt-start
+                                                                                                         :crux.tx/tx-time tt-start}
+                                                                                                 :end {:crux.db/valid-time vt-end
+                                                                                                       :crux.tx/tx-time tt-end}})]
+                                                      (->> (iterator-seq history)
+                                                           (map c/entity-tx->edn)
+                                                           (set)))]]
+                                   (= expected actual))
+                                 (every? true?))))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-start-of-range-test 50
   (let [eid (c/->id-buffer :foo)
@@ -145,15 +152,19 @@
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
                         (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
                         (with-open [snapshot (kv/new-snapshot *kv*)]
-                          (->> (for [[vt-start tt-start] (concat txs queries)
-                                     :let [vt-end (Date. Long/MAX_VALUE)
-                                           tt-end (Date. Long/MAX_VALUE)
-                                           expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
-                                           actual (->> (idx/entity-history-range snapshot eid vt-start tt-start vt-end tt-end)
-                                                       (map c/entity-tx->edn)
-                                                       (set))]]
-                                 (= expected actual))
-                               (every? true?)))))))))
+                          (let [index-store (kvi/map->KvIndexStore {:snapshot snapshot})]
+                            (->> (for [[vt-start tt-start] (concat txs queries)
+                                       :let [vt-end (Date. Long/MIN_VALUE)
+                                             tt-end (Date. Long/MIN_VALUE)
+                                             expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
+                                             actual (with-open [history (db/open-entity-history index-store eid :desc
+                                                                                                {:start {:crux.db/valid-time vt-start
+                                                                                                         :crux.tx/tx-time tt-start}})]
+                                                      (->> (iterator-seq history)
+                                                           (map c/entity-tx->edn)
+                                                           (set)))]]
+                                   (= expected actual))
+                                 (every? true?))))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-end-of-range-test 50
   (let [eid (c/->id-buffer :foo)
@@ -168,15 +179,19 @@
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
                         (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
                         (with-open [snapshot (kv/new-snapshot *kv*)]
-                          (->> (for [[vt-end tt-end] (concat txs queries)
-                                     :let [vt-start (Date. Long/MIN_VALUE)
-                                           tt-start (Date. Long/MIN_VALUE)
-                                           expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
-                                           actual (->> (idx/entity-history-range snapshot eid vt-start tt-start vt-end tt-end)
-                                                       (map c/entity-tx->edn)
-                                                       (set))]]
-                                 (= expected actual))
-                               (every? true?)))))))))
+                          (let [index-store (kvi/map->KvIndexStore {:snapshot snapshot})]
+                            (->> (for [[vt-end tt-end] (concat txs queries)
+                                       :let [vt-start (Date. Long/MAX_VALUE)
+                                             tt-start (Date. Long/MAX_VALUE)
+                                             expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
+                                             actual (with-open [history (db/open-entity-history index-store eid :desc
+                                                                                                {:end {:crux.db/valid-time vt-end
+                                                                                                       :crux.tx/tx-time tt-end}})]
+                                                      (->> (iterator-seq history)
+                                                           (map c/entity-tx->edn)
+                                                           (set)))]]
+                                   (= expected actual))
+                                 (every? true?))))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-full-range-test 50
   (let [eid (c/->id-buffer :foo)
@@ -190,14 +205,16 @@
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
                         (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
                         (with-open [snapshot (kv/new-snapshot *kv*)]
-                          (let [vt-start (Date. Long/MIN_VALUE)
-                                tt-start (Date. Long/MIN_VALUE)
-                                vt-end (Date. Long/MAX_VALUE)
-                                tt-end (Date. Long/MAX_VALUE)
+                          (let [index-store (kvi/map->KvIndexStore {:snapshot snapshot})
+                                vt-start (Date. Long/MAX_VALUE)
+                                tt-start (Date. Long/MAX_VALUE)
+                                vt-end (Date. Long/MIN_VALUE)
+                                tt-end (Date. Long/MIN_VALUE)
                                 expected (entities-with-range vt+tt->entity vt-start tt-start vt-end tt-end)
-                                actual (->> (idx/entity-history-range snapshot eid vt-start tt-start vt-end tt-end)
-                                            (map c/entity-tx->edn)
-                                            (set))]
+                                actual (with-open [history (db/open-entity-history index-store eid :desc {})]
+                                         (->> (iterator-seq history)
+                                              (map c/entity-tx->edn)
+                                              (set)))]
                             (= expected actual)))))))))
 
 (t/deftest test-can-perform-unary-join
