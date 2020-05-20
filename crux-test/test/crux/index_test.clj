@@ -9,6 +9,7 @@
             [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.index :as idx]
             [crux.kv :as kv]
+            [crux.kv-indexer :as kvi]
             [crux.tx :as tx])
   (:import java.util.Date))
 
@@ -104,7 +105,8 @@
                                            content-hash (c/new-id (:crux.db/content-hash expected))
                                            expected-or-deleted (when-not (= (c/new-id nil) content-hash)
                                                                  expected)]]
-                                 (= expected-or-deleted (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt)))))
+                                 ;; TODO eugh. this shouldn't be using the KV store, ideally (or it should be a kv-indexer test)
+                                 (= expected-or-deleted (c/entity-tx->edn (db/entity-as-of (kvi/map->KvIndexStore {:snapshot snapshot}) eid vt tt))))
                                (every? true?)))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-range-test 50
