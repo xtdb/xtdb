@@ -7,7 +7,7 @@
             [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.status :as status])
-  (:import crux.codec.EntityTx
+  (:import (crux.codec EntityTx EntityValueContentHash)
            java.io.Closeable
            java.util.function.Supplier
            (clojure.lang MapEntry)
@@ -199,7 +199,11 @@
                     (entity-history-seq i eid opts))))
 
   (all-content-hashes [this eid]
-    (idx/all-content-hashes snapshot eid))
+    (with-open [i (kv/new-iterator snapshot)]
+      (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to (.get idx/seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
+           (map c/decode-aecv-key->evc-from)
+           (map #(.content-hash ^EntityValueContentHash %))
+           (set))))
 
   (decode-value [this a content-hash value-buffer]
     (assert (some? value-buffer) (str a))

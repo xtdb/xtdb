@@ -477,13 +477,6 @@
          (cond-> (not with-corrections?) (->> (partition-by :vt)
                                               (map first)))))))
 
-(defn all-content-hashes [snapshot eid]
-  (with-open [i (kv/new-iterator snapshot)]
-    (->> (all-keys-in-prefix i (c/encode-aecv-key-to (.get seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
-         (map c/decode-aecv-key->evc-from)
-         (map #(.content-hash ^EntityValueContentHash %))
-         (set))))
-
 ;; Join
 
 (extend-protocol db/LayeredIndex
