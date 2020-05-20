@@ -224,23 +224,36 @@
   (open-nested-index-store [this]
     (->KvIndexStore object-store (lru/new-cached-snapshot snapshot false))))
 
+(defn content-idx-kvs [content-hash doc]
+  (let [id (c/->id-buffer (:crux.db/id doc))
+        content-hash (c/->id-buffer content-hash)]
+    (->> (for [[k v] doc
+               :let [k (c/->id-buffer k)]
+               v (idx/vectorize-value v)
+               :let [v (c/->value-buffer v)]
+               :when (pos? (.capacity v))]
+           [(MapEntry/create (c/encode-avec-key-to nil k v id content-hash) c/empty-buffer)
+            (MapEntry/create (c/encode-aecv-key-to nil k id content-hash v) c/empty-buffer)])
+         (apply concat))))
+
 (defrecord KvIndexer [kv-store object-store]
   db/Indexer
   (index-docs [this docs]
-    (let [doc-idx-keys (when (seq docs)
-                         (->> docs
-                              (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))))
+    (let [content-idx-kvs (when (seq docs)
+                             (->> docs
+                                  (mapcat (fn [[k doc]] (content-idx-kvs k doc)))))
 
-          _ (some->> (seq doc-idx-keys) (idx/store-doc-idx-keys kv-store))]
+          _ (some->> (seq content-idx-kvs) (kv/store kv-store))]
 
       (db/put-objects object-store docs)
 
-      (->> doc-idx-keys (transduce (map mem/capacity) +))))
+      (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))))
 
   (unindex-docs [this docs]
     (->> docs
-         (mapcat (fn [[k doc]] (idx/doc-idx-keys k doc)))
-         (idx/delete-doc-idx-keys kv-store)))
+         (mapcat (fn [[k doc]] (content-idx-kvs k doc)))
+         keys
+         (kv/delete kv-store)))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)

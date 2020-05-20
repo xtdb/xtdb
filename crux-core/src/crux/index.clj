@@ -233,25 +233,6 @@
          [k (cond-> (count (vectorize-value v)) evicted? -)])
        (into {})))
 
-(defn doc-idx-keys [content-hash doc]
-  (let [id (c/->id-buffer (:crux.db/id doc))
-        content-hash (c/->id-buffer content-hash)]
-    (->> (for [[k v] doc
-               :let [k (c/->id-buffer k)]
-               v (vectorize-value v)
-               :let [v (c/->value-buffer v)]
-               :when (pos? (.capacity v))]
-           [(c/encode-avec-key-to nil k v id content-hash)
-            (c/encode-aecv-key-to nil k id content-hash v)])
-         (apply concat))))
-
-(defn store-doc-idx-keys [kv idx-keys]
-  (kv/store kv (for [k idx-keys]
-                 [k c/empty-buffer])))
-
-(defn delete-doc-idx-keys [kv idx-keys]
-  (kv/delete kv idx-keys))
-
 ;; Utils
 
 (defn current-index-version [kv]
