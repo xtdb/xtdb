@@ -335,7 +335,7 @@
     (assert (some? value-buffer) (str a))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (let [doc (db/get-document this content-hash)
+      (let [doc (db/get-single-object object-store snapshot content-hash)
             value-or-values (get doc a)]
         (if-not (idx/multiple-values? value-or-values)
           value-or-values
@@ -347,9 +347,6 @@
 
   (encode-value [this value]
     (c/->value-buffer value))
-
-  (get-document [this content-hash]
-    (db/get-single-object object-store snapshot content-hash))
 
   (open-nested-index-store [this]
     (->KvIndexStore object-store (lru/new-cached-snapshot snapshot false))))

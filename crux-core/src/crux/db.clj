@@ -37,7 +37,6 @@
   (all-content-hashes [this eid])
   (decode-value [this a content-hash value-buffer])
   (encode-value [this value])
-  (get-document [this content-hash])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 
