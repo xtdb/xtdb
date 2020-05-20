@@ -157,12 +157,9 @@
                            :crux.db/content-hash (str ivan-crux-id)
                            :crux.db/valid-time valid-time})
                    entity-tx))
-          (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
-          (t/is (= {ivan-crux-id ivan} (api/documents *api* #{(:crux.db/content-hash entity-tx)})))
           (t/is (= [entity-tx] (api/history *api* :ivan)))
           (t/is (= [entity-tx] (api/history-range *api* :ivan #inst "1990" #inst "1990" tx-time tx-time)))
 
-          (t/is (nil? (api/document *api* (c/new-id :does-not-exist))))
           (t/is (nil? (api/entity-tx (api/db *api* #inst "1999") :ivan))))))))
 
 (t/deftest test-can-write-entity-using-map-as-id
@@ -239,22 +236,6 @@
 
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo)))
-
-(t/deftest test-document-bug-123
-  (let [version-1-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1}]])]
-    (.awaitTx *api* version-1-submitted-tx nil)
-    (t/is (true? (.hasTxCommitted *api* version-1-submitted-tx))))
-
-  (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2}]])]
-    (.awaitTx *api* version-2-submitted-tx nil)
-    (t/is (true? (.hasTxCommitted *api* version-2-submitted-tx))))
-
-  (let [history (.history *api* :ivan)]
-    (t/is (= 2 (count history)))
-    (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
-              {:crux.db/id :ivan :name "Ivan" :version 1}]
-             (for [content-hash (map :crux.db/content-hash history)]
-               (.document *api* content-hash))))))
 
 (t/deftest test-tx-log
   (let [valid-time (Date.)
