@@ -56,6 +56,22 @@
 (defn new-prefix-kv-iterator ^java.io.Closeable [i prefix]
   (->PrefixKvIterator i prefix))
 
+(defn all-keys-in-prefix
+  ([i prefix] (all-keys-in-prefix i prefix prefix {}))
+  ([i prefix seek-k] (all-keys-in-prefix i prefix seek-k {}))
+  ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
+   (letfn [(step [k]
+             (lazy-seq
+              (when (and k (mem/buffers=? prefix k (.capacity prefix)))
+                (cons (if entries?
+                        (MapEntry/create (mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i)))
+                        (mem/copy-to-unpooled-buffer k))
+                      (step (if reverse? (kv/prev i) (kv/next i)))))))]
+     (step (if reverse?
+             (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
+               (kv/prev i))
+             (kv/seek i seek-k))))))
+
 (defn- buffer-or-value-buffer [v]
   (cond
     (instance? DirectBuffer v)
@@ -80,6 +96,46 @@
 
 (defn- inc-unsigned-prefix-buffer [buffer prefix-size]
   (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer buffer prefix-size (.get idx/seek-buffer-tl)) prefix-size)))
+
+(defn- ->entity-tx [[k v]]
+  (-> (c/decode-entity+vt+tt+tx-id-key-from k)
+      (idx/enrich-entity-tx v)))
+
+(defn entity-history-seq-ascending
+  ([i eid] ([i eid] (entity-history-seq-ascending i eid {})))
+  ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
+           {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
+           :keys [with-corrections?]}]
+   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
+     (-> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
+                             {:reverse? true, :entries? true})
+         (->> (map ->entity-tx))
+         (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
+                                       (neg? (compare (.vt entity-tx) end-vt))))
+                  start-tt (remove (fn [^EntityTx entity-tx]
+                                     (neg? (compare (.tt entity-tx) start-tt))))
+                  end-tt (filter (fn [^EntityTx entity-tx]
+                                   (neg? (compare (.tt entity-tx) end-tt)))))
+         (cond-> (not with-corrections?) (->> (partition-by :vt)
+                                              (map last)))))))
+
+(defn entity-history-seq-descending
+  ([i eid] (entity-history-seq-descending i eid {}))
+  ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
+           {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
+           :keys [with-corrections?]}]
+   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
+     (-> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
+                             {:entries? true})
+         (->> (map ->entity-tx))
+         (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
+                                         (pos? (compare (.vt entity-tx) end-vt))))
+                  start-tt (remove (fn [^EntityTx entity-tx]
+                                    (pos? (compare (.tt entity-tx) start-tt))))
+                  end-tt (filter (fn [^EntityTx entity-tx]
+                                   (pos? (compare (.tt entity-tx) end-tt)))))
+         (cond-> (not with-corrections?) (->> (partition-by :vt)
+                                              (map first)))))))
 
 (defrecord KvIndexStore [object-store snapshot]
   Closeable
@@ -193,14 +249,14 @@
   (open-entity-history [this eid sort-order opts]
     (let [i (kv/new-iterator snapshot)
           entity-history-seq (case sort-order
-                               :asc idx/entity-history-seq-ascending
-                               :desc idx/entity-history-seq-descending)]
+                               :asc entity-history-seq-ascending
+                               :desc entity-history-seq-descending)]
       (cio/->cursor #(.close i)
                     (entity-history-seq i eid opts))))
 
   (all-content-hashes [this eid]
     (with-open [i (kv/new-iterator snapshot)]
-      (->> (idx/all-keys-in-prefix i (c/encode-aecv-key-to (.get idx/seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
+      (->> (all-keys-in-prefix i (c/encode-aecv-key-to (.get idx/seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
            (map c/decode-aecv-key->evc-from)
            (map #(.content-hash ^EntityValueContentHash %))
            (set))))

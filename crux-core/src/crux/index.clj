@@ -255,22 +255,6 @@
 ;; returned by the iterator will (may) get invalidated by the next
 ;; iterator call.
 
-(defn all-keys-in-prefix
-  ([i prefix] (all-keys-in-prefix i prefix prefix {}))
-  ([i prefix seek-k] (all-keys-in-prefix i prefix seek-k {}))
-  ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
-   (letfn [(step [k]
-             (lazy-seq
-              (when (and k (mem/buffers=? prefix k (.capacity prefix)))
-                (cons (if entries?
-                        (MapEntry/create (mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i)))
-                        (mem/copy-to-unpooled-buffer k))
-                      (step (if reverse? (kv/prev i) (kv/next i)))))))]
-     (step (if reverse?
-             (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
-               (kv/prev i))
-             (kv/seek i seek-k))))))
-
 (defn idx->series
   [idx]
   (reify
@@ -297,7 +281,7 @@
 
 ;; Entities
 
-(defn- ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
+(defn ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
   (assoc entity-tx :content-hash (when (pos? (.capacity content-hash))
                                    (c/safe-id (c/new-id content-hash)))))
 
@@ -436,46 +420,6 @@
            (cons result)
            (not-empty)
            (map second)))))
-
-(defn- ->entity-tx [[k v]]
-  (-> (c/decode-entity+vt+tt+tx-id-key-from k)
-      (enrich-entity-tx v)))
-
-(defn entity-history-seq-ascending
-  ([i eid] ([i eid] (entity-history-seq-ascending i eid {})))
-  ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
-           {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
-           :keys [with-corrections?]}]
-   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
-     (-> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
-                             {:reverse? true, :entries? true})
-         (->> (map ->entity-tx))
-         (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
-                                       (neg? (compare (.vt entity-tx) end-vt))))
-                  start-tt (remove (fn [^EntityTx entity-tx]
-                                     (neg? (compare (.tt entity-tx) start-tt))))
-                  end-tt (filter (fn [^EntityTx entity-tx]
-                                   (neg? (compare (.tt entity-tx) end-tt)))))
-         (cond-> (not with-corrections?) (->> (partition-by :vt)
-                                              (map last)))))))
-
-(defn entity-history-seq-descending
-  ([i eid] (entity-history-seq-descending i eid {}))
-  ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
-           {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
-           :keys [with-corrections?]}]
-   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
-     (-> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
-                             {:entries? true})
-         (->> (map ->entity-tx))
-         (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
-                                         (pos? (compare (.vt entity-tx) end-vt))))
-                  start-tt (remove (fn [^EntityTx entity-tx]
-                                    (pos? (compare (.tt entity-tx) start-tt))))
-                  end-tt (filter (fn [^EntityTx entity-tx]
-                                   (pos? (compare (.tt entity-tx) end-tt)))))
-         (cond-> (not with-corrections?) (->> (partition-by :vt)
-                                              (map first)))))))
 
 ;; Join
 
