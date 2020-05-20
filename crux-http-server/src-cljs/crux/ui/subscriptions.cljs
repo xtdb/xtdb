@@ -193,6 +193,6 @@
        (get-in db [:current-route :data :name]))))
 
 (rf/reg-sub
- ::left-pane-visible?
+ ::left-pane-hidden?
  (fn [db _]
-   (get-in db [:left-pane :visible?])))
+   (get-in db [:left-pane :hidden?])))

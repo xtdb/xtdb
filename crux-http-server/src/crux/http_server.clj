@@ -58,6 +58,7 @@
           (when options [:meta {:title "options" :content (str options)}])
           [:link {:rel "stylesheet" :href "/css/all.css"}]
           [:link {:rel "stylesheet" :href "/css/table.css"}]
+          [:link {:rel "stylesheet" :href "/css/codemirror.css"}]
           [:link {:rel "stylesheet"
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
           [:title "Crux Console"]]

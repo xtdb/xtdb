@@ -19,6 +19,7 @@
   :profiles {:dev
              {:dependencies [[org.clojure/clojurescript "1.10.339"]
                              [ch.qos.logback/logback-classic "1.2.3"]
+                             [cljsjs/codemirror "5.44.0-1"]
                              [com.bhauman/figwheel-main "0.2.4"]
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
                              [reagent "0.10.0"]

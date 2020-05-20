@@ -32,7 +32,7 @@
 (rf/reg-event-db
  ::toggle-left-pane
  (fn [db _]
-   (update-in db [:left-pane :visible?] not)))
+   (update-in db [:left-pane :hidden?] not)))
 
 (rf/reg-event-db
  ::set-left-pane-view

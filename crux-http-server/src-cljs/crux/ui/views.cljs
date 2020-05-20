@@ -1,16 +1,15 @@
 (ns crux.ui.views
   (:require
    [clojure.string :as string]
-   [clojure.pprint :as pprint]
+   [cljs.pprint :as pprint]
    [crux.ui.events :as events]
+   [crux.ui.codemirror :as cm]
    [crux.ui.common :as common]
    [crux.ui.subscriptions :as sub]
    [crux.ui.uikit.table :as table]
    [fork.core :as fork]
    [reagent.core :as r]
-   [reitit.core :as reitit]
-   [re-frame.core :as rf]
-   [tick.alpha.api :as t]))
+   [re-frame.core :as rf]))
 
 (defn vt-tt-inputs
   [{:keys [values touched errors handle-change handle-blur]}]
@@ -75,12 +74,11 @@
               :initial-values @(rf/subscribe [::sub/initial-values-query])
               :on-submit #(rf/dispatch [::events/go-to-query-view %])}
    (fn [{:keys [values
-                state
                 errors
                 touched
+                set-values
+                set-touched
                 form-id
-                handle-change
-                handle-blur
                 handle-submit] :as props}]
      (let [loading? @(rf/subscribe [::sub/query-right-pane-loading?])
            query-pane? (= :query @(rf/subscribe [::sub/left-pane-view]))]
@@ -89,12 +87,9 @@
          :id form-id
          :on-submit handle-submit}
         [:div.input-group
-         [:textarea.textarea
-          {:name "q"
-           :value (get values "q")
-           :on-change handle-change
-           :on-blur handle-blur
-           :rows 10}]
+         [cm/code-mirror (get values "q")
+          {:on-change #(set-values {"q" %})
+           :on-blur #(set-touched "q")}]
          (when (and (get touched "q")
                     (get errors "q"))
            [:p.input-error (get errors "q")])]
@@ -109,7 +104,7 @@
   (let [invalid? #(empty? (string/trim (or (get values %) "")))
         validation {"eid" (when (invalid? "eid") "Entity id is empty")
                     "vt" (when (apply not= ((juxt #(% "vtd")
-                                                  #(% "vtt")) invalid?))
+                                                   #(% "vtt")) invalid?))
                            "Fill out both inputs or none")
                     "tt" (when (apply not= ((juxt #(% "ttd")
                                                   #(% "ttt")) invalid?))
@@ -128,7 +123,6 @@
                 touched
                 errors
                 form-id
-                state
                 handle-change
                 handle-blur
                 handle-submit] :as props}]
@@ -349,22 +343,22 @@
 
 (defn left-pane
   []
-  (let [left-pane-visible? @(rf/subscribe [::sub/left-pane-visible?])
+  (let [left-pane-hidden? @(rf/subscribe [::sub/left-pane-hidden?])
         left-pane-view @(rf/subscribe [::sub/left-pane-view])]
     [:div.left-pane
-     (if left-pane-visible?
-       [:div.hide-button
-        {:on-click #(rf/dispatch [::events/toggle-left-pane])}
-        "Hide"]
+     (if left-pane-hidden?
        [:button.button.hidden-pane
         {:on-click #(rf/dispatch [::events/toggle-left-pane])}
         [:span "."]
         [:span "."]
-        [:span "."]])
+        [:span "."]]
+       [:div.hide-button
+        {:on-click #(rf/dispatch [::events/toggle-left-pane])}
+        "Hide"])
      [:div
-      {:class (if left-pane-visible?
-                "pane-toggled"
-                "pane-untoggled")}
+      {:class (if left-pane-hidden?
+                "pane-untoggled"
+                "pane-toggled")}
       [:div.pane-nav
        [:div.pane-nav__tab
         {:class (if (= left-pane-view :query)
