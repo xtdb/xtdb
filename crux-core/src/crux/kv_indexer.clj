@@ -46,15 +46,17 @@
     (kv/get-value snapshot k))
 
   db/IndexStore
-  (new-attribute-value-entity-index-pair [this a entity-resolver-fn]
-    (let [v-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
-          e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-idx entity-resolver-fn)]
-      [v-idx e-idx]))
+  (av [this a min-v entity-resolver-fn]
+    (idx/av this a min-v entity-resolver-fn))
 
-  (new-attribute-entity-value-index-pair [this a entity-resolver-fn]
-    (let [e-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-resolver-fn)
-          v-idx (idx/new-doc-attribute-entity-value-value-index snapshot a e-idx)]
-      [e-idx v-idx]))
+  (ave [this a v min-e entity-resolver-fn]
+    (idx/ave this a v min-e entity-resolver-fn))
+
+  (ae [this a min-e entity-resolver-fn]
+    (idx/ae this a min-e entity-resolver-fn))
+
+  (aev [this a e min-v entity-resolver-fn]
+    (idx/aev this a e min-v entity-resolver-fn))
 
   (entity-as-of [this valid-time transact-time eid]
     (with-open [i (kv/new-iterator snapshot)]
