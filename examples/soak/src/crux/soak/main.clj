@@ -31,9 +31,11 @@
        [true (br/->Redirect 307 :homepage)]]])
 
 (defn get-current-weather [node location valid-time]
-  (when-let [etx (api/entity-tx (api/db node valid-time) (keyword (str location "-current")))]
-    (merge (api/document node (:crux.db/content-hash etx))
-           (select-keys etx [:crux.db/valid-time :crux.tx/tx-time]))))
+  (let [db (api/db node valid-time)
+        eid (keyword (str location "-current"))]
+    (when-let [etx (api/entity-tx db eid)]
+      (merge (api/entity db eid)
+             (select-keys etx [:crux.db/valid-time :crux.tx/tx-time])))))
 
 (defn get-weather-forecast [node location ^Date valid-time]
   (->> (for [tx-time (->> (iterate #(.minus ^ZonedDateTime % (Duration/ofDays 1))
@@ -45,9 +47,10 @@
                          (api/db node valid-time tx-time)
                          (catch NodeOutOfSyncException e
                            nil))]
-           (when-let [etx (api/entity-tx db (keyword (str location "-forecast")))]
-             (merge (api/document node (:crux.db/content-hash etx))
-                    (select-keys etx [:crux.db/valid-time :crux.tx/tx-time])))))
+           (let [eid (keyword (str location "-forecast"))]
+             (when-let [etx (api/entity-tx db eid)]
+               (merge (api/entity db eid)
+                      (select-keys etx [:crux.db/valid-time :crux.tx/tx-time]))))))
        (remove nil?)
        distinct))
 
