@@ -87,24 +87,6 @@ public class CruxNode implements AutoCloseable {
         return database(node, validTime, transactionTime);
     }
 
-    private Document document(Object contentHash) {
-        Map<Keyword, Object> doc = node.document(contentHash);
-        return Document.document(doc);
-    }
-
-    /**
-     * Returns the transaction history of an entity, in reverse chronological order. Includes corrections, but does not include the actual documents
-     * @param id Id of the entity to get the history for
-     * @return Iterable set of Documents containing transaction information
-     */
-    public Iterable<Document> history(CruxId id) {
-        @SuppressWarnings("deprecation")
-        List<Map<Keyword,Object>> history = node.history(id.toEdn());
-        return history.stream()
-            .map(this::document)
-            .collect(Collectors.toList());
-    }
-
     /**
      * Blocks until the node has caught up indexing. Will throw an exception on timeout
      * @param timeout Max time to wait, can be null for the default

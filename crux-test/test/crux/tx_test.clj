@@ -778,14 +778,21 @@
                         [:crux.tx/put {:crux.db/id :frob :foo :baz}]])
   (fix/submit+await-tx [[:crux.tx/evict :foo]])
 
-  (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :foo, :foo :bar}))))
-  (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :foo, :foo :baz}))))
-  (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :foo, :foo :quux}))))
+  (with-open [index-store (db/open-index-store (:indexer *api*))]
+    (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :foo, :foo :bar}))
+                    idx/keep-non-evicted-doc)))
+    (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :foo, :foo :baz}))
+                    idx/keep-non-evicted-doc)))
+    (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :foo, :foo :quux}))
+                    idx/keep-non-evicted-doc))))
 
   (t/testing "even though the CaS was unrelated, the whole transaction fails - we should still evict those docs"
     (fix/submit+await-tx [[:crux.tx/evict :frob]])
-    (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :frob, :foo :bar}))))
-    (t/is (nil? (api/document *api* (c/new-id {:crux.db/id :frob, :foo :baz}))))))
+    (with-open [index-store (db/open-index-store (:indexer *api*))]
+      (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :frob, :foo :bar}))
+                      idx/keep-non-evicted-doc)))
+      (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :frob, :foo :baz}))
+                      idx/keep-non-evicted-doc))))))
 
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
