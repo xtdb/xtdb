@@ -24,8 +24,6 @@
 
   (api/entity (api/db syst) :id/jeff)
 
-  (api/document syst "48ea7b320721dbdbd09c5e6be1486b0e76369b6a")
-
   (api/submit-tx
            syst
            [[:crux.tx/put
@@ -36,9 +34,5 @@
               :person/name "Lia"}]])
 
   (api/transaction-time
-    (api/db syst #inst "2019-02-02"
-            #inst "2019-04-16T12:35:05.042-00:00"))
-
-  (api/document
     (api/db syst #inst "2019-02-02"
             #inst "2019-04-16T12:35:05.042-00:00")))
