@@ -156,22 +156,20 @@
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {::keys [tx-time tx-id] :as tx}
-                                        {:keys [object-store history index-store] :as tx-consumer}]
+                                        {:keys [history document-store] :as tx-consumer}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
-    {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history eid valid-time tx-time)]
+    {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history eid valid-time tx-time)
+                           current-id (c/new-id content-hash)
+                           expected-id (c/new-id old-v)]
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
                        ;; can't rely on the old content-hashing returning the same hash for the same document
-                       (if (or (= (c/new-id content-hash) (c/new-id old-v))
-                               (= (db/get-document index-store (c/new-id content-hash))
-                                  (db/get-document index-store (c/new-id old-v))))
-                         (let [correct-state? (not (nil? (db/get-document index-store (c/new-id new-v))))]
-                           (when-not correct-state?
-                             (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                           correct-state?)
-                         (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
-                             false)))
+                       (or (= current-id expected-id)
+                           (let [docs (db/fetch-docs document-store #{current-id expected-id})]
+                             (= (get docs current-id)
+                                (get docs expected-id)))
+                           (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))))
 
      :etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx tx-consumer)}))
 
@@ -205,7 +203,7 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {::keys [tx-time tx-id] :as tx}
-                                       {:keys [indexer index-store nested-fn-args query-engine], :as tx-consumer}]
+                                       {:keys [indexer index-store document-store nested-fn-args query-engine], :as tx-consumer}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
@@ -214,7 +212,8 @@
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
                                                  (or (get nested-fn-args arg-id)
-                                                     (db/get-document index-store arg-id)))
+                                                     (-> (db/fetch-docs document-store #{arg-id})
+                                                         (get arg-id))))
         args-id (:crux.db/id args-doc)
 
         {:keys [conformed-tx-ops fn-error]} (try
@@ -233,6 +232,7 @@
                       (into {} (mapcat :docs)))
             {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args val) docs)
             _ (db/index-docs indexer (into {} docs))
+            _ (db/submit-docs document-store (into {} docs))
             op-results (vec (for [[op :as tx-event] (map txc/->tx-event conformed-tx-ops)]
                               (index-tx-event tx-event tx
                                               (-> tx-consumer
@@ -251,7 +251,7 @@
 (def ^:dynamic *current-tx*)
 
 ;; TODO: Rename :crux.kv/stats on next index bump.
-(defn- update-stats [{:keys [indexer ^ExecutorService stats-executor] :as tx-consumer} docs-stats]
+(defn- update-stats [{:keys [indexer object-store ^ExecutorService stats-executor] :as tx-consumer} docs-stats]
   (let [stats-fn ^Runnable #(->> (apply merge-with + (db/read-index-meta indexer :crux.kv/stats) docs-stats)
                                  (db/store-index-meta indexer :crux.kv/stats))]
     (if stats-executor
@@ -266,15 +266,17 @@
   (with-open [index-store (db/open-index-store indexer)]
     (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
 
-    (when-let [docs-to-upsert (->> docs
-                                   (into {} (remove (fn [[k doc]]
-                                                      (or (idx/keep-non-evicted-doc (db/get-document index-store (c/new-id k)))
-                                                          (idx/evicted-doc? doc)))))
-                                   not-empty)]
+    (when-let [docs (->> docs
+                         (into {} (remove (fn [[k doc]]
+                                            ;; TODO don't refer to object-store here
+                                            ;; this is mainly to stop Kafka docs getting added twice to stats
+                                            (or (idx/keep-non-evicted-doc (db/get-single-object object-store index-store (c/new-id k)))
+                                                (idx/evicted-doc? doc)))))
+                         not-empty)]
       (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-      (let [bytes-indexed (db/index-docs indexer docs-to-upsert)
-            docs-stats (->> (vals docs-to-upsert)
+      (let [bytes-indexed (db/index-docs indexer docs)
+            docs-stats (->> (vals docs)
                             (map #(idx/doc-predicate-stats % false)))]
 
         (bus/send bus {:crux/event-type ::indexed-docs,

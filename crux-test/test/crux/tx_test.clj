@@ -750,9 +750,11 @@
                            (with-open [history (db/open-entity-history index-store
                                                                        (c/new-id eid) :asc
                                                                        {:start {::db/valid-time #inst "2020-01-01"}})]
-                             (->> (iterator-seq history)
-                                  (mapv (fn [{:keys [content-hash vt]}]
-                                          [vt (:v (db/get-document index-store content-hash))])))))]
+                             (let [history (iterator-seq history)
+                                   docs (db/fetch-docs (:document-store *api*) (map :content-hash history))]
+                               (->> history
+                                    (mapv (fn [{:keys [content-hash vt]}]
+                                            [vt (:v (get docs content-hash))]))))))]
         ;; transaction functions, asserts both still apply at the start of the transaction
         (t/is (= [[#inst "2020-01-08" 8]
                   [#inst "2020-01-09" 9]
@@ -778,21 +780,17 @@
                         [:crux.tx/put {:crux.db/id :frob :foo :baz}]])
   (fix/submit+await-tx [[:crux.tx/evict :foo]])
 
-  (with-open [index-store (db/open-index-store (:indexer *api*))]
-    (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :foo, :foo :bar}))
-                    idx/keep-non-evicted-doc)))
-    (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :foo, :foo :baz}))
-                    idx/keep-non-evicted-doc)))
-    (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :foo, :foo :quux}))
-                    idx/keep-non-evicted-doc))))
+  (t/is (every? (comp idx/evicted-doc? val)
+                (db/fetch-docs (:document-store *api*) #{(c/new-id {:crux.db/id :foo, :foo :bar})
+                                                         (c/new-id {:crux.db/id :foo, :foo :baz})
+                                                         (c/new-id {:crux.db/id :foo, :foo :quux})})))
+
 
   (t/testing "even though the CaS was unrelated, the whole transaction fails - we should still evict those docs"
     (fix/submit+await-tx [[:crux.tx/evict :frob]])
-    (with-open [index-store (db/open-index-store (:indexer *api*))]
-      (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :frob, :foo :bar}))
-                      idx/keep-non-evicted-doc)))
-      (t/is (nil? (-> (db/get-document index-store (c/new-id {:crux.db/id :frob, :foo :baz}))
-                      idx/keep-non-evicted-doc))))))
+    (t/is (every? (comp idx/evicted-doc? val)
+                  (db/fetch-docs (:document-store *api*) #{(c/new-id {:crux.db/id :frob, :foo :bar})
+                                                           (c/new-id {:crux.db/id :frob, :foo :baz})})))))
 
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
