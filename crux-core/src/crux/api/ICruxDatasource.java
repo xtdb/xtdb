@@ -22,16 +22,6 @@ public interface ICruxDatasource extends Closeable {
     public Map<Keyword,Object> entity(Object eid);
 
     /**
-     * Returns the document map for an entity using an existing snapshot.
-     *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param eid an object that can be coerced into an entity id.
-     * @return    the entity document map.
-     */
-    @Deprecated
-    public Map<Keyword,Object> entity(Closeable snapshot, Object eid);
-
-    /**
      * Returns the transaction details for an entity. Details
      * include tx-id and tx-time.
      *
@@ -39,28 +29,6 @@ public interface ICruxDatasource extends Closeable {
      * @return    the entity transaction details.
      */
     public Map<Keyword,?> entityTx(Object eid);
-
-    /**
-     * Returns a new snapshot allowing for lazy query results in a
-     * try-with-resources block using {@link #q(Closeable snapshot,
-     * Object query)}. Can also be used for {@link
-     * #historyAscending(Closeable snapshot, Object eid)} and {@link
-     * #historyDescending(Closeable snapshot, Object eid)}
-     *
-     * @return an implementation specific snapshot
-     */
-    @Deprecated
-    public Closeable newSnapshot();
-
-    /**
-     * Queries the db.
-     *
-     * @param query the query in map, vector or string form.
-     * @return      a set or vector of result tuples.
-     * @deprecated  renamed to {@link #query(Object)}
-     */
-    @Deprecated
-    public Collection<List<?>> q(Object query);
 
     /**
      * Queries the db.
@@ -73,87 +41,10 @@ public interface ICruxDatasource extends Closeable {
     /**
      * Queries the db lazily.
      *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param query    the query in map, vector or string form.
-     * @return         a lazy sequence of result tuples.
-     */
-    @Deprecated
-    public Iterable<List<?>> q(Closeable snapshot, Object query);
-
-    /**
-     * Queries the db lazily.
-     *
      * @param query the query in map, vector or string form.
      * @return      a cursor of result tuples.
      */
     public ICursor<List<?>> openQuery(Object query);
-
-    /**
-     * Retrieves entity history in chronological order from and
-     * including the valid time of the db while respecting
-     * transaction time. Includes the documents.
-     *
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         the history of the given entity.
-     */
-    public List<Map<Keyword,?>> historyAscending(Object eid);
-
-    /**
-     * Retrieves entity history lazily in chronological order from and
-     * including the valid time of the db while respecting
-     * transaction time. Includes the documents.
-     *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         a lazy sequence of history.
-     */
-    @Deprecated
-    public Iterable<Map<Keyword,?>> historyAscending(Closeable snapshot, Object eid);
-
-    /**
-     * Retrieves entity history lazily in chronological order from and
-     * including the valid time of the db while respecting
-     * transaction time. Includes the documents.
-     *
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         a stream of history.
-     */
-    @Deprecated
-    public ICursor<Map<Keyword,?>> openHistoryAscending(Object eid);
-
-    /**
-     * Retrieves entity history in reverse chronological order
-     * from and including the valid time of the db while respecting
-     * transaction time. Includes the documents.
-     *
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         the history of the given entity.
-     */
-    @Deprecated
-    public List<Map<Keyword,?>> historyDescending(Object eid);
-
-    /**
-     * Retrieves entity history lazily in reverse chronological order
-     * from and including the valid time of the db while respecting
-     * transaction time. Includes the documents.
-     *
-     * @param snapshot a snapshot from {@link #newSnapshot()}.
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         a lazy sequence of history.
-     */
-    @Deprecated
-    public Iterable<Map<Keyword,?>> historyDescending(Closeable snapshot, Object eid);
-
-    /**
-     * Retrieves entity history lazily in reverse chronological order
-     * from and including the valid time of the db while respecting
-     * transaction time. Includes the documents.
-     *
-     * @param eid      an object that can be coerced into an entity id.
-     * @return         a stream of history.
-     */
-    @Deprecated
-    public ICursor<Map<Keyword,?>> openHistoryDescending(Object eid);
 
     /**
      * Eagerly retrieves entity history for the given entity.

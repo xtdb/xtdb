@@ -129,28 +129,6 @@
                 {"Content-Type" "application/edn"}
                 (cio/pr-edn-str status-map)))))
 
-(defn- history [^ICruxAPI crux-node request]
-  (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
-        history (.history crux-node (c/new-id (URLDecoder/decode eid)))]
-    (-> (success-response history)
-        (add-last-modified (:crux.tx/tx-time (first history))))))
-
-(defn- parse-history-range-params [{:keys [query-params] :as request}]
-  (let [[_ eid] (re-find #"^/history-range/(.+)$" (req/path-info request))
-        times (map #(some-> (get query-params %) not-empty cio/parse-rfc3339-or-millis-date)
-                   ["valid-time-start" "transaction-time-start" "valid-time-end" "transaction-time-end"])]
-    (cons eid times)))
-
-(defn- history-range [^ICruxAPI crux-node request]
-  (try
-    (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
-          history (.historyRange crux-node (c/new-id (URLDecoder/decode eid)) valid-time-start transaction-time-start valid-time-end transaction-time-end)
-          last-modified (:crux.tx/tx-time (last history))]
-      (-> (success-response history)
-          (add-last-modified (:crux.tx/tx-time (last history)))))
-    (catch NodeOutOfSyncException e
-      (exception-response 400 e))))
-
 (defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
     (and valid-time transact-time)
@@ -195,16 +173,7 @@
   (when-not (s/valid? spec body-edn)
     (throw (ex-info (str "Spec assertion failed\n" (s/explain-str spec body-edn)) (s/explain-data spec body-edn)))))
 
-;; TODO: Potentially require both valid and transaction time sent by
-;; the client?
 (defn- query [^ICruxAPI crux-node request]
-  (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
-        db (db-for-request crux-node query-map)]
-    (-> (success-response
-         (.query db (:query query-map)))
-        (add-last-modified (.transactionTime db)))))
-
-(defn- query-stream [^ICruxAPI crux-node request]
   (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (db-for-request crux-node query-map)
         result (api/open-q db (:query query-map))]
@@ -249,20 +218,6 @@
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response entity-tx)
         (add-last-modified tx-time))))
-
-(defn- history-ascending [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
-        db (db-for-request crux-node body)
-        history (api/open-history-ascending db (c/new-id eid))]
-    (-> (streamed-edn-response history (iterator-seq history))
-        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
-
-(defn- history-descending [^ICruxAPI crux-node request]
-  (let [{:keys [eid] :as body} (doto (body->edn request) (validate-or-throw ::entity-map))
-        db (db-for-request crux-node body)
-        history (api/open-history-descending db (c/new-id eid))]
-    (-> (streamed-edn-response history (iterator-seq history))
-        (add-last-modified (:crux.tx/tx-time (.latestCompletedTx crux-node))))))
 
 (defn- entity-history [^ICruxAPI node
                        {{:strs [sort-order
@@ -382,26 +337,11 @@
     [#"^/entity-tx$" [:post]]
     (entity-tx crux-node request)
 
-    [#"^/history/.+$" [:get :post]]
-    (history crux-node request)
-
-    [#"^/history-range/.+$" [:get]]
-    (history-range crux-node request)
-
-    [#"^/history-ascending$" [:post]]
-    (history-ascending crux-node request)
-
-    [#"^/history-descending$" [:post]]
-    (history-descending crux-node request)
-
     [#"^/entity-history/.+$" [:get]]
     (entity-history crux-node request)
 
     [#"^/query$" [:post]]
     (query crux-node request)
-
-    [#"^/query-stream$" [:post]]
-    (query-stream crux-node request)
 
     [#"^/attribute-stats" [:get]]
     (attribute-stats crux-node)
