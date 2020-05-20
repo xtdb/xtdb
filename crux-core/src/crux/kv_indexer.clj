@@ -6,7 +6,8 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
-            [crux.status :as status])
+            [crux.status :as status]
+            [crux.morton :as morton])
   (:import (crux.codec EntityTx EntityValueContentHash)
            java.io.Closeable
            java.util.function.Supplier
@@ -96,6 +97,47 @@
 
 (defn- inc-unsigned-prefix-buffer [buffer prefix-size]
   (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer buffer prefix-size (.get idx/seek-buffer-tl)) prefix-size)))
+
+(defn- find-first-entity-tx-within-range [i min max eid]
+  (let [prefix-size (+ c/index-id-size c/id-size)
+        seek-k (c/encode-entity+z+tx-id-key-to
+                (.get idx/seek-buffer-tl)
+                eid
+                min)]
+    (loop [k (kv/seek i seek-k)]
+      (when (and k (mem/buffers=? seek-k k prefix-size))
+        (let [z (c/decode-entity+z+tx-id-key-as-z-number-from k)]
+          (if (morton/morton-number-within-range? min max z)
+            (let [entity-tx (idx/safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
+                  v (kv/value i)]
+              (if-not (mem/buffers=? c/nil-id-buffer v)
+                [(c/->id-buffer (.eid entity-tx))
+                 (idx/enrich-entity-tx entity-tx v)
+                 z]
+                [::deleted-entity entity-tx z]))
+            (let [[litmax bigmin] (morton/morton-range-search min max z)]
+              (when-not (neg? (.compareTo ^Comparable bigmin z))
+                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
+                                   (.get idx/seek-buffer-tl)
+                                   eid
+                                   bigmin)))))))))))
+
+(defn- find-entity-tx-within-range-with-highest-valid-time [i min max eid prev-candidate]
+  (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eid)]
+    (let [[^long x ^long y] (morton/morton-number->longs z)
+          min-x (long (first (morton/morton-number->longs min)))
+          max-x (dec x)]
+      (if (and (not (pos? (Long/compareUnsigned min-x max-x)))
+               (not= y -1))
+        (let [min (morton/longs->morton-number
+                   min-x
+                   (unchecked-inc y))
+              max (morton/longs->morton-number
+                   max-x
+                   -1)]
+          (recur i min max eid candidate))
+        candidate))
+    prev-candidate))
 
 (defn- ->entity-tx [[k v]]
   (-> (c/decode-entity+vt+tt+tx-id-key-from k)
@@ -239,9 +281,29 @@
                                            entity-tx)
                           (lazy-seq (step (kv/next i))))))))))
 
-  (entity-as-of [this valid-time transact-time eid]
+  (entity-as-of [this eid valid-time transact-time]
     (with-open [i (kv/new-iterator snapshot)]
-      (idx/entity-as-of i valid-time transact-time eid)))
+      (let [prefix-size (+ c/index-id-size c/id-size)
+            eid-buffer (c/->id-buffer eid)
+            seek-k (c/encode-entity+vt+tt+tx-id-key-to
+                    (.get idx/seek-buffer-tl)
+                    eid-buffer
+                    valid-time
+                    transact-time
+                    nil)]
+        (loop [k (kv/seek i seek-k)]
+          (when (and k (mem/buffers=? seek-k k prefix-size))
+            (let [entity-tx (idx/safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
+                  v (kv/value i)]
+              (if (<= (compare (.tt entity-tx) transact-time) 0)
+                (when-not (mem/buffers=? c/nil-id-buffer v)
+                  (idx/enrich-entity-tx entity-tx v))
+                (if morton/*use-space-filling-curve-index?*
+                  (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
+                    (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
+                      (when-not (= ::deleted-entity k)
+                        v)))
+                  (recur (kv/next i))))))))))
 
   (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end))

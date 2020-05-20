@@ -36,36 +36,33 @@
   (let [content-hash (c/new-id picasso)
         valid-time #inst "2018-05-21"
         {:crux.tx/keys [tx-time tx-id]}
-        (fix/submit+await-tx [[:crux.tx/put picasso valid-time]])
-        expected-entities [(c/map->EntityTx {:eid          picasso-eid
-                                             :content-hash content-hash
-                                             :vt           valid-time
-                                             :tt           tx-time
-                                             :tx-id        tx-id})]]
+        (fix/submit+await-tx [[:crux.tx/put picasso valid-time]])]
 
     (with-open [index-store (db/open-index-store (:indexer *api*))]
-      ;; TODO shouldn't grab snapshot out of index-store
-      (let [snapshot (:snapshot index-store)]
-        (t/testing "can see entity at transact and valid time"
-          (t/is (= expected-entities
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
+      (t/testing "can see entity at transact and valid time"
+        (t/is (= (c/map->EntityTx {:eid picasso-eid
+                                   :content-hash content-hash
+                                   :vt valid-time
+                                   :tt tx-time
+                                   :tx-id tx-id})
+                 (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-time))))
 
-        (t/testing "cannot see entity before valid or transact time"
-          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" tx-time)))
-          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time #inst "2018-05-20"))))
+      (t/testing "cannot see entity before valid or transact time"
+        (t/is (nil? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" tx-time)))
+        (t/is (nil? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso tx-time #inst "2018-05-20"))))
 
-        (t/testing "can see entity after valid or transact time"
-          (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" tx-time)))
-          (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
+      (t/testing "can see entity after valid or transact time"
+        (t/is (some? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-22" tx-time)))
+        (t/is (some? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-time))))
 
-        (t/testing "can see entity history"
-          (with-open [history (db/open-entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc {})]
-            (t/is (= [(c/map->EntityTx {:eid picasso-eid
-                                        :content-hash content-hash
-                                        :vt valid-time
-                                        :tt tx-time
-                                        :tx-id tx-id})]
-                     (iterator-seq history)))))))
+      (t/testing "can see entity history"
+        (with-open [history (db/open-entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc {})]
+          (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                      :content-hash content-hash
+                                      :vt valid-time
+                                      :tt tx-time
+                                      :tx-id tx-id})]
+                   (iterator-seq history))))))
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
@@ -75,15 +72,15 @@
              new-tx-id   :crux.tx/tx-id}
             (fix/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= [(c/map->EntityTx {:eid picasso-eid
-                                      :content-hash new-content-hash
-                                      :vt new-valid-time
-                                      :tt new-tx-time
-                                      :tx-id new-tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
+        (with-open [index-store (db/open-index-store (:indexer *api*))]
+          (t/is (= (c/map->EntityTx {:eid picasso-eid
+                                     :content-hash new-content-hash
+                                     :vt new-valid-time
+                                     :tt new-tx-time
+                                     :tx-id new-tx-id})
+                   (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
 
-          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
+          (t/is (nil? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" #inst "2018-05-21"))))))
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
@@ -93,19 +90,19 @@
              new-tx-id   :crux.tx/tx-id}
             (fix/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-          (t/is (= [(c/map->EntityTx {:eid picasso-eid
-                                      :content-hash new-content-hash
-                                      :vt new-valid-time
-                                      :tt new-tx-time
-                                      :tx-id new-tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid picasso-eid
-                                      :content-hash content-hash
-                                      :vt valid-time
-                                      :tt tx-time
-                                      :tx-id tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time tx-time))))
+        (with-open [index-store (db/open-index-store (:indexer *api*))]
+          (t/is (= (c/map->EntityTx {:eid picasso-eid
+                                     :content-hash new-content-hash
+                                     :vt new-valid-time
+                                     :tt new-tx-time
+                                     :tx-id new-tx-id})
+                   (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
+          (t/is (= (c/map->EntityTx {:eid picasso-eid
+                                     :content-hash content-hash
+                                     :vt valid-time
+                                     :tt tx-time
+                                     :tx-id tx-id})
+                   (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time tx-time))))
 
         (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -117,29 +114,26 @@
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-              (t/is (= [(c/map->EntityTx {:eid picasso-eid
-                                          :content-hash new-content-hash
-                                          :vt new-valid-time
-                                          :tt new-tx-time
-                                          :tx-id new-tx-id})]
-                       (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
+            (with-open [index-store (db/open-index-store (:indexer *api*))]
+              (t/is (= (c/map->EntityTx {:eid picasso-eid
+                                         :content-hash new-content-hash
+                                         :vt new-valid-time
+                                         :tt new-tx-time
+                                         :tx-id new-tx-id})
+                       (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
 
-              (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
-                                      (first)
-                                      :tx-id))))))
+              (t/is (= prev-tx-id
+                       (:tx-id (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso prev-tx-time prev-tx-time)))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
-            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
-              (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
+            (with-open [index-store (db/open-index-store (:indexer *api*))]
+              (t/is (nil? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
               (t/testing "first version of entity is still visible in the past"
-                (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] valid-time new-tx-time)
-                                   (first)
-                                   :tx-id)))))))))
+                (t/is (= tx-id (:tx-id (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-time))))))))))
 
     (t/testing "can retrieve history of entity"
       (with-open [index-store (db/open-index-store (:indexer *api*))
@@ -406,17 +400,17 @@
     (db/submit-docs (:document-store *api*) {content-hash picasso})
     (db/index-docs (:indexer *api*) {content-hash picasso})
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [index-store (db/open-index-store (:indexer *api*))]
       (t/is (= {content-hash picasso}
-               (db/get-objects (:object-store *api*) snapshot #{content-hash})))
+               (db/get-objects (:object-store *api*) (:snapshot index-store) #{content-hash})))
 
       (t/testing "non existent docs are ignored"
         (t/is (= {content-hash picasso}
                  (db/get-objects (:object-store *api*)
-                                 snapshot
+                                 (:snapshot index-store)
                                  [content-hash
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects (:object-store *api*) snapshot #{})))))))
+        (t/is (empty? (db/get-objects (:object-store *api*) (:snapshot index-store) #{})))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
@@ -538,19 +532,17 @@
         tx (fix/submit+await-tx (for [n (range number-of-versions)]
                                   [:crux.tx/put (assoc ivan :version n) (Date. (+ (.getTime start-valid-time) (inc (long n))))]))]
 
-    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
+    (with-open [index-store (db/open-index-store (:indexer *api*))]
       (let [baseline-time (let [start-time (System/nanoTime)
                                 valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
-                              (t/is (= valid-time (-> (idx/entities-at snapshot [:ivan] valid-time (Date.))
-                                                      (first)
-                                                      :vt))))
+                              (t/is (= valid-time (:vt (db/entity-as-of index-store :ivan valid-time (Date.))))))
                             (- (System/nanoTime) start-time))]
 
         (let [start-time (System/nanoTime)
               valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
           (t/testing "no version is visible before transactions"
-            (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
+            (t/is (nil? (db/entity-as-of index-store :ivan valid-time valid-time)))
             (let [corrections-time (- (System/nanoTime) start-time)]
               ;; TODO: This can be a bit flaky. This assertion was
               ;; mainly there to prove the opposite, but it has been
