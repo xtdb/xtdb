@@ -138,13 +138,11 @@
               index-store (db/open-index-store indexer)
               tx-log (-> (iterator-seq tx-log-iterator)
                          (->> (filter #(db/tx-failed? indexer (:crux.tx/tx-id %))))
-                         (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id
-                                                              crux.tx.event/tx-events] :as tx-log-entry}]
+                         (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events]
+                                                       :as tx-log-entry}]
                                                    (-> tx-log-entry
                                                        (dissoc :crux.tx.event/tx-events)
-                                                       (assoc :crux.api/tx-ops
-                                                              (->> tx-events
-                                                                   (mapv #(tx/tx-event->tx-op % index-store)))))))))]
+                                                       (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events)))))))]
 
           (cio/->cursor (fn []
                           (.close index-store)
@@ -179,7 +177,7 @@
                                     (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
                                     (when (:with-tx-ops? event-opts)
                                       (with-open [index-store (db/open-index-store indexer)]
-                                        {:crux/tx-ops (mapv #(tx/tx-event->tx-op % index-store) tx-events)}))))))))
+                                        {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)}))))))))
 
   (latestCompletedTx [this]
     (db/latest-completed-tx indexer))

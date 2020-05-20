@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.tx.conform
-  (:require [crux.codec :as c]))
+  (:require [crux.codec :as c]
+            [crux.db :as db]))
 
 (defn- check-eid [eid op]
   (when-not (and eid (c/valid-id? eid) (not (string? eid)))
@@ -131,3 +132,45 @@
 
 (defmethod ->tx-event ::default [tx-op]
   (throw (IllegalArgumentException. (str "invalid op: " (pr-str tx-op)))))
+
+(defmulti <-tx-event first
+  :default ::default)
+
+(defmethod <-tx-event :crux.tx/put [evt]
+  (zipmap [:op :eid :content-hash :start-valid-time :end-valid-time] evt))
+
+(defmethod <-tx-event :crux.tx/delete [evt]
+  (zipmap [:op :eid :start-valid-time :end-valid-time] evt))
+
+(defmethod <-tx-event :crux.tx/cas [evt]
+  (zipmap [:op :eid :old-content-hash :new-content-hash :valid-time] evt))
+
+(defmethod <-tx-event :crux.tx/match [evt]
+  (zipmap [:op :eid :content-hash :valid-time] evt))
+
+(defmethod <-tx-event :crux.tx/evict [[op eid & args]]
+  (let [[start-valid-time end-valid-time] (filter inst? args)
+        [keep-latest? keep-earliest?] (filter boolean? args)]
+    {:op :crux.tx/evict
+     :eid eid
+     :start-valid-time start-valid-time, :end-valid-time end-valid-time
+     :keep-latest? keep-latest?, :keep-earliest? keep-earliest?}))
+
+(defmethod <-tx-event :crux.tx/fn [evt]
+  (zipmap [:op :fn-eid :args-content-hash] evt))
+
+(defn tx-events->docs [document-store tx-events]
+  (->> tx-events
+       (map <-tx-event)
+       (mapcat #(keep % [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
+       (db/fetch-docs document-store)))
+
+(defn tx-events->tx-ops [document-store tx-events]
+  (let [docs (tx-events->docs document-store tx-events)]
+    (for [[op id & args] tx-events]
+      (into [op]
+            (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
+                      [(c/new-id id)])
+
+                    (for [arg args]
+                      (get docs arg arg)))))))
