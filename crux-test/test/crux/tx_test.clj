@@ -139,19 +139,7 @@
       (with-open [index-store (db/open-index-store (:indexer *api*))
                   history (db/open-entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc
                                                   {:with-corrections? true})]
-        (let [picasso-history (iterator-seq history)]
-          (t/is (= 5 (count (map :content-hash picasso-history))))
-          ;; TODO shouldn't go grab the snapshot out
-          (with-open [i (kv/new-iterator (:snapshot index-store))]
-            (doseq [{:keys [content-hash]} picasso-history
-                    :when (not (= (c/new-id nil) content-hash))
-                    :let [version-k (c/encode-aecv-key-to
-                                     nil
-                                     (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                     (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                     (c/->id-buffer content-hash)
-                                     (c/->value-buffer "Pablo"))]]
-              (t/is (kv/get-value (:snapshot index-store) version-k)))))))))
+        (t/is (= 5 (count (iterator-seq history))))))))
 
 (t/deftest test-can-cas-entity
   (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
@@ -263,8 +251,7 @@
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
-          ;; TODO shouldn't grab snapshot out
-          (t/is (empty? (->> (db/get-objects (:object-store *api*) (:snapshot index-store) (keep :content-hash picasso-history))
+          (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash picasso-history))
                              vals
                              (remove idx/evicted-doc?)))))))))
 
@@ -289,7 +276,7 @@
     (t/testing "no docs evicted yet"
       (with-open [index-store (db/open-index-store (:indexer *api*))
                   history (db/open-entity-history index-store picasso-id :desc {})]
-        (t/is (seq (->> (db/get-objects (:object-store *api*) (:snapshot index-store)
+        (t/is (seq (->> (db/fetch-docs (:document-store *api*)
                                         (->> (iterator-seq history)
                                              (keep :content-hash)))
                         vals
@@ -302,7 +289,7 @@
         (t/testing "eviction removes docs"
           (with-open [index-store (db/open-index-store (:indexer *api*))
                       history (db/open-entity-history index-store picasso-id :desc {})]
-            (t/is (empty? (->> (db/get-objects (:object-store *api*) (:snapshot index-store)
+            (t/is (empty? (->> (db/fetch-docs (:document-store *api*)
                                                (->> (iterator-seq history)
                                                     (keep :content-hash)))
                                vals
@@ -391,26 +378,6 @@
             (t/is (= []
                      (history-asc {:start {::db/valid-time t1},
                                    :end {::tx/tx-time t1}})))))))))
-
-(t/deftest test-can-store-doc
-  (let [content-hash (c/new-id picasso)]
-    (t/is (= 48 (count picasso)))
-    (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
-
-    (db/submit-docs (:document-store *api*) {content-hash picasso})
-    (db/index-docs (:indexer *api*) {content-hash picasso})
-
-    (with-open [index-store (db/open-index-store (:indexer *api*))]
-      (t/is (= {content-hash picasso}
-               (db/get-objects (:object-store *api*) (:snapshot index-store) #{content-hash})))
-
-      (t/testing "non existent docs are ignored"
-        (t/is (= {content-hash picasso}
-                 (db/get-objects (:object-store *api*)
-                                 (:snapshot index-store)
-                                 [content-hash
-                                  "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects (:object-store *api*) (:snapshot index-store) #{})))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
