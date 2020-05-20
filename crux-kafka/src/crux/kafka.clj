@@ -132,11 +132,7 @@
   db/TxLog
   (submit-tx [this tx-events]
     (try
-      (let [content-hashes (->> (set (map c/new-id (mapcat tx/tx-event->doc-hashes tx-events))))
-            tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
-                                  (-> (.headers) (.add (str :crux.tx/docs)
-                                                       (nippy/fast-freeze content-hashes))))
-                                (.send producer))]
+      (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
         (delay
          (let [record-meta ^RecordMetadata @tx-send-future]
            {::tx/tx-id (.offset record-meta)
