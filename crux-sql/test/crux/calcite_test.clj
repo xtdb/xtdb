@@ -343,7 +343,8 @@
 (t/deftest test-prepare-statement
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                         {:crux.db/id :malcolm :name" Malcolm" :homeworld "Mars" :age 25 :alive false}])
-  (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE NAME = ?" [1 "Ivan"]))))
+  (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE NAME = ?" [1 "Ivan"])))
+  (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE TRIM(NAME) = ?" [1 "Ivan"]))))
 
 (t/deftest test-sort
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
@@ -372,16 +373,19 @@
         afloat (float 1.0)]
     (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
                            :crux.sql.table/name "person"
-                           :crux.sql.table/query '{:find [?id ?name ?born ?afloat]
+                           :crux.sql.table/query '{:find [?id ?name ?born ?afloat ?adecimal]
                                                    :where [[?id :name ?name]
                                                            [?id :born ?born]
-                                                           [?id :afloat ?afloat]]}
+                                                           [?id :afloat ?afloat]
+                                                           [?id :adecimal ?adecimal]]}
                            :crux.sql.table/columns '{?id :keyword
                                                      ?name :varchar
                                                      ?born :timestamp
-                                                     ?afloat :float}}
-                          {:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :born born :afloat afloat}])
-    (t/is (= [{:id ":human/ivan", :name "Ivan" :born born :afloat afloat}] (query "SELECT * FROM PERSON"))))
+                                                     ?afloat :float
+                                                     ?adecimal :decimal}}
+                          {:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :born born :afloat afloat :adecimal 1.3M}])
+    (t/is (= [{:id ":human/ivan", :name "Ivan" :born born :afloat afloat :adecimal 1.3M}] (query "SELECT * FROM PERSON")))
+    (t/is (first (query "SELECT NAME FROM PERSON WHERE ADECIMAL = 1.3"))))
   (t/testing "restricted types"
     (t/is (thrown-with-msg? java.lang.Exception #"Unrecognised java.sql.Types: :time"
                             (do
@@ -532,17 +536,42 @@
   (t/is (= [{:age 5}] (query "SELECT mod((AGE + 2), 6) AS AGE FROM PERSON"))))
 
 (t/deftest test-calcite-built-in-fns
-  (fix/transact! *api* [{:crux.db/id :human/ivan :name " Ivan " :homeworld "Earth" :alive true :age 21}])
+  (fix/transact! *api* [{:crux.db/id :human/ivan :name " Ivan " :homeworld "earth" :alive true :age 21}])
 
-  ;; (t/is (= [{:lname "ivan"}] (query "SELECT LOWER(NAME) AS LNAME FROM PERSON")))
+  (t/testing "single arg fns"
+    (t/is (= [{:lname " ivan "}] (query "SELECT LOWER(NAME) AS LNAME FROM PERSON")))
+    (t/is (= [{:lname " IVAN "}] (query "SELECT UPPER(NAME) AS LNAME FROM PERSON")))
+    (t/is (= [{:planet "Earth"}] (query "SELECT INITCAP(HOMEWORLD) AS PLANET FROM PERSON"))))
 
-  ;; (t/is (:current_date (first (query "SELECT current_date FROM PERSON"))))
+  (t/testing "literals"
+    (t/is (= [{:lname " ivan "}] (query "SELECT LOWER(' IVAN ') AS LNAME FROM PERSON"))))
+  (t/testing "nested"
+    (t/is (= [{:planet "Earth"}] (query "SELECT INITCAP(LOWER(HOMEWORLD)) AS PLANET FROM PERSON"))))
+
+  ;; ;; (t/is (:current_date (first (query "SELECT current_date FROM PERSON"))))
 
   (t/is (= "Ivan" (:name2 (first (query "SELECT TRIM(NAME) AS NAME2 FROM PERSON")))))
-  (t/is (= " Ivan asd" (:name2 (first (query "SELECT NAME, {fn CONCAT(NAME, 'qs')} AS NAME2 FROM PERSON")))))
-  (t/is (= "Ivan asd" (:name2 (first (query "SELECT TRIM({fn CONCAT(NAME, 'qs')}) AS NAME2 FROM PERSON"))))))
+  (t/is (= " Ivan qs" (:name2 (first (query "SELECT NAME, {fn CONCAT(NAME, 'qs')} AS NAME2 FROM PERSON")))))
+  (t/is (= "Ivan qs" (:name2 (first (query "SELECT TRIM({fn CONCAT(NAME, 'qs')}) AS NAME2 FROM PERSON")))))
+  (t/is (= 21 (:age (first (query "SELECT CEIL(AGE) AS AGE FROM PERSON")))))
+  (t/is (= 1 (:age (first (query "SELECT CEIL(1) AS AGE FROM PERSON")))))
+  (t/is (first (query "SELECT NAME FROM PERSON WHERE CEIL(AGE) = 21")))
+
+  (let [q  "SELECT CEIL(1.1) FROM PERSON"]
+    (t/is (= 2M (val (ffirst (query q)))))
+    (t/is (= (str "CruxToEnumerableConverter\n"
+                  "  CruxProject(EXPR$0=[CEIL(1.1:DECIMAL(2, 1))])\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n") (explain q))))
+
+  ;; (let [q  "SELECT TRUNCATE(1.1, 1) FROM PERSON"]
+  ;;   ;; The washing of the lambda, could fix this by passing some type info, or we wash the literals though
+  ;;   (t/is (= 2M (val (ffirst (query q))))))
+  )
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
   (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))
+
+
+;; Known Issues (integers are washed to longs via the EDN transform), this breaks subsequent lambda calls
