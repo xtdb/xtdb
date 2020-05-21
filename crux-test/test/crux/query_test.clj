@@ -2828,3 +2828,21 @@
            (api/q (api/db *api*)
                   '{:find [?name flag?], :where [[?id :name ?name] [?id :flag? flag?]],
                     :args [{flag? nil}]}))))
+
+(t/deftest test-unused-args-still-binding-882
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :name "foo"}]])
+
+  (t/is (= #{["foo" false]}
+           (api/q (api/db *api*)
+                  '{:find [?name foo], :where [[?id :name ?name]],
+                    :args [{foo false}]})))
+
+  (t/is (= #{["foo" true]}
+           (api/q (api/db *api*)
+                  '{:find [?name foo], :where [[?id :name ?name]],
+                    :args [{foo true}]})))
+
+  (t/is (= #{["foo" nil]}
+           (api/q (api/db *api*)
+                  '{:find [?name foo], :where [[?id :name ?name]],
+                    :args [{foo nil}]}))))

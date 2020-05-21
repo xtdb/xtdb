@@ -417,7 +417,7 @@
     (UnaryJoinIteratorState.
      idx
      (or value c/empty-buffer)
-     (when (and result-name results)
+     (when (and result-name value)
        {result-name results}))))
 
 (defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
