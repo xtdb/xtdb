@@ -9,7 +9,10 @@
             [crux.calcite.types]
             crux.db)
   (:import crux.calcite.CruxTable
-           [crux.calcite.types SQLCondition ArithmeticFunction CalciteLambda SQLPredicate WrapLiteral]
+           [crux.calcite.types SQLCondition ArithmeticFunction CalciteLambda SQLPredicate]
+           org.apache.calcite.adapter.enumerable.RexToLixTranslator
+           org.apache.calcite.adapter.enumerable.RexImpTable
+           org.apache.calcite.adapter.enumerable.RexImpTable$NullAs
            [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
            [java.util List Properties WeakHashMap]
@@ -54,9 +57,6 @@
       Function2
       (.apply ^Function2 l (first args) (second args))
       (.apply ^Function0 l))))
-
-(defn -literal [v]
-  (WrapLiteral. v))
 
 ;; Utils:
 
@@ -118,11 +118,14 @@
 (declare ->ast)
 (declare ->operand)
 
+(def ^:private ^JavaTypeFactory jtf (JavaTypeFactoryImpl.))
+
+(defn- ->literal-expression [^RexLiteral l]
+  (RexToLixTranslator/translateLiteral l, (.getType ^RexLiteral l), jtf, RexImpTable$NullAs/NOT_POSSIBLE))
+
 (defn- ->lambda-expression [^MethodCallExpression m parameter-expressions operands]
   (let [l (Expressions/lambda m ^Iterable parameter-expressions)]
     (CalciteLambda. (gensym) l operands)))
-
-(def ^:private ^JavaTypeFactory jtf (JavaTypeFactoryImpl.))
 
 (defn- ^MethodCallExpression ->method-call-expression [m parameter-expressions]
   (if (instance? Method m)
@@ -146,8 +149,7 @@
                      SqlStdOperatorTable/UPPER (.method BuiltInMethod/UPPER)
                      SqlStdOperatorTable/INITCAP (.method BuiltInMethod/INITCAP)
                      SqlStdOperatorTable/CONCAT (.method BuiltInMethod/STRING_CONCAT)
-;;                     SqlStdOperatorTable/TRUNCATE "struncate"
-                     }
+                     SqlStdOperatorTable/TRUNCATE "struncate"}
                     (.getOperator n))]
         (method->lambda n schema m))
       (condp = (.getOperator n)
@@ -209,6 +211,7 @@
   (let [args (atom {})
         sql-ops (atom [])
         linq-lambdas (atom [])
+        literals (atom {})
         clauses (postwalk (fn [x]
                             (condp instance? x
 
@@ -228,9 +231,9 @@
                                 sym)
 
                               RexLiteral
-                              (if (= "DECIMAL" (str (.getSqlTypeName (.getType ^RexLiteral x))))
-                                (.getValue3 ^RexLiteral x)
-                                (.getValue2 ^RexLiteral x))
+                              (let [s (gensym)]
+                                (swap! literals assoc s x)
+                                s)
 
                               ;; If used as an argument, the literal should already have been extracted,
                               ;; so we can assume it's being used in a conditional (OR/AND/NOT)
@@ -259,28 +262,28 @@
     {:clauses clauses
      :calc-clauses calc-clauses
      :lambdas @linq-lambdas
+     :literals @literals
      :args @args}))
 
 (defn enrich-filter [schema ^RexNode filter]
   (log/debug "Enriching with filter" filter)
-  (let [{:keys [clauses calc-clauses lambdas args]} (post-process schema (->ast filter schema))]
+  (let [{:keys [clauses calc-clauses lambdas literals args]} (post-process schema (->ast filter schema))]
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value clauses) calc-clauses)
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args)
+        (update :literals merge literals)
         (update :lambdas concat lambdas))))
 
 (defn enrich-project [schema projects]
   (log/debug "Enriching project with" projects)
-  (let [{:keys [clauses calc-clauses lambdas]} (->> (for [rex-node (map #(.-left ^Pair %) projects)]
-                                                      (->operand rex-node schema))
-                                                    (post-process schema))
-        literal->syms (into {} (map #(vector % (gensym)) (remove symbol? clauses)))
-        literal-clauses (map (fn [[literal sym]] [(list 'crux.calcite/-literal literal) sym]) literal->syms)
-        clauses (map #(get literal->syms % %) clauses)]
+  (let [{:keys [clauses calc-clauses lambdas literals]} (->> (for [rex-node (map #(.-left ^Pair %) projects)]
+                                                               (->operand rex-node schema))
+                                                             (post-process schema))]
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses literal-clauses)
+        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
         (assoc-in [:crux.sql.table/query :find] (vec clauses))
+        (update :literals merge literals)
         (update :lambdas concat lambdas))))
 
 (defn enrich-join [s1 s2 join-type condition]
@@ -291,7 +294,9 @@
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (-> s1
                (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
-               (update-in [:crux.sql.table/query :args] (partial apply merge)))]
+               (update-in [:crux.sql.table/query :args] (partial apply merge))
+               (update :literals merge (:literals s2))
+               (update :lambdas concat (:lambdas s2)))]
     (enrich-filter s3 condition)))
 
 (defn enrich-sort-by [schema sort-fields]
@@ -315,14 +320,11 @@
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
 (defn- transform-result [tuple]
-  (let [tuple (map #(if (instance? WrapLiteral %)
-                      ;; literal numbers expected to be ints:
-                      (if (int? (.l ^WrapLiteral %)) (int (.l ^WrapLiteral %)) (.l ^WrapLiteral %))
-                      (or (and (float? %) (double %))
-                          ;; Calcite enumerator wants millis for timestamps:
-                          (and (inst? %) (inst-ms %))
-                          (and (keyword? %) (str %))
-                          %))
+  (let [tuple (map #(or (and (float? %) (double %))
+                        ;; Calcite enumerator wants millis for timestamps:
+                        (and (inst? %) (inst-ms %))
+                        (and (keyword? %) (str %))
+                        %)
                    tuple)]
     (if (= 1 (count tuple))
       (first tuple)
@@ -349,23 +351,32 @@
               (close []
                 (.close snapshot))))))))
 
-(defn ^Enumerable scan [node ^String schema ^DataContext data-context x]
+(defn ^Enumerable scan [node ^String schema ^DataContext data-context x literals]
+  (def l literals)
   (try
-    (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
-          query (update query :args (fn [args] [(into {:data-context data-context
-                                                       :lambdas (zipmap (map #(.-left ^Pair %) x)
-                                                                        (map #(.-right ^Pair %) x))}
-                                                      (map (fn [[k v]]
-                                                             [v (.get data-context k)])
-                                                           args))]))]
-      (log/debug "Executing query:" query)
-      (perform-query node (.get data-context "VALIDTIME") query))
-    (catch Throwable e
-      (log/error e)
-      (throw e))))
+      (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
+            query (update query :args (fn [args] [(merge {:data-context data-context
+                                                          :lambdas (zipmap (map #(.-left ^Pair %) x)
+                                                                           (map #(.-right ^Pair %) x))}
+                                                         (into {} (map (fn [^Pair p]
+                                                                         [(symbol (.-left p)) (.-right p)])
+                                                                       literals))
+                                                         (into {} (map (fn [[k v]]
+                                                                         [v (.get data-context k)])
+                                                                       args)))]))]
+        (log/debug "Executing query:" query)
+        (perform-query node (.get data-context "VALIDTIME") query))
+      (catch Throwable e
+        (log/error e)
+        (throw e))))
 
 (defn ->expr [schema]
-  (Expressions/constant (prn-str (dissoc schema :lambdas))))
+  (Expressions/constant (prn-str (dissoc schema :lambdas :literals))))
+
+(defn ->literals [schema]
+  (Expressions/newArrayInit Pair ^List (map (fn [[k l]]
+                                              (Expressions/constant (Pair. (str k) (->literal-expression l))))
+                                            (:literals schema))))
 
 (defn ->fn [schema]
   (Expressions/newArrayInit Pair ^List (map (fn [^CalciteLambda l]
