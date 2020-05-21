@@ -269,8 +269,9 @@
          (into {}))))
 
 (defn- arg-for-var [arg var]
-  (or (get arg (symbol (name var)))
-      (get arg (keyword (name var)))))
+  (second
+    (or (find arg (symbol (name var)))
+        (find arg (keyword (name var))))))
 
 (defn- update-binary-index! [index-store {:keys [entity-resolver-fn]} binary-idx vars-in-join-order var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)

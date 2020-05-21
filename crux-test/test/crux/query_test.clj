@@ -2808,3 +2808,23 @@
                                   {})
                 :vars-in-join-order
                 (filter #{'m 'e})))))
+
+(t/deftest test-binds-against-false-arg-885
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :name "foo", :flag? false}]
+                        [:crux.tx/put {:crux.db/id :bar, :name "bar", :flag? true}]
+                        [:crux.tx/put {:crux.db/id :baz, :name "baz", :flag? nil}]])
+
+  (t/is (= #{["foo" false]}
+           (api/q (api/db *api*)
+                  '{:find [?name flag?], :where [[?id :name ?name] [?id :flag? flag?]],
+                    :args [{flag? false}]})))
+
+  (t/is (= #{["bar" true]}
+           (api/q (api/db *api*)
+                  '{:find [?name flag?], :where [[?id :name ?name] [?id :flag? flag?]],
+                    :args [{flag? true}]})))
+
+  (t/is (= #{["baz" nil]}
+           (api/q (api/db *api*)
+                  '{:find [?name flag?], :where [[?id :name ?name] [?id :flag? flag?]],
+                    :args [{flag? nil}]}))))
