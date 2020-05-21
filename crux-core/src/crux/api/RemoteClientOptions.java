@@ -1,0 +1,16 @@
+package crux.api;
+
+import java.util.Date;
+import java.util.function.Supplier;
+
+public class RemoteClientOptions {
+    /**
+     * A supplier function which provides JWT authorization strings for the remote API client to use
+     * to connect to a authenticated HTTP Server.
+     */
+    public final Supplier<String> jwtSupplier;
+
+    public RemoteClientOptions (Supplier<String> jwtSupplier) {
+        this.jwtSupplier = jwtSupplier;
+    }
+}

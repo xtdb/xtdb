@@ -6,11 +6,12 @@
             [clojure.tools.logging :as log])
   (:import [crux.api Crux ICruxAPI ICruxIngestAPI
             ICruxAsyncIngestAPI ICruxDatasource ICursor
-            HistoryOptions HistoryOptions$SortOrder]
+            HistoryOptions HistoryOptions$SortOrder
+            RemoteClientOptions]
            java.io.Closeable
            java.util.Date
            java.time.Duration
-           java.util.function.Consumer))
+           [java.util.function Supplier Consumer]))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 (s/def :crux.db/evicted? boolean?)
@@ -432,6 +433,11 @@
   ^ICruxAPI [options]
   (Crux/startNode options))
 
+(defn- ->RemoteClientOptions [{:keys [->jwt-token] :as opts}]
+  (RemoteClientOptions. (when ->jwt-token
+                          (reify Supplier
+                            (get [_] (->jwt-token))))))
+
 (defn new-api-client
   "Creates a new remote API client ICruxAPI. The remote client
   requires valid and transaction time to be specified for all
@@ -442,10 +448,13 @@
   information.
 
   url the URL to a Crux HTTP end-point.
+  (OPTIONAL) auth-supplier a supplier function which provides an auth token string for the Crux HTTP end-point.
 
   returns a remote API client."
-  ^ICruxAPI [url]
-  (Crux/newApiClient url))
+  (^ICruxAPI [url]
+   (Crux/newApiClient url))
+  (^ICruxAPI [url opts]
+   (Crux/newApiClient url (->RemoteClientOptions opts))))
 
 (defn new-ingest-client
   "Starts an ingest client for transacting into Kafka without running a

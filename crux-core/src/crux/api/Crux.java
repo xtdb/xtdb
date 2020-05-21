@@ -1,7 +1,6 @@
 package crux.api;
 
 import java.util.Map;
-
 import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
 import clojure.lang.IFn;
@@ -57,6 +56,23 @@ public class Crux {
      */
     public static ICruxAPI newApiClient(String url) {
         return (ICruxAPI) resolve("crux.remote-api-client/new-api-client").invoke(url);
+    }
+
+    /**
+     * Creates a new remote API client ICruxAPI. The remote client
+     * requires valid and transaction time to be specified for all
+     * calls to {@link ICruxAPI#db()}.
+     *
+     * NOTE: requires crux-http-client on the classpath,
+     * see crux.remote-api-client/*internal-http-request-fn*
+     * for more information.
+     *
+     * @param url the URL to a Crux HTTP end-point.
+     * @param options an {@link RemoteClientOptions} object to start the api client with..
+     * @return    a remote API client.
+     */
+    public static ICruxAPI newApiClient(String url, RemoteClientOptions options) {
+        return (ICruxAPI) resolve("crux.remote-api-client/new-api-client").invoke(url, options);
     }
 
     /**
