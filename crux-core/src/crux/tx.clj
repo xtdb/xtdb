@@ -251,42 +251,32 @@
 (def ^:dynamic *current-tx*)
 
 ;; TODO: Rename :crux.kv/stats on next index bump.
-(defn- update-stats [{:keys [indexer object-store ^ExecutorService stats-executor] :as tx-consumer} docs-stats]
+(defn- update-stats [{:keys [indexer ^ExecutorService stats-executor] :as tx-consumer} docs-stats]
   (let [stats-fn ^Runnable #(->> (apply merge-with + (db/read-index-meta indexer :crux.kv/stats) docs-stats)
                                  (db/store-index-meta indexer :crux.kv/stats))]
     (if stats-executor
       (.submit stats-executor stats-fn)
       (stats-fn))))
 
-(defn index-docs [{:keys [bus indexer object-store] :as tx-consumer} docs]
+(defn index-docs [{:keys [bus indexer] :as tx-consumer} docs]
   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
     (throw (IllegalArgumentException.
             (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
   (with-open [index-store (db/open-index-store indexer)]
-    (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
-
-    (when-let [docs (->> docs
-                         (into {} (remove (fn [[k doc]]
-                                            ;; TODO don't refer to object-store here
-                                            ;; this is mainly to stop Kafka docs getting added twice to stats
-                                            (or (idx/keep-non-evicted-doc (db/get-single-object object-store index-store (c/new-id k)))
-                                                (idx/evicted-doc? doc)))))
-                         not-empty)]
+    (when (seq docs)
       (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-      (let [bytes-indexed (db/index-docs indexer docs)
-            docs-stats (->> (vals docs)
-                            (map #(idx/doc-predicate-stats % false)))]
+      (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
+        (update-stats tx-consumer (->> (vals indexed-docs)
+                                       (map #(idx/doc-predicate-stats % false))))
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids (set (keys docs))
-                       :av-count (->> (vals docs) (apply concat) (count))
-                       :bytes-indexed bytes-indexed})
+                       :av-count (->> (vals indexed-docs) (apply concat) (count))
+                       :bytes-indexed bytes-indexed})))))
 
-        (update-stats tx-consumer docs-stats)))))
-
-(defn index-tx [{:keys [bus indexer object-store kv-store document-store] :as tx-consumer}
+(defn index-tx [{:keys [bus indexer kv-store document-store] :as tx-consumer}
                 {::keys [tx-time tx-id] :as tx}
                 tx-events]
   (s/assert ::txe/tx-events tx-events)
@@ -313,11 +303,11 @@
 
         (if committed?
           (do (when-let [tombstones (not-empty (:tombstones res))]
-                (let [existing-docs (db/get-objects object-store index-store (keys tombstones))]
-                  (db/put-objects object-store tombstones)
-                  (db/unindex-docs indexer existing-docs)
-                  (update-stats tx-consumer (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true)))))
+                (let [{:keys [unindexed-docs]} (db/unindex-docs indexer tombstones)]
+                  (update-stats tx-consumer (->> (vals unindexed-docs)
+                                                 (map #(idx/doc-predicate-stats % true)))))
                 (db/submit-docs document-store tombstones))
+
               (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
           (do
@@ -371,7 +361,7 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log object-store bus]
+(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log bus]
   db/TxConsumer
   (consumer-error [_] @!error)
 
@@ -386,14 +376,13 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def tx-consumer
-  {:start-fn (fn [{:crux.node/keys [indexer document-store tx-log object-store bus query-engine]} args]
+  {:start-fn (fn [{:crux.node/keys [indexer document-store tx-log bus query-engine]} args]
                (let [stats-executor (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))
                      tx-consumer (map->TxConsumer
                                   {:!error (atom nil)
                                    :indexer indexer
                                    :document-store document-store
                                    :tx-log tx-log
-                                   :object-store object-store
                                    :bus bus
                                    :query-engine query-engine
                                    :stats-executor stats-executor})]
@@ -402,7 +391,7 @@
                         (doto (Thread. #(index-tx-log tx-consumer args))
                           (.setName "crux-tx-consumer")
                           (.start)))))
-   :deps [:crux.node/indexer :crux.node/document-store :crux.node/tx-log :crux.node/object-store :crux.node/bus :crux.node/query-engine]
+   :deps [:crux.node/indexer :crux.node/document-store :crux.node/tx-log :crux.node/bus :crux.node/query-engine]
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})
