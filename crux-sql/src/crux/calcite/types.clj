@@ -2,7 +2,7 @@
   (:import org.apache.calcite.rex.RexCall
            org.apache.calcite.linq4j.tree.Expression))
 
-(defrecord SQLFunction [sym op operands])
+(defrecord ArithmeticFunction [sym op operands])
 
 (defrecord CruxKeywordFn [^RexCall r])
 
@@ -12,4 +12,4 @@
 
 (defrecord WrapLiteral [l])
 
-(defrecord SqlLambda [sym ^Expression e operands])
+(defrecord CalciteLambda [sym ^Expression e operands])

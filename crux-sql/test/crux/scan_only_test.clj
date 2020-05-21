@@ -23,6 +23,14 @@
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                         {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
 
+  (let [q "SELECT CEIL(21) FROM PERSON"]
+    (t/is (= 21
+             (val (ffirst (query q)))))
+    (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], expr#5=[21], expr#6=[CEIL($t5)], EXPR$0=[$t6])\n"
+                  "  CruxToEnumerableConverter\n"
+                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+             (explain q))))
+
   (t/testing "retrieve data"
     (let [q "SELECT PERSON.NAME FROM PERSON"]
       (t/is (= [{:name "Ivan"}

@@ -9,20 +9,24 @@
             [crux.calcite.types]
             crux.db)
   (:import crux.calcite.CruxTable
-           [crux.calcite.types SQLCondition SQLFunction SqlLambda SQLPredicate WrapLiteral]
-           java.lang.reflect.Field
+           [crux.calcite.types SQLCondition ArithmeticFunction CalciteLambda SQLPredicate WrapLiteral]
+           [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
            [java.util List Properties WeakHashMap]
+           org.apache.calcite.adapter.enumerable.EnumUtils
+           org.apache.calcite.adapter.java.JavaTypeFactory
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
            [org.apache.calcite.avatica.server HttpServer HttpServer$Builder]
            org.apache.calcite.DataContext
+           org.apache.calcite.jdbc.JavaTypeFactoryImpl
            org.apache.calcite.linq4j.Enumerable
-           org.apache.calcite.linq4j.function.Function1
-           [org.apache.calcite.linq4j.tree Expression Expressions]
+           [org.apache.calcite.linq4j.function Function0 Function1 Function2]
+           [org.apache.calcite.linq4j.tree Expression Expressions MethodCallExpression ParameterExpression]
            org.apache.calcite.rel.RelFieldCollation
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
-           [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode]
+           [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode RexVariable]
+           org.apache.calcite.runtime.SqlFunctions
            [org.apache.calcite.sql SqlFunction SqlKind SqlOperator]
            [org.apache.calcite.sql.fun SqlStdOperatorTable SqlTrimFunction$Flag]
            org.apache.calcite.sql.type.SqlTypeName
@@ -30,8 +34,7 @@
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
-(defn- vectorize-value [v]
-  (if (or (not (vector? v)) (= 1 (count v))) (vector v) v))
+;; Datalog fns:
 
 (defn -divide [x y]
   (let [z (/ x y)]
@@ -39,6 +42,28 @@
 
 (defn -mod [x y]
   (int (mod x y)))
+
+(defn -like [s pattern]
+  (SqlFunctions/like s pattern))
+
+(defn -lambda [id lambdas & args]
+  (let [l (lambdas id)]
+    (condp instance? l
+      Function1
+      (.apply ^Function1 l (first args))
+      Function2
+      (.apply ^Function2 l (first args) (second args))
+      (.apply ^Function0 l))))
+
+(defn -literal [v]
+  (WrapLiteral. v))
+
+;; Utils:
+
+(defn- vectorize-value [v]
+  (if (or (not (vector? v)) (= 1 (count v))) (vector v) v))
+
+;; SQL Operators:
 
 (def ^:private pred-fns
   {SqlKind/EQUALS '=
@@ -91,43 +116,76 @@
        (apply list 'and clause  (map #(vector (list 'identity %)) vars))))))
 
 (declare ->ast)
+(declare ->operand)
+
+(defn- ->lambda-expression [^MethodCallExpression m parameter-expressions operands]
+  (let [l (Expressions/lambda m ^Iterable parameter-expressions)]
+    (CalciteLambda. (gensym) l operands)))
+
+(def ^:private ^JavaTypeFactory jtf (JavaTypeFactoryImpl.))
+
+(defn- ^MethodCallExpression ->method-call-expression [m parameter-expressions]
+  (if (instance? Method m)
+    (crux.calcite.CruxUtils/lambda m (into-array Expression parameter-expressions))
+    (EnumUtils/call SqlFunctions m parameter-expressions)))
+
+(defn- method->lambda [^RexCall n schema m]
+  (let [parameter-expressions (mapv #(Expressions/parameter (.getJavaClass jtf (condp instance? %
+                                                                                 RexVariable
+                                                                                 (.getType ^RexVariable %)
+                                                                                 RexCall
+                                                                                 (.getType ^RexCall %)
+                                                                                 RexLiteral
+                                                                                 (.getType ^RexLiteral %))))
+                                    (.getOperands n))
+        m (->method-call-expression m parameter-expressions)]
+    (->lambda-expression m parameter-expressions (mapv #(->operand % schema) (.getOperands n)))))
+
+(defn linq-lambda [^RexCall n schema]
+  (or (when-let [m ({SqlStdOperatorTable/LOWER (.method BuiltInMethod/LOWER)
+                     SqlStdOperatorTable/UPPER (.method BuiltInMethod/UPPER)
+                     SqlStdOperatorTable/INITCAP (.method BuiltInMethod/INITCAP)
+                     SqlStdOperatorTable/CONCAT (.method BuiltInMethod/STRING_CONCAT)
+;;                     SqlStdOperatorTable/TRUNCATE "struncate"
+                     }
+                    (.getOperator n))]
+        (method->lambda n schema m))
+      (condp = (.getOperator n)
+        SqlStdOperatorTable/CEIL
+        (if (#{"BIGINT" "INTEGER" "SMALLINT" "TINYINT"} (.getName (.getSqlTypeName (.getType n))))
+          (->operand (first (.getOperands n)) schema)
+          (method->lambda n schema (.getName (.method BuiltInMethod/CEIL))))
+        SqlStdOperatorTable/SUBSTRING
+        (let [exprs [(Expressions/parameter String)
+                     (Expressions/constant (int (.getValue2 ^RexLiteral (nth (.getOperands n) 1))))
+                     (Expressions/constant (int (.getValue2 ^RexLiteral (nth (.getOperands n) 2))))]
+              operands [(first (.getOperands n))]
+              m (->method-call-expression (.method BuiltInMethod/SUBSTRING) exprs)]
+          (->lambda-expression m
+                               (filter #(instance? ParameterExpression %) exprs)
+                               (mapv #(->operand % schema) operands)))
+        SqlStdOperatorTable/TRIM
+        (let [f (.getValue ^RexLiteral (first (.getOperands n)))
+              left? (or (= SqlTrimFunction$Flag/BOTH f )
+                        (= SqlTrimFunction$Flag/LEADING f))
+              right? (or (= SqlTrimFunction$Flag/BOTH f )
+                         (= SqlTrimFunction$Flag/TRAILING f))
+              exprs [(Expressions/constant left?)
+                     (Expressions/constant right?)
+                     (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
+                     (Expressions/parameter String)
+                     (Expressions/constant true)]
+              operands [(nth (.getOperands n) 2)]
+              m (->method-call-expression (.method BuiltInMethod/TRIM) exprs)]
+          (->lambda-expression m
+                               (filter #(instance? ParameterExpression %) exprs)
+                               (mapv #(->operand % schema) operands)))
+        (throw (IllegalArgumentException. (str "Can't understand call " n))))))
 
 (defn- ->operand [o schema]
   (if (instance? RexInputRef o)
     (input-ref->attr o schema)
     (->ast o schema)))
-
-(def linq-lambdas
-  {SqlStdOperatorTable/TRIM
-   (fn [^RexCall n schema]
-     (let [f (.getValue ^RexLiteral (first (.getOperands n)))
-           left? (or (= SqlTrimFunction$Flag/BOTH f )
-                     (= SqlTrimFunction$Flag/LEADING f))
-           right? (or (= SqlTrimFunction$Flag/BOTH f )
-                      (= SqlTrimFunction$Flag/TRAILING f))
-           p (Expressions/parameter String)
-           m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/TRIM)
-                                            (into-array Expression [(Expressions/constant left?)
-                                                                    (Expressions/constant right?)
-                                                                    (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
-                                                                    p
-                                                                    (Expressions/constant true)]))]
-       (SqlLambda. (gensym) (Expressions/lambda m ^Iterable (list p)) [(->operand (nth (.getOperands n) 2) schema)])))
-   SqlStdOperatorTable/CONCAT
-   (fn [^RexCall n schema]
-     (let [p1 (Expressions/parameter String)
-           m (crux.calcite.CruxUtils/lambda (.method BuiltInMethod/STRING_CONCAT)
-                                            (into-array Expression [p1 (Expressions/constant "asd")]))]
-       (SqlLambda. (gensym)
-                   (Expressions/lambda m ^Iterable (list p1))
-                   [(->operand (nth (.getOperands n) 0) schema)])))})
-
-(defn -lambda [id lambdas & args]
-  (def id id)
-  (def l lambdas)
-  (def a args)
-  (let [^Function1 l (lambdas id)]
-    (.apply l (first args))))
 
 (defn- ->ast [^RexNode n schema]
   (or (when-let [op (pred-fns (.getKind n))]
@@ -138,28 +196,12 @@
         (keyword (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
 
       (when-let [op (get arithmetic-fns (.getKind n))]
-        (SQLFunction. (gensym) op (map #(->operand % schema) (.getOperands ^RexCall n))))
+        (ArithmeticFunction. (gensym) op (map #(->operand % schema) (.getOperands ^RexCall n))))
 
       (and (#{SqlKind/AND SqlKind/OR SqlKind/NOT} (.getKind n))
            (SQLCondition. (.getKind n) (mapv #(->ast % schema) (.-operands ^RexCall n))))
 
-      (if (instance? RexCall n)
-        (do
-          (def n n)
-          (if-let [lambda-builder (linq-lambdas (.getOperator ^RexCall n))]
-            (do
-              (def a (lambda-builder n schema))
-              a)
-            (throw (IllegalArgumentException. (str "Can't understand call " n))))))
-
-      #_(if (instance? RexCall n)
-        (do
-          (def n n)
-          (if-let [f (calcite-built-in-fns (.getName (.op ^RexCall n)))]
-            (let [operands (into [(.getName (.op ^RexCall n)) 'data-context]
-                                 (map #(->operand % schema) (.getOperands ^RexCall n)))]
-              (SQLFunction. (gensym) 'crux.calcite/-built-in operands))
-            (throw (IllegalArgumentException. (str "Can't understand call " n))))))
+      (and (instance? RexCall n) (linq-lambda n schema))
 
       n))
 
@@ -170,15 +212,15 @@
         clauses (postwalk (fn [x]
                             (condp instance? x
 
-                              SqlLambda
+                              CalciteLambda
                               (do
                                 (swap! linq-lambdas conj x)
-                                (.sym ^SqlLambda x))
+                                (.sym ^CalciteLambda x))
 
-                              SQLFunction
+                              ArithmeticFunction
                               (do
                                 (swap! sql-ops conj x)
-                                (.sym ^SQLFunction x))
+                                (.sym ^ArithmeticFunction x))
 
                               RexDynamicParam
                               (let [sym (gensym)]
@@ -186,7 +228,9 @@
                                 sym)
 
                               RexLiteral
-                              (.getValue2 ^RexLiteral x)
+                              (if (= "DECIMAL" (str (.getSqlTypeName (.getType ^RexLiteral x))))
+                                (.getValue3 ^RexLiteral x)
+                                (.getValue2 ^RexLiteral x))
 
                               ;; If used as an argument, the literal should already have been extracted,
                               ;; so we can assume it's being used in a conditional (OR/AND/NOT)
@@ -208,9 +252,9 @@
                               x))
                           clauses)
         calc-clauses (concat
-                      (for [^SQLFunction op @sql-ops]
+                      (for [^ArithmeticFunction op @sql-ops]
                         [(apply list (.op op) (.operands op)) (.sym op)])
-                      (for [^SqlLambda op @linq-lambdas]
+                      (for [^CalciteLambda op @linq-lambdas]
                         [(apply list 'crux.calcite/-lambda (str (.sym op)) 'lambdas (.operands op)) (.sym op)]))]
     {:clauses clauses
      :calc-clauses calc-clauses
@@ -225,6 +269,30 @@
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args)
         (update :lambdas concat lambdas))))
+
+(defn enrich-project [schema projects]
+  (log/debug "Enriching project with" projects)
+  (let [{:keys [clauses calc-clauses lambdas]} (->> (for [rex-node (map #(.-left ^Pair %) projects)]
+                                                      (->operand rex-node schema))
+                                                    (post-process schema))
+        literal->syms (into {} (map #(vector % (gensym)) (remove symbol? clauses)))
+        literal-clauses (map (fn [[literal sym]] [(list 'crux.calcite/-literal literal) sym]) literal->syms)
+        clauses (map #(get literal->syms % %) clauses)]
+    (-> schema
+        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses literal-clauses)
+        (assoc-in [:crux.sql.table/query :find] (vec clauses))
+        (update :lambdas concat lambdas))))
+
+(defn enrich-join [s1 s2 join-type condition]
+  (log/debug "Enriching join with" condition)
+  (let [q1 (:crux.sql.table/query s1)
+        q2 (:crux.sql.table/query s2)
+        s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
+        q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
+        s3 (-> s1
+               (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
+               (update-in [:crux.sql.table/query :args] (partial apply merge)))]
+    (enrich-filter s3 condition)))
 
 (defn enrich-sort-by [schema sort-fields]
   (assoc-in schema [:crux.sql.table/query :order-by]
@@ -245,33 +313,6 @@
 
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
-
-(defn -literal [v]
-  (WrapLiteral. v))
-
-(defn enrich-project [schema projects]
-  (log/debug "Enriching project with" projects)
-  (let [{:keys [clauses calc-clauses lambdas]}
-        (->> (for [rex-node (map #(.-left ^Pair %) projects)]
-               (if (instance? RexLiteral rex-node)
-                 (SQLFunction. (gensym) 'crux.calcite/-literal [rex-node])
-                 (->operand rex-node schema)))
-             (post-process schema))]
-    (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
-        (assoc-in [:crux.sql.table/query :find] (vec clauses))
-        (update :lambdas concat lambdas))))
-
-(defn enrich-join [s1 s2 join-type condition]
-  (log/debug "Enriching join with" condition)
-  (let [q1 (:crux.sql.table/query s1)
-        q2 (:crux.sql.table/query s2)
-        s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
-        q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
-        s3 (-> s1
-               (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
-               (update-in [:crux.sql.table/query :args] (partial apply merge)))]
-    (enrich-filter s3 condition)))
 
 (defn- transform-result [tuple]
   (let [tuple (map #(if (instance? WrapLiteral %)
@@ -327,7 +368,7 @@
   (Expressions/constant (prn-str (dissoc schema :lambdas))))
 
 (defn ->fn [schema]
-  (Expressions/newArrayInit Pair ^List (map (fn [^SqlLambda l]
+  (Expressions/newArrayInit Pair ^List (map (fn [^CalciteLambda l]
                                               (Expressions/constant (Pair. (str (.sym l)) (.e l))))
                                             (:lambdas schema))))
 
@@ -340,7 +381,7 @@
         (throw t)))))
 
 (def ^:private mapped-types {:keyword SqlTypeName/OTHER})
-(def ^:private supported-types #{:boolean :bigint :double :float :timestamp :varchar})
+(def ^:private supported-types #{:boolean :bigint :double :float :timestamp :varchar :decimal})
 
 ;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
 (def ^:private java-sql-types

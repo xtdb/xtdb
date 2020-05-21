@@ -119,6 +119,7 @@ We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.
 * `:bigint`
 * `:boolean`
 * `:double`
+* `:decimal
 * `:float`
 * `:timestamp`
 * `:varchar`
@@ -146,8 +147,5 @@ stripped for the SQL column name.
 
 == Current Limitations
 
-Joins are handled by Calcite rather than Crux, with Calcite running
-separate queries and then joining the result-sets together in
-memory. Executing queries directly against Crux would be more
-efficient and provide greater consistency. This module is therefore
-intended for light usage for the time being.
+We support a range of calculations (ceil, lower, upper, concat), but
+we do not support all. A notable exception is `cast`.
