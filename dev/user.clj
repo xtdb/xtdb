@@ -8,9 +8,12 @@
             [crux.kafka.embedded :as ek]
             [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)
-           (java.io Closeable)))
+           (java.io Closeable File)))
 
 (ctn/disable-reload!)
+(apply ctn/set-refresh-dirs (for [^File dir (.listFiles (io/file "."))
+                                  :when (.isDirectory dir)]
+                              (io/file dir "src")))
 
 (def dev-node-dir
   (io/file "dev/dev-node"))
