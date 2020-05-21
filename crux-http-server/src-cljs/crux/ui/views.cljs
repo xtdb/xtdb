@@ -88,7 +88,8 @@
          :on-submit handle-submit}
         [:div.input-group
          [cm/code-mirror (get values "q")
-          {:on-change #(set-values {"q" %})
+          {:class "cm-textarea__query"
+           :on-change #(set-values {"q" %})
            :on-blur #(set-touched "q")}]
          (when (and (get touched "q")
                     (get errors "q"))
@@ -123,8 +124,8 @@
                 touched
                 errors
                 form-id
-                handle-change
-                handle-blur
+                set-values
+                set-touched
                 handle-submit] :as props}]
      (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])
            entity-pane? (= :entity @(rf/subscribe [::sub/left-pane-view]))]
@@ -133,11 +134,10 @@
          :id form-id
          :on-submit handle-submit}
         [:div.input-group
-         [:textarea.textarea
-          {:name "eid"
-           :value (get values "eid")
-           :on-change handle-change
-           :on-blur handle-blur}]
+         [cm/code-mirror (get values "eid")
+          {:class "cm-textarea__entity"
+           :on-change #(set-values {"eid" %})
+           :on-blur #(set-touched "eid")}]
          (when (and (get touched "eid")
                     (get errors "eid"))
            [:p.input-error (get errors "eid")])]
@@ -253,7 +253,7 @@
              ":crux.db/id"]
             [:div.entity-group__value (str eid)]]
            [:hr.entity-group__separator]
-           (entity->hiccup linked-entities document-no-eid)]
+           [cm/code-snippet document-no-eid linked-entities]]
           [vt-tt-entity-box vt tt]]))]))
 
 (defn- entity-history-document []
@@ -279,16 +279,44 @@
       (if loading?
         [:div.entity-map.entity-map--loading
          [:i.fas.fa-spinner.entity-map__load-icon]]
-        (if error
-          [:div.error-box error]
-          [:div.entity-histories
-           (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
-                  :as history-elem} entity-history]
-             ^{:key history-elem}
-             [:div.entity-history__container
-              [:div.entity-map
-               (entity->hiccup {} doc)]
-              [vt-tt-entity-box valid-time tx-time]])]))]]))
+        (cond
+          entity-error [:div.error-box entity-error]
+          (not diffs-tab?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-right-pane-history])]
+                             [:div.entity-histories
+                              (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
+                                     :as history-elem} entity-history]
+                                ^{:key history-elem}
+                                [:div.entity-history__container
+                                 [:div.entity-map
+                                  [cm/code-snippet doc {}]]
+                                 [vt-tt-entity-box valid-time tx-time]])])
+          diffs-tab? (let [{:keys [up-to-date-doc history-diffs]} @(rf/subscribe [::sub/entity-right-pane-history-diffs])]
+                       [:div.entity-histories
+                        [:div.entity-history__container
+                         [:div.entity-map
+                          [cm/code-snippet (:crux.db/doc up-to-date-doc) {}]]
+                         [vt-tt-entity-box
+                          (:crux.db/valid-time up-to-date-doc)
+                          (:crux.tx/tx-time up-to-date-doc)]]
+                        (for [{:keys [additions deletions
+                                      crux.tx/tx-time crux.db/valid-time]
+                               :as history-elem} history-diffs]
+                          ^{:key history-elem}
+                          [:div.entity-history__container
+                           [:div.entity-map__diffs-group
+                            [:div.entity-map
+                             (when additions
+                               [:<>
+                                [:span {:style {:color "green"}}
+                                 "+ Additions:"]
+                                [cm/code-snippet additions {}]])
+                             (when deletions
+                               [:<>
+                                [:span {:style {:color "red"}}
+                                 "- Deletions:"]
+                                [cm/code-snippet deletions {}]])]]
+                           [vt-tt-entity-box valid-time tx-time]])])
+          :else nil))]]))
 
 (defn entity-raw-edn
   []

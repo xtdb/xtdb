@@ -4,7 +4,7 @@
     /* Set height, width, borders, and global font properties here */
     font-family: monospace;
     cursor: text;
-    height: 300px;
+    height: 100%;
     width: 100%;
     color: black;
     direction: ltr;
@@ -49,6 +49,7 @@
   border-right: none;
   width: 0;
 }
+
 /* Shown when moving in bi-directional text */
 .CodeMirror div.CodeMirror-secondarycursor {
   border-left: 1px solid silver;
@@ -267,6 +268,11 @@ div.CodeMirror span.CodeMirror-nonmatchingbracket {color: #a22;}
   position: absolute;
   pointer-events: none;
 }
+
+.CodeMirror-static .CodeMirror-cursor {
+    display: none;
+}
+
 .CodeMirror-measure pre { position: static; }
 
 div.CodeMirror-cursors {
@@ -375,3 +381,28 @@ li.CodeMirror-hint-active {
 
 .cm-s-eclipse .CodeMirror-activeline-background { background: #e8f2ff; }
 .cm-s-eclipse .CodeMirror-matchingbracket { outline:1px solid grey; color:black !important; }
+
+.CodeMirror-foldmarker {
+  color: blue;
+  text-shadow: #b9f 1px 1px 2px, #b9f -1px -1px 2px, #b9f 1px -1px 2px, #b9f -1px 1px 2px;
+  font-family: arial;
+  line-height: .3;
+  cursor: pointer;
+}
+.CodeMirror-foldgutter {
+  width: .7em;
+}
+.CodeMirror-foldgutter-open,
+.CodeMirror-foldgutter-folded {
+  cursor: pointer;
+}
+.CodeMirror-foldgutter-open:after {
+  content: "\25BE";
+}
+.CodeMirror-foldgutter-folded:after {
+  content: "\25B8";
+}
+
+.CodeMirror-static .CodeMirror-gutters {
+    opacity: 0;
+}

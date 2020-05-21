@@ -97,6 +97,16 @@ html, body {
     width: 100%;
 }
 
+.cm-textarea__query {
+    height: 300px;
+    padding: 0;
+}
+
+.cm-textarea__entity {
+    height: 100px;
+    padding: 0;
+}
+
 .input:focus, .button:focus {
     outline: 0;
 }
@@ -333,7 +343,18 @@ ul.entity-group__value li::before {
     box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
 }
 
-.entity-map, .entity-history {
+.entity-map {
+    width: 80%;
+    padding: 1rem;
+    margin-right: 4rem;
+    border-radius: 0.2rem;
+    white-space: pre-wrap;
+    -webkit-box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
+    -moz-box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
+    box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
+}
+
+.entity-history {
     margin-right: 4rem;
     @extend .common-entity-box;
 }
