@@ -339,13 +339,11 @@
                                                   [(= ?homeworld G__158554)]],
                                           :args [{G__158554 "Earth"}]})))
 
-  ;; (let [q "SELECT * FROM PERSON WHERE HOMEWORLD = 'Earth'"]
-  ;;   (t/is (= ["Ivan" "Malcolm"] (sort (map :name (query q))))))
+  (let [q "SELECT * FROM PERSON WHERE HOMEWORLD = 'Earth'"]
+    (t/is (= ["Ivan" "Malcolm"] (sort (map :name (query q))))))
 
-  ;; (let [q "SELECT * FROM PERSON"]
-  ;;   (t/is (= ["Ivan" "Malcolm" "Malcolm"] (sort (map :name (query q))))))
-
-  )
+  (let [q "SELECT * FROM PERSON"]
+    (t/is (= ["Ivan" "Malcolm" "Malcolm"] (sort (map :name (query q)))))))
 
 (t/deftest test-limit-and-offset
   (fix/transact! *api* (for [i (range 20)]
