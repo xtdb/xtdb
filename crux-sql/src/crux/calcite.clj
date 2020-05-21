@@ -9,14 +9,11 @@
             [crux.calcite.types]
             crux.db)
   (:import crux.calcite.CruxTable
-           [crux.calcite.types SQLCondition ArithmeticFunction CalciteLambda SQLPredicate]
-           org.apache.calcite.adapter.enumerable.RexToLixTranslator
-           org.apache.calcite.adapter.enumerable.RexImpTable
-           org.apache.calcite.adapter.enumerable.RexImpTable$NullAs
+           [crux.calcite.types ArithmeticFunction CalciteLambda SQLCondition SQLPredicate]
            [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
            [java.util List Properties WeakHashMap]
-           org.apache.calcite.adapter.enumerable.EnumUtils
+           [org.apache.calcite.adapter.enumerable EnumUtils RexImpTable RexImpTable$NullAs RexToLixTranslator]
            org.apache.calcite.adapter.java.JavaTypeFactory
            org.apache.calcite.avatica.jdbc.JdbcMeta
            [org.apache.calcite.avatica.remote Driver LocalService]
@@ -30,8 +27,8 @@
            [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
            [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode RexVariable]
            org.apache.calcite.runtime.SqlFunctions
-           [org.apache.calcite.sql SqlFunction SqlKind SqlOperator]
            [org.apache.calcite.sql.fun SqlStdOperatorTable SqlTrimFunction$Flag]
+           org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName
            [org.apache.calcite.util BuiltInMethod Pair]))
 
@@ -83,29 +80,6 @@
    SqlKind/DIVIDE 'crux.calcite/-divide
    SqlKind/MOD 'crux.calcite/-mod})
 
-(def ^:private standard-operator-fns
-  {SqlStdOperatorTable/TRIM '*})
-
-(def ^:private calcite-built-in-fns
-  (let [calcite-built-in-fns (->> (BuiltInMethod/values)
-                                  (map #(vector (.name ^BuiltInMethod %) %))
-                                  (into {}))]
-    (->> (.getFields SqlStdOperatorTable)
-         (filter #(.isAssignableFrom SqlFunction (.getType ^Field %)))
-         (keep (fn [^Field f]
-                 (when-let [built-in-fn ^BuiltInMethod (calcite-built-in-fns (.getName f))]
-                   (let [o ^SqlOperator (.get f (SqlStdOperatorTable/instance))]
-                     [(.getName o) built-in-fn]))))
-         (into {}))))
-
-(comment
-  (sort (keys calcite-built-in-fns)))
-
-(defn -built-in [id data-context & args]
-  (let [built-in-fn ^BuiltInMethod (calcite-built-in-fns id)
-        args (if (= DataContext (first (.getParameterTypes (.method built-in-fn)))) [data-context] args)]
-    (crux.calcite.CruxUtils/invokeStaticMethod (.method built-in-fn) (into-array Object args))))
-
 (defn input-ref->attr [^RexInputRef i schema]
   (get-in schema [:crux.sql.table/query :find (.getIndex i)]))
 
@@ -129,7 +103,7 @@
 
 (defn- ^MethodCallExpression ->method-call-expression [m parameter-expressions]
   (if (instance? Method m)
-    (crux.calcite.CruxUtils/lambda m (into-array Expression parameter-expressions))
+    (crux.calcite.CruxUtils/callExpression m (into-array Expression parameter-expressions))
     (EnumUtils/call SqlFunctions m parameter-expressions)))
 
 (defn- method->lambda [^RexCall n schema m]
@@ -149,6 +123,7 @@
                      SqlStdOperatorTable/UPPER (.method BuiltInMethod/UPPER)
                      SqlStdOperatorTable/INITCAP (.method BuiltInMethod/INITCAP)
                      SqlStdOperatorTable/CONCAT (.method BuiltInMethod/STRING_CONCAT)
+                     SqlStdOperatorTable/CHAR_LENGTH (.method BuiltInMethod/CHAR_LENGTH)
                      SqlStdOperatorTable/TRUNCATE "struncate"}
                     (.getOperator n))]
         (method->lambda n schema m))
@@ -157,12 +132,25 @@
         (if (#{"BIGINT" "INTEGER" "SMALLINT" "TINYINT"} (.getName (.getSqlTypeName (.getType n))))
           (->operand (first (.getOperands n)) schema)
           (method->lambda n schema (.getName (.method BuiltInMethod/CEIL))))
+        SqlStdOperatorTable/FLOOR
+        (if (#{"BIGINT" "INTEGER" "SMALLINT" "TINYINT"} (.getName (.getSqlTypeName (.getType n))))
+          (->operand (first (.getOperands n)) schema)
+          (method->lambda n schema (.getName (.method BuiltInMethod/FLOOR))))
         SqlStdOperatorTable/SUBSTRING
         (let [exprs [(Expressions/parameter String)
                      (Expressions/constant (int (.getValue2 ^RexLiteral (nth (.getOperands n) 1))))
                      (Expressions/constant (int (.getValue2 ^RexLiteral (nth (.getOperands n) 2))))]
               operands [(first (.getOperands n))]
               m (->method-call-expression (.method BuiltInMethod/SUBSTRING) exprs)]
+          (->lambda-expression m
+                               (filter #(instance? ParameterExpression %) exprs)
+                               (mapv #(->operand % schema) operands)))
+        SqlStdOperatorTable/REPLACE
+        (let [exprs [(Expressions/parameter String)
+                     (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 1)))
+                     (Expressions/constant (.getValue2 ^RexLiteral (nth (.getOperands n) 2)))]
+              operands [(first (.getOperands n))]
+              m (->method-call-expression (.method BuiltInMethod/REPLACE) exprs)]
           (->lambda-expression m
                                (filter #(instance? ParameterExpression %) exprs)
                                (mapv #(->operand % schema) operands)))

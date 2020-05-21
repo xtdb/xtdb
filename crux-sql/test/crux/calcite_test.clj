@@ -119,6 +119,20 @@
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                         {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
 
+  (t/testing "count"
+    (let [q "SELECT count(*) as N FROM PERSON"]
+      (t/is (= [{:n 2}]
+               (query q)))
+      (t/is (= (str "EnumerableAggregate(group=[{}], N=[COUNT()])\n"
+                    "  CruxToEnumerableConverter\n"
+                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+               (explain q))))
+
+    (t/testing "retrieve data case insensitivity of table schema"
+      (t/is (= [{:name "Ivan"}
+                {:name "Malcolm"}]
+               (query "select person.name from person")))))
+
   (t/testing "retrieve data"
     (let [q "SELECT PERSON.NAME FROM PERSON"]
       (t/is (= [{:name "Ivan"}
@@ -573,23 +587,32 @@
   (t/is (= "Ivan" (:name2 (first (query "SELECT TRIM(NAME) AS NAME2 FROM PERSON")))))
   (t/is (= " Ivan qs" (:name2 (first (query "SELECT NAME, {fn CONCAT(NAME, 'qs')} AS NAME2 FROM PERSON")))))
   (t/is (= "Ivan qs" (:name2 (first (query "SELECT TRIM({fn CONCAT(NAME, 'qs')}) AS NAME2 FROM PERSON")))))
-  (t/is (= 21 (:age (first (query "SELECT CEIL(AGE) AS AGE FROM PERSON")))))
-  (t/is (= 1 (:age (first (query "SELECT CEIL(1) AS AGE FROM PERSON")))))
-  (t/is (first (query "SELECT NAME FROM PERSON WHERE CEIL(AGE) = 21")))
 
-  (let [q  "SELECT CEIL(1.1) FROM PERSON"]
-    (t/is (= 2M (val (ffirst (query q)))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxProject(EXPR$0=[CEIL(1.1:DECIMAL(2, 1))])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n") (explain q)))) (type (read-string (prn-str (int 10))))
+  (t/testing "ceil"
+    (t/is (= 21 (:age (first (query "SELECT CEIL(AGE) AS AGE FROM PERSON")))))
+    (t/is (= 1 (:age (first (query "SELECT CEIL(1) AS AGE FROM PERSON")))))
+    (t/is (first (query "SELECT NAME FROM PERSON WHERE CEIL(AGE) = 21")))
+
+    (let [q "SELECT CEIL(1.1) FROM PERSON"]
+      (t/is (= 2M (val (ffirst (query q)))))
+      (t/is (= (str "CruxToEnumerableConverter\n"
+                    "  CruxProject(EXPR$0=[CEIL(1.1:DECIMAL(2, 1))])\n"
+                    "    CruxTableScan(table=[[crux, PERSON]])\n") (explain q))))
+    (t/is (= 1M (val (ffirst (query "SELECT FLOOR(1.1) FROM PERSON"))))))
 
   (let [q  "SELECT TRUNCATE(1.12, 1) FROM PERSON"]
-    (t/is (= 1.1M (val (ffirst (query q)))))))
+    (t/is (= 1.1M (val (ffirst (query q))))))
+
+  (let [q  "SELECT REPLACE(NAME, 'v', 'A') FROM PERSON"]
+    (t/is (= " IAan " (val (ffirst (query q))))))
+
+  (let [q  "SELECT CHAR_LENGTH(NAME), NAME FROM PERSON"]
+    (t/is (= 6 (val (ffirst (query q)))))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
   (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))
 
-;; Restore current date
-;; Think for joins (lterals, calc etc), lambdas won't work currently
+#_("CURRENT_DATE" "CURRENT_TIME" "CURRENT_TIMESTAMP" "ELEMENT" "LAST_DAY" "OVERLAY" "POSITION" "RAND" "RAND_INTEGER" "SYSTEM_USER" "USER")
+;; try sin etc
