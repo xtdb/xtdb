@@ -110,7 +110,10 @@
     (t/is (= #{{:name "Ivan" :t 1}}
              (set (query "SELECT NAME, 1 AS T FROM PERSON WHERE ALIVE = TRUE"))))
     (t/is (= #{{:name "Ivan" :t "h"}}
-             (set (query "SELECT NAME, 'h' AS T FROM PERSON WHERE ALIVE = TRUE"))))))
+             (set (query "SELECT NAME, 'h' AS T FROM PERSON WHERE ALIVE = TRUE")))))
+
+  (t/is (= #{{:name "Ivan", :t 1} {:name "Malcolm", :t 1}}
+           (set (query "SELECT NAME, 1 AS T FROM PERSON")))))
 
 (t/deftest test-sql-query
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
@@ -307,11 +310,28 @@
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                         {:crux.db/id :malcolm :name "Malcolm" :homeworld ["Mars" "Earth"] :age 25 :alive false}])
 
-  (let [q "SELECT * FROM PERSON WHERE HOMEWORLD = 'Earth'"]
-    (t/is (= ["Ivan" "Malcolm"] (sort (map :name (query q))))))
+  (t/is (= #{["Ivan"] ["Malcolm"]} (c/q (c/db *api*)
+                                        '{:find [?name],
+                                          :where [[?id :name ?name]
+                                                  [?id :homeworld ?homeworld]
+                                                  [?id :alive ?alive]
+                                                  [(= ?homeworld "Earth")]]})))
 
-  (let [q "SELECT * FROM PERSON"]
-    (t/is (= ["Ivan" "Malcolm" "Malcolm"] (sort (map :name (query q)))))))
+  (t/is (= #{["Ivan"] ["Malcolm"]} (c/q (c/db *api*)
+                                        '{:find [?name],
+                                          :where [[?id :name ?name]
+                                                  [?id :homeworld ?homeworld]
+                                                  [?id :alive ?alive]
+                                                  [(= ?homeworld G__158554)]],
+                                          :args [{G__158554 "Earth"}]})))
+
+  ;; (let [q "SELECT * FROM PERSON WHERE HOMEWORLD = 'Earth'"]
+  ;;   (t/is (= ["Ivan" "Malcolm"] (sort (map :name (query q))))))
+
+  ;; (let [q "SELECT * FROM PERSON"]
+  ;;   (t/is (= ["Ivan" "Malcolm" "Malcolm"] (sort (map :name (query q))))))
+
+  )
 
 (t/deftest test-limit-and-offset
   (fix/transact! *api* (for [i (range 20)]
@@ -561,17 +581,15 @@
     (t/is (= 2M (val (ffirst (query q)))))
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(EXPR$0=[CEIL(1.1:DECIMAL(2, 1))])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n") (explain q))))
+                  "    CruxTableScan(table=[[crux, PERSON]])\n") (explain q)))) (type (read-string (prn-str (int 10))))
 
-  ;; (let [q  "SELECT TRUNCATE(1.1, 1) FROM PERSON"]
-  ;;   ;; The washing of the lambda, could fix this by passing some type info, or we wash the literals though
-  ;;   (t/is (= 2M (val (ffirst (query q))))))
-  )
+  (let [q  "SELECT TRUNCATE(1.12, 1) FROM PERSON"]
+    (t/is (= 1.1M (val (ffirst (query q)))))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
   (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))
 
-
-;; Known Issues (integers are washed to longs via the EDN transform), this breaks subsequent lambda calls
+;; Restore current date
+;; Think for joins (lterals, calc etc), lambdas won't work currently

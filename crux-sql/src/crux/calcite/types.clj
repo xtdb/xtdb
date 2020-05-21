@@ -10,6 +10,4 @@
 
 (defrecord SQLPredicate [op operands])
 
-(defrecord WrapLiteral [l])
-
 (defrecord CalciteLambda [sym ^Expression e operands])
