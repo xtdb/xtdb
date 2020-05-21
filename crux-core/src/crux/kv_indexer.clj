@@ -366,21 +366,36 @@
 (defrecord KvIndexer [kv-store object-store]
   db/Indexer
   (index-docs [this docs]
-    (let [content-idx-kvs (when (seq docs)
-                             (->> docs
-                                  (mapcat (fn [[k doc]] (content-idx-kvs k doc)))))
+    (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
 
-          _ (some->> (seq content-idx-kvs) (kv/store kv-store))]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (let [docs (->> docs
+                      (into {} (remove (fn [[k doc]]
+                                         (or (idx/keep-non-evicted-doc (db/get-single-object object-store snapshot (c/new-id k)))
+                                             (idx/evicted-doc? doc)))))
+                      not-empty)
 
-      (db/put-objects object-store docs)
+            content-idx-kvs (when (seq docs)
+                              (->> docs
+                                   (mapcat (fn [[k doc]] (content-idx-kvs k doc)))))]
 
-      (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))))
+        (some->> (seq content-idx-kvs) (kv/store kv-store))
+        (some->> (seq docs) (db/put-objects object-store))
+
+        {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
+         :indexed-docs docs})))
 
   (unindex-docs [this docs]
-    (->> docs
-         (mapcat (fn [[k doc]] (content-idx-kvs k doc)))
-         keys
-         (kv/delete kv-store)))
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (let [existing-docs (db/get-objects object-store snapshot (keys docs))]
+        (->> existing-docs
+             (mapcat (fn [[k doc]] (content-idx-kvs k doc)))
+             keys
+             (kv/delete kv-store))
+
+        (db/put-objects object-store docs)
+
+        {:unindexed-docs existing-docs})))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
