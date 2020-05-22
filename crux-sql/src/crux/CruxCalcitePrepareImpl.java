@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.HashMap;
 
 public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
-    private static final Pattern PATTERN  = Pattern.compile("((TRANSACTIONTIME|VALIDTIME|TRANSACTIONID)\\s\\(\\'(.*?)\\'\\))");
+    private static final Pattern PATTERN  = Pattern.compile("((TRANSACTIONTIME|VALIDTIME)\\s\\(\\'(.*?)\\'\\))");
 
     public CruxCalcitePrepareImpl() {
         super();
@@ -29,9 +29,6 @@ public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
             while (matcher.find()) {
                 switch(matcher.group(2))
                 {
-                    case "TRANSACTIONID":
-                        internalParameters.put("TRANSACTIONID", Long.parseLong(matcher.group(3)));
-                        break;
                     case "TRANSACTIONTIME":
                         Date txTime = Date.from(ZonedDateTime.parse(matcher.group(3)).toInstant());
                         internalParameters.put("TRANSACTIONTIME", txTime);
