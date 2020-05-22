@@ -84,6 +84,7 @@
                "crux-http-server/test"
                "crux-metrics/test"
                "crux-s3/test"
+               "crux-bench/test"
                "crux-test/test"]
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
