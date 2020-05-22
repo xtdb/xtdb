@@ -431,16 +431,19 @@
 
 ;;;; Indexer
 
-(defn content-idx-kvs [content-hash doc]
-  (let [id (c/->id-buffer (:crux.db/id doc))
-        content-hash (c/->id-buffer content-hash)]
-    (->> (for [[k v] doc
-               :let [k (c/->id-buffer k)]
+(defn ->content-idx-kvs [docs]
+  (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
+                       (into {} (map (juxt identity c/->id-buffer))))]
+    (->> (for [[content-hash doc] docs
+               :let [id (c/->id-buffer (:crux.db/id doc))
+                     content-hash (c/->id-buffer content-hash)]
+               [a v] doc
+               :let [a (get attr-bufs a)]
                v (idx/vectorize-value v)
                :let [v-buf (c/->value-buffer v)]
                :when (pos? (.capacity v-buf))]
-           (cond-> [(MapEntry/create (encode-ave-key-to nil k v-buf id) c/empty-buffer)
-                    (MapEntry/create (encode-aecv-key-to nil k id content-hash v-buf) c/empty-buffer)]
+           (cond-> [(MapEntry/create (encode-ave-key-to nil a v-buf id) c/empty-buffer)
+                    (MapEntry/create (encode-aecv-key-to nil a id content-hash v-buf) c/empty-buffer)]
              (not (c/can-decode-value-buffer? v-buf))
              (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (idx/->nippy-buffer v)))))
          (apply concat))))
@@ -457,9 +460,7 @@
                                              (idx/evicted-doc? doc)))))
                       not-empty)
 
-            content-idx-kvs (when (seq docs)
-                              (->> docs
-                                   (mapcat (fn [[k doc]] (content-idx-kvs k doc)))))]
+            content-idx-kvs (->content-idx-kvs docs)]
 
         (some->> (seq content-idx-kvs) (kv/store kv-store))
         (some->> (seq docs) (db/put-objects object-store))
@@ -470,8 +471,7 @@
   (unindex-docs [this docs]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (let [existing-docs (db/get-objects object-store snapshot (keys docs))]
-        (->> existing-docs
-             (mapcat (fn [[k doc]] (content-idx-kvs k doc)))
+        (->> (->content-idx-kvs existing-docs)
              keys
              (kv/delete kv-store))
 
