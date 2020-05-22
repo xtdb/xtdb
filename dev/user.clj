@@ -12,7 +12,8 @@
 
 (ctn/disable-reload!)
 (apply ctn/set-refresh-dirs (for [^File dir (.listFiles (io/file "."))
-                                  :when (.isDirectory dir)]
+                                  :when (and (.isDirectory dir)
+                                             (not (-> dir .getName #{"crux-graal"})))]
                               (io/file dir "src")))
 
 (def dev-node-dir
