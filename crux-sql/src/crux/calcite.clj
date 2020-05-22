@@ -124,7 +124,8 @@
                      SqlStdOperatorTable/INITCAP (.method BuiltInMethod/INITCAP)
                      SqlStdOperatorTable/CONCAT (.method BuiltInMethod/STRING_CONCAT)
                      SqlStdOperatorTable/CHAR_LENGTH (.method BuiltInMethod/CHAR_LENGTH)
-                     SqlStdOperatorTable/TRUNCATE "struncate"}
+                     SqlStdOperatorTable/TRUNCATE "struncate"
+                     SqlStdOperatorTable/LAST_DAY "lastDay"}
                     (.getOperator n))]
         (method->lambda n schema m))
       (when-let [data-context-fn ({SqlStdOperatorTable/CURRENT_DATE (.method BuiltInMethod/CURRENT_DATE)

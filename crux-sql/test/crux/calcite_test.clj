@@ -612,12 +612,10 @@
 
   (t/is (:current_date (first (query "SELECT current_date FROM PERSON"))))
   (t/is (:current_time (first (query "SELECT current_time FROM PERSON"))))
-  (t/is (:current_timestamp (first (query "SELECT current_timestamp FROM PERSON")))))
+  (t/is (:current_timestamp (first (query "SELECT current_timestamp FROM PERSON"))))
+  (t/is (first (query "SELECT last_day(current_timestamp) FROM PERSON"))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
   (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))
-
-#_("ELEMENT" "LAST_DAY" "OVERLAY" "POSITION" "RAND" "RAND_INTEGER")
-;; try sin etc
