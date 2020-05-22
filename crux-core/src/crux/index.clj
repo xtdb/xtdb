@@ -8,7 +8,6 @@
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IReduceInit MapEntry Seqable Sequential]
            crux.api.IndexVersionOutOfSyncException
-           [crux.codec EntityValueContentHash EntityTx]
            [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
            [java.io Closeable DataInputStream]
            [java.util Collections Comparator Date]
