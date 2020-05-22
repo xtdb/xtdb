@@ -35,7 +35,7 @@
   (entity-as-of [this eid valid-time transact-time])
   (open-entity-history ^crux.api.ICursor [this eid sort-order opts])
   (all-content-hashes [this eid])
-  (decode-value [this a content-hash value-buffer])
+  (decode-value [this value-buffer eid-buffer])
   (encode-value [this value])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
