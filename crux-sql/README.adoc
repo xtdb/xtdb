@@ -70,6 +70,9 @@ Returns:
 [{:name "Ivan"}]
 ----
 
+Note that using JDBC PreparedStatements for queries will be
+significantly faster.
+
 == Connecting
 
 If you want to connect in-process, you can do so with the above method
