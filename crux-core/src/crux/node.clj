@@ -151,7 +151,7 @@
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx (:tx-log this))]
-      (-> (api/await-tx this tx nil)
+      (-> (api/await-tx this tx timeout)
           :crux.tx/tx-time)))
 
   (awaitTxTime [this tx-time timeout]
