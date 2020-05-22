@@ -585,8 +585,6 @@
   (t/testing "nested"
     (t/is (= [{:planet "Earth"}] (query "SELECT INITCAP(LOWER(HOMEWORLD)) AS PLANET FROM PERSON"))))
 
-  ;; ;; (t/is (:current_date (first (query "SELECT current_date FROM PERSON"))))
-
   (t/is (= "Ivan" (:name2 (first (query "SELECT TRIM(NAME) AS NAME2 FROM PERSON")))))
   (t/is (= " Ivan qs" (:name2 (first (query "SELECT NAME, {fn CONCAT(NAME, 'qs')} AS NAME2 FROM PERSON")))))
   (t/is (= "Ivan qs" (:name2 (first (query "SELECT TRIM({fn CONCAT(NAME, 'qs')}) AS NAME2 FROM PERSON")))))
@@ -610,12 +608,16 @@
     (t/is (= " IAan " (val (ffirst (query q))))))
 
   (let [q  "SELECT CHAR_LENGTH(NAME), NAME FROM PERSON"]
-    (t/is (= 6 (val (ffirst (query q)))))))
+    (t/is (= 6 (val (ffirst (query q))))))
+
+  (t/is (:current_date (first (query "SELECT current_date FROM PERSON"))))
+  (t/is (:current_time (first (query "SELECT current_time FROM PERSON"))))
+  (t/is (:current_timestamp (first (query "SELECT current_timestamp FROM PERSON")))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
   (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))
 
-#_("CURRENT_DATE" "CURRENT_TIME" "CURRENT_TIMESTAMP" "ELEMENT" "LAST_DAY" "OVERLAY" "POSITION" "RAND" "RAND_INTEGER" "SYSTEM_USER" "USER")
+#_("ELEMENT" "LAST_DAY" "OVERLAY" "POSITION" "RAND" "RAND_INTEGER")
 ;; try sin etc
