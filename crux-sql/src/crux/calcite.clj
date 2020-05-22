@@ -127,6 +127,11 @@
                      SqlStdOperatorTable/TRUNCATE "struncate"}
                     (.getOperator n))]
         (method->lambda n schema m))
+      (when-let [data-context-fn ({SqlStdOperatorTable/CURRENT_DATE (.method BuiltInMethod/CURRENT_DATE)
+                                   SqlStdOperatorTable/CURRENT_TIME (.method BuiltInMethod/CURRENT_TIME)
+                                   SqlStdOperatorTable/CURRENT_TIMESTAMP (.method BuiltInMethod/CURRENT_TIMESTAMP)}
+                                  (.getOperator n))]
+        (->lambda-expression (->method-call-expression data-context-fn [DataContext/ROOT]) [] []))
       (condp = (.getOperator n)
         SqlStdOperatorTable/CEIL
         (if (#{"BIGINT" "INTEGER" "SMALLINT" "TINYINT"} (.getName (.getSqlTypeName (.getType n))))
