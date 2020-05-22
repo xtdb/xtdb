@@ -31,27 +31,28 @@
 
 (def ^:const ave-index-id 1)
 (def ^:const aecv-index-id 2)
+(def ^:const hash-cache-index-id 3)
 
 ;; main bitemp index [reverse]
-(def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 3)
+(def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 4)
 
 ;; for crux own needs
-(def ^:const ^:private meta-key->value-index-id 4)
+(def ^:const ^:private meta-key->value-index-id 5)
 
 ;; Repurpose old id from internal tx-log used for testing for failed tx
 ;; ids.
-(def ^:const ^:private failed-tx-id-index-id 5)
+(def ^:const ^:private failed-tx-id-index-id 6)
 
 ;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
-(def ^:const ^:private index-version-index-id 6)
+(def ^:const ^:private index-version-index-id 7)
 
 ;; second bitemp index [also reverse]
 ;; z combines vt and tt
 ;; used when a lookup by the first index fails
-(def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
+(def ^:const ^:private entity+z+tx-id->content-hash-index-id 8)
 
 ;; used in standalone TxLog
-(def ^:const ^:private tx-events-index-id 8)
+(def ^:const ^:private tx-events-index-id 9)
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 

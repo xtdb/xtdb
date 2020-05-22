@@ -166,8 +166,7 @@
            (.putBytes (+ c/index-id-size c/id-size (.capacity entity) (.capacity content-hash)) v 0 (.capacity v)))
          (mem/limit-buffer (+ c/index-id-size c/id-size (.capacity entity) (.capacity content-hash) (.capacity v)))))))
 
-(defn decode-aecv-key->evc-from
-  ^crux.kv_indexer.EntityValueContentHash [^DirectBuffer k]
+(defn decode-aecv-key->evc-from ^crux.kv_indexer.EntityValueContentHash [^DirectBuffer k]
   (let [length (long (.capacity k))]
     (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
@@ -177,6 +176,20 @@
             content-hash (Id. (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size) c/id-size) 0)
             value (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size c/id-size) value-size)]
         (->EntityValueContentHash entity value content-hash)))))
+
+(defn encode-hash-cache-key-to
+  (^org.agrona.MutableDirectBuffer [b entity]
+   (encode-aecv-key-to b entity c/empty-buffer))
+
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^DirectBuffer value]
+   (assert (= c/id-size (.capacity entity)) (mem/buffer->hex entity))
+
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size (.capacity value))))]
+     (-> (doto b
+           (.putByte 0 c/hash-cache-index-id)
+           (.putBytes c/index-id-size entity 0 c/id-size)
+           (.putBytes (+ c/index-id-size c/id-size) value 0 (.capacity value)))
+         (mem/limit-buffer (+ c/index-id-size c/id-size (.capacity value)))))))
 
 ;;;; Entity as-of
 
@@ -402,19 +415,13 @@
            (map #(.content-hash ^EntityValueContentHash %))
            (set))))
 
-  (decode-value [this a content-hash value-buffer]
-    (assert (some? value-buffer) (str a))
+  (decode-value [this value-buffer eid-buffer]
+    (assert (some? value-buffer))
+    (assert (some? eid-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (let [doc (db/get-single-object object-store snapshot content-hash)
-            value-or-values (get doc a)]
-        (if-not (idx/multiple-values? value-or-values)
-          value-or-values
-          (loop [[x & xs] (idx/vectorize-value value-or-values)]
-            (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
-              x
-              (when xs
-                (recur xs))))))))
+      (some-> (kv/get-value this (encode-hash-cache-key-to (.get idx/seek-buffer-tl) eid-buffer value-buffer))
+              (idx/<-nippy-buffer))))
 
   (encode-value [this value]
     (c/->value-buffer value))
@@ -430,10 +437,12 @@
     (->> (for [[k v] doc
                :let [k (c/->id-buffer k)]
                v (idx/vectorize-value v)
-               :let [v (c/->value-buffer v)]
-               :when (pos? (.capacity v))]
-           [(MapEntry/create (encode-ave-key-to nil k v id) c/empty-buffer)
-            (MapEntry/create (encode-aecv-key-to nil k id content-hash v) c/empty-buffer)])
+               :let [v-buf (c/->value-buffer v)]
+               :when (pos? (.capacity v-buf))]
+           (cond-> [(MapEntry/create (encode-ave-key-to nil k v-buf id) c/empty-buffer)
+                    (MapEntry/create (encode-aecv-key-to nil k id content-hash v-buf) c/empty-buffer)]
+             (not (c/can-decode-value-buffer? v-buf))
+             (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (idx/->nippy-buffer v)))))
          (apply concat))))
 
 (defrecord KvIndexer [kv-store object-store]

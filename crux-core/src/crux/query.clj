@@ -546,11 +546,13 @@
        (into {})))
 
 (defn- bound-result-for-var [index-store var->bindings join-keys join-results var]
-  (let [binding ^VarBinding (get var->bindings var)]
-    (if (.value? binding)
-      (get join-results (.result-name binding))
-      (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (db/decode-value index-store (.attr binding) (.content-hash entity-tx) (get join-keys (.result-index binding)))))))
+  (let [var-binding ^VarBinding (get var->bindings var)]
+    (if (.value? var-binding)
+      (get join-results (.result-name var-binding))
+      (when-let [etx ^EntityTx (get join-results (.e-var var-binding))]
+        (db/decode-value index-store
+                         (get join-keys (.result-index var-binding))
+                         (c/->id-buffer (.eid etx)))))))
 
 (declare build-sub-query)
 
