@@ -319,7 +319,6 @@
       (to-array tuple))))
 
 (defn- perform-query [node valid-time transaction-time q]
-  (println "RUNNING" valid-time transaction-time)
   (let [db (crux/db node valid-time transaction-time)]
     (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
         []
