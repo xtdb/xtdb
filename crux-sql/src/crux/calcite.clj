@@ -318,8 +318,9 @@
       (first tuple)
       (to-array tuple))))
 
-(defn- perform-query [node valid-time q]
-  (let [db (if valid-time (crux/db node valid-time) (crux/db node))]
+(defn- perform-query [node valid-time transaction-time q]
+  (println "RUNNING" valid-time transaction-time)
+  (let [db (crux/db node valid-time transaction-time)]
     (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
         []
         (enumerator []
@@ -340,7 +341,6 @@
                 (.close snapshot))))))))
 
 (defn ^Enumerable scan [node ^String schema ^DataContext data-context x literals]
-  (def l literals)
   (try
       (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
             query (update query :args (fn [args] [(merge {:data-context data-context
@@ -353,7 +353,7 @@
                                                                          [v (.get data-context k)])
                                                                        args)))]))]
         (log/debug "Executing query:" query)
-        (perform-query node (.get data-context "VALIDTIME") query))
+        (perform-query node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") query))
       (catch Throwable e
         (log/error e)
         (throw e))))
