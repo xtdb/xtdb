@@ -2,9 +2,9 @@
   (:require [clojure.test :as t]
             [crux.api :as c]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
-            [crux.fixtures.calcite :as cf :refer [explain prepared-query query]]
-            [crux.fixtures.kv :as kvf]
-            [crux.query :as q]))
+            [crux.fixtures.calcite :as cf :refer [explain prepared-query query]])
+  (:import [java.time ZonedDateTime ZoneId]
+           java.time.format.DateTimeFormatter))
 
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection f)
@@ -24,19 +24,24 @@
 
 (t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node with-each-connection-type with-sql-schema)
 
+(defn- inst->iso-str [^java.util.Date t]
+  (.format (ZonedDateTime/ofInstant (.toInstant t) (ZoneId/systemDefault)) DateTimeFormatter/ISO_INSTANT))
+
 (t/deftest test-valid-time
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true} #inst "2015"]
-                    [:crux.tx/put {:crux.db/id :ivan :name "Ivana" :homeworld "Earth" :age 21 :alive true}]
-                    [:crux.tx/put {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}]])
+  (let [id (java.util.UUID/randomUUID)
+        tx1 (submit+await-tx [[:crux.tx/put {:crux.db/id id :name "Ivan" :homeworld (str id) :age 21 :alive true} #inst "2015"]
+                              [:crux.tx/put {:crux.db/id id :name "Ivana" :homeworld (str id) :age 21 :alive true} #inst "2018"]])
+        q (str "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD = '" (str id) "'")]
 
-  (let [q "VALIDTIME ('2016-12-01T10:13:30Z') SELECT PERSON.NAME FROM PERSON"]
-    (t/is (= [{:name "Ivan"}]
-             (query q))))
+    (t/is (= "Ivana" (:name (first (query q)))))
+    (t/is (= "Ivan" (:name (first (query (str "VALIDTIME ('2016-12-01T10:13:30Z') " q))))))
 
-  (let [q "SELECT PERSON.NAME FROM PERSON"]
-    (t/is (= [{:name "Ivana"}
-              {:name "Malcolm"}]
-             (query q)))))
+    (submit+await-tx [[:crux.tx/put {:crux.db/id id :name "Ivanb" :homeworld (str id) :age 21 :alive true} #inst "2016"]])
+    (assert (= "Ivana" (:name (first (query q)))))
+    (assert (= "Ivanb" (:name (first (query (str "VALIDTIME ('2016-12-01T10:13:30Z') " q))))))
+
+    (t/testing "tx-time"
+      (t/is (= "Ivan" (:name (first (query (str (format "VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONTIME ('%s') " (inst->iso-str (:crux.tx/tx-time tx1))) q)))))))))
 
 (t/deftest test-project
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
