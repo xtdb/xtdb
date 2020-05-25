@@ -284,7 +284,7 @@
 
 (defn- decode-double ^double [^DirectBuffer buffer]
   (let [l (dec (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN))
-        l (bit-xor l (bit-or (bit-shift-right (bit-xor l Long/MIN_VALUE) (dec Long/SIZE)) Long/MIN_VALUE))]
+        l (bit-xor l (bit-or (bit-shift-right (bit-not l) (dec Long/SIZE)) Long/MIN_VALUE))]
     (Double/longBitsToDouble l)))
 
 (defn- decode-string ^String [^DirectBuffer buffer]
