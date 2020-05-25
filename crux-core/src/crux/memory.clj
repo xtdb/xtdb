@@ -74,7 +74,7 @@
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
-   (copy-buffer from (capacity from)))
+   (copy-buffer from (.capacity from)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit]
    (copy-buffer from limit (allocate-buffer limit)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit ^MutableDirectBuffer to]
@@ -82,7 +82,7 @@
      (.putBytes 0 from 0 limit))))
 
 (defn copy-to-unpooled-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
-  (copy-buffer from (capacity from) (allocate-unpooled-buffer (capacity from))))
+  (copy-buffer from (.capacity from) (allocate-unpooled-buffer (.capacity from))))
 
 (defn slice-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long offset ^long limit]
   (UnsafeBuffer. buffer offset limit))
