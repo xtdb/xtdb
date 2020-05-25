@@ -72,14 +72,14 @@
                                 gen/double
                                 (gen/fmap #(Date. (long %)) gen/large-integer)
                                 gen/string
+                                gen/char
                                 gen/boolean])]
                 (let [buffer (c/->value-buffer v)]
                   (if (c/can-decode-value-buffer? buffer)
-                    (t/is (if (and (double? v) (Double/isNaN v))
-                            (Double/isNaN (c/decode-value-buffer buffer))
-                            (= v (c/decode-value-buffer buffer)))
-                          (str (pr-str v) " " (class v)))
-                    (t/is (and (string? v)
-                               (> (count v) @#'c/max-string-index-length)
-                               (= @#'c/object-value-type-id
-                                  (.getByte (c/value-buffer-type-id buffer) 0))))))))
+                    (if (and (double? v) (Double/isNaN v))
+                      (Double/isNaN (c/decode-value-buffer buffer))
+                      (= v (c/decode-value-buffer buffer)))
+                    (and (string? v)
+                         (> (count v) @#'c/max-string-index-length)
+                         (= @#'c/object-value-type-id
+                            (.getByte (c/value-buffer-type-id buffer) 0)))))))
