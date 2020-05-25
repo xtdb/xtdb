@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 6)
+(def ^:const index-version 7)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -96,6 +96,8 @@
 (def ^:private string-value-type-id 4)
 (def ^:private bytes-value-type-id 5)
 (def ^:private object-value-type-id 6)
+(def ^:private boolean-value-type-id 7)
+(def ^:private char-value-type-id 8)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -155,6 +157,16 @@
   (value->buffer [this to]
     (throw (UnsupportedOperationException. "Byte arrays as values is not supported.")))
 
+  Boolean
+  (value->buffer [this ^MutableDirectBuffer to]
+    (mem/limit-buffer
+     (doto to
+       (.putByte 0 boolean-value-type-id)
+       (.putByte value-type-id-size ^byte (if this
+                                            1
+                                            0)))
+     (+ value-type-id-size Byte/BYTES)))
+
   Byte
   (value->buffer [this to]
     (value->buffer (long this) to))
@@ -195,8 +207,12 @@
       (.putByte 0 (byte date-value-type-id))))
 
   Character
-  (value->buffer [this to]
-    (value->buffer (str this) to))
+  (value->buffer [this ^MutableDirectBuffer to]
+    (mem/limit-buffer
+     (doto to
+       (.putByte 0 char-value-type-id)
+       (.putChar value-type-id-size this ByteOrder/BIG_ENDIAN))
+     (+ value-type-id-size Character/BYTES)))
 
   String
   (value->buffer [this ^MutableDirectBuffer to]
@@ -283,35 +299,30 @@
           (aset bs (dec idx) (unchecked-byte (- b offset)))
           (recur (inc idx)))))))
 
-;; TODO: Booleans should really have their own value type and encode
-;; as single bytes, but this change would require an index bump.
+(defn- decode-boolean ^Boolean [^DirectBuffer buffer]
+  (= 1 (.getByte buffer value-type-id-size)))
 
-(def ^:private true-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer true)))
-(def ^:private false-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer false)))
+(defn- decode-char ^Character [^DirectBuffer buffer]
+  (.getChar buffer value-type-id-size ByteOrder/BIG_ENDIAN))
 
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when buffer
     (case (.getByte (value-buffer-type-id buffer) 0)
+      (1 2 3 4 7 8) true
       0 (= buffer nil-id-buffer)
-      (1 2 3 4) true
-      6 (or (= buffer true-value-buffer)
-            (= buffer false-value-buffer))
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
   (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
     (case type-id
-      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
-          nil
-          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
       1 (decode-long buffer) ;; long-value-type-id
       2 (decode-double buffer) ;; double-value-type-id
       3 (Date. (decode-long buffer)) ;; date-value-type-id
       4 (decode-string buffer) ;; string-value-type-id
-      6 (cond ;; object-value-type-id
-          (= buffer true-value-buffer) true
-          (= buffer false-value-buffer) false
-          :else
+      7 (decode-boolean buffer) ;; boolean-value-type-id
+      8 (decode-char buffer) ;; char-value-type-id
+      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
+          nil
           (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
       (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
