@@ -14,6 +14,8 @@
            (clojure.lang MapEntry)
            (org.agrona DirectBuffer ExpandableDirectByteBuffer)))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn etx->kvs [^EntityTx etx]
   [[(c/encode-entity+vt+tt+tx-id-key-to
      nil
