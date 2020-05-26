@@ -60,12 +60,12 @@
   (->PrefixKvIterator i prefix))
 
 (defn all-keys-in-prefix
-  ([i prefix] (all-keys-in-prefix i prefix prefix {}))
-  ([i prefix seek-k] (all-keys-in-prefix i prefix seek-k {}))
-  ([i ^DirectBuffer prefix, ^DirectBuffer seek-k, {:keys [entries? reverse?]}]
+  ([i ^DirectBuffer prefix] (all-keys-in-prefix i prefix (.capacity prefix) {}))
+  ([i seek-k prefix-length] (all-keys-in-prefix i seek-k prefix-length {}))
+  ([i ^DirectBuffer seek-k, prefix-length {:keys [entries? reverse?]}]
    (letfn [(step [k]
              (lazy-seq
-              (when (and k (mem/buffers=? prefix k (.capacity prefix)))
+              (when (and k (mem/buffers=? seek-k k prefix-length))
                 (cons (if entries?
                         (MapEntry/create (mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i)))
                         (mem/copy-to-unpooled-buffer k))
@@ -109,10 +109,9 @@
       (update :eid c/safe-id)
       (update :content-hash c/safe-id)))
 
-;;;; Content indices
+(defrecord Quad [attr eid content-hash value])
 
-(defrecord EntityValue [eid value])
-(defrecord EntityValueContentHash [eid value content-hash])
+;;;; Content indices
 
 (defn encode-ave-key-to
   (^org.agrona.MutableDirectBuffer[b attr]
@@ -133,18 +132,20 @@
         (.putBytes (+ c/index-id-size c/id-size (.capacity v)) entity 0 (.capacity entity)))
       (+ c/index-id-size c/id-size (.capacity v) (.capacity entity))))))
 
-(defn decode-ave-key->ev-from
-  ^crux.kv_indexer.EntityValue [^DirectBuffer k]
+(defn decode-ave-key-from ^crux.kv_indexer.Quad [^DirectBuffer k]
   (let [length (long (.capacity k))]
     (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
       (assert (= c/ave-index-id index-id))
       (let [value-size (- length c/id-size c/id-size c/index-id-size)
+            attr (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)
             value (mem/slice-buffer k (+ c/index-id-size c/id-size) value-size)
             entity (Id. (mem/slice-buffer k (+ c/index-id-size c/id-size value-size) c/id-size) 0)]
-        (->EntityValue entity value)))))
+        (->Quad attr entity nil value)))))
 
 (defn encode-aecv-key-to
+  (^org.agrona.MutableDirectBuffer [b]
+   (encode-aecv-key-to b c/empty-buffer c/empty-buffer c/empty-buffer c/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr]
    (encode-aecv-key-to b attr c/empty-buffer c/empty-buffer c/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr entity]
@@ -152,30 +153,45 @@
   (^org.agrona.MutableDirectBuffer [b attr entity content-hash]
    (encode-aecv-key-to b attr entity content-hash c/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer v]
-   (assert (= c/id-size (.capacity attr)) (mem/buffer->hex attr))
-   (assert (or (= c/id-size (.capacity content-hash))
-               (zero? (.capacity content-hash))) (mem/buffer->hex content-hash))
-   (assert (or (= c/id-size (.capacity entity))
-               (zero? (.capacity entity))) (mem/buffer->hex entity))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size (.capacity entity) (.capacity content-hash) (.capacity v))))]
+   (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
+           (mem/buffer->hex attr))
+   (assert (or (zero? (.capacity entity)) (= c/id-size (.capacity entity)))
+           (mem/buffer->hex entity))
+   (assert (or (zero? (.capacity content-hash)) (= c/id-size (.capacity content-hash)))
+           (mem/buffer->hex content-hash))
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity attr) (.capacity entity) (.capacity content-hash) (.capacity v))))]
      (-> (doto b
            (.putByte 0 c/aecv-index-id)
-           (.putBytes c/index-id-size attr 0 c/id-size)
-           (.putBytes (+ c/index-id-size c/id-size) entity 0 (.capacity entity))
-           (.putBytes (+ c/index-id-size c/id-size (.capacity entity)) content-hash 0 (.capacity content-hash))
-           (.putBytes (+ c/index-id-size c/id-size (.capacity entity) (.capacity content-hash)) v 0 (.capacity v)))
-         (mem/limit-buffer (+ c/index-id-size c/id-size (.capacity entity) (.capacity content-hash) (.capacity v)))))))
+           (.putBytes c/index-id-size attr 0 (.capacity attr))
+           (.putBytes (+ c/index-id-size (.capacity attr)) entity 0 (.capacity entity))
+           (.putBytes (+ c/index-id-size (.capacity attr) (.capacity entity)) content-hash 0 (.capacity content-hash))
+           (.putBytes (+ c/index-id-size (.capacity attr) (.capacity entity) (.capacity content-hash)) v 0 (.capacity v)))
+         (mem/limit-buffer (+ c/index-id-size (.capacity attr) (.capacity entity) (.capacity content-hash) (.capacity v)))))))
 
-(defn decode-aecv-key->evc-from ^crux.kv_indexer.EntityValueContentHash [^DirectBuffer k]
+(defn decode-aecv-key-from ^crux.kv_indexer.Quad [^DirectBuffer k]
   (let [length (long (.capacity k))]
     (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
       (assert (= c/aecv-index-id index-id))
       (let [value-size (- length c/id-size c/id-size c/id-size c/index-id-size)
+            attr (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)
             entity (Id. (mem/slice-buffer k (+ c/index-id-size c/id-size) c/id-size) 0)
             content-hash (Id. (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size) c/id-size) 0)
             value (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size c/id-size) value-size)]
-        (->EntityValueContentHash entity value content-hash)))))
+        (->Quad attr entity content-hash value)))))
+
+(defn all-attrs [i]
+  (let [seek-buffer (.get idx/seek-buffer-tl)
+        aecv-prefix (encode-aecv-key-to seek-buffer)
+        i (new-prefix-kv-iterator i aecv-prefix)]
+    (letfn [(step [k]
+              (lazy-seq
+               (when-let [^DirectBuffer k (kv/seek i k)]
+                 (cons (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)
+                       (step (-> (mem/copy-buffer k (.capacity k) seek-buffer)
+                                 (mem/limit-buffer (+ c/index-id-size c/id-size))
+                                 (mem/inc-unsigned-buffer!)))))))]
+      (step aecv-prefix))))
 
 (defn encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b entity]
@@ -246,7 +262,7 @@
            {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
            :keys [with-corrections?]}]
    (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
-     (-> (all-keys-in-prefix i (mem/limit-buffer seek-k (+ c/index-id-size c/id-size)) seek-k
+     (-> (all-keys-in-prefix i seek-k (+ c/index-id-size c/id-size)
                              {:reverse? true, :entries? true})
          (->> (map ->entity-tx))
          (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
@@ -264,7 +280,7 @@
            {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
            :keys [with-corrections?]}]
    (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
-     (-> (all-keys-in-prefix i (-> seek-k (mem/limit-buffer (+ c/index-id-size c/id-size))) seek-k
+     (-> (all-keys-in-prefix i seek-k (+ c/index-id-size c/id-size)
                              {:entries? true})
          (->> (map ->entity-tx))
          (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
@@ -278,7 +294,7 @@
 
 ;;;; IndexStore
 
-(defrecord KvIndexStore [object-store snapshot]
+(defrecord KvIndexStore [snapshot]
   Closeable
   (close [_]
     (cio/try-close snapshot))
@@ -301,7 +317,7 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (cons (MapEntry/create (.value (decode-ave-key->ev-from k))
+                    (cons (MapEntry/create (.value (decode-ave-key-from k))
                                            :crux.index.binary-placeholder/value)
                           (lazy-seq
                            (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size))
@@ -320,7 +336,7 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (let [eid (.eid (decode-ave-key->ev-from k))
+                    (let [eid (.eid (decode-ave-key-from k))
                           eid-buffer (c/->id-buffer eid)]
                       (concat
                        (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
@@ -346,7 +362,7 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (let [eid (.eid (decode-aecv-key->evc-from k))
+                    (let [eid (.eid (decode-aecv-key-from k))
                           eid-buffer (c/->id-buffer eid)]
                       (concat
                        (when (entity-resolver-fn eid-buffer)
@@ -372,7 +388,7 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (cons (MapEntry/create (.value (decode-aecv-key->evc-from k))
+                    (cons (MapEntry/create (.value (decode-aecv-key-from k))
                                            entity-tx)
                           (lazy-seq (step (kv/next i))))))))))
 
@@ -408,13 +424,6 @@
       (cio/->cursor #(.close i)
                     (entity-history-seq i eid opts))))
 
-  (all-content-hashes [this eid]
-    (with-open [i (kv/new-iterator snapshot)]
-      (->> (all-keys-in-prefix i (encode-aecv-key-to (.get idx/seek-buffer-tl) (c/->id-buffer :crux.db/id) (c/->id-buffer eid)))
-           (map decode-aecv-key->evc-from)
-           (map #(.content-hash ^EntityValueContentHash %))
-           (set))))
-
   (decode-value [this value-buffer eid-buffer]
     (assert (some? value-buffer))
     (assert (some? eid-buffer))
@@ -427,7 +436,7 @@
     (c/->value-buffer value))
 
   (open-nested-index-store [this]
-    (->KvIndexStore object-store (lru/new-cached-snapshot snapshot false))))
+    (->KvIndexStore (lru/new-cached-snapshot snapshot false))))
 
 ;;;; Indexer
 
@@ -448,36 +457,60 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (idx/->nippy-buffer v)))))
          (apply concat))))
 
-(defrecord KvIndexer [kv-store object-store]
+(defrecord KvIndexer [kv-store]
   db/Indexer
   (index-docs [this docs]
-    (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
-
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (let [docs (->> docs
-                      (into {} (remove (fn [[k doc]]
-                                         (or (idx/keep-non-evicted-doc (db/get-single-object object-store snapshot (c/new-id k)))
-                                             (idx/evicted-doc? doc)))))
+                      (into {} (remove (let [crux-db-id (c/->id-buffer :crux.db/id)]
+                                         (fn [[k doc]]
+                                           (let [eid (c/->id-buffer (:crux.db/id doc))]
+                                             (kv/get-value snapshot (encode-aecv-key-to (.get idx/seek-buffer-tl)
+                                                                                        crux-db-id
+                                                                                        eid
+                                                                                        (c/->id-buffer k)
+                                                                                        eid)))))))
                       not-empty)
 
             content-idx-kvs (->content-idx-kvs docs)]
 
         (some->> (seq content-idx-kvs) (kv/store kv-store))
-        (some->> (seq docs) (db/put-objects object-store))
 
         {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
          :indexed-docs docs})))
 
-  (unindex-docs [this docs]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (let [existing-docs (db/get-objects object-store snapshot (keys docs))]
-        (->> (->content-idx-kvs existing-docs)
-             keys
-             (kv/delete kv-store))
+  (unindex-eids [this eids]
+    (with-open [snapshot (kv/new-snapshot kv-store)
+                i (kv/new-iterator snapshot)]
+      (let [attrs (vec (all-attrs i))
+            {:keys [tombstones ks]} (->> (for [attr attrs
+                                               eid eids
+                                               aecv-key (all-keys-in-prefix i
+                                                                            (encode-aecv-key-to (.get idx/seek-buffer-tl)
+                                                                                                (c/->id-buffer attr)
+                                                                                                (c/->id-buffer eid)))]
+                                           aecv-key)
 
-        (db/put-objects object-store docs)
+                                         (reduce (fn [acc aecv-key]
+                                                   (let [quad (decode-aecv-key-from aecv-key)]
+                                                     (-> acc
+                                                         (update :tombstones assoc (.content-hash quad) {:crux.db/id (.eid quad), :crux.db/evicted? true})
+                                                         (update :ks conj
+                                                                 (encode-ave-key-to nil
+                                                                                    (c/->id-buffer (.attr quad))
+                                                                                    (c/->id-buffer (.value quad))
+                                                                                    (c/->id-buffer (.eid quad)))
+                                                                 aecv-key))))
+                                                 {:tombstones {}
+                                                  :ks #{}}))]
 
-        {:unindexed-docs existing-docs})))
+        (kv/delete kv-store
+                   (concat ks
+                           (for [eid eids
+                                 k (all-keys-in-prefix i (encode-hash-cache-key-to nil (c/->id-buffer eid)))]
+                             k)))
+
+        {:tombstones tombstones})))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
@@ -502,7 +535,7 @@
       (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
-    (->KvIndexStore object-store (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
+    (->KvIndexStore (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
 
   status/Status
   (status-map [this]
@@ -511,6 +544,6 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [kv-store object-store]} args]
-               (->KvIndexer kv-store object-store))
-   :deps [:crux.node/kv-store :crux.node/object-store]})
+  {:start-fn (fn [{:crux.node/keys [kv-store]} args]
+               (->KvIndexer kv-store))
+   :deps [:crux.node/kv-store]})
