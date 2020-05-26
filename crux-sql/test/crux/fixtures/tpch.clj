@@ -1,4 +1,5 @@
 (ns crux.fixtures.tpch
+  (:require [crux.fixtures :as fix :refer [*api*]])
   (:import [io.airlift.tpch TpchColumn TpchColumnType TpchColumnType$Base TpchEntity TpchTable]))
 
 (def tpch-column-types->crux-calcite-type
@@ -37,9 +38,14 @@
              TpchColumnType$Base/DATE
              (.getDate c b))])))
 
+;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
 (defn tpch-table->docs [^TpchTable t]
   ;; first happens to be customers (;; 150000)
-  (map (partial tpch-entity->doc t) (seq (.createGenerator ^TpchTable t 0.005 1 1))))
+  (map (partial tpch-entity->doc t) (seq (.createGenerator ^TpchTable t 0.05 1 1))))
+
+(defn with-tpch-schema [f]
+  (fix/transact! *api* (tpch-tables->crux-sql-schemas))
+  (f))
 
 (comment
   (first (tpch-tables->crux-sql-schemas))

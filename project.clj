@@ -54,6 +54,9 @@
    [org.reactivestreams/reactive-streams "1.0.3"]
    [cheshire "5.10.0"]
 
+   ;; SQL development:
+   [io.airlift.tpch/tpch "0.10"]
+
    ;; crux metrics dependencies
    ;; tag::MetricsJMXDeps[]
    [io.dropwizard.metrics/metrics-jmx "4.1.2"]
