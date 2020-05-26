@@ -28,11 +28,13 @@
 (defn exec-prepared-query [^PreparedStatement p & args]
   (doseq [[i v] args]
     (if (string? v)
-      (.setString p i v)))
+      (.setString p i v)
+      (if (number? v)
+        (.setInt p i v))))
   (with-open [rs (.executeQuery p)]
     (->> rs resultset-seq (into []))))
 
-(defn prepared-query [^java.sql.Connection conn q & args]
+(defn prepared-query [^java.sql.Connection conn q]
   (.prepareStatement conn q))
 
 (defn query [^java.sql.Connection conn q]

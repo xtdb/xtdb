@@ -15,7 +15,7 @@
    :crux.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
                                        (symbol (.getColumnName c))))
                           :where (vec (for [^TpchColumn c (.getColumns t)]
-                                        ['e (keyword (.getSimplifiedColumnName c)) (symbol (.getColumnName c))]))}
+                                        ['e (keyword (.getColumnName c)) (symbol (.getColumnName c))]))}
    :crux.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
                                       [(symbol (.getColumnName c)) (tpch-column-types->crux-calcite-type (.getBase (.getType c)))]))})
 
@@ -23,9 +23,9 @@
   (map tpch-table->crux-sql-schema (TpchTable/getTables)))
 
 (defn tpch-entity->doc [^TpchTable t ^TpchEntity b]
-  (into {:crux.db/id (keyword (str (.getTableName t) "-" (.getRowNumber b)))}
+  (into {:crux.db/id (java.util.UUID/randomUUID)}
         (for [^TpchColumn c (.getColumns t)]
-          [(keyword (.getSimplifiedColumnName c))
+          [(keyword (.getColumnName c))
            (condp = (.getBase (.getType c))
              TpchColumnType$Base/IDENTIFIER
              (.getIdentifier c b)
