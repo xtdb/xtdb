@@ -8,17 +8,13 @@
 ;; Transaction Processing Performance Council
 ;; http://www.tpc.org/
 
-(defn- with-tpch-schema [f]
-  (fix/transact! *api* (tf/tpch-tables->crux-sql-schemas))
-  (f))
-
 (defn- with-tpch-dataset [f]
   (doseq [^TpchTable t (TpchTable/getTables)]
     ;; Using a scale-factor of .005 and no take, takes ~3 mins combined for all tests
     (fix/transact! *api* (take 10 (tf/tpch-table->docs t))))
   (f))
 
-(t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node cf/with-calcite-connection with-tpch-schema with-tpch-dataset)
+(t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node cf/with-calcite-connection tf/with-tpch-schema with-tpch-dataset)
 
 (defn query [^String s]
   (cf/query (.replace s "tpch." "")))
