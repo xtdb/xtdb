@@ -25,13 +25,15 @@
     (merge (when (map? ret) ret)
            {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
 
+(defn exec-prepared-query [^PreparedStatement p & args]
+  (doseq [[i v] args]
+    (if (string? v)
+      (.setString p i v)))
+  (with-open [rs (.executeQuery p)]
+    (->> rs resultset-seq (into []))))
+
 (defn prepared-query [^java.sql.Connection conn q & args]
-  (let
-    (doseq [[i v] args]
-      (if (string? v)
-        (.setString p i v)))
-    (with-open [rs (.executeQuery p)]
-      (->> rs resultset-seq (into [])))))
+  (.prepareStatement conn q))
 
 (defn query [^java.sql.Connection conn q]
   (with-open [stmt (.createStatement conn)
@@ -43,12 +45,18 @@
   (fix/transact! (user/crux-node) (tf/tpch-tables->crux-sql-schemas))
   (def db (c/db (user/crux-node)))
   (def conn (cal/jdbc-connection (user/crux-node)))
+  (def p (prepared-query conn "SELECT c_name FROM CUSTOMER"))
 
   (println (with-timing*
-             (fn [] {:count (count (c/q db '{:find [e] :where [[e :custkey ?custkey] [e :name ?c_name]]}))})))
+             (fn [] {:count (count (c/q db '{:find [c_custkey c_name c_address c_nationkey c_phone c_acctbal c_mktsegment c_comment],
+                                             :where [[e :custkey c_custkey] [e :name c_name] [e :address c_address] [e :nationkey c_nationkey] [e :phone c_phone] [e :acctbal c_acctbal] [e :mktsegment c_mktsegment] [e :comment c_comment]],
+                                             :args []}))})))
 
   (println (with-timing*
              (fn [] {:count (count (query conn "SELECT * FROM CUSTOMER"))})))
 
   (println (with-timing*
-             (fn [] {:count (count (prepared-query conn "SELECT * FROM CUSTOMER"))}))))
+             (fn [] {:count (count (exec-prepared-query (prepared-query conn "SELECT c_name FROM CUSTOMER")))})))
+
+  (println (with-timing*
+             (fn [] {:count (count (exec-prepared-query p))}))))
