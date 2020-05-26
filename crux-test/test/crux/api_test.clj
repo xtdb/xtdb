@@ -214,17 +214,7 @@
       (t/is (true? (api/tx-committed? *api* submitted-tx))))
 
     (let [stats (api/attribute-stats *api*)]
-      (t/is (= 2 (:name stats)))))
-
-  (t/testing "reflect evicted documents"
-    (let [now (Date.)
-          submitted-tx (api/submit-tx *api* [[:crux.tx/evict :ivan]])]
-      (t/is (api/await-tx *api* submitted-tx))
-
-      (t/is (nil? (api/entity (api/db *api*) :ivan)))
-
-      (let [stats (api/attribute-stats *api*)]
-        (t/is (= 0 (:name stats)))))))
+      (t/is (= 2 (:name stats))))))
 
 (t/deftest test-adding-back-evicted-document
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
