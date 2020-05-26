@@ -671,9 +671,7 @@
   (fix/submit+await-tx [[:crux.tx/evict :to-evict]])
 
   (with-open [log-iterator (api/open-tx-log *api* nil true)]
-    (t/is (= (->> (iterator-seq log-iterator)
-                  (map :crux.api/tx-ops))
-             [[[:crux.tx/put
+    (t/is (= [[[:crux.tx/put
                 #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                           :evicted? true}]]
               [[:crux.tx/cas
@@ -682,7 +680,9 @@
                 #:crux.db{:id #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                           :evicted? true}]]
               [[:crux.tx/evict
-                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]))))
+                #crux/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]
+             (->> (iterator-seq log-iterator)
+                  (map :crux.api/tx-ops))))))
 
 (t/deftest nil-transaction-fn-457
   (with-redefs [tx/tx-fns-enabled? true]
