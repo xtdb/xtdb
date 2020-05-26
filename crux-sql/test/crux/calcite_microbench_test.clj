@@ -6,7 +6,9 @@
             [crux.fixtures.calcite :as cf]
             [crux.fixtures.tpch :as tf]
             [user :as user])
-  (:import io.airlift.tpch.TpchTable))
+  (:import io.airlift.tpch.TpchTable
+           java.sql.DriverManager
+           java.sql.PreparedStatement))
 
 (defn- load-docs! [node]
   (doseq [^TpchTable t (TpchTable/getTables)]
@@ -23,8 +25,16 @@
     (merge (when (map? ret) ret)
            {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
 
-(defn query [node q]
-  (with-open [stmt (.createStatement (cal/jdbc-connection node))
+(defn prepared-query [^java.sql.Connection conn q & args]
+  (let
+    (doseq [[i v] args]
+      (if (string? v)
+        (.setString p i v)))
+    (with-open [rs (.executeQuery p)]
+      (->> rs resultset-seq (into [])))))
+
+(defn query [^java.sql.Connection conn q]
+  (with-open [stmt (.createStatement conn)
               rs (.executeQuery stmt q)]
     (->> rs resultset-seq (into []))))
 
@@ -32,9 +42,13 @@
   (load-docs! (user/crux-node))
   (fix/transact! (user/crux-node) (tf/tpch-tables->crux-sql-schemas))
   (def db (c/db (user/crux-node)))
+  (def conn (cal/jdbc-connection (user/crux-node)))
 
   (println (with-timing*
              (fn [] {:count (count (c/q db '{:find [e] :where [[e :custkey ?custkey] [e :name ?c_name]]}))})))
 
   (println (with-timing*
-             (fn [] {:count (count (query (user/crux-node) "SELECT * FROM CUSTOMER"))}))))
+             (fn [] {:count (count (query conn "SELECT * FROM CUSTOMER"))})))
+
+  (println (with-timing*
+             (fn [] {:count (count (prepared-query conn "SELECT * FROM CUSTOMER"))}))))
