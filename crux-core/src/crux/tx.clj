@@ -9,7 +9,8 @@
             [crux.kv :as kv]
             [crux.query :as q]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [clojure.set :as set])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
@@ -36,7 +37,6 @@
 (defprotocol EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time f])
   (with-entity-history-seq-descending [_ eid valid-time f])
-  (all-content-hashes [_ eid])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
 
@@ -84,12 +84,6 @@
                                    first
                                    vector))
          first))
-
-  (all-content-hashes [_ eid]
-    (with-open [nested-index-store (db/open-nested-index-store index-store)]
-      (into (set (db/all-content-hashes nested-index-store eid))
-            (set (->> (get etxs eid)
-                      (map #(.content-hash ^EntityTx %)))))))
 
   (with-etxs [_ new-etxs]
     (->IndexStore+NewETXs index-store
@@ -177,8 +171,7 @@
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
 (defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history] :as tx-consumer}]
-  (let [eid (c/new-id k)
-        content-hashes (all-content-hashes history eid)]
+  (let [eid (c/new-id k)]
     {:pre-commit-fn #(cond
                        (empty? legacy-args) true
 
@@ -191,8 +184,7 @@
                                           k evict-time-ranges-env-var)
                                true))
 
-     :tombstones (into {} (for [content-hash content-hashes]
-                            [content-hash {:crux.db/id eid, :crux.db/evicted? true}]))}))
+     :evict-eids #{k}}))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
@@ -243,7 +235,7 @@
          :etxs (cond-> (mapcat :etxs op-results)
                  args-doc (conj (c/->EntityTx args-id tx-time tx-time tx-id args-v)))
 
-         :tombstones (into {} (mapcat :tombstones) op-results)}))))
+         :evict-eids (into #{} (mapcat :evict-eids) op-results)}))))
 
 (defmethod index-tx-event :default [[op & _] tx tx-consumer]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
@@ -269,7 +261,7 @@
 
       (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
         (update-stats tx-consumer (->> (vals indexed-docs)
-                                       (map #(idx/doc-predicate-stats % false))))
+                                       (map idx/doc-predicate-stats)))
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids (set (keys docs))
@@ -288,27 +280,26 @@
     (binding [*current-tx* (assoc tx ::txe/tx-events tx-events)]
       (let [tx-consumer (assoc tx-consumer :index-store index-store)
             res (reduce (fn [{:keys [history] :as acc} tx-event]
-                          (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
+                          (let [{:keys [pre-commit-fn etxs evict-eids]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
                             (if (and pre-commit-fn (not (pre-commit-fn)))
                               (reduced ::aborted)
                               (-> acc
                                   (update :history with-etxs etxs)
-                                  (update :tombstones merge tombstones)))))
+                                  (update :evict-eids set/union evict-eids)))))
 
                         {:history (->IndexStore+NewETXs index-store {})
-                         :tombstones {}}
+                         :evict-eids #{}}
 
                         tx-events)
             committed? (not= res ::aborted)]
 
         (if committed?
-          (do (when-let [tombstones (not-empty (:tombstones res))]
-                (let [{:keys [unindexed-docs]} (db/unindex-docs indexer tombstones)]
-                  (update-stats tx-consumer (->> (vals unindexed-docs)
-                                                 (map #(idx/doc-predicate-stats % true)))))
-                (db/submit-docs document-store tombstones))
+          (do
+            (when-let [evict-eids (not-empty (:evict-eids res))]
+              (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
+                (db/submit-docs document-store tombstones)))
 
-              (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
+            (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
           (do
             (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)

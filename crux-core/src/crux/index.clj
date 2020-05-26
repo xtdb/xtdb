@@ -227,9 +227,9 @@
     (not (multiple-values? v))
     (vector)))
 
-(defn doc-predicate-stats [doc evicted?]
+(defn doc-predicate-stats [doc]
   (->> (for [[k v] doc]
-         [k (cond-> (count (vectorize-value v)) evicted? -)])
+         [k (count (vectorize-value v))])
        (into {})))
 
 ;; Utils
