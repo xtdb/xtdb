@@ -373,25 +373,28 @@
   Closeable
   (close [_]))
 
+(defn- ^:dynamic *now* ^Instant []
+  (Instant/now))
+
+(defn- ->jwt-token-fn [^Supplier jwt-supplier]
+  (let [!token-cache (atom nil)]
+    (fn []
+      (or (when-let [token @!token-cache]
+            (let [expiration-time (.minusSeconds ^Instant (:token-expiration token) 5)
+                  current-time (*now*)]
+              (when (.isBefore current-time expiration-time)
+                (:token token))))
+          (let [^String new-token (.get jwt-supplier)
+                ^Instant new-token-exp (-> (SignedJWT/parse new-token)
+                                           (.getJWTClaimsSet)
+                                           (.getExpirationTime)
+                                           (.toInstant))]
+            (reset! !token-cache {:token new-token :token-expiration new-token-exp})
+            new-token)))))
+
 (defn new-api-client ^ICruxAPI
   ([url]
    (new-api-client url nil))
   ([url ^RemoteClientOptions options]
    (init-internal-http-request-fn)
-   (let [!token-cache (atom nil)
-         supplier (some-> options (.-jwtSupplier))
-         ->jwt-token (when supplier
-                       (fn []
-                         (or (when-let [token @!token-cache]
-                               (let [expiration-time (.minusSeconds ^Instant (:token-expiration token) 5)
-                                     current-time (Instant/now)]
-                                 (when (.isBefore current-time expiration-time)
-                                   (:token token))))
-                             (let [^String new-token (.get supplier)
-                                   ^Instant new-token-exp (-> (SignedJWT/parse new-token)
-                                                              (.getJWTClaimsSet)
-                                                              (.getExpirationTime)
-                                                              (.toInstant))]
-                               (reset! !token-cache {:token new-token :token-expiration new-token-exp})
-                               new-token))))]
-     (->RemoteApiClient url ->jwt-token))))
+   (->RemoteApiClient url (some-> options (.-jwtSupplier) ->jwt-token-fn))))
