@@ -32,7 +32,11 @@
            java.time.Duration
            java.util.Date
            java.net.URLDecoder
-           org.eclipse.jetty.server.Server))
+           org.eclipse.jetty.server.Server
+           [com.nimbusds.jose.jwk JWK JWKSet KeyType RSAKey ECKey]
+           com.nimbusds.jose.JWSObject
+           com.nimbusds.jwt.SignedJWT
+           [com.nimbusds.jose.crypto RSASSAVerifier ECDSAVerifier]))
 
 ;; ---------------------------------------------------
 ;; Utils
@@ -721,27 +725,56 @@
     (encode-to-output-stream [_ data charset]
       (throw (UnsupportedOperationException.)))))
 
+(defn valid-jwt?
+  "Return true if the given JWS is valid with respect to the given
+  signing key."
+  [^String jwt ^JWKSet jwks]
+  (try
+    (let [jws (SignedJWT/parse ^String jwt)
+          kid (.. jws getHeader getKeyID)
+          jwk (.getKeyByKeyId jwks kid)
+          verifier (case (.getValue ^KeyType (.getKeyType jwk))
+                     "RSA" (RSASSAVerifier. ^RSAKey jwk)
+                     "EC"  (ECDSAVerifier. ^ECKey jwk))]
+      (.verify jws verifier))
+    (catch Exception e
+      false)))
+
+(defn wrap-jwt [handler jwks]
+  (fn [request]
+    (if-not (valid-jwt? (or (get-in request [:headers "x-amzn-oidc-accesstoken"])
+                            (some->> (get-in request [:headers "authorization"])
+                                     (re-matches #"Bearer (.*)")
+                                     (second)))
+                        jwks)
+      {:status 401
+       :body "JWT Failed to validate"}
+
+      (handler request))))
+
 (def module
-  {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port read-only?] :as options}]
-                         (let [server (j/run-jetty (some-fn (-> #(handler % {:crux-node node, ::read-only? read-only?})
-                                                                (p/wrap-params)
-                                                                (wrap-exception-handling))
+  {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port read-only? ^String jwks] :as options}]
+                         (let [server (j/run-jetty
+                                       (-> (some-fn (-> #(handler % {:crux-node node, ::read-only? read-only?})
+                                                        (p/wrap-params)
+                                                        (wrap-exception-handling))
 
-                                                            (-> (partial data-browser-handler node options)
-                                                                (p/wrap-params)
-                                                                (wrap-resource "public")
-                                                                (wrap-format (assoc-in m/default-options
-                                                                                       [:formats "text/html"]
-                                                                                       (mfc/map->Format {:name "text/html"
-                                                                                                         :encoder [html-encoder]})))
-                                                                (wrap-exception-handling))
+                                                    (-> (partial data-browser-handler node options)
+                                                        (p/wrap-params)
+                                                        (wrap-resource "public")
+                                                        (wrap-format (assoc-in m/default-options
+                                                                               [:formats "text/html"]
+                                                                               (mfc/map->Format {:name "text/html"
+                                                                                                 :encoder [html-encoder]})))
+                                                        (wrap-exception-handling))
 
-                                                            (fn [request]
-                                                              {:status 404
-                                                               :headers {"Content-Type" "text/plain"}
-                                                               :body "Could not find resource."}))
-                                                   {:port port
-                                                    :join? false})]
+                                                    (fn [request]
+                                                      {:status 404
+                                                       :headers {"Content-Type" "text/plain"}
+                                                       :body "Could not find resource."}))
+                                           (cond-> jwks (wrap-jwt (JWKSet/parse jwks))))
+                                       {:port port
+                                        :join? false})]
                            (log/info "HTTP server started on port: " port)
                            (->HTTPServer server options)))
              :deps #{:crux.node/node}
@@ -752,7 +785,8 @@
              :args {::port {:crux.config/type :crux.config/nat-int
                             :doc "Port to start the HTTP server on"
                             :default default-server-port}
-
                     ::read-only? {:crux.config/type :crux.config/boolean
                                   :doc "Whether to start the Crux HTTP server in read-only mode"
-                                  :default false}}}})
+                                  :default false}
+                    ::jwks {:crux.config/type :crux.config/string
+                            :doc "JWKS string to validate against"}}}})

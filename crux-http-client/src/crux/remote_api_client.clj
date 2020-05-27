@@ -7,10 +7,13 @@
             [crux.query :as q]
             [clojure.string :as string])
   (:import (java.io Closeable InputStreamReader IOException PushbackReader)
-           java.time.Duration
+           (java.time Instant Duration)
            java.util.Date
+           java.util.function.Supplier
+           com.nimbusds.jwt.SignedJWT
            (crux.api Crux ICruxAPI ICruxDatasource NodeOutOfSyncException
-                     HistoryOptions HistoryOptions$SortOrder)))
+                     HistoryOptions HistoryOptions$SortOrder
+                     RemoteClientOptions)))
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
@@ -65,17 +68,17 @@
               (throw (IllegalStateException. "No supported HTTP client found.")))))))))
 
 (defn- api-request-sync
-  ([url body]
-   (api-request-sync url body {}))
-  ([url body opts]
+  ([url {:keys [body http-opts ->jwt-token] :as opts}]
    (let [{:keys [body status headers]
           :as result}
          (*internal-http-request-fn* (merge {:url url
                                              :method :post
-                                             :headers (when body
-                                                        {"Content-Type" "application/edn"})
+                                             :headers (merge (when body
+                                                               {"Content-Type" "application/edn"})
+                                                             (when ->jwt-token
+                                                               {"Authorization" (str "Bearer " (->jwt-token))}))
                                              :body (some-> body cio/pr-edn-str)}
-                                            opts))]
+                                            http-opts))]
      (cond
        (= 404 status)
        nil
@@ -108,47 +111,53 @@
     valid-time (assoc :valid-time valid-time)
     transact-time (assoc :transact-time transact-time)))
 
-(defrecord RemoteDatasource [url valid-time transact-time]
+(defrecord RemoteDatasource [url valid-time transact-time ->jwt-token]
   Closeable
   (close [_])
 
   ICruxDatasource
   (entity [this eid]
     (api-request-sync (str url "/entity/" (str (c/new-id eid)))
-                      (as-of-map this)
-                      {:method :get}))
+                      {:body (as-of-map this)
+                       :http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (entityTx [this eid]
     (api-request-sync (str url "/entity-tx/" (str (c/new-id eid)))
-                      (as-of-map this)
-                      {:method :get}))
+                      {:body (as-of-map this)
+                       :http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (newSnapshot [this]
     (->RemoteApiStream (atom [])))
 
   (q [this q]
     (api-request-sync (str url "/query")
-                      (assoc (as-of-map this)
-                             :query (q/normalize-query q))))
+                      {:body (assoc (as-of-map this)
+                                    :query (q/normalize-query q))
+                       :->jwt-token ->jwt-token}))
 
   (query [this q]
     (api-request-sync (str url "/query")
-                      (assoc (as-of-map this)
-                             :query (q/normalize-query q))))
+                      {:body (assoc (as-of-map this)
+                                    :query (q/normalize-query q))
+                       :->jwt-token ->jwt-token}))
 
   (q [this snapshot q]
     (let [in (api-request-sync (str url "/query-stream")
-                               (assoc (as-of-map this)
-                                      :query (q/normalize-query q))
-                               {:as :stream})]
+                               {:body (assoc (as-of-map this)
+                                             :query (q/normalize-query q))
+                                :http-opts {:as :stream}
+                                :->jwt-token ->jwt-token})]
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
   (openQuery [this q]
     (let [in (api-request-sync (str url "/query-stream")
-                               (assoc (as-of-map this)
-                                      :query (q/normalize-query q))
-                               {:as :stream})]
+                               {:body (assoc (as-of-map this)
+                                             :query (q/normalize-query q))
+                                :http-opts {:as :stream}
+                                :->jwt-token ->jwt-token})]
       (cio/->cursor #(.close ^Closeable in)
                     (edn-list->lazy-seq in))))
 
@@ -158,15 +167,17 @@
 
   (historyAscending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-ascending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
+                               {:body (assoc (as-of-map this) :eid eid)
+                                :http-opts {:as :stream}
+                                :->jwt-token ->jwt-token})]
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
   (openHistoryAscending [this eid]
     (let [in (api-request-sync (str url "/history-ascending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
+                               {:body (assoc (as-of-map this) :eid eid)
+                                :http-opts {:as :stream}
+                                :->jwt-token ->jwt-token})]
       (cio/->cursor #(.close ^java.io.Closeable in)
                     (edn-list->lazy-seq in))))
 
@@ -176,15 +187,17 @@
 
   (historyDescending [this snapshot eid]
     (let [in (api-request-sync (str url "/history-descending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
+                               {:body (assoc (as-of-map this) :eid eid)
+                                :http-opts {:as :stream}
+                                :->jwt-token ->jwt-token})]
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
   (openHistoryDescending [this eid]
     (let [in (api-request-sync (str url "/history-descending")
-                               (assoc (as-of-map this) :eid eid)
-                               {:as :stream})]
+                               {:body (assoc (as-of-map this) :eid eid)
+                                :http-opts {:as :stream}
+                                :->jwt-token ->jwt-token})]
       (cio/->cursor #(.close ^java.io.Closeable in)
                     (edn-list->lazy-seq in))))
 
@@ -206,10 +219,10 @@
                     :transaction-time (cio/format-rfc3339-date transact-time)}
                    (into {} (remove (comp nil? val))))]
       (if-let [in (api-request-sync (str url "/entity-history/" (c/new-id eid))
-                                    nil
-                                    {:as :stream,
-                                     :method :get
-                                     :query-params qps})]
+                                    {:http-opts {:as :stream
+                                                 :method :get
+                                                 :query-params qps}
+                                     :->jwt-token ->jwt-token})]
         (cio/->cursor #(.close ^java.io.Closeable in)
                       (edn-list->lazy-seq in))
         (cio/->cursor #() []))))
@@ -217,38 +230,49 @@
   (validTime [_] valid-time)
   (transactionTime [_] transact-time))
 
-(defrecord RemoteApiClient [url]
+(defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
-  (db [_] (->RemoteDatasource url nil nil))
-  (db [_ valid-time] (->RemoteDatasource url valid-time nil))
+  (db [_] (->RemoteDatasource url nil nil ->jwt-token))
+  (db [_ valid-time] (->RemoteDatasource url valid-time nil ->jwt-token))
 
   (db [_ valid-time tx-time]
     (when tx-time
-      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx") nil {:method :get})
+      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx")
+                                                 {:http-opts {:method :get}
+                                                  :->jwt-token ->jwt-token})
                                :crux.tx/tx-time)]
         (when (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time)))
           (throw (NodeOutOfSyncException.
                   (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
                   tx-time latest-tx-time)))))
 
-    (->RemoteDatasource url valid-time tx-time))
+    (->RemoteDatasource url valid-time tx-time ->jwt-token))
 
   (openDB [this] (.db this))
   (openDB [this valid-time] (.db this valid-time))
   (openDB [this valid-time tx-time] (.db this valid-time tx-time))
 
   (document [_ content-hash]
-    (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
+    (api-request-sync (str url "/document/" content-hash)
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (documents [_ content-hash-set]
-    (api-request-sync (str url "/documents") content-hash-set {:method :post}))
+    (api-request-sync (str url "/documents")
+                      {:body content-hash-set
+                       :http-opts {:method :post}
+                       :->jwt-token ->jwt-token}))
 
   (history [_ eid]
-    (api-request-sync (str url "/history/" (str (c/new-id eid))) nil {:method :get}))
+    (api-request-sync (str url "/history/" (str (c/new-id eid)))
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (when transaction-time-end
-      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx") nil {:method :get})
+      (let [latest-tx-time (-> (api-request-sync (str url "/latest-completed-tx")
+                                                 {:http-opts {:method :get}
+                                                  :->jwt-token ->jwt-token})
                                :crux.tx/tx-time)]
         (when (or (nil? latest-tx-time) (pos? (compare transaction-time-end latest-tx-time)))
           (throw (NodeOutOfSyncException.
@@ -262,17 +286,24 @@
                                                ["transaction-time-start" (cio/format-rfc3339-date transaction-time-start)]
                                                ["valid-time-end" (cio/format-rfc3339-date valid-time-end)]
                                                ["transaction-time-end" (cio/format-rfc3339-date transaction-time-end)]])))
-                          nil {:method :get}))))
+                          {:http-opts {:method :get}
+                           :->jwt-token ->jwt-token}))))
 
   (status [_]
-    (api-request-sync url nil {:method :get}))
+    (api-request-sync url
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (attributeStats [_]
-    (api-request-sync (str url "/attribute-stats") nil {:method :get}))
+    (api-request-sync (str url "/attribute-stats")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (submitTx [_ tx-ops]
     (try
-      (api-request-sync (str url "/tx-log") tx-ops)
+      (api-request-sync (str url "/tx-log")
+                        {:body tx-ops
+                         :->jwt-token ->jwt-token})
       (catch Exception e
         (let [data (ex-data e)]
           (when (and (= 403 (:status data))
@@ -281,7 +312,9 @@
           (throw e)))))
 
   (hasTxCommitted [_ submitted-tx]
-    (api-request-sync (str url "/tx-committed?tx-id=" (:crux.tx/tx-id submitted-tx)) nil {:method :get}))
+    (api-request-sync (str url "/tx-committed?tx-id=" (:crux.tx/tx-id submitted-tx))
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (openTxLog [this after-tx-id with-ops?]
     (let [params (->> [(when after-tx-id
@@ -292,42 +325,76 @@
                       (str/join "&"))
           in (api-request-sync (cond-> (str url "/tx-log")
                                  (seq params) (str "?" params))
-                               nil
-                               {:method :get
-                                :as :stream})]
+                               {:http-opts {:method :get
+                                            :as :stream}
+                                :->jwt-token ->jwt-token})]
 
       (cio/->cursor #(.close ^Closeable in)
                     (edn-list->lazy-seq in))))
 
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")
-                        timeout (str "?timeout=" (.toMillis timeout))) nil {:method :get}))
+                        timeout (str "?timeout=" (.toMillis timeout)))
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (sync [_ transaction-time timeout]
     (api-request-sync (cond-> (str url "/sync")
                         transaction-time (str "?transactionTime=" (cio/format-rfc3339-date transaction-time))
-                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout)))
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (awaitTxTime [_ tx-time timeout]
     (api-request-sync (cond-> (str url "/await-tx-time?tx-time=" (cio/format-rfc3339-date tx-time))
-                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout)))
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (awaitTx [_ tx timeout]
     (api-request-sync (cond-> (str url "/await-tx?tx-id=" (:crux.tx/tx-id tx))
-                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout)))
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (listen [_ opts f]
     (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))
 
   (latestCompletedTx [_]
-    (api-request-sync (str url "/latest-completed-tx") nil {:method :get}))
+    (api-request-sync (str url "/latest-completed-tx")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   (latestSubmittedTx [_]
-    (api-request-sync (str url "/latest-submitted-tx") nil {:method :get}))
+    (api-request-sync (str url "/latest-submitted-tx")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
 
   Closeable
   (close [_]))
 
-(defn new-api-client ^ICruxAPI [url]
-  (init-internal-http-request-fn)
-  (->RemoteApiClient url))
+(defn- ^:dynamic *now* ^Instant []
+  (Instant/now))
+
+(defn- ->jwt-token-fn [^Supplier jwt-supplier]
+  (let [!token-cache (atom nil)]
+    (fn []
+      (or (when-let [token @!token-cache]
+            (let [expiration-time (.minusSeconds ^Instant (:token-expiration token) 5)
+                  current-time (*now*)]
+              (when (.isBefore current-time expiration-time)
+                (:token token))))
+          (let [^String new-token (.get jwt-supplier)
+                ^Instant new-token-exp (-> (SignedJWT/parse new-token)
+                                           (.getJWTClaimsSet)
+                                           (.getExpirationTime)
+                                           (.toInstant))]
+            (reset! !token-cache {:token new-token :token-expiration new-token-exp})
+            new-token)))))
+
+(defn new-api-client ^ICruxAPI
+  ([url]
+   (new-api-client url nil))
+  ([url ^RemoteClientOptions options]
+   (init-internal-http-request-fn)
+   (->RemoteApiClient url (some-> options (.-jwtSupplier) ->jwt-token-fn))))

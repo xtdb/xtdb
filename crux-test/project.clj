@@ -40,6 +40,10 @@
                  [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0" :exclusions [commons-codec]]
                  [criterium "0.4.5"]
 
+                 ;; Authenticated HTTP Server/Client Tests
+                 [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [commons-codec net.minidev/json-smart]]
+                 [net.minidev/json-smart "2.3"]
+
                  ;; dependency conflict resolution
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
