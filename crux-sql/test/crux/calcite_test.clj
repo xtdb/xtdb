@@ -381,7 +381,8 @@
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                         {:crux.db/id :malcolm :name" Malcolm" :homeworld "Mars" :age 25 :alive false}])
   (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE NAME = ?" [1 "Ivan"])))
-  (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE TRIM(NAME) = ?" [1 "Ivan"]))))
+  (t/is (= [{:homeworld "Earth"}] (prepared-query "SELECT HOMEWORLD FROM PERSON WHERE TRIM(NAME) = ?" [1 "Ivan"])))
+  (t/is (= [{:name " Malcolm"}] (prepared-query "SELECT NAME FROM PERSON WHERE AGE > ?" [1 23]))))
 
 (t/deftest test-sort
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}

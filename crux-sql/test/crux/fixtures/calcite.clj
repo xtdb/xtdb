@@ -37,13 +37,17 @@
               rs (.executeQuery stmt q)]
     (->> rs resultset-seq (into []))))
 
+(defn exec-prepared-query [^PreparedStatement p & args]
+  (doseq [[i v] args]
+    (if (string? v)
+      (.setString p i v)
+      (if (number? v)
+        (.setInt p i v))))
+  (with-open [rs (.executeQuery p)]
+    (->> rs resultset-seq (into []))))
+
 (defn prepared-query [q & args]
-  (let [p ^PreparedStatement (.prepareStatement *conn* q)]
-    (doseq [[i v] args]
-      (if (string? v)
-        (.setString p i v)))
-    (with-open [rs (.executeQuery p)]
-      (->> rs resultset-seq (into [])))))
+  (apply exec-prepared-query (.prepareStatement *conn* q) args))
 
 (defn explain [q]
   (:plan (first (query (str "explain plan for " q)))))
