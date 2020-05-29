@@ -399,8 +399,32 @@
   (max-depth [this]
     1))
 
+(defrecord SingletonUnaryJoinVirtualIndex [idx]
+  db/Index
+  (seek-values [this k]
+    (let [[k result] (db/seek-values idx k)]
+      (when k
+        (MapEntry/create k {(:name idx) result}))))
+
+  (next-values [this]
+    (let [[k result] (db/next-values idx)]
+      (when k
+        (MapEntry/create k {(:name idx) result}))))
+
+  db/LayeredIndex
+  (open-level [this]
+    (db/open-level idx))
+
+  (close-level [this]
+    (db/close-level idx))
+
+  (max-depth [this]
+    1))
+
 (defn new-unary-join-virtual-index [indexes]
-  (->UnaryJoinVirtualIndex indexes (UnaryJoinIteratorsThunkFnState. nil)))
+  (if (= 1 (count indexes))
+    (->SingletonUnaryJoinVirtualIndex (first indexes))
+    (->UnaryJoinVirtualIndex indexes (UnaryJoinIteratorsThunkFnState. nil))))
 
 (defn constrain-join-result-by-empty-names [join-keys join-results]
   (when (not-any? nil? (vals join-results))
