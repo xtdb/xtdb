@@ -2,34 +2,54 @@
   (:require [clojure.java.io :as io]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as i]
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy]
-            [crux.index :as idx])
+            [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
-           org.agrona.io.DirectBufferInputStream
+           java.util.function.Supplier
+           org.agrona.ExpandableDirectByteBuffer
+           [org.agrona DirectBuffer MutableDirectBuffer]
+           crux.codec.Id
            crux.kv.KvSnapshot))
+
+(def ^:private ^ThreadLocal seek-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer.)))))
+
+(defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
+  (assert (= c/id-size (.capacity content-hash)) (mem/buffer->hex content-hash))
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size)))]
+    (mem/limit-buffer
+     (doto b
+       (.putByte 0 c/content-hash->doc-index-id)
+       (.putBytes c/index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash)))
+     (+ c/index-id-size c/id-size))))
+
+(defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
+  (assert (= (+ c/index-id-size c/id-size) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= c/content-hash->doc-index-id index-id))
+    (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)))
 
 (defrecord KvObjectStore [kv]
   db/ObjectStore
   (get-single-object [this snapshot k]
     (if (instance? KvSnapshot snapshot)
       (let [doc-key (c/->id-buffer k)
-            seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) doc-key)]
+            seek-k (encode-doc-key-to (.get seek-buffer-tl) doc-key)]
         (some->> (kv/get-value snapshot seek-k)
-                 (DirectBufferInputStream.)
-                 (DataInputStream.)
-                 (nippy/thaw-from-in!)))
+                 (mem/<-nippy-buffer)))
       (with-open [snapshot (kv/new-snapshot kv)]
         (db/get-single-object this snapshot k))))
 
   (get-objects [this snapshot ks]
     (if (instance? KvSnapshot snapshot)
       (->> (for [k ks
-                 :let [seek-k (c/encode-doc-key-to (.get i/seek-buffer-tl) (c/->id-buffer k))
-                       doc (some-> (kv/get-value snapshot seek-k) idx/<-nippy-buffer)]
+                 :let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))
+                       doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
                  :when doc]
              [k doc])
            (into {}))
@@ -38,8 +58,8 @@
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
-                   [(c/encode-doc-key-to nil (c/->id-buffer k))
-                    (idx/->nippy-buffer v)])))
+                   [(encode-doc-key-to nil (c/->id-buffer k))
+                    (mem/->nippy-buffer v)])))
 
   Closeable
   (close [_]))
