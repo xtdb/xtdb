@@ -540,29 +540,29 @@
                                 (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size c/id-size))
                                          (kv/seek i)
                                          (step)))]
-                      (if (entity-resolver-fn eid-buffer)
-                        (cons (MapEntry/create eid-buffer nil) tail)
+                      (if-let [entity-tx (entity-resolver-fn eid-buffer)]
+                        (cons (MapEntry/create eid-buffer entity-tx) tail)
                         tail))))))))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          eid-buffer (buffer-or-id-buffer e)
-          ^EntityTx entity-tx (entity-resolver-fn eid-buffer)
-          content-hash-buffer (c/->id-buffer (.content-hash entity-tx))
-          prefix (encode-aecv-key-to nil attr-buffer eid-buffer content-hash-buffer)
-          i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
-      (some->> (encode-aecv-key-to
-                (.get seek-buffer-tl)
-                attr-buffer
-                eid-buffer
-                content-hash-buffer
-                (buffer-or-value-buffer min-v))
-               (kv/seek i)
-               ((fn step [^DirectBuffer k]
-                  (when k
-                    (cons (MapEntry/create (.value (decode-aecv-key-from k))
-                                           entity-tx)
-                          (lazy-seq (step (kv/next i))))))))))
+          eid-buffer (buffer-or-id-buffer e)]
+      (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
+        (let [content-hash-buffer (c/->id-buffer (.content-hash entity-tx))
+              prefix (encode-aecv-key-to nil attr-buffer eid-buffer content-hash-buffer)
+              i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
+          (some->> (encode-aecv-key-to
+                    (.get seek-buffer-tl)
+                    attr-buffer
+                    eid-buffer
+                    content-hash-buffer
+                    (buffer-or-value-buffer min-v))
+                   (kv/seek i)
+                   ((fn step [^DirectBuffer k]
+                      (when k
+                        (cons (MapEntry/create (.value (decode-aecv-key-from k))
+                                               entity-tx)
+                              (lazy-seq (step (kv/next i))))))))))))
 
   (entity-as-of [this eid valid-time transact-time]
     (let [i @entity-as-of-iterator-delay
