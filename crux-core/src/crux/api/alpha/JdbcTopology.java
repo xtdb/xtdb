@@ -18,7 +18,6 @@ public class JdbcTopology extends EdnTopology {
     private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
     private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
     private static final Keyword SYNC = keyword("crux.kv/sync");
-    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = keyword("crux.kv/check-and-store-index-version");
     private static final Keyword HOST = keyword("crux.jdbc/host");
     private static final Keyword USER = keyword("crux.jdbc/user");
     private static final Keyword PASSWORD = keyword("crux.jdbc/password");
@@ -77,10 +76,6 @@ public class JdbcTopology extends EdnTopology {
 
     public JdbcTopology withSync(boolean sync) {
         return with(SYNC, sync);
-    }
-
-    public JdbcTopology withCheckAndStoreIndexVersion(boolean checkAndStoreIndexVersion) {
-        return with(CHECK_AND_STORE_INDEX_VERSION, checkAndStoreIndexVersion);
     }
 
     public JdbcTopology withDbType(String dbType) {
