@@ -428,8 +428,7 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (cons (MapEntry/create (.value (decode-ave-key-from k))
-                                           :crux.index.binary-placeholder/value)
+                    (cons (MapEntry/create (.value (decode-ave-key-from k)) nil)
                           (lazy-seq
                            (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size))
                                     (kv/seek i)
@@ -483,7 +482,7 @@
                                          (kv/seek i)
                                          (step)))]
                       (if (entity-resolver-fn eid-buffer)
-                        (cons (MapEntry/create eid-buffer :crux.index.binary-placeholder/entity) tail)
+                        (cons (MapEntry/create eid-buffer nil) tail)
                         tail))))))))
 
   (aev [this a e min-v entity-resolver-fn]
