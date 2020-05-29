@@ -2730,7 +2730,7 @@
         _ (fix/transact! *api* [ivan])
         db (api/db *api*)]
     (with-open [shared-db (api/open-db *api*)]
-      (t/is (= (api/entity db :ivan) (api/entity shared-db :ivan) ivan))
+      (t/is (= ivan (api/entity shared-db :ivan)))
       (let [n 1000
              ;; TODO: was 1.4, introduced a bug?
             acceptable-snapshot-speedup 1.1

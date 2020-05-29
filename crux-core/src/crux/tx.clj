@@ -1,12 +1,12 @@
 (ns ^:no-doc crux.tx
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.query :as q]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
@@ -36,7 +36,6 @@
 (defprotocol EntityHistory
   (with-entity-history-seq-ascending [_ eid valid-time f])
   (with-entity-history-seq-descending [_ eid valid-time f])
-  (all-content-hashes [_ eid])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
 
@@ -84,12 +83,6 @@
                                    first
                                    vector))
          first))
-
-  (all-content-hashes [_ eid]
-    (with-open [nested-index-store (db/open-nested-index-store index-store)]
-      (into (set (db/all-content-hashes nested-index-store eid))
-            (set (->> (get etxs eid)
-                      (map #(.content-hash ^EntityTx %)))))))
 
   (with-etxs [_ new-etxs]
     (->IndexStore+NewETXs index-store
@@ -156,22 +149,20 @@
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {::keys [tx-time tx-id] :as tx}
-                                        {:keys [object-store history index-store] :as tx-consumer}]
+                                        {:keys [history document-store] :as tx-consumer}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time tx-time)]
 
-    {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history eid valid-time tx-time)]
+    {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history eid valid-time tx-time)
+                           current-id (c/new-id content-hash)
+                           expected-id (c/new-id old-v)]
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
                        ;; can't rely on the old content-hashing returning the same hash for the same document
-                       (if (or (= (c/new-id content-hash) (c/new-id old-v))
-                               (= (db/get-document index-store (c/new-id content-hash))
-                                  (db/get-document index-store (c/new-id old-v))))
-                         (let [correct-state? (not (nil? (db/get-document index-store (c/new-id new-v))))]
-                           (when-not correct-state?
-                             (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                           correct-state?)
-                         (do (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
-                             false)))
+                       (or (= current-id expected-id)
+                           (let [docs (db/fetch-docs document-store #{current-id expected-id})]
+                             (= (get docs current-id)
+                                (get docs expected-id)))
+                           (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))))
 
      :etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx tx-consumer)}))
 
@@ -179,8 +170,7 @@
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
 (defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx {:keys [history] :as tx-consumer}]
-  (let [eid (c/new-id k)
-        content-hashes (all-content-hashes history eid)]
+  (let [eid (c/new-id k)]
     {:pre-commit-fn #(cond
                        (empty? legacy-args) true
 
@@ -193,8 +183,7 @@
                                           k evict-time-ranges-env-var)
                                true))
 
-     :tombstones (into {} (for [content-hash content-hashes]
-                            [content-hash {:crux.db/id eid, :crux.db/evicted? true}]))}))
+     :evict-eids #{k}}))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
@@ -205,7 +194,7 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-v :as tx-op]
                                        {::keys [tx-time tx-id] :as tx}
-                                       {:keys [indexer index-store nested-fn-args query-engine], :as tx-consumer}]
+                                       {:keys [indexer index-store document-store nested-fn-args query-engine], :as tx-consumer}]
   (when-not tx-fns-enabled?
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
@@ -214,7 +203,8 @@
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (let [arg-id (c/new-id args-v)]
                                                  (or (get nested-fn-args arg-id)
-                                                     (db/get-document index-store arg-id)))
+                                                     (-> (db/fetch-docs document-store #{arg-id})
+                                                         (get arg-id))))
         args-id (:crux.db/id args-doc)
 
         {:keys [conformed-tx-ops fn-error]} (try
@@ -233,6 +223,7 @@
                       (into {} (mapcat :docs)))
             {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args val) docs)
             _ (db/index-docs indexer (into {} docs))
+            _ (db/submit-docs document-store (into {} docs))
             op-results (vec (for [[op :as tx-event] (map txc/->tx-event conformed-tx-ops)]
                               (index-tx-event tx-event tx
                                               (-> tx-consumer
@@ -243,7 +234,7 @@
          :etxs (cond-> (mapcat :etxs op-results)
                  args-doc (conj (c/->EntityTx args-id tx-time tx-time tx-id args-v)))
 
-         :tombstones (into {} (mapcat :tombstones) op-results)}))))
+         :evict-eids (into #{} (mapcat :evict-eids) op-results)}))))
 
 (defmethod index-tx-event :default [[op & _] tx tx-consumer]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
@@ -258,33 +249,25 @@
       (.submit stats-executor stats-fn)
       (stats-fn))))
 
-(defn index-docs [{:keys [bus indexer object-store] :as tx-consumer} docs]
+(defn index-docs [{:keys [bus indexer] :as tx-consumer} docs]
   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
     (throw (IllegalArgumentException.
             (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
   (with-open [index-store (db/open-index-store indexer)]
-    (db/put-objects object-store (->> docs (into {} (filter (comp idx/evicted-doc? val)))))
-
-    (when-let [docs-to-upsert (->> docs
-                                   (into {} (remove (fn [[k doc]]
-                                                      (or (idx/keep-non-evicted-doc (db/get-document index-store (c/new-id k)))
-                                                          (idx/evicted-doc? doc)))))
-                                   not-empty)]
+    (when (seq docs)
       (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-      (let [bytes-indexed (db/index-docs indexer docs-to-upsert)
-            docs-stats (->> (vals docs-to-upsert)
-                            (map #(idx/doc-predicate-stats % false)))]
+      (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
+        (update-stats tx-consumer (->> (vals indexed-docs)
+                                       (map idx/doc-predicate-stats)))
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids (set (keys docs))
-                       :av-count (->> (vals docs) (apply concat) (count))
-                       :bytes-indexed bytes-indexed})
+                       :av-count (->> (vals indexed-docs) (apply concat) (count))
+                       :bytes-indexed bytes-indexed})))))
 
-        (update-stats tx-consumer docs-stats)))))
-
-(defn index-tx [{:keys [bus indexer object-store kv-store document-store] :as tx-consumer}
+(defn index-tx [{:keys [bus indexer kv-store document-store] :as tx-consumer}
                 {::keys [tx-time tx-id] :as tx}
                 tx-events]
   (s/assert ::txe/tx-events tx-events)
@@ -296,27 +279,26 @@
     (binding [*current-tx* (assoc tx ::txe/tx-events tx-events)]
       (let [tx-consumer (assoc tx-consumer :index-store index-store)
             res (reduce (fn [{:keys [history] :as acc} tx-event]
-                          (let [{:keys [pre-commit-fn etxs tombstones]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
+                          (let [{:keys [pre-commit-fn etxs evict-eids]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
                             (if (and pre-commit-fn (not (pre-commit-fn)))
                               (reduced ::aborted)
                               (-> acc
                                   (update :history with-etxs etxs)
-                                  (update :tombstones merge tombstones)))))
+                                  (update :evict-eids set/union evict-eids)))))
 
                         {:history (->IndexStore+NewETXs index-store {})
-                         :tombstones {}}
+                         :evict-eids #{}}
 
                         tx-events)
             committed? (not= res ::aborted)]
 
         (if committed?
-          (do (when-let [tombstones (not-empty (:tombstones res))]
-                (let [existing-docs (db/get-objects object-store index-store (keys tombstones))]
-                  (db/put-objects object-store tombstones)
-                  (db/unindex-docs indexer existing-docs)
-                  (update-stats tx-consumer (->> (vals existing-docs) (map #(idx/doc-predicate-stats % true)))))
-                (db/submit-docs document-store tombstones))
-              (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
+          (do
+            (when-let [evict-eids (not-empty (:evict-eids res))]
+              (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
+                (db/submit-docs document-store tombstones)))
+
+            (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
           (do
             (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
@@ -369,7 +351,7 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log object-store bus]
+(defrecord TxConsumer [^Thread executor-thread ^ExecutorService stats-executor !error indexer document-store tx-log bus]
   db/TxConsumer
   (consumer-error [_] @!error)
 
@@ -384,14 +366,13 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def tx-consumer
-  {:start-fn (fn [{:crux.node/keys [indexer document-store tx-log object-store bus query-engine]} args]
+  {:start-fn (fn [{:crux.node/keys [indexer document-store tx-log bus query-engine]} args]
                (let [stats-executor (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))
                      tx-consumer (map->TxConsumer
                                   {:!error (atom nil)
                                    :indexer indexer
                                    :document-store document-store
                                    :tx-log tx-log
-                                   :object-store object-store
                                    :bus bus
                                    :query-engine query-engine
                                    :stats-executor stats-executor})]
@@ -400,7 +381,7 @@
                         (doto (Thread. #(index-tx-log tx-consumer args))
                           (.setName "crux-tx-consumer")
                           (.start)))))
-   :deps [:crux.node/indexer :crux.node/document-store :crux.node/tx-log :crux.node/object-store :crux.node/bus :crux.node/query-engine]
+   :deps [:crux.node/indexer :crux.node/document-store :crux.node/tx-log :crux.node/bus :crux.node/query-engine]
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})
