@@ -2,14 +2,15 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.io :as cio])
-  (:import [java.io DataOutputStream]
+            [crux.io :as cio]
+            [taoensso.nippy :as nippy])
+  (:import [java.io DataInputStream DataOutputStream]
            java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           org.agrona.io.ExpandableDirectBufferOutputStream
+           [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
 
 (defprotocol MemoryRegion
@@ -222,3 +223,9 @@
                (recur (dec idx)))
            (doto buffer
              (.putByte idx (unchecked-byte (inc b))))))))))
+
+(defn <-nippy-buffer [buf]
+  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+
+(defn ->nippy-buffer [v]
+  (->off-heap (nippy/fast-freeze v)))

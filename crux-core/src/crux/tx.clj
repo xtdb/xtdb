@@ -275,6 +275,11 @@
       (.submit stats-executor stats-fn)
       (stats-fn))))
 
+(defn- doc-predicate-stats [doc]
+  (->> (for [[k v] doc]
+         [k (count (c/vectorize-value v))])
+       (into {})))
+
 (defn index-docs [{:keys [bus indexer] :as tx-consumer} docs]
   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
     (throw (IllegalArgumentException.
@@ -286,7 +291,7 @@
 
       (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
         (update-stats tx-consumer (->> (vals indexed-docs)
-                                       (map idx/doc-predicate-stats)))
+                                       (map doc-predicate-stats)))
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids (set (keys docs))
@@ -334,7 +339,7 @@
             (when-let [docs (not-empty (:docs res))]
               (db/index-docs indexer docs)
               (update-stats tx-consumer (->> (vals docs)
-                                             (map idx/doc-predicate-stats)))
+                                             (map doc-predicate-stats)))
 
               (db/submit-docs document-store docs))
 

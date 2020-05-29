@@ -15,7 +15,6 @@
 
 (t/use-fixtures :each
                 fkv/with-each-kv-store-implementation
-                fkv/without-kv-index-version
                 fkv/with-kv-store
                 f/with-silent-test-check)
 

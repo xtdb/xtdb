@@ -27,7 +27,7 @@
 (def ^:const index-id-size Byte/BYTES)
 
 ;; index for object store
-(def ^:const ^:private content-hash->doc-index-id 0)
+(def ^:const content-hash->doc-index-id 0)
 
 (def ^:const ave-index-id 1)
 (def ^:const aecv-index-id 2)
@@ -42,15 +42,15 @@
 (def ^:const entity+z+tx-id->content-hash-index-id 5)
 
 ;; for crux own needs
-(def ^:const ^:private meta-key->value-index-id 6)
+(def ^:const meta-key->value-index-id 6)
 
 (def ^:const failed-tx-id-index-id 7)
 
 ;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
-(def ^:const ^:private index-version-index-id 8)
+(def ^:const index-version-index-id 8)
 
 ;; used in standalone TxLog
-(def ^:const ^:private tx-events-index-id 9)
+(def ^:const tx-events-index-id 9)
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
@@ -543,30 +543,6 @@
                         (->> (.readFully data-input))))
       0))
 
-(defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
-  (assert (= id-size (.capacity content-hash)) (mem/buffer->hex content-hash))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (mem/limit-buffer
-     (doto b
-       (.putByte 0 content-hash->doc-index-id)
-       (.putBytes index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash)))
-     (+ index-id-size id-size))))
-
-(defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
-  (assert (= (+ index-id-size id-size) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= content-hash->doc-index-id index-id))
-    (Id. (mem/slice-buffer k index-id-size id-size) 0)))
-
-(defn encode-meta-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
-  (assert (= id-size (.capacity k)) (mem/buffer->hex k))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (mem/limit-buffer
-     (doto b
-       (.putByte 0 meta-key->value-index-id)
-       (.putBytes index-id-size k 0 (.capacity k)))
-     (+ index-id-size id-size))))
-
 (defn descending-long ^long [^long l]
   (bit-xor (bit-not l) Long/MIN_VALUE))
 
@@ -594,34 +570,10 @@
      :crux.tx/tx-time (.tt entity-tx)
      :crux.tx/tx-id (.tx-id entity-tx)}))
 
-(defn encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-id-size))]
-    (.putByte b 0 index-version-index-id)
-    (mem/limit-buffer b index-id-size)))
+(defn multiple-values? [v]
+  (or (vector? v) (set? v)))
 
-(defn encode-index-version-value-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^long version]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-version-size))]
-    (doto b
-      (.putLong 0 version ByteOrder/BIG_ENDIAN))
-    (mem/limit-buffer b index-version-size)))
-
-(defn decode-index-version-value-from ^long [^MutableDirectBuffer b]
-  (.getLong b 0 ByteOrder/BIG_ENDIAN))
-
-(defn encode-tx-event-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b, {:crux.tx/keys [tx-id tx-time]}]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size Long/BYTES Long/BYTES)))]
-    (doto b
-      (.putByte 0 tx-events-index-id)
-      (.putLong index-id-size tx-id ByteOrder/BIG_ENDIAN)
-      (.putLong (+ index-id-size Long/BYTES)
-                (date->reverse-time-ms (or tx-time (Date.)))
-                ByteOrder/BIG_ENDIAN))))
-
-(defn tx-event-key? [^DirectBuffer k]
-  (= tx-events-index-id (.getByte k 0)))
-
-(defn decode-tx-event-key-from [^DirectBuffer k]
-  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (assert (tx-event-key? k))
-  {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
-   :crux.tx/tx-time (reverse-time-ms->date (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
+(defn vectorize-value [v]
+  (cond-> v
+    (not (multiple-values? v))
+    (vector)))
