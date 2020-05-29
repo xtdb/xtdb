@@ -4,8 +4,7 @@
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
-            [crux.memory :as mem]
-            [crux.index :as idx])
+            [crux.memory :as mem])
   (:import java.io.Closeable
            clojure.lang.MapEntry
            (org.rocksdb Checkpoint CompressionType FlushOptions
@@ -110,7 +109,7 @@
     (.close write-options)))
 
 (def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync?
                             ::disable-wal? ::metrics? ::db-options]
                      :as options}]
                (RocksDB/loadLibrary)
@@ -133,8 +132,7 @@
                                     :db db
                                     :options opts
                                     :stats stats
-                                    :write-options write-opts})
-                     (cond-> check-and-store-index-version idx/check-and-store-index-version))))
+                                    :write-options write-opts}))))
 
    :args (-> (merge kv/options
                     {::db-options {:doc "RocksDB Options"

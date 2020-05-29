@@ -3,11 +3,11 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.status :as status]
             [crux.morton :as morton])
   (:import (crux.codec Id EntityTx)
+           crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
            java.nio.ByteOrder
            java.util.Date
@@ -23,6 +23,11 @@
    (reify Supplier
      (get [_]
        (ExpandableDirectByteBuffer.)))))
+
+;; NOTE: A buffer returned from an kv/KvIterator can only be assumed
+;; to be valid until the next call on the same iterator. In practice
+;; this limitation is only for RocksJNRKv.
+;; TODO: It would be nice to make this explicit somehow.
 
 (defrecord PrefixKvIterator [i ^DirectBuffer prefix]
   kv/KvIterator
@@ -291,6 +296,60 @@
                                   (.tx-id etx))
     (c/->id-buffer (.content-hash etx))]])
 
+;; Index Version
+
+(defn- encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer c/index-id-size))]
+    (.putByte b 0 c/index-version-index-id)
+    (mem/limit-buffer b c/index-id-size)))
+
+(defn- encode-index-version-value-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^long version]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer c/index-version-size))]
+    (doto b
+      (.putLong 0 version ByteOrder/BIG_ENDIAN))
+    (mem/limit-buffer b c/index-version-size)))
+
+(defn- decode-index-version-value-from ^long [^MutableDirectBuffer b]
+  (.getLong b 0 ByteOrder/BIG_ENDIAN))
+
+(defn current-index-version [kv]
+  (with-open [snapshot (kv/new-snapshot kv)]
+    (some->> (kv/get-value snapshot (encode-index-version-key-to (.get seek-buffer-tl)))
+             (decode-index-version-value-from))))
+
+(defn check-and-store-index-version [kv]
+  (if-let [index-version (current-index-version kv)]
+    (when (not= c/index-version index-version)
+      (throw (IndexVersionOutOfSyncException.
+              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
+    (doto kv
+      (kv/store [[(encode-index-version-key-to nil)
+                  (encode-index-version-value-to nil c/index-version)]])
+      (kv/fsync)))
+  kv)
+;; Meta
+
+(defn encode-meta-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
+  (assert (= c/id-size (.capacity k)) (mem/buffer->hex k))
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size)))]
+    (mem/limit-buffer
+     (doto b
+       (.putByte 0 c/meta-key->value-index-id)
+       (.putBytes c/index-id-size k 0 (.capacity k)))
+     (+ c/index-id-size c/id-size))))
+
+(defn meta-kv [k v]
+  [(encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))
+   (mem/->nippy-buffer v)])
+
+(defn store-meta [kv k v]
+  (kv/store kv [(meta-kv k v)]))
+
+(defn read-meta [kv k]
+  (let [seek-k (encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))]
+    (with-open [snapshot (kv/new-snapshot kv)]
+      (some->> (kv/get-value snapshot seek-k)
+               (mem/<-nippy-buffer)))))
 
 ;;;; Failed tx-id
 
@@ -541,7 +600,7 @@
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
       (some-> (kv/get-value this (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
-              (idx/<-nippy-buffer))))
+              (mem/<-nippy-buffer))))
 
   (encode-value [this value]
     (c/->value-buffer value))
@@ -561,13 +620,13 @@
                      content-hash (c/->id-buffer content-hash)]
                [a v] doc
                :let [a (get attr-bufs a)]
-               v (idx/vectorize-value v)
+               v (c/vectorize-value v)
                :let [v-buf (c/->value-buffer v)]
                :when (pos? (.capacity v-buf))]
            (cond-> [(MapEntry/create (encode-ave-key-to nil a v-buf id) c/empty-buffer)
                     (MapEntry/create (encode-aecv-key-to nil a id content-hash v-buf) c/empty-buffer)]
              (not (c/can-decode-value-buffer? v-buf))
-             (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (idx/->nippy-buffer v)))))
+             (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (mem/->nippy-buffer v)))))
          (apply concat))))
 
 (defn- new-kv-index-store [snapshot close-snapshot?]
@@ -635,19 +694,19 @@
         {:tombstones tombstones})))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
-    (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
+    (kv/store kv-store [(meta-kv ::latest-completed-tx tx)
                         [(encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))
 
   (index-entity-txs [this tx entity-txs]
     (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
-                                  (idx/meta-kv ::latest-completed-tx tx))
+                                  (meta-kv ::latest-completed-tx tx))
                             (into (sorted-map-by mem/buffer-comparator)))))
 
   (store-index-meta [_ k v]
-    (idx/store-meta kv-store k v))
+    (store-meta kv-store k v))
 
   (read-index-meta [_  k]
-    (idx/read-meta kv-store k))
+    (read-meta kv-store k))
 
   (latest-completed-tx [this]
     (db/read-index-meta this ::latest-completed-tx))
@@ -661,11 +720,12 @@
 
   status/Status
   (status-map [this]
-    {:crux.index/index-version (idx/current-index-version kv-store)
+    {:crux.index/index-version (current-index-version kv-store)
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
   {:start-fn (fn [{:crux.node/keys [kv-store]} args]
+               (check-and-store-index-version kv-store)
                (->KvIndexer kv-store))
    :deps [:crux.node/kv-store]})

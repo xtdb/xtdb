@@ -7,7 +7,6 @@
 
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-module* 'crux.kv.rocksdb/kv)
-(def ^:dynamic *check-and-store-index-version* true)
 (def ^:dynamic *sync* false)
 
 (defn ^Closeable start-kv-store [opts]
@@ -17,16 +16,11 @@
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
       (with-open [kv (start-kv-store {:crux.kv/db-dir (str db-dir)
-                                      :crux.kv/sync? *sync*
-                                      :crux.kv/check-and-store-index-version *check-and-store-index-version*})]
+                                      :crux.kv/sync? *sync*})]
         (binding [*kv* kv]
           (f)))
       (finally
         (cio/delete-dir db-dir)))))
-
-(defn without-kv-index-version [f]
-  (binding [*check-and-store-index-version* false]
-    (f)))
 
 (defn with-memdb [f]
   (binding [*kv-module* 'crux.kv.memdb/kv]

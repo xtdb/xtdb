@@ -7,9 +7,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.query :as q]
-            [crux.index :as i]
-            [crux.tx :as tx])
+            [crux.query :as q])
   (:import java.util.UUID))
 
 (t/use-fixtures :each fix/with-kv-dir fix/with-standalone-topology fix/with-node)
