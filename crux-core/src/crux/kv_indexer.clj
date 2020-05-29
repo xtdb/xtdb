@@ -1,7 +1,6 @@
 (ns ^:no-doc crux.kv-indexer
   (:require [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -19,7 +18,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private ^ThreadLocal value-buffer-tl
+(def ^ThreadLocal seek-buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
@@ -86,7 +85,7 @@
     c/empty-buffer))
 
 (defn- inc-unsigned-prefix-buffer [buffer prefix-size]
-  (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer buffer prefix-size (.get idx/seek-buffer-tl)) prefix-size)))
+  (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer buffer prefix-size (.get seek-buffer-tl)) prefix-size)))
 
 (defn ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
   (assoc entity-tx :content-hash (when (pos? (.capacity content-hash))
@@ -169,7 +168,7 @@
         (->Quad attr entity content-hash value)))))
 
 (defn all-attrs [i]
-  (let [seek-buffer (.get idx/seek-buffer-tl)
+  (let [seek-buffer (.get seek-buffer-tl)
         aecv-prefix (encode-aecv-key-to seek-buffer)
         i (new-prefix-kv-iterator i aecv-prefix)]
     (letfn [(step [k]
@@ -309,7 +308,7 @@
 
 (defn- find-first-entity-tx-within-range [i min max eid]
   (let [prefix-size (+ c/index-id-size c/id-size)
-        seek-k (encode-entity+z+tx-id-key-to (.get idx/seek-buffer-tl)
+        seek-k (encode-entity+z+tx-id-key-to (.get seek-buffer-tl)
                                              eid
                                              min)]
     (loop [k (kv/seek i seek-k)]
@@ -325,7 +324,7 @@
                 [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
               (when-not (neg? (.compareTo ^Comparable bigmin z))
-                (recur (kv/seek i (encode-entity+z+tx-id-key-to (.get idx/seek-buffer-tl)
+                (recur (kv/seek i (encode-entity+z+tx-id-key-to (.get seek-buffer-tl)
                                                                 eid
                                                                 bigmin)))))))))))
 
@@ -422,7 +421,7 @@
     (let [attr-buffer (c/->id-buffer a)
           prefix (encode-ave-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
-      (some->> (encode-ave-key-to (.get idx/seek-buffer-tl)
+      (some->> (encode-ave-key-to (.get seek-buffer-tl)
                                   attr-buffer
                                   (buffer-or-value-buffer min-v))
                (kv/seek i)
@@ -439,7 +438,7 @@
           value-buffer (buffer-or-value-buffer v)
           prefix (encode-ave-key-to nil attr-buffer value-buffer)
           i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
-      (some->> (encode-ave-key-to (.get idx/seek-buffer-tl)
+      (some->> (encode-ave-key-to (.get seek-buffer-tl)
                                   attr-buffer
                                   value-buffer
                                   (buffer-or-id-buffer min-e))
@@ -449,7 +448,7 @@
                     (let [eid (.eid (decode-ave-key-from k))
                           eid-buffer (c/->id-buffer eid)
                           head (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
-                                 (let [version-k (encode-aecv-key-to (.get idx/seek-buffer-tl)
+                                 (let [version-k (encode-aecv-key-to (.get seek-buffer-tl)
                                                                      attr-buffer
                                                                      eid-buffer
                                                                      (c/->id-buffer (.content-hash entity-tx))
@@ -469,7 +468,7 @@
     (let [attr-buffer (c/->id-buffer a)
           prefix (encode-aecv-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
-      (some->> (encode-aecv-key-to (.get idx/seek-buffer-tl)
+      (some->> (encode-aecv-key-to (.get seek-buffer-tl)
                                      attr-buffer
                                      (buffer-or-id-buffer min-e))
                (kv/seek i)
@@ -493,7 +492,7 @@
           prefix (encode-aecv-key-to nil attr-buffer eid-buffer content-hash-buffer)
           i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
       (some->> (encode-aecv-key-to
-                (.get idx/seek-buffer-tl)
+                (.get seek-buffer-tl)
                 attr-buffer
                 eid-buffer
                 content-hash-buffer
@@ -509,7 +508,7 @@
       (let [i @entity-as-of-iterator-delay
             prefix-size (+ c/index-id-size c/id-size)
             eid-buffer (c/->id-buffer eid)
-            seek-k (encode-entity+vt+tt+tx-id-key-to (.get idx/seek-buffer-tl)
+            seek-k (encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)
                                                      eid-buffer
                                                      valid-time
                                                      transact-time
@@ -541,7 +540,7 @@
     (assert (some? eid-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (some-> (kv/get-value this (encode-hash-cache-key-to (.get idx/seek-buffer-tl) eid-buffer value-buffer))
+      (some-> (kv/get-value this (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
               (idx/<-nippy-buffer))))
 
   (encode-value [this value]
@@ -588,7 +587,7 @@
                       (into {} (remove (let [crux-db-id (c/->id-buffer :crux.db/id)]
                                          (fn [[k doc]]
                                            (let [eid (c/->id-buffer (:crux.db/id doc))]
-                                             (kv/get-value snapshot (encode-aecv-key-to (.get idx/seek-buffer-tl)
+                                             (kv/get-value snapshot (encode-aecv-key-to (.get seek-buffer-tl)
                                                                                         crux-db-id
                                                                                         eid
                                                                                         (c/->id-buffer k)
@@ -609,7 +608,7 @@
             {:keys [tombstones ks]} (->> (for [attr attrs
                                                eid eids
                                                aecv-key (all-keys-in-prefix i
-                                                                            (encode-aecv-key-to (.get idx/seek-buffer-tl)
+                                                                            (encode-aecv-key-to (.get seek-buffer-tl)
                                                                                                 (c/->id-buffer attr)
                                                                                                 (c/->id-buffer eid)))]
                                            aecv-key)
