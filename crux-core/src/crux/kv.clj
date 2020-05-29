@@ -37,10 +37,6 @@
    :crux.kv/sync?
    {:doc "Sync the KV store to disk after every write."
     :default false
-    :crux.config/type :crux.config/boolean}
-   :crux.kv/check-and-store-index-version
-   {:doc "Check and store index version upon start"
-    :default true
     :crux.config/type :crux.config/boolean}})
 
 (extend-protocol status/Status

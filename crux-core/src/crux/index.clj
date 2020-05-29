@@ -2,33 +2,16 @@
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.morton :as morton]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IReduceInit MapEntry Seqable Sequential]
-           crux.api.IndexVersionOutOfSyncException
            [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
-           [java.io Closeable DataInputStream]
+           java.io.Closeable
            [java.util Collections Comparator Date]
-           java.util.function.Supplier
-           [org.agrona DirectBuffer ExpandableDirectByteBuffer]
-           org.agrona.io.DirectBufferInputStream))
+           org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-;; NOTE: A buffer returned from an kv/KvIterator can only be assumed
-;; to be valid until the next call on the same iterator. In practice
-;; this limitation is only for RocksJNRKv.
-;; TODO: It would be nice to make this explicit somehow.
-
-;; Indexes
-
-(def ^ThreadLocal seek-buffer-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (ExpandableDirectByteBuffer.)))))
 
 ;; AVE
 
@@ -181,30 +164,7 @@
     (range-constraints idx)
     idx))
 
-;; Meta
-
-(defn meta-kv [k v]
-  [(c/encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))
-   (mem/->off-heap (nippy/fast-freeze v))])
-
-(defn store-meta [kv k v]
-  (kv/store kv [(meta-kv k v)]))
-
-(defn read-meta [kv k]
-  (let [seek-k (c/encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))]
-    (with-open [snapshot (kv/new-snapshot kv)]
-      (some->> (kv/get-value snapshot seek-k)
-               (DirectBufferInputStream.)
-               (DataInputStream.)
-               (nippy/thaw-from-in!)))))
-
 ;; Object Store
-
-(defn <-nippy-buffer [buf]
-  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
-
-(defn ->nippy-buffer [v]
-  (mem/->off-heap (nippy/fast-freeze v)))
 
 (defn evicted-doc?
   [{:crux.db/keys [id evicted?] :as doc}]
@@ -214,36 +174,7 @@
   (when-not (evicted-doc? doc)
     doc))
 
-(defn multiple-values? [v]
-  (or (vector? v) (set? v)))
-
-(defn vectorize-value [v]
-  (cond-> v
-    (not (multiple-values? v))
-    (vector)))
-
-(defn doc-predicate-stats [doc]
-  (->> (for [[k v] doc]
-         [k (count (vectorize-value v))])
-       (into {})))
-
 ;; Utils
-
-(defn current-index-version [kv]
-  (with-open [snapshot (kv/new-snapshot kv)]
-    (some->> (kv/get-value snapshot (c/encode-index-version-key-to (.get seek-buffer-tl)))
-             (c/decode-index-version-value-from))))
-
-(defn check-and-store-index-version [kv]
-  (if-let [index-version (current-index-version kv)]
-    (when (not= c/index-version index-version)
-      (throw (IndexVersionOutOfSyncException.
-              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
-    (doto kv
-      (kv/store [[(c/encode-index-version-key-to nil)
-                  (c/encode-index-version-value-to nil c/index-version)]])
-      (kv/fsync)))
-  kv)
 
 ;; NOTE: We need to copy the keys and values here, as the originals
 ;; returned by the iterator will (may) get invalidated by the next

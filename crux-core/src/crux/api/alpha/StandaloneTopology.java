@@ -16,7 +16,6 @@ public class StandaloneTopology extends EdnTopology {
     private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
     private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
     private static final Keyword SYNC = keyword("crux.kv/sync");
-    private static final Keyword CHECK_AND_STORE_INDEX_VERSION = keyword("crux.kv/check-and-store-index-version");
     private static final Keyword EVENT_LOG_KV_STORE = keyword("crux.standalone/event-log-kv-store");
     private static final Keyword EVENT_LOG_DIR = keyword("crux.standalone/event-log-dir");
     private static final Keyword EVENT_LOG_SYNC = keyword("crux.standalone/event-log-sync?");
@@ -72,10 +71,6 @@ public class StandaloneTopology extends EdnTopology {
 
     public StandaloneTopology withSync(boolean sync) {
         return with(SYNC, sync);
-    }
-
-    public StandaloneTopology withCheckAndStoreIndexVersion(boolean checkAndStoreIndexVersion) {
-        return with(CHECK_AND_STORE_INDEX_VERSION, checkAndStoreIndexVersion);
     }
 
     public StandaloneTopology withEventLogKvStore(String eventLogKvStore) {
