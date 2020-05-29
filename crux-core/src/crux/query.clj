@@ -606,12 +606,11 @@
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
-  (let [eid (get (first args) e)]
-    (when-let [^EntityTx entity-tx (entity-resolver-fn eid)]
-      (let [v (c/->value-buffer v)
-            [[found-v _]] (db/aev index-store (c/->id-buffer a) eid v entity-resolver-fn)]
-        (when (and found-v (mem/buffers=? v found-v))
-          [])))))
+  (let [eid (get (first args) e)
+        v (c/->value-buffer v)
+        [[found-v _]] (db/aev index-store (c/->id-buffer a) eid v entity-resolver-fn)]
+    (when (and found-v (mem/buffers=? v found-v))
+      [])))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
