@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [crux.bench :as bench]
             [crux.bench.watdiv :as watdiv]
-            [crux.index :as idx]
+            [crux.codec :as c]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
             [datomic.api :as d])
@@ -284,7 +284,7 @@
   (cons
    {:db/ident (:crux.db/id e)}
    (for [[_ v] e
-         v (idx/vectorize-value v)
+         v (c/vectorize-value v)
          :when (keyword? v)]
      {:db/ident v})))
 
