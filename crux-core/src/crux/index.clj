@@ -381,9 +381,7 @@
               (when-let [result (->> new-results
                                      (apply merge-with
                                             (fn [x y]
-                                              (if (map? y)
-                                                y
-                                                x))))]
+                                              (or y x))))]
                 (MapEntry/create max-k result)))
             (recur))))))
 
