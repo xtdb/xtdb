@@ -91,7 +91,7 @@
            (NodeOutOfSyncException.
             (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
             tx-time latest-tx-time))
-          (db/tx-failed? indexer tx-id)))))
+          (not (db/tx-failed? indexer tx-id))))))
 
   (openTxLog ^ICursor [this after-tx-id with-ops?]
     (cio/with-read-lock lock
@@ -104,7 +104,7 @@
         (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
               index-store (db/open-index-store indexer)
               tx-log (-> (iterator-seq tx-log-iterator)
-                         (->> (filter #(db/tx-failed? indexer (:crux.tx/tx-id %))))
+                         (->> (remove #(db/tx-failed? indexer (:crux.tx/tx-id %))))
                          (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events]
                                                        :as tx-log-entry}]
                                                    (-> tx-log-entry
