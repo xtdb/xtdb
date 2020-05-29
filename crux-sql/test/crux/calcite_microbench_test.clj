@@ -25,15 +25,6 @@
     (merge (when (map? ret) ret)
            {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
 
-(defn exec-prepared-query [^PreparedStatement p & args]
-  (doseq [[i v] args]
-    (if (string? v)
-      (.setString p i v)
-      (if (number? v)
-        (.setInt p i v))))
-  (with-open [rs (.executeQuery p)]
-    (->> rs resultset-seq (into []))))
-
 (defn prepared-query [^java.sql.Connection conn q]
   (.prepareStatement conn q))
 
@@ -58,7 +49,7 @@
              (fn [] {:count (count (query conn "SELECT * FROM CUSTOMER"))})))
 
   (println (with-timing*
-             (fn [] {:count (count (exec-prepared-query (prepared-query conn "SELECT c_name FROM CUSTOMER")))})))
+             (fn [] {:count (count (cf/exec-prepared-query (prepared-query conn "SELECT c_name FROM CUSTOMER")))})))
 
   (println (with-timing*
-             (fn [] {:count (count (exec-prepared-query p))}))))
+             (fn [] {:count (count (cf/exec-prepared-query p))}))))
