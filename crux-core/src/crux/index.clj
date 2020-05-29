@@ -309,10 +309,7 @@
                (set! (.thunk state)))
           (if match?
             (let [new-results (map (fn [x] (.results ^UnaryJoinIteratorState x)) iterators)]
-              (when-let [result (->> new-results
-                                     (apply merge-with
-                                            (fn [x y]
-                                              (or y x))))]
+              (when-let [result (reduce merge new-results)]
                 (MapEntry/create max-k result)))
             (recur))))))
 
