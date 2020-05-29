@@ -16,7 +16,7 @@
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
-           (java.util Comparator Date UUID)
+           (java.util Comparator Date List UUID)
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
@@ -489,7 +489,7 @@
                                                  {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
-(defrecord VarBinding [e-var var attr result-index join-depth result-name type value?])
+(defrecord VarBinding [e-var var attr result-index e-result-index join-depth result-name type value?])
 
 ;; NOTE: result-index is the index into join keys, it's the var's
 ;; position into vars-in-join-order. The join-depth is the depth at
@@ -511,6 +511,7 @@
                 :var var
                 :attr (get var->attr var)
                 :result-index result-index
+                :e-result-index (get var->values-result-index e)
                 :join-depth join-depth
                 :result-name e
                 :type :entity
@@ -546,14 +547,13 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
-(defn- bound-result-for-var [index-store var->bindings join-keys join-results var]
+(defn- bound-result-for-var [index-store var->bindings ^List join-keys join-results var]
   (let [var-binding ^VarBinding (get var->bindings var)]
     (if (.value? var-binding)
       (get join-results (.result-name var-binding))
-      (when-let [etx ^EntityTx (get join-results (.e-var var-binding))]
-        (db/decode-value index-store
-                         (get join-keys (.result-index var-binding))
-                         (c/->id-buffer (.eid etx)))))))
+      (db/decode-value index-store
+                       (.get join-keys (.result-index var-binding))
+                       (.get join-keys (.e-result-index var-binding))))))
 
 (declare build-sub-query)
 
@@ -1054,11 +1054,10 @@
 
 (defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
-         (if-let [^EntityTx entity-tx (and (c/valid-id? value)
-                                           (entity-resolver-fn value))]
-           (let [content-hash (.content-hash entity-tx)]
-             (-> (db/fetch-docs document-store #{content-hash})
-                 (get content-hash)))
+         (if-let [content-hash (and (c/valid-id? value)
+                                    (entity-resolver-fn value))]
+           (-> (db/fetch-docs document-store #{content-hash})
+               (get content-hash))
            value))))
 
 (defn open-index-store ^java.io.Closeable [{:keys [query-engine index-store] :as db}]
@@ -1144,7 +1143,7 @@
                                            (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                            (dissoc :args))))
      (validate-args args)
-     (let [entity-resolver-fn (cond-> #(db/entity-as-of index-store % valid-time transact-time)
+     (let [entity-resolver-fn (cond-> #(db/entity-as-of-resolver index-store % valid-time transact-time)
                                 (::entity-cache? options) (with-entity-resolver-cache options))
            rule-name->rules (rule-name->rules rules)
 
