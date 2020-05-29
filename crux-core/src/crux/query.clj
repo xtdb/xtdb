@@ -690,7 +690,7 @@
               args (vec (for [arg args]
                           (if (logic-var? arg)
                             arg
-                            (->> (map encode-value-fn (idx/vectorize-value arg))
+                            (->> (map encode-value-fn (c/vectorize-value arg))
                                  (into (sorted-set-by mem/buffer-comparator))))))]]
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
