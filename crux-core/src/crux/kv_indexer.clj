@@ -448,20 +448,23 @@
                ((fn step [^DirectBuffer k]
                   (when k
                     (let [eid (.eid (decode-ave-key-from k))
-                          eid-buffer (c/->id-buffer eid)]
-                      (concat
-                       (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
-                         (let [version-k (encode-aecv-key-to (.get idx/seek-buffer-tl)
-                                                             attr-buffer
-                                                             eid-buffer
-                                                             (c/->id-buffer (.content-hash entity-tx))
-                                                             value-buffer)]
-                           (when (kv/get-value this version-k)
-                             [(MapEntry/create eid-buffer entity-tx)])))
-                       (lazy-seq
-                        (some->> (inc-unsigned-prefix-buffer k (.capacity k))
-                                 (kv/seek i)
-                                 (step)))))))))))
+                          eid-buffer (c/->id-buffer eid)
+                          head (when-let [^EntityTx entity-tx (entity-resolver-fn eid-buffer)]
+                                 (let [version-k (encode-aecv-key-to (.get idx/seek-buffer-tl)
+                                                                     attr-buffer
+                                                                     eid-buffer
+                                                                     (c/->id-buffer (.content-hash entity-tx))
+                                                                     value-buffer)]
+                                   (when (kv/get-value snapshot version-k)
+                                     (MapEntry/create eid-buffer entity-tx))))
+                          tail (lazy-seq
+                                (some->> (inc-unsigned-prefix-buffer k (.capacity k))
+                                         (kv/seek i)
+                                         (step)))]
+
+                      (if head
+                        (cons head tail)
+                        tail))))))))
 
   (ae [this a min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
@@ -474,14 +477,14 @@
                ((fn step [^DirectBuffer k]
                   (when k
                     (let [eid (.eid (decode-aecv-key-from k))
-                          eid-buffer (c/->id-buffer eid)]
-                      (concat
-                       (when (entity-resolver-fn eid-buffer)
-                         [(MapEntry/create eid-buffer :crux.index.binary-placeholder/entity)])
-                       (lazy-seq
-                        (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size c/id-size))
-                                 (kv/seek i)
-                                 (step)))))))))))
+                          eid-buffer (c/->id-buffer eid)
+                          tail (lazy-seq
+                                (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size c/id-size))
+                                         (kv/seek i)
+                                         (step)))]
+                      (if (entity-resolver-fn eid-buffer)
+                        (cons (MapEntry/create eid-buffer :crux.index.binary-placeholder/entity) tail)
+                        tail))))))))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
