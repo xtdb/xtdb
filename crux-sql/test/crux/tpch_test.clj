@@ -26,10 +26,10 @@
   (t/is (= 10 (count (query "SELECT * FROM tpch.customer"))))
   (t/is (= 10 (count (query "SELECT * FROM tpch.orders"))))
   (t/is (= 10 (count (query "SELECT * FROM tpch.part"))))
-  (t/is (= 3 (count (query "SELECT * FROM tpch.partsupp"))))
+  (t/is (= 10 (count (query "SELECT * FROM tpch.partsupp"))))
   (t/is (= 10 (count (query "SELECT * FROM tpch.supplier"))))
   (t/is (= 10 (count (query "SELECT * FROM tpch.nation"))))
-  (t/is (= 15 (count (query "SELECT * FROM tpch.region")))))
+  (t/is (= 5 (count (query "SELECT * FROM tpch.region")))))
 
 (t/deftest test-001
   (let [q (str "select\n"
