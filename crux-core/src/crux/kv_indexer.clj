@@ -567,9 +567,8 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (idx/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-store [object-store snapshot]
-  (->KvIndexStore object-store
-                  snapshot
+(defn- new-kv-index-store [snapshot]
+  (->KvIndexStore snapshot
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
