@@ -529,8 +529,8 @@
           prefix (encode-aecv-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
       (some->> (encode-aecv-key-to (.get seek-buffer-tl)
-                                     attr-buffer
-                                     (buffer-or-id-buffer min-e))
+                                   attr-buffer
+                                   (buffer-or-id-buffer min-e))
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
@@ -565,27 +565,27 @@
                           (lazy-seq (step (kv/next i))))))))))
 
   (entity-as-of [this eid valid-time transact-time]
-      (let [i @entity-as-of-iterator-delay
-            prefix-size (+ c/index-id-size c/id-size)
-            eid-buffer (c/->id-buffer eid)
-            seek-k (encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)
-                                                     eid-buffer
-                                                     valid-time
-                                                     transact-time
-                                                     nil)]
-        (loop [k (kv/seek i seek-k)]
-          (when (and k (mem/buffers=? seek-k k prefix-size))
-            (let [entity-tx (safe-entity-tx (decode-entity+vt+tt+tx-id-key-from k))
-                  v (kv/value i)]
-              (if (<= (compare (.tt entity-tx) transact-time) 0)
-                (when-not (mem/buffers=? c/nil-id-buffer v)
-                  (enrich-entity-tx entity-tx v))
-                (if morton/*use-space-filling-curve-index?*
-                  (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
-                    (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
-                      (when-not (= ::deleted-entity k)
-                        v)))
-                  (recur (kv/next i)))))))))
+    (let [i @entity-as-of-iterator-delay
+          prefix-size (+ c/index-id-size c/id-size)
+          eid-buffer (c/->id-buffer eid)
+          seek-k (encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)
+                                                   eid-buffer
+                                                   valid-time
+                                                   transact-time
+                                                   nil)]
+      (loop [k (kv/seek i seek-k)]
+        (when (and k (mem/buffers=? seek-k k prefix-size))
+          (let [entity-tx (safe-entity-tx (decode-entity+vt+tt+tx-id-key-from k))
+                v (kv/value i)]
+            (if (<= (compare (.tt entity-tx) transact-time) 0)
+              (when-not (mem/buffers=? c/nil-id-buffer v)
+                (enrich-entity-tx entity-tx v))
+              (if morton/*use-space-filling-curve-index?*
+                (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
+                  (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
+                    (when-not (= ::deleted-entity k)
+                      v)))
+                (recur (kv/next i)))))))))
 
   (open-entity-history [this eid sort-order opts]
     (let [i (kv/new-iterator snapshot)
@@ -714,7 +714,7 @@
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (nil? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
+      (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
     (new-kv-index-store (kv/new-snapshot kv-store) true))
