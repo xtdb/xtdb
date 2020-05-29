@@ -1,4 +1,4 @@
-(ns crux.kv-indexer
+(ns ^:no-doc crux.kv-indexer
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
@@ -10,26 +10,13 @@
             [crux.morton :as morton])
   (:import (crux.codec Id EntityTx)
            java.io.Closeable
+           java.nio.ByteOrder
+           java.util.Date
            java.util.function.Supplier
            (clojure.lang MapEntry)
            (org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer)))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defn etx->kvs [^EntityTx etx]
-  [[(c/encode-entity+vt+tt+tx-id-key-to
-     nil
-     (c/->id-buffer (.eid etx))
-     (.vt etx)
-     (.tt etx)
-     (.tx-id etx))
-    (c/->id-buffer (.content-hash etx))]
-   [(c/encode-entity+z+tx-id-key-to
-     nil
-     (c/->id-buffer (.eid etx))
-     (c/encode-entity-tx-z-number (.vt etx) (.tt etx))
-     (.tx-id etx))
-    (c/->id-buffer (.content-hash etx))]])
 
 (def ^:private ^ThreadLocal value-buffer-tl
   (ThreadLocal/withInitial
@@ -207,19 +194,128 @@
            (.putBytes (+ c/index-id-size c/id-size) value 0 (.capacity value)))
          (mem/limit-buffer (+ c/index-id-size c/id-size (.capacity value)))))))
 
+;;;; Bitemp indices
+
+(defn encode-entity+vt+tt+tx-id-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (encode-entity+vt+tt+tx-id-key-to b c/empty-buffer nil nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
+   (encode-entity+vt+tt+tx-id-key-to b entity nil nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity valid-time]
+   (encode-entity+vt+tt+tx-id-key-to b entity valid-time nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^Date valid-time ^Date transact-time ^Long tx-id]
+   (assert (or (= c/id-size (.capacity entity))
+               (zero? (.capacity entity))) (mem/buffer->hex entity))
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ c/index-id-size (.capacity entity))
+                                                             valid-time (+ Long/BYTES)
+                                                             transact-time (+ Long/BYTES)
+                                                             tx-id (+ Long/BYTES))))]
+     (.putByte b 0 c/entity+vt+tt+tx-id->content-hash-index-id)
+     (.putBytes b c/index-id-size entity 0 (.capacity entity))
+     (when valid-time
+       (.putLong b (+ c/index-id-size c/id-size) (c/date->reverse-time-ms valid-time) ByteOrder/BIG_ENDIAN))
+     (when transact-time
+       (.putLong b (+ c/index-id-size c/id-size Long/BYTES) (c/date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN))
+     (when tx-id
+       (.putLong b (+ c/index-id-size c/id-size Long/BYTES Long/BYTES) (c/descending-long tx-id) ByteOrder/BIG_ENDIAN))
+     (->> (+ c/index-id-size (.capacity entity)
+             (c/maybe-long-size valid-time) (c/maybe-long-size transact-time) (c/maybe-long-size tx-id))
+          (mem/limit-buffer b)))))
+
+(defn decode-entity+vt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
+  (assert (= (+ c/index-id-size c/id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= c/entity+vt+tt+tx-id->content-hash-index-id index-id))
+    (let [entity (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)
+          valid-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size c/id-size) ByteOrder/BIG_ENDIAN))
+          transact-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size c/id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
+          tx-id (c/descending-long (.getLong k (+ c/index-id-size c/id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
+      (c/->EntityTx entity valid-time transact-time tx-id nil))))
+
+(defn encode-entity-tx-z-number [valid-time transaction-time]
+  (morton/longs->morton-number (c/date->reverse-time-ms valid-time)
+                               (c/date->reverse-time-ms transaction-time)))
+
+(defn encode-entity+z+tx-id-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (encode-entity+z+tx-id-key-to b c/empty-buffer nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
+   (encode-entity+z+tx-id-key-to b entity nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity z]
+   (encode-entity+z+tx-id-key-to b entity z nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity z ^Long tx-id]
+   (assert (or (= c/id-size (.capacity entity))
+               (zero? (.capacity entity))) (mem/buffer->hex entity))
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ c/index-id-size (.capacity entity))
+                                                             z (+ (* 2 Long/BYTES))
+                                                             tx-id (+ Long/BYTES))))
+         [upper-morton lower-morton] (when z
+                                       (morton/morton-number->interleaved-longs z))]
+     (.putByte b 0 c/entity+z+tx-id->content-hash-index-id)
+     (.putBytes b c/index-id-size entity 0 (.capacity entity))
+     (when z
+       (.putLong b (+ c/index-id-size c/id-size) upper-morton ByteOrder/BIG_ENDIAN)
+       (.putLong b (+ c/index-id-size c/id-size Long/BYTES) lower-morton ByteOrder/BIG_ENDIAN))
+     (when tx-id
+       (.putLong b (+ c/index-id-size c/id-size Long/BYTES Long/BYTES) (c/descending-long tx-id) ByteOrder/BIG_ENDIAN))
+     (->> (+ c/index-id-size (.capacity entity) (if z (* 2 Long/BYTES) 0) (c/maybe-long-size tx-id))
+          (mem/limit-buffer b)))))
+
+(defn decode-entity+z+tx-id-key-as-z-number-from [^DirectBuffer k]
+  (assert (= (+ c/index-id-size c/id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= c/entity+z+tx-id->content-hash-index-id index-id))
+    (morton/interleaved-longs->morton-number
+     (.getLong k (+ c/index-id-size c/id-size) ByteOrder/BIG_ENDIAN)
+     (.getLong k (+ c/index-id-size c/id-size Long/BYTES) ByteOrder/BIG_ENDIAN))))
+
+(defn decode-entity+z+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
+  (assert (= (+ c/index-id-size c/id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= c/entity+z+tx-id->content-hash-index-id index-id))
+    (let [entity (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)
+          [valid-time transaction-time] (morton/morton-number->longs (decode-entity+z+tx-id-key-as-z-number-from k))
+          tx-id (c/descending-long (.getLong k (+ c/index-id-size c/id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
+      (c/->EntityTx entity (c/reverse-time-ms->date valid-time) (c/reverse-time-ms->date transaction-time) tx-id nil))))
+
+(defn etx->kvs [^EntityTx etx]
+  [[(encode-entity+vt+tt+tx-id-key-to nil
+                                      (c/->id-buffer (.eid etx))
+                                      (.vt etx)
+                                      (.tt etx)
+                                      (.tx-id etx))
+    (c/->id-buffer (.content-hash etx))]
+   [(encode-entity+z+tx-id-key-to nil
+                                  (c/->id-buffer (.eid etx))
+                                  (encode-entity-tx-z-number (.vt etx) (.tt etx))
+                                  (.tx-id etx))
+    (c/->id-buffer (.content-hash etx))]])
+
+
+;;;; Failed tx-id
+
+(defn encode-failed-tx-id-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (encode-failed-tx-id-key-to b nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b tx-id]
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (c/maybe-long-size tx-id))))]
+     (.putByte b 0 c/failed-tx-id-index-id)
+     (when tx-id
+       (.putLong b c/index-id-size (c/descending-long tx-id) ByteOrder/BIG_ENDIAN))
+     (mem/limit-buffer b (+ c/index-id-size (c/maybe-long-size tx-id))))))
+
 ;;;; Entity as-of
 
 (defn- find-first-entity-tx-within-range [i min max eid]
   (let [prefix-size (+ c/index-id-size c/id-size)
-        seek-k (c/encode-entity+z+tx-id-key-to
-                (.get idx/seek-buffer-tl)
-                eid
-                min)]
+        seek-k (encode-entity+z+tx-id-key-to (.get idx/seek-buffer-tl)
+                                             eid
+                                             min)]
     (loop [k (kv/seek i seek-k)]
       (when (and k (mem/buffers=? seek-k k prefix-size))
-        (let [z (c/decode-entity+z+tx-id-key-as-z-number-from k)]
+        (let [z (decode-entity+z+tx-id-key-as-z-number-from k)]
           (if (morton/morton-number-within-range? min max z)
-            (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
+            (let [entity-tx (safe-entity-tx (decode-entity+z+tx-id-key-from k))
                   v (kv/value i)]
               (if-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
@@ -228,10 +324,9 @@
                 [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
               (when-not (neg? (.compareTo ^Comparable bigmin z))
-                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
-                                   (.get idx/seek-buffer-tl)
-                                   eid
-                                   bigmin)))))))))))
+                (recur (kv/seek i (encode-entity+z+tx-id-key-to (.get idx/seek-buffer-tl)
+                                                                eid
+                                                                bigmin)))))))))))
 
 (defn- find-entity-tx-within-range-with-highest-valid-time [i min max eid prev-candidate]
   (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eid)]
@@ -253,7 +348,7 @@
 ;;;; History
 
 (defn- ->entity-tx [[k v]]
-  (-> (c/decode-entity+vt+tt+tx-id-key-from k)
+  (-> (decode-entity+vt+tt+tx-id-key-from k)
       (enrich-entity-tx v)))
 
 (defn entity-history-seq-ascending
@@ -261,7 +356,7 @@
   ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
            {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
            :keys [with-corrections?]}]
-   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
+   (let [seek-k (encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
      (-> (all-keys-in-prefix i seek-k (+ c/index-id-size c/id-size)
                              {:reverse? true, :entries? true})
          (->> (map ->entity-tx))
@@ -279,7 +374,7 @@
   ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
            {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
            :keys [with-corrections?]}]
-   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
+   (let [seek-k (encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) start-vt)]
      (-> (all-keys-in-prefix i seek-k (+ c/index-id-size c/id-size)
                              {:entries? true})
          (->> (map ->entity-tx))
@@ -396,21 +491,20 @@
     (with-open [i (kv/new-iterator snapshot)]
       (let [prefix-size (+ c/index-id-size c/id-size)
             eid-buffer (c/->id-buffer eid)
-            seek-k (c/encode-entity+vt+tt+tx-id-key-to
-                    (.get idx/seek-buffer-tl)
-                    eid-buffer
-                    valid-time
-                    transact-time
-                    nil)]
+            seek-k (encode-entity+vt+tt+tx-id-key-to (.get idx/seek-buffer-tl)
+                                                     eid-buffer
+                                                     valid-time
+                                                     transact-time
+                                                     nil)]
         (loop [k (kv/seek i seek-k)]
           (when (and k (mem/buffers=? seek-k k prefix-size))
-            (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
+            (let [entity-tx (safe-entity-tx (decode-entity+vt+tt+tx-id-key-from k))
                   v (kv/value i)]
               (if (<= (compare (.tt entity-tx) transact-time) 0)
                 (when-not (mem/buffers=? c/nil-id-buffer v)
                   (enrich-entity-tx entity-tx v))
                 (if morton/*use-space-filling-curve-index?*
-                  (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
+                  (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
                     (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
                       (when-not (= ::deleted-entity k)
                         v)))
@@ -514,7 +608,7 @@
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(idx/meta-kv ::latest-completed-tx tx)
-                        [(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))
+                        [(encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))
 
   (index-entity-txs [this tx entity-txs]
     (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
@@ -532,7 +626,7 @@
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id)))))
+      (nil? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
     (->KvIndexStore (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)))
