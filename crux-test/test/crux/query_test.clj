@@ -2846,3 +2846,22 @@
            (api/q (api/db *api*)
                   '{:find [?name foo], :where [[?id :name ?name]],
                     :args [{foo nil}]}))))
+
+(t/deftest test-multiple-fields-sql-bug
+  (let [n 10000
+        acceptable-slowdown-factor 1.1]
+    (fix/transact! *api* (fix/people (repeat n {})))
+    (t/is (= n (count (api/q (api/db *api*)
+                             '{:find [?e] :where [[?e :crux.db/id]]}))))
+    (let [single-field-ns-start (System/nanoTime)]
+      (t/is (= n (count (api/q (api/db *api*)
+                               '{:find [?e] :where [[?e :age ?age]]}))))
+      (let [single-field-ns (- (System/nanoTime) single-field-ns-start)
+            multiple-fields-ns-start (System/nanoTime)]
+        (t/is (= n (count (api/q (api/db *api*)
+                                 '{:find [?e] :where [[?e :age ?age]
+                                                      [?e :salary ?salary]
+                                                      [?e :sex ?sex]]}))))
+        (let [multiple-field-ns (- (System/nanoTime) multiple-fields-ns-start)]
+          (t/is (< (double (/ multiple-field-ns single-field-ns)) acceptable-slowdown-factor)
+                (str (/ single-field-ns 1000000.0) " " (/ multiple-field-ns 1000000.0))))))))
