@@ -136,20 +136,12 @@
         (->Quad attr entity nil value)))))
 
 (defn decode-ave-key-to-v-from ^org.agrona.DirectBuffer [^DirectBuffer k]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/ave-index-id index-id))
-      (let [value-size (- length c/id-size c/id-size c/index-id-size)]
-        (mem/slice-buffer k (+ c/index-id-size c/id-size) value-size)))))
+  (let [value-size (- (.capacity k) c/id-size c/id-size c/index-id-size)]
+    (mem/slice-buffer k (+ c/index-id-size c/id-size) value-size)))
 
 (defn decode-ave-key-to-e-from ^org.agrona.DirectBuffer [^DirectBuffer k]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/ave-index-id index-id))
-      (let [value-size (- length c/id-size c/id-size c/index-id-size)]
-        (mem/slice-buffer k (+ c/index-id-size c/id-size value-size) c/id-size)))))
+  (let [value-size (- (.capacity k) c/id-size c/id-size c/index-id-size)]
+    (mem/slice-buffer k (+ c/index-id-size c/id-size value-size) c/id-size)))
 
 (defn encode-aecv-key-to
   (^org.agrona.MutableDirectBuffer [b]
@@ -189,19 +181,11 @@
         (->Quad attr entity content-hash value)))))
 
 (defn decode-aecv-key-to-e-from ^crux.kv_indexer.Quad [^DirectBuffer k]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/aecv-index-id index-id))
-      (mem/slice-buffer k (+ c/index-id-size c/id-size) c/id-size))))
+  (mem/slice-buffer k (+ c/index-id-size c/id-size) c/id-size))
 
 (defn decode-aecv-key-to-v-from ^crux.kv_indexer.Quad [^DirectBuffer k]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/aecv-index-id index-id))
-      (let [value-size (- length c/id-size c/id-size c/id-size c/index-id-size)]
-        (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size c/id-size) value-size)))))
+  (let [value-size (- (.capacity k) c/id-size c/id-size c/id-size c/index-id-size)]
+    (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size c/id-size) value-size)))
 
 (defn all-attrs [i]
   (let [seek-buffer (.get seek-buffer-tl)
@@ -269,10 +253,7 @@
       (c/->EntityTx entity valid-time transact-time tx-id nil))))
 
 (defn decode-entity+vt+tt+tx-id-key-as-tt-from ^java.util.Date [^DirectBuffer k]
-  (assert (= (+ c/index-id-size c/id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= c/entity+vt+tt+tx-id->content-hash-index-id index-id))
-    (c/reverse-time-ms->date (.getLong k (+ c/index-id-size c/id-size Long/BYTES) ByteOrder/BIG_ENDIAN))))
+  (c/reverse-time-ms->date (.getLong k (+ c/index-id-size c/id-size Long/BYTES) ByteOrder/BIG_ENDIAN)))
 
 (defn encode-entity-tx-z-number [valid-time transaction-time]
   (morton/longs->morton-number (c/date->reverse-time-ms valid-time)
