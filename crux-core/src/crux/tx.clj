@@ -1,16 +1,15 @@
 (ns ^:no-doc crux.tx
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.query :as q]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe]
-            [clojure.set :as set])
+            [crux.tx.event :as txe])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
