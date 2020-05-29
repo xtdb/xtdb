@@ -3,7 +3,6 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy]
             [crux.index :as idx])
@@ -117,11 +116,9 @@
                                 :db (atom (if (.isFile (io/file db-dir "memdb"))
                                             (restore-db db-dir)
                                             (sorted-map-by mem/buffer-comparator)))})
-                   (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                   (lru/wrap-lru-cache options)))
+                   (cond-> check-and-store-index-version idx/check-and-store-index-version)))
 
    :args (merge kv/options
-                lru/options
                 {::persist-on-close? {:doc "Persist Mem Db on close"
                                       :default false
                                       :crux.config/type :crux.config/boolean}})})
