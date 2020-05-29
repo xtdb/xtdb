@@ -393,6 +393,7 @@
 (declare new-kv-index-store)
 
 (defrecord KvIndexStore [snapshot
+                         close-snapshot?
                          level-1-iterator-delay
                          level-2-iterator-delay
                          entity-as-of-iterator-delay
@@ -406,7 +407,8 @@
       (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay]
               :when (realized? i)]
         (cio/try-close @i))
-      (cio/try-close snapshot)))
+      (when close-snapshot?
+        (cio/try-close snapshot))))
 
   kv/KvSnapshot
   (new-iterator ^java.io.Closeable [this]
@@ -544,7 +546,7 @@
     (c/->value-buffer value))
 
   (open-nested-index-store [this]
-    (let [nested-index-store (new-kv-index-store (lru/new-cached-snapshot snapshot false))]
+    (let [nested-index-store (new-kv-index-store snapshot false)]
       (swap! nested-index-store-state conj nested-index-store)
       nested-index-store)))
 
@@ -567,8 +569,9 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (idx/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-store [snapshot]
+(defn- new-kv-index-store [snapshot close-snapshot?]
   (->KvIndexStore snapshot
+                  close-snapshot?
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
@@ -653,8 +656,7 @@
       (nil? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
-    (let [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv-store) true)]
-      (new-kv-index-store snapshot)))
+    (new-kv-index-store (kv/new-snapshot kv-store) true))
 
   status/Status
   (status-map [this]
