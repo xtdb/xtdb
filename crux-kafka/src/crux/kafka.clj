@@ -9,7 +9,8 @@
             [crux.node :as n]
             [crux.status :as status]
             [crux.tx :as tx]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.kv :as kv])
   (:import crux.db.DocumentStore
            [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
@@ -170,7 +171,7 @@
   (.flush producer))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               indexer object-store
+                               kv-store object-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
@@ -185,8 +186,8 @@
     (loop [indexed {}]
       (let [missing-ids (set/difference (set ids) (set (keys indexed)))
             indexed (merge indexed (when (seq missing-ids)
-                                     (with-open [index-store (db/open-index-store indexer)]
-                                       (db/get-objects object-store index-store missing-ids))))]
+                                     (with-open [snapshot (kv/new-snapshot kv-store)]
+                                       (db/get-objects object-store snapshot missing-ids))))]
         (if (= (count indexed) (count ids))
           indexed
           (do
@@ -217,12 +218,9 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{:keys [bus object-store indexer !error]}
+(defn- index-doc-log [{:keys [bus object-store kv-store indexer !error]}
                       {:keys [::doc-topic ::group-id kafka-config]}]
-  (let [tp-offsets (read-doc-offsets indexer)
-        tx-consumer-deps {:bus bus
-                          :indexer indexer
-                          :object-store object-store}]
+  (let [tp-offsets (read-doc-offsets indexer)]
     (try
       (with-open [consumer (doto (create-consumer (assoc kafka-config
                                                          "group.id" (or group-id (str (UUID/randomUUID)))))
@@ -230,7 +228,7 @@
         (loop [tp-offsets tp-offsets]
           (let [tp-offsets (->> (consumer-seqs consumer (Duration/ofSeconds 1))
                                 (reduce (fn [tp-offsets doc-records]
-                                          (tx/index-docs tx-consumer-deps (->> doc-records (into {} (map doc-record->id+doc))))
+                                          (db/put-objects object-store (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
                                             (->> (store-doc-offsets indexer))))
                                         tp-offsets))]
@@ -297,13 +295,14 @@
    :args default-options})
 
 (def document-store
-  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [indexer object-store bus] :as deps}
+  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [indexer kv-store object-store bus] :as deps}
                   {::keys [doc-topic doc-partitions] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      doc-store (map->KafkaDocumentStore
                                 {:producer producer
                                  :doc-topic doc-topic
                                  :indexer indexer
+                                 :kv-store kv-store
                                  :object-store object-store
                                  :bus bus
                                  :!indexing-error (atom nil)})]
@@ -313,7 +312,7 @@
                         (doto (Thread. #(index-doc-log doc-store (assoc options :kafka-config kafka-config)))
                           (.setName "crux-doc-consumer")
                           (.start)))))
-   :deps [::producer ::admin-client ::n/object-store ::n/indexer ::n/bus]
+   :deps [::producer ::admin-client ::n/kv-store ::n/object-store ::n/indexer ::n/bus]
    :args default-options})
 
 (def topology
