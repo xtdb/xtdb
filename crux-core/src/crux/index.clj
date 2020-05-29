@@ -8,7 +8,6 @@
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IReduceInit MapEntry Seqable Sequential]
            crux.api.IndexVersionOutOfSyncException
-           [crux.codec EntityValueContentHash EntityTx]
            [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
            [java.io Closeable DataInputStream]
            [java.util Collections Comparator Date]
@@ -228,9 +227,9 @@
     (not (multiple-values? v))
     (vector)))
 
-(defn doc-predicate-stats [doc evicted?]
+(defn doc-predicate-stats [doc]
   (->> (for [[k v] doc]
-         [k (cond-> (count (vectorize-value v)) evicted? -)])
+         [k (count (vectorize-value v))])
        (into {})))
 
 ;; Utils

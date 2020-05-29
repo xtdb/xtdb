@@ -546,11 +546,13 @@
        (into {})))
 
 (defn- bound-result-for-var [index-store var->bindings join-keys join-results var]
-  (let [binding ^VarBinding (get var->bindings var)]
-    (if (.value? binding)
-      (get join-results (.result-name binding))
-      (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (db/decode-value index-store (.attr binding) (.content-hash entity-tx) (get join-keys (.result-index binding)))))))
+  (let [var-binding ^VarBinding (get var->bindings var)]
+    (if (.value? var-binding)
+      (get join-results (.result-name var-binding))
+      (when-let [etx ^EntityTx (get join-results (.e-var var-binding))]
+        (db/decode-value index-store
+                         (get join-keys (.result-index var-binding))
+                         (c/->id-buffer (.eid etx)))))))
 
 (declare build-sub-query)
 
@@ -605,8 +607,9 @@
 (defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
   (let [eid (get (first args) e)]
     (when-let [^EntityTx entity-tx (entity-resolver-fn eid)]
-      (let [doc (db/get-document index-store (.content-hash entity-tx))]
-        (when (contains? (set (idx/vectorize-value (get doc a))) v)
+      (let [v (c/->value-buffer v)
+            [[found-v _]] (db/aev index-store (c/->id-buffer a) eid v entity-resolver-fn)]
+        (when (and found-v (mem/buffers=? v found-v))
           [])))))
 
 (def ^:private ^:dynamic *recursion-table* {})
@@ -1049,11 +1052,13 @@
   (let [{:keys [where args rules]} (s/conform ::query q)]
     (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
 
-(defn- build-full-results [{:keys [entity-resolver-fn index-store] :as db} bound-result-tuple]
+(defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
-         (if-let [entity-tx (and (c/valid-id? value)
-                                 (entity-resolver-fn value))]
-           (db/get-document index-store (.content-hash ^EntityTx entity-tx))
+         (if-let [^EntityTx entity-tx (and (c/valid-id? value)
+                                           (entity-resolver-fn value))]
+           (let [content-hash (.content-hash entity-tx)]
+             (-> (db/fetch-docs document-store #{content-hash})
+                 (get content-hash)))
            value))))
 
 (defn open-index-store ^java.io.Closeable [{:keys [query-engine index-store] :as db}]
@@ -1175,9 +1180,11 @@
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
           (c/entity-tx->edn)))
 
-(defn entity [db index-store eid]
-  (let [entity-tx (entity-tx db index-store eid)]
-    (-> (db/get-document index-store (:crux.db/content-hash entity-tx))
+(defn entity [{{:keys [document-store]} :query-engine, :as db} index-store eid]
+  (when-let [content-hash (some-> (entity-tx db index-store eid)
+                                  :crux.db/content-hash)]
+    (-> (db/fetch-docs document-store #{content-hash})
+        (get content-hash)
         (idx/keep-non-evicted-doc))))
 
 (defrecord QueryDatasource [query-engine
@@ -1276,7 +1283,8 @@
                               :crux.tx/tx-id (.tx-id etx)
                               :crux.db/valid-time (.vt etx)
                               :crux.db/content-hash (.content-hash etx)}
-                       with-docs? (assoc :crux.db/doc (db/get-document index-store (.content-hash etx)))))))))))
+                       with-docs? (assoc :crux.db/doc (-> (db/fetch-docs (:document-store query-engine) #{(.content-hash etx)})
+                                                          (get (.content-hash etx))))))))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time))
@@ -1293,16 +1301,17 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def query-engine
-  {:start-fn (fn [{:crux.node/keys [indexer bus]} {::keys [query-pool-size query-cache-size conform-cache-size] :as args}]
+  {:start-fn (fn [{:crux.node/keys [indexer bus document-store]} {::keys [query-pool-size query-cache-size conform-cache-size] :as args}]
                (let [query-executor (Executors/newFixedThreadPool query-pool-size (cio/thread-factory "crux.query.query-pool-thread"))]
                  (map->QueryEngine
                   {:indexer indexer
                    :conform-cache (lru/new-cache conform-cache-size)
                    :query-cache (lru/new-cache query-cache-size)
+                   :document-store document-store
                    :bus bus
                    :query-executor query-executor
                    :options args})))
-   :deps [:crux.node/indexer :crux.node/bus]
+   :deps [:crux.node/indexer :crux.node/bus :crux.node/document-store]
    :args {::query-pool-size {:doc "Query Pool Size"
                              :default 32
                              :crux.config/type :crux.config/nat-int}
