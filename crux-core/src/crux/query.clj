@@ -278,16 +278,17 @@
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get var->range-constraints v)
-        e-range-constraints (get var->range-constraints e)]
+        e-range-constraints (get var->range-constraints e)
+        nested-index-store (db/open-nested-index-store index-store)]
     (if (= (:v names) (first order))
-      (let [v-idx (idx/new-doc-attribute-value-entity-value-index index-store a entity-resolver-fn)
-            e-idx (idx/new-doc-attribute-value-entity-entity-index index-store a v-idx entity-resolver-fn)]
+      (let [v-idx (idx/new-doc-attribute-value-entity-value-index nested-index-store a entity-resolver-fn)
+            e-idx (idx/new-doc-attribute-value-entity-entity-index nested-index-store a v-idx entity-resolver-fn)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints v-idx v-range-constraints)
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)))
-      (let [e-idx (idx/new-doc-attribute-entity-value-entity-index index-store a entity-resolver-fn)
-            v-idx (idx/new-doc-attribute-entity-value-value-index index-store a e-idx entity-resolver-fn)]
+      (let [e-idx (idx/new-doc-attribute-entity-value-entity-index nested-index-store a entity-resolver-fn)
+            v-idx (idx/new-doc-attribute-entity-value-value-index nested-index-store a e-idx entity-resolver-fn)]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)
