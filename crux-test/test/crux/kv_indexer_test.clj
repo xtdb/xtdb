@@ -8,7 +8,6 @@
             [crux.fixtures :as f]
             [crux.fixtures.kv-only :as fkv :refer [*kv*]]
             [crux.kv-indexer :as kvi]
-            [crux.object-store :as os]
             [crux.tx :as tx])
   (:import crux.codec.EntityTx
            java.util.Date))
@@ -20,7 +19,7 @@
 (defmacro with-fresh-indexer [& body]
   `(fkv/with-kv-store
      (fn []
-       (binding [*indexer* (kvi/->KvIndexer *kv* (os/->KvObjectStore *kv*))]
+       (binding [*indexer* (kvi/->KvIndexer *kv*)]
          ~@body))))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own
