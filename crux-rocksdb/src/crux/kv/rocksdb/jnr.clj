@@ -7,7 +7,6 @@
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
             [crux.memory :as mem]
-            [crux.lru :as lru]
             [crux.index :as idx])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
@@ -300,11 +299,9 @@
                                        :db db
                                        :options opts
                                        :write-options write-options})
-                     (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                     (lru/wrap-lru-cache options))))
+                     (cond-> check-and-store-index-version idx/check-and-store-index-version))))
 
    :args (merge kv/options
-                lru/options
                 {::db-options {:doc "RocksDB Options"
                                :crux.config/type :crux.config/string}
                  ::disable-wal? {:doc "Disable Write Ahead Log"
