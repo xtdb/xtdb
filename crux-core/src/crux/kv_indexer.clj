@@ -487,13 +487,6 @@
       (when close-snapshot?
         (cio/try-close snapshot))))
 
-  kv/KvSnapshot
-  (new-iterator ^java.io.Closeable [this]
-    (kv/new-iterator snapshot))
-
-  (get-value [this k]
-    (kv/get-value snapshot k))
-
   db/IndexStore
   (av [this a min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
@@ -636,7 +629,7 @@
     (assert (some? eid-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (some-> (kv/get-value this (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
+      (some-> (kv/get-value snapshot (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
               (mem/<-nippy-buffer))))
 
   (encode-value [this value]
