@@ -327,6 +327,7 @@
                   (encode-index-version-value-to nil c/index-version)]])
       (kv/fsync)))
   kv)
+
 ;; Meta
 
 (defn encode-meta-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
