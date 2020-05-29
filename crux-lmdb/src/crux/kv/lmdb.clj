@@ -6,7 +6,6 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.lru :as lru]
             [crux.index :as idx])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
@@ -269,14 +268,12 @@
                                      :env env
                                      :env-flags env-flags
                                      :dbi (dbi-open env)})
-                       (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                       (lru/wrap-lru-cache options))
+                       (cond-> check-and-store-index-version idx/check-and-store-index-version))
                    (catch Throwable t
                      (env-close env)
                      (throw t)))))
 
    :args (-> (merge kv/options
-                    lru/options
                     {::env-flags {:doc "LMDB Flags"
                                   :crux.config/type :crux.config/nat-int}})
              (update ::kv/db-dir assoc :required? true, :default "data"))})

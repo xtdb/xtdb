@@ -3,7 +3,6 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.kv.rocksdb.loader]
             [crux.memory :as mem]
             [crux.index :as idx])
@@ -168,11 +167,9 @@
                                     :options opts
                                     :stats stats
                                     :write-options write-opts})
-                     (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                     (lru/wrap-lru-cache options))))
+                     (cond-> check-and-store-index-version idx/check-and-store-index-version))))
 
    :args (-> (merge kv/options
-                    lru/options
                     {::db-options {:doc "RocksDB Options"
                                    :crux.config/type [#(instance? Options %) identity]}
                      ::disable-wal? {:doc "Disable Write Ahead Log"
