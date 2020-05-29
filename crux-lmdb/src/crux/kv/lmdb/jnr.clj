@@ -4,7 +4,6 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.index :as idx])
   (:import java.io.Closeable
@@ -127,13 +126,11 @@
                          (-> (map->LMDBJNRKv {:db-dir db-dir
                                               :env env
                                               :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))})
-                             (lru/wrap-lru-cache options)
                              (cond-> check-and-store-index-version idx/check-and-store-index-version))
                          (catch Throwable t
                            (.close env)
                            (throw t)))))
          :args (merge kv/options
-                      lru/options
                       {::env-flags {:doc "LMDB Flags"
                                     :crux.config/type [any? identity]}})})
 
