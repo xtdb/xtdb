@@ -202,7 +202,7 @@
 
 (defn encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b value]
-   (encode-aecv-key-to b value c/empty-buffer))
+   (encode-hash-cache-key-to b value c/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer value ^DirectBuffer entity]
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity value) (.capacity entity))))]
      (-> (doto b
