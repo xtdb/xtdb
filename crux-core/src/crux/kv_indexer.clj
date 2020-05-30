@@ -627,12 +627,12 @@
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (or (let [i @decode-value-iterator-delay
+      (or (.get temp-hash-cache value-buffer)
+          (let [i @decode-value-iterator-delay
                 hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
                 found-k (kv/seek i hash-cache-prefix-key)]
             (when (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key))
-              (some-> (kv/value i) (mem/<-nippy-buffer))))
-          (.get temp-hash-cache value-buffer))))
+              (some-> (kv/value i) (mem/<-nippy-buffer)))))))
 
   (encode-value [this value]
     (let [value-buffer (c/->value-buffer value)]
