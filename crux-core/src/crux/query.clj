@@ -489,30 +489,17 @@
                                                  {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
-(defrecord VarBinding [e-var var attr result-index join-depth result-name type value?])
+(defrecord VarBinding [e-var var attr result-index result-name type value?])
 
-;; NOTE: result-index is the index into join keys, it's the var's
-;; position into vars-in-join-order. The join-depth is the depth at
-;; which the var can first be accessed, that is, its e-var have had at
-;; least one participating clause fully joined and is part of the
-;; active result tuple. That is, its v-var, not necessarily this var,
-;; has been joined as well. There are subtleties to this, so take this
-;; explanation with a grain of salt.
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index max-join-depth vars]
   (->> (for [var vars
-             :let [e (get v-var->e var var)
-                   result-index (get var->values-result-index var)
-                   join-depth (or (max (long (get var->values-result-index e -1))
-                                       (long (get var->values-result-index (get e->v-var e) -1))
-                                       (long result-index))
-                                  (dec (long max-join-depth)))]]
+             :let [e-var (get v-var->e var var)]]
          [var (map->VarBinding
-               {:e-var e
+               {:e-var e-var
                 :var var
                 :attr (get var->attr var)
-                :result-index result-index
-                :join-depth join-depth
-                :result-name e
+                :result-index (get var->values-result-index var)
+                :result-name e-var
                 :type :entity
                 :value? false})])
        (into {})))
@@ -522,7 +509,6 @@
    {:var var
     :result-name (symbol "crux.query.value" (name var))
     :result-index result-index
-    :join-depth result-index
     :type type
     :value? true}))
 
@@ -552,15 +538,12 @@
 
 (declare build-sub-query)
 
-(defn- calculate-constraint-join-depth
-  ([var->bindings vars]
-   (calculate-constraint-join-depth var->bindings vars :join-depth))
-  ([var->bindings vars var-k]
-   (->> (for [var vars]
-          (get-in var->bindings [var var-k] -1))
-        (apply max -1)
-        (long)
-        (inc))))
+(defn- calculate-constraint-join-depth [var->bindings vars]
+  (->> (for [var vars]
+         (get-in var->bindings [var :result-index] -1))
+       (apply max -1)
+       (long)
+       (inc)))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
@@ -680,7 +663,7 @@
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unification-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars)
               args (vec (for [arg args]
                           (if (logic-var? arg)
                             arg
