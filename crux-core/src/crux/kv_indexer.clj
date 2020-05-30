@@ -10,7 +10,7 @@
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
            java.nio.ByteOrder
-           java.util.Date
+           [java.util Date HashMap Map]
            java.util.function.Supplier
            java.util.concurrent.atomic.AtomicBoolean
            (clojure.lang MapEntry)
@@ -475,6 +475,7 @@
                          level-2-iterator-delay
                          entity-as-of-iterator-delay
                          nested-index-store-state
+                         ^Map temp-hash-cache
                          ^AtomicBoolean closed?]
   Closeable
   (close [_]
@@ -626,17 +627,21 @@
 
   (decode-value [this value-buffer eid-buffer]
     (assert (some? value-buffer))
-    (assert (some? eid-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (some-> (kv/get-value snapshot (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
-              (mem/<-nippy-buffer))))
+      (if eid-buffer
+        (some-> (kv/get-value snapshot (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
+                (mem/<-nippy-buffer))
+        (.get temp-hash-cache value-buffer))))
 
   (encode-value [this value]
-    (c/->value-buffer value))
+    (let [value-buffer (c/->value-buffer value)]
+      (when-not (c/can-decode-value-buffer? value-buffer)
+        (.put temp-hash-cache (mem/copy-to-unpooled-buffer value-buffer) value))
+      value-buffer))
 
   (open-nested-index-store [this]
-    (let [nested-index-store (new-kv-index-store snapshot false)]
+    (let [nested-index-store (new-kv-index-store snapshot temp-hash-cache false)]
       (swap! nested-index-store-state conj nested-index-store)
       nested-index-store)))
 
@@ -659,13 +664,14 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-store [snapshot close-snapshot?]
+(defn- new-kv-index-store [snapshot temp-hash-cache close-snapshot?]
   (->KvIndexStore snapshot
                   close-snapshot?
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (atom [])
+                  temp-hash-cache
                   (AtomicBoolean.)))
 
 (defrecord KvIndexer [kv-store]
@@ -746,7 +752,7 @@
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
-    (new-kv-index-store (kv/new-snapshot kv-store) true))
+    (new-kv-index-store (kv/new-snapshot kv-store) (HashMap.) true))
 
   status/Status
   (status-map [this]
