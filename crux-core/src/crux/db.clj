@@ -35,7 +35,7 @@
   (entity-as-of-resolver [this eid valid-time transact-time])
   (entity-as-of [this eid valid-time transact-time])
   (open-entity-history ^crux.api.ICursor [this eid sort-order opts])
-  (decode-value [this value-buffer eid-buffer])
+  (decode-value [this value-buffer])
   (encode-value [this value])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]

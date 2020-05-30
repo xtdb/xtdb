@@ -489,7 +489,7 @@
                                                  {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
-(defrecord VarBinding [e-var var attr result-index e-result-index join-depth result-name type value?])
+(defrecord VarBinding [e-var var attr result-index join-depth result-name type value?])
 
 ;; NOTE: result-index is the index into join keys, it's the var's
 ;; position into vars-in-join-order. The join-depth is the depth at
@@ -511,7 +511,6 @@
                 :var var
                 :attr (get var->attr var)
                 :result-index result-index
-                :e-result-index (get var->values-result-index e)
                 :join-depth join-depth
                 :result-name e
                 :type :entity
@@ -549,9 +548,7 @@
 
 (defn- bound-result-for-var [index-store var->bindings ^List join-keys var]
   (let [var-binding ^VarBinding (get var->bindings var)]
-    (db/decode-value index-store
-                     (.get join-keys (.result-index var-binding))
-                     (some->> (.e-result-index var-binding) (.get join-keys)))))
+    (db/decode-value index-store (.get join-keys (.result-index var-binding)))))
 
 (declare build-sub-query)
 

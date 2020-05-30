@@ -201,18 +201,15 @@
       (step aecv-prefix))))
 
 (defn encode-hash-cache-key-to
-  (^org.agrona.MutableDirectBuffer [b entity]
-   (encode-aecv-key-to b entity c/empty-buffer))
-
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^DirectBuffer value]
-   (assert (= c/id-size (.capacity entity)) (mem/buffer->hex entity))
-
+  (^org.agrona.MutableDirectBuffer [b value]
+   (encode-aecv-key-to b value c/empty-buffer))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer value ^DirectBuffer entity]
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size (.capacity value))))]
      (-> (doto b
            (.putByte 0 c/hash-cache-index-id)
-           (.putBytes c/index-id-size entity 0 c/id-size)
-           (.putBytes (+ c/index-id-size c/id-size) value 0 (.capacity value)))
-         (mem/limit-buffer (+ c/index-id-size c/id-size (.capacity value)))))))
+           (.putBytes c/index-id-size value 0 (.capacity value))
+           (.putBytes (+ c/index-id-size (.capacity value)) entity 0 c/id-size))
+         (mem/limit-buffer (+ c/index-id-size (.capacity value) c/id-size))))))
 
 ;;;; Bitemp indices
 
@@ -474,6 +471,7 @@
                          level-1-iterator-delay
                          level-2-iterator-delay
                          entity-as-of-iterator-delay
+                         decode-value-iterator-delay
                          nested-index-store-state
                          ^Map temp-hash-cache
                          ^AtomicBoolean closed?]
@@ -482,7 +480,7 @@
     (when (.compareAndSet closed? false true)
       (doseq [nested-index-store @nested-index-store-state]
         (cio/try-close nested-index-store))
-      (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay]
+      (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay]
               :when (realized? i)]
         (cio/try-close @i))
       (when close-snapshot?
@@ -625,14 +623,16 @@
       (cio/->cursor #(.close i)
                     (entity-history-seq i eid opts))))
 
-  (decode-value [this value-buffer eid-buffer]
+  (decode-value [this value-buffer]
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (if eid-buffer
-        (some-> (kv/get-value snapshot (encode-hash-cache-key-to (.get seek-buffer-tl) eid-buffer value-buffer))
-                (mem/<-nippy-buffer))
-        (.get temp-hash-cache value-buffer))))
+      (or (let [i @decode-value-iterator-delay
+                hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
+                found-k (kv/seek i hash-cache-prefix-key)]
+            (when (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key))
+              (some-> (kv/value i) (mem/<-nippy-buffer))))
+          (.get temp-hash-cache value-buffer))))
 
   (encode-value [this value]
     (let [value-buffer (c/->value-buffer value)]
@@ -661,12 +661,13 @@
            (cond-> [(MapEntry/create (encode-ave-key-to nil a v-buf id) c/empty-buffer)
                     (MapEntry/create (encode-aecv-key-to nil a id content-hash v-buf) c/empty-buffer)]
              (not (c/can-decode-value-buffer? v-buf))
-             (conj (MapEntry/create (encode-hash-cache-key-to nil id v-buf) (mem/->nippy-buffer v)))))
+             (conj (MapEntry/create (encode-hash-cache-key-to nil v-buf id) (mem/->nippy-buffer v)))))
          (apply concat))))
 
 (defn- new-kv-index-store [snapshot temp-hash-cache close-snapshot?]
   (->KvIndexStore snapshot
                   close-snapshot?
+                  (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
@@ -721,7 +722,7 @@
                                                                                        eid-buffer)
                                                                     aecv-key)
                                                        (not (c/can-decode-value-buffer? value-buffer))
-                                                       (update :ks conj (encode-hash-cache-key-to nil eid-buffer value-buffer)))))
+                                                       (update :ks conj (encode-hash-cache-key-to nil value-buffer eid-buffer)))))
                                                  {:tombstones {}
                                                   :ks #{}}))]
 
