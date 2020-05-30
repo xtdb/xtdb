@@ -204,12 +204,12 @@
   (^org.agrona.MutableDirectBuffer [b value]
    (encode-aecv-key-to b value c/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer value ^DirectBuffer entity]
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size (.capacity value))))]
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity value) (.capacity entity))))]
      (-> (doto b
            (.putByte 0 c/hash-cache-index-id)
            (.putBytes c/index-id-size value 0 (.capacity value))
-           (.putBytes (+ c/index-id-size (.capacity value)) entity 0 c/id-size))
-         (mem/limit-buffer (+ c/index-id-size (.capacity value) c/id-size))))))
+           (.putBytes (+ c/index-id-size (.capacity value)) entity 0 (.capacity entity)))
+         (mem/limit-buffer (+ c/index-id-size (.capacity value) (.capacity entity)))))))
 
 ;;;; Bitemp indices
 
