@@ -709,24 +709,23 @@
                                            aecv-key)
 
                                          (reduce (fn [acc aecv-key]
-                                                   (let [quad (decode-aecv-key-from aecv-key)]
-                                                     (-> acc
-                                                         (update :tombstones assoc (.content-hash quad) {:crux.db/id (.eid quad), :crux.db/evicted? true})
-                                                         (update :ks conj
-                                                                 (encode-ave-key-to nil
-                                                                                    (c/->id-buffer (.attr quad))
-                                                                                    (c/->id-buffer (.value quad))
-                                                                                    (c/->id-buffer (.eid quad)))
-                                                                 aecv-key))))
+                                                   (let [quad (decode-aecv-key-from aecv-key)
+                                                         eid-buffer (c/->id-buffer (.eid quad))
+                                                         value-buffer (.value quad)]
+                                                     (cond-> acc
+                                                       true (update :tombstones assoc (.content-hash quad) {:crux.db/id (.eid quad), :crux.db/evicted? true})
+                                                       true (update :ks conj
+                                                                    (encode-ave-key-to nil
+                                                                                       (c/->id-buffer (.attr quad))
+                                                                                       value-buffer
+                                                                                       eid-buffer)
+                                                                    aecv-key)
+                                                       (not (c/can-decode-value-buffer? value-buffer))
+                                                       (update :ks conj (encode-hash-cache-key-to nil eid-buffer value-buffer)))))
                                                  {:tombstones {}
                                                   :ks #{}}))]
 
-        (kv/delete kv-store
-                   (concat ks
-                           (for [eid eids
-                                 k (all-keys-in-prefix i (encode-hash-cache-key-to nil (c/->id-buffer eid)))]
-                             k)))
-
+        (kv/delete kv-store ks)
         {:tombstones tombstones})))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
