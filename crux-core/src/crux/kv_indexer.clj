@@ -18,7 +18,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^ThreadLocal seek-buffer-tl
+(def ^:private ^ThreadLocal seek-buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
@@ -180,10 +180,10 @@
             value (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size c/id-size) value-size)]
         (->Quad attr entity content-hash value)))))
 
-(defn decode-aecv-key-to-e-from ^crux.kv_indexer.Quad [^DirectBuffer k]
+(defn decode-aecv-key-to-e-from ^org.agrona.DirectBuffer [^DirectBuffer k]
   (mem/slice-buffer k (+ c/index-id-size c/id-size) c/id-size))
 
-(defn decode-aecv-key-to-v-from ^crux.kv_indexer.Quad [^DirectBuffer k]
+(defn decode-aecv-key-to-v-from ^org.agrona.DirectBuffer [^DirectBuffer k]
   (let [value-size (- (.capacity k) c/id-size c/id-size c/id-size c/index-id-size)]
     (mem/slice-buffer k (+ c/index-id-size c/id-size c/id-size c/id-size) value-size)))
 
