@@ -42,7 +42,7 @@
  (fn [{:keys [db]} _]
    (let [query-params (assoc (get-in db [:current-route :query-params]) :link-entities? true)]
      {:scroll-top nil
-      :dispatch-n [[:crux.ui.events/entity-right-pane-document-error nil]
+      :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
                    [:crux.ui.events/set-entity-result-pane-loading true]]
       :http-xhrio {:method :get
                    :uri (common/route->url :entity nil query-params)

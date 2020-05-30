@@ -7,10 +7,7 @@ $spacing: 0.5rem;
 
 .uikit-table {
     width: 100%;
-    border-radius: 3px;
-    -webkit-box-shadow: 0px 0px 15px -8px rgba(0,0,0,0.51);
-    -moz-box-shadow: 0px 0px 15px -8px rgba(0,0,0,0.51);
-    box-shadow: 0px 0px 15px -8px rgba(0,0,0,0.51);
+    border: 1px solid;
 
     .button:focus {
 	outline:0;
@@ -38,7 +35,6 @@ $spacing: 0.5rem;
 	-webkit-appearance: none;
 	align-items: center;
 	border: 1px solid transparent;
-	border-radius: 4px;
 	box-shadow: none;
 	display: inline-flex;
 	justify-content: flex-start;
@@ -78,7 +74,6 @@ $spacing: 0.5rem;
 
     .select::after {
 	border: 3px solid transparent;
-	border-radius: 2px;
 	border-right: 0;
 	border-top: 0;
 	content: " ";

@@ -26,9 +26,7 @@
                              [re-frame "0.12.0"]
                              [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
-                             [bidi "2.1.6"]
-                             [tick "0.4.23-alpha"]
-                             [kibu/pushy "0.3.8"]]}
+                             [tick "0.4.23-alpha"]]}
              :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
                                      :target "crux-http-server/cljs-target/public/css/"}}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]

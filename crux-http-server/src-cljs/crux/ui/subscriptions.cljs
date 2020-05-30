@@ -112,8 +112,8 @@
      (let [query-params (get-in db [:current-route :query-params])
          document (get-in db [:entity :http :document "entity"])]
      {:eid (:eid query-params)
-      :vt (or (:valid-time query-params) (str (t/now)))
-      :tt (or (:transaction-time query-params) "Not Specified")
+      :vt (common/iso-format-datetime (or (:valid-time query-params) (t/now)))
+      :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
       :document document
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
 
@@ -127,11 +127,21 @@
  (fn [db _]
    (get-in db [:entity :error])))
 
+
+(defn- format-history-times [entity-history]
+  (map
+   (fn [history-element]
+     (-> history-element
+         (update :crux.tx/tx-time common/iso-format-datetime)
+         (update :crux.db/valid-time common/iso-format-datetime)))
+   entity-history))
+
 (rf/reg-sub
  ::entity-result-pane-history
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
-         history (get-in db [:entity :http :history])]
+         history (-> (get-in db [:entity :http :history])
+                     format-history-times)]
      {:eid eid
       :entity-history history})))
 
@@ -150,21 +160,18 @@
  ::entity-result-pane-history-diffs
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
-         history (get-in db [:entity :http :history])
+         history (-> (get-in db [:entity :http :history])
+                     format-history-times)
          entity-history (history-docs->diffs history)]
      {:eid eid
       :up-to-date-doc (first history)
       :history-diffs entity-history})))
 
 (rf/reg-sub
- ::form-pane-entity-view
+ ::form-pane-view
  (fn [db _]
-   (get-in db [:form-pane :entity :view])))
-
-(rf/reg-sub
- ::form-pane-query-view
- (fn [db _]
-   (get-in db [:form-pane :query :view])))
+   (or (get-in db [:form-pane :view])
+       (get-in db [:current-route :data :name]))))
 
 (rf/reg-sub
  ::form-pane-history

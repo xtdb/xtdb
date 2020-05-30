@@ -26,8 +26,8 @@
 (rf/reg-event-db
  ::navigate-to-root-view
  (fn [db [_ view]]
-   (-> (assoc-in db [:left-pane :visible?] true)
-       (assoc-in [:left-pane :view] view))))
+   (-> (assoc-in db [:form-pane :hidden?] false)
+       (assoc-in [:form-pane :view] view))))
 
 (rf/reg-event-db
  ::toggle-form-pane
@@ -40,14 +40,9 @@
    (update-in db [:form-pane :history component] #(if (seq bool) (first bool) (not %)))))
 
 (rf/reg-event-db
- ::set-form-pane-entity-view
- (fn [db _]
-   (update-in db [:form-pane :entity :view] not)))
-
-(rf/reg-event-db
- ::set-form-pane-query-view
- (fn [db _]
-   (update-in db [:form-pane :query :view] not)))
+ ::set-form-pane-view
+ (fn [db [_ view]]
+   (assoc-in db [:form-pane :view] view)))
 
 (rf/reg-event-db
  ::query-table-error

@@ -6,7 +6,9 @@
    [crux.ui.navigation :as navigation]
    [reitit.frontend :as reitit]
    [reitit.frontend.easy :as rfe]
-   [tick.alpha.api :as t]))
+   [tick.alpha.api :as t]
+   [tick.format :as tf]
+   [tick.locale-en-us]))
 
 (defn route->url
   "k: page handler i.e. :entity
@@ -37,6 +39,11 @@
   (when (not-empty dt)
     {:date (str (t/date dt))
      :time (str (t/time dt))}))
+
+(defn iso-format-datetime
+  [dt]
+  (when dt
+    (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt)))))
 
 (defn vectorize
   [ks m]
@@ -74,10 +81,6 @@
                (mapv str v)
                (str v))]))
        (into {})))
-
-(defn back-page
-  []
-  (js/window.history.back))
 
 (defn- scroll-top []
   (set! (.. js/document -body -scrollTop) 0)

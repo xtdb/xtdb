@@ -15,7 +15,7 @@
   [{:keys [values touched errors handle-change handle-blur]}]
   [:div.crux-time
    [:div.input-group
-    [:div.label
+    [:div.input-group-label.label
      [:label "Valid Time"]]
     [:input.input.input-time
      {:type "date"
@@ -34,7 +34,7 @@
                (get errors "vt"))
       [:p.input-error (get errors "vt")])]
    [:div.input-group
-    [:div.label
+    [:div.input-group-label.label
      [:label "Transaction Time" ]]
     [:input.input.input-time
      {:type "date"
@@ -87,7 +87,8 @@
                     handle-submit] :as props}]
          (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
                form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])
-               query-history-list @(rf/subscribe [::sub/query-form-history])]
+               query-history-list @(rf/subscribe [::sub/query-form-history])
+               disabled? (or loading? (some some? (vals errors)))]
            [:<>
             [:form
              {:id form-id
@@ -140,8 +141,9 @@
                 [:p.input-error (get errors "q")])]
              [vt-tt-inputs props]
              [:button.button
-              {:type "submit"
-               :disabled (or loading? (some some? (vals errors)))}
+              {:class (when-not disabled? "query-form__button")
+               :type "submit"
+               :disabled disabled?}
               "Submit Query"]]]))])))
 
 (defn entity-validation
@@ -171,7 +173,8 @@
                 set-values
                 set-touched
                 handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
+     (let [loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
+           disabled? (or loading? (some some? (vals errors)))]
        [:form
         {:id form-id
          :on-submit handle-submit}
@@ -186,7 +189,8 @@
         [vt-tt-inputs props]
         [:button.button
          {:type "submit"
-          :disabled (or loading? (some some? (vals errors)))}
+          :class (when-not disabled? "query-form__button")
+          :disabled disabled?}
          "Submit Entity"]]))])
 
 (defn query-table
@@ -239,31 +243,23 @@
         {:keys [query-params path-params]} @(rf/subscribe [::sub/current-route])
         asc-order? (= "asc" (:sort-order query-params))]
     [:<>
-     [:div.history-diffs-order
-      [:div.history-slider__group
-       [:div.onoffswitch
+     [:div.history-diffs__options
+      [:div.select.history-sorting-group
+       [:select
+        {:name "diffs-order"
+         :value (:sort-order query-params)
+         :on-change #(rf/dispatch [:navigate :entity path-params
+                                   (assoc query-params :sort-order (if asc-order? "desc" "asc"))])}
+        [:option {:value "asc"} "Ascending"]
+        [:option {:value "desc"} "Descending"]]]
+      [:div.history-checkbox__group
+       [:div.history-diffs__checkbox
         [:input
-         {:name "onoffswitch"
-          :class "onoffswitch-checkbox"
-          :checked diffs-tab?
+         {:checked diffs-tab?
           :on-change #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
                                     (if diffs-tab? false true)])
-          :id "diffs"
-          :type "checkbox"}]
-        [:label.onoffswitch-label
-         {:for "diffs"}
-         [:span.onoffswitch-inner]
-         [:span.onoffswitch-switch]]]
-       [:span
-        {:on-click #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
-                                  (if diffs-tab? false true)])}
-        "Diffs"]]
-      [:a.history-sorting-group
-       {:href (common/route->url :entity path-params
-                                 (assoc query-params :sort-order (if asc-order? "desc" "asc")))}
-       (if asc-order?
-         [:<> [:i.fas.fa-caret-down] "Asc"]
-         [:<> [:i.fas.fa-caret-up] "Desc"])]]
+          :type "checkbox"}]]
+       [:span "Diffs"]]]
      [:div.entity-histories__container
       (if loading?
         [:div.entity-map.entity-map--loading
@@ -360,8 +356,7 @@
 (defn form-pane
   []
   (let [form-pane-hidden? @(rf/subscribe [::sub/form-pane-hidden?])
-        form-pane-entity-view @(rf/subscribe [::sub/form-pane-entity-view])
-        form-pane-query-view @(rf/subscribe [::sub/form-pane-query-view])]
+        form-pane-view @(rf/subscribe [::sub/form-pane-view])]
     [:div.form-pane
      [:div.expand-collapse__group
       {:on-click #(rf/dispatch [::events/toggle-form-pane])}
@@ -372,47 +367,55 @@
        {:style {:margin-left ".5rem"}}
        "Console"]]
 
-     [:div.form-pane__content.expand-collapse-transition
+     [:div.form-pane__content
       {:class (if form-pane-hidden? "collapse" "expand")}
-
-      [:div.expand-collapse__group.form-pane__arrow
-       {:on-click #(rf/dispatch [::events/set-form-pane-query-view])}
-       [common/arrow-svg form-pane-query-view]
-       [:span.expand-collapse__txt "Query"]]
-      [:div.expand-collapse-transition
-       {:class (if form-pane-query-view "expand" "collapse")}
+      [:div.form-pane__tabs
+       [:a.form-pane__tab
+        {:class (when (= :query form-pane-view)
+                  "form-pane__tab--selected")
+         :on-click #(rf/dispatch [::events/set-form-pane-view :query])}
+        "Query"]
+       [:a.form-pane__tab
+        {:class (when (= :entity form-pane-view)
+                  "form-pane__tab--selected")
+         :on-click #(rf/dispatch [::events/set-form-pane-view :entity])}
+        "Entity"]]
+      [:div
+       {:class (if (= :query form-pane-view) "visible" "hidden")}
        [query-form]]
-
-      [:div.expand-collapse__group.form-pane__arrow
-       {:on-click #(rf/dispatch [::events/set-form-pane-entity-view])}
-       [common/arrow-svg form-pane-entity-view]
-       [:span.expand-collapse__txt "Entity"]]
-      [:div.expand-collapse-transition
-       {:class (if form-pane-entity-view "expand" "collapse")}
+      [:div
+       {:class (if (= :entity form-pane-view) "visible" "hidden")}
        [entity-form]]]]))
 
 (defn root-page
   []
   [:div.root-contents
    [:p "Welcome to the Crux Console! Get started below:"]
-   [:p [:a {:href "/_crux/query" :on-click #(rf/dispatch [::events/navigate-to-root-view :query])} "Performing a query"]]
-   [:p [:a {:href "/_crux/entity" :on-click #(rf/dispatch [::events/navigate-to-root-view :entity])} "Searching for an entity"]]])
+   [:p [:a {:href (common/route->url :query)
+            :on-click #(rf/dispatch [::events/navigate-to-root-view :query])}
+        "Performing a query"]]
+   [:p [:a
+        {:href (common/route->url :entity)
+         :on-click #(rf/dispatch [::events/navigate-to-root-view :entity])}
+        "Searching for an entity"]]])
+
+(defn navbar
+  []
+  [:nav.nav
+   [:a {:href (common/route->url :homepage)}
+    [:img.crux-logo {:src "/crux-horizontal-bw.svg" }]]])
 
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:<>
      #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
      [:div.container.page-pane
+      [navbar]
       (if (= name :homepage)
         [root-page]
         [:<>
          (when name [form-pane])
          [:div.result-pane
-          [:div.back-button
-           [:a
-            {:on-click common/back-page}
-            [:i.fas.fa-chevron-left]
-            [:span.back-button__text "Back"]]]
           (case name
             :query [query-table]
             :entity [entity-pane]
