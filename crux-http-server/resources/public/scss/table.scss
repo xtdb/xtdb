@@ -468,6 +468,7 @@ $spacing: 0.5rem;
     }
 
     .table__row {
+	font-family: monospace;
 	border-bottom: 1px solid rgba(224, 224, 224, 1);
     }
 
@@ -476,7 +477,7 @@ $spacing: 0.5rem;
     }
 
     .table__cell {
-	padding: 16px;
+	padding: 1rem;
 	text-align: left;
 	min-width: 160px;
     }

@@ -461,7 +461,7 @@
 
 (defn resolve-entity-map [linked-entities entity-map]
   (if-let [href (get linked-entities entity-map)]
-    [:a.entity-link
+    [:a
      {:href href}
      (str entity-map)]
     (cond
@@ -665,7 +665,7 @@
             (for [[header cell-value] (map vector headers row)]
               [:td.table__cell.body__cell
                (if-let [href (get links cell-value)]
-                 [:a.entity-link {:href href} (str cell-value)]
+                 [:a {:href href} (str cell-value)]
                  (str cell-value))])])]
         [:tbody.table__body.table__no-data
          [:tr [:td.td__no-data

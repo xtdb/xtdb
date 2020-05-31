@@ -58,7 +58,7 @@
      (let [{:strs [query-results linked-entities]}
            (get-in db [:query :http])
            find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
-           table-loading? (get-in db [:query :right-pane :loading?])
+           table-loading? (get-in db [:query :result-pane :loading?])
            offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
            columns (map (fn [column]
@@ -67,7 +67,7 @@
                            :render-fn
                            (fn [_ v]
                              (if-let [link (get linked-entities v)]
-                               [:a.entity-link {:href link}
+                               [:a {:href link}
                                 (str v)]
                                v))
                            :render-only #{:filter :sort}})
@@ -81,24 +81,17 @@
          :filters {:input (into #{} find-clause)}}}))))
 
 (rf/reg-sub
- ::query-right-pane-view
+ ::query-result-pane-loading?
  (fn [db _]
-   (if (empty? (get-in db [:current-route :query-params]))
-     :query-root
-     (or (get-in db [:query :right-pane :view]) :table))))
+   (get-in db [:query :result-pane :loading?])))
 
 (rf/reg-sub
- ::query-right-pane-loading?
+ ::entity-result-pane-loading?
  (fn [db _]
-   (get-in db [:query :right-pane :loading?])))
+   (get-in db [:entity :result-pane :loading?])))
 
 (rf/reg-sub
- ::entity-right-pane-loading?
- (fn [db _]
-   (get-in db [:entity :right-pane :loading?])))
-
-(rf/reg-sub
- ::entity-right-pane-view
+ ::entity-pane-view
  (fn [db _]
    (if (nil? (get-in db [:current-route :query-params :eid]))
      :entity-root
@@ -112,7 +105,7 @@
          (string/replace #"query" (str "query." link-type))))))
 
 (rf/reg-sub
- ::entity-right-pane-document
+ ::entity-result-pane-document
  (fn [db _]
    (if-let [error (get-in db [:entity :error])]
      {:error error}
@@ -126,17 +119,17 @@
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
 
 (rf/reg-sub
- ::entity-right-pane-history-diffs?
+ ::entity-result-pane-history-diffs?
  (fn [db _]
-   (or (get-in db [:entity :right-pane :diffs?]) false)))
+   (or (get-in db [:entity :result-pane :diffs?]) false)))
 
 (rf/reg-sub
- ::entity-right-pane-document-error
+ ::entity-result-pane-document-error
  (fn [db _]
    (get-in db [:entity :error])))
 
 (rf/reg-sub
- ::entity-right-pane-history
+ ::entity-result-pane-history
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
          history (get-in db [:entity :http :history])]
@@ -155,29 +148,7 @@
    (partition 2 1 entity-history)))
 
 (rf/reg-sub
- ::entity-right-pane-history-diffs?
- (fn [db _]
-   (or (get-in db [:entity :right-pane :diffs?]) false)))
-
-(rf/reg-sub
- ::entity-right-pane-history
- (fn [db _]
-   (let [error (get-in db [:entity :error])
-         diffs? (or (get-in db [:entity :right-pane :diffs?]) false)
-         eid (get-in db [:current-route :path-params :eid])
-         history (get-in db [:entity :http :history])]
-     (cond
-       error {:error error}
-       diffs? (let [entity-history (-> history
-                                       vec
-                                       history-docs->diffs)]
-                {:eid eid
-                 :entity-history entity-history})
-       :else {:eid eid
-              :entity-history history}))))
-
-(rf/reg-sub
- ::entity-right-pane-history-diffs
+ ::entity-result-pane-history-diffs
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
          history (get-in db [:entity :http :history])
@@ -187,12 +158,16 @@
       :history-diffs entity-history})))
 
 (rf/reg-sub
- ::left-pane-view
+ ::form-pane-entity-view
  (fn [db _]
-   (or (get-in db [:left-pane :view])
-       (get-in db [:current-route :data :name]))))
+   (get-in db [:form-pane :entity :view])))
 
 (rf/reg-sub
- ::left-pane-hidden?
+ ::form-pane-query-view
  (fn [db _]
-   (get-in db [:left-pane :hidden?])))
+   (get-in db [:form-pane :query :view])))
+
+(rf/reg-sub
+ ::form-pane-hidden?
+ (fn [db _]
+   (get-in db [:form-pane :hidden?])))

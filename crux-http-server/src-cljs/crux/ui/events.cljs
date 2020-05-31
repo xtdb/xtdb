@@ -30,14 +30,19 @@
        (assoc-in [:left-pane :view] view))))
 
 (rf/reg-event-db
- ::toggle-left-pane
- (fn [db _]
-   (update-in db [:left-pane :hidden?] not)))
+ ::toggle-form-pane
+ (fn [db [_ & bool]]
+   (update-in db [:form-pane :hidden?] #(if (seq bool) (first bool) (not %)))))
 
 (rf/reg-event-db
- ::set-left-pane-view
- (fn [db [_ view]]
-   (assoc-in db [:left-pane :view] view)))
+ ::set-form-pane-entity-view
+ (fn [db _]
+   (update-in db [:form-pane :entity :view] not)))
+
+(rf/reg-event-db
+ ::set-form-pane-query-view
+ (fn [db _]
+   (update-in db [:form-pane :query :view] not)))
 
 (rf/reg-event-db
  ::query-table-error
@@ -45,14 +50,9 @@
    (assoc-in db [:query :error] error)))
 
 (rf/reg-event-db
- ::set-query-right-pane-view
- (fn [db [_ view]]
-   (assoc-in db [:query :right-pane :view] view)))
-
-(rf/reg-event-db
- ::set-query-right-pane-loading
+ ::set-query-result-pane-loading
  (fn [db [_ bool]]
-   (assoc-in db [:query :right-pane :loading?] bool)))
+   (assoc-in db [:query :result-pane :loading?] bool)))
 
 (rf/reg-event-fx
  ::go-to-query-view
@@ -68,7 +68,7 @@
      {:dispatch [:navigate :query {} query-params]})))
 
 (rf/reg-event-fx
- ::set-entity-right-pane-document
+ ::set-entity-pane-document
  (fn [{:keys [db]} _]
    (let [query-params (-> (get-in db [:current-route :query-params])
                           (select-keys [:valid-time :transaction-time :eid]))]
@@ -76,7 +76,7 @@
       :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-fx
- ::set-entity-right-pane-history
+ ::set-entity-pane-history
  (fn [{:keys [db]} _]
    (let [query-params (-> (get-in db [:current-route :query-params])
                           (assoc :history true)
@@ -86,7 +86,7 @@
       :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-fx
- ::set-entity-right-pane-raw-edn
+ ::set-entity-pane-raw-edn
  (fn [{:keys [db]} _]
    (let [query-params (-> (get-in db [:current-route :query-params])
                           (select-keys [:valid-time :transaction-time :eid]))]
@@ -94,9 +94,9 @@
       :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-db
- ::set-entity-right-pane-loading
+ ::set-entity-result-pane-loading
  (fn [db [_ bool]]
-   (assoc-in db [:entity :right-pane :loading?] bool)))
+   (assoc-in db [:entity :result-pane :loading?] bool)))
 
 (rf/reg-event-fx
  ::go-to-entity-view
@@ -111,11 +111,11 @@
       :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-db
- ::entity-right-pane-document-error
+ ::entity-result-pane-document-error
  (fn [db [_ error]]
    (assoc-in db [:entity :error] error)))
 
 (rf/reg-event-db
- ::set-entity-right-pane-history-diffs?
+ ::set-entity-result-pane-history-diffs?
  (fn [db [_ bool]]
-   (assoc-in db [:entity :right-pane :diffs?] bool)))
+   (assoc-in db [:entity :result-pane :diffs?] bool)))

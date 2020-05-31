@@ -23,7 +23,7 @@
       :value (get values "vtd")
       :on-change handle-change
       :on-blur handle-blur}]
-    [:input.input
+    [:input.input.input-time
      {:type "time"
       :name "vtt"
       :value (get values "vtt")
@@ -42,7 +42,7 @@
       :value (get values "ttd")
       :on-change handle-change
       :on-blur handle-blur}]
-    [:input.input
+    [:input.input.input-time
      {:type "time"
       :name "ttt"
       :value (get values "ttt")
@@ -80,13 +80,11 @@
                 set-touched
                 form-id
                 handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/query-right-pane-loading?])
-           query-pane? (= :query @(rf/subscribe [::sub/left-pane-view]))]
-       [:form.hidden
-        {:class (when query-pane? "visible")
-         :id form-id
+     (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])]
+       [:form
+        {:id form-id
          :on-submit handle-submit}
-        [:div.input-group
+        [:div.input-textarea
          [cm/code-mirror (get values "q")
           {:class "cm-textarea__query"
            :on-change #(set-values {"q" %})
@@ -127,13 +125,11 @@
                 set-values
                 set-touched
                 handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/entity-right-pane-loading?])
-           entity-pane? (= :entity @(rf/subscribe [::sub/left-pane-view]))]
-       [:form.hidden
-        {:class (when entity-pane? "visible")
-         :id form-id
+     (let [loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
+       [:form
+        {:id form-id
          :on-submit handle-submit}
-        [:div.input-group
+        [:div.input-textarea
          [cm/code-mirror (get values "eid")
           {:class "cm-textarea__entity"
            :on-change #(set-values {"eid" %})
@@ -164,57 +160,6 @@
           {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
           "TSV"]]])]))
 
-(defn query-right-pane
-  []
-  (let [right-pane-view @(rf/subscribe [::sub/query-right-pane-view])]
-    (if (= right-pane-view :query-root)
-      [:div.query-root
-       [:div.query-root__title
-        "Getting Started"]
-       [:p "To perform a query:"]
-       [:ul
-        [:li "Enter the desired query into the query editor."]
-        [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
-        [:li "Click " [:b "submit query"] " to perform the query and get the results in a table."]]]
-      [:<>
-       [:div.pane-nav
-        [:div.pane-nav__tab
-         "Table"]
-        #_[:div.pane-nav__tab
-           {:class (if (= right-pane-view :graph)
-                     "pane-nav__tab--active"
-                     "pane-nav__tab--hover")
-            :on-click #(rf/dispatch [::events/set-query-right-pane-view :graph])}
-           "Graph"]]
-       (case right-pane-view
-         :table [query-table]
-         :graph [:div "this is graph"]
-         nil)])))
-
-(defn- entity->hiccup
-  [links edn]
-  (if-let [href (get links edn)]
-    [:a.entity-link
-     {:href href}
-     (str edn)]
-    (cond
-      (map? edn) (for [[k v] edn]
-                   ^{:key (str (gensym))}
-                   [:div.entity-group
-                    [:div.entity-group__key
-                     (entity->hiccup links k)]
-                    [:div.entity-group__value
-                     (entity->hiccup links v)]])
-      (sequential? edn) [:ul.entity-group__value
-                         (for [v (filter some? edn)]
-                           ^{:key (str (gensym))}
-                           [:li (entity->hiccup links v)])]
-      (set? edn) [:ul.entity-group__value
-                  (for [v edn]
-                    ^{:key v}
-                    [:li (entity->hiccup links v)])]
-      :else edn)))
-
 (defn vt-tt-entity-box
   [vt tt]
   [:div.entity-vt-tt
@@ -238,8 +183,8 @@
 (defn entity-document
   []
   (let [{:keys [eid vt tt document-no-eid linked-entities error]}
-        @(rf/subscribe [::sub/entity-right-pane-document])
-        loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
+        @(rf/subscribe [::sub/entity-result-pane-document])
+        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
     [:div.entity-map__container
      (if loading?
        [:div.entity-map.entity-map--loading
@@ -257,23 +202,22 @@
           [vt-tt-entity-box vt tt]]))]))
 
 (defn- entity-history-document []
-  (let [
-        {:keys [error eid entity-history]} @(rf/subscribe [::sub/entity-right-pane-history])
-        diffs-tab? @(rf/subscribe [::sub/entity-right-pane-history-diffs?])
-        loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
+  (let [diffs-tab? @(rf/subscribe [::sub/entity-result-pane-history-diffs?])
+        entity-error @(rf/subscribe [::sub/entity-result-pane-document-error])
+        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
     [:<>
      [:div.pane-nav
       [:div.pane-nav__tab
        {:class (if diffs-tab?
                  "pane-nav__tab--hover"
                  "pane-nav__tab--active")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-history-diffs? false])}
+        :on-click #(rf/dispatch [::events/set-entity-result-pane-history-diffs? false])}
        "Documents"]
       [:div.pane-nav__tab
        {:class (if diffs-tab?
                  "pane-nav__tab--active"
                  "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-history-diffs? true])}
+        :on-click #(rf/dispatch [::events/set-entity-result-pane-history-diffs? true])}
        "Diffs"]]
      [:div.entity-histories__container
       (if loading?
@@ -281,7 +225,7 @@
          [:i.fas.fa-spinner.entity-map__load-icon]]
         (cond
           entity-error [:div.error-box entity-error]
-          (not diffs-tab?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-right-pane-history])]
+          (not diffs-tab?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-result-pane-history])]
                              [:div.entity-histories
                               (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
                                      :as history-elem} entity-history]
@@ -290,7 +234,7 @@
                                  [:div.entity-map
                                   [cm/code-snippet doc {}]]
                                  [vt-tt-entity-box valid-time tx-time]])])
-          diffs-tab? (let [{:keys [up-to-date-doc history-diffs]} @(rf/subscribe [::sub/entity-right-pane-history-diffs])]
+          diffs-tab? (let [{:keys [up-to-date-doc history-diffs]} @(rf/subscribe [::sub/entity-result-pane-history-diffs])]
                        [:div.entity-histories
                         [:div.entity-history__container
                          [:div.entity-map
@@ -332,9 +276,9 @@
          [:div.entity-raw-edn
           (with-out-str (pprint/pprint document))]))]))
 
-(defn entity-right-pane []
-  (let [right-pane-view @(rf/subscribe [::sub/entity-right-pane-view])]
-    (if (= right-pane-view :entity-root)
+(defn entity-bottom-pane []
+  (let [pane-view @(rf/subscribe [::sub/entity-pane-view])]
+    (if (= pane-view :entity-root)
       [:div.entity-root
        [:div.entity-root__title
         "Getting Started"]
@@ -344,64 +288,62 @@
         [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
         [:li "Click " [:b "submit entity"] " to go to the entity's page"]]]
       [:<>
-     [:div.pane-nav
-      [:div.pane-nav__tab
-       {:class (if (= right-pane-view :document)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-document])}
-       "Document"]
-      [:div.pane-nav__tab
-       {:class (if (= right-pane-view :history)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-history])}
-       "History"]
-      [:div.pane-nav__tab
-       {:class (if (= right-pane-view :raw-edn)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-raw-edn])}
-       "Raw EDN"]]
-     (case right-pane-view
-       :document [entity-document]
-       :history [entity-history-document]
-       :raw-edn [entity-raw-edn]
-       nil)])))
 
-(defn left-pane
+       [:div.pane-nav
+        [:div.pane-nav__tab
+         {:class (if (= pane-view :document)
+                   "pane-nav__tab--active"
+                   "pane-nav__tab--hover")
+          :on-click #(rf/dispatch [::events/set-entity-pane-document])}
+         "Document"]
+        [:div.pane-nav__tab
+         {:class (if (= pane-view :history)
+                   "pane-nav__tab--active"
+                   "pane-nav__tab--hover")
+          :on-click #(rf/dispatch [::events/set-entity-pane-history])}
+         "History"]]
+       [:div.pane-nav__tab
+        {:class (if (= pane-view :raw-edn)
+                 "pane-nav__tab--active"
+                 "pane-nav__tab--hover")
+         :on-click #(rf/dispatch [::events/set-entity-pane-raw-edn])}
+       "Raw EDN"]]
+       (case pane-view
+         :document [entity-document]
+         :history [entity-history-document]
+         :raw-edn [entity-raw-edn]
+         nil)])))
+>>>>>>> Move editor on top
+
+(defn form-pane
   []
-  (let [left-pane-hidden? @(rf/subscribe [::sub/left-pane-hidden?])
-        left-pane-view @(rf/subscribe [::sub/left-pane-view])]
-    [:div.left-pane
-     (if left-pane-hidden?
-       [:button.button.hidden-pane
-        {:on-click #(rf/dispatch [::events/toggle-left-pane])}
-        [:span "."]
-        [:span "."]
-        [:span "."]]
-       [:div.hide-button
-        {:on-click #(rf/dispatch [::events/toggle-left-pane])}
-        "Hide"])
-     [:div
-      {:class (if left-pane-hidden?
-                "pane-untoggled"
-                "pane-toggled")}
-      [:div.pane-nav
-       [:div.pane-nav__tab
-        {:class (if (= left-pane-view :query)
-                  "pane-nav__tab--active"
-                  "pane-nav__tab--hover")
-         :on-click #(rf/dispatch [::events/set-left-pane-view :query])}
-        "Query"]
-       [:div.pane-nav__tab
-        {:class (if (= left-pane-view :entity)
-                  "pane-nav__tab--active"
-                  "pane-nav__tab--hover")
-         :on-click #(rf/dispatch [::events/set-left-pane-view :entity])}
-        "Entity"]]
-      [query-form]
-      [entity-form]]]))
+  (let [form-pane-hidden? @(rf/subscribe [::sub/form-pane-hidden?])
+        form-pane-entity-view @(rf/subscribe [::sub/form-pane-entity-view])
+        form-pane-query-view @(rf/subscribe [::sub/form-pane-query-view])]
+    [:div.form-pane
+     [:div.expand-collapse__group
+      {:on-click #(rf/dispatch [::events/toggle-form-pane])}
+      (if form-pane-hidden?
+        [:i.fas.fa-expand]
+        [:i.fas.fa-compress])
+      [:span.expand-collapse__txt "Console"]]
+
+     [:div.form-pane__content.expand-collapse-transition
+      {:class (if form-pane-hidden? "collapse" "expand")}
+      [:div.expand-collapse__group
+       {:on-click #(rf/dispatch [::events/set-form-pane-query-view])}
+       [:i.fas {:class (if form-pane-query-view  "fa-compress-alt" "fa-expand-alt")}]
+       [:span.expand-collapse__txt "Query"]]
+      [:div.expand-collapse-transition
+       {:class (if form-pane-query-view "expand" "collapse")}
+       [query-form]]
+      [:div.expand-collapse__group
+       {:on-click #(rf/dispatch [::events/set-form-pane-entity-view])}
+       [:i.fas {:class (if form-pane-entity-view "fa-compress-alt" "fa-expand-alt")}]
+       [:span.expand-collapse__txt "Entity"]]
+      [:div.expand-collapse-transition
+       {:class (if form-pane-entity-view "expand" "collapse")}
+       [entity-form]]]]))
 
 (defn root-page
   []
@@ -418,14 +360,14 @@
       (if (= name :homepage)
         [root-page]
         [:<>
-         (when name [left-pane])
-         [:div.right-pane
+         (when name [form-pane])
+         [:div.result-pane
           [:div.back-button
            [:a
             {:on-click common/back-page}
             [:i.fas.fa-chevron-left]
             [:span.back-button__text "Back"]]]
           (case name
-            :query [query-right-pane]
-            :entity [entity-right-pane]
+            :query [query-table]
+            :entity [entity-bottom-pane]
             [:div "no matching"])]])]]))

@@ -7,10 +7,6 @@
             cljsjs.codemirror.addon.hint.show-hint
             cljsjs.codemirror.addon.hint.anyword-hint
             cljsjs.codemirror.addon.display.autorefresh
-            cljsjs.codemirror.addon.fold.foldcode
-            cljsjs.codemirror.addon.fold.foldgutter
-            cljsjs.codemirror.addon.fold.brace-fold
-            cljsjs.codemirror.addon.fold.indent-fold
             [reagent.core :as r]
             [reagent.dom :as rd]
             [goog.object :as gobj]
@@ -144,14 +140,14 @@
   (let [state (r/atom nil)]
     (fn [m links]
       (let [generate-snippet
-            (fn generate-snippet [parent-keys m parent]
+            (fn generate-snippet [parent-keys m]
               (let [level (inc (count parent-keys))]
                 (cond
                   (get links m) [:a {:href (str (get links m))}
                                  (with-out-str
                                    (pprint/with-pprint-dispatch
                                      pprint/code-dispatch
-                                     (pprint/pprint m)))]
+                                     (pprint/pprint (str m))))]
                   (map? m) [:<>
                             [unfolding-icon state m parent-keys]
                             (when (get @state parent-keys)
@@ -163,7 +159,7 @@
                                  [:pre {:style {:margin 0}}
                                   [:span (indent-code level)]
                                   [:span.cm-atom (str k " ")]
-                                  (generate-snippet (conj parent-keys k) v m)])
+                                  (generate-snippet (conj parent-keys k) v)])
                                [:span (indent-code level)
                                 "}"]])]
                   (coll? m) (let [[open close] (coll-type m)]
@@ -178,7 +174,7 @@
                                       ^{:key v}
                                       [:pre {:style {:margin 0}}
                                        [:span (indent-code level 1)]
-                                       (generate-snippet (conj parent-keys idx) v m)])
+                                       (generate-snippet (conj parent-keys idx) v)])
                                     m))
                                   [:span (indent-code level) close]])])
                   :else [:span
@@ -194,5 +190,5 @@
              [:pre {:style {:margin 0
                             :line-height "1.2rem"}}
               [:span.cm-atom (str k " ")]
-              (generate-snippet [k] v m)]))
+              (generate-snippet [k] v)]))
           [:span (indent-code 0) "}"]]]))))
