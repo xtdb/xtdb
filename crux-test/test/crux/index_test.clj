@@ -40,13 +40,11 @@
                                               1
                                               c/->value-buffer)]
 
-    (t/is (= [{:x 8}
-              {:x 12}]
-             (for [[_ join-results] (-> (idx/new-unary-join-virtual-index [(assoc a-idx :name :x)
-                                                                           (assoc b-idx :name :x)
-                                                                           (assoc c-idx :name :x)])
-                                        (idx/idx->seq))]
-               join-results)))))
+    (t/is (= [8
+              12]
+             (->> (idx/new-unary-join-virtual-index [a-idx b-idx c-idx])
+                  (idx/idx->seq)
+                  (map c/decode-value-buffer))))))
 
 ;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
 
@@ -86,22 +84,21 @@
                                           2
                                           c/->value-buffer)]
     (t/testing "n-ary join"
-      (let [index-groups [[(assoc r :name :a) (assoc t :name :a)]
-                          [(assoc r :name :b) (assoc s :name :b)]
-                          [(assoc s :name :c) (assoc t :name :c)]]
+      (let [index-groups [[r t]
+                          [r s]
+                          [s t]]
             result (-> (mapv idx/new-unary-join-virtual-index index-groups)
                        (idx/new-n-ary-join-layered-virtual-index)
-                       (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
                        (idx/layered-idx->seq))]
-        (t/is (= [{:a 1, :b 3, :c 4}
-                  {:a 1, :b 3, :c 5}
-                  {:a 1, :b 4, :c 6}
-                  {:a 1, :b 4, :c 8}
-                  {:a 1, :b 4, :c 9}
-                  {:a 1, :b 5, :c 2}
-                  {:a 3, :b 5, :c 2}]
-                 (for [[_ join-results] result]
-                   join-results)))))))
+        (t/is (= [[1 3 4]
+                  [1 3 5]
+                  [1 4 6]
+                  [1 4 8]
+                  [1 4 9]
+                  [1 5 2]
+                  [3 5 2]]
+                 (for [join-keys result]
+                   (mapv c/decode-value-buffer join-keys))))))))
 
 (t/deftest test-sorted-virtual-index
   (let [idx (idx/new-sorted-virtual-index
@@ -131,94 +128,50 @@
 
     (t/is (= [1 2 3 4 5]
              (->> (idx/idx->seq r)
-                  (map second))))
+                  (map c/decode-value-buffer))))
 
     (t/is (= [1 2 3 4 5]
              (into []
-                   (map second)
+                   (map c/decode-value-buffer)
                    (idx/idx->series r))))
 
     (t/is (= [1 2 3]
              (->> (idx/idx->seq (idx/new-less-than-virtual-index r (c/->value-buffer 4)))
-                  (map second))))
+                  (map c/decode-value-buffer))))
 
     (t/is (= [1 2 3 4]
              (->> (idx/idx->seq (idx/new-less-than-equal-virtual-index r (c/->value-buffer 4)))
-                  (map second))))
+                  (map c/decode-value-buffer))))
 
     (t/is (= [3 4 5]
              (->> (idx/idx->seq (idx/new-greater-than-virtual-index r (c/->value-buffer 2)))
-                  (map second))))
+                  (map c/decode-value-buffer))))
 
     (t/is (= [2 3 4 5]
              (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r (c/->value-buffer 2)))
-                  (map second))))
+                  (map c/decode-value-buffer))))
 
     (t/is (= [2]
              (->> (idx/idx->seq (idx/new-equals-virtual-index r (c/->value-buffer 2)))
-                  (map second))))
+                  (map c/decode-value-buffer))))
 
     (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (c/->value-buffer 0)))))
     (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (c/->value-buffer 6)))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r (c/->value-buffer 2)) (c/->value-buffer nil)))))
-      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r (c/->value-buffer 2)) (c/->value-buffer 1))))))
+      (t/is (= 2 (c/decode-value-buffer (db/seek-values (idx/new-greater-than-equal-virtual-index r (c/->value-buffer 2)) (c/->value-buffer nil)))))
+      (t/is (= 3 (c/decode-value-buffer (db/seek-values (idx/new-greater-than-virtual-index r (c/->value-buffer 2)) (c/->value-buffer 1))))))
 
     (t/testing "combining indexes"
       (t/is (= [2 3 4]
                (->> (idx/idx->seq (-> r
                                       (idx/new-greater-than-equal-virtual-index (c/->value-buffer 2))
                                       (idx/new-less-than-virtual-index (c/->value-buffer 5))))
-                    (map second)))))
+                    (map c/decode-value-buffer)))))
 
     (t/testing "incompatible type"
       (t/is (empty? (->> (idx/idx->seq (-> (idx/new-greater-than-equal-virtual-index r (c/->value-buffer "foo"))))
-                         (map second)))))))
-
-(t/deftest test-or-virtual-index
-  (let [idx-1 (idx/new-sorted-virtual-index
-               [[(c/->value-buffer 1) :a]
-                [(c/->value-buffer 3) :c]
-                [(c/->value-buffer 5) :e1]])
-        idx-2 (idx/new-sorted-virtual-index
-               [[(c/->value-buffer 2) :b]
-                [(c/->value-buffer 4) :d]
-                [(c/->value-buffer 5) :e2]
-                [(c/->value-buffer 7) :g]])
-        idx-3 (idx/new-sorted-virtual-index
-               [[(c/->value-buffer 5) :e3]
-                [(c/->value-buffer 6) :f]])
-        idx (idx/new-or-virtual-index [idx-1 idx-2 idx-3])]
-    (t/testing "interleaves results in value order"
-      (t/is (= :a
-               (second (db/seek-values idx nil))))
-      (t/is (= :b
-               (second (db/next-values idx))))
-      (t/is (= :c
-               (second (db/next-values idx))))
-      (t/is (= :d
-               (second (db/next-values idx)))))
-    (t/testing "shared values are returned in index order"
-      (t/is (= :e1
-               (second (db/next-values idx))))
-      (t/is (= :e2
-               (second (db/next-values idx))))
-      (t/is (= :e3
-               (second (db/next-values idx)))))
-    (t/testing "can continue after one index is done"
-      (t/is (= :f
-               (second (db/next-values idx))))
-      (t/is (= :g
-               (second (db/next-values idx)))))
-    (t/testing "returns nil after all indexes are done"
-      (t/is (nil? (db/next-values idx))))
-
-    (t/testing "can seek into indexes"
-      (t/is (= :d
-               (second (db/seek-values idx (c/->value-buffer 4)))))
-      (t/is (= :e1
-               (second (db/next-values idx)))))))
+                         (map c/decode-value-buffer)))))))
 
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable
@@ -246,25 +199,20 @@
                                                [8 2]]
                                               2
                                               c/->value-buffer)
-        index-groups [[(assoc r-idx :name :a)
-                       (assoc t-idx :name :a)]
-                      [(assoc r-idx :name :b)
-                       (assoc s-idx :name :b)]
-                      [(assoc s-idx :name :c)
-                       (assoc t-idx :name :c)]]]
+        index-groups [[r-idx t-idx]
+                      [r-idx s-idx]
+                      [s-idx t-idx]]]
     (t/is (= #{[7 4 0]
                [7 4 1]
                [7 4 2]
                [8 4 1]
                [8 4 2]}
-             (set (for [[_ join-results] (-> (mapv idx/new-unary-join-virtual-index index-groups)
-                                             (idx/new-n-ary-join-layered-virtual-index)
-                                             (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
-                                             (idx/layered-idx->seq))]
-                    (vec (for [var [:a :b :c]]
-                           (get join-results var)))))))))
+             (set (for [join-keys (-> (mapv idx/new-unary-join-virtual-index index-groups)
+                                      (idx/new-n-ary-join-layered-virtual-index)
+                                      (idx/layered-idx->seq))]
+                    (mapv c/decode-value-buffer join-keys)))))))
 
-(t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction-and-disjunction
+(t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction
   (let [p-idx (idx/new-relation-virtual-index :p
                                               [[1]
                                                [2]
@@ -284,30 +232,13 @@
                                               1
                                               c/->value-buffer)]
     (t/testing "conjunction"
-      (let [unary-and-idx (idx/new-unary-join-virtual-index [(assoc p-idx :name :x)
-                                                             (assoc q-idx :name :x)
-                                                             (assoc r-idx :name :x)])]
+      (let [unary-and-idx (idx/new-unary-join-virtual-index [p-idx
+                                                             q-idx
+                                                             r-idx])]
         (t/is (= #{[3]}
-                 (set (for [[_ join-results] (-> (idx/new-n-ary-join-layered-virtual-index [unary-and-idx])
-                                                 (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
-                                                 (idx/layered-idx->seq))]
-                        (vec (for [var [:x]]
-                               (get join-results var)))))))))
-
-    (t/testing "disjunction"
-      (let [unary-or-idx (idx/new-or-virtual-index
-                          [(idx/new-unary-join-virtual-index [(assoc p-idx :name :x)])
-                           (idx/new-unary-join-virtual-index [(assoc q-idx :name :x)
-                                                              (assoc r-idx :name :x)])])]
-        (t/is (= #{[1]
-                   [2]
-                   [3]
-                   [4]}
-                 (set (for [[_ join-results] (-> (idx/new-n-ary-join-layered-virtual-index [unary-or-idx])
-                                                 (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
-                                                 (idx/layered-idx->seq))]
-                        (vec (for [var [:x]]
-                               (get join-results var)))))))))))
+                 (set (for [join-keys (-> (idx/new-n-ary-join-layered-virtual-index [unary-and-idx])
+                                          (idx/layered-idx->seq))]
+                        (mapv c/decode-value-buffer join-keys)))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
   (let [p-idx (idx/new-relation-virtual-index :p
@@ -322,20 +253,17 @@
                                                [3 30]]
                                               2
                                               c/->value-buffer)
-        index-groups [[(assoc p-idx :name :x)
-                       (assoc q-idx :name :x)]
-                      [(assoc p-idx :name :y)]
-                      [(assoc q-idx :name :z)]]]
+        index-groups [[p-idx q-idx]
+                      [p-idx]
+                      [q-idx]]]
     (t/testing "conjunction"
       (t/is (= #{[1 3 10]
                  [2 4 20]
                  [2 20 20]}
-               (set (for [[_ join-results] (-> (mapv idx/new-unary-join-virtual-index index-groups)
-                                               (idx/new-n-ary-join-layered-virtual-index)
-                                               (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
-                                               (idx/layered-idx->seq))]
-                      (vec (for [var [:x :y :z]]
-                             (get join-results var))))))))
+               (set (for [join-keys (-> (mapv idx/new-unary-join-virtual-index index-groups)
+                                        (idx/new-n-ary-join-layered-virtual-index)
+                                        (idx/layered-idx->seq))]
+                      (mapv c/decode-value-buffer join-keys))))))
 
     (t/testing "disjunction"
       (let [zero-idx (idx/new-relation-virtual-index :zero
@@ -343,26 +271,22 @@
                                                      1
                                                      c/->value-buffer)
             lhs-index (idx/new-n-ary-join-layered-virtual-index
-                       [(idx/new-unary-join-virtual-index [(assoc p-idx :name :x)])
-                        (idx/new-unary-join-virtual-index [(assoc p-idx :name :y)])
-                        (idx/new-unary-join-virtual-index [(assoc zero-idx :name :z)])])]
+                       [(idx/new-unary-join-virtual-index [p-idx])
+                        (idx/new-unary-join-virtual-index [p-idx])
+                        (idx/new-unary-join-virtual-index [zero-idx])])]
         (t/is (= #{[1 3 0]
                    [2 4 0]
                    [2 20 0]}
-                 (set (for [[_ join-results] (-> lhs-index
-                                                 (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
-                                                 (idx/layered-idx->seq))]
-                        (vec (for [var [:x :y :z]]
-                               (get join-results var)))))))
+                 (set (for [join-keys (-> lhs-index
+                                          (idx/layered-idx->seq))]
+                        (mapv c/decode-value-buffer join-keys)))))
         (let [rhs-index (idx/new-n-ary-join-layered-virtual-index
-                         [(idx/new-unary-join-virtual-index [(assoc q-idx :name :x)])
-                          (idx/new-unary-join-virtual-index [(assoc zero-idx :name :y)])
-                          (idx/new-unary-join-virtual-index [(assoc q-idx :name :z)])])]
+                         [(idx/new-unary-join-virtual-index [q-idx])
+                          (idx/new-unary-join-virtual-index [zero-idx])
+                          (idx/new-unary-join-virtual-index [q-idx])])]
           (t/is (= #{[1 0 10]
                      [2 0 20]
                      [3 0 30]}
-                   (set (for [[_ join-results] (-> rhs-index
-                                                   (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
-                                                   (idx/layered-idx->seq))]
-                          (vec (for [var [:x :y :z]]
-                                 (get join-results var))))))))))))
+                   (set (for [join-keys (-> rhs-index
+                                            (idx/layered-idx->seq))]
+                          (mapv c/decode-value-buffer join-keys))))))))))
