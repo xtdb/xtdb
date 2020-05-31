@@ -589,7 +589,7 @@
               (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
                 (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
                   (when-not (= ::deleted-entity k)
-                    (.content-hash ^EntityTx v))))
+                    (c/->id-buffer (.content-hash ^EntityTx v)))))
               (recur (kv/next i))))))))
 
   (entity-as-of [this eid valid-time transact-time]
