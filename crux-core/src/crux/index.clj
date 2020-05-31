@@ -20,13 +20,13 @@
   (seek-values [this k]
     (let [[v & vs] (db/av index-store attr k entity-resolver)]
       (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) (first v))
+      (set! (.-key peek-state) v)
       v))
 
   (next-values [this]
     (when-let [[v & vs] (.-seq peek-state)]
       (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) (first v))
+      (set! (.-key peek-state) v)
       v)))
 
 (defn new-doc-attribute-value-entity-value-index [index-store attr entity-resolver]
@@ -39,13 +39,13 @@
       (let [value-buffer (.-key ^BinaryJoinLayeredVirtualIndexPeekState (.peek-state value-entity-value-idx))
             [v & vs] (db/ave index-store attr value-buffer k entity-resolver-fn)]
         (set! (.-seq peek-state) vs)
-        (set! (.-key peek-state) (first v))
+        (set! (.-key peek-state) v)
         v)))
 
   (next-values [this]
     (when-let [[v & vs] (.-seq peek-state)]
       (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) (first v))
+      (set! (.-key peek-state) v)
       v)))
 
 (defn new-doc-attribute-value-entity-entity-index [index-store attr value-entity-value-idx entity-resolver-fn]
@@ -59,13 +59,13 @@
     (when (c/valid-id? k)
       (let [[v & vs] (db/ae index-store attr k entity-resolver)]
         (set! (.-seq peek-state) vs)
-        (set! (.-key peek-state) (first v))
+        (set! (.-key peek-state) v)
         v)))
 
   (next-values [this]
     (when-let [[v & vs] (.-seq peek-state)]
       (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) (first v))
+      (set! (.-key peek-state) v)
       v)))
 
 (defn new-doc-attribute-entity-value-entity-index [index-store attr entity-resolver-fn]
@@ -77,13 +77,13 @@
     (let [eid-buffer (.-key ^BinaryJoinLayeredVirtualIndexPeekState (.peek-state entity-value-entity-idx))
           [v & vs] (db/aev index-store attr eid-buffer k entity-resolver-fn)]
       (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) (first v))
+      (set! (.-key peek-state) v)
       v))
 
   (next-values [this]
     (when-let [[v & vs] (.-seq peek-state)]
       (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) (first v))
+      (set! (.-key peek-state) v)
       v)))
 
 (defn new-doc-attribute-entity-value-value-index [index-store attr entity-value-entity-idx entity-resolver-fn]
@@ -94,22 +94,26 @@
 (defrecord PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
   (seek-values [this k]
-    (when-let [value+results (db/seek-values idx (seek-k-fn k))]
-      (when (pred (first value+results))
-        value+results)))
+    (when-let [v (db/seek-values idx (seek-k-fn k))]
+      (when (pred v)
+        v)))
 
   (next-values [this]
-    (when-let [value+results (db/next-values idx)]
-      (when (pred (first value+results))
-        value+results))))
+    (when-let [v (db/next-values idx)]
+      (when (pred v)
+        v))))
 
+;; TODO: Fix MapEntry check here, depends on RelationVirtualIndex
+;; changes.
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
    (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
   ([compare-pred ^DirectBuffer compare-v max-length]
    (if compare-v
      (fn [value]
-       (and value (compare-pred (mem/compare-buffers value compare-v max-length))))
+       (and value (compare-pred (mem/compare-buffers (if (instance? MapEntry value)
+                                                       (key value)
+                                                       value) compare-v max-length))))
      (constantly true))))
 
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
@@ -212,70 +216,8 @@
   (close-level [_])
   (max-depth [_] 1))
 
-(def ^:private sorted-virtual-index-key-comparator
-  (reify Comparator
-    (compare [_ [a] [b]]
-      (mem/compare-buffers (or a c/empty-buffer)
-                           (or b c/empty-buffer)))))
-
-(defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
-  db/Index
-  (seek-values [this k]
-    (let [idx (Collections/binarySearch values
-                                        [k]
-                                        sorted-virtual-index-key-comparator)
-          [x & xs] (subvec values (if (neg? idx)
-                                    (dec (- idx))
-                                    idx))]
-      (set! (.seq state) (seq xs))
-      x))
-
-  (next-values [this]
-    (when-let [[x & xs] (.seq state)]
-      (set! (.seq state) (seq xs))
-      x)))
-
-(defn new-sorted-virtual-index [idx-or-seq]
-  (let [idx-as-seq (if (satisfies? db/Index idx-or-seq)
-                     (idx->seq idx-or-seq)
-                     idx-or-seq)]
-    (->SortedVirtualIndex
-     (->> idx-as-seq
-          (sort-by first mem/buffer-comparator)
-          (distinct)
-          (vec))
-     (SortedVirtualIndexState. nil))))
-
-;; NOTE: Not used by production code, kept for reference.
-(defrecord OrVirtualIndex [indexes ^objects peek-state]
-  db/Index
-  (seek-values [this k]
-    (loop [[idx & indexes] indexes
-           i 0]
-      (when idx
-        (aset peek-state i (db/seek-values idx k))
-        (recur indexes (inc i))))
-    (db/next-values this))
-
-  (next-values [this]
-    (let [[n value] (->> (map-indexed vector peek-state)
-                         (remove (comp nil? second))
-                         (sort-by (comp first second) mem/buffer-comparator)
-                         (first))]
-      (when n
-        (aset peek-state n (db/next-values (get indexes n))))
-      value)))
-
-(defn new-or-virtual-index [indexes]
-  (->OrVirtualIndex indexes (object-array (count indexes))))
-
-(defn- new-unary-join-iterator-state [idx [value results]]
-  (let [result-name (:name idx)]
-    (UnaryJoinIteratorState.
-     idx
-     (or value c/empty-buffer)
-     (when (and result-name value)
-       {result-name results}))))
+(defn- new-unary-join-iterator-state [idx value]
+  (UnaryJoinIteratorState. idx (or value c/empty-buffer)))
 
 (defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
   db/Index
@@ -298,19 +240,17 @@
               max-k (.key ^UnaryJoinIteratorState (nth iterators max-index nil))
               match? (mem/buffers=? (.key iterator-state) max-k)
               idx (.idx iterator-state)]
-          (->> #(let [next-value+results (if match?
-                                           (db/next-values idx)
-                                           (db/seek-values idx max-k))]
-                  (when next-value+results
+          (->> #(let [v (if match?
+                          (db/next-values idx)
+                          (db/seek-values idx max-k))]
+                  (when v
                     (set! (.iterators iterators-thunk)
-                          (assoc iterators index (new-unary-join-iterator-state idx next-value+results)))
+                          (assoc iterators index (new-unary-join-iterator-state idx v)))
                     (set! (.index iterators-thunk) (mod (inc index) (count iterators)))
                     iterators-thunk))
                (set! (.thunk state)))
           (if match?
-            (let [new-results (map (fn [x] (.results ^UnaryJoinIteratorState x)) iterators)]
-              (when-let [result (reduce merge new-results)]
-                (MapEntry/create max-k result)))
+            max-k
             (recur))))))
 
   db/LayeredIndex
@@ -325,36 +265,10 @@
   (max-depth [this]
     1))
 
-(defrecord SingletonUnaryJoinVirtualIndex [idx]
-  db/Index
-  (seek-values [this k]
-    (let [[k result] (db/seek-values idx k)]
-      (when k
-        (MapEntry/create k {(:name idx) result}))))
-
-  (next-values [this]
-    (let [[k result] (db/next-values idx)]
-      (when k
-        (MapEntry/create k {(:name idx) result}))))
-
-  db/LayeredIndex
-  (open-level [this]
-    (db/open-level idx))
-
-  (close-level [this]
-    (db/close-level idx))
-
-  (max-depth [this]
-    1))
-
 (defn new-unary-join-virtual-index [indexes]
   (if (= 1 (count indexes))
-    (->SingletonUnaryJoinVirtualIndex (first indexes))
+    (first indexes)
     (->UnaryJoinVirtualIndex indexes (UnaryJoinIteratorsThunkFnState. nil))))
-
-(defn constrain-join-result-by-empty-names [join-keys join-results]
-  (when (not-any? nil? (vals join-results))
-    join-results))
 
 (defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes ^NAryJoinLayeredVirtualIndexState state]
   db/Index
@@ -415,28 +329,26 @@
   (set! (.indexes ^BinaryJoinLayeredVirtualIndexState (.state binary-join-index)) [lhs-index rhs-index])
   binary-join-index)
 
-(defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
-  (let [[max-ks parent-result] (last result-stack)
+(defn- build-constrained-result [constrain-result-fn result-stack max-k]
+  (let [max-ks (last result-stack)
         join-keys (conj (or max-ks []) max-k)]
-    (when-let [join-results (->> (merge parent-result new-values)
-                                 (constrain-result-fn join-keys)
-                                 (not-empty))]
-      (conj result-stack [join-keys join-results]))))
+    (when (constrain-result-fn join-keys)
+      (conj result-stack join-keys))))
 
 (defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn ^NAryWalkState state]
   db/Index
   (seek-values [this k]
-    (when-let [[value :as values] (db/seek-values n-ary-index k)]
-      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) values)]
+    (when-let [v (db/seek-values n-ary-index k)]
+      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) v)]
         (do (set! (.last state) result)
-            (MapEntry/create value (second (last result))))
+            v)
         (db/next-values this))))
 
   (next-values [this]
-    (when-let [[value :as values] (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) values)]
+    (when-let [v (db/next-values n-ary-index)]
+      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) v)]
         (do (set! (.last state) result)
-            (MapEntry/create value (second (last result))))
+            v)
         (recur))))
 
   db/LayeredIndex
@@ -459,14 +371,6 @@
 (defn layered-idx->seq [idx]
   (when idx
     (let [max-depth (long (db/max-depth idx))
-          build-result (fn [max-ks [max-k new-values]]
-                         (when new-values
-                           (conj max-ks max-k)))
-          build-leaf-results (fn [max-ks idx]
-                               (for [result (idx->seq idx)
-                                     :let [leaf-key (build-result max-ks result)]
-                                     :when leaf-key]
-                                 (MapEntry/create leaf-key (last result))))
           step (fn step [max-ks ^long depth needs-seek?]
                  (when (Thread/interrupted)
                    (throw (InterruptedException.)))
@@ -475,19 +379,20 @@
                                        (lazy-seq
                                         (db/close-level idx)
                                         (step (pop max-ks) (dec depth) false))))
-                       open-level (fn [result]
+                       open-level (fn [v]
                                     (db/open-level idx)
-                                    (if-let [max-ks (build-result max-ks result)]
+                                    (if-let [max-ks (conj max-ks v)]
                                       (step max-ks (inc depth) true)
                                       (do (db/close-level idx)
                                           (step max-ks depth false))))]
                    (if (= depth (dec max-depth))
-                     (concat (build-leaf-results max-ks idx)
+                     (concat (for [v (idx->seq idx)]
+                               (conj max-ks v))
                              (close-level))
-                     (if-let [result (if needs-seek?
-                                       (db/seek-values idx nil)
-                                       (db/next-values idx))]
-                       (open-level result)
+                     (if-let [v (if needs-seek?
+                                  (db/seek-values idx nil)
+                                  (db/next-values idx))]
+                       (open-level v)
                        (close-level)))))]
       (when (pos? max-depth)
         (step [] 0 true)))))
@@ -503,7 +408,7 @@
         (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
         (set! (.needs-seek? state) false)
         (when k
-          (MapEntry/create k (.value nested-index-state))))))
+          k))))
 
   (next-values [this]
     (if (.needs-seek? state)
@@ -512,7 +417,7 @@
         (let [[k ^RelationNestedIndexState nested-index-state] (db/next-values idx)]
           (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
           (when k
-            (MapEntry/create k (.value nested-index-state)))))))
+            k)))))
 
   db/LayeredIndex
   (open-level [this]
@@ -534,6 +439,42 @@
   (max-depth [this]
     max-depth))
 
+(def ^:private sorted-virtual-index-key-comparator
+  (reify Comparator
+    (compare [_ [a] [b]]
+      (mem/compare-buffers (or a c/empty-buffer)
+                           (or b c/empty-buffer)))))
+
+(defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
+  db/Index
+  (seek-values [this k]
+    (let [idx (Collections/binarySearch values
+                                        [k]
+                                        sorted-virtual-index-key-comparator)
+          [x & xs] (subvec values (if (neg? idx)
+                                    (dec (- idx))
+                                    idx))]
+      (set! (.seq state) (seq xs))
+      x))
+
+  (next-values [this]
+    (when-let [[x & xs] (.seq state)]
+      (set! (.seq state) (seq xs))
+      x)))
+
+(defn new-sorted-virtual-index [idx-or-seq]
+  (let [idx-as-seq (if (satisfies? db/Index idx-or-seq)
+                     (idx->seq idx-or-seq)
+                     idx-or-seq)]
+    (->SortedVirtualIndex
+     (->> idx-as-seq
+          (sort-by first mem/buffer-comparator)
+          (distinct)
+          (vec))
+     (SortedVirtualIndexState. nil))))
+
+;; TODO: Get rid of MapEntry here and represent the nested index
+;; structure in a different way.
 (defn- build-nested-index [encode-value-fn tuples [range-constraints & next-range-constraints]]
   (-> (new-sorted-virtual-index
        (for [prefix (vals (group-by first tuples))
