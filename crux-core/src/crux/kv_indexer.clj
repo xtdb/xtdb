@@ -497,7 +497,7 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (cons (MapEntry/create (decode-ave-key-to-v-from k) nil)
+                    (cons (decode-ave-key-to-v-from k)
                           (lazy-seq
                            (some->> (inc-unsigned-prefix-buffer k (- (.capacity k) c/id-size))
                                     (kv/seek i)
@@ -523,7 +523,7 @@
                                                                      content-hash-buffer
                                                                      value-buffer)]
                                    (when (kv/get-value snapshot version-k)
-                                     (MapEntry/create eid-buffer nil))))
+                                     eid-buffer)))
                           tail (lazy-seq
                                 (some->> (inc-unsigned-prefix-buffer k (.capacity k))
                                          (kv/seek i)
@@ -549,7 +549,7 @@
                                          (kv/seek i)
                                          (step)))]
                       (if (entity-resolver-fn eid-buffer)
-                        (cons (MapEntry/create eid-buffer nil) tail)
+                        (cons eid-buffer tail)
                         tail))))))))
 
   (aev [this a e min-v entity-resolver-fn]
@@ -567,7 +567,7 @@
                    (kv/seek i)
                    ((fn step [^DirectBuffer k]
                       (when k
-                        (cons (MapEntry/create (decode-aecv-key-to-v-from k) nil)
+                        (cons (decode-aecv-key-to-v-from k)
                               (lazy-seq (step (kv/next i))))))))))))
 
   (entity-as-of-resolver [this eid valid-time transact-time]
