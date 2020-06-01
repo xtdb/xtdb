@@ -241,15 +241,17 @@
 
               :else (try
                       (let [ctx (->TxFnContext query-engine tx)
-                            conformed-tx-ops (->> (apply tx-fn ctx args)
-                                                  (mapv txc/conform-tx-op))
-                            tx-events (mapv txc/->tx-event conformed-tx-ops)]
-                        (let []
-                          {:tx-events tx-events
-                           :docs (into {args-content-hash {:crux.db/id args-doc-id
-                                                           :crux.db.fn/tx-events tx-events}}
-                                       (mapcat :docs)
-                                       conformed-tx-ops)}))
+                            res (apply tx-fn ctx args)]
+                        (if (false? res)
+                          {:failed? true}
+
+                          (let [conformed-tx-ops (mapv txc/conform-tx-op res)
+                                tx-events (mapv txc/->tx-event conformed-tx-ops)]
+                            {:tx-events tx-events
+                             :docs (into {args-content-hash {:crux.db/id args-doc-id
+                                                             :crux.db.fn/tx-events tx-events}}
+                                         (mapcat :docs)
+                                         conformed-tx-ops)})))
 
                       (catch Throwable t
                         (reset! !last-tx-fn-error t)
