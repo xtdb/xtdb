@@ -36,8 +36,8 @@
 
 (rf/reg-event-db
  ::toggle-form-history
- (fn [db [_ component]]
-   (update-in db [:form-pane :history component] not)))
+ (fn [db [_ component & bool]]
+   (update-in db [:form-pane :history component] #(if (seq bool) (first bool) (not %)))))
 
 (rf/reg-event-db
  ::set-form-pane-entity-view
@@ -66,13 +66,15 @@
             (assoc :query-history (reader/read-string
                                    (.getItem js/window.localStorage "query"))))}))
 
+(defn vec-remove
+  [pos coll]
+  (vec (concat (subvec coll 0 pos) (subvec coll (inc pos)))))
+
 (rf/reg-event-fx
  ::remove-query-from-local-storage
- (fn [{:keys [db]} [_ q]]
+ (fn [{:keys [db]} [_ idx]]
    (let [query-history (:query-history db)
-         updated-history (into [] (remove #(= q
-                                              (common/query-params->formatted-edn-string %))
-                                          query-history))]
+         updated-history (vec-remove idx query-history)]
      {:db (assoc db :query-history updated-history)
       :local-storage ["query" updated-history]})))
 

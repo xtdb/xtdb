@@ -75,7 +75,9 @@
                   :prevent-default? true
                   :clean-on-unmount? true
                   :initial-values @(rf/subscribe [::sub/initial-values-query])
-                  :on-submit #(rf/dispatch [::events/go-to-query-view %])}
+                  :on-submit #(do
+                                (rf/dispatch [::events/toggle-form-history :query false])
+                                (rf/dispatch [::events/go-to-query-view %]))}
        (fn [{:keys [values
                     errors
                     touched
@@ -84,7 +86,8 @@
                     form-id
                     handle-submit] :as props}]
          (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
-               form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])]
+               form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])
+               query-history-list @(rf/subscribe [::sub/query-form-history])]
            [:<>
             [:form
              {:id form-id
@@ -104,34 +107,34 @@
               [:div.expand-collapse-transition
                {:class (if form-pane-history-q "expand" "collapse")}
                [:div.form-pane__history-scrollable
-                (for [{:strs [q vtd vtt ttd ttt]} @(rf/subscribe [::sub/query-form-history])]
-                  ^{:key (gensym)}
-                  [:div.form-pane__history-scrollable-el
-                   [:div.form-pane__history-delete
-                    {:on-click #(rf/dispatch [::events/remove-query-from-local-storage q])}
-                    [:i.fas.fa-trash-alt]]
-                   [:div.form-pane__history-scrollable-el-left
-                    {:on-click #(do
-                                  (rf/dispatch [::events/toggle-form-history :query])
-                                  (.setValue @cm-instance q)
-                                  (set-values
-                                   {"q" q
-                                    "vtd" vtd
-                                    "vtt" vtt
-                                    "ttd" ttd
-                                    "ttt" ttt}))}
-                    [:div.form-pane__history-headings
-                     {:style {:margin-bottom ".5rem"}}
-                     "Query"]
-                    [:div {:style {:margin-bottom "1rem"}}
-                     [cm/code-mirror-static q {:class "cm-textarea__query"}]]
-                    [:div
-                     [:span.form-pane__history-headings "Valid Time: "]
-                     [:span.form-pane__history-txt (str vtd " " vtt)]]
-                    (when (and ttd ttt)
-                      [:div
-                       [:span.form-pane__history-headings "Transaction Time: "]
-                       [:span.form-pane__history-txt (str ttd " " ttt)]])]])]]
+                (map-indexed
+                 (fn [idx {:strs [q vtd vtt ttd ttt]}]
+                   ^{:key (gensym)}
+                   [:div.form-pane__history-scrollable-el
+                    [:div.form-pane__history-delete
+                     {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+                     [:i.fas.fa-trash-alt]]
+                    [:div.form-pane__history-scrollable-el-left
+                     {:on-click #(do
+                                   (rf/dispatch [::events/toggle-form-history :query])
+                                   (.setValue @cm-instance q)
+                                   (set-values
+                                    {"q" q
+                                     "vtd" vtd
+                                     "vtt" vtt
+                                     "ttd" ttd
+                                     "ttt" ttt}))}
+                     [:div
+                      {:style {:margin-bottom "1rem"}}
+                      [:span.form-pane__history-headings "Valid Time: "]
+                      [:span.form-pane__history-txt (str vtd " " vtt)]]
+                     (when (and ttd ttt)
+                       [:div
+                        [:span.form-pane__history-headings "Transaction Time: "]
+                        [:span.form-pane__history-txt (str ttd " " ttt)]])
+                     [:div {:style {:margin-top "1rem"}}
+                      [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+                 query-history-list)]]
               (when (and (get touched "q")
                          (get errors "q"))
                 [:p.input-error (get errors "q")])]
@@ -202,16 +205,6 @@
          [:a.query-table-downloads__link
           {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
           "TSV"]]])]))
-
-(defn vt-tt-entity-box
-  [vt tt]
-  [:div.entity-vt-tt
-   [:div.entity-vt-tt__title
-    "Valid Time"]
-   [:div.entity-vt-tt__value (str vt)]
-   [:div.entity-vt-tt__title
-    "Transaction Time"]
-   [:div.entity-vt-tt__value (str tt)]])
 
 (defn vt-tt-entity-box
   [vt tt]

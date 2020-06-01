@@ -178,15 +178,16 @@
                       (str (:valid-time % (t/now))))
          transaction-time #(common/datetime->date-time
                             (:transaction-time %))]
-     (mapv
-      (fn [x]
-        {"q" (common/query-params->formatted-edn-string
-              (dissoc x :valid-time :transaction-time))
-         "vtd" (:date (valid-time x))
-         "vtt" (:time (valid-time x))
-         "ttd" (:date (transaction-time x))
-         "ttt" (:time (transaction-time x))})
-      (:query-history db)))))
+     (reverse
+      (mapv
+       (fn [x]
+         {"q" (common/query-params->formatted-edn-string
+               (dissoc x :valid-time :transaction-time))
+          "vtd" (:date (valid-time x))
+          "vtt" (:time (valid-time x))
+          "ttd" (:date (transaction-time x))
+          "ttt" (:time (transaction-time x))})
+       (:query-history db))))))
 
 (rf/reg-sub
  ::entity-form-history
