@@ -740,18 +740,27 @@
              (->> (iterator-seq log-iterator)
                   (map :crux.api/tx-ops))))))
 
-(t/deftest nil-transaction-fn-457
+(t/deftest transaction-fn-return-values-457
   (with-redefs [tx/tx-fns-enabled? true]
-    (let [merge-fn {:crux.db/id :my-fn
-                    :crux.db/fn '(fn [ctx] nil)}]
+    (let [nil-fn {:crux.db/id :nil-fn
+                  :crux.db/fn '(fn [ctx] nil)}
+          false-fn {:crux.db/id :false-fn
+                    :crux.db/fn '(fn [ctx] false)}]
 
-      (fix/submit+await-tx [[:crux.tx/put merge-fn]])
-      (fix/submit+await-tx [[:crux.tx/fn :my-fn]
+      (fix/submit+await-tx [[:crux.tx/put nil-fn]
+                            [:crux.tx/put false-fn]])
+      (fix/submit+await-tx [[:crux.tx/fn :nil-fn]
                             [:crux.tx/put {:crux.db/id :foo
-                                           :bar :baz}]])
+                                           :foo? true}]])
 
-      (t/is (= {:crux.db/id :foo, :bar :baz}
-               (api/entity (api/db *api*) :foo))))))
+      (t/is (= {:crux.db/id :foo, :foo? true}
+               (api/entity (api/db *api*) :foo)))
+
+      (fix/submit+await-tx [[:crux.tx/fn :false-fn]
+                            [:crux.tx/put {:crux.db/id :bar
+                                           :bar? true}]])
+
+      (t/is (nil? (api/entity (api/db *api*) :bar))))))
 
 (t/deftest map-ordering-362
   (t/testing "cas is independent of map ordering"
