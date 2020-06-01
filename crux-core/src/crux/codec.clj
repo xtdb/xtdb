@@ -52,6 +52,11 @@
 ;; used in standalone TxLog
 (def ^:const tx-events-index-id 9)
 
+
+;; prefix indexes
+(def ^:const av-index-id 10)
+(def ^:const ae-index-id 11)
+
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
