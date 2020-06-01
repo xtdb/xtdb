@@ -555,9 +555,8 @@
     (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
           v4-ivan (assoc v1-ivan :name "IVAN")
           update-attribute-fn {:crux.db/id :update-attribute-fn
-                               :crux.db.fn/body
-                               '(fn [db eid k f]
-                                  [[:crux.tx/put (update (crux.api/entity db eid) k (eval f))]])}]
+                               :crux.db/fn '(fn [ctx eid k f]
+                                              [[:crux.tx/put (update (crux.api/entity (crux.api/db ctx) eid) k (eval f))]])}]
       (fix/submit+await-tx [[:crux.tx/put v1-ivan]
                             [:crux.tx/put update-attribute-fn]])
       (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
@@ -586,16 +585,16 @@
           (t/testing "invalid results"
             (fix/submit+await-tx [[:crux.tx/put
                                    {:crux.db/id :invalid-fn
-                                    :crux.db.fn/body '(fn [db]
-                                                        [[:crux.tx/foo]])}]])
+                                    :crux.db/fn '(fn [ctx]
+                                                   [[:crux.tx/foo]])}]])
             (fix/submit+await-tx '[[:crux.tx/fn :invalid-fn]])
             (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op" (some-> (#'tx/reset-tx-fn-error) throw))))
 
           (t/testing "exception thrown"
             (fix/submit+await-tx [[:crux.tx/put
                                    {:crux.db/id :exception-fn
-                                    :crux.db.fn/body '(fn [db]
-                                                        (throw (RuntimeException. "foo")))}]])
+                                    :crux.db/fn '(fn [ctx]
+                                                   (throw (RuntimeException. "foo")))}]])
             (fix/submit+await-tx '[[:crux.tx/fn :exception-fn]])
             (t/is (thrown-with-msg? RuntimeException #"foo" (some-> (#'tx/reset-tx-fn-error) throw))))
 
@@ -607,9 +606,8 @@
 
         (t/testing "function ops can return other function ops"
           (let [returns-fn {:crux.db/id :returns-fn
-                            :crux.db.fn/body
-                            '(fn [db]
-                               [[:crux.tx/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
+                            :crux.db/fn '(fn [ctx]
+                                           [[:crux.tx/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
             (fix/submit+await-tx [[:crux.tx/put returns-fn]])
             (fix/submit+await-tx [[:crux.tx/fn :returns-fn]])
             (some-> (#'tx/reset-tx-fn-error) throw)
@@ -621,31 +619,30 @@
                                 :hair-style "short"
                                 :mass 60})
                 merge-fn {:crux.db/id :merge-fn
-                          :crux.db.fn/body '(fn [db eid m]
-                                              [[:crux.tx/put (merge (crux.api/entity db eid) m)]])}]
+                          :crux.db/fn `(fn [ctx# eid# m#]
+                                         [[:crux.tx/put (merge (api/entity (api/db ctx#) eid#) m#)]])}]
             (fix/submit+await-tx [[:crux.tx/put merge-fn]])
             (fix/submit+await-tx [[:crux.tx/fn :merge-fn :ivan {:mass 60, :hair-style "short"}]])
             (fix/submit+await-tx [[:crux.tx/fn :merge-fn :ivan {:height 180}]])
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= v5-ivan (api/entity (api/db *api*) :ivan)))))
 
-        (t/testing "can access current transaction as dynamic var"
+        (t/testing "can access current transaction on tx-fn context"
           (fix/submit+await-tx
            [[:crux.tx/put
              {:crux.db/id :tx-metadata-fn
-              :crux.db.fn/body
-              '(fn [db]
-                 [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx crux.tx/*current-tx*}]])}]])
+              :crux.db/fn `(fn [ctx#]
+                             [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx (api/indexing-tx ctx#)}]])}]])
           (let [submitted-tx (fix/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= {:crux.db/id :tx-metadata
-                      :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn :tx-metadata-fn]])}
+                      :crux.tx/current-tx submitted-tx}
                      (api/entity (api/db *api*) :tx-metadata)))))))))
 
 (t/deftest test-tx-fn-replacing-arg-docs-866
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
-                                       :crux.db.fn/body '(fn [db doc]
-                                                           [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
+                                       :crux.db/fn '(fn [ctx doc]
+                                                      [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
 
   (with-redefs [tx/tx-fns-enabled? true
                 tx/tx-fn-eval-cache (memoize eval)]
@@ -665,8 +662,8 @@
 
     (t/testing "nested tx-fn"
       (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-bob-and-ivan
-                                           :crux.db.fn/body '(fn [db bob ivan]
-                                                               [[:crux.tx/put (assoc bob :crux.db/id :bob)]
+                                           :crux.db/fn '(fn [ctx bob ivan]
+                                                          [[:crux.tx/put (assoc bob :crux.db/id :bob)]
                                                                 [:crux.tx/fn :put-ivan ivan]])}]])
 
       (fix/submit+await-tx [[:crux.tx/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
@@ -746,7 +743,7 @@
 (t/deftest nil-transaction-fn-457
   (with-redefs [tx/tx-fns-enabled? true]
     (let [merge-fn {:crux.db/id :my-fn
-                    :crux.db.fn/body '(fn [db] nil)}]
+                    :crux.db/fn '(fn [ctx] nil)}]
 
       (fix/submit+await-tx [[:crux.tx/put merge-fn]])
       (fix/submit+await-tx [[:crux.tx/fn :my-fn]
