@@ -3,15 +3,36 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
+            [crux.kv-indexer :as kvi]
+            [crux.memory :as mem]
             [crux.node :as n]
             [crux.topology :as topo]
             [crux.tx :as tx])
   (:import java.io.Closeable
            [java.util.concurrent ArrayBlockingQueue Executors ExecutorService ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy TimeUnit]
+           java.nio.ByteOrder
+           [org.agrona DirectBuffer MutableDirectBuffer]
            java.util.Date))
+
+(defn encode-tx-event-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b, {:crux.tx/keys [tx-id tx-time]}]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size Long/BYTES Long/BYTES)))]
+    (doto b
+      (.putByte 0 c/tx-events-index-id)
+      (.putLong c/index-id-size tx-id ByteOrder/BIG_ENDIAN)
+      (.putLong (+ c/index-id-size Long/BYTES)
+                (c/date->reverse-time-ms (or tx-time (Date.)))
+                ByteOrder/BIG_ENDIAN))))
+
+(defn tx-event-key? [^DirectBuffer k]
+  (= c/tx-events-index-id (.getByte k 0)))
+
+(defn decode-tx-event-key-from [^DirectBuffer k]
+  (assert (= (+ c/index-id-size Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (assert (tx-event-key? k))
+  {:crux.tx/tx-id (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN)
+   :crux.tx/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
                   {:keys [^ExecutorService tx-submit-executor, event-log-kv-store]}]
@@ -19,11 +40,11 @@
     (deliver !submitted-tx ::closed))
 
   (let [tx-time (Date.)
-        tx-id (inc (or (idx/read-meta event-log-kv-store ::latest-submitted-tx-id) -1))
+        tx-id (inc (or (kvi/read-meta event-log-kv-store ::latest-submitted-tx-id) -1))
         next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
-    (kv/store event-log-kv-store [[(c/encode-tx-event-key-to nil next-tx)
-                                   (idx/->nippy-buffer tx-events)]
-                                  (idx/meta-kv ::latest-submitted-tx-id tx-id)])
+    (kv/store event-log-kv-store [[(encode-tx-event-key-to nil next-tx)
+                                   (mem/->nippy-buffer tx-events)]
+                                  (kvi/meta-kv ::latest-submitted-tx-id tx-id)])
 
     (deliver !submitted-tx next-tx)))
 
@@ -39,14 +60,14 @@
                                       :tx-events tx-events}
                                      this))
       (delay
-        (let [submitted-tx @!submitted-tx]
-          (when (= ::closed submitted-tx)
-            (throw (IllegalStateException. "TxLog is closed.")))
+       (let [submitted-tx @!submitted-tx]
+         (when (= ::closed submitted-tx)
+           (throw (IllegalStateException. "TxLog is closed.")))
 
-          submitted-tx))))
+         submitted-tx))))
 
   (latest-submitted-tx [this]
-    (when-let [tx-id (idx/read-meta event-log-kv-store ::latest-submitted-tx-id)]
+    (when-let [tx-id (kvi/read-meta event-log-kv-store ::latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
 
   (open-tx-log [this after-tx-id]
@@ -54,12 +75,12 @@
           iterator (kv/new-iterator snapshot)]
       (letfn [(tx-log [k]
                 (lazy-seq
-                  (when (some-> k c/tx-event-key?)
-                    (cons (assoc (c/decode-tx-event-key-from k)
-                            :crux.tx.event/tx-events (idx/<-nippy-buffer (kv/value iterator)))
-                          (tx-log (kv/next iterator))))))]
+                 (when (some-> k (tx-event-key?))
+                   (cons (assoc (decode-tx-event-key-from k)
+                                :crux.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
+                         (tx-log (kv/next iterator))))))]
 
-        (let [k (kv/seek iterator (c/encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
+        (let [k (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
           (->> (when k (tx-log (if after-tx-id (kv/next iterator) k)))
                (cio/->cursor (fn []
                                (cio/try-close iterator)

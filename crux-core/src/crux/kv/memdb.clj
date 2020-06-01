@@ -3,10 +3,8 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy]
-            [crux.index :as idx])
+            [taoensso.nippy :as nippy])
   (:import clojure.lang.Box
            java.io.Closeable))
 
@@ -105,7 +103,7 @@
       (persist-db db-dir db))))
 
 (def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version ::persist-on-close?]
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::persist-on-close?]
                      :as options}]
                (when sync?
                  (log/warn "Using sync? on MemKv has no effect."
@@ -116,12 +114,9 @@
                                 :persist-on-close? persist-on-close?
                                 :db (atom (if (.isFile (io/file db-dir "memdb"))
                                             (restore-db db-dir)
-                                            (sorted-map-by mem/buffer-comparator)))})
-                   (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                   (lru/wrap-lru-cache options)))
+                                            (sorted-map-by mem/buffer-comparator)))})))
 
    :args (merge kv/options
-                lru/options
                 {::persist-on-close? {:doc "Persist Mem Db on close"
                                       :default false
                                       :crux.config/type :crux.config/boolean}})})
