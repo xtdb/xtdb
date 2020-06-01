@@ -10,9 +10,10 @@
             [crux.io :as cio]
             [crux.lru :as lru]
             [crux.memory :as mem]
-            [crux.bus :as bus])
+            [crux.bus :as bus]
+            [crux.api :as api])
   (:import clojure.lang.ExceptionInfo
-           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
+           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
@@ -1265,6 +1266,30 @@
                         indexer bus
                         query-cache conform-cache
                         options]
+  api/DBProvider
+  (db [this] (api/db this nil nil))
+  (db [this valid-time] (api/db this valid-time nil))
+  (db [this valid-time tx-time]
+    (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx indexer))
+          _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
+              (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
+                                                      tx-time latest-tx-time)
+                                              tx-time latest-tx-time)))
+          valid-time (or valid-time (cio/next-monotonic-date))
+          tx-time (or tx-time latest-tx-time valid-time)]
+
+      (->QueryDatasource this
+                         valid-time
+                         tx-time
+                         nil
+                         nil)))
+
+  (open-db [this] (api/open-db this nil nil))
+  (open-db [this valid-time] (api/open-db this valid-time nil))
+  (open-db [this valid-time tx-time]
+    (let [db (api/db this valid-time tx-time)]
+      (assoc db :index-store (open-index-store db))))
+
   Closeable
   (close [_]
     (when query-executor
@@ -1302,10 +1327,3 @@
           ::query-timeout {:doc "Query Timeout ms"
                            :default 30000
                            :crux.config/type :crux.config/nat-int}}})
-
-(defn db ^crux.api.ICruxDatasource [query-engine valid-time transact-time]
-  (->QueryDatasource query-engine
-                     valid-time
-                     transact-time
-                     nil
-                     nil))
