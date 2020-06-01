@@ -61,10 +61,24 @@
                        (into {}))]
      {:dispatch [:navigate :query {} query-params]})))
 
-(rf/reg-event-db
- ::set-entity-right-pane-view
- (fn [db [_ view]]
-   (assoc-in db [:entity :right-pane :view] view)))
+(rf/reg-event-fx
+ ::set-entity-right-pane-document
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:current-route :path-params :eid])
+         query-params (-> (get-in db [:current-route :query-params])
+                          (select-keys [:valid-time :transaction-time]))]
+     {:dispatch [:navigate :entity {:eid eid} query-params]})))
+
+(rf/reg-event-fx
+ ::set-entity-right-pane-history
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:current-route :path-params :eid])
+         query-params (-> (get-in db [:current-route :query-params])
+                          (assoc :history true)
+                          (assoc :with-docs true)
+                          (assoc :sort-order "desc"))]
+     {:dispatch [:navigate :entity {:eid eid} query-params]})))
+
 
 (rf/reg-event-db
  ::set-entity-right-pane-loading
@@ -73,7 +87,7 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values :as v}]]
+ (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values}]]
    (let [query-params (->>
                        {:valid-time (common/date-time->datetime vtd vtt)
                         :transaction-time (common/date-time->datetime ttd ttt)}
@@ -86,3 +100,8 @@
  ::entity-right-pane-document-error
  (fn [db [_ error]]
    (assoc-in db [:entity :error] error)))
+
+(rf/reg-event-db
+ ::set-entity-right-pane-history-diffs?
+ (fn [db [_ bool]]
+   (assoc-in db [:entity :right-pane :diffs?] bool)))

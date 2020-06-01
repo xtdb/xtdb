@@ -1,2 +1,1 @@
-{:id "app"
- :main crux.ui.main}
+{:main crux.ui.main}

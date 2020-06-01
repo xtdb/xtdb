@@ -31,7 +31,7 @@
            [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
-           java.net.URLDecoder
+           [java.net URLDecoder URLEncoder]
            org.eclipse.jetty.server.Server
            [com.nimbusds.jose.jwk JWK JWKSet KeyType RSAKey ECKey]
            com.nimbusds.jose.JWSObject
@@ -476,86 +476,128 @@
                       (api/entity db result))
                (let [query-params (format "?valid-time=%s&transaction-time=%s"
                                           (.toInstant ^Date (api/valid-time db))
-                                          (.toInstant ^Date (api/transaction-time db)))]
-                 (assoc links result (str path "/" result query-params)))
+                                          (.toInstant ^Date (api/transaction-time db)))
+                     encoded-eid (URLEncoder/encode (str result) "UTF-8")]
+                 (assoc links result (str path "/" encoded-eid query-params)))
                (cond
                  (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
                  (sequential? result) (apply merge (map #(recur-on-result % links) result))
                  :else links)))]
     (recur-on-result result {})))
 
-(defn- entity->html [eid linked-entities entity-map vt tt]
-  (let [nodes (fn resolve-entity-map
-                [linked-entities entity-map]
-                (if-let [href (get linked-entities entity-map)]
-                  [:a.entity-link
-                   {:href href}
-                   (str entity-map)]
-                  (cond
-                    (map? entity-map) (for [[k v] entity-map]
-                                        ^{:key (str (gensym))}
-                                        [:div.entity-group
-                                         [:div.entity-group__key
-                                          (resolve-entity-map linked-entities k)]
-                                         [:div.entity-group__value
-                                          (resolve-entity-map linked-entities v)]])
+(defn resolve-entity-map [linked-entities entity-map]
+  (if-let [href (get linked-entities entity-map)]
+    [:a.entity-link
+     {:href href}
+     (str entity-map)]
+    (cond
+      (map? entity-map) (for [[k v] entity-map]
+                          ^{:key (str (gensym))}
+                          [:div.entity-group
+                           [:div.entity-group__key
+                            (resolve-entity-map linked-entities k)]
+                           [:div.entity-group__value
+                            (resolve-entity-map linked-entities v)]])
 
-                    (sequential? entity-map) [:ol.entity-group__value
-                                       (for [v entity-map]
-                                         ^{:key (str (gensym))}
-                                         [:li (resolve-entity-map linked-entities v)])]
-                    (set? entity-map) [:ul.entity-group__value
+      (sequential? entity-map) [:ol.entity-group__value
                                 (for [v entity-map]
-                                  ^{:key v}
+                                  ^{:key (str (gensym))}
                                   [:li (resolve-entity-map linked-entities v)])]
-                    :else (str entity-map))))]
-    [:div.entity-map__container
-     (if entity-map
-       [:div.entity-map
-        [:div.entity-group
-         [:div.entity-group__key
-          ":crux.db/id"]
-         [:div.entity-group__value
-          (str (:crux.db/id entity-map))]]
-        [:hr.entity-group__separator]
-        (nodes (linked-entities) (dissoc entity-map :crux.db/id))]
-       [:div.enttiy-map
-        [:strong (str eid)] " entity not found"])
-      [:div.entity-vt-tt
-       [:div.entity-vt-tt__title
-        "Valid Time"]
-       [:div.entity-vt-tt__value
-        (str (or vt (java.util.Date.)))]
-       [:div.entity-vt-tt__title
-        "Transaction Time"]
-       [:div.entity-vt-tt__value
-        (str (or tt "Not Specified"))]]]))
+      (set? entity-map) [:ul.entity-group__value
+                         (for [v entity-map]
+                           ^{:key v}
+                           [:li (resolve-entity-map linked-entities v)])]
+      :else (str entity-map))))
 
-(defn- entity-state [^ICruxAPI crux-node options request]
+(defn vt-tt-entity-box
+  [vt tt]
+  [:div.entity-vt-tt
+    [:div.entity-vt-tt__title
+     "Valid Time"]
+    [:div.entity-vt-tt__value
+     (str (or vt (java.util.Date.)))]
+    [:div.entity-vt-tt__title
+     "Transaction Time"]
+    [:div.entity-vt-tt__value
+     (str (or tt "Not Specified"))]])
+
+(defn- entity->html [eid linked-entities entity-map vt tt]
+  [:div.entity-map__container
+   (if entity-map
+     [:div.entity-map
+      [:div.entity-group
+       [:div.entity-group__key
+        ":crux.db/id"]
+       [:div.entity-group__value
+        (str (:crux.db/id entity-map))]]
+      [:hr.entity-group__separator]
+      (resolve-entity-map (linked-entities) (dissoc entity-map :crux.db/id))]
+     [:div.entity-map
+      [:strong (str eid)] " entity not found"])
+   (vt-tt-entity-box vt tt)])
+
+(defn- entity-history->html [eid entity-history]
+  [:div.entity-histories__container
+   [:div.entity-histories
+    (if (not-empty entity-history)
+      (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
+        [:div.entity-history__container
+         [:div.entity-map
+          (resolve-entity-map {} doc)]
+         (vt-tt-entity-box valid-time tx-time)])
+      [:div.entity-histories
+       [:strong (str eid)] " entity not found"])]])
+
+(defn html-request? [request]
+  (= (get-in request [:muuntaja/response :format]) "text/html"))
+
+(defn- entity-state [^ICruxAPI crux-node options {{:strs [history sort-order
+                                                          valid-time transaction-time
+                                                          start-valid-time start-transaction-time
+                                                          end-valid-time end-transaction-time
+                                                          with-corrections with-docs link-entities?]} :query-params
+                                                  :as request}]
   (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))
-        eid (c/id-edn-reader (URLDecoder/decode encoded-eid))
-        query-params (:query-params request)
-        vt (some-> (get query-params "valid-time")
+        eid (or (some-> encoded-eid URLDecoder/decode c/id-edn-reader)
+                (throw (IllegalArgumentException. "missing eid")))
+        vt (some-> valid-time
                    (instant/read-instant-date))
-        tt (some-> (get query-params "transaction-time")
+        tt (some-> transaction-time
                    (instant/read-instant-date))
         db (db-for-request crux-node {:valid-time vt
                                       :transact-time tt})
-        entity-map (api/entity db eid)
-        linked-entities #(link-all-entities db  "/_entity" entity-map)]
-    {:status (if (some? entity-map) 200 404)
-     :body (cond
-             (= (get-in request [:muuntaja/response :format]) "text/html")
-             (raw-html
-              {:body (entity->html encoded-eid linked-entities entity-map vt tt)
-               :title "/_entity"
-               :options options})
+        html? (html-request? request)]
+    (if history
+      (let [sort-order (or (some-> sort-order keyword)
+                           (throw (IllegalArgumentException. "missing sort-order query parameter")))
+            history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
+                          :with-docs? (or html? (some-> ^String with-docs Boolean/valueOf))
+                          :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
+                                  :crux.tx/tx-time (some-> start-transaction-time (instant/read-instant-date))}
+                          :end {:crux.db/valid-time (some-> end-valid-time (instant/read-instant-date))
+                                :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
+            entity-history (api/entity-history db eid sort-order history-opts)]
+        {:status (if (not-empty entity-history) 200 404)
+         :body  (if html?
+                  (raw-html
+                   {:body (entity-history->html encoded-eid entity-history)
+                    :title "/_entity?history=true"
+                    :options options})
+                  ;; Stringifying #crux/id values, caused issues with AJAX
+                  (map #(update % :crux.db/content-hash str) entity-history))})
+      (let [entity-map (api/entity db eid)
+            linked-entities #(link-all-entities db  "/_entity" entity-map)]
+        {:status (if (some? entity-map) 200 404)
+         :body (cond
+                 html? (raw-html
+                        {:body (entity->html encoded-eid linked-entities entity-map vt tt)
+                         :title "/_entity"
+                         :options options})
 
-             (get query-params "link-entities?")
-             {"linked-entities" (linked-entities)
-              "entity" entity-map}
+                 link-entities? {"linked-entities" (linked-entities)
+                                 "entity" entity-map}
 
-             :else entity-map)}))
+                 :else entity-map)}))))
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
@@ -579,8 +621,9 @@
        (map (fn [id]
               (let [query-params (format "?valid-time=%s&transaction-time=%s"
                                          (.toInstant ^Date (api/valid-time db))
-                                         (.toInstant ^Date (api/transaction-time db)))]
-                [id (str path "/" id query-params)])))
+                                         (.toInstant ^Date (api/transaction-time db)))
+                    encoded-eid (URLEncoder/encode (str id) "UTF-8")]
+                [id (str path "/" encoded-eid query-params)])))
        (into {})))
 
 (defn resolve-prev-next-offset
@@ -625,7 +668,7 @@
 (defn data-browser-query [^ICruxAPI crux-node options request]
   (let [query-params (:query-params request)
         link-entities? (get query-params "link-entities?")
-        html? (= (get-in request [:muuntaja/response :format]) "text/html")]
+        html? (html-request? request)]
     (cond
       (empty? query-params)
       (if html?

@@ -1,10 +1,10 @@
 (ns crux.ui.subscriptions
   (:require
    [cljs.reader :as reader]
-   [clojure.pprint :as p]
    [crux.ui.common :as common]
    [re-frame.core :as rf]
-   [tick.alpha.api :as t]))
+   [tick.alpha.api :as t]
+   [clojure.data :as data]))
 
 (rf/reg-sub
  :db
@@ -97,7 +97,7 @@
 (rf/reg-sub
  ::entity-right-pane-view
  (fn [db _]
-   (or (get-in db [:entity :right-pane :view]) :document)))
+   (if (get-in db [:current-route :query-params :history]) :history :document)))
 
 (rf/reg-sub
  ::entity-right-pane-document
@@ -105,13 +105,52 @@
    (if-let [error (get-in db [:entity :error])]
      {:error error}
      (let [query-params (get-in db [:current-route :query-params])
-           document (get-in db [:entity :http "entity"])]
-       {:eid (get-in db [:current-route :path-params :eid])
-        :vt (or (:valid-time query-params) (str (t/now)))
-        :tt (or (:transaction-time query-params) "Not Specified")
-        :document document
-        :document-no-eid (dissoc document :crux.db/id)
-        :linked-entities (get-in db [:entity :http "linked-entities"])}))))
+         document (get-in db [:entity :http :document "entity"])]
+     {:eid (get-in db [:current-route :path-params :eid])
+      :vt (or (:valid-time query-params) (str (t/now)))
+      :tt (or (:transaction-time query-params) "Not Specified")
+      :document document
+      :document-no-eid (dissoc document :crux.db/id)
+      :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
+
+(rf/reg-sub
+ ::entity-right-pane-history-diffs?
+ (fn [db _]
+   (or (get-in db [:entity :right-pane :diffs?]) false)))
+
+(rf/reg-sub
+ ::entity-right-pane-document-error
+ (fn [db _]
+   (get-in db [:entity :error])))
+
+(rf/reg-sub
+ ::entity-right-pane-history
+ (fn [db _]
+   (let [eid (get-in db [:current-route :path-params :eid])
+         history (get-in db [:entity :http :history])]
+     {:eid eid
+      :entity-history history})))
+
+(defn- history-docs->diffs [entity-history]
+  (map
+   (fn [[x y]]
+     (let [[deletions additions]
+           (data/diff (:crux.db/doc x) (:crux.db/doc y))]
+       (merge
+        (select-keys y [:crux.tx/tx-time :crux.db/valid-time])
+        {:deletions deletions
+         :additions additions})))
+   (partition 2 1 entity-history)))
+
+(rf/reg-sub
+ ::entity-right-pane-history-diffs
+ (fn [db _]
+   (let [ eid (get-in db [:current-route :path-params :eid])
+         history (get-in db [:entity :http :history])
+         entity-history (history-docs->diffs history)]
+     {:eid eid
+      :up-to-date-doc (first history)
+      :history-diffs entity-history})))
 
 (rf/reg-sub
  ::left-pane-view

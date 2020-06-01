@@ -11,6 +11,7 @@ html, body {
 
 .console {
     max-width: 95%;
+    min-height: 60vh;
     margin: auto;
     margin-top: 2rem;
 }
@@ -170,7 +171,6 @@ html, body {
     display: flex;
 }
 
-
 .entity-group {
     display: flex;
     align-items: flex-start;
@@ -184,15 +184,11 @@ html, body {
 }
 
 .entity-group__key {
-    margin-right: 1rem;
+    margin-right: 0.8rem;
 }
 
-ol.entity-group__value {
-    list-style: none;
-    counter-reset: my-counter;
-    padding-inline-start: 0;
-    margin-block-start: 0;
-    margin-block-end: 0;
+.entity-group__value {
+    position: relative;
 }
 
 ul.entity-group__value {
@@ -202,28 +198,41 @@ ul.entity-group__value {
     margin-block-end: 0;
 }
 
-ol.entity-group__value li {
-    counter-increment: my-counter;
+.entity-group__value .entity-group {
+    margin: 0;
+    margin-bottom: 1rem;
 }
 
-ol.entity-group__value li::before {
-    content: counter(my-counter) ".";
+.entity-group__value .entity-group:last-child {
+    margin-bottom: 0;
+}
+
+.entity-group__value .entity-group:first-child::before {
+    content: "{";
     color: grey;
-    font-size: 0.765em;
-    margin-right: .5rem;
     font-weight: bold;
 }
 
-ul.entity-group__value li::before {
-    content: "-";
+.entity-group__value .entity-group:not(first-child)::before {
+    content: "";
+    width: 1rem;
+}
+
+.entity-group__value .entity-group:last-child::after {
+    content: "}";
+    align-self: flex-end;
     color: grey;
-    font-size: 0.765em;
-    margin-right: .5rem;
+    margin-left: 0.6rem;
     font-weight: bold;
 }
 
 // apply to only first level keys
 .entity-map > .entity-group > .entity-group__key {
+    margin-right: 1rem;
+    font-weight: bold;
+}
+
+ .entity-map > .entity-group > .entity-group__key {
     margin-right: 1rem;
     font-weight: bold;
 }
@@ -237,14 +246,42 @@ ul.entity-group__value li::before {
     align-items: flex-start;
 }
 
+.entity-history__toggle-buttons {
+    display: flex;
+    margin: 1rem 0;
+}
+
+.entity-history__toggle-buttons > *:not(last-child) {
+    margin-right: 1rem;
+}
+
+.entity-histories__container {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+}
+
+.entity-history__container {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    justify-content: space-between;
+}
+
+.entity-map__diffs-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 2rem;
+}
+
 .common-entity-box {
     padding: 1rem;
     border-radius: 0.7rem;
+    white-space: pre-wrap;
     box-shadow: 0 0 12px 0px rgba(10, 10, 10, 0.1);
 }
 
-.entity-map {
-    width: fit-content;
+.entity-map, .entity-history {
     margin-right: 4rem;
     @extend .common-entity-box;
 }
@@ -294,6 +331,10 @@ ul.entity-group__value li::before {
     -ms-animation: rotating 1s linear infinite;
     -o-animation: rotating 1s linear infinite;
     animation: rotating 1s linear infinite;
+}
+
+.entity-map--loading {
+    min-height: 50vh;
 }
 
 .entity-map__load-icon {

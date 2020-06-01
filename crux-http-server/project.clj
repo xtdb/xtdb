@@ -38,7 +38,7 @@
                        ["with-profiles" "+sass-from-root" "build:cljs"]
                        "install"]}
   :plugins [[yogthos/lein-sass "0.1.10"]]
-  :resource-paths ["resources" "cljs-target"]
+  :resource-paths ["resources" "cljs-target" "src-cljs"]
   :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)
