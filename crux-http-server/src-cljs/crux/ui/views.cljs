@@ -242,23 +242,35 @@
 (defn- entity-history-document []
   (let [diffs-tab? @(rf/subscribe [::sub/entity-result-pane-history-diffs?])
         entity-error @(rf/subscribe [::sub/entity-result-pane-document-error])
-        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
+        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
+        {:keys [query-params path-params]} @(rf/subscribe [::sub/current-route])
+        asc-order? (= "asc" (:sort-order query-params))]
     [:<>
-     [:div.history-slider__group
-      [:div.onoffswitch
-       [:input
-        {:name "onoffswitch"
-         :class "onoffswitch-checkbox"
-         :checked diffs-tab?
-         :on-change #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
-                                   (if (-> % .-target .-checked) true false)])
-         :id "diffs"
-         :type "checkbox"}]
-       [:label.onoffswitch-label
-        {:for "diffs"}
-        [:span.onoffswitch-inner]
-        [:span.onoffswitch-switch]]]
-      [:span "Diffs"]]
+     [:div.history-diffs-order
+      [:div.history-slider__group
+       [:div.onoffswitch
+        [:input
+         {:name "onoffswitch"
+          :class "onoffswitch-checkbox"
+          :checked diffs-tab?
+          :on-change #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
+                                    (if diffs-tab? false true)])
+          :id "diffs"
+          :type "checkbox"}]
+        [:label.onoffswitch-label
+         {:for "diffs"}
+         [:span.onoffswitch-inner]
+         [:span.onoffswitch-switch]]]
+       [:span
+        {:on-click #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
+                                  (if diffs-tab? false true)])}
+        "Diffs"]]
+      [:a.history-sorting-group
+       {:href (common/route->url :entity path-params
+                                 (assoc query-params :sort-order (if asc-order? "desc" "asc")))}
+       (if asc-order?
+         [:<> [:i.fas.fa-caret-down] "Asc"]
+         [:<> [:i.fas.fa-caret-up] "Desc"])]]
      [:div.entity-histories__container
       (if loading?
         [:div.entity-map.entity-map--loading

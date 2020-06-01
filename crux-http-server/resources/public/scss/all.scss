@@ -607,10 +607,29 @@ ul.entity-group__value li::before {
 
 .history-slider__group {
     display: flex;
+    margin-right: 1rem;
     align-items: center;
-    margin-bottom: 1rem;
     font-weight: bold;
     font-size: .8rem;
+}
+
+.history-sorting-group {
+    text-decoration: none;
+    color: black;
+    font-size: .8rem;
+    font-weight: bold;
+    display: flex;
+    cursor: pointer;
+    align-items: center;
+    i {
+	margin-right: .5rem;
+	font-size: 1.5rem;
+      }
+}
+
+.history-diffs-order {
+    display: flex;
+    margin-bottom: 1rem;
 }
 
 .hidden {

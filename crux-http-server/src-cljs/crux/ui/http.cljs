@@ -10,7 +10,8 @@
  (fn [{:keys [db]} _]
    (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)]
      (when (seq query-params)
-       {:dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
+       {:scroll-top nil
+        :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
                      [:crux.ui.events/query-table-error nil]]
         :http-xhrio {:method :get
                      :uri (common/route->url :query
@@ -40,8 +41,9 @@
  ::fetch-entity
  (fn [{:keys [db]} _]
    (let [query-params (assoc (get-in db [:current-route :query-params]) :link-entities? true)]
-     {:dispatch-n [[:crux.ui.events/entity-right-pane-document-error nil]
-                   [:crux.ui.events/set-entity-right-pane-loading true]]
+     {:scroll-top nil
+      :dispatch-n [[:crux.ui.events/entity-right-pane-document-error nil]
+                   [:crux.ui.events/set-entity-result-pane-loading true]]
       :http-xhrio {:method :get
                    :uri (common/route->url :entity nil query-params)
                    :response-format (ajax-edn/edn-response-format)
