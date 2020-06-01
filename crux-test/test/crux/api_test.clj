@@ -393,8 +393,7 @@
                                        :crux.db/fn '(fn [ctx doc]
                                                       [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
 
-  (with-redefs [tx/tx-fns-enabled? true
-                tx/tx-fn-eval-cache (memoize eval)]
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (let [*server-api* (or *http-server-api* *api*)]
       (t/testing "replaces args doc with resulting ops"
         (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
