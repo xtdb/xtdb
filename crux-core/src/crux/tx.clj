@@ -194,8 +194,6 @@
 (defn- reset-tx-fn-error []
   (first (reset-vals! !last-tx-fn-error nil)))
 
-(def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
-
 (defn- ->tx-fn [{body :crux.db/fn
                  legacy-body :crux.db.fn/body}]
   (or (tx-fn-eval-cache body)
@@ -219,9 +217,6 @@
 (defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
                                        {:keys [index-store query-engine], :as tx-consumer}]
-  (when-not tx-fns-enabled?
-    (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
-
   (let [fn-id (c/new-id k)
         db (api/db query-engine tx-time)
         tx-fn (->tx-fn (q/entity db index-store fn-id))
