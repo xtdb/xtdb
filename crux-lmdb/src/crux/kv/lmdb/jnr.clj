@@ -4,9 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
-            [crux.lru :as lru]
-            [crux.memory :as mem]
-            [crux.index :as idx])
+            [crux.memory :as mem])
   (:import java.io.Closeable
            org.agrona.ExpandableDirectByteBuffer
            [org.lmdbjava CopyFlags Cursor Dbi DbiFlags DirectBufferProxy Env EnvFlags Env$MapFullException GetOp PutFlags Txn]))
@@ -116,7 +114,7 @@
   (close [_]
     (.close env)))
 
-(def kv {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version ::env-flags]
+(def kv {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags]
                            :as options}]
                      (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
                                       (io/file db-dir)
@@ -126,14 +124,11 @@
                        (try
                          (-> (map->LMDBJNRKv {:db-dir db-dir
                                               :env env
-                                              :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))})
-                             (lru/wrap-lru-cache options)
-                             (cond-> check-and-store-index-version idx/check-and-store-index-version))
+                                              :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))}))
                          (catch Throwable t
                            (.close env)
                            (throw t)))))
          :args (merge kv/options
-                      lru/options
                       {::env-flags {:doc "LMDB Flags"
                                     :crux.config/type [any? identity]}})})
 
