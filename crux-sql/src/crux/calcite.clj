@@ -313,28 +313,31 @@
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
-(defn- transform-result [tuple]
-  (let [tuple (map #(or (and (float? %) (double %))
-                        ;; Calcite enumerator wants millis for timestamps:
-                        (and (inst? %) (inst-ms %))
-                        (and (keyword? %) (str %))
-                        %)
-                   tuple)]
+(defn- transform-result [find-vars literals tuple]
+  (let [tuple (map (fn [find-v tuple-v]
+                     (or (literals find-v)
+                         (or (and (float? tuple-v) (double tuple-v))
+                             ;; Calcite enumerator wants millis for timestamps:
+                             (and (inst? tuple-v) (inst-ms tuple-v))
+                             (and (keyword? tuple-v) (str tuple-v))
+                             tuple-v)))
+                   find-vars tuple)]
     (if (= 1 (count tuple))
       (first tuple)
       (to-array tuple))))
 
-(defn- perform-query [node valid-time transaction-time q]
+(defn- ->enumerator [node valid-time transaction-time literals q]
   (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
       []
     (enumerator []
-      (let [db (crux/open-db node valid-time transaction-time)
+      (let [_ (log/debug "Executing query:" q)
+            db (crux/open-db node valid-time transaction-time)
             results (atom (crux/q db q))
             current (atom nil)]
         (proxy [org.apache.calcite.linq4j.Enumerator]
             []
           (current []
-            (transform-result @current))
+            (transform-result (:find q) literals @current))
           (moveNext []
             (reset! current (first @results))
             (swap! results next)
@@ -346,21 +349,21 @@
 
 (defn ^Enumerable scan [node ^String schema ^DataContext data-context x literals]
   (try
-      (let [{:keys [crux.sql.table/query]} (edn/read-string schema)
-            query (update query :args (fn [args] [(merge {:data-context data-context
-                                                          :lambdas (zipmap (map #(.-left ^Pair %) x)
-                                                                           (map #(.-right ^Pair %) x))}
-                                                         (into {} (map (fn [^Pair p]
-                                                                         [(symbol (.-left p)) (.-right p)])
-                                                                       literals))
-                                                         (into {} (map (fn [[k v]]
-                                                                         [v (.get data-context k)])
-                                                                       args)))]))]
-        (log/debug "Executing query:" query)
-        (perform-query node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") query))
-      (catch Throwable e
-        (log/error e)
-        (throw e))))
+    (let [literals (into {} (map (fn [^Pair p]
+                                   [(symbol (.-left p)) (.-right p)])
+                                 literals))
+          {:keys [crux.sql.table/query]} (edn/read-string schema)
+          query (update query :args (fn [args] [(merge {:data-context data-context
+                                                        :lambdas (zipmap (map #(.-left ^Pair %) x)
+                                                                         (map #(.-right ^Pair %) x))}
+                                                       (into {} (map (fn [[k v]]
+                                                                       [v (.get data-context k)])
+                                                                     args))
+                                                       literals)]))]
+      (->enumerator node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") literals query))
+    (catch Throwable e
+      (log/error e)
+      (throw e))))
 
 (defn ->expr [schema]
   (Expressions/constant (prn-str (dissoc schema :lambdas :literals))))
