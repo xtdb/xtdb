@@ -8,7 +8,9 @@
             [crux.io :as cio]
             [crux.query :as q]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [crux.api :as api]
+            [crux.tx :as tx])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
@@ -194,6 +196,26 @@
 
 (def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
 
+(defn- ->tx-fn [{body :crux.db/fn
+                 legacy-body :crux.db.fn/body}]
+  (or (tx-fn-eval-cache body)
+      (when legacy-body
+        (let [f (tx-fn-eval-cache legacy-body)]
+          (fn [ctx & args]
+            (apply f (api/db ctx) args))))))
+
+(defrecord TxFnContext [db-provider indexing-tx]
+  api/DBProvider
+  (db [ctx] (api/db db-provider (:crux.tx/tx-time indexing-tx)))
+  (db [ctx valid-time] (api/db db-provider valid-time))
+  (db [ctx valid-time tx-time] (api/db db-provider valid-time tx-time))
+  (open-db [ctx] (api/open-db db-provider (:crux.tx/tx-time indexing-tx)))
+  (open-db [ctx valid-time] (api/open-db db-provider valid-time))
+  (open-db [ctx valid-time tx-time] (api/open-db db-provider valid-time tx-time))
+
+  api/TransactionFnContext
+  (indexing-tx [_] indexing-tx))
+
 (defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
                                        {:keys [index-store query-engine], :as tx-consumer}]
@@ -201,8 +223,8 @@
     (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (cio/pr-edn-str tx-op)))))
 
   (let [fn-id (c/new-id k)
-        db (q/db query-engine tx-time tx-time)
-        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db index-store fn-id)
+        db (api/db query-engine tx-time)
+        tx-fn (->tx-fn (q/entity db index-store fn-id))
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
         args-content-hash (c/new-id args-doc)
 
@@ -218,14 +240,16 @@
                         {:failed? true})
 
               :else (try
-                      (let [conformed-tx-ops (->> (apply (tx-fn-eval-cache body) db args)
+                      (let [ctx (->TxFnContext query-engine tx)
+                            conformed-tx-ops (->> (apply tx-fn ctx args)
                                                   (mapv txc/conform-tx-op))
                             tx-events (mapv txc/->tx-event conformed-tx-ops)]
-                        {:tx-events tx-events
-                         :docs (into {args-content-hash {:crux.db/id args-doc-id
-                                                         :crux.db.fn/tx-events tx-events}}
-                                     (mapcat :docs)
-                                     conformed-tx-ops)})
+                        (let []
+                          {:tx-events tx-events
+                           :docs (into {args-content-hash {:crux.db/id args-doc-id
+                                                           :crux.db.fn/tx-events tx-events}}
+                                       (mapcat :docs)
+                                       conformed-tx-ops)}))
 
                       (catch Throwable t
                         (reset! !last-tx-fn-error t)
@@ -263,8 +287,6 @@
 
 (defmethod index-tx-event :default [[op & _] tx tx-consumer]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
-
-(def ^:dynamic *current-tx*)
 
 ;; TODO: Rename :crux.kv/stats on next index bump.
 (defn- update-stats [{:keys [indexer ^ExecutorService stats-executor] :as tx-consumer} docs-stats]
@@ -306,52 +328,51 @@
   (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
   (with-open [index-store (db/open-index-store indexer)]
-    (binding [*current-tx* (assoc tx ::txe/tx-events tx-events)]
-      (let [tx-consumer (assoc tx-consumer :index-store index-store)
-            res (reduce (fn [{:keys [history] :as acc} tx-event]
-                          (let [{:keys [pre-commit-fn etxs evict-eids docs]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
-                            (if (and pre-commit-fn (not (pre-commit-fn)))
-                              (reduced {::aborted? true
-                                        :docs (merge (:docs acc) docs)})
-                              (-> acc
-                                  (update :history with-etxs etxs)
-                                  (update :evict-eids set/union evict-eids)
-                                  (update :docs merge docs)))))
+    (let [tx-consumer (assoc tx-consumer :index-store index-store)
+          res (reduce (fn [{:keys [history] :as acc} tx-event]
+                        (let [{:keys [pre-commit-fn etxs evict-eids docs]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
+                          (if (and pre-commit-fn (not (pre-commit-fn)))
+                            (reduced {::aborted? true
+                                      :docs (merge (:docs acc) docs)})
+                            (-> acc
+                                (update :history with-etxs etxs)
+                                (update :evict-eids set/union evict-eids)
+                                (update :docs merge docs)))))
 
-                        {:history (->IndexStore+NewETXs index-store {})
-                         :evict-eids #{}
-                         :docs {}}
+                      {:history (->IndexStore+NewETXs index-store {})
+                       :evict-eids #{}
+                       :docs {}}
 
-                        tx-events)
-            committed? (not (::aborted? res))]
+                      tx-events)
+          committed? (not (::aborted? res))]
 
-        (db/submit-docs document-store
-                        (cond->> (:docs res)
-                          (not committed?) (into {} (filter (comp :crux.db.fn/failed? val)))))
+      (db/submit-docs document-store
+                      (cond->> (:docs res)
+                        (not committed?) (into {} (filter (comp :crux.db.fn/failed? val)))))
 
-        (if committed?
-          (do
-            (when-let [evict-eids (not-empty (:evict-eids res))]
-              (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
-                (db/submit-docs document-store tombstones)))
+      (if committed?
+        (do
+          (when-let [evict-eids (not-empty (:evict-eids res))]
+            (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
+              (db/submit-docs document-store tombstones)))
 
-            (when-let [docs (not-empty (:docs res))]
-              (db/index-docs indexer docs)
-              (update-stats tx-consumer (->> (vals docs)
-                                             (map doc-predicate-stats)))
+          (when-let [docs (not-empty (:docs res))]
+            (db/index-docs indexer docs)
+            (update-stats tx-consumer (->> (vals docs)
+                                           (map doc-predicate-stats)))
 
-              (db/submit-docs document-store docs))
+            (db/submit-docs document-store docs))
 
-            (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
+          (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
-          (do
-            (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-            (db/mark-tx-as-failed indexer tx)))
+        (do
+          (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
+          (db/mark-tx-as-failed indexer tx)))
 
-        (bus/send bus {:crux/event-type ::indexed-tx,
-                       ::submitted-tx tx,
-                       :committed? committed?
-                       ::txe/tx-events tx-events})))))
+      (bus/send bus {:crux/event-type ::indexed-tx,
+                     ::submitted-tx tx,
+                     :committed? committed?
+                     ::txe/tx-events tx-events}))))
 
 (defn with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
   (case op

@@ -16,9 +16,11 @@
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 (s/def :crux.db/evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
-(s/def :crux.db.fn/body (s/cat :fn #{'fn}
-                               :args (s/coll-of symbol? :kind vector? :min-count 1)
-                               :body (s/* any?)))
+
+(s/def :crux.db/fn
+  (s/cat :fn #{'fn}
+         :args (s/coll-of symbol? :kind vector? :min-count 1)
+         :body (s/* any?)))
 
 (defn- conform-tx-ops [tx-ops]
   (->> tx-ops
@@ -28,8 +30,7 @@
                tx-op)))
        (mapv vec)))
 
-(defprotocol PCruxNode
-  "Provides API access to Crux."
+(defprotocol DBProvider
   (db
     ^crux.api.ICruxDatasource [node]
     ^crux.api.ICruxDatasource [node ^Date valid-time]
@@ -60,8 +61,13 @@
 
   This DB opens up shared resources to make multiple requests faster - it must
   be `.close`d when you've finished using it (for example, in a `with-open`
-  block)")
+  block)"))
 
+(defprotocol TransactionFnContext
+  (indexing-tx [tx-fn-ctx]))
+
+(defprotocol PCruxNode
+  "Provides API access to Crux."
   (status [node]
     "Returns the status of this node as a map.")
 
@@ -151,7 +157,7 @@
                    (:crux.db/valid-time end)
                    (:crux.tx/tx-time end)))
 
-(extend-protocol PCruxNode
+(extend-protocol DBProvider
   ICruxAPI
   (db
     ([this] (.db this))
@@ -161,8 +167,10 @@
   (open-db
     ([this] (.openDB this))
     ([this ^Date valid-time] (.openDB this valid-time))
-    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time)))
+    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time))))
 
+(extend-protocol PCruxNode
+  ICruxAPI
   (status [this] (.status this))
 
   (tx-committed? [this submitted-tx] (.hasTxCommitted this submitted-tx))
