@@ -551,7 +551,7 @@
                  log))))))
 
 (t/deftest test-can-apply-transaction-fn
-  (with-redefs [tx/tx-fns-enabled? true]
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
           v4-ivan (assoc v1-ivan :name "IVAN")
           update-attribute-fn {:crux.db/id :update-attribute-fn
@@ -659,7 +659,7 @@
                   (map :crux.api/tx-ops))))))
 
 (t/deftest transaction-fn-return-values-457
-  (with-redefs [tx/tx-fns-enabled? true]
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (let [nil-fn {:crux.db/id :nil-fn
                   :crux.db/fn '(fn [ctx] nil)}
           false-fn {:crux.db/id :false-fn
