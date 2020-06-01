@@ -325,25 +325,24 @@
       (to-array tuple))))
 
 (defn- perform-query [node valid-time transaction-time q]
-  (let [db (crux/db node valid-time transaction-time)]
-    (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
-        []
-        (enumerator []
-          (let [snapshot (crux/new-snapshot db)
-                results (atom (crux/q db snapshot q))
-                current (atom nil)]
-            (proxy [org.apache.calcite.linq4j.Enumerator]
-                []
-              (current []
-                (transform-result @current))
-              (moveNext []
-                (reset! current (first @results))
-                (swap! results next)
-                (boolean @current))
-              (reset []
-                (throw (UnsupportedOperationException.)))
-              (close []
-                (.close snapshot))))))))
+  (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
+      []
+    (enumerator []
+      (let [db (crux/open-db node valid-time transaction-time)
+            results (atom (crux/q db q))
+            current (atom nil)]
+        (proxy [org.apache.calcite.linq4j.Enumerator]
+            []
+          (current []
+            (transform-result @current))
+          (moveNext []
+            (reset! current (first @results))
+            (swap! results next)
+            (boolean @current))
+          (reset []
+            (throw (UnsupportedOperationException.)))
+          (close []
+            (.close db)))))))
 
 (defn ^Enumerable scan [node ^String schema ^DataContext data-context x literals]
   (try
