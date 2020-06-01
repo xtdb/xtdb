@@ -82,3 +82,14 @@
 (defn- scroll-top []
   (set! (.. js/document -body -scrollTop) 0)
   (set! (.. js/document -documentElement -scrollTop) 0))
+
+(defn arrow-svg
+  [toggled?]
+  [:svg
+   {:class (if toggled? "arrow-toggle" "arrow-untoggle")
+    :height "24"
+    :id "arrow"
+    :viewBox "0 0 24 24"
+    :width "24"}
+   [:g {:fill "#111111"}
+    [:path {:d "M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"}]]])

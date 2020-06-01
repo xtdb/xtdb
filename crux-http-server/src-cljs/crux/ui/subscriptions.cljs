@@ -115,7 +115,6 @@
       :vt (or (:valid-time query-params) (str (t/now)))
       :tt (or (:transaction-time query-params) "Not Specified")
       :document document
-      :document-no-eid (dissoc document :crux.db/id)
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
 
 (rf/reg-sub
@@ -168,6 +167,33 @@
    (get-in db [:form-pane :query :view])))
 
 (rf/reg-sub
+ ::form-pane-history
+ (fn [db [_ component]]
+   (get-in db [:form-pane :history component])))
+
+(rf/reg-sub
+ ::query-form-history
+ (fn [db _]
+   (let [valid-time #(common/datetime->date-time
+                      (str (:valid-time % (t/now))))
+         transaction-time #(common/datetime->date-time
+                            (:transaction-time %))]
+     (mapv
+      (fn [x]
+        {"q" (common/query-params->formatted-edn-string
+              (dissoc x :valid-time :transaction-time))
+         "vtd" (:date (valid-time x))
+         "vtt" (:time (valid-time x))
+         "ttd" (:date (transaction-time x))
+         "ttt" (:time (transaction-time x))})
+      (:query-history db)))))
+
+(rf/reg-sub
+ ::entity-form-history
+ (fn [db _]
+   (:entity-history db)))
+
+(rf/reg-sub
  ::form-pane-hidden?
  (fn [db _]
-   (get-in db [:form-pane :hidden?])))
+   (get-in db [:form-pane :hidden?] true)))

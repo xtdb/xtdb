@@ -551,7 +551,7 @@ $spacing: 0.5rem;
 
     @media screen and (max-width: 767px) {
 	.table__main {
-	    min-height: initial;
+	    min-height: 50vh;
 	    max-height: initial;
 	    height: 90%;
 	}

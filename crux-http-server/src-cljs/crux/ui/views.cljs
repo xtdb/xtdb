@@ -67,36 +67,79 @@
 
 (defn query-form
   []
-  [fork/form {:form-id "form-query"
-              :validation query-validation
-              :prevent-default? true
-              :clean-on-unmount? true
-              :initial-values @(rf/subscribe [::sub/initial-values-query])
-              :on-submit #(rf/dispatch [::events/go-to-query-view %])}
-   (fn [{:keys [values
-                errors
-                touched
-                set-values
-                set-touched
-                form-id
-                handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])]
-       [:form
-        {:id form-id
-         :on-submit handle-submit}
-        [:div.input-textarea
-         [cm/code-mirror (get values "q")
-          {:class "cm-textarea__query"
-           :on-change #(set-values {"q" %})
-           :on-blur #(set-touched "q")}]
-         (when (and (get touched "q")
-                    (get errors "q"))
-           [:p.input-error (get errors "q")])]
-        [vt-tt-inputs props]
-        [:button.button
-         {:type "submit"
-          :disabled (or loading? (some some? (vals errors)))}
-         "Submit Query"]]))])
+  ;; we need to create a cm instance holder to modify the CodeMirror code
+  (let [cm-instance (atom nil)]
+    (fn []
+      [fork/form {:form-id "form-query"
+                  :validation query-validation
+                  :prevent-default? true
+                  :clean-on-unmount? true
+                  :initial-values @(rf/subscribe [::sub/initial-values-query])
+                  :on-submit #(rf/dispatch [::events/go-to-query-view %])}
+       (fn [{:keys [values
+                    errors
+                    touched
+                    set-values
+                    set-touched
+                    form-id
+                    handle-submit] :as props}]
+         (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
+               form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])]
+           [:<>
+            [:form
+             {:id form-id
+              :on-submit handle-submit}
+             [:div.input-textarea
+              [cm/code-mirror (get values "q")
+               {:cm-instance cm-instance
+                :class "cm-textarea__query"
+                :on-change #(set-values {"q" %})
+                :on-blur #(set-touched "q")}]
+              [:div.expand-collapse__group.form-pane__history
+               {:on-click #(rf/dispatch [::events/toggle-form-history :query])}
+               [:span.expand-collapse__txt
+                [:span.form-pane__arrow
+                 [common/arrow-svg form-pane-history-q]
+                 "History"]]]
+              [:div.expand-collapse-transition
+               {:class (if form-pane-history-q "expand" "collapse")}
+               [:div.form-pane__history-scrollable
+                (for [{:strs [q vtd vtt ttd ttt]} @(rf/subscribe [::sub/query-form-history])]
+                  ^{:key (gensym)}
+                  [:div.form-pane__history-scrollable-el
+                   [:div.form-pane__history-delete
+                    {:on-click #(rf/dispatch [::events/remove-query-from-local-storage q])}
+                    [:i.fas.fa-trash-alt]]
+                   [:div.form-pane__history-scrollable-el-left
+                    {:on-click #(do
+                                  (rf/dispatch [::events/toggle-form-history :query])
+                                  (.setValue @cm-instance q)
+                                  (set-values
+                                   {"q" q
+                                    "vtd" vtd
+                                    "vtt" vtt
+                                    "ttd" ttd
+                                    "ttt" ttt}))}
+                    [:div.form-pane__history-headings
+                     {:style {:margin-bottom ".5rem"}}
+                     "Query"]
+                    [:div {:style {:margin-bottom "1rem"}}
+                     [cm/code-mirror-static q {:class "cm-textarea__query"}]]
+                    [:div
+                     [:span.form-pane__history-headings "Valid Time: "]
+                     [:span.form-pane__history-txt (str vtd " " vtt)]]
+                    (when (and ttd ttt)
+                      [:div
+                       [:span.form-pane__history-headings "Transaction Time: "]
+                       [:span.form-pane__history-txt (str ttd " " ttt)]])]])]]
+              (when (and (get touched "q")
+                         (get errors "q"))
+                [:p.input-error (get errors "q")])]
+             [vt-tt-inputs props]
+             [:button.button
+              {:type "submit"
+               :disabled (or loading? (some some? (vals errors)))}
+              "Submit Query"]]]))])))
 
 (defn entity-validation
   [values]
@@ -182,7 +225,7 @@
 
 (defn entity-document
   []
-  (let [{:keys [eid vt tt document-no-eid linked-entities error]}
+  (let [{:keys [eid vt tt document linked-entities error]}
         @(rf/subscribe [::sub/entity-result-pane-document])
         loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
     [:div.entity-map__container
@@ -193,12 +236,7 @@
          [:div.error-box error]
          [:<>
           [::div.entity-map
-           [:div.entity-group
-            [:div.entity-group__key
-             ":crux.db/id"]
-            [:div.entity-group__value (str eid)]]
-           [:hr.entity-group__separator]
-           [cm/code-snippet document-no-eid linked-entities]]
+           [cm/code-snippet document linked-entities]]
           [vt-tt-entity-box vt tt]]))]))
 
 (defn- entity-history-document []
@@ -206,19 +244,21 @@
         entity-error @(rf/subscribe [::sub/entity-result-pane-document-error])
         loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
     [:<>
-     [:div.pane-nav
-      [:div.pane-nav__tab
-       {:class (if diffs-tab?
-                 "pane-nav__tab--hover"
-                 "pane-nav__tab--active")
-        :on-click #(rf/dispatch [::events/set-entity-result-pane-history-diffs? false])}
-       "Documents"]
-      [:div.pane-nav__tab
-       {:class (if diffs-tab?
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-result-pane-history-diffs? true])}
-       "Diffs"]]
+     [:div.history-slider__group
+      [:div.onoffswitch
+       [:input
+        {:name "onoffswitch"
+         :class "onoffswitch-checkbox"
+         :checked diffs-tab?
+         :on-change #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
+                                   (if (-> % .-target .-checked) true false)])
+         :id "diffs"
+         :type "checkbox"}]
+       [:label.onoffswitch-label
+        {:for "diffs"}
+        [:span.onoffswitch-inner]
+        [:span.onoffswitch-switch]]]
+      [:span "Diffs"]]
      [:div.entity-histories__container
       (if loading?
         [:div.entity-map.entity-map--loading
@@ -276,7 +316,8 @@
          [:div.entity-raw-edn
           (with-out-str (pprint/pprint document))]))]))
 
-(defn entity-bottom-pane []
+
+(defn entity-pane []
   (let [pane-view @(rf/subscribe [::sub/entity-pane-view])]
     (if (= pane-view :entity-root)
       [:div.entity-root
@@ -291,29 +332,25 @@
 
        [:div.pane-nav
         [:div.pane-nav__tab
-         {:class (if (= pane-view :document)
-                   "pane-nav__tab--active"
-                   "pane-nav__tab--hover")
+         {:class (when (= pane-view :document) "pane-nav__tab--active")
           :on-click #(rf/dispatch [::events/set-entity-pane-document])}
          "Document"]
         [:div.pane-nav__tab
-         {:class (if (= pane-view :history)
+         {:class (when (= pane-view :history) "pane-nav__tab--active")
+          :on-click #(rf/dispatch [::events/set-entity-pane-history])}
+         "History"]
+        [:div.pane-nav__tab
+         {:class (if (= pane-view :raw-edn)
                    "pane-nav__tab--active"
                    "pane-nav__tab--hover")
-          :on-click #(rf/dispatch [::events/set-entity-pane-history])}
-         "History"]]
-       [:div.pane-nav__tab
-        {:class (if (= pane-view :raw-edn)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-         :on-click #(rf/dispatch [::events/set-entity-pane-raw-edn])}
-       "Raw EDN"]]
-       (case pane-view
-         :document [entity-document]
-         :history [entity-history-document]
-         :raw-edn [entity-raw-edn]
-         nil)])))
->>>>>>> Move editor on top
+          :on-click #(rf/dispatch [::events/set-entity-pane-raw-edn])}
+         "Raw EDN"]]
+       [:section.document-section
+        (case pane-view
+          :document [entity-document]
+          :history [entity-history-document]
+          :raw-edn [entity-raw-edn]
+          nil)]])))
 
 (defn form-pane
   []
@@ -326,20 +363,24 @@
       (if form-pane-hidden?
         [:i.fas.fa-expand]
         [:i.fas.fa-compress])
-      [:span.expand-collapse__txt "Console"]]
+      [:span.expand-collapse__txt
+       {:style {:margin-left ".5rem"}}
+       "Console"]]
 
      [:div.form-pane__content.expand-collapse-transition
       {:class (if form-pane-hidden? "collapse" "expand")}
-      [:div.expand-collapse__group
+
+      [:div.expand-collapse__group.form-pane__arrow
        {:on-click #(rf/dispatch [::events/set-form-pane-query-view])}
-       [:i.fas {:class (if form-pane-query-view  "fa-compress-alt" "fa-expand-alt")}]
+       [common/arrow-svg form-pane-query-view]
        [:span.expand-collapse__txt "Query"]]
       [:div.expand-collapse-transition
        {:class (if form-pane-query-view "expand" "collapse")}
        [query-form]]
-      [:div.expand-collapse__group
+
+      [:div.expand-collapse__group.form-pane__arrow
        {:on-click #(rf/dispatch [::events/set-form-pane-entity-view])}
-       [:i.fas {:class (if form-pane-entity-view "fa-compress-alt" "fa-expand-alt")}]
+       [common/arrow-svg form-pane-entity-view]
        [:span.expand-collapse__txt "Entity"]]
       [:div.expand-collapse-transition
        {:class (if form-pane-entity-view "expand" "collapse")}
@@ -369,5 +410,5 @@
             [:span.back-button__text "Back"]]]
           (case name
             :query [query-table]
-            :entity [entity-bottom-pane]
+            :entity [entity-pane]
             [:div "no matching"])]])]]))

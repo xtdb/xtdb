@@ -35,6 +35,11 @@
    (update-in db [:form-pane :hidden?] #(if (seq bool) (first bool) (not %)))))
 
 (rf/reg-event-db
+ ::toggle-form-history
+ (fn [db [_ component]]
+   (update-in db [:form-pane :history component] not)))
+
+(rf/reg-event-db
  ::set-form-pane-entity-view
  (fn [db _]
    (update-in db [:form-pane :entity :view] not)))
@@ -55,6 +60,28 @@
    (assoc-in db [:query :result-pane :loading?] bool)))
 
 (rf/reg-event-fx
+ ::inject-local-storage
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc :query-history (reader/read-string
+                                   (.getItem js/window.localStorage "query"))))}))
+
+(rf/reg-event-fx
+ ::remove-query-from-local-storage
+ (fn [{:keys [db]} [_ q]]
+   (let [query-history (:query-history db)
+         updated-history (into [] (remove #(= q
+                                              (common/query-params->formatted-edn-string %))
+                                          query-history))]
+     {:db (assoc db :query-history updated-history)
+      :local-storage ["query" updated-history]})))
+
+(rf/reg-fx
+ :local-storage
+ (fn [[k data]]
+   (.setItem js/window.localStorage k data)))
+
+(rf/reg-event-fx
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
    (let [{:strs [q vtd vtt ttd ttt]} values
@@ -64,8 +91,12 @@
                         {:valid-time (common/date-time->datetime vtd vtt)
                          :transaction-time (common/date-time->datetime ttd ttt)})
                        (remove #(nil? (second %)))
-                       (into {}))]
-     {:dispatch [:navigate :query {} query-params]})))
+                       (into {}))
+         current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
+         updated-history (conj (into [] (remove #(= query-params %) current-storage)) query-params)]
+     {:db (assoc db :query-history updated-history)
+      :dispatch [:navigate :query {} query-params]
+      :local-storage ["query" updated-history]})))
 
 (rf/reg-event-fx
  ::set-entity-pane-document

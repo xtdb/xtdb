@@ -44,12 +44,12 @@
               :to end})))
 
 (defn code-mirror
-  [initial-value {:keys [class stats on-change
+  [initial-value {:keys [cm-instance class stats on-change
                          on-blur on-cm-init]}]
   (let [value-atom (atom (or initial-value ""))
         on-change (or on-change (constantly nil))
         on-blur (or on-blur (constantly nil))
-        cm-inst (atom nil)
+        cm-inst (or cm-instance (atom nil))
         indexes (when (map? stats) (keys stats))]
     (r/create-class
      {:component-did-mount
@@ -62,8 +62,6 @@
                         :autoRefresh true
                         :value @value-atom
                         :theme "eclipse"
-                        :foldGutter true
-                        :gutters #js ["CodeMirror-linenumbers", "CodeMirror-foldgutter"]
                         :autoCloseBrackets true
                         :hintOptions #js {:hint (partial autocomplete indexes)
                                           :completeSingle false}
@@ -97,6 +95,29 @@
       (fn []
         [:div.textarea
          {:class class}])})))
+
+(defn code-mirror-static
+  [initial-value {:keys [cm-instance class]}]
+  (let [value-atom (atom (or initial-value ""))
+        cm-inst (or cm-instance (atom nil))]
+    (r/create-class
+     {:component-did-mount
+      (fn [this]
+        (let [el (rd/dom-node this)
+              opts #js {:lineNumbers false
+                        :readOnly true
+                        :undoDepth 100000000
+                        :historyEventDelay 1
+                        :viewportMargin js/Infinity
+                        :autoRefresh true
+                        :value @value-atom
+                        :theme "eclipse"}]
+          (reset! cm-inst (js/CodeMirror. el opts))))
+      :reagent-render
+      (fn []
+        [:div.CodeMirror-readOnly
+         [:div.textarea
+          {:class class}]])})))
 
 
 (defn indent-code
@@ -147,7 +168,7 @@
                                  (with-out-str
                                    (pprint/with-pprint-dispatch
                                      pprint/code-dispatch
-                                     (pprint/pprint (str m))))]
+                                     (pprint/pprint m)))]
                   (map? m) [:<>
                             [unfolding-icon state m parent-keys]
                             (when (get @state parent-keys)
