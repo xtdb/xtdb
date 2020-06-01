@@ -16,7 +16,7 @@
            crux.codec.EntityTx
            crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
-           (java.util Comparator Date UUID)
+           (java.util Comparator Date List UUID)
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
@@ -278,16 +278,17 @@
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get var->range-constraints v)
-        e-range-constraints (get var->range-constraints e)]
+        e-range-constraints (get var->range-constraints e)
+        nested-index-store (db/open-nested-index-store index-store)]
     (if (= (:v names) (first order))
-      (let [v-idx (idx/new-doc-attribute-value-entity-value-index index-store a entity-resolver-fn)
-            e-idx (idx/new-doc-attribute-value-entity-entity-index index-store a v-idx entity-resolver-fn)]
+      (let [v-idx (idx/new-doc-attribute-value-entity-value-index nested-index-store a entity-resolver-fn)
+            e-idx (idx/new-doc-attribute-value-entity-entity-index nested-index-store a v-idx entity-resolver-fn)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints v-idx v-range-constraints)
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)))
-      (let [e-idx (idx/new-doc-attribute-entity-value-entity-index index-store a entity-resolver-fn)
-            v-idx (idx/new-doc-attribute-entity-value-value-index index-store a e-idx entity-resolver-fn)]
+      (let [e-idx (idx/new-doc-attribute-entity-value-entity-index nested-index-store a entity-resolver-fn)
+            v-idx (idx/new-doc-attribute-entity-value-value-index nested-index-store a e-idx entity-resolver-fn)]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/update-binary-join-order! binary-idx
                                        (idx/wrap-with-range-constraints e-idx e-range-constraints)
@@ -488,30 +489,17 @@
                                                  {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
-(defrecord VarBinding [e-var var attr result-index join-depth result-name type value?])
+(defrecord VarBinding [e-var var attr result-index result-name type value?])
 
-;; NOTE: result-index is the index into join keys, it's the var's
-;; position into vars-in-join-order. The join-depth is the depth at
-;; which the var can first be accessed, that is, its e-var have had at
-;; least one participating clause fully joined and is part of the
-;; active result tuple. That is, its v-var, not necessarily this var,
-;; has been joined as well. There are subtleties to this, so take this
-;; explanation with a grain of salt.
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index max-join-depth vars]
   (->> (for [var vars
-             :let [e (get v-var->e var var)
-                   result-index (get var->values-result-index var)
-                   join-depth (or (max (long (get var->values-result-index e -1))
-                                       (long (get var->values-result-index (get e->v-var e) -1))
-                                       (long result-index))
-                                  (dec (long max-join-depth)))]]
+             :let [e-var (get v-var->e var var)]]
          [var (map->VarBinding
-               {:e-var e
+               {:e-var e-var
                 :var var
                 :attr (get var->attr var)
-                :result-index result-index
-                :join-depth join-depth
-                :result-name e
+                :result-index (get var->values-result-index var)
+                :result-name e-var
                 :type :entity
                 :value? false})])
        (into {})))
@@ -521,7 +509,6 @@
    {:var var
     :result-name (symbol "crux.query.value" (name var))
     :result-index result-index
-    :join-depth result-index
     :type type
     :value? true}))
 
@@ -545,26 +532,18 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
-(defn- bound-result-for-var [index-store var->bindings join-keys join-results var]
+(defn- bound-result-for-var [index-store var->bindings ^List join-keys var]
   (let [var-binding ^VarBinding (get var->bindings var)]
-    (if (.value? var-binding)
-      (get join-results (.result-name var-binding))
-      (when-let [etx ^EntityTx (get join-results (.e-var var-binding))]
-        (db/decode-value index-store
-                         (get join-keys (.result-index var-binding))
-                         (c/->id-buffer (.eid etx)))))))
+    (db/decode-value index-store (.get join-keys (.result-index var-binding)))))
 
 (declare build-sub-query)
 
-(defn- calculate-constraint-join-depth
-  ([var->bindings vars]
-   (calculate-constraint-join-depth var->bindings vars :join-depth))
-  ([var->bindings vars var-k]
-   (->> (for [var vars]
-          (get-in var->bindings [var var-k] -1))
-        (apply max -1)
-        (long)
-        (inc))))
+(defn- calculate-constraint-join-depth [var->bindings vars]
+  (->> (for [var vars]
+         (get-in var->bindings [var :result-index] -1))
+       (apply max -1)
+       (long)
+       (inc)))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
@@ -581,15 +560,15 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         {:join-depth pred-join-depth
          :constraint-fn
-         (fn pred-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn pred-constraint [index-store db idx-id->idx join-keys]
            (let [[pred-fn & args] (for [arg (cons pred-fn args)]
                                     (if (logic-var? arg)
-                                      (bound-result-for-var index-store var->bindings join-keys join-results arg)
+                                      (bound-result-for-var index-store var->bindings join-keys arg)
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
                  (idx/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
-               join-results)))})))
+               pred-result)))})))
 
 ;; TODO: For or (but not or-join) it might be possible to embed the
 ;; entire or expression into the parent join via either OrVirtualIndex
@@ -605,12 +584,11 @@
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
-  (let [eid (get (first args) e)]
-    (when-let [^EntityTx entity-tx (entity-resolver-fn eid)]
-      (let [v (c/->value-buffer v)
-            [[found-v _]] (db/aev index-store (c/->id-buffer a) eid v entity-resolver-fn)]
-        (when (and found-v (mem/buffers=? v found-v))
-          [])))))
+  (let [eid (get (first args) e)
+        v (c/->value-buffer v)
+        [found-v] (db/aev index-store (c/->id-buffer a) eid v entity-resolver-fn)]
+    (when (and found-v (mem/buffers=? v found-v))
+      [])))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
@@ -631,10 +609,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn or-constraint [index-store db idx-id->idx join-keys]
            (let [args (when (seq bound-vars)
                         [(->> (for [var bound-vars]
-                                (bound-result-for-var index-store var->bindings join-keys join-results var))
+                                (bound-result-for-var index-store var->bindings join-keys var))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -664,9 +642,9 @@
                                                         var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)]
                                             (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                               (if has-free-vars?
-                                                (vec (for [[join-keys join-results] idx-seq]
+                                                (vec (for [join-keys idx-seq]
                                                        (vec (for [var free-vars-in-join-order]
-                                                              (bound-result-for-var index-store var->bindings join-keys join-results var)))))
+                                                              (bound-result-for-var index-store var->bindings join-keys var)))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -675,7 +653,7 @@
                                          (distinct)
                                          (vec))]
                    (idx/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map var->range-constraints free-vars-in-join-order))))
-               join-results)))})))
+               true)))})))
 
 ;; TODO: Unification could be improved by using dynamic relations
 ;; propagating knowledge from the first var to the next. Currently
@@ -685,26 +663,25 @@
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unification-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars)
               args (vec (for [arg args]
                           (if (logic-var? arg)
                             arg
-                            (->> (map encode-value-fn (idx/vectorize-value arg))
+                            (->> (map encode-value-fn (c/vectorize-value arg))
                                  (into (sorted-set-by mem/buffer-comparator))))))]]
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
-         (fn unification-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn unification-constraint [index-store db idx-id->idx join-keys]
            (let [values (for [arg args]
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
                               (->> (get join-keys result-index)
                                    (sorted-set-by mem/buffer-comparator)))
                             arg))]
-             (when (case op
-                     == (boolean (not-empty (apply set/intersection values)))
-                     != (empty? (apply set/intersection values)))
-               join-results)))})))
+             (case op
+               == (boolean (not-empty (apply set/intersection values)))
+               != (empty? (apply set/intersection values)))))})))
 
 (defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings stats]
   (for [not-clause not-clauses
@@ -718,24 +695,20 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [index-store db idx-id->idx join-keys join-results]
+         (fn not-constraint [index-store db idx-id->idx join-keys]
            (with-open [index-store ^Closeable (open-index-store db)]
              (let [db (assoc db :index-store index-store)
                    args (when (seq not-vars)
                           [(->> (for [var not-vars]
-                                  (bound-result-for-var index-store var->bindings join-keys join-results var))
+                                  (bound-result-for-var index-store var->bindings join-keys var))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
-               (when (empty? (idx/layered-idx->seq n-ary-join))
-                 join-results))))})))
+               (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
-(defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys join-results]
-  (reduce
-   (fn [results constraint]
-     (when results
-       (constraint index-store db idx-id->idx join-keys results)))
-   join-results
-   (get depth->constraints (count join-keys))))
+(defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys]
+  (->> (get depth->constraints (count join-keys))
+       (every? (fn [f]
+                 (f index-store db idx-id->idx join-keys)))))
 
 (defn- potential-bpg-pair-vars [g vars]
   (for [var vars
@@ -979,8 +952,8 @@
                               (fn [_]
                                 (compile-sub-query encode-value-fn where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx encode-value-fn var->joins)
-        constrain-result-fn (fn [join-keys join-results]
-                              (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys join-results))
+        constrain-result-fn (fn [join-keys]
+                              (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys))
         unary-join-index-groups (for [v vars-in-join-order]
                                   (for [{:keys [id idx-fn name] :as join} (get var->joins v)]
                                     (assoc (or (get idx-id->idx id) (idx-fn encode-value-fn)) :name name)))]
@@ -997,7 +970,7 @@
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :attr-stats (cio/pr-edn-str attr-stats))
     (log/debug :var->bindings (cio/pr-edn-str var->bindings))
-    {:n-ary-join (when (constrain-result-fn [] [])
+    {:n-ary-join (when (constrain-result-fn [])
                    (-> (mapv idx/new-unary-join-virtual-index unary-join-index-groups)
                        (idx/new-n-ary-join-layered-virtual-index)
                        (idx/new-n-ary-constraining-layered-virtual-index constrain-result-fn)))
@@ -1054,11 +1027,10 @@
 
 (defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
-         (if-let [^EntityTx entity-tx (and (c/valid-id? value)
-                                           (entity-resolver-fn value))]
-           (let [content-hash (.content-hash entity-tx)]
-             (-> (db/fetch-docs document-store #{content-hash})
-                 (get content-hash)))
+         (if-let [content-hash (and (c/valid-id? value)
+                                    (c/new-id (entity-resolver-fn value)))]
+           (-> (db/fetch-docs document-store #{content-hash})
+               (get content-hash))
            value))))
 
 (defn open-index-store ^java.io.Closeable [{:keys [query-engine index-store] :as db}]
@@ -1144,7 +1116,7 @@
                                            (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                            (dissoc :args))))
      (validate-args args)
-     (let [entity-resolver-fn (cond-> #(db/entity-as-of index-store % valid-time transact-time)
+     (let [entity-resolver-fn (cond-> #(db/entity-as-of-resolver index-store % valid-time transact-time)
                                 (::entity-cache? options) (with-entity-resolver-cache options))
            rule-name->rules (rule-name->rules rules)
 
@@ -1164,9 +1136,9 @@
          (throw (IllegalArgumentException.
                  (str "Order by requires a var from :find. unreturned var: " var))))
 
-       (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
+       (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                 (bound-result-for-var index-store var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var index-store var->bindings join-keys var))]]
                   (if full-results?
                     (build-full-results db bound-result-tuple)
                     (vec bound-result-tuple)))

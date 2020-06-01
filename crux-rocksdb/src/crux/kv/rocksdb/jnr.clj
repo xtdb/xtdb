@@ -6,9 +6,7 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
-            [crux.memory :as mem]
-            [crux.lru :as lru]
-            [crux.index :as idx])
+            [crux.memory :as mem])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -270,7 +268,7 @@
     (.rocksdb_writeoptions_destroy rocksdb write-options)))
 
 (def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync?
                             ::db-options ::disable-wal?]
                      :as options}]
                (init-rocksdb-jnr!)
@@ -299,12 +297,9 @@
                  (-> (map->RocksJNRKv {:db-dir db-dir
                                        :db db
                                        :options opts
-                                       :write-options write-options})
-                     (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                     (lru/wrap-lru-cache options))))
+                                       :write-options write-options}))))
 
    :args (merge kv/options
-                lru/options
                 {::db-options {:doc "RocksDB Options"
                                :crux.config/type :crux.config/string}
                  ::disable-wal? {:doc "Disable Write Ahead Log"
