@@ -5,9 +5,7 @@
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem]
-            [crux.lru :as lru]
-            [crux.index :as idx])
+            [crux.memory :as mem])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
@@ -256,7 +254,7 @@
     (env-close env)))
 
 (def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::kv/check-and-store-index-version ::env-flags] :as options}]
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags] :as options}]
                (let [env-flags (or env-flags
                                    (bit-or default-env-flags
                                            (if sync?
@@ -268,15 +266,12 @@
                    (-> (map->LMDBKv {:db-dir db-dir
                                      :env env
                                      :env-flags env-flags
-                                     :dbi (dbi-open env)})
-                       (cond-> check-and-store-index-version idx/check-and-store-index-version)
-                       (lru/wrap-lru-cache options))
+                                     :dbi (dbi-open env)}))
                    (catch Throwable t
                      (env-close env)
                      (throw t)))))
 
    :args (-> (merge kv/options
-                    lru/options
                     {::env-flags {:doc "LMDB Flags"
                                   :crux.config/type :crux.config/nat-int}})
              (update ::kv/db-dir assoc :required? true, :default "data"))})
