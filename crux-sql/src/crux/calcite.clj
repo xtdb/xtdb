@@ -8,7 +8,8 @@
             [crux.api :as crux]
             [crux.calcite.types]
             crux.db)
-  (:import crux.calcite.CruxTable
+  (:import clojure.lang.Symbol
+           crux.calcite.CruxTable
            [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
            [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
@@ -22,16 +23,15 @@
            org.apache.calcite.jdbc.JavaTypeFactoryImpl
            org.apache.calcite.linq4j.Enumerable
            [org.apache.calcite.linq4j.function Function0 Function1 Function2]
-           [org.apache.calcite.linq4j.tree Expression Expressions MethodCallExpression ParameterExpression]
+           [org.apache.calcite.linq4j.tree Expression Expressions MethodCallExpression ParameterExpression Primitive]
            org.apache.calcite.rel.RelFieldCollation
-           [org.apache.calcite.rel.type RelDataTypeFactory RelDataTypeFactory$Builder]
+           [org.apache.calcite.rel.type RelDataType RelDataTypeFactory RelDataTypeFactory$Builder RelDataTypeField]
            [org.apache.calcite.rex RexCall RexDynamicParam RexInputRef RexLiteral RexNode RexVariable]
            org.apache.calcite.runtime.SqlFunctions
            [org.apache.calcite.sql.fun SqlStdOperatorTable SqlTrimFunction$Flag]
            org.apache.calcite.sql.SqlKind
            org.apache.calcite.sql.type.SqlTypeName
-           [org.apache.calcite.util BuiltInMethod Pair]
-           clojure.lang.Symbol))
+           [org.apache.calcite.util BuiltInMethod Pair]))
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
 
@@ -42,7 +42,7 @@
     (if (ratio? z) (long z) z)))
 
 (defn -mod [x y]
-  (int (mod x y)))
+  (mod x y))
 
 (defn -like [s pattern]
   (SqlFunctions/like s pattern))
@@ -302,20 +302,24 @@
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
   (-> schema (enrich-limit limit) (enrich-offset offset)))
 
-(defn- transform-result [find-vars literals tuple]
-  (let [tuple (map (fn [find-v tuple-v]
-                     (or (literals find-v)
-                         (or (and (float? tuple-v) (double tuple-v))
-                             ;; Calcite enumerator wants millis for timestamps:
-                             (and (inst? tuple-v) (inst-ms tuple-v))
-                             (and (keyword? tuple-v) (str tuple-v))
-                             tuple-v)))
-                   find-vars tuple)]
+(defn- coerce-num [v clazz]
+  (if-let [p (or (Primitive/of clazz) (Primitive/ofBox clazz))]
+    (.number p v)
+    v))
+
+(defn- transform-result [column-types tuple]
+  (let [tuple (map (fn [clazz v]
+                     (cond-> v
+                       (keyword? v) str
+                       (inst? v) inst-ms
+                       (and clazz (instance? clazz v)) identity
+                       (and clazz (number? v)) (coerce-num clazz)))
+                   column-types tuple)]
     (if (= 1 (count tuple))
       (first tuple)
       (to-array tuple))))
 
-(defn- ->enumerator [node valid-time transaction-time literals q]
+(defn- ->enumerator [node valid-time transaction-time column-types q]
   (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
       []
     (enumerator []
@@ -326,7 +330,7 @@
         (proxy [org.apache.calcite.linq4j.Enumerator]
             []
           (current []
-            (transform-result (:find q) literals @current))
+            (transform-result column-types @current))
           (moveNext []
             (reset! current (first @results))
             (swap! results next)
@@ -336,19 +340,17 @@
           (close []
             (.close db)))))))
 
-(defn ^Enumerable scan [node ^Pair schema+expressions ^DataContext data-context]
+(defn ^Enumerable scan [node ^Pair schema+expressions column-types ^DataContext data-context]
   (try
-    (let [
-          literals (into {} (map (fn [^Pair p]
-                                   [(symbol (.-left p)) (.-right p)])
-                                 (.-right schema+expressions)))
-          {:keys [crux.sql.table/query]} (edn/read-string (.-left schema+expressions))
+    (let [{:keys [crux.sql.table/query]} (edn/read-string (.-left schema+expressions))
           query (update query :args (fn [args] [(merge {:data-context data-context}
                                                        (into {} (map (fn [[k v]]
                                                                        [v (.get data-context k)])
                                                                      args))
-                                                       literals)]))]
-      (->enumerator node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") literals query))
+                                                       (into {} (map (fn [^Pair p]
+                                                                       [(symbol (.-left p)) (.-right p)])
+                                                                     (.-right schema+expressions))))]))]
+      (->enumerator node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") column-types query))
     (catch Throwable e
       (log/error e)
       (throw e))))
@@ -358,6 +360,9 @@
                                (Expressions/newArrayInit Pair ^List (map (fn [[k l]]
                                                                            (Expressions/constant (Pair. (str k) l)))
                                                                          (:literals schema))))))
+
+(defn ->column-types [^RelDataType x]
+  (Expressions/constant ^List (map #(.getJavaClass jtf (.getType ^RelDataTypeField %)) (.getFieldList x))))
 
 (defn clojure-helper-fn [f]
   (fn [& args]
