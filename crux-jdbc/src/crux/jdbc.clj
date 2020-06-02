@@ -3,7 +3,6 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.node :as n]
             [crux.tx :as tx]
             [next.jdbc :as jdbc]
@@ -86,7 +85,7 @@
   (submit-docs [this id-and-docs]
     (doseq [[id doc] id-and-docs
             :let [id (str id)]]
-      (if (idx/evicted-doc? doc)
+      (if (c/evicted-doc? doc)
         (do
           (insert-event! ds id doc "docs")
           (evict-docs! ds id (nippy/freeze doc)))
