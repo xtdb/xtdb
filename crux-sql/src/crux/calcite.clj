@@ -180,44 +180,41 @@
 
       n))
 
-(defn- post-process
+(defn- ->vars+clauses+exprs
   "Swaps out Calcs/Predicates for symbols and clauses."
-  [schema clauses]
+  [schema nodes]
   (let [args (atom {})
         literals (atom {})
-        calc-clauses (atom [])
-        clauses (postwalk (fn [x]
-                            (condp instance? x
+        clauses (atom [])]
+    [(postwalk (fn [x]
+                 (condp instance? x
 
-                              Expression
-                              (let [s (gensym)]
-                                (swap! literals assoc s x)
-                                s)
+                   Expression
+                   (let [s (gensym)]
+                     (swap! literals assoc s x)
+                     s)
 
-                              ArbitraryFn
-                              (let [s (gensym)]
-                                (swap! calc-clauses conj [(apply list (.op ^ArbitraryFn x) (.operands ^ArbitraryFn x)) s])
-                                s)
+                   ArbitraryFn
+                   (let [s (gensym)]
+                     (swap! clauses conj [(apply list (.op ^ArbitraryFn x) (.operands ^ArbitraryFn x)) s])
+                     s)
 
-                              RexDynamicParam
-                              (let [sym (gensym)]
-                                (swap! args assoc (.getName ^RexDynamicParam x) sym)
-                                sym)
+                   RexDynamicParam
+                   (let [sym (gensym)]
+                     (swap! args assoc (.getName ^RexDynamicParam x) sym)
+                     sym)
 
-                              RexLiteral
-                              (let [s (gensym)]
-                                (swap! literals assoc s x)
-                                s)
+                   RexLiteral
+                   (let [s (gensym)]
+                     (swap! literals assoc s x)
+                     s)
 
-                              RexInputRef
-                              (get-in schema [:crux.sql.table/query :find (.getIndex ^RexInputRef x)])
+                   RexInputRef
+                   (get-in schema [:crux.sql.table/query :find (.getIndex ^RexInputRef x)])
 
-                              x))
-                          clauses)]
-    {:clauses clauses
-     :calc-clauses @calc-clauses
-     :literals @literals
-     :args @args}))
+                   x))
+               nodes)
+     @clauses @literals @args]))
 
 (defn- ground-vars [or-statement]
   (let [vars (distinct (mapcat #(filter symbol? (rest (first %))) or-statement))]
@@ -252,22 +249,22 @@
 
 (defn enrich-filter [schema ^RexNode filter]
   (log/debug "Enriching with filter" filter)
-  (let [{:keys [clauses calc-clauses literals args] :as s} (post-process schema (->ast filter schema))]
+  (let [[filters clauses literals args] (->vars+clauses+exprs schema (->ast filter schema))]
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value (->where clauses)) )
-        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
+        (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value (->where filters)))
+        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args)
         (update :literals merge literals))))
 
 (defn enrich-project [schema projects]
   (log/debug "Enriching project with" projects)
-  (let [{:keys [clauses calc-clauses literals]} (->> (for [rex-node (map #(.-left ^Pair %) projects)]
-                                                               (->ast rex-node schema))
-                                                             (post-process schema))]
+  (let [[projects clauses literals] (->> (for [rex-node (map #(.-left ^Pair %) projects)]
+                                           (->ast rex-node schema))
+                                         (->vars+clauses+exprs schema))]
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) calc-clauses)
-        (assoc-in [:crux.sql.table/query :find] (vec clauses))
+        (assoc-in [:crux.sql.table/query :find] (vec projects))
+        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
         (update :literals merge literals))))
 
 (defn enrich-join [s1 s2 join-type condition]
