@@ -79,6 +79,9 @@
 
 (def ^:private ^JavaTypeFactory jtf (JavaTypeFactoryImpl.))
 
+(defn- ->literal-expression [^RexLiteral l]
+  (RexToLixTranslator/translateLiteral l, (.getType ^RexLiteral l), jtf, RexImpTable$NullAs/NOT_POSSIBLE))
+
 (defn- ->lambda-expression [^MethodCallExpression m parameter-expressions operands]
   (let [l (Expressions/lambda m ^Iterable parameter-expressions)]
     (ArbitraryFn. 'crux.calcite/-lambda (cons l operands))))
@@ -206,7 +209,7 @@
 
                    RexLiteral
                    (let [s (gensym)]
-                     (swap! literals assoc s x)
+                     (swap! literals assoc s (->literal-expression x))
                      s)
 
                    RexInputRef
@@ -350,17 +353,11 @@
       (log/error e)
       (throw e))))
 
-(defn- ->literal-expression [^RexLiteral l]
-  (RexToLixTranslator/translateLiteral l, (.getType ^RexLiteral l), jtf, RexImpTable$NullAs/NOT_POSSIBLE))
-
-(defn- ^List ->literal-pairs [literals]
-  (map (fn [[k l]]
-         (Expressions/constant (Pair. (str k) (if (instance? Expression l) l (->literal-expression l)))))
-       literals))
-
 (defn ->expr [schema]
   (Expressions/constant (Pair. (Expressions/constant (prn-str (dissoc schema :literals)))
-                               (Expressions/newArrayInit Pair (->literal-pairs (:literals schema))))))
+                               (Expressions/newArrayInit Pair ^List (map (fn [[k l]]
+                                                                           (Expressions/constant (Pair. (str k) l)))
+                                                                         (:literals schema))))))
 
 (defn clojure-helper-fn [f]
   (fn [& args]
