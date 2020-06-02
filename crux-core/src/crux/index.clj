@@ -1,14 +1,11 @@
 (ns ^:no-doc crux.index
   (:require [crux.codec :as c]
             [crux.db :as db]
-            [crux.io :as cio]
             [crux.memory :as mem]
-            [crux.morton :as morton]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang IReduceInit MapEntry Seqable Sequential]
-           [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
-           java.io.Closeable
-           [java.util Collections Comparator Date]
+  (:import [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
+            RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
+           java.util.Comparator
            org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -103,17 +100,13 @@
       (when (pred v)
         v))))
 
-;; TODO: Fix MapEntry check here, depends on RelationVirtualIndex
-;; changes.
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
    (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
   ([compare-pred ^DirectBuffer compare-v max-length]
    (if compare-v
      (fn [value]
-       (and value (compare-pred (mem/compare-buffers (if (instance? MapEntry value)
-                                                       (key value)
-                                                       value) compare-v max-length))))
+       (and value (compare-pred (mem/compare-buffers value compare-v max-length))))
      (constantly true))))
 
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
@@ -180,33 +173,12 @@
 
 ;; Utils
 
-;; NOTE: We need to copy the keys and values here, as the originals
-;; returned by the iterator will (may) get invalidated by the next
-;; iterator call.
-
-(defn idx->series
-  [idx]
-  (reify
-    IReduceInit
-    (reduce [_ rf init]
-      (loop [ret (rf init (db/seek-values idx nil))]
-        (if-let [x (db/next-values idx)]
-          (let [ret (rf ret x)]
-            (if (reduced? ret)
-              @ret
-              (recur ret)))
-          ret)))
-    Seqable
-    (seq [_]
-      (when-let [result (db/seek-values idx nil)]
-        (->> (repeatedly #(db/next-values idx))
-             (take-while identity)
-             (cons result))))
-    Sequential))
-
 (defn idx->seq
   [idx]
-  (seq (idx->series idx)))
+  (when-let [result (db/seek-values idx nil)]
+    (->> (repeatedly #(db/next-values idx))
+         (take-while identity)
+         (cons result))))
 
 ;; Join
 
@@ -217,7 +189,7 @@
   (max-depth [_] 1))
 
 (defn- new-unary-join-iterator-state [idx value]
-  (UnaryJoinIteratorState. idx (or value c/empty-buffer)))
+  (UnaryJoinIteratorState. idx (or value mem/empty-buffer)))
 
 (defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
   db/Index
@@ -397,109 +369,89 @@
       (when (pos? max-depth)
         (step [] 0 true)))))
 
-(defn- relation-virtual-index-depth ^long [^RelationIteratorsState iterators-state]
-  (dec (count (.indexes iterators-state))))
-
-(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints encode-value-fn ^RelationIteratorsState state]
+(defrecord SortedVirtualIndex [sc ^SortedVirtualIndexState state]
   db/Index
   (seek-values [this k]
-    (when-let [idx (last (.indexes state))]
-      (let [[k ^RelationNestedIndexState nested-index-state] (db/seek-values idx k)]
-        (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
-        (set! (.needs-seek? state) false)
-        (when k
-          k))))
-
-  (next-values [this]
-    (if (.needs-seek? state)
-      (db/seek-values this nil)
-      (when-let [idx (last (.indexes state))]
-        (let [[k ^RelationNestedIndexState nested-index-state] (db/next-values idx)]
-          (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
-          (when k
-            k)))))
-
-  db/LayeredIndex
-  (open-level [this]
-    (when (= max-depth (relation-virtual-index-depth state))
-      (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (set! (.indexes state) (conj (.indexes state) (.child-idx state)))
-    (set! (.child-idx state) nil)
-    (set! (.needs-seek? state) true)
-    nil)
-
-  (close-level [this]
-    (when (zero? (relation-virtual-index-depth state))
-      (throw (IllegalStateException. "Cannot close level at root.")))
-    (set! (.indexes state) (pop (.indexes state)))
-    (set! (.child-idx state) nil)
-    (set! (.needs-seek? state) false)
-    nil)
-
-  (max-depth [this]
-    max-depth))
-
-(def ^:private sorted-virtual-index-key-comparator
-  (reify Comparator
-    (compare [_ [a] [b]]
-      (mem/compare-buffers (or a c/empty-buffer)
-                           (or b c/empty-buffer)))))
-
-(defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
-  db/Index
-  (seek-values [this k]
-    (let [idx (Collections/binarySearch values
-                                        [k]
-                                        sorted-virtual-index-key-comparator)
-          [x & xs] (subvec values (if (neg? idx)
-                                    (dec (- idx))
-                                    idx))]
-      (set! (.seq state) (seq xs))
-      x))
+    (set! (.seq state) (subseq sc >= (or k mem/empty-buffer)))
+    (db/next-values this))
 
   (next-values [this]
     (when-let [[x & xs] (.seq state)]
       (set! (.seq state) (seq xs))
-      x)))
+      (some-> x (key)))))
 
-(defn new-sorted-virtual-index [idx-or-seq]
-  (let [idx-as-seq (if (satisfies? db/Index idx-or-seq)
-                     (idx->seq idx-or-seq)
-                     idx-or-seq)]
-    (->SortedVirtualIndex
-     (->> idx-as-seq
-          (sort-by first mem/buffer-comparator)
-          (distinct)
-          (vec))
-     (SortedVirtualIndexState. nil))))
+(defn- new-sorted-virtual-index [sc]
+  (->SortedVirtualIndex sc (SortedVirtualIndexState. nil)))
 
-;; TODO: Get rid of MapEntry here and represent the nested index
-;; structure in a different way.
-(defn- build-nested-index [encode-value-fn tuples [range-constraints & next-range-constraints]]
-  (-> (new-sorted-virtual-index
-       (for [prefix (vals (group-by first tuples))
-             :let [value (ffirst prefix)]]
-         (MapEntry/create (encode-value-fn value)
-                          (RelationNestedIndexState.
-                           value
-                           (when (seq (next (first prefix)))
-                             (build-nested-index encode-value-fn (map next prefix) next-range-constraints))))))
-      (wrap-with-range-constraints range-constraints)))
+(defrecord RelationVirtualIndex [max-depth tree ^RelationVirtualIndexState state layered-range-constraints encode-value-fn]
+  db/Index
+  (seek-values [this k]
+    (when-let [k (db/seek-values (last (.indexes state)) (or k mem/empty-buffer))]
+      (set! (.key state) k)
+      k))
+
+  (next-values [this]
+    (when-let [k (db/next-values (last (.indexes state)))]
+      (set! (.key state) k)
+      k))
+
+  db/LayeredIndex
+  (open-level [this]
+    (when (= max-depth (count (.path state)))
+      (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
+    (let [path (conj (.path state) (.key state))
+          level (count path)]
+      (set! (.path state) path)
+      (set! (.indexes state) (conj (.indexes state)
+                                   (wrap-with-range-constraints
+                                    (new-sorted-virtual-index (get-in (.tree state) path))
+                                    (get layered-range-constraints level))))
+      (set! (.key state) nil))
+    nil)
+
+  (close-level [this]
+    (when (zero? (count (.path state)))
+      (throw (IllegalStateException. "Cannot close level at root.")))
+    (set! (.path state) (pop (.path state)))
+    (set! (.indexes state) (pop (.indexes state)))
+    (set! (.key state) nil)
+    nil)
+
+  (max-depth [_]
+    max-depth))
+
+(defn- sorted-map-assoc-in [m [k & ks] v]
+  (if ks
+    (assoc m k (sorted-map-assoc-in (or (get m k) (sorted-map-by mem/buffer-comparator)) ks v))
+    (assoc m k v)))
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
    (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (let [state ^RelationIteratorsState (.state relation)]
-     (set! (.indexes state) [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                               (build-nested-index (.encode-value-fn relation) tuples layered-range-constraints))])
-     (set! (.child-idx state) nil)
-     (set! (.needs-seek? state) false))
-   relation))
+   (let [encode-value-fn (.encode_value_fn relation)
+         tree (binding [nippy/*freeze-fallback* :write-unfreezable]
+                (reduce
+                 (fn [acc tuple]
+                   (sorted-map-assoc-in acc (mapv encode-value-fn tuple) nil))
+                 (sorted-map-by mem/buffer-comparator)
+                 tuples))
+         root-level (wrap-with-range-constraints
+                     (new-sorted-virtual-index tree)
+                     (get layered-range-constraints 0))
+         state ^RelationVirtualIndexState (.state relation)]
+     (set! (.tree state) tree)
+     (set! (.path state) [])
+     (set! (.indexes state) [root-level])
+     (set! (.key state) nil)
+     relation)))
 
 (defn new-relation-virtual-index
   ([relation-name tuples max-depth encode-value-fn]
    (new-relation-virtual-index relation-name tuples max-depth encode-value-fn nil))
   ([relation-name tuples max-depth encode-value-fn layered-range-constraints]
-   (let [iterators-state (RelationIteratorsState. nil nil false)]
-     (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints encode-value-fn iterators-state) tuples))))
+   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
+                                                           nil
+                                                           (RelationVirtualIndexState. nil nil nil nil)
+                                                           layered-range-constraints
+                                                           encode-value-fn) tuples)))

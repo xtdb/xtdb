@@ -100,22 +100,6 @@
                  (for [join-keys result]
                    (mapv c/decode-value-buffer join-keys))))))))
 
-(t/deftest test-sorted-virtual-index
-  (let [idx (idx/new-sorted-virtual-index
-             [[(c/->value-buffer 1) :a]
-              [(c/->value-buffer 3) :c]])]
-    (t/is (= :a
-             (second (db/seek-values idx (c/->value-buffer 0)))))
-    (t/is (= :a
-             (second (db/seek-values idx (c/->value-buffer 1)))))
-    (t/is (= :c
-             (second (db/next-values idx))))
-    (t/is (= :c
-             (second (db/seek-values idx (c/->value-buffer 2)))))
-    (t/is (= :c
-             (second (db/seek-values idx (c/->value-buffer 3)))))
-    (t/is (nil? (db/seek-values idx (c/->value-buffer 4))))))
-
 (t/deftest test-range-predicates
   (let [r (idx/new-relation-virtual-index :r
                                           [[1]
@@ -129,11 +113,6 @@
     (t/is (= [1 2 3 4 5]
              (->> (idx/idx->seq r)
                   (map c/decode-value-buffer))))
-
-    (t/is (= [1 2 3 4 5]
-             (into []
-                   (map c/decode-value-buffer)
-                   (idx/idx->series r))))
 
     (t/is (= [1 2 3]
              (->> (idx/idx->seq (idx/new-less-than-virtual-index r (c/->value-buffer 4)))
