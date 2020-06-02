@@ -380,7 +380,7 @@
 (defn- new-sorted-virtual-index [sc]
   (->SortedVirtualIndex sc (SortedVirtualIndexState. nil)))
 
-(defrecord RelationVirtualIndex [max-depth tree ^RelationVirtualIndexState state layered-range-constraints encode-value-fn]
+(defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state layered-range-constraints encode-value-fn]
   db/Index
   (seek-values [this k]
     (when-let [k (db/seek-values (last (.indexes state)) (or k mem/empty-buffer))]
@@ -448,7 +448,6 @@
    (new-relation-virtual-index relation-name tuples max-depth encode-value-fn nil))
   ([relation-name tuples max-depth encode-value-fn layered-range-constraints]
    (update-relation-virtual-index! (->RelationVirtualIndex max-depth
-                                                           nil
                                                            (RelationVirtualIndexState. nil nil nil nil)
                                                            layered-range-constraints
                                                            encode-value-fn) tuples)))
