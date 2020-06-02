@@ -1,6 +1,5 @@
 (ns ^:no-doc crux.index
-  (:require [crux.codec :as c]
-            [crux.db :as db]
+  (:require [crux.db :as db]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
@@ -27,17 +26,16 @@
       v)))
 
 (defn new-doc-attribute-value-entity-value-index [index-store attr entity-resolver]
-  (->DocAttributeValueEntityValueIndex index-store (c/->id-buffer attr) entity-resolver (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
+  (->DocAttributeValueEntityValueIndex index-store attr entity-resolver (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
 
 (defrecord DocAttributeValueEntityEntityIndex [index-store ^DirectBuffer attr ^DocAttributeValueEntityValueIndex value-entity-value-idx entity-resolver-fn ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
   db/Index
   (seek-values [this k]
-    (when (c/valid-id? k)
-      (let [value-buffer (.-key ^BinaryJoinLayeredVirtualIndexPeekState (.peek-state value-entity-value-idx))
-            [v & vs] (db/ave index-store attr value-buffer k entity-resolver-fn)]
-        (set! (.-seq peek-state) vs)
-        (set! (.-key peek-state) v)
-        v)))
+    (let [value-buffer (.-key ^BinaryJoinLayeredVirtualIndexPeekState (.peek-state value-entity-value-idx))
+          [v & vs] (db/ave index-store attr value-buffer k entity-resolver-fn)]
+      (set! (.-seq peek-state) vs)
+      (set! (.-key peek-state) v)
+      v))
 
   (next-values [this]
     (when-let [[v & vs] (.-seq peek-state)]
@@ -46,18 +44,17 @@
       v)))
 
 (defn new-doc-attribute-value-entity-entity-index [index-store attr value-entity-value-idx entity-resolver-fn]
-  (->DocAttributeValueEntityEntityIndex index-store (c/->id-buffer attr) value-entity-value-idx entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
+  (->DocAttributeValueEntityEntityIndex index-store attr value-entity-value-idx entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
 
 ;; AEV
 
 (defrecord DocAttributeEntityValueEntityIndex [index-store ^DirectBuffer attr entity-resolver ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
   db/Index
   (seek-values [this k]
-    (when (c/valid-id? k)
-      (let [[v & vs] (db/ae index-store attr k entity-resolver)]
-        (set! (.-seq peek-state) vs)
-        (set! (.-key peek-state) v)
-        v)))
+    (let [[v & vs] (db/ae index-store attr k entity-resolver)]
+      (set! (.-seq peek-state) vs)
+      (set! (.-key peek-state) v)
+      v))
 
   (next-values [this]
     (when-let [[v & vs] (.-seq peek-state)]
@@ -66,7 +63,7 @@
       v)))
 
 (defn new-doc-attribute-entity-value-entity-index [index-store attr entity-resolver-fn]
-  (->DocAttributeEntityValueEntityIndex index-store (c/->id-buffer attr) entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
+  (->DocAttributeEntityValueEntityIndex index-store attr entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
 
 (defrecord DocAttributeEntityValueValueIndex [index-store ^DirectBuffer attr ^DocAttributeEntityValueEntityIndex entity-value-entity-idx entity-resolver-fn ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
   db/Index
@@ -84,7 +81,7 @@
       v)))
 
 (defn new-doc-attribute-entity-value-value-index [index-store attr entity-value-entity-idx entity-resolver-fn]
-  (->DocAttributeEntityValueValueIndex index-store (c/->id-buffer attr) entity-value-entity-idx entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
+  (->DocAttributeEntityValueValueIndex index-store attr entity-value-entity-idx entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
 
 ;; Range Constraints
 
