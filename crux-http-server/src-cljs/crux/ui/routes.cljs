@@ -10,14 +10,14 @@
      :controllers
      [{:start (fn [& params])
        :stop (fn [& params])}]}]
-   ["/_query"
+   ["/_crux/query"
     {:name :query
      :link-text "Query"
      :controllers
      [{:identity #(gensym)
        :start #(rf/dispatch [:crux.ui.http/fetch-query-table])
        :stop (fn [& params])}]}]
-   ["/_entity/:eid"
+   ["/_crux/entity/:eid"
     {:name :entity
      :link-text "Entity"
      :controllers

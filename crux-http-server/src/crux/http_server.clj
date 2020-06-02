@@ -557,7 +557,7 @@
                                                           end-valid-time end-transaction-time
                                                           with-corrections with-docs link-entities?]} :query-params
                                                   :as request}]
-  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))
+  (let [[_ encoded-eid] (re-find #"^/_crux/entity/(.+)$" (req/path-info request))
         eid (or (some-> encoded-eid URLDecoder/decode c/id-edn-reader)
                 (throw (IllegalArgumentException. "missing eid")))
         vt (some-> valid-time
@@ -581,17 +581,17 @@
          :body  (if html?
                   (raw-html
                    {:body (entity-history->html encoded-eid entity-history)
-                    :title "/_entity?history=true"
+                    :title "/entity?history=true"
                     :options options})
                   ;; Stringifying #crux/id values, caused issues with AJAX
                   (map #(update % :crux.db/content-hash str) entity-history))})
       (let [entity-map (api/entity db eid)
-            linked-entities #(link-all-entities db  "/_entity" entity-map)]
+            linked-entities #(link-all-entities db  "/_crux/entity" entity-map)]
         {:status (if (some? entity-map) 200 404)
          :body (cond
                  html? (raw-html
                         {:body (entity->html encoded-eid linked-entities entity-map vt tt)
-                         :title "/_entity"
+                         :title "/entity"
                          :options options})
 
                  link-entities? {"linked-entities" (linked-entities)
@@ -628,7 +628,7 @@
 
 (defn resolve-prev-next-offset
   [query-params prev-offset next-offset]
-  (let [url (str "/_query?"
+  (let [url (str "/_crux/query?"
                  (subs
                   (->> (dissoc query-params "offset")
                        (reduce-kv (fn [coll k v]
@@ -675,7 +675,7 @@
         {:status 200
          :body (raw-html
                 {:body [:form
-                        {:action "/_query"}
+                        {:action "/_crux/query"}
                         [:textarea.textarea
                          {:name "q"
                           :cols 40
@@ -685,7 +685,7 @@
                         [:button.button
                          {:type "submit"}
                          "Submit Query"]]
-                 :title "/_query"
+                 :title "/query"
                  :options options})}
         {:status 400
          :body "No query provided."})
@@ -703,19 +703,19 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [links (link-top-level-entities db  "/_entity" results)]
+                   html? (let [links (link-top-level-entities db  "/_crux/entity" results)]
                            (raw-html
                             {:body (query->html links query results)
-                             :title "/_query"
+                             :title "/query"
                              :options options}))
-                   link-entities? {"linked-entities" (link-top-level-entities db  "/_entity" results)
+                   link-entities? {"linked-entities" (link-top-level-entities db  "/_crux/entity" results)
                                    "query-results" results}
                    :else results)})
         (catch Exception e
           {:status 400
            :body (if html?
                    (raw-html
-                    {:title "/_query"
+                    {:title "/query"
                      :body
                      [:div.error-box (.getMessage e)]})
                    (with-out-str
@@ -723,10 +723,11 @@
 
 (defn- data-browser-handler [crux-node options request]
   (condp check-path request
-    [#"^/_entity/.+$" [:get]]
+
+    [#"^/_crux/entity/.*$" [:get]]
     (entity-state crux-node options request)
 
-    [#"^/_query" [:get]]
+    [#"^/_crux/query" [:get]]
     (data-browser-query crux-node options request)
 
     nil))
