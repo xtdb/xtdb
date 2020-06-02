@@ -42,7 +42,7 @@
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
      (when (= :entity handler)
-       {"eid" (get-in db [:current-route :path-params :eid])
+       {"eid" (:eid query-params)
         "vtd" (:date valid-time)
         "vtt" (:time valid-time)
         "ttd" (:date transaction-time)
@@ -106,7 +106,7 @@
      {:error error}
      (let [query-params (get-in db [:current-route :query-params])
          document (get-in db [:entity :http :document "entity"])]
-     {:eid (get-in db [:current-route :path-params :eid])
+     {:eid (:eid query-params)
       :vt (or (:valid-time query-params) (str (t/now)))
       :tt (or (:transaction-time query-params) "Not Specified")
       :document document
@@ -126,7 +126,7 @@
 (rf/reg-sub
  ::entity-right-pane-history
  (fn [db _]
-   (let [eid (get-in db [:current-route :path-params :eid])
+   (let [eid (get-in db [:current-route :query-params :eid])
          history (get-in db [:entity :http :history])]
      {:eid eid
       :entity-history history})))
@@ -145,7 +145,7 @@
 (rf/reg-sub
  ::entity-right-pane-history-diffs
  (fn [db _]
-   (let [ eid (get-in db [:current-route :path-params :eid])
+   (let [eid (get-in db [:current-route :query-params :eid])
          history (get-in db [:entity :http :history])
          entity-history (history-docs->diffs history)]
      {:eid eid

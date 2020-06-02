@@ -17,7 +17,7 @@
      [{:identity #(gensym)
        :start #(rf/dispatch [:crux.ui.http/fetch-query-table])
        :stop (fn [& params])}]}]
-   ["/_crux/entity/:eid"
+   ["/_crux/entity"
     {:name :entity
      :link-text "Entity"
      :controllers
