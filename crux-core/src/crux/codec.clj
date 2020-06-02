@@ -61,8 +61,6 @@
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
 
-(def empty-buffer (mem/allocate-unpooled-buffer 0))
-
 (def ^:const ^:private max-string-index-length 128)
 
 (defprotocol IdOrBuffer
@@ -292,7 +290,7 @@
   (.getChar buffer value-type-id-size ByteOrder/BIG_ENDIAN))
 
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
-  (when buffer
+  (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte (value-buffer-type-id buffer) 0)
       (1 2 3 4 7 8) true
       0 (= buffer nil-id-buffer)

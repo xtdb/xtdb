@@ -76,7 +76,7 @@
     (c/->value-buffer v)
 
     :else
-    c/empty-buffer))
+    mem/empty-buffer))
 
 (defn- buffer-or-id-buffer [v]
   (cond
@@ -87,7 +87,7 @@
     (c/->id-buffer v)
 
     :else
-    c/empty-buffer))
+    mem/empty-buffer))
 
 (defn ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
   (assoc entity-tx :content-hash (when (pos? (.capacity content-hash))
@@ -104,7 +104,7 @@
 
 (defn encode-av-key-to
   (^org.agrona.MutableDirectBuffer[b attr]
-   (encode-av-key-to b attr c/empty-buffer))
+   (encode-av-key-to b attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer
    [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v]
    (assert (= c/id-size (.capacity attr)) (mem/buffer->hex attr))
@@ -122,9 +122,9 @@
 
 (defn encode-ave-key-to
   (^org.agrona.MutableDirectBuffer[b attr]
-   (encode-ave-key-to b attr c/empty-buffer c/empty-buffer))
+   (encode-ave-key-to b attr mem/empty-buffer mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer[b attr v]
-   (encode-ave-key-to b attr v c/empty-buffer))
+   (encode-ave-key-to b attr v mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer
    [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity]
    (assert (= c/id-size (.capacity attr)) (mem/buffer->hex attr))
@@ -160,9 +160,9 @@
 
 (defn encode-ae-key-to
   (^org.agrona.MutableDirectBuffer [b]
-   (encode-ae-key-to b c/empty-buffer c/empty-buffer))
+   (encode-ae-key-to b mem/empty-buffer mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr]
-   (encode-ae-key-to b attr c/empty-buffer))
+   (encode-ae-key-to b attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b ^DirectBuffer attr ^DirectBuffer entity]
    (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
            (mem/buffer->hex attr))
@@ -180,13 +180,13 @@
 
 (defn encode-aecv-key-to
   (^org.agrona.MutableDirectBuffer [b]
-   (encode-aecv-key-to b c/empty-buffer c/empty-buffer c/empty-buffer c/empty-buffer))
+   (encode-aecv-key-to b mem/empty-buffer mem/empty-buffer mem/empty-buffer mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr]
-   (encode-aecv-key-to b attr c/empty-buffer c/empty-buffer c/empty-buffer))
+   (encode-aecv-key-to b attr mem/empty-buffer mem/empty-buffer mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr entity]
-   (encode-aecv-key-to b attr entity c/empty-buffer c/empty-buffer))
+   (encode-aecv-key-to b attr entity mem/empty-buffer mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b attr entity content-hash]
-   (encode-aecv-key-to b attr entity content-hash c/empty-buffer))
+   (encode-aecv-key-to b attr entity content-hash mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer v]
    (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
            (mem/buffer->hex attr))
@@ -237,7 +237,7 @@
 
 (defn encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b value]
-   (encode-hash-cache-key-to b value c/empty-buffer))
+   (encode-hash-cache-key-to b value mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer value ^DirectBuffer entity]
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity value) (.capacity entity))))]
      (-> (doto b
@@ -250,7 +250,7 @@
 
 (defn encode-entity+vt+tt+tx-id-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-entity+vt+tt+tx-id-key-to b c/empty-buffer nil nil nil))
+   (encode-entity+vt+tt+tx-id-key-to b mem/empty-buffer nil nil nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
    (encode-entity+vt+tt+tx-id-key-to b entity nil nil nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity valid-time]
@@ -293,7 +293,7 @@
 
 (defn encode-entity+z+tx-id-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-entity+z+tx-id-key-to b c/empty-buffer nil))
+   (encode-entity+z+tx-id-key-to b mem/empty-buffer nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
    (encode-entity+z+tx-id-key-to b entity nil nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity z]
@@ -682,10 +682,10 @@
                v (c/vectorize-value v)
                :let [v-buf (c/->value-buffer v)]
                :when (pos? (.capacity v-buf))]
-           (cond-> [(MapEntry/create (encode-av-key-to nil a v-buf) c/empty-buffer)
-                    (MapEntry/create (encode-ave-key-to nil a v-buf id) c/empty-buffer)
-                    (MapEntry/create (encode-ae-key-to nil a id) c/empty-buffer)
-                    (MapEntry/create (encode-aecv-key-to nil a id content-hash v-buf) c/empty-buffer)]
+           (cond-> [(MapEntry/create (encode-av-key-to nil a v-buf) mem/empty-buffer)
+                    (MapEntry/create (encode-ave-key-to nil a v-buf id) mem/empty-buffer)
+                    (MapEntry/create (encode-ae-key-to nil a id) mem/empty-buffer)
+                    (MapEntry/create (encode-aecv-key-to nil a id content-hash v-buf) mem/empty-buffer)]
              (not (c/can-decode-value-buffer? v-buf))
              (conj (MapEntry/create (encode-hash-cache-key-to nil v-buf id) (mem/->nippy-buffer v)))))
          (apply concat))))
@@ -763,7 +763,7 @@
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(meta-kv ::latest-completed-tx tx)
-                        [(encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))
+                        [(encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer]]))
 
   (index-entity-txs [this tx entity-txs]
     (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
