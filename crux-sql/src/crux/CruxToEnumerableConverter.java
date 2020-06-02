@@ -54,15 +54,9 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
         final Expression schemaEdn = (Expression) CruxUtils.resolve("crux.calcite/->expr").invoke(implementor.schema);
         final Expression schema = block.append("schema", schemaEdn);
 
-        final Expression fnEdn = (Expression) CruxUtils.resolve("crux.calcite/->fn").invoke(implementor.schema);
-        final Expression fn = block.append("fn", fnEdn);
-
-        final Expression literalsEdn = (Expression) CruxUtils.resolve("crux.calcite/->literals").invoke(implementor.schema);
-        final Expression literals = block.append("literals", literalsEdn);
-
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, schema, DataContext.ROOT, fn, literals));
+                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, schema, DataContext.ROOT));
 
         // if (CalciteSystemProperty.DEBUG.value()) {
         //     System.out.println("Mongo: " + opList);
