@@ -8,7 +8,6 @@
             [crux.codec :as c]
             [crux.config :as cc]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]

@@ -158,16 +158,6 @@
     (range-constraints idx)
     idx))
 
-;; Object Store
-
-(defn evicted-doc?
-  [{:crux.db/keys [id evicted?] :as doc}]
-  (boolean (or (= :crux.db/evicted id) evicted?)))
-
-(defn keep-non-evicted-doc [doc]
-  (when-not (evicted-doc? doc)
-    doc))
-
 ;; Utils
 
 (defn idx->seq
