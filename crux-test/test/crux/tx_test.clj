@@ -4,7 +4,6 @@
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.tx :as tx]
             [crux.kv :as kv]
@@ -258,7 +257,7 @@
         (t/testing "eviction removes docs"
           (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash picasso-history))
                              vals
-                             (remove idx/evicted-doc?)))))))))
+                             (remove c/evicted-doc?)))))))))
 
 (t/deftest test-handles-legacy-evict-events
   (let [{put-tx-time ::tx/tx-time, put-tx-id ::tx/tx-id} (fix/submit+await-tx [[:crux.tx/put picasso #inst "2018-05-21"]])
@@ -285,7 +284,7 @@
                                         (->> (iterator-seq history)
                                              (keep :content-hash)))
                         vals
-                        (remove idx/evicted-doc?))))))
+                        (remove c/evicted-doc?))))))
 
     (binding [tx/*evict-all-on-legacy-time-ranges?* true]
       (let [{:keys [docs]} (index-evict!)]
@@ -298,7 +297,7 @@
                                                (->> (iterator-seq history)
                                                     (keep :content-hash)))
                                vals
-                               (remove idx/evicted-doc?))))))))))
+                               (remove c/evicted-doc?))))))))))
 
 (t/deftest test-multiple-txs-in-same-ms-441
   (let [ivan {:crux.db/id :ivan}
@@ -837,7 +836,7 @@
                         [:crux.tx/put {:crux.db/id :frob :foo :baz}]])
   (fix/submit+await-tx [[:crux.tx/evict :foo]])
 
-  (t/is (every? (comp idx/evicted-doc? val)
+  (t/is (every? (comp c/evicted-doc? val)
                 (db/fetch-docs (:document-store *api*) #{(c/new-id {:crux.db/id :foo, :foo :bar})
                                                          (c/new-id {:crux.db/id :foo, :foo :baz})
                                                          (c/new-id {:crux.db/id :foo, :foo :quux})})))
@@ -845,7 +844,7 @@
 
   (t/testing "even though the CaS was unrelated, the whole transaction fails - we should still evict those docs"
     (fix/submit+await-tx [[:crux.tx/evict :frob]])
-    (t/is (every? (comp idx/evicted-doc? val)
+    (t/is (every? (comp c/evicted-doc? val)
                   (db/fetch-docs (:document-store *api*) #{(c/new-id {:crux.db/id :frob, :foo :bar})
                                                            (c/new-id {:crux.db/id :frob, :foo :baz})})))))
 
