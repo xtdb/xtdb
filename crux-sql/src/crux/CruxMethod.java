@@ -8,7 +8,7 @@ import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.function.Function;
 
 public enum CruxMethod {
-    CRUX_QUERYABLE_FIND(CruxTable.CruxQueryable.class, "find", String.class, DataContext.class, Object.class, Object.class);
+    CRUX_QUERYABLE_FIND(CruxTable.CruxQueryable.class, "find", Object.class, DataContext.class);
 
     public final Method method;
     public static final ImmutableMap<Method, CruxMethod> MAP;
