@@ -201,12 +201,6 @@
     (t/is (= #{{:name "Ivan"} {:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE NAME = 'Ivan' OR AGE = 25")))))
 
-  (t/testing "boolean"
-    (t/is (= #{{:name "Ivan"}}
-             (set (query "SELECT NAME FROM PERSON WHERE ALIVE = TRUE"))))
-    (t/is (= #{{:name "Malcolm"}}
-             (set (query "SELECT NAME FROM PERSON WHERE ALIVE = FALSE")))))
-
   (t/testing "numeric-columns"
     (t/is (= [{:name "Ivan" :age 21}]
              (query "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = 21")))
@@ -244,6 +238,16 @@
   (t/testing "unknown column"
     (t/is (thrown-with-msg? java.sql.SQLException #"Column 'NOCNOLUMN' not found in any table"
                             (query "SELECT NOCNOLUMN FROM PERSON")))))
+
+(t/deftest test-booleans
+  (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                        {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
+  (t/is (= #{{:name "Ivan"}}
+           (set (query "SELECT NAME FROM PERSON WHERE ALIVE = TRUE"))))
+  (t/is (= #{{:name "Malcolm"}}
+           (set (query "SELECT NAME FROM PERSON WHERE ALIVE = FALSE"))))
+  (t/is (= #{{:name "Ivan"}}
+           (set (query "SELECT NAME FROM PERSON WHERE NAME IS NOT NULL OR ALIVE = TRUE")))))
 
 (t/deftest test-calcs
   (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
