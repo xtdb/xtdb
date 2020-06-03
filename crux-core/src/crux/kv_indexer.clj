@@ -298,19 +298,6 @@
           tx-id (c/descending-long (.getLong k (+ c/index-id-size c/id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
       (c/->EntityTx entity (c/reverse-time-ms->date valid-time) (c/reverse-time-ms->date transaction-time) tx-id nil))))
 
-(defn etx->kvs [^EntityTx etx]
-  [[(encode-entity+vt+tt+tx-id-key-to nil
-                                      (c/->id-buffer (.eid etx))
-                                      (.vt etx)
-                                      (.tt etx)
-                                      (.tx-id etx))
-    (c/->id-buffer (.content-hash etx))]
-   [(encode-entity+z+tx-id-key-to nil
-                                  (c/->id-buffer (.eid etx))
-                                  (encode-entity-tx-z-number (.vt etx) (.tt etx))
-                                  (.tx-id etx))
-    (c/->id-buffer (.content-hash etx))]])
-
 ;; Index Version
 
 (defn- encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
@@ -342,6 +329,16 @@
                   (encode-index-version-value-to nil c/index-version)]])
       (kv/fsync)))
   kv)
+
+(defn- check-z-curve-index-config [kv z-curve-index?]
+  (with-open [snapshot (kv/new-snapshot kv)
+              i (kv/new-iterator snapshot)]
+    (let [z-present? (boolean (kv/seek i (encode-entity+z+tx-id-key-to (.get seek-buffer-tl))))
+          bitemp-present? (boolean (kv/seek i (encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl))))]
+      (when (and z-curve-index?
+                 bitemp-present?
+                 (not z-present?))
+        (throw (IllegalArgumentException. "Can't add a z-curve index to an existing node"))))))
 
 ;; Meta
 
@@ -468,6 +465,7 @@
 
 (defrecord KvIndexStore [snapshot
                          close-snapshot?
+                         z-curve-index?
                          level-1-iterator-delay
                          level-2-iterator-delay
                          entity-as-of-iterator-delay
@@ -585,7 +583,7 @@
             (let [v (kv/value i)]
               (when-not (mem/buffers=? c/nil-id-buffer v)
                 v))
-            (if morton/*use-space-filling-curve-index?*
+            (if z-curve-index?
               (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
                 (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
                   (when-not (= ::deleted-entity k)
@@ -608,7 +606,7 @@
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (mem/buffers=? c/nil-id-buffer v)
                 (enrich-entity-tx entity-tx v))
-              (if morton/*use-space-filling-curve-index?*
+              (if z-curve-index?
                 (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
                   (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
                     (when-not (= ::deleted-entity k)
@@ -641,7 +639,7 @@
       value-buffer))
 
   (open-nested-index-store [this]
-    (let [nested-index-store (new-kv-index-store snapshot temp-hash-cache false)]
+    (let [nested-index-store (new-kv-index-store snapshot temp-hash-cache false z-curve-index?)]
       (swap! nested-index-store-state conj nested-index-store)
       nested-index-store)))
 
@@ -664,9 +662,10 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil v-buf id) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-store [snapshot temp-hash-cache close-snapshot?]
+(defn- new-kv-index-store [snapshot temp-hash-cache close-snapshot? z-curve-index?]
   (->KvIndexStore snapshot
                   close-snapshot?
+                  z-curve-index?
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
@@ -675,7 +674,7 @@
                   temp-hash-cache
                   (AtomicBoolean.)))
 
-(defrecord KvIndexer [kv-store]
+(defrecord KvIndexer [kv-store z-curve-index?]
   db/Indexer
   (index-docs [this docs]
     (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -734,9 +733,26 @@
                         [(encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))
 
   (index-entity-txs [this tx entity-txs]
-    (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
-                                  (meta-kv ::latest-completed-tx tx))
-                            (into (sorted-map-by mem/buffer-comparator)))))
+    (kv/store kv-store (into (sorted-map-by mem/buffer-comparator)
+                             (conj (mapcat (fn [^EntityTx etx]
+                                             (cond-> [[(encode-entity+vt+tt+tx-id-key-to
+                                                        nil
+                                                        (c/->id-buffer (.eid etx))
+                                                        (.vt etx)
+                                                        (.tt etx)
+                                                        (.tx-id etx))
+                                                       (c/->id-buffer (.content-hash etx))]]
+
+                                               z-curve-index?
+                                               (conj [(encode-entity+z+tx-id-key-to
+                                                       nil
+                                                       (c/->id-buffer (.eid etx))
+                                                       (encode-entity-tx-z-number (.vt etx) (.tt etx))
+                                                       (.tx-id etx))
+                                                      (c/->id-buffer (.content-hash etx))])))
+                                           entity-txs)
+
+                                   (meta-kv ::latest-completed-tx tx)))))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
@@ -752,7 +768,7 @@
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-store [this]
-    (new-kv-index-store (kv/new-snapshot kv-store) (HashMap.) true))
+    (new-kv-index-store (kv/new-snapshot kv-store) (HashMap.) true z-curve-index?))
 
   status/Status
   (status-map [this]
@@ -761,7 +777,11 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def kv-indexer
-  {:start-fn (fn [{:crux.node/keys [kv-store]} args]
+  {:start-fn (fn [{:crux.node/keys [kv-store]} {::keys [z-curve-index?]}]
                (check-and-store-index-version kv-store)
-               (->KvIndexer kv-store))
-   :deps [:crux.node/kv-store]})
+               (check-z-curve-index-config kv-store z-curve-index?)
+               (->KvIndexer kv-store z-curve-index?))
+   :deps [:crux.node/kv-store]
+   :args {::z-curve-index? {:crux.config/type :boolean
+                            :default false
+                            :doc "Enable the Z-curve bitemporal index"}}})

@@ -19,7 +19,7 @@
 (defmacro with-fresh-indexer [& body]
   `(fkv/with-kv-store
      (fn []
-       (binding [*indexer* (kvi/->KvIndexer *kv*)]
+       (binding [*indexer* (kvi/->KvIndexer *kv* true)]
          ~@body))))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own
