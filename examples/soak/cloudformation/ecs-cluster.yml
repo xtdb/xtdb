@@ -2,12 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: This stack starts an example load balanced Fargate task.
 
 Parameters:
-  VpcStackName:
+  VPCId:
     Type: String
-    Default: soak-vpc
-  LbStackName:
+  LoadBalancerSG:
     Type: String
-    Default: soak-lb
 
 Resources:
   # ECS Resources
@@ -23,8 +21,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the Fargate containers
-      VpcId:
-        Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+      VpcId: !Ref VPCId
 
   EcsSecurityGroupIngressFromPublicALB:
     Type: AWS::EC2::SecurityGroupIngress
@@ -32,18 +29,12 @@ Resources:
       Description: Ingress from the public ALB
       GroupId: !Ref 'FargateContainerSecurityGroup'
       IpProtocol: -1
-      SourceSecurityGroupId:
-        Fn::ImportValue: !Join [':', [!Ref 'LbStackName', 'LoadBalancerSG']]
+      SourceSecurityGroupId: !Ref 'LoadBalancerSG'
 
 Outputs:
   FargateContainerSecurityGroup:
     Description: The Security Group for the Fargate Containers
     Value: !Ref 'FargateContainerSecurityGroup'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'FargateContainerSecurityGroup' ] ]
   ECSClusterARN:
     Description: The ARN for the ECS cluster
-    Value:
-      Fn::GetAtt: ["ECSCluster", "Arn"]
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ECSClusterARN' ] ]
+    Value: !GetAtt ["ECSCluster", "Arn"]

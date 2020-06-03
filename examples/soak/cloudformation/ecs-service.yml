@@ -1,15 +1,16 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  VpcStackName:
+  VPCId:
     Type: String
-    Default: soak-vpc
-  EcsClusterStackName:
+  PublicSubnetOne:
     Type: String
-    Default: soak-ecs-cluster
-  LbStackName:
+  PublicSubnetTwo:
     Type: String
-    Default: soak-lb
+  FargateContainerSecurityGroup:
+    Type: String
+  LoadBalancerHTTPSListener:
+    Type: String
 
 Resources:
   LogGroup:
@@ -93,6 +94,39 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
+  SoakTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /status
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: 'crux-soak'
+      Port: 8080
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VPCId
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '10'
+
+  LBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref SoakTargetGroup
+
+      Conditions:
+        - Field: host-header
+          Values:
+            - 'soak.crux.cloud'
+
+      ListenerArn: !Ref LoadBalancerHTTPSListener
+      Priority: 10
+
   Service:
     Type: AWS::ECS::Service
     Properties:
@@ -108,16 +142,12 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: 'ENABLED'
           SecurityGroups:
-            - Fn::ImportValue:
-                !Join [':', [!Ref 'EcsClusterStackName', 'FargateContainerSecurityGroup']]
+            - !Ref FargateContainerSecurityGroup
           Subnets:
-            - Fn::ImportValue:
-                !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
-            - Fn::ImportValue:
-                !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
+            - !Ref PublicSubnetOne
+            - !Ref PublicSubnetTwo
       TaskDefinition: !Ref 'SoakTaskDef'
       LoadBalancers:
         - ContainerName: 'crux-soak'
           ContainerPort: 8080
-          TargetGroupArn:
-            Fn::ImportValue: !Join [':', [!Ref 'LbStackName', 'SoakTargetGroup']]
+          TargetGroupArn: !Ref SoakTargetGroup

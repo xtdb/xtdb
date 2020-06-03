@@ -9,29 +9,29 @@ Resources:
       CidrBlock: '10.0.0.0/16'
       Tags:
         - Key: Name
-          Value: crux-soak
+          Value: crux-cloud
 
   PublicSubnetOne:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: 'eu-west-2a'
+      AvailabilityZone: 'eu-west-1a'
       VpcId: !Ref 'VPC'
       CidrBlock: '10.0.0.0/24'
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: crux-soak-a1
+          Value: crux-cloud-a1
 
   PublicSubnetTwo:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: 'eu-west-2b'
+      AvailabilityZone: 'eu-west-1b'
       VpcId: !Ref 'VPC'
       CidrBlock: '10.0.1.0/24'
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: crux-soak-b1
+          Value: crux-cloud-b1
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -48,7 +48,7 @@ Resources:
       VpcId: !Ref 'VPC'
       Tags:
         - Key: Name
-          Value: crux-soak-public
+          Value: crux-cloud-public
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -74,17 +74,11 @@ Outputs:
   VPCId:
     Description: The ID of the VPC that this stack is deployed in
     Value: !Ref 'VPC'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VPCId' ] ]
 
   PublicSubnetOne:
     Description: Public subnet one
     Value: !Ref 'PublicSubnetOne'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicSubnetOne' ] ]
 
   PublicSubnetTwo:
     Description: Public subnet two
     Value: !Ref 'PublicSubnetTwo'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicSubnetTwo' ] ]

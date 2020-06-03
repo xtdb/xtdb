@@ -1,9 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  EcsClusterStackName:
+  ECSClusterARN:
     Type: String
-    Default: soak-ecs-cluster
 
 Resources:
   LogGroup:
@@ -139,17 +138,13 @@ Resources:
                - Effect: "Allow"
                  Condition:
                    ArnEquals:
-                     ecs:cluster:
-                       - Fn::ImportValue:
-                           !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+                     ecs:cluster: !Ref 'ECSClusterARN'
                  Action: "ecs:RunTask"
                  Resource: "*"
                - Effect: "Allow"
                  Condition:
                    ArnEquals:
-                     ecs:cluster:
-                        - Fn::ImportValue:
-                           !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+                     ecs:cluster: !Ref 'ECSClusterARN'
                  Action:
                    - "iam:ListInstanceProfiles"
                    - "iam:ListRoles"
@@ -179,9 +174,7 @@ Resources:
             TaskDefinitionArn:
               Ref: "SoakIngestCurrentTaskDef"
             TaskCount: 1
-          Arn:
-            Fn::ImportValue:
-              !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+          Arn: !Ref 'ECSClusterARN'
 
   SoakTaskScheduleForecast:
     Type: AWS::Events::Rule
@@ -205,6 +198,4 @@ Resources:
             TaskDefinitionArn:
               Ref: "SoakIngestForecastTaskDef"
             TaskCount: 1
-          Arn:
-            Fn::ImportValue:
-              !Join [':', [!Ref 'EcsClusterStackName', 'ECSClusterARN']]
+          Arn: !Ref 'ECSClusterARN'

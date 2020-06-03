@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  CruxCloudStack:
+    Type: String
+    Default: crux-cloud
+
+Resources:
+  ECSCluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-cluster.yml
+      Parameters:
+        VPCId:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+        LoadBalancerSG:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerSG']]
+      Tags:
+        - Key: JUXTUser
+          Value: jms
+
+  ECRRepository:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecr-repo.yml
+      Tags:
+        - Key: JUXTUser
+          Value: jms
+
+  SoakDNS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/soak-dns.yml
+      Parameters:
+        LoadBalancerDNSName:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerDNSName']]
+        LoadBalancerCanonicalHostedZoneId:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerCanonicalHostedZoneId']]
+      Tags:
+        - Key: JUXTUser
+          Value: jms
+
+  ECSIngest:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-ingest.yml
+      Parameters:
+        ECSClusterARN: !GetAtt 'ECSCluster.Outputs.ECSClusterARN'
+      Tags:
+        - Key: JUXTUser
+          Value: jms
+
+  # ECSService:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-service.yml
+  #     Parameters:
+  #       VPCId:
+  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+  #       PublicSubnetOne:
+  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetOne']]
+  #       PublicSubnetTwo:
+  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetTwo']]
+  #       LoadBalancerHTTPSListener:
+  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
+  #       FargateContainerSecurityGroup: !GetAtt 'ECSCluster.Outputs.FargateContainerSecurityGroup'
+  #     Tags:
+  #       - Key: JUXTUser
+  #         Value: jms

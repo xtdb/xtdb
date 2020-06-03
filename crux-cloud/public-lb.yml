@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VPCId:
+    Type: String
+  PublicSubnetOne:
+    Type: String
+  PublicSubnetTwo:
+    Type: String
+  CertificateARN:
+    Type: String
+    Default: 'arn:aws:acm:eu-west-1:955308952094:certificate/51477c84-1221-44fa-b569-012e2ce9d338'
+
+Resources:
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "crux-cloud-public-load-balancer"
+      GroupDescription: "Access to the public-facing load balancer"
+      VpcId: !Ref 'VPCId'
+      SecurityGroupIngress:
+        # Allow access to ALB from anywhere on the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets:
+        - !Ref 'PublicSubnetOne'
+        - !Ref 'PublicSubnetTwo'
+      SecurityGroups: [!Ref 'LoadBalancerSG']
+      Tags:
+        - Key: Name
+          Value: crux-cloud-lb
+
+  LoadBalancerHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref 'LoadBalancer'
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: 'redirect'
+          RedirectConfig:
+            Port: 443
+            Protocol: HTTPS
+            StatusCode: HTTP_302
+
+  LoadBalancerHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref 'LoadBalancer'
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+         - CertificateArn: !Ref CertificateARN
+      DefaultActions:
+        - Type: 'fixed-response'
+          FixedResponseConfig:
+            StatusCode: 503
+
+Outputs:
+  LoadBalancerSG:
+    Value: !Ref 'LoadBalancerSG'
+
+  LoadBalancer:
+    Value: !Ref 'LoadBalancer'
+
+  LoadBalancerDNSName:
+    Value: !GetAtt ['LoadBalancer', 'DNSName']
+
+  LoadBalancerCanonicalHostedZoneId:
+    Value: !GetAtt ['LoadBalancer', 'CanonicalHostedZoneID']
+
+  LoadBalancerHTTPSListener:
+    Value: !Ref 'LoadBalancerHTTPSListener'
