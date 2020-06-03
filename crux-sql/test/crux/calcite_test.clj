@@ -77,7 +77,7 @@
   (let [q "SELECT PERSON.NAME, PERSON.AGE FROM PERSON"]
     (t/is (= [{:name "Ivan" :age 21}
               {:name "Malcolm" :age 25}]
-             (query q))))
+             (sort-by :name (query q)))))
 
   (let [q "SELECT SUM(PERSON.AGE) AS TOTAL_AGE FROM PERSON"]
     (t/is (= [{:total_age 46}]
@@ -284,7 +284,7 @@
   (t/testing "project"
     (let [q "SELECT NAME, (PERSON.AGE * 2) AS AGE FROM PERSON"]
       (t/is (= [{:name "Ivan", :age 84} {:name "Malcolm", :age 44}]
-               (query q)))
+               (sort-by :name (query q))))
       (t/is (= (str "CruxToEnumerableConverter\n"
                     "  CruxProject(NAME=[$1], AGE=[*($2, 2)])\n"
                     "    CruxTableScan(table=[[crux, PERSON]])\n")
@@ -293,12 +293,12 @@
     (t/testing "nested"
       (let [q "SELECT NAME, ((PERSON.AGE * 2) * 3) AS AGE FROM PERSON"]
         (t/is (= [{:name "Ivan", :age 252} {:name "Malcolm", :age 132}]
-                 (query q))))))
+                 (sort-by :name (query q)))))))
 
   (t/testing "in OR conditional with args"
     (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Malcolm' OR AGE = (2 * 21)"]
       (t/is (= [{:name "Ivan"} {:name "Malcolm"}]
-               (query q)))))
+               (sort-by :name (query q))))))
 
   (t/testing "tphc-022-example-substring"
     (let [q "SELECT NAME FROM PERSON WHERE substring(name from 1 for 1) in ('I', 'V')"]
@@ -542,7 +542,7 @@
   (let [q "SELECT PERSON.NAME FROM PERSON LEFT OUTER JOIN PLANET ON PERSON.PLANET = PLANET.NAME"]
     ;; Calcite handles OUTER_JOINS for now:
     (t/is (= [{:name "Ivan"} {:name "Malcolm"}]
-             (query q)))
+             (sort-by :name (query q))))
     (t/is (= (str "EnumerableCalc(expr#0..2=[{inputs}], NAME=[$t0])\n"
                   "  EnumerableHashJoin(condition=[=($1, $2)], joinType=[left])\n"
                   "    CruxToEnumerableConverter\n"

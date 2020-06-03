@@ -92,16 +92,21 @@
     (EnumUtils/call SqlFunctions m parameter-expressions)))
 
 (defn- method->lambda [^RexCall n schema m]
-  (let [parameter-expressions (mapv #(Expressions/parameter (.getJavaClass jtf (condp instance? %
-                                                                                 RexVariable
-                                                                                 (.getType ^RexVariable %)
-                                                                                 RexCall
-                                                                                 (.getType ^RexCall %)
-                                                                                 RexLiteral
-                                                                                 (.getType ^RexLiteral %))))
-                                    (.getOperands n))
-        m (->method-call-expression m parameter-expressions)]
-    (->lambda-expression m parameter-expressions (mapv #(->ast % schema) (.getOperands n)))))
+  (let [method-call-parameters (mapv #(if (instance? RexLiteral %)
+                                        (->literal-expression %)
+                                        (Expressions/parameter (.getJavaClass jtf (condp instance? %
+                                                                                    RexVariable
+                                                                                    (.getType ^RexVariable %)
+                                                                                    RexCall
+                                                                                    (.getType ^RexCall %)
+                                                                                    RexLiteral
+                                                                                    (.getType ^RexLiteral %)))))
+                                     (.getOperands n))
+        m (->method-call-expression m method-call-parameters)
+        lambda-call-parameters (filter (partial instance? ParameterExpression) method-call-parameters)]
+    (->lambda-expression m lambda-call-parameters (->> (.getOperands n)
+                                                       (remove (partial instance? RexLiteral))
+                                                       (mapv #(->ast % schema))))))
 
 (defn linq-lambda [^RexCall n schema]
   (or (when-let [m ({SqlStdOperatorTable/LOWER (.method BuiltInMethod/LOWER)
