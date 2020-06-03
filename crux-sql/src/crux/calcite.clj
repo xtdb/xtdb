@@ -347,14 +347,17 @@
 
 (defn ^Enumerable scan [node ^Pair schema+expressions column-types ^DataContext data-context]
   (try
-    (let [{:keys [crux.sql.table/query]} (edn/read-string (.-left schema+expressions))
+    (let [timeout (.get org.apache.calcite.DataContext$Variable/TIMEOUT data-context)
+          {:keys [crux.sql.table/query]} (edn/read-string (.-left schema+expressions))
           query (update query :args (fn [args] [(merge {:data-context data-context}
                                                        (into {} (map (fn [[k v]]
                                                                        [v (.get data-context k)])
                                                                      args))
                                                        (into {} (map (fn [^Pair p]
                                                                        [(symbol (.-left p)) (.-right p)])
-                                                                     (.-right schema+expressions))))]))]
+                                                                     (.-right schema+expressions))))]))
+          query (cond-> query
+                  timeout (assoc :timeout timeout))]
       (->enumerator node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") column-types query))
     (catch Throwable e
       (log/error e)
