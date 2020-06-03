@@ -74,7 +74,7 @@ Resources:
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
         - Name: 'crux-soak'
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
+          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/crux-soak:latest'
           PortMappings:
             - ContainerPort: 8080
           Command:
@@ -84,7 +84,7 @@ Resources:
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-region: 'eu-west-2'
+              awslogs-region: 'eu-west-1'
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
@@ -105,7 +105,7 @@ Resources:
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
         - Name: 'crux-soak'
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-soak:latest'
+          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/crux-soak:latest'
           PortMappings:
             - ContainerPort: 8080
           Command:
@@ -115,7 +115,7 @@ Resources:
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-region: 'eu-west-2'
+              awslogs-region: 'eu-west-1'
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
