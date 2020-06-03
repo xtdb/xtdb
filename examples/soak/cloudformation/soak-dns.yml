@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  LoadBalancerDNSName:
+    Type: String
+  LoadBalancerCanonicalHostedZoneId:
+    Type: String
+
+Resources:
+  SoakRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !Ref 'LoadBalancerDNSName'
+        EvaluateTargetHealth: false
+        HostedZoneId: !Ref 'LoadBalancerCanonicalHostedZoneId'
+      HostedZoneName: 'crux.cloud.'
+      Name: 'soak.crux.cloud'
+      Type: 'A'

@@ -9,5 +9,3 @@ Resources:
 Outputs:
   FargateContainerSecurityGroup:
     Value: !Ref 'ECRRepository'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ECRRepository' ] ]
