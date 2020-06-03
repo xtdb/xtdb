@@ -609,6 +609,10 @@
   (let [q  "SELECT TRUNCATE(1.12, 1) FROM PERSON"]
     (t/is (= 1.1M (val (ffirst (query q))))))
 
+  ;; Todo, edge case not working:
+  #_(let [q  "SELECT TRUNCATE(1.12, TRUNCATE(1)) FROM PERSON"]
+    (t/is (= 1.1M (val (ffirst (query q))))))
+
   (let [q  "SELECT REPLACE(NAME, 'v', 'A') FROM PERSON"]
     (t/is (= " IAan " (val (ffirst (query q))))))
 
