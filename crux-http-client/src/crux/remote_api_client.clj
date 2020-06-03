@@ -290,7 +290,7 @@
                            :->jwt-token ->jwt-token}))))
 
   (status [_]
-    (api-request-sync url
+    (api-request-sync (str url "/_crux/status")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
