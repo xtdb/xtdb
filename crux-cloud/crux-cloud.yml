@@ -6,8 +6,8 @@ Resources:
     Properties:
       TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-cloud/vpc.yml
       Tags:
-        - Key: JUXTUser
-          Value: jms
+        - Key: juxt:team
+          Value: crux-core
 
   LoadBalancerStack:
     Type: AWS::CloudFormation::Stack
@@ -18,8 +18,8 @@ Resources:
         PublicSubnetOne: !GetAtt 'VPCStack.Outputs.PublicSubnetOne'
         PublicSubnetTwo: !GetAtt 'VPCStack.Outputs.PublicSubnetTwo'
       Tags:
-        - Key: JUXTUser
-          Value: jms
+        - Key: juxt:team
+          Value: crux-core
 Outputs:
    VPCId:
      Value: !GetAtt 'VPCStack.Outputs.VPCId'

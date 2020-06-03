@@ -16,16 +16,16 @@ Resources:
         LoadBalancerSG:
           Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerSG']]
       Tags:
-        - Key: JUXTUser
-          Value: jms
+        - Key: juxt:team
+          Value: crux-core
 
   ECRRepository:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecr-repo.yml
       Tags:
-        - Key: JUXTUser
-          Value: jms
+        - Key: juxt:team
+          Value: crux-core
 
   SoakDNS:
     Type: AWS::CloudFormation::Stack
@@ -37,8 +37,8 @@ Resources:
         LoadBalancerCanonicalHostedZoneId:
           Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerCanonicalHostedZoneId']]
       Tags:
-        - Key: JUXTUser
-          Value: jms
+        - Key: juxt:team
+          Value: crux-core
 
   ECSIngest:
     Type: AWS::CloudFormation::Stack
@@ -47,8 +47,8 @@ Resources:
       Parameters:
         ECSClusterARN: !GetAtt 'ECSCluster.Outputs.ECSClusterARN'
       Tags:
-        - Key: JUXTUser
-          Value: jms
+        - Key: juxt:team
+          Value: crux-core
 
   # ECSService:
   #   Type: AWS::CloudFormation::Stack
@@ -65,5 +65,5 @@ Resources:
   #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
   #       FargateContainerSecurityGroup: !GetAtt 'ECSCluster.Outputs.FargateContainerSecurityGroup'
   #     Tags:
-  #       - Key: JUXTUser
-  #         Value: jms
+  #       - Key: juxt:team
+  #         Value: crux-core
