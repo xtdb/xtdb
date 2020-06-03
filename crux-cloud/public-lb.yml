@@ -1,9 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  VpcStackName:
+  VPCId:
     Type: String
-    Default: crux-cloud-vpc
+  PublicSubnetOne:
+    Type: String
+  PublicSubnetTwo:
+    Type: String
   CertificateARN:
     Type: String
     Default: 'arn:aws:acm:eu-west-1:955308952094:certificate/51477c84-1221-44fa-b569-012e2ce9d338'
@@ -14,8 +17,7 @@ Resources:
     Properties:
       GroupName: "crux-cloud-public-load-balancer"
       GroupDescription: "Access to the public-facing load balancer"
-      VpcId:
-         Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+      VpcId: !Ref 'VPCId'
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
@@ -29,8 +31,8 @@ Resources:
       - Key: idle_timeout.timeout_seconds
         Value: '30'
       Subnets:
-        - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
-        - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
+        - !Ref 'PublicSubnetOne'
+        - !Ref 'PublicSubnetTwo'
       SecurityGroups: [!Ref 'LoadBalancerSG']
       Tags:
         - Key: Name
@@ -65,15 +67,15 @@ Resources:
 Outputs:
   LoadBalancerSG:
     Value: !Ref 'LoadBalancerSG'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancerSG' ] ]
 
   LoadBalancer:
     Value: !Ref 'LoadBalancer'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancer' ] ]
+
+  LoadBalancerDNSName:
+    Value: !GetAtt ['LoadBalancer', 'DNSName']
+
+  LoadBalancerCanonicalHostedZoneId:
+    Value: !GetAtt ['LoadBalancer', 'CanonicalHostedZoneID']
 
   LoadBalancerHTTPSListener:
     Value: !Ref 'LoadBalancerHTTPSListener'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancerHTTPSListener' ] ]
