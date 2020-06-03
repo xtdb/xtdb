@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  VpcStackName:
+    Type: String
+    Default: crux-cloud-vpc
+  CertificateARN:
+    Type: String
+    Default: 'arn:aws:acm:eu-west-1:955308952094:certificate/51477c84-1221-44fa-b569-012e2ce9d338'
+
+Resources:
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "crux-cloud-public-load-balancer"
+      GroupDescription: "Access to the public-facing load balancer"
+      VpcId:
+         Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'VPCId']]
+      SecurityGroupIngress:
+        # Allow access to ALB from anywhere on the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets:
+        - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetOne']]
+        - Fn::ImportValue: !Join [':', [!Ref 'VpcStackName', 'PublicSubnetTwo']]
+      SecurityGroups: [!Ref 'LoadBalancerSG']
+      Tags:
+        - Key: Name
+          Value: crux-cloud-lb
+
+  LoadBalancerHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref 'LoadBalancer'
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: 'redirect'
+          RedirectConfig:
+            Port: 443
+            Protocol: HTTPS
+            StatusCode: HTTP_302
+
+  LoadBalancerHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref 'LoadBalancer'
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+         - CertificateArn: !Ref CertificateARN
+      DefaultActions:
+        - Type: 'fixed-response'
+          FixedResponseConfig:
+            StatusCode: 503
+
+Outputs:
+  LoadBalancerSG:
+    Value: !Ref 'LoadBalancerSG'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancerSG' ] ]
+
+  LoadBalancer:
+    Value: !Ref 'LoadBalancer'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancer' ] ]
+
+  LoadBalancerHTTPSListener:
+    Value: !Ref 'LoadBalancerHTTPSListener'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'LoadBalancerHTTPSListener' ] ]
