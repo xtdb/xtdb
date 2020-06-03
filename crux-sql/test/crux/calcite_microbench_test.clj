@@ -25,7 +25,7 @@
     (merge (when (map? ret) ret)
            {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
 
-(defn prepared-query [^java.sql.Connection conn q]
+(defn ^java.sql.PreparedStatement prepared-query [^java.sql.Connection conn q]
   (.prepareStatement conn q))
 
 (defn query [^java.sql.Connection conn q]
@@ -41,9 +41,38 @@
   (def p (prepared-query conn "SELECT c_name FROM CUSTOMER"))
 
   (println (with-timing*
-             (fn [] {:count (count (c/q db '{:find [c_custkey c_name c_address c_nationkey c_phone c_acctbal c_mktsegment c_comment],
-                                             :where [[e :custkey c_custkey] [e :name c_name] [e :address c_address] [e :nationkey c_nationkey] [e :phone c_phone] [e :acctbal c_acctbal] [e :mktsegment c_mktsegment] [e :comment c_comment]],
-                                             :args []}))})))
+             (fn [] {:count (count (c/q db '{:find [e ?n]
+                                             :where [[e :l_partkey ?n]]}))})))
+
+  (println (with-timing*
+             (fn [] {:count (count (c/q db '{:find [l_orderkey],
+                                             :where [[e :l_orderkey l_orderkey]
+                                                     [e :l_partkey l_partkey]
+                                                     [e :l_suppkey l_suppkey]
+                                                     [e :l_linenumber l_linenumber]
+                                                     [e :l_quantity l_quantity]
+                                                     ;; [e :l_extendedprice l_extendedprice]
+                                                     ;; [e :l_discount l_discount]
+                                                     ;; [e :l_tax l_tax]
+                                                     ;; [e :l_returnflag l_returnflag]
+                                                     ;; [e :l_linestatus l_linestatus]
+                                                     ;; [e :l_shipdate l_shipdate]
+                                                     ;; [e :l_commitdate l_commitdate]
+                                                     ;; [e :l_receiptdate l_receiptdate]
+                                                     ;; [e :l_shipinstruct l_shipinstruct]
+                                                     ;; [e :l_shipmode l_shipmode]
+                                                     ;; [e :l_comment l_comment]
+                                                     ]
+                                             :timeout 100000}))})))
+
+  (println (with-timing*
+             (fn [] {:count (first (query conn "SELECT l_orderkey FROM LINEITEM"))})))
+
+  (println (with-timing*
+             (fn [] {:count (count (cf/exec-prepared-query
+                                    (let [s (prepared-query conn "SELECT * FROM LINEITEM")]
+                                      (.setQueryTimeout s 10)
+                                      s)))})))
 
   (println (with-timing*
              (fn [] {:count (count (query conn "SELECT * FROM CUSTOMER"))})))
