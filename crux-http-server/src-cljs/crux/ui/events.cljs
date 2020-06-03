@@ -24,6 +24,12 @@
        (js/console.warn "Metadata not found")))))
 
 (rf/reg-event-db
+ ::navigate-to-root-view
+ (fn [db [_ view]]
+   (-> (assoc-in db [:left-pane :visible?] true)
+       (assoc-in [:left-pane :view] view))))
+
+(rf/reg-event-db
  ::toggle-left-pane
  (fn [db _]
    (update-in db [:left-pane :visible?] not)))

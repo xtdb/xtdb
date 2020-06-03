@@ -4,7 +4,7 @@
 
 (def routes
   [""
-   ["/"
+   ["/_crux/index"
     {:name :homepage
      :link-text "Home"
      :controllers

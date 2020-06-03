@@ -82,7 +82,9 @@
 (rf/reg-sub
  ::query-right-pane-view
  (fn [db _]
-   (or (get-in db [:query :right-pane :view]) :table)))
+   (if (empty? (get-in db [:current-route :query-params]))
+     :query-root
+     (or (get-in db [:query :right-pane :view]) :table))))
 
 (rf/reg-sub
  ::query-right-pane-loading?
@@ -97,7 +99,10 @@
 (rf/reg-sub
  ::entity-right-pane-view
  (fn [db _]
-   (if (get-in db [:current-route :query-params :history]) :history :document)))
+   (cond
+     (nil? (get-in db [:current-route :query-params :eid])) :entity-root
+     (get-in db [:current-route :query-params :history]) :history
+     :else :document)))
 
 (rf/reg-sub
  ::entity-right-pane-document
