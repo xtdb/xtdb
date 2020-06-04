@@ -115,6 +115,16 @@ install https://get-coursier.io/docs/cli-installation[Coursier] and run:
 coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n crux -p crux -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf" -d org.apache.calcite.avatica.remote.Driver
 ----
 
+== Column Names
+
+SQL table column names are mapped from the symbols used by the
+`:crux.sql.table/query` query backing the table and referred to by
+`:crux.sql.table/columns`.
+
+Note that in the case where symbols are prefixed with `?`, then `?` is
+stripped for the SQL column name.
+
+
 == Column Types
 
 We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.html[`java.sql.Types`]:
@@ -127,6 +137,7 @@ We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.
 * `:timestamp`
 * `:varchar`
 * `:keyword`
+* `:uuid`
 
 Note that `bigint` maps to `Long`.
 
@@ -139,16 +150,17 @@ function, for example:
 SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')
 ----
 
-== Column Names
+Same for UUID:
 
-SQL table column names are mapped from the symbols used by the
-`:crux.sql.table/query` query backing the table and referred to by
-`:crux.sql.table/columns`.
+[source,clojure]
+----
+SELECT NAME FROM PERSON WHERE AUUID = UUID('e7ae4200-d619-4c20-9d64-87d1f90d0fd2')
+----
 
-Note that in the case where symbols are prefixed with `?`, then `?` is
-stripped for the SQL column name.
+Note that currently we do not support UUIDs and Keywords being set
+inside of prepared statements.
 
 == Current Limitations
 
-We support a range of calculations (ceil, lower, upper, concat), but
+* We support a range of calculations (ceil, lower, upper, concat), but
 we do not support all. A notable exception is `cast`.

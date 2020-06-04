@@ -11,6 +11,7 @@
   (:import clojure.lang.Symbol
            crux.calcite.CruxTable
            [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
+           java.util.UUID
            [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
            [java.util List Properties WeakHashMap]
@@ -178,6 +179,10 @@
                  (= "KEYWORD" (str (.-op ^RexCall n))))
         (keyword (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
 
+      (when (and (= SqlKind/OTHER_FUNCTION (.getKind n))
+                 (= "UUID" (str (.-op ^RexCall n))))
+        (UUID/fromString (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
+
       (when-let [op (get arithmetic-fns (.getKind n))]
         (ArbitraryFn. op (map #(->ast % schema) (.getOperands ^RexCall n))))
 
@@ -315,7 +320,7 @@
 (defn- transform-result [column-types tuple]
   (let [tuple (map (fn [clazz v]
                      (cond-> v
-                       (keyword? v) str
+                       (or (keyword? v) (uuid? v)) str
                        (inst? v) inst-ms
                        (and clazz (instance? clazz v)) identity
                        (and clazz (number? v)) (coerce-num clazz)))
@@ -380,7 +385,7 @@
         (log/error t "Exception occured calling Clojure fn")
         (throw t)))))
 
-(def ^:private mapped-types {:keyword SqlTypeName/OTHER})
+(def ^:private mapped-types {:keyword SqlTypeName/OTHER :uuid SqlTypeName/OTHER})
 (def ^:private supported-types #{:boolean :bigint :double :float :timestamp :varchar :decimal})
 
 ;; See: https://docs.oracle.com/javase/8/docs/api/java/sql/JDBCType.html
@@ -439,7 +444,8 @@
    :schemas [{:name "crux",
               :type "custom",
               :factory "crux.calcite.CruxSchemaFactory",
-              :functions [{:name "KEYWORD", :className "crux.calcite.KeywordFn"}]}]})
+              :functions [{:name "KEYWORD", :className "crux.calcite.KeywordFn"}
+                          {:name "UUID", :className "crux.calcite.UuidFn"}]}]})
 
 (defn- model-properties [node-uuid scan-only?]
   (doto (Properties.)
@@ -463,7 +469,7 @@
    (DriverManager/getConnection "jdbc:crux:" (-> node meta :crux.node/topology ::server :node-uuid (model-properties scan-only?)))))
 
 (defn start-server [{:keys [:crux.node/node]} {:keys [::port ::scan-only?]}]
-  (let [node-uuid (str (java.util.UUID/randomUUID))]
+  (let [node-uuid (str (UUID/randomUUID))]
     (.put !crux-nodes node-uuid node)
     (let [server (.build (doto (HttpServer$Builder.)
                            (.withHandler (LocalService. (JdbcMeta. "jdbc:crux:" (model-properties node-uuid scan-only?)))
