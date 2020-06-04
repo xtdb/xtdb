@@ -6,7 +6,6 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
-            [crux.query :as q]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe]
             [crux.api :as api])
@@ -208,9 +207,10 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [index-store query-engine], :as tx-consumer}]
+                                       {:keys [query-engine], :as tx-consumer}]
   (let [fn-id (c/new-id k)
         db (api/db query-engine tx-time)
+        tx-fn (->tx-fn (api/entity db fn-id))
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
         args-content-hash (c/new-id args-doc)
 
@@ -227,7 +227,7 @@
 
               :else (try
                       (let [ctx (->TxFnContext query-engine tx)
-                            res (apply (->tx-fn (q/entity db index-store fn-id)) ctx args)]
+                            res (apply (->tx-fn (api/entity db index-store fn-id)) ctx args)]
                         (if (false? res)
                           {:failed? true}
 
