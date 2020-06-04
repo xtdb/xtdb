@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 7)
+(def ^:const index-version 8)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -30,7 +30,7 @@
 (def ^:const content-hash->doc-index-id 0)
 
 (def ^:const ave-index-id 1)
-(def ^:const aecv-index-id 2)
+(def ^:const ecav-index-id 2)
 (def ^:const hash-cache-index-id 3)
 
 ;; main bitemp index [reverse]
