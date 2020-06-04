@@ -306,14 +306,9 @@
                      :av-count (->> (vals indexed-docs) (apply concat) (count))
                      :bytes-indexed bytes-indexed}))))
 
-(defn index-tx [{:keys [bus indexer document-store] :as tx-consumer}
+(defn index-tx [{:keys [indexer document-store] :as tx-consumer}
                 {::keys [tx-time tx-id] :as tx}
                 tx-events]
-  (s/assert ::txe/tx-events tx-events)
-
-  (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
-  (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
-
   (let [res (with-open [index-store (db/open-index-store indexer)]
               (let [tx-consumer (assoc tx-consumer :index-store index-store)]
                 (reduce (fn [{:keys [history] :as acc} tx-event]
@@ -357,10 +352,7 @@
         (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
         (db/mark-tx-as-failed indexer tx)))
 
-    (bus/send bus {:crux/event-type ::indexed-tx,
-                   ::submitted-tx tx,
-                   :committed? committed?
-                   ::txe/tx-events tx-events})))
+    {:committed committed}))
 
 (defn with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
   (case op
@@ -370,7 +362,7 @@
                                          (get arg-doc-id)))))
     evt))
 
-(defn- index-tx-log [{:keys [!error tx-log indexer document-store] :as tx-consumer} {::keys [^Duration poll-sleep-duration]}]
+(defn- index-tx-log [{:keys [!error tx-log indexer document-store bus] :as tx-consumer} {::keys [^Duration poll-sleep-duration]}]
   (log/info "Started tx-consumer")
   (try
     (while true
@@ -393,8 +385,19 @@
 
                                   (doseq [{:keys [::txe/tx-events] :as tx} tx-log-entry
                                           :let [tx (select-keys tx [::tx-time ::tx-id])]]
-                                    (index-tx tx-consumer tx (->> tx-events
-                                                                  (map #(with-tx-fn-args % tx-consumer))))
+
+                                    (s/assert ::txe/tx-events tx-events)
+
+                                    (log/debug "Indexing tx-id:" (::tx-id tx) "tx-events:" (count tx-events))
+                                    (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
+
+                                    (let [{:keys [committed?]} (index-tx tx-consumer tx (->> tx-events
+                                                                                             (map #(with-tx-fn-args % tx-consumer))))]
+
+                                      (bus/send bus {:crux/event-type ::indexed-tx,
+                                                     ::submitted-tx tx,
+                                                     :committed? committed?
+                                                     ::txe/tx-events tx-events}))
 
                                     (when (Thread/interrupted)
                                       (throw (InterruptedException.)))))
