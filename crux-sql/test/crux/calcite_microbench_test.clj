@@ -70,9 +70,49 @@
 
   (println (with-timing*
              (fn [] {:count (count (cf/exec-prepared-query
-                                    (let [s (prepared-query conn "SELECT * FROM LINEITEM")]
+                                    (let [s (prepared-query conn "SELECT * FROM LINEITEM LIMIT 10")]
                                       (.setQueryTimeout s 10)
                                       s)))})))
+
+  ;; Testing vars for range searches
+
+  (println (with-timing*
+             (fn [] {:count (count (c/q db '{:find [e]
+                                             :where [[e :l_quantity ?qty]
+                                                     [(> ?qty qty)]]
+                                             :args [{:qty 30.0}]}))})))
+
+  ;; using args:
+
+  (println (with-timing*
+             (fn [] {:count (count (c/q db '{:find [e]
+                                             :where [[e :l_quantity qty]]
+                                             :args [{:qty 30.0}]}))})))
+  ;; Args penalises
+  (println (with-timing*
+             (fn [] {:count (count (c/q db '{:find [e]
+                                             :where [[e :l_quantity ?qty]
+                                                     [(= qty ?qty)]]
+                                             :args [{:qty 30.0}]}))})))
+
+  ;; Not using Args (below)
+
+  (println (with-timing*
+             (fn [] {:count (count (c/q db '{:find [e]
+                                             :where [[e :l_quantity 30.0]]}))})))
+
+  ;; Fast:
+  (println (with-timing*
+             (fn [] {:count (count (c/q db '{:find [e]
+                                             :where [[e :l_quantity ?qty]
+                                                     [(= ?qty 30)]]}))})))
+
+  ;; Statement - = is optimised for, except when used with args
+
+  ;; SQL (below)
+
+  (println (with-timing*
+             (fn [] {:count (count (query conn "SELECT * FROM LINEITEM WHERE L_QUANTITY = 30.0"))})))
 
   (println (with-timing*
              (fn [] {:count (count (query conn "SELECT * FROM CUSTOMER"))})))
