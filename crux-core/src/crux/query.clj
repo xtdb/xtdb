@@ -6,12 +6,17 @@
             [com.stuartsierra.dependency :as dep]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.fork :as fork]
+            [crux.kv.memdb :as mem-kv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.bus :as bus]
             [crux.api :as api]
+            [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [crux.kv-indexer :as kvi]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
@@ -1271,8 +1276,6 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-
-
 (defrecord QueryDatasource [document-store indexer bus
                             ^Date valid-time ^Date transact-time
                             query-executor conform-cache query-cache
@@ -1369,7 +1372,33 @@
                                                                        (get (.content-hash etx))))))))))))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time))
+  (transactionTime [_] transact-time)
+
+  (withTx [this tx-ops]
+    (let [{:keys [::tx/tx-time] :as tx} (if-let [latest-completed-tx (db/latest-completed-tx indexer)]
+                                          {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
+                                           ::tx/tx-time (Date. (max (System/currentTimeMillis)
+                                                                    (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))}
+                                          {::tx/tx-time (Date.)
+                                           ::tx/tx-id 0})
+          conformed-tx-ops (map txc/conform-tx-op tx-ops)
+          docs (into {} (mapcat :docs) conformed-tx-ops)
+          document-store (doto (fork/->ForkedDocumentStore document-store (atom {}))
+                           (db/submit-docs docs))
+          indexer (doto (fork/->forked-indexer indexer (kvi/->KvIndexer (mem-kv/->mem-kv))
+                                               valid-time transact-time)
+                    (db/index-docs docs))]
+
+      (tx/index-tx {:document-store document-store
+                    :indexer indexer}
+                   (assoc tx :crux.db/valid-time valid-time)
+                   (map txc/->tx-event conformed-tx-ops))
+
+      (map->QueryDatasource (merge this
+                                   {:valid-time valid-time
+                                    :transact-time tx-time
+                                    :document-store document-store
+                                    :indexer indexer})))))
 
 (defrecord QueryEngine [^ExecutorService query-executor document-store
                         indexer bus

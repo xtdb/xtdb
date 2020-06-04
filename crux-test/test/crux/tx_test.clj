@@ -17,7 +17,8 @@
             [clojure.string :as string]
             [crux.tx.conform :as txc])
   (:import [java.util Date]
-           [java.time Duration]))
+           [java.time Duration]
+           [crux.codec EntityTx]))
 
 (t/use-fixtures :each fix/with-standalone-topology fix/with-kv-dir fix/with-node fix/with-silent-test-check
   (fn [f]
@@ -134,7 +135,7 @@
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
             (with-open [index-store (db/open-index-store (:indexer *api*))]
-              (t/is (nil? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
+              (t/is (nil? (.content-hash (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time))))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (:tx-id (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-time))))))))))
 

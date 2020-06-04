@@ -60,7 +60,7 @@
 
 (t/use-fixtures :each with-each-api-implementation)
 
-(defmacro with-both-dbs [[db db-args] & body]
+(defmacro with-dbs [[db db-args] & body]
   `(do
      (t/testing "with open-db"
        (with-open [~db (api/open-db ~@db-args)]
@@ -68,7 +68,12 @@
 
      (t/testing "with db"
        (let [~db (api/db ~@db-args)]
-         ~@body))))
+         ~@body))
+
+     (when-not (= *node-type* :remote)
+       (t/testing "with speculative db"
+         (let [~db (api/with-tx (api/db ~@db-args) [])]
+           ~@body)))))
 
 (t/deftest test-single-id
   (let [valid-time (Date.)
@@ -124,7 +129,7 @@
                           '{:find [e]
                             :where [[e :name "Ivan"]]})))
 
-      (with-both-dbs [db (*api*)]
+      (with-dbs [db (*api*)]
         (t/testing "query string"
           (t/is (= #{[:ivan]} (api/q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
 
@@ -155,7 +160,7 @@
     (let [valid-time (Date.)
           {::tx/keys [tx-time tx-id] :as submitted-tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (api/await-tx *api* submitted-tx)
-      (with-both-dbs [db (*api*)]
+      (with-dbs [db (*api*)]
         (let [entity-tx (api/entity-tx db :ivan)
               ivan {:crux.db/id :ivan :name "Ivan"}
               ivan-crux-id (c/new-id ivan)]
@@ -289,7 +294,7 @@
           v3 (submit-ivan {:version 3} #inst "2019-02-03")
           v2-corrected (submit-ivan {:version 2, :corrected? true} #inst "2019-02-02")]
 
-      (with-both-dbs [db (*api* #inst "2019-02-03")]
+      (with-dbs [db (*api* #inst "2019-02-03")]
         (t/is (= [v1 v2-corrected v3]
                  (api/entity-history db :ivan :asc {:with-docs? true})))
 
@@ -303,13 +308,13 @@
           (t/is (= [v3 v2-corrected v1]
                    (iterator-seq history-desc)))))
 
-      (with-both-dbs [db (*api* #inst "2019-02-02")]
+      (with-dbs [db (*api* #inst "2019-02-02")]
         (t/is (= [v1 v2-corrected]
                  (api/entity-history db :ivan :asc {:with-docs? true})))
         (t/is (= [v2-corrected v1]
                  (api/entity-history db :ivan :desc {:with-docs? true}))))
 
-      (with-both-dbs [db (*api* #inst "2019-01-31")]
+      (with-dbs [db (*api* #inst "2019-01-31")]
         (t/is (empty? (api/entity-history db :ivan :asc)))
         (t/is (empty? (api/entity-history db :ivan :desc)))
 
@@ -318,7 +323,7 @@
           (t/is (empty? (iterator-seq history-asc)))
           (t/is (empty? (iterator-seq history-desc)))))
 
-      (with-both-dbs [db (*api* #inst "2019-02-04")]
+      (with-dbs [db (*api* #inst "2019-02-04")]
         (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
                     history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
           (t/is (= [v1 v2-corrected v3]
@@ -326,11 +331,11 @@
           (t/is (= [v3 v2-corrected v1]
                    (iterator-seq history-desc)))))
 
-      (with-both-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
+      (with-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
         (t/is (empty? (api/entity-history db :ivan :asc)))
         (t/is (empty? (api/entity-history db :ivan :desc))))
 
-      (with-both-dbs [db (*api* #inst "2019-02-02" (:crux.tx/tx-time v2))]
+      (with-dbs [db (*api* #inst "2019-02-02" (:crux.tx/tx-time v2))]
         (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
                     history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
           (t/is (= [v1 v2]
@@ -338,7 +343,7 @@
           (t/is (= [v2 v1]
                    (iterator-seq history-desc)))))
 
-      (with-both-dbs [db (*api* #inst "2019-02-03" (:crux.tx/tx-time v2))]
+      (with-dbs [db (*api* #inst "2019-02-03" (:crux.tx/tx-time v2))]
         (t/is (= [v1 v2]
                  (api/entity-history db :ivan :asc {:with-docs? true})))
         (t/is (= [v2 v1]

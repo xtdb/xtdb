@@ -91,12 +91,13 @@
   (fn [[op :as tx-event] tx tx-consumer]
     op))
 
-(defn- put-delete-etxs [k start-valid-time end-valid-time content-hash {::keys [tx-time tx-id]} {:keys [history]}]
+(defn- put-delete-etxs [k start-valid-time end-valid-time content-hash
+                        {::keys [tx-time tx-id], :keys [crux.db/valid-time]} {:keys [history]}]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
                           (c/->EntityTx eid vt tx-time tx-id content-hash))
 
-        start-valid-time (or start-valid-time tx-time)]
+        start-valid-time (or start-valid-time valid-time tx-time)]
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
@@ -130,20 +131,20 @@
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx tx-consumer)})
 
 (defmethod index-tx-event :crux.tx/match [[op k v at-valid-time :as match-op]
-                                          {::keys [tx-time tx-id] :as tx}
+                                          {::keys [tx-time tx-id], :keys [crux.db/valid-time], :as tx}
                                           {:keys [history] :as tx-consumer}]
   {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history
                                                                       (c/new-id k)
-                                                                      (or at-valid-time tx-time)
+                                                                      (or at-valid-time valid-time tx-time)
                                                                       tx-time)]
                      (or (= (c/new-id content-hash) (c/new-id v))
                          (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash))))})
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
-                                        {::keys [tx-time tx-id] :as tx}
+                                        {::keys [tx-time tx-id], :keys [crux.db/valid-time] :as tx}
                                         {:keys [history document-store] :as tx-consumer}]
   (let [eid (c/new-id k)
-        valid-time (or at-valid-time tx-time)]
+        valid-time (or at-valid-time valid-time tx-time)]
 
     {:pre-commit-fn #(let [{:keys [content-hash] :as entity} (entity-at history eid valid-time tx-time)
                            current-id (c/new-id content-hash)
@@ -306,9 +307,7 @@
                      :av-count (->> (vals indexed-docs) (apply concat) (count))
                      :bytes-indexed bytes-indexed}))))
 
-(defn index-tx [{:keys [indexer document-store] :as tx-consumer}
-                {::keys [tx-time tx-id] :as tx}
-                tx-events]
+(defn index-tx [{:keys [indexer document-store] :as tx-consumer} tx tx-events]
   (let [res (with-open [index-store (db/open-index-store indexer)]
               (let [tx-consumer (assoc tx-consumer :index-store index-store)]
                 (reduce (fn [{:keys [history] :as acc} tx-event]
@@ -349,7 +348,7 @@
         (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
       (do
-        (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
+        (log/warn "Transaction aborted:" (pr-str tx-events) (pr-str tx))
         (db/mark-tx-as-failed indexer tx)))
 
     {:committed committed}))

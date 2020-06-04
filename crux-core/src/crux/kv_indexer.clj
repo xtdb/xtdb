@@ -5,7 +5,9 @@
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.status :as status]
-            [crux.morton :as morton])
+            [crux.morton :as morton]
+            [crux.kv.memdb :as memdb]
+            [crux.tx :as tx])
   (:import (crux.codec Id EntityTx)
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
@@ -615,13 +617,12 @@
           (let [entity-tx (safe-entity-tx (decode-entity+vt+tt+tx-id-key-from k))
                 v (kv/value i)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
-              (when-not (mem/buffers=? c/nil-id-buffer v)
-                (enrich-entity-tx entity-tx v))
+              (cond-> entity-tx
+                (not (mem/buffers=? c/nil-id-buffer v)) (enrich-entity-tx v))
               (if morton/*use-space-filling-curve-index?*
                 (let [seek-z (encode-entity-tx-z-number valid-time transact-time)]
-                  (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
-                    (when-not (= ::deleted-entity k)
-                      v)))
+                  (when-let [[_ v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid-buffer nil)]
+                    v))
                 (recur (kv/next i)))))))))
 
   (entity-history [this eid sort-order opts]

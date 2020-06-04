@@ -87,12 +87,9 @@
 
                       (write-etxs (vals vt+tt->etx))
                       (with-open [index-store (db/open-index-store *indexer*)]
-                        (->> (for [[vt tt] (concat txs queries)
-                                   :let [expected (entity-as-of vt+tt->etx vt tt)
-                                         expected-or-deleted (when-not (= (c/new-id nil)
-                                                                          (c/new-id (some-> expected .content-hash)))
-                                                               expected)]]
-                               (= expected-or-deleted (db/entity-as-of index-store eid vt tt)))
+                        (->> (for [[vt tt] (concat txs queries)]
+                               (= (entity-as-of vt+tt->etx vt tt)
+                                  (db/entity-as-of index-store eid vt tt)))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-range-test 50

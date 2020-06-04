@@ -281,7 +281,10 @@
   (transaction-time [db]
     "returns the time of the latest transaction applied to this db value.
   If a tx time was specified when db value was acquired then returns
-  the specified time."))
+  the specified time.")
+
+  (with-tx [db tx-ops]
+    (.withTx db tx-ops)))
 
 (let [arglists '(^crux.api.ICursor
                  [db eid sort-order]
@@ -309,7 +312,9 @@
     ([this eid sort-order opts] (.openEntityHistory this eid (->HistoryOptions sort-order opts))))
 
   (valid-time [this] (.validTime this))
-  (transaction-time [this] (.transactionTime this)))
+  (transaction-time [this] (.transactionTime this))
+
+  (with-tx [this tx-ops] (.withTx this tx-ops)))
 
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."
