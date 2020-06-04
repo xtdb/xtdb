@@ -169,19 +169,18 @@
                                (mapv #(->ast % schema) operands)))
         (throw (IllegalArgumentException. (str "Can't understand call " n))))))
 
+(def ^:private crux-custom-fns
+  {"KEYWORD" keyword
+   "UUID" #(UUID/fromString %)})
+
 (defn- ->ast
   "Turn the Calcite RexNode into a data-structure we can parse."
   [^RexNode n schema]
   (or (when-let [op (pred-fns (.getKind n))]
         (SQLPredicate. op (map #(->ast % schema) (.-operands ^RexCall n))))
 
-      (when (and (= SqlKind/OTHER_FUNCTION (.getKind n))
-                 (= "KEYWORD" (str (.-op ^RexCall n))))
-        (keyword (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
-
-      (when (and (= SqlKind/OTHER_FUNCTION (.getKind n))
-                 (= "UUID" (str (.-op ^RexCall n))))
-        (UUID/fromString (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
+      (when-let [custom-fn (and (= SqlKind/OTHER_FUNCTION (.getKind n)) (crux-custom-fns (str (.-op ^RexCall n))))]
+        (custom-fn (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
 
       (when-let [op (get arithmetic-fns (.getKind n))]
         (ArbitraryFn. op (map #(->ast % schema) (.getOperands ^RexCall n))))
