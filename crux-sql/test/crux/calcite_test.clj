@@ -308,11 +308,28 @@
 (t/deftest test-keywords
   (fix/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :homeworld "Earth" :alive true :age 21}])
 
-  (t/testing "select keywords"
+  (t/testing "select"
     (t/is (= [{:id ":human/ivan"}] (query "SELECT ID FROM PERSON"))))
 
-  (t/testing "filter using keyword"
+  (t/testing "filter"
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')")))))
+
+(t/deftest test-uuid
+  (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                         :crux.sql.table/name "person"
+                         :crux.sql.table/query '{:find [?id ?name ?auuid]
+                                                 :where [[?id :name ?name]
+                                                         [?id :auuid ?auuid]]}
+                         :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?auuid :uuid}}])
+  (let [auuid (java.util.UUID/randomUUID)]
+    (fix/transact! *api* [{:crux.db/id :human/ivan :name "Ivan" :auuid auuid}])
+    (t/is (= [{:id ":human/ivan",
+               :name "Ivan",
+               :auuid (str auuid)}]
+             (query "SELECT * FROM PERSON")))
+
+    (t/testing "filter"
+      (t/is (= [{:name "Ivan"}] (query (format "SELECT NAME FROM PERSON WHERE AUUID = UUID('%s')" auuid)))))))
 
 (t/deftest test-equality-of-columns
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Ivan" :age 21 :alive true}
