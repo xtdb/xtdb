@@ -50,6 +50,8 @@
 (defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
+(def empty-buffer (allocate-unpooled-buffer 0))
+
 (def ^:private ^:const alignment-round-mask 0xf)
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
