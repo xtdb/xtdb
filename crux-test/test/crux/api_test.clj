@@ -11,6 +11,7 @@
             [crux.db :as db]
             [crux.query :as q]
             [crux.tx :as tx]
+            [crux.tx.event :as txe]
             [crux.fixtures :as f]
             [clojure.java.io :as io])
   (:import crux.api.NodeOutOfSyncException
@@ -20,12 +21,15 @@
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
 
+(def ^:dynamic *http-server-api* nil)
+
 (def api-implementations
   (-> {:local-standalone (t/join-fixtures [fix/with-standalone-topology fix/with-kv-dir fix/with-node])
        :remote (t/join-fixtures [fix/with-standalone-topology
                                  fix/with-kv-dir
                                  fh/with-http-server
                                  fix/with-node
+                                 (fn [f] (binding [*http-server-api* *api*] (f)))
                                  fh/with-http-client])
        :h2 (t/join-fixtures [#(fj/with-jdbc-node :h2 %) fix/with-kv-dir fix/with-node])
        :sqlite (t/join-fixtures [#(fj/with-jdbc-node :sqlite %) fix/with-kv-dir fix/with-node])
@@ -383,3 +387,85 @@
                           :crux/tx-ops [[:crux.tx/put {:crux.db/id :baz}]]}
                          baz-tx)]
                  @!events))))))
+
+(t/deftest test-tx-fn-replacing-arg-docs-866
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
+                                       :crux.db/fn '(fn [ctx doc]
+                                                      [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
+
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
+    (let [*server-api* (or *http-server-api* *api*)]
+      (t/testing "replaces args doc with resulting ops"
+        (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
+
+        (t/is (= {:crux.db/id :ivan, :name "Ivan"}
+                 (api/entity (api/db *api*) :ivan)))
+
+        (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
+                           (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
+
+          (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put :ivan (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
+                   (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
+                       (get arg-doc-id)
+                       (dissoc :crux.db/id))))))
+
+      (t/testing "nested tx-fn"
+        (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-bob-and-ivan
+                                             :crux.db/fn '(fn [ctx bob ivan]
+                                                            [[:crux.tx/put (assoc bob :crux.db/id :bob)]
+                                                             [:crux.tx/fn :put-ivan ivan]])}]])
+
+        (fix/submit+await-tx [[:crux.tx/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
+
+        (t/is (= {:crux.db/id :ivan, :name "Ivan2"}
+                 (api/entity (api/db *api*) :ivan)))
+
+        (t/is (= {:crux.db/id :bob, :name "Bob"}
+                 (api/entity (api/db *api*) :bob)))
+
+        (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) 1)]
+                           (-> (iterator-seq tx-log) last ::txe/tx-events first last))
+              arg-doc (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
+                          (get arg-doc-id))
+
+              sub-arg-doc-id (-> arg-doc :crux.db.fn/tx-events second last)
+              sub-arg-doc (-> (db/fetch-docs (:document-store *server-api*) #{sub-arg-doc-id})
+                              (get sub-arg-doc-id))]
+
+          (t/is (= {:crux.db/id (:crux.db/id arg-doc)
+                    :crux.db.fn/tx-events [[:crux.tx/put :bob (c/new-id {:crux.db/id :bob, :name "Bob"})]
+                                           [:crux.tx/fn :put-ivan sub-arg-doc-id]]}
+                   arg-doc))
+
+          (t/is (= {:crux.db/id (:crux.db/id sub-arg-doc)
+                    :crux.db.fn/tx-events [[:crux.tx/put :ivan (c/new-id {:crux.db/id :ivan :name "Ivan2"})]]}
+                   sub-arg-doc))))
+
+      (t/testing "copes with args doc having been replaced"
+        (let [sergei {:crux.db/id :sergei
+                      :name "Sergei"}
+              arg-doc {:crux.db/id :args
+                       :crux.db.fn/tx-events [[:crux.tx/put :sergei (c/new-id sergei)]]}]
+          (db/submit-docs (:document-store *server-api*)
+                          {(c/new-id arg-doc) arg-doc
+                           (c/new-id sergei) sergei})
+          (let [tx @(db/submit-tx (:tx-log *server-api*) [[:crux.tx/fn :put-sergei (c/new-id arg-doc)]])]
+            (api/await-tx *api* tx)
+
+            (t/is (= sergei (api/entity (api/db *api*) :sergei))))))
+
+      (t/testing "failed tx-fn"
+        (fix/submit+await-tx [[:crux.tx/fn :put-petr {:name "Petr"}]])
+
+        (t/is (nil? (api/entity (api/db *api*) :petr)))
+
+        (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
+                           (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
+
+          (t/is (= {:crux.db.fn/failed? true
+                    :crux.db.fn/exception 'java.lang.NullPointerException
+                    :crux.db.fn/message nil
+                    :crux.db.fn/ex-data nil}
+                   (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
+                       (get arg-doc-id)
+                       (dissoc :crux.db/id)))))))))
