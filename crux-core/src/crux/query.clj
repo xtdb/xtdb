@@ -1157,7 +1157,7 @@
                                   :crux.db/content-hash)]
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
-        (idx/keep-non-evicted-doc))))
+        (c/keep-non-evicted-doc))))
 
 (defrecord QueryDatasource [query-engine
                             ^Date valid-time
