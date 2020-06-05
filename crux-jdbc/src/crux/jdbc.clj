@@ -77,8 +77,11 @@
 (defn- doc-exists? [ds k]
   (not-empty (jdbc/execute-one! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
-(defn- evict-docs! [ds k tombstone]
-  (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
+(defn- update-doc! [ds k doc]
+  (jdbc/execute! ds ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze doc) k]))
+
+(defn- evict-doc! [ds k tombstone]
+  (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze tombstone) k]))
 
 (defrecord JdbcDocumentStore [ds dbtype]
   db/DocumentStore
@@ -88,10 +91,10 @@
       (if (c/evicted-doc? doc)
         (do
           (insert-event! ds id doc "docs")
-          (evict-docs! ds id (nippy/freeze doc)))
+          (evict-doc! ds id doc))
         (if-not (doc-exists? ds id)
           (insert-event! ds id doc "docs")
-          (log/infof "Skipping doc insert %s" id)))))
+          (update-doc! ds id doc)))))
 
   (fetch-docs [this ids]
     (->> (for [id-batch (partition-all 100 ids)
