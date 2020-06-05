@@ -566,10 +566,13 @@
                                     (if (logic-var? arg)
                                       (bound-result-for-var index-store var->bindings join-keys arg)
                                       arg))]
-             (when-let [pred-result (apply pred-fn args)]
-               (when return
-                 (idx/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
-               pred-result)))})))
+             (let [pred-result (apply pred-fn args)]
+               (if return
+                 (if-let [values (not-empty (mapv vector (c/vectorize-value pred-result)))]
+                   (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values)
+                       true)
+                   false)
+                 pred-result))))})))
 
 ;; TODO: For or (but not or-join) it might be possible to embed the
 ;; entire or expression into the parent join via either OrVirtualIndex
