@@ -9,8 +9,7 @@
             [crux.query :as q]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe]
-            [crux.api :as api]
-            [crux.tx :as tx])
+            [crux.api :as api])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
