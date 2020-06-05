@@ -551,13 +551,12 @@
                  log))))))
 
 (t/deftest test-can-apply-transaction-fn
-  (with-redefs [tx/tx-fns-enabled? true]
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
           v4-ivan (assoc v1-ivan :name "IVAN")
           update-attribute-fn {:crux.db/id :update-attribute-fn
-                               :crux.db.fn/body
-                               '(fn [db eid k f]
-                                  [[:crux.tx/put (update (crux.api/entity db eid) k (eval f))]])}]
+                               :crux.db/fn '(fn [ctx eid k f]
+                                              [[:crux.tx/put (update (crux.api/entity (crux.api/db ctx) eid) k (eval f))]])}]
       (fix/submit+await-tx [[:crux.tx/put v1-ivan]
                             [:crux.tx/put update-attribute-fn]])
       (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
@@ -586,16 +585,16 @@
           (t/testing "invalid results"
             (fix/submit+await-tx [[:crux.tx/put
                                    {:crux.db/id :invalid-fn
-                                    :crux.db.fn/body '(fn [db]
-                                                        [[:crux.tx/foo]])}]])
+                                    :crux.db/fn '(fn [ctx]
+                                                   [[:crux.tx/foo]])}]])
             (fix/submit+await-tx '[[:crux.tx/fn :invalid-fn]])
             (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op" (some-> (#'tx/reset-tx-fn-error) throw))))
 
           (t/testing "exception thrown"
             (fix/submit+await-tx [[:crux.tx/put
                                    {:crux.db/id :exception-fn
-                                    :crux.db.fn/body '(fn [db]
-                                                        (throw (RuntimeException. "foo")))}]])
+                                    :crux.db/fn '(fn [ctx]
+                                                   (throw (RuntimeException. "foo")))}]])
             (fix/submit+await-tx '[[:crux.tx/fn :exception-fn]])
             (t/is (thrown-with-msg? RuntimeException #"foo" (some-> (#'tx/reset-tx-fn-error) throw))))
 
@@ -607,9 +606,8 @@
 
         (t/testing "function ops can return other function ops"
           (let [returns-fn {:crux.db/id :returns-fn
-                            :crux.db.fn/body
-                            '(fn [db]
-                               [[:crux.tx/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
+                            :crux.db/fn '(fn [ctx]
+                                           [[:crux.tx/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
             (fix/submit+await-tx [[:crux.tx/put returns-fn]])
             (fix/submit+await-tx [[:crux.tx/fn :returns-fn]])
             (some-> (#'tx/reset-tx-fn-error) throw)
@@ -621,108 +619,25 @@
                                 :hair-style "short"
                                 :mass 60})
                 merge-fn {:crux.db/id :merge-fn
-                          :crux.db.fn/body '(fn [db eid m]
-                                              [[:crux.tx/put (merge (crux.api/entity db eid) m)]])}]
+                          :crux.db/fn `(fn [ctx# eid# m#]
+                                         [[:crux.tx/put (merge (api/entity (api/db ctx#) eid#) m#)]])}]
             (fix/submit+await-tx [[:crux.tx/put merge-fn]])
             (fix/submit+await-tx [[:crux.tx/fn :merge-fn :ivan {:mass 60, :hair-style "short"}]])
             (fix/submit+await-tx [[:crux.tx/fn :merge-fn :ivan {:height 180}]])
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= v5-ivan (api/entity (api/db *api*) :ivan)))))
 
-        (t/testing "can access current transaction as dynamic var"
+        (t/testing "can access current transaction on tx-fn context"
           (fix/submit+await-tx
            [[:crux.tx/put
              {:crux.db/id :tx-metadata-fn
-              :crux.db.fn/body
-              '(fn [db]
-                 [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx crux.tx/*current-tx*}]])}]])
+              :crux.db/fn `(fn [ctx#]
+                             [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx (api/indexing-tx ctx#)}]])}]])
           (let [submitted-tx (fix/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= {:crux.db/id :tx-metadata
-                      :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn :tx-metadata-fn]])}
+                      :crux.tx/current-tx submitted-tx}
                      (api/entity (api/db *api*) :tx-metadata)))))))))
-
-(t/deftest test-tx-fn-replacing-arg-docs-866
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
-                                       :crux.db.fn/body '(fn [db doc]
-                                                           [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
-
-  (with-redefs [tx/tx-fns-enabled? true
-                tx/tx-fn-eval-cache (memoize eval)]
-    (t/testing "replaces args doc with resulting ops"
-      (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
-
-      (t/is (= {:crux.db/id :ivan, :name "Ivan"}
-               (api/entity (api/db *api*) :ivan)))
-
-      (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
-                         (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
-
-        (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put :ivan (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
-                 (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
-                     (get arg-doc-id)
-                     (dissoc :crux.db/id))))))
-
-    (t/testing "nested tx-fn"
-      (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-bob-and-ivan
-                                           :crux.db.fn/body '(fn [db bob ivan]
-                                                               [[:crux.tx/put (assoc bob :crux.db/id :bob)]
-                                                                [:crux.tx/fn :put-ivan ivan]])}]])
-
-      (fix/submit+await-tx [[:crux.tx/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
-
-      (t/is (= {:crux.db/id :ivan, :name "Ivan2"}
-               (api/entity (api/db *api*) :ivan)))
-
-      (t/is (= {:crux.db/id :bob, :name "Bob"}
-               (api/entity (api/db *api*) :bob)))
-
-      (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) 1)]
-                         (-> (iterator-seq tx-log) last ::txe/tx-events first last))
-            arg-doc (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
-                        (get arg-doc-id))
-
-            sub-arg-doc-id (-> arg-doc :crux.db.fn/tx-events second last)
-            sub-arg-doc (-> (db/fetch-docs (:document-store *api*) #{sub-arg-doc-id})
-                            (get sub-arg-doc-id))]
-
-        (t/is (= {:crux.db/id (:crux.db/id arg-doc)
-                  :crux.db.fn/tx-events [[:crux.tx/put :bob (c/new-id {:crux.db/id :bob, :name "Bob"})]
-                                         [:crux.tx/fn :put-ivan sub-arg-doc-id]]}
-                 arg-doc))
-
-        (t/is (= {:crux.db/id (:crux.db/id sub-arg-doc)
-                  :crux.db.fn/tx-events [[:crux.tx/put :ivan (c/new-id {:crux.db/id :ivan :name "Ivan2"})]]}
-                 sub-arg-doc))))
-
-    (t/testing "copes with args doc having been replaced"
-      (let [sergei {:crux.db/id :sergei
-                    :name "Sergei"}
-            arg-doc {:crux.db/id :args
-                     :crux.db.fn/tx-events [[:crux.tx/put :sergei (c/new-id sergei)]]}]
-        (db/submit-docs (:document-store *api*)
-                        {(c/new-id arg-doc) arg-doc
-                         (c/new-id sergei) sergei})
-        (let [tx @(db/submit-tx (:tx-log *api*) [[:crux.tx/fn :put-sergei (c/new-id arg-doc)]])]
-          (api/await-tx *api* tx)
-
-          (t/is (= sergei (api/entity (api/db *api*) :sergei))))))
-
-    (t/testing "failed tx-fn"
-      (fix/submit+await-tx [[:crux.tx/fn :put-petr {:name "Petr"}]])
-
-      (t/is (nil? (api/entity (api/db *api*) :petr)))
-
-      (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
-                         (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
-
-        (t/is (= {:crux.db.fn/failed? true
-                  :crux.db.fn/exception 'java.lang.NullPointerException
-                  :crux.db.fn/message nil
-                  :crux.db.fn/ex-data nil}
-                 (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
-                     (get arg-doc-id)
-                     (dissoc :crux.db/id))))))))
 
 (t/deftest tx-log-evict-454 []
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :to-evict}]])
@@ -743,18 +658,27 @@
              (->> (iterator-seq log-iterator)
                   (map :crux.api/tx-ops))))))
 
-(t/deftest nil-transaction-fn-457
-  (with-redefs [tx/tx-fns-enabled? true]
-    (let [merge-fn {:crux.db/id :my-fn
-                    :crux.db.fn/body '(fn [db] nil)}]
+(t/deftest transaction-fn-return-values-457
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
+    (let [nil-fn {:crux.db/id :nil-fn
+                  :crux.db/fn '(fn [ctx] nil)}
+          false-fn {:crux.db/id :false-fn
+                    :crux.db/fn '(fn [ctx] false)}]
 
-      (fix/submit+await-tx [[:crux.tx/put merge-fn]])
-      (fix/submit+await-tx [[:crux.tx/fn :my-fn]
+      (fix/submit+await-tx [[:crux.tx/put nil-fn]
+                            [:crux.tx/put false-fn]])
+      (fix/submit+await-tx [[:crux.tx/fn :nil-fn]
                             [:crux.tx/put {:crux.db/id :foo
-                                           :bar :baz}]])
+                                           :foo? true}]])
 
-      (t/is (= {:crux.db/id :foo, :bar :baz}
-               (api/entity (api/db *api*) :foo))))))
+      (t/is (= {:crux.db/id :foo, :foo? true}
+               (api/entity (api/db *api*) :foo)))
+
+      (fix/submit+await-tx [[:crux.tx/fn :false-fn]
+                            [:crux.tx/put {:crux.db/id :bar
+                                           :bar? true}]])
+
+      (t/is (nil? (api/entity (api/db *api*) :bar))))))
 
 (t/deftest map-ordering-362
   (t/testing "cas is independent of map ordering"
