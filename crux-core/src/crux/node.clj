@@ -45,21 +45,14 @@
   (db [this valid-time tx-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [latest-tx-time (:crux.tx/tx-time (.latestCompletedTx this))
-            _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-                (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
-                                                        tx-time latest-tx-time)
-                                                tx-time latest-tx-time)))
-            valid-time (or valid-time (cio/next-monotonic-date))
-            tx-time (or tx-time latest-tx-time valid-time)]
-
-        (q/db query-engine valid-time tx-time))))
+      (api/db query-engine valid-time tx-time)))
 
   (openDB [this] (.openDB this nil nil))
   (openDB [this valid-time] (.openDB this valid-time nil))
   (openDB [this valid-time tx-time]
-    (let [db (.db this valid-time tx-time)]
-      (assoc db :index-store (q/open-index-store db))))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (api/open-db query-engine valid-time tx-time)))
 
   (status [this]
     (cio/with-read-lock lock

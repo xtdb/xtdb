@@ -133,6 +133,40 @@ Evicts a document from Crux. Historical versions of the document will no longer 
 [:crux.tx/evict :dbpedia.resource/Pablo-Picasso]
 ----
 
+== Transaction functions
+
+Transaction functions are user-supplied functions that run on the individual Crux nodes when a transaction is being ingested.
+They can take any number of parameters, and return normal transaction operations which are then indexed as above.
+If they return `false` or throw an exception, the whole transaction will roll back.
+
+Transaction functions can be used, for example, to safely check the current database state before applying a transaction, for integrity checks, or to patch an entity.
+
+Transaction functions are created/updated by submitting a document to Crux with a `crux.db/fn` key.
+These functions are passed a 'context' parameter, which can be used to obtain a database value using `db` or `open-db`.
+
+[source,clojure]
+----
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id :increment-age
+                                     ;; note that the function body is quoted.
+                                     :crux.db/fn '(fn [ctx eid]
+                                                    (let [db (crux.api/db ctx)
+                                                          entity (crux.api/entity db eid)]
+                                                      [[:crux.tx/put (update entity :age inc)]]))}]])
+----
+
+You can then invoke these transaction functions by submitting a `:crux.tx/fn` operation:
+
+[source,clojure]
+----
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :age 40}]])
+(crux/submit-tx node [[:crux.tx/fn :increment-age :ivan]])
+
+;; once those transactions have been indexed
+
+(crux/entity (crux/db node) :ivan)
+;; => {:crux.db/id :ivan, :age 41}
+----
+
 == Events
 
 You can subscribe to Crux events using the `(crux.api/listen node event-opts f)` function.
