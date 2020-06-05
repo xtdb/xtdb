@@ -2010,11 +2010,13 @@
                #{["a" 1] ["abc" 3]})))
 
     (t/testing "Built-in vector, hashmap"
-      (t/is (= (api/q db
-                      '{:find [?tx-data]
-                        :where [[(identity :db/add) ?op]
-                                [(vector ?op -1 :attr 12) ?tx-data]]})
-               #{[[:db/add -1 :attr 12]]}))
+      ;; Crux differs here by treating vectors and sets as multiple
+      ;; results.
+      #_(t/is (= (api/q db
+                        '{:find [?tx-data]
+                          :where [[(identity :db/add) ?op]
+                                  [(vector ?op -1 :attr 12) ?tx-data]]})
+                 #{[[:db/add -1 :attr 12]]}))
 
       (t/is (= (api/q db
                       '{:find [?tx-data]
@@ -2105,15 +2107,16 @@
                                 [:1 :age 35]]})
                #{})))
 
-    (t/testing "Returning nil from function filters out tuple from result"
-      (t/is (= (api/q db
-                      {:find '[?x]
-                       :where '[[(crux.query-test/even-or-nil? ?in) ?x]]
-                       :args [{:?in 1}
-                              {:?in 2}
-                              {:?in 3}
-                              {:?in 4}]})
-               #{[2] [4]})))
+    ;; Crux supports nil and false results.
+    #_(t/testing "Returning nil from function filters out tuple from result"
+        (t/is (= (api/q db
+                        {:find '[?x]
+                         :where '[[(crux.query-test/even-or-nil? ?in) ?x]]
+                         :args [{:?in 1}
+                                {:?in 2}
+                                {:?in 3}
+                                {:?in 4}]})
+                 #{[2] [4]})))
 
     ;; NOTE: Crux does not currently support destructuring.
     #_(t/testing "Result bindings"
@@ -2222,6 +2225,62 @@
     (t/is (= #{[42]} (api/q db
                             '{:find [?x]
                               :where [[(crux.query-test/sample-query-fn) ?x]]})))))
+
+(t/deftest test-can-bind-function-returns-to-falsy
+  ;; Datomic does allow binding falsy values, DataScript doesn't
+  ;; see "Returning nil from function filters out tuple from result"
+  (t/is (= #{[false]}
+           (api/q (api/db *api*)
+                  '{:find [b]
+                    :where [[(identity false) b]]})))
+
+  (t/is (= #{[nil]}
+           (api/q (api/db *api*)
+                  '{:find [b]
+                    :where [[(identity nil) b]]})))
+
+  (t/is (= #{[true]}
+           (api/q (api/db *api*)
+                  '{:find [b]
+                    :where [[(identity true) b]]}))))
+
+(t/deftest test-can-bind-function-returns-to-multiple-values
+  (t/testing "vectors"
+    (t/is (= #{[1]
+               [2]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(vector 1 2) x]]})))
+
+    (t/is (= #{}
+           (api/q (api/db *api*)
+                  '{:find [x]
+                    :where [[(vector) x]]}))))
+
+  (t/testing "sets"
+    (t/is (= #{[1]
+               [2]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(sorted-set 1 2) x]]})))
+
+
+
+    (t/is (= #{}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(sorted-set) x]]}))))
+
+  (t/testing "maps are treated as single values"
+    (t/is (= #{[{1 2}]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(hash-map 1 2) x]]})))
+
+    (t/is (= #{[{}]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(hash-map) x]]})))))
 
 ;; Tests from Racket Datalog
 ;; https://github.com/racket/datalog/tree/master/tests/examples
