@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 7)
+(def ^:const index-version 8)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -30,7 +30,7 @@
 (def ^:const content-hash->doc-index-id 0)
 
 (def ^:const ave-index-id 1)
-(def ^:const aecv-index-id 2)
+(def ^:const ecav-index-id 2)
 (def ^:const hash-cache-index-id 3)
 
 ;; main bitemp index [reverse]
@@ -52,11 +52,14 @@
 ;; used in standalone TxLog
 (def ^:const tx-events-index-id 9)
 
+
+;; prefix indexes
+(def ^:const av-index-id 10)
+(def ^:const ae-index-id 11)
+
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
-
-(def empty-buffer (mem/allocate-unpooled-buffer 0))
 
 (def ^:const ^:private max-string-index-length 128)
 
@@ -287,7 +290,7 @@
   (.getChar buffer value-type-id-size ByteOrder/BIG_ENDIAN))
 
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
-  (when buffer
+  (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte (value-buffer-type-id buffer) 0)
       (1 2 3 4 7 8) true
       0 (= buffer nil-id-buffer)
@@ -577,3 +580,11 @@
   (cond-> v
     (not (multiple-values? v))
     (vector)))
+
+(defn evicted-doc?
+  [{:crux.db/keys [id evicted?] :as doc}]
+  (boolean (or (= :crux.db/evicted id) evicted?)))
+
+(defn keep-non-evicted-doc [doc]
+  (when-not (evicted-doc? doc)
+    doc))
