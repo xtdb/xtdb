@@ -5,7 +5,6 @@
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.query :as q]
             [crux.tx.conform :as txc]
@@ -298,7 +297,7 @@
                        :av-count (->> (vals indexed-docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})))))
 
-(defn index-tx [{:keys [bus indexer kv-store document-store] :as tx-consumer}
+(defn index-tx [{:keys [bus indexer document-store] :as tx-consumer}
                 {::keys [tx-time tx-id] :as tx}
                 tx-events]
   (s/assert ::txe/tx-events tx-events)
