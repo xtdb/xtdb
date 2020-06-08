@@ -407,9 +407,9 @@
      relation)))
 
 (defn new-relation-virtual-index
-  ([relation-name tuples max-depth encode-value-fn]
-   (new-relation-virtual-index relation-name tuples max-depth encode-value-fn nil))
-  ([relation-name tuples max-depth encode-value-fn layered-range-constraints]
+  ([tuples max-depth encode-value-fn]
+   (new-relation-virtual-index tuples max-depth encode-value-fn nil))
+  ([tuples max-depth encode-value-fn layered-range-constraints]
    (update-relation-virtual-index! (->RelationVirtualIndex max-depth
                                                            (RelationVirtualIndexState. nil nil nil nil)
                                                            layered-range-constraints

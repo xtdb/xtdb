@@ -6,8 +6,7 @@
             [crux.index :as idx]))
 
 (t/deftest test-can-perform-unary-join
-  (let [a-idx (idx/new-relation-virtual-index :a
-                                              [[0]
+  (let [a-idx (idx/new-relation-virtual-index [[0]
                                                [1]
                                                [3]
                                                [4]
@@ -20,8 +19,7 @@
                                                [12]]
                                               1
                                               c/->value-buffer)
-        b-idx (idx/new-relation-virtual-index :b
-                                              [[0]
+        b-idx (idx/new-relation-virtual-index [[0]
                                                [2]
                                                [6]
                                                [7]
@@ -30,8 +28,7 @@
                                                [12]]
                                               1
                                               c/->value-buffer)
-        c-idx (idx/new-relation-virtual-index :c
-                                              [[2]
+        c-idx (idx/new-relation-virtual-index [[2]
                                                [4]
                                                [5]
                                                [8]
@@ -57,15 +54,13 @@
 ;; (3, 5, 2)
 ;; TODO: Same as above.
 (t/deftest test-can-perform-n-ary-join
-  (let [r (idx/new-relation-virtual-index :r
-                                          [[1 3]
+  (let [r (idx/new-relation-virtual-index [[1 3]
                                            [1 4]
                                            [1 5]
                                            [3 5]]
                                           2
                                           c/->value-buffer)
-        s (idx/new-relation-virtual-index :s
-                                          [[3 4]
+        s (idx/new-relation-virtual-index [[3 4]
                                            [3 5]
                                            [4 6]
                                            [4 8]
@@ -73,8 +68,7 @@
                                            [5 2]]
                                           2
                                           c/->value-buffer)
-        t (idx/new-relation-virtual-index :t
-                                          [[1 4]
+        t (idx/new-relation-virtual-index [[1 4]
                                            [1 5]
                                            [1 6]
                                            [1 8]
@@ -101,8 +95,7 @@
                    (mapv c/decode-value-buffer join-keys))))))))
 
 (t/deftest test-range-predicates
-  (let [r (idx/new-relation-virtual-index :r
-                                          [[1]
+  (let [r (idx/new-relation-virtual-index [[1]
                                            [2]
                                            [3]
                                            [4]
@@ -157,21 +150,18 @@
 ;; twice in two positions. All relations and the join order must be in
 ;; the same order for it to work.
 (t/deftest test-n-ary-join-based-on-relational-tuples
-  (let [r-idx (idx/new-relation-virtual-index :r
-                                              [[7 4]
+  (let [r-idx (idx/new-relation-virtual-index [[7 4]
                                                ;; extra sanity check
                                                [8 4]]
                                               2
                                               c/->value-buffer)
-        s-idx (idx/new-relation-virtual-index :s
-                                              [[4 0]
+        s-idx (idx/new-relation-virtual-index [[4 0]
                                                [4 1]
                                                [4 2]
                                                [4 3]]
                                               2
                                               c/->value-buffer)
-        t-idx (idx/new-relation-virtual-index :t
-                                              [[7 0]
+        t-idx (idx/new-relation-virtual-index [[7 0]
                                                [7 1]
                                                [7 2]
                                                [8 1]
@@ -192,20 +182,17 @@
                     (mapv c/decode-value-buffer join-keys)))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction
-  (let [p-idx (idx/new-relation-virtual-index :p
-                                              [[1]
+  (let [p-idx (idx/new-relation-virtual-index [[1]
                                                [2]
                                                [3]]
                                               1
                                               c/->value-buffer)
-        q-idx (idx/new-relation-virtual-index :q
-                                              [[2]
+        q-idx (idx/new-relation-virtual-index [[2]
                                                [3]
                                                [4]]
                                               1
                                               c/->value-buffer)
-        r-idx (idx/new-relation-virtual-index :r
-                                              [[3]
+        r-idx (idx/new-relation-virtual-index [[3]
                                                [4]
                                                [5]]
                                               1
@@ -220,14 +207,12 @@
                         (mapv c/decode-value-buffer join-keys)))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
-  (let [p-idx (idx/new-relation-virtual-index :p
-                                              [[1 3]
+  (let [p-idx (idx/new-relation-virtual-index [[1 3]
                                                [2 4]
                                                [2 20]]
                                               2
                                               c/->value-buffer)
-        q-idx (idx/new-relation-virtual-index :q
-                                              [[1 10]
+        q-idx (idx/new-relation-virtual-index [[1 10]
                                                [2 20]
                                                [3 30]]
                                               2
@@ -245,8 +230,7 @@
                       (mapv c/decode-value-buffer join-keys))))))
 
     (t/testing "disjunction"
-      (let [zero-idx (idx/new-relation-virtual-index :zero
-                                                     [[0]]
+      (let [zero-idx (idx/new-relation-virtual-index [[0]]
                                                      1
                                                      c/->value-buffer)
             lhs-index (idx/new-n-ary-join-layered-virtual-index
