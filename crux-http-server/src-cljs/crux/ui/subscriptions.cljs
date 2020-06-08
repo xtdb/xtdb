@@ -100,11 +100,9 @@
 (rf/reg-sub
  ::entity-right-pane-view
  (fn [db _]
-   (cond
-     (nil? (get-in db [:current-route :query-params :eid])) :entity-root
-     (get-in db [:current-route :query-params :history]) :history
-     (get-in db [:current-route :query-params :raw-edn]) :raw-edn
-     :else :document)))
+   (if (nil? (get-in db [:current-route :query-params :eid]))
+     :entity-root
+     (or (get-in db [:entity :right-pane :view]) :document))))
 
 (rf/reg-sub
  ::query-data-download-link
