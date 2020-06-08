@@ -1235,20 +1235,17 @@
                    (-> (update-in [:start :crux.db/valid-time]
                                   with-upper-bound valid-time)
                        (update-in [:start :crux.tx/tx-time]
-                                  with-upper-bound transact-time)))
+                                  with-upper-bound transact-time)))]
 
-            history (db/open-entity-history index-store eid sort-order opts)]
-
-        (cio/->cursor
-         #(run! cio/try-close [history index-store])
-         (->> (iterator-seq history)
-              (map (fn [^EntityTx etx]
-                     (cond-> {:crux.tx/tx-time (.tt etx)
-                              :crux.tx/tx-id (.tx-id etx)
-                              :crux.db/valid-time (.vt etx)
-                              :crux.db/content-hash (.content-hash etx)}
-                       with-docs? (assoc :crux.db/doc (-> (db/fetch-docs (:document-store query-engine) #{(.content-hash etx)})
-                                                          (get (.content-hash etx))))))))))))
+        (cio/->cursor #(.close index-store)
+                      (->> (db/entity-history index-store eid sort-order opts)
+                           (map (fn [^EntityTx etx]
+                                  (cond-> {:crux.tx/tx-time (.tt etx)
+                                           :crux.tx/tx-id (.tx-id etx)
+                                           :crux.db/valid-time (.vt etx)
+                                           :crux.db/content-hash (.content-hash etx)}
+                                    with-docs? (assoc :crux.db/doc (-> (db/fetch-docs (:document-store query-engine) #{(.content-hash etx)})
+                                                                       (get (.content-hash etx))))))))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time))

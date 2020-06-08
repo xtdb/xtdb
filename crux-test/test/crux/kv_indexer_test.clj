@@ -111,14 +111,13 @@
                                    :let [[vt-end vt-start] (sort [vt1 vt2])
                                          [tt-end tt-start] (sort [tt1 tt2])
                                          expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (with-open [history (db/open-entity-history index-store
-                                                                                            eid :desc
-                                                                                            {:start {:crux.db/valid-time vt-start
-                                                                                                     :crux.tx/tx-time tt-start}
-                                                                                             :end {:crux.db/valid-time vt-end
-                                                                                                   :crux.tx/tx-time tt-end}})]
-                                                  (->> (iterator-seq history)
-                                                       (set)))]]
+                                         actual (->> (db/entity-history index-store
+                                                                        eid :desc
+                                                                        {:start {:crux.db/valid-time vt-start
+                                                                                 :crux.tx/tx-time tt-start}
+                                                                         :end {:crux.db/valid-time vt-end
+                                                                               :crux.tx/tx-time tt-end}})
+                                                     (set))]]
                                (= expected actual))
                              (every? true?))))))))
 
@@ -138,11 +137,10 @@
                                    :let [vt-end (Date. Long/MIN_VALUE)
                                          tt-end (Date. Long/MIN_VALUE)
                                          expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (with-open [history (db/open-entity-history index-store eid :desc
-                                                                                            {:start {:crux.db/valid-time vt-start
-                                                                                                     :crux.tx/tx-time tt-start}})]
-                                                  (->> (iterator-seq history)
-                                                       (set)))]]
+                                         actual (->> (db/entity-history index-store eid :desc
+                                                                        {:start {:crux.db/valid-time vt-start
+                                                                                 :crux.tx/tx-time tt-start}})
+                                                     (set))]]
                                (= expected actual))
                              (every? true?))))))))
 
@@ -162,11 +160,10 @@
                                    :let [vt-start (Date. Long/MAX_VALUE)
                                          tt-start (Date. Long/MAX_VALUE)
                                          expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (with-open [history (db/open-entity-history index-store eid :desc
-                                                                                            {:end {:crux.db/valid-time vt-end
-                                                                                                   :crux.tx/tx-time tt-end}})]
-                                                  (->> (iterator-seq history)
-                                                       (set)))]]
+                                         actual (->> (db/entity-history index-store eid :desc
+                                                                        {:end {:crux.db/valid-time vt-end
+                                                                               :crux.tx/tx-time tt-end}})
+                                                     (set))]]
                                (= expected actual))
                              (every? true?))))))))
 
@@ -186,9 +183,8 @@
                               vt-end (Date. Long/MIN_VALUE)
                               tt-end (Date. Long/MIN_VALUE)
                               expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                              actual (with-open [history (db/open-entity-history index-store eid :desc {})]
-                                       (->> (iterator-seq history)
-                                            (set)))]
+                              actual (->> (db/entity-history index-store eid :desc {})
+                                          (set))]
                           (= expected actual))))))))
 
 (t/deftest test-store-and-retrieve-meta
