@@ -83,6 +83,14 @@
                           (assoc :sort-order "desc"))]
      {:dispatch [:navigate :entity nil query-params]})))
 
+(rf/reg-event-fx
+ ::set-entity-right-pane-raw-edn
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:current-route :path-params :eid])
+         query-params (-> (get-in db [:current-route :query-params])
+                          (select-keys [:valid-time :transaction-time])
+                          (assoc :raw-edn true))]
+     {:dispatch [:navigate :entity {:eid eid} query-params]})))
 
 (rf/reg-event-db
  ::set-entity-right-pane-loading
