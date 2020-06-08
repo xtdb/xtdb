@@ -18,6 +18,7 @@
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
            (software.amazon.awssdk.core.sync RequestBody)
            (software.amazon.awssdk.core.exception SdkClientException)
+           software.amazon.awssdk.regions.Region
            (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
            (com.amazonaws.services.logs.model StartQueryRequest StartQueryResult GetQueryResultsRequest GetQueryResultsResult ResultField)
            (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClient AmazonSimpleEmailServiceClientBuilder)
@@ -329,9 +330,14 @@
                             (.format (java.text.SimpleDateFormat. "yyyyMMdd-HHmmss")))]
     (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
 
+(def ^software.amazon.awssdk.services.s3.S3Client s3-client
+  (-> (S3Client/builder)
+      (.region Region/EU_WEST_2)
+      (.build)))
+
 (defn save-to-s3 [{:keys [database version]} ^File file]
   (try
-    (.putObject (S3Client/create)
+    (.putObject s3-client
                 (-> (PutObjectRequest/builder)
                     (.bucket "crux-bench")
                     (.key (generate-s3-filename database version))
@@ -342,7 +348,7 @@
 
 (defn load-from-s3 [key]
   (try
-    (.getObject (S3Client/create)
+    (.getObject s3-client
                 (-> (GetObjectRequest/builder)
                     (.bucket "crux-bench")
                     (.key key)
