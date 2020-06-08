@@ -273,13 +273,13 @@
     (or (find arg (symbol (name var)))
         (find arg (keyword (name var))))))
 
-(defn- new-binary-index [clause names {:keys [entity-resolver-fn]} index-store {:keys [vars-in-join-order var->range-constraints]}]
+(defn- new-binary-index [clause {:keys [entity-resolver-fn]} index-store {:keys [vars-in-join-order var->range-constraints]}]
   (let [{:keys [e a v]} clause
-        order (filter (set (vals names)) vars-in-join-order)
+        order (keep #{e v} vars-in-join-order)
         v-range-constraints (get var->range-constraints v)
         e-range-constraints (get var->range-constraints e)
         nested-index-store (db/open-nested-index-store index-store)]
-    (if (= (:v names) (first order))
+    (if (= v (first order))
       (let [v-idx (idx/new-doc-attribute-value-entity-value-index nested-index-store a entity-resolver-fn)
             e-idx (idx/new-doc-attribute-value-entity-entity-index nested-index-store a v-idx entity-resolver-fn)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
@@ -303,13 +303,9 @@
                               :when (or (literal? e)
                                         (literal? v))]
                           clause)
-        literal->var (->> (for [{:keys [e v]} literal-clauses
-                                :when (literal? v)]
-                            [v (gensym (str "literal_" v "_"))])
-                          (into {}))
         literal-join-order (concat (for [{:keys [e v]} literal-clauses]
                                      (if (literal? v)
-                                       (get literal->var v)
+                                       v
                                        e))
                                    arg-vars
                                    (for [{:keys [e v]} literal-clauses]
@@ -346,29 +342,23 @@
      (->> triple-clauses
           (reduce
            (fn [var->joins {:keys [e a v] :as clause}]
-             (let [e-var e
-                   v-var (if (logic-var? v)
-                           v
-                           (get literal->var v))
-                   join {:id (gensym "triple")
-                         :name e-var
+             (let [join {:id (gensym "triple")
                          :idx-fn (fn [db index-store compiled-query]
                                    (new-binary-index clause
-                                                     {:e e-var :v v-var}
                                                      db
                                                      index-store
                                                      compiled-query))}
-                   var->joins (merge-with into var->joins {v-var [join]
-                                                           e-var [join]})
+                   var->joins (merge-with into var->joins {v [join]
+                                                           e [join]})
                    var->joins (if (literal? e)
-                                (merge-with into var->joins {e-var [{:idx-fn
-                                                                     (fn [db index-store _]
-                                                                       (idx/new-relation-virtual-index e-var [[e]] 1 (partial db/encode-value index-store)))}]})
+                                (merge-with into var->joins {e [{:idx-fn
+                                                                 (fn [db index-store _]
+                                                                   (idx/new-relation-virtual-index [[e]] 1 (partial db/encode-value index-store)))}]})
                                 var->joins)
                    var->joins (if (literal? v)
-                                (merge-with into var->joins {v-var [{:idx-fn
-                                                                     (fn [db index-store _]
-                                                                       (idx/new-relation-virtual-index v-var [[v]] 1 (partial db/encode-value index-store)))}]})
+                                (merge-with into var->joins {v [{:idx-fn
+                                                                 (fn [db index-store _]
+                                                                   (idx/new-relation-virtual-index [[v]] 1 (partial db/encode-value index-store)))}]})
                                 var->joins)]
                var->joins))
            var->joins))]))
@@ -391,16 +381,14 @@
           join {:id idx-id
                 :idx-fn
                 (fn [_ index-store _]
-                  (idx/new-relation-virtual-index idx-id
-                                                  []
+                  (idx/new-relation-virtual-index []
                                                   (count arg-vars)
                                                   (partial db/encode-value index-store)))}]
       [idx-id
        (->> arg-vars
             (reduce
              (fn [var->joins arg-var]
-               (->> {arg-var
-                     [(assoc join :name (symbol "crux.query.value" (name arg-var)))]}
+               (->> {arg-var [join]}
                     (merge-with into var->joins)))
              var->joins))])
     [nil var->joins]))
@@ -414,12 +402,10 @@
                   join {:id idx-id
                         :idx-fn
                         (fn [_ index-store _]
-                          (idx/new-relation-virtual-index idx-id
-                                                          []
+                          (idx/new-relation-virtual-index []
                                                           1
                                                           (partial db/encode-value index-store)
-                                                          [(get var->range-constraints return)]))
-                        :name (symbol "crux.query.value" (name return))}]
+                                                          [(get var->range-constraints return)]))}]
               [(conj pred-clause+idx-ids [pred-clause idx-id])
                (merge-with into var->joins {return [join]})])
             [(conj pred-clause+idx-ids [pred-clause])
@@ -474,8 +460,7 @@
                        {:id idx-id
                         :idx-fn
                         (fn [_ index-store _]
-                          (idx/new-relation-virtual-index idx-id
-                                                          []
+                          (idx/new-relation-virtual-index []
                                                           (count free-vars)
                                                           (partial db/encode-value index-store)))})]
             (when (not (apply = (map :or-vars or-branches)))
@@ -484,7 +469,7 @@
             [(conj or-clause+idx-id+or-branches [clause idx-id or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
-                                                 {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
+                                                 {v [join]}))]))
         [[] known-vars var->joins])))
 
 (defrecord VarBinding [e-var var attr result-index result-name type value?])
@@ -956,10 +941,9 @@
         constrain-result-fn (fn [join-keys]
                               (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys))
         unary-join-index-groups (for [v vars-in-join-order]
-                                  (for [{:keys [id idx-fn name] :as join} (get var->joins v)]
-                                    (assoc (or (get idx-id->idx id)
-                                               (idx-fn db index-store compiled-query))
-                                           :name name)))]
+                                  (for [{:keys [id idx-fn] :as join} (get var->joins v)]
+                                    (or (get idx-id->idx id)
+                                        (idx-fn db index-store compiled-query))))]
     (when (and (seq args) args-idx-id)
       (idx/update-relation-virtual-index!
        (get idx-id->idx args-idx-id)
