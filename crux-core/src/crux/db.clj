@@ -20,7 +20,7 @@
   (index-entity-txs [this tx entity-txs])
   (mark-tx-as-failed [this tx])
   (store-index-meta [this k v])
-  (read-index-meta [this k])
+  (read-index-meta [this k] [this k not-found])
   (latest-completed-tx [this])
   (tx-failed? [this tx-id])
   (open-index-store ^java.io.Closeable [this]))
