@@ -612,13 +612,12 @@
                       v)))
                 (recur (kv/next i)))))))))
 
-  (open-entity-history [this eid sort-order opts]
-    (let [i (kv/new-iterator snapshot)
+  (entity-history [this eid sort-order opts]
+    (let [i @entity-as-of-iterator-delay
           entity-history-seq (case sort-order
                                :asc entity-history-seq-ascending
                                :desc entity-history-seq-descending)]
-      (cio/->cursor #(.close i)
-                    (entity-history-seq i eid opts))))
+      (entity-history-seq i eid opts)))
 
   (decode-value [this value-buffer]
     (assert (some? value-buffer))
