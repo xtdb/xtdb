@@ -361,12 +361,12 @@
                    var->joins (if (literal? e)
                                 (merge-with into var->joins {e [{:idx-fn
                                                                  (fn [db index-store _]
-                                                                   (idx/new-relation-virtual-index [[e]] 1 (partial db/encode-value index-store)))}]})
+                                                                   (idx/new-singleton-virtual-index e (partial db/encode-value index-store)))}]})
                                 var->joins)
                    var->joins (if (literal? v)
                                 (merge-with into var->joins {v [{:idx-fn
                                                                  (fn [db index-store _]
-                                                                   (idx/new-relation-virtual-index [[v]] 1 (partial db/encode-value index-store)))}]})
+                                                                   (idx/new-singleton-virtual-index v (partial db/encode-value index-store)))}]})
                                 var->joins)]
                var->joins))
            var->joins))]))
