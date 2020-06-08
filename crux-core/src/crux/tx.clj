@@ -34,8 +34,8 @@
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
 
 (defprotocol EntityHistory
-  (with-entity-history-seq-ascending [_ eid valid-time f])
-  (with-entity-history-seq-descending [_ eid valid-time f])
+  (entity-history-seq-ascending [_ eid valid-time])
+  (entity-history-seq-descending [_ eid valid-time])
   (entity-at [_ eid valid-time tx-time])
   (with-etxs [_ etxs]))
 
@@ -56,23 +56,19 @@
 
 (defrecord IndexStore+NewETXs [index-store etxs]
   EntityHistory
-  (with-entity-history-seq-ascending [_ eid valid-time f]
-    (with-open [nested-index-store (db/open-nested-index-store index-store)
-                history (db/open-entity-history nested-index-store eid :asc
-                                                {:start {:crux.db/valid-time valid-time}})]
-      (f (merge-histories etx->vt compare
-                          (iterator-seq history)
-                          (->> (get etxs eid)
-                               (drop-while (comp neg? #(compare % valid-time) etx->vt)))))))
+  (entity-history-seq-ascending [_ eid valid-time]
+    (merge-histories etx->vt compare
+                     (db/entity-history index-store eid :asc
+                                        {:start {:crux.db/valid-time valid-time}})
+                     (->> (get etxs eid)
+                          (drop-while (comp neg? #(compare % valid-time) etx->vt)))))
 
-  (with-entity-history-seq-descending [_ eid valid-time f]
-    (with-open [nested-index-store (db/open-nested-index-store index-store)
-                history (db/open-entity-history nested-index-store eid :desc
-                                                {:start {:crux.db/valid-time valid-time}})]
-      (f (merge-histories etx->vt #(compare %2 %1)
-                          (iterator-seq history)
-                          (->> (reverse (get etxs eid))
-                               (drop-while (comp pos? #(compare % valid-time) etx->vt)))))))
+  (entity-history-seq-descending [_ eid valid-time]
+    (merge-histories etx->vt #(compare %2 %1)
+                     (db/entity-history index-store eid :desc
+                                        {:start {:crux.db/valid-time valid-time}})
+                     (->> (reverse (get etxs eid))
+                          (drop-while (comp pos? #(compare % valid-time) etx->vt)))))
 
   (entity-at [_ eid valid-time tx-time]
     (->> (merge-histories etx->vt #(compare %2 %1)
@@ -105,29 +101,26 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (with-entity-history-seq-descending history eid end-valid-time
-          (fn [entity-history]
-            (into (->> (cons start-valid-time
-                             (->> (map etx->vt entity-history)
-                                  (take-while #(neg? (compare start-valid-time %)))))
-                       (remove #{end-valid-time})
-                       (mapv ->new-entity-tx))
+        (let [entity-history (entity-history-seq-descending history eid end-valid-time)]
+          (into (->> (cons start-valid-time
+                           (->> (map etx->vt entity-history)
+                                (take-while #(neg? (compare start-valid-time %)))))
+                     (remove #{end-valid-time})
+                     (mapv ->new-entity-tx))
 
-                  [(if-let [entity-to-restore ^EntityTx (first entity-history)]
-                     (-> entity-to-restore
-                         (assoc :vt end-valid-time))
+                [(if-let [entity-to-restore ^EntityTx (first entity-history)]
+                   (-> entity-to-restore
+                       (assoc :vt end-valid-time))
 
-                     (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))]))))
+                   (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))])))
 
       (->> (cons start-valid-time
                  (when-let [visible-entity (some-> (entity-at history eid start-valid-time tx-time)
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (with-entity-history-seq-ascending history eid start-valid-time
-                     (fn [entity-history]
-                       (->> entity-history
-                            (remove #{start-valid-time})
-                            (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
-                            (mapv etx->vt))))))
+                   (->> (entity-history-seq-ascending history eid start-valid-time)
+                        (remove #{start-valid-time})
+                        (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
+                        (mapv etx->vt))))
 
            (map ->new-entity-tx)))))
 
