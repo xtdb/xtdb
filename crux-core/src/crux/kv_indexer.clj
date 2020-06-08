@@ -365,11 +365,13 @@
 (defn store-meta [kv k v]
   (kv/store kv [(meta-kv k v)]))
 
-(defn read-meta [kv k]
-  (let [seek-k (encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))]
-    (with-open [snapshot (kv/new-snapshot kv)]
-      (some->> (kv/get-value snapshot seek-k)
-               (mem/<-nippy-buffer)))))
+(defn read-meta
+  ([kv k] (read-meta kv k nil))
+  ([kv k not-found]
+   (with-open [snapshot (kv/new-snapshot kv)]
+     (if-let [v (kv/get-value snapshot (encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k)))]
+       (mem/<-nippy-buffer v)
+       not-found))))
 
 ;;;; Failed tx-id
 
@@ -741,8 +743,11 @@
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
 
-  (read-index-meta [_  k]
-    (read-meta kv-store k))
+  (read-index-meta [this k]
+    (db/read-index-meta this k nil))
+
+  (read-index-meta [this k not-found]
+    (read-meta kv-store k not-found))
 
   (latest-completed-tx [this]
     (db/read-index-meta this ::latest-completed-tx))
