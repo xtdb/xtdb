@@ -1,10 +1,10 @@
 package crux.index;
 
-public class IndexStorePeekState {
+public class IndexStoreIndexState {
     public Object seq;
     public Object key;
 
-    public IndexStorePeekState(Object seq, Object key) {
+    public IndexStoreIndexState(Object seq, Object key) {
         this.seq = seq;
         this.key = key;
     }

@@ -15,6 +15,7 @@
   (:import clojure.lang.ExceptionInfo
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
+           crux.index.IndexStoreIndexState
            (java.io Closeable)
            (java.util Comparator Date List UUID)
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
@@ -273,23 +274,30 @@
     (or (find arg (symbol (name var)))
         (find arg (keyword (name var))))))
 
-(defn- new-binary-index [clause {:keys [entity-resolver-fn]} index-store {:keys [vars-in-join-order var->range-constraints]}]
-  (let [{:keys [e a v]} clause
-        order (keep #{e v} vars-in-join-order)
-        v-range-constraints (get var->range-constraints v)
-        e-range-constraints (get var->range-constraints e)
+(defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn]} index-store {:keys [vars-in-join-order var->range-constraints]}]
+  (let [order (keep #{e v} vars-in-join-order)
         nested-index-store (db/open-nested-index-store index-store)]
     (if (= v (first order))
-      (let [v-idx (idx/new-doc-attribute-value-entity-value-index nested-index-store a entity-resolver-fn)
-            e-idx (idx/new-doc-attribute-value-entity-entity-index nested-index-store a v-idx entity-resolver-fn)]
+      (let [v-idx (idx/new-index-store-index
+                   (fn [k]
+                     (db/av nested-index-store a k entity-resolver-fn)))
+            e-idx (idx/new-index-store-index
+                   (fn [k]
+                     (db/ave nested-index-store a (.key ^IndexStoreIndexState (.state v-idx)) k entity-resolver-fn)))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
-        (idx/new-n-ary-join-layered-virtual-index [(idx/wrap-with-range-constraints v-idx v-range-constraints)
-                                                   (idx/wrap-with-range-constraints e-idx e-range-constraints)]))
-      (let [e-idx (idx/new-doc-attribute-entity-value-entity-index nested-index-store a entity-resolver-fn)
-            v-idx (idx/new-doc-attribute-entity-value-value-index nested-index-store a e-idx entity-resolver-fn)]
+        (idx/new-n-ary-join-layered-virtual-index
+         [(idx/wrap-with-range-constraints v-idx (get var->range-constraints v))
+          (idx/wrap-with-range-constraints e-idx (get var->range-constraints e))]))
+      (let [e-idx (idx/new-index-store-index
+                   (fn [k]
+                     (db/ae nested-index-store a k entity-resolver-fn)))
+            v-idx (idx/new-index-store-index
+                   (fn [k]
+                     (db/aev nested-index-store a (.key ^IndexStoreIndexState (.state e-idx)) k entity-resolver-fn)))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
-        (idx/new-n-ary-join-layered-virtual-index [(idx/wrap-with-range-constraints e-idx e-range-constraints)
-                                                   (idx/wrap-with-range-constraints v-idx v-range-constraints)])))))
+        (idx/new-n-ary-join-layered-virtual-index
+         [(idx/wrap-with-range-constraints e-idx (get var->range-constraints e))
+          (idx/wrap-with-range-constraints v-idx (get var->range-constraints v))])))))
 
 (defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
   (let [var->frequency (->> (concat (map :e triple-clauses)
