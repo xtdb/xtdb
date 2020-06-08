@@ -2,86 +2,32 @@
   (:require [crux.db :as db]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import [crux.index BinaryJoinLayeredVirtualIndexPeekState BinaryJoinLayeredVirtualIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
+  (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
             RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
-           java.util.Comparator
+           java.util.function.Function
+           [java.util Comparator Iterator NavigableMap TreeMap]
            org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; AVE
+;; Index Store
 
-(defrecord DocAttributeValueEntityValueIndex [index-store ^DirectBuffer attr entity-resolver ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
+(defrecord IndexStoreIndex [seek-fn ^IndexStoreIndexState state]
   db/Index
   (seek-values [this k]
-    (let [[v & vs] (db/av index-store attr k entity-resolver)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
+    (let [[v & vs] (seek-fn k)]
+      (set! (.-seq state) vs)
+      (set! (.-key state) v)
       v))
 
   (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
+    (when-let [[v & vs] (.-seq state)]
+      (set! (.-seq state) vs)
+      (set! (.-key state) v)
       v)))
 
-(defn new-doc-attribute-value-entity-value-index [index-store attr entity-resolver]
-  (->DocAttributeValueEntityValueIndex index-store attr entity-resolver (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
-
-(defrecord DocAttributeValueEntityEntityIndex [index-store ^DirectBuffer attr ^DocAttributeValueEntityValueIndex value-entity-value-idx entity-resolver-fn ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
-  db/Index
-  (seek-values [this k]
-    (let [value-buffer (.-key ^BinaryJoinLayeredVirtualIndexPeekState (.peek-state value-entity-value-idx))
-          [v & vs] (db/ave index-store attr value-buffer k entity-resolver-fn)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v))
-
-  (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v)))
-
-(defn new-doc-attribute-value-entity-entity-index [index-store attr value-entity-value-idx entity-resolver-fn]
-  (->DocAttributeValueEntityEntityIndex index-store attr value-entity-value-idx entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
-
-;; AEV
-
-(defrecord DocAttributeEntityValueEntityIndex [index-store ^DirectBuffer attr entity-resolver ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
-  db/Index
-  (seek-values [this k]
-    (let [[v & vs] (db/ae index-store attr k entity-resolver)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v))
-
-  (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v)))
-
-(defn new-doc-attribute-entity-value-entity-index [index-store attr entity-resolver-fn]
-  (->DocAttributeEntityValueEntityIndex index-store attr entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
-
-(defrecord DocAttributeEntityValueValueIndex [index-store ^DirectBuffer attr ^DocAttributeEntityValueEntityIndex entity-value-entity-idx entity-resolver-fn ^BinaryJoinLayeredVirtualIndexPeekState peek-state]
-  db/Index
-  (seek-values [this k]
-    (let [eid-buffer (.-key ^BinaryJoinLayeredVirtualIndexPeekState (.peek-state entity-value-entity-idx))
-          [v & vs] (db/aev index-store attr eid-buffer k entity-resolver-fn)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v))
-
-  (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v)))
-
-(defn new-doc-attribute-entity-value-value-index [index-store attr entity-value-entity-idx entity-resolver-fn]
-  (->DocAttributeEntityValueValueIndex index-store attr entity-value-entity-idx entity-resolver-fn (BinaryJoinLayeredVirtualIndexPeekState. nil nil)))
+(defn new-index-store-index ^crux.index.IndexStoreIndex [seek-fn]
+  (->IndexStoreIndex seek-fn (IndexStoreIndexState. nil nil)))
 
 ;; Range Constraints
 
@@ -254,31 +200,6 @@
 (defn new-n-ary-join-layered-virtual-index [indexes]
   (->NAryJoinLayeredVirtualIndex indexes (NAryJoinLayeredVirtualIndexState. 0)))
 
-(defrecord BinaryJoinLayeredVirtualIndex [^BinaryJoinLayeredVirtualIndexState state]
-  db/Index
-  (seek-values [this k]
-    (db/seek-values (nth (.indexes state) (.depth state) nil) k))
-
-  (next-values [this]
-    (db/next-values (nth (.indexes state) (.depth state) nil)))
-
-  db/LayeredIndex
-  (open-level [this]
-    (db/open-level (nth (.indexes state) (.depth state) nil))
-    (set! (.depth state) (inc (.depth state)))
-    nil)
-
-  (close-level [this]
-    (db/close-level (nth (.indexes state) (dec (long (.depth state))) nil))
-    (set! (.depth state) (dec (.depth state)))
-    nil)
-
-  (max-depth [this]
-    2))
-
-(defn new-binary-join-virtual-index [lhs-index rhs-index]
-   (->BinaryJoinLayeredVirtualIndex (BinaryJoinLayeredVirtualIndexState. [lhs-index rhs-index] 0)))
-
 (defn- build-constrained-result [constrain-result-fn result-stack max-k]
   (let [max-ks (last result-stack)
         join-keys (conj (or max-ks []) max-k)]
@@ -347,19 +268,19 @@
       (when (pos? max-depth)
         (step [] 0 true)))))
 
-(defrecord SortedVirtualIndex [sc ^SortedVirtualIndexState state]
+(defrecord SortedVirtualIndex [^NavigableMap m ^SortedVirtualIndexState state]
   db/Index
   (seek-values [this k]
-    (set! (.seq state) (subseq sc >= (or k mem/empty-buffer)))
+    (set! (.iterator state) (.iterator (.tailSet (.navigableKeySet m) (or k mem/empty-buffer))))
     (db/next-values this))
 
   (next-values [this]
-    (when-let [[x & xs] (.seq state)]
-      (set! (.seq state) (seq xs))
-      (some-> x (key)))))
+    (when-let [iterator ^Iterator (.iterator state)]
+      (when (.hasNext iterator)
+        (.next iterator)))))
 
-(defn- new-sorted-virtual-index [sc]
-  (->SortedVirtualIndex sc (SortedVirtualIndexState. nil)))
+(defn- new-sorted-virtual-index [m]
+  (->SortedVirtualIndex m (SortedVirtualIndexState. nil)))
 
 (defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state layered-range-constraints encode-value-fn]
   db/Index
@@ -398,10 +319,16 @@
   (max-depth [_]
     max-depth))
 
-(defn- sorted-map-assoc-in [m [k & ks] v]
+(defn- tree-map-put-in [^TreeMap m [k & ks] v]
   (if ks
-    (assoc m k (sorted-map-assoc-in (or (get m k) (sorted-map-by mem/buffer-comparator)) ks v))
-    (assoc m k v)))
+    (doto m
+      (-> (.computeIfAbsent k
+                            (reify Function
+                              (apply [_ k]
+                                (TreeMap. (.comparator m)))))
+          (tree-map-put-in ks v)))
+    (doto m
+      (.put k v))))
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
@@ -411,8 +338,8 @@
          tree (binding [nippy/*freeze-fallback* :write-unfreezable]
                 (reduce
                  (fn [acc tuple]
-                   (sorted-map-assoc-in acc (mapv encode-value-fn tuple) nil))
-                 (sorted-map-by mem/buffer-comparator)
+                   (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
+                 (TreeMap. mem/buffer-comparator)
                  tuples))
          root-level (wrap-with-range-constraints
                      (new-sorted-virtual-index tree)
@@ -425,11 +352,23 @@
      relation)))
 
 (defn new-relation-virtual-index
-  ([relation-name tuples max-depth encode-value-fn]
-   (new-relation-virtual-index relation-name tuples max-depth encode-value-fn nil))
-  ([relation-name tuples max-depth encode-value-fn layered-range-constraints]
+  ([tuples max-depth encode-value-fn]
+   (new-relation-virtual-index tuples max-depth encode-value-fn nil))
+  ([tuples max-depth encode-value-fn layered-range-constraints]
    (update-relation-virtual-index! (->RelationVirtualIndex max-depth
                                                            (RelationVirtualIndexState. nil nil nil nil)
                                                            layered-range-constraints
                                                            encode-value-fn)
                                    tuples)))
+
+(defrecord SingletonVirtualIndex [v]
+  db/Index
+  (seek-values [_ k]
+    (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))
+      v))
+
+  (next-values [_]))
+
+(defn new-singleton-virtual-index [v encode-value-fn]
+  (binding [nippy/*freeze-fallback* :write-unfreezable]
+    (->SingletonVirtualIndex (encode-value-fn v))))
