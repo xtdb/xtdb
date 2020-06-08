@@ -60,13 +60,12 @@
         (t/is (some? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-time))))
 
       (t/testing "can see entity history"
-        (with-open [history (db/open-entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc {})]
-          (t/is (= [(c/map->EntityTx {:eid picasso-eid
-                                      :content-hash content-hash
-                                      :vt valid-time
-                                      :tt tx-time
-                                      :tx-id tx-id})]
-                   (iterator-seq history))))))
+        (t/is (= [(c/map->EntityTx {:eid picasso-eid
+                                    :content-hash content-hash
+                                    :vt valid-time
+                                    :tt tx-time
+                                    :tx-id tx-id})]
+                 (db/entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc {})))))
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
@@ -140,10 +139,9 @@
                 (t/is (= tx-id (:tx-id (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-time))))))))))
 
     (t/testing "can retrieve history of entity"
-      (with-open [index-store (db/open-index-store (:indexer *api*))
-                  history (db/open-entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc
-                                                  {:with-corrections? true})]
-        (t/is (= 5 (count (iterator-seq history))))))))
+      (with-open [index-store (db/open-index-store (:indexer *api*))]
+        (t/is (= 5 (count (db/entity-history index-store :http://dbpedia.org/resource/Pablo_Picasso :desc
+                                             {:with-corrections? true}))))))))
 
 (t/deftest test-can-cas-entity
   (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
@@ -154,21 +152,19 @@
 
         (api/await-tx *api* cas-failure-tx (Duration/ofMillis 1000))
 
-        (with-open [index-store (db/open-index-store (:indexer *api*))
-                    history (db/open-entity-history index-store picasso-id :desc {})]
+        (with-open [index-store (db/open-index-store (:indexer *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id picasso)
                                       :vt picasso-tx-time
                                       :tt picasso-tx-time
                                       :tx-id picasso-tx-id})]
-                   (iterator-seq history))))))
+                   (db/entity-history index-store picasso-id :desc {}))))))
 
     (t/testing "compare and set updates with correct content hash"
       (let [new-picasso (assoc picasso :new? true)
             {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/cas picasso new-picasso]])]
 
-        (with-open [index-store (db/open-index-store (:indexer *api*))
-                    history (db/open-entity-history index-store picasso-id :desc {})]
+        (with-open [index-store (db/open-index-store (:indexer *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id new-picasso)
                                       :vt new-tx-time
@@ -179,20 +175,19 @@
                                       :vt picasso-tx-time
                                       :tt picasso-tx-time
                                       :tx-id picasso-tx-id})]
-                   (iterator-seq history)))))))
+                   (db/entity-history index-store picasso-id :desc {})))))))
 
   (t/testing "compare and set can update non existing nil entity"
     (let [ivan {:crux.db/id :ivan, :value 12}
           {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/cas nil ivan]])]
 
-      (with-open [index-store (db/open-index-store (:indexer *api*))
-                  history (db/open-entity-history index-store :ivan :desc {})]
+      (with-open [index-store (db/open-index-store (:indexer *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
                                     :content-hash (c/new-id ivan)
                                     :vt ivan-tx-time
                                     :tt ivan-tx-time
                                     :tx-id ivan-tx-id})]
-                 (iterator-seq history)))))))
+                 (db/entity-history index-store :ivan :desc {})))))))
 
 (t/deftest test-match-ops
   (let [{picasso-tx-time :crux.tx/tx-time, picasso-tx-id :crux.tx/tx-id} (api/submit-tx *api* [[:crux.tx/put picasso]])]
@@ -203,22 +198,20 @@
 
         (api/await-tx *api* match-failure-tx (Duration/ofMillis 1000))
 
-        (with-open [index-store (db/open-index-store (:indexer *api*))
-                    history (db/open-entity-history index-store picasso-id :desc {})]
+        (with-open [index-store (db/open-index-store (:indexer *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id picasso)
                                       :vt picasso-tx-time
                                       :tt picasso-tx-time
                                       :tx-id picasso-tx-id})]
-                   (iterator-seq history))))))
+                   (db/entity-history index-store picasso-id :desc {}))))))
 
     (t/testing "match continues with correct content hash"
       (let [new-picasso (assoc picasso :new? true)
             {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/match picasso-id picasso]
                                                                                            [:crux.tx/put new-picasso]])]
 
-        (with-open [index-store (db/open-index-store (:indexer *api*))
-                    history (db/open-entity-history index-store picasso-id :desc {})]
+        (with-open [index-store (db/open-index-store (:indexer *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id new-picasso)
                                       :vt new-tx-time
@@ -229,29 +222,27 @@
                                       :vt picasso-tx-time
                                       :tt picasso-tx-time
                                       :tx-id picasso-tx-id})]
-                   (iterator-seq history)))))))
+                   (db/entity-history index-store picasso-id :desc {})))))))
 
   (t/testing "match can check non existing entity"
     (let [ivan {:crux.db/id :ivan, :value 12}
           {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/match :ivan nil]
                                                                                            [:crux.tx/put ivan]])]
 
-      (with-open [index-store (db/open-index-store (:indexer *api*))
-                  history (db/open-entity-history index-store :ivan :desc {})]
+      (with-open [index-store (db/open-index-store (:indexer *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
                                     :content-hash (c/new-id ivan)
                                     :vt ivan-tx-time
                                     :tt ivan-tx-time
                                     :tx-id ivan-tx-id})]
-                 (iterator-seq history)))))))
+                 (db/entity-history index-store :ivan :desc {})))))))
 
 (t/deftest test-can-evict-entity
   (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
         {evict-tx-time :crux.tx/tx-time} (fix/submit+await-tx [[:crux.tx/evict picasso-id]])]
 
-    (with-open [index-store (db/open-index-store (:indexer *api*))
-                history (db/open-entity-history index-store picasso-id :desc {})]
-      (let [picasso-history (iterator-seq history)]
+    (with-open [index-store (db/open-index-store (:indexer *api*))]
+      (let [picasso-history (db/entity-history index-store picasso-id :desc {})]
         (t/testing "eviction keeps tx history"
           (t/is (= 1 (count (map :content-hash picasso-history)))))
         (t/testing "eviction removes docs"
@@ -278,11 +269,10 @@
                               (index-evict!))))
 
     (t/testing "no docs evicted yet"
-      (with-open [index-store (db/open-index-store (:indexer *api*))
-                  history (db/open-entity-history index-store picasso-id :desc {})]
+      (with-open [index-store (db/open-index-store (:indexer *api*))]
         (t/is (seq (->> (db/fetch-docs (:document-store *api*)
-                                        (->> (iterator-seq history)
-                                             (keep :content-hash)))
+                                       (->> (db/entity-history index-store picasso-id :desc {})
+                                            (keep :content-hash)))
                         vals
                         (remove c/evicted-doc?))))))
 
@@ -291,11 +281,10 @@
         (db/submit-docs (:document-store *api*) docs)
 
         (t/testing "eviction removes docs"
-          (with-open [index-store (db/open-index-store (:indexer *api*))
-                      history (db/open-entity-history index-store picasso-id :desc {})]
+          (with-open [index-store (db/open-index-store (:indexer *api*))]
             (t/is (empty? (->> (db/fetch-docs (:document-store *api*)
-                                               (->> (iterator-seq history)
-                                                    (keep :content-hash)))
+                                              (->> (db/entity-history index-store picasso-id :desc {})
+                                                   (keep :content-hash)))
                                vals
                                (remove c/evicted-doc?))))))))))
 
@@ -313,18 +302,15 @@
                  [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [index-store (db/open-index-store (:indexer *api*))]
-      (with-open [history (db/open-entity-history index-store :ivan :desc {:with-corrections? true})]
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
-                  (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
-                 (iterator-seq history))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
+                (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
+               (db/entity-history index-store :ivan :desc {:with-corrections? true})))
 
-      (with-open [history (db/open-entity-history index-store :ivan :desc {:start {::tx/tx-time t, ::db/valid-time t}})]
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-                 (iterator-seq history))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+               (db/entity-history index-store :ivan :desc {:start {::tx/tx-time t, ::db/valid-time t}})))
 
-      (with-open [history (db/open-entity-history index-store :ivan :asc {:start {::db/valid-time t}})]
-        (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-                 (iterator-seq history)))))))
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
+               (db/entity-history index-store :ivan :asc {:start {::db/valid-time t}}))))))
 
 (t/deftest test-entity-history-seq-corner-cases
   (let [ivan {:crux.db/id :ivan}
@@ -346,11 +332,9 @@
             etx-v1-t2 (c/->EntityTx (c/new-id :ivan) t1 t2 2 (c/new-id ivan2))
             etx-v2-t2 (c/->EntityTx (c/new-id :ivan) t2 t2 2 (c/new-id ivan2))]
         (letfn [(history-asc [opts]
-                  (with-open [history (db/open-entity-history index-store :ivan :asc opts)]
-                    (vec (iterator-seq history))))
+                  (vec (db/entity-history index-store :ivan :asc opts)))
                 (history-desc [opts]
-                  (with-open [history (db/open-entity-history index-store :ivan :desc opts)]
-                    (vec (iterator-seq history))))]
+                  (vec (db/entity-history index-store :ivan :desc opts)))]
 
           (t/testing "start is inclusive"
             (t/is (= [etx-v2-t2
@@ -397,16 +381,14 @@
 
                          (api/await-tx *api* last-tx nil)
 
-                         (with-open [index-store (db/open-index-store (:indexer *api*))
-                                     entity-history (db/open-entity-history index-store eid :asc
-                                                                            {:start {::db/valid-time first-vt}})]
-                           (let [entity-history (iterator-seq entity-history)]
-                             (t/is (= (for [[vt tx-idx value] history]
-                                        [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
-                                                                                             (assoc ivan :value value)))])
+                         (with-open [index-store (db/open-index-store (:indexer *api*))]
+                           (t/is (= (for [[vt tx-idx value] history]
+                                      [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
+                                                                                           (assoc ivan :value value)))])
 
-                                      (->> entity-history
-                                           (map (juxt :vt :tx-id :content-hash))))))))
+                                    (->> (db/entity-history index-store eid :asc
+                                                            {:start {::db/valid-time first-vt}})
+                                         (map (juxt :vt :tx-id :content-hash)))))))
 
     ;; pairs
     ;; [[value vt ?end-vt] ...]
@@ -727,14 +709,13 @@
 
     (with-open [index-store (db/open-index-store (:indexer *api*))]
       (let [eid->history (fn [eid]
-                           (with-open [history (db/open-entity-history index-store
-                                                                       (c/new-id eid) :asc
-                                                                       {:start {::db/valid-time #inst "2020-01-01"}})]
-                             (let [history (iterator-seq history)
-                                   docs (db/fetch-docs (:document-store *api*) (map :content-hash history))]
-                               (->> history
-                                    (mapv (fn [{:keys [content-hash vt]}]
-                                            [vt (:v (get docs content-hash))]))))))]
+                           (let [history (db/entity-history index-store
+                                                            (c/new-id eid) :asc
+                                                            {:start {::db/valid-time #inst "2020-01-01"}})
+                                 docs (db/fetch-docs (:document-store *api*) (map :content-hash history))]
+                             (->> history
+                                  (mapv (fn [{:keys [content-hash vt]}]
+                                          [vt (:v (get docs content-hash))])))))]
         ;; transaction functions, asserts both still apply at the start of the transaction
         (t/is (= [[#inst "2020-01-08" 8]
                   [#inst "2020-01-09" 9]
