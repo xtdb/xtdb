@@ -360,3 +360,15 @@
                                                            layered-range-constraints
                                                            encode-value-fn)
                                    tuples)))
+
+(defrecord SingletonVirtualIndex [v]
+  db/Index
+  (seek-values [_ k]
+    (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))
+      v))
+
+  (next-values [_]))
+
+(defn new-singleton-virtual-index [v encode-value-fn]
+  (binding [nippy/*freeze-fallback* :write-unfreezable]
+    (->SingletonVirtualIndex (encode-value-fn v))))
