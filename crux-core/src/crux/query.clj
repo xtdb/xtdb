@@ -15,7 +15,6 @@
   (:import clojure.lang.ExceptionInfo
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
-           crux.index.BinaryJoinLayeredVirtualIndex
            (java.io Closeable)
            (java.util Comparator Date List UUID)
            [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
@@ -284,13 +283,13 @@
       (let [v-idx (idx/new-doc-attribute-value-entity-value-index nested-index-store a entity-resolver-fn)
             e-idx (idx/new-doc-attribute-value-entity-entity-index nested-index-store a v-idx entity-resolver-fn)]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
-        (idx/new-binary-join-virtual-index (idx/wrap-with-range-constraints v-idx v-range-constraints)
-                                           (idx/wrap-with-range-constraints e-idx e-range-constraints)))
+        (idx/new-n-ary-join-layered-virtual-index [(idx/wrap-with-range-constraints v-idx v-range-constraints)
+                                                   (idx/wrap-with-range-constraints e-idx e-range-constraints)]))
       (let [e-idx (idx/new-doc-attribute-entity-value-entity-index nested-index-store a entity-resolver-fn)
             v-idx (idx/new-doc-attribute-entity-value-value-index nested-index-store a e-idx entity-resolver-fn)]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
-        (idx/new-binary-join-virtual-index (idx/wrap-with-range-constraints e-idx e-range-constraints)
-                                           (idx/wrap-with-range-constraints v-idx v-range-constraints))))))
+        (idx/new-n-ary-join-layered-virtual-index [(idx/wrap-with-range-constraints e-idx e-range-constraints)
+                                                   (idx/wrap-with-range-constraints v-idx v-range-constraints)])))))
 
 (defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
   (let [var->frequency (->> (concat (map :e triple-clauses)
