@@ -1,9 +1,9 @@
 package crux.index;
 
 public class SortedVirtualIndexState {
-    public Object seq;
+    public Object iterator;
 
-    public SortedVirtualIndexState(Object seq) {
-        this.seq = seq;
+    public SortedVirtualIndexState(Object iterator) {
+        this.iterator = iterator;
     }
 }
