@@ -696,7 +696,7 @@
        (every? (fn [f]
                  (f index-store db idx-id->idx join-keys)))))
 
-(defn- potential-bpg-pair-vars [g vars]
+(defn- potential-bgp-pair-vars [g vars]
   (for [var vars
         pair-var (dep/transitive-dependents g var)]
     pair-var))
@@ -710,7 +710,7 @@
         g (reduce
            (fn [g {:keys [pred return] :as pred-clause}]
              (let [pred-vars (filter logic-var? (:args pred))
-                   pred-vars (into pred-vars (potential-bpg-pair-vars triple-join-deps pred-vars))]
+                   pred-vars (into pred-vars (potential-bgp-pair-vars triple-join-deps pred-vars))]
                (->> (for [pred-var pred-vars
                           :when return
                           return [return]]
@@ -723,7 +723,7 @@
            pred-clauses)
         g (reduce
            (fn [g [_ _ [{:keys [free-vars bound-vars]}]]]
-             (let [bound-vars (into bound-vars (potential-bpg-pair-vars triple-join-deps bound-vars))]
+             (let [bound-vars (into bound-vars (potential-bgp-pair-vars triple-join-deps bound-vars))]
                (->> (for [bound-var bound-vars
                           free-var free-vars]
                       [free-var bound-var])
