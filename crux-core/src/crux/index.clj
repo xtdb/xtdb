@@ -2,7 +2,7 @@
   (:require [crux.db :as db]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import [crux.index IndexStorePeekState NAryJoinLayeredVirtualIndexState NAryWalkState
+  (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
             RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
            java.util.function.Function
            [java.util Comparator Iterator NavigableMap TreeMap]
@@ -10,79 +10,24 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; AVE
+;; Index Store
 
-(defrecord DocAttributeValueEntityValueIndex [index-store ^DirectBuffer attr entity-resolver ^IndexStorePeekState peek-state]
+(defrecord IndexStoreIndex [seek-fn ^IndexStoreIndexState state]
   db/Index
   (seek-values [this k]
-    (let [[v & vs] (db/av index-store attr k entity-resolver)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
+    (let [[v & vs] (seek-fn k)]
+      (set! (.-seq state) vs)
+      (set! (.-key state) v)
       v))
 
   (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
+    (when-let [[v & vs] (.-seq state)]
+      (set! (.-seq state) vs)
+      (set! (.-key state) v)
       v)))
 
-(defn new-doc-attribute-value-entity-value-index [index-store attr entity-resolver]
-  (->DocAttributeValueEntityValueIndex index-store attr entity-resolver (IndexStorePeekState. nil nil)))
-
-(defrecord DocAttributeValueEntityEntityIndex [index-store ^DirectBuffer attr ^DocAttributeValueEntityValueIndex value-entity-value-idx entity-resolver-fn ^IndexStorePeekState peek-state]
-  db/Index
-  (seek-values [this k]
-    (let [value-buffer (.-key ^IndexStorePeekState (.peek-state value-entity-value-idx))
-          [v & vs] (db/ave index-store attr value-buffer k entity-resolver-fn)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v))
-
-  (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v)))
-
-(defn new-doc-attribute-value-entity-entity-index [index-store attr value-entity-value-idx entity-resolver-fn]
-  (->DocAttributeValueEntityEntityIndex index-store attr value-entity-value-idx entity-resolver-fn (IndexStorePeekState. nil nil)))
-
-;; AEV
-
-(defrecord DocAttributeEntityValueEntityIndex [index-store ^DirectBuffer attr entity-resolver ^IndexStorePeekState peek-state]
-  db/Index
-  (seek-values [this k]
-    (let [[v & vs] (db/ae index-store attr k entity-resolver)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v))
-
-  (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v)))
-
-(defn new-doc-attribute-entity-value-entity-index [index-store attr entity-resolver-fn]
-  (->DocAttributeEntityValueEntityIndex index-store attr entity-resolver-fn (IndexStorePeekState. nil nil)))
-
-(defrecord DocAttributeEntityValueValueIndex [index-store ^DirectBuffer attr ^DocAttributeEntityValueEntityIndex entity-value-entity-idx entity-resolver-fn ^IndexStorePeekState peek-state]
-  db/Index
-  (seek-values [this k]
-    (let [eid-buffer (.-key ^IndexStorePeekState (.peek-state entity-value-entity-idx))
-          [v & vs] (db/aev index-store attr eid-buffer k entity-resolver-fn)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v))
-
-  (next-values [this]
-    (when-let [[v & vs] (.-seq peek-state)]
-      (set! (.-seq peek-state) vs)
-      (set! (.-key peek-state) v)
-      v)))
-
-(defn new-doc-attribute-entity-value-value-index [index-store attr entity-value-entity-idx entity-resolver-fn]
-  (->DocAttributeEntityValueValueIndex index-store attr entity-value-entity-idx entity-resolver-fn (IndexStorePeekState. nil nil)))
+(defn new-index-store-index ^crux.index.IndexStoreIndex [seek-fn]
+  (->IndexStoreIndex seek-fn (IndexStoreIndexState. nil nil)))
 
 ;; Range Constraints
 
