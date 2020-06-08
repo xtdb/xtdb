@@ -276,17 +276,8 @@
   (max-depth [this]
     2))
 
-(defn new-binary-join-virtual-index
-  ([]
-   (new-binary-join-virtual-index nil nil))
-  ([lhs-index rhs-index]
-   (->BinaryJoinLayeredVirtualIndex (BinaryJoinLayeredVirtualIndexState.
-                                     [lhs-index rhs-index]
-                                     0))))
-
-(defn update-binary-join-order! [^BinaryJoinLayeredVirtualIndex binary-join-index lhs-index rhs-index]
-  (set! (.indexes ^BinaryJoinLayeredVirtualIndexState (.state binary-join-index)) [lhs-index rhs-index])
-  binary-join-index)
+(defn new-binary-join-virtual-index [lhs-index rhs-index]
+   (->BinaryJoinLayeredVirtualIndex (BinaryJoinLayeredVirtualIndexState. [lhs-index rhs-index] 0)))
 
 (defn- build-constrained-result [constrain-result-fn result-stack max-k]
   (let [max-ks (last result-stack)
@@ -440,4 +431,5 @@
    (update-relation-virtual-index! (->RelationVirtualIndex max-depth
                                                            (RelationVirtualIndexState. nil nil nil nil)
                                                            layered-range-constraints
-                                                           encode-value-fn) tuples)))
+                                                           encode-value-fn)
+                                   tuples)))
