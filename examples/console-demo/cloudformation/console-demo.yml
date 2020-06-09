@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  CruxCloudStack:
+    Type: String
+    Default: crux-cloud
+
+Resources:
+  ConsoleRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName:
+          Fn::ImportValue: !Join [':', [!Ref CruxCloudStack, 'LoadBalancerDNSName']]
+        EvaluateTargetHealth: false
+        HostedZoneId:
+          Fn::ImportValue: !Join [':', [!Ref CruxCloudStack, 'LoadBalancerCanonicalHostedZoneId']]
+      HostedZoneName: 'crux.cloud.'
+      Name: 'console.crux.cloud'
+      Type: 'A'
+
+  ConsoleTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /latest-completed-tx
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: 'crux-console-demo'
+      Port: 3000
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '10'
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: 'crux-console-demo'
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: 'crux-console-demo'
+
+  FargateContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the Fargate containers
+      VpcId:
+        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+
+  EcsSecurityGroupIngressFromPublicALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Ingress from the public ALB
+      GroupId: !Ref 'FargateContainerSecurityGroup'
+      IpProtocol: -1
+      SourceSecurityGroupId:
+        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerSG']]
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+              Resource: '*'
+
+  ConsoleTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - ECSCluster
+      - ECSTaskExecutionRole
+    Properties:
+      Cpu: '0.5 vCPU'
+      Memory: '2GB'
+      Family: 'crux-console-demo'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'crux-console-demo'
+          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/crux-console-demo:latest'
+          PortMappings:
+            - ContainerPort: 3000
+
+  LBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ConsoleTargetGroup
+      Conditions:
+        - Field: host-header
+          Values:
+            - 'console.crux.cloud'
+      ListenerArn:
+        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
+      Priority: 20
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ConsoleTaskDef
+    Properties:
+      ServiceName: 'crux-console-demo'
+      Cluster: 'crux-console-demo'
+      LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 600
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: 0
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: 'ENABLED'
+          SecurityGroups:
+            - !Ref 'FargateContainerSecurityGroup'
+          Subnets:
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetOne']]
+            - Fn::ImportValue:
+                !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetTwo']]
+      TaskDefinition: !Ref 'ConsoleTaskDef'
+      LoadBalancers:
+        - ContainerName: 'crux-console-demo'
+          ContainerPort: 3000
+          TargetGroupArn: !Ref 'ConsoleTargetGroup'
