@@ -1,7 +1,6 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
-            [crux.memory :as mem]
-            [taoensso.nippy :as nippy])
+            [crux.memory :as mem])
   (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
             RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
            java.util.function.Function
@@ -334,8 +333,15 @@
   ([^RelationVirtualIndex relation tuples]
    (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (let [encode-value-fn (.encode_value_fn relation)
-         tree (binding [nippy/*freeze-fallback* :write-unfreezable]
+   (update-relation-virtual-index! relation tuples layered-range-constraints (.encode_value_fn relation) false))
+  ([^RelationVirtualIndex relation tuples layered-range-constraints encode-value-fn single-values?]
+   (let [tree (if single-values?
+                (reduce
+                 (fn [^TreeMap acc v]
+                   (doto acc
+                     (.put (encode-value-fn v) nil)))
+                 (TreeMap. mem/buffer-comparator)
+                 tuples)
                 (reduce
                  (fn [acc tuple]
                    (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
@@ -370,5 +376,4 @@
   (next-values [_]))
 
 (defn new-singleton-virtual-index [v encode-value-fn]
-  (binding [nippy/*freeze-fallback* :write-unfreezable]
-    (->SingletonVirtualIndex (encode-value-fn v))))
+  (->SingletonVirtualIndex (encode-value-fn v)))
