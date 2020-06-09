@@ -553,13 +553,15 @@
    (throw (UnsupportedOperationException.))))
 
 (defn get-attr-fn? [{:keys [pred return] :as clause}]
-  (let [{:keys [pred-fn args]} pred]
+  (let [{:keys [pred-fn args]} pred
+        [e-var attr not-found] args]
     (and (= pred-fn get-attr)
          (or (= 2 (count args))
              (= 3 (count args)))
          return
-         (logic-var? (first args))
-         (literal? (second args)))))
+         (logic-var? e-var)
+         (literal? attr)
+         (literal? not-found))))
 
 (defn- build-pred-constraints [pred-clause+idx-ids var->bindings]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
@@ -576,12 +578,13 @@
          (if (get-attr-fn? clause)
            (let [[e-var attr not-found] args
                  not-found? (= 3 (count args))
+                 not-found (c/vectorize-value not-found)
                  e-result-index (.result-index ^VarBinding (get var->bindings e-var))]
              (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
                (let [e (.get join-keys e-result-index)
                      vs (db/aev index-store attr e nil entity-resolver-fn)]
                  (if-let [values (if (and (empty? vs) not-found?)
-                                   [(db/encode-value index-store not-found)]
+                                   (mapv #(db/encode-value index-store %) not-found)
                                    (not-empty vs))]
                    (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values nil identity true)
                        true)
