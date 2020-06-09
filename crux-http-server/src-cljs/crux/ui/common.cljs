@@ -10,7 +10,7 @@
 
 (defn route->url
   "k: page handler i.e. :entity
-  params: path-params map i.e. {:eid ':hello'}
+  params: path-params map
   query: query-params map i.e. {:find '[?eid]'}"
   ([k]
    (route->url k nil nil))
@@ -20,7 +20,7 @@
    (rfe/href k params query)))
 
 (defn url->route
-  "url: abosolute string path i.e. '/_entity/:eid?tt=...'"
+  "url: abosolute string path i.e. '/_entity?eid=...'"
   [url]
   (reitit/match-by-path (navigation/router) url))
 

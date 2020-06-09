@@ -42,7 +42,7 @@
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
      (when (= :entity handler)
-       {"eid" (get-in db [:current-route :path-params :eid])
+       {"eid" (:eid query-params)
         "vtd" (:date valid-time)
         "vtt" (:time valid-time)
         "ttd" (:date transaction-time)
@@ -82,7 +82,9 @@
 (rf/reg-sub
  ::query-right-pane-view
  (fn [db _]
-   (or (get-in db [:query :right-pane :view]) :table)))
+   (if (empty? (get-in db [:current-route :query-params]))
+     :query-root
+     (or (get-in db [:query :right-pane :view]) :table))))
 
 (rf/reg-sub
  ::query-right-pane-loading?
@@ -97,7 +99,10 @@
 (rf/reg-sub
  ::entity-right-pane-view
  (fn [db _]
-   (if (get-in db [:current-route :query-params :history]) :history :document)))
+   (cond
+     (nil? (get-in db [:current-route :query-params :eid])) :entity-root
+     (get-in db [:current-route :query-params :history]) :history
+     :else :document)))
 
 (rf/reg-sub
  ::entity-right-pane-document
@@ -106,7 +111,7 @@
      {:error error}
      (let [query-params (get-in db [:current-route :query-params])
          document (get-in db [:entity :http :document "entity"])]
-     {:eid (get-in db [:current-route :path-params :eid])
+     {:eid (:eid query-params)
       :vt (or (:valid-time query-params) (str (t/now)))
       :tt (or (:transaction-time query-params) "Not Specified")
       :document document
@@ -126,7 +131,7 @@
 (rf/reg-sub
  ::entity-right-pane-history
  (fn [db _]
-   (let [eid (get-in db [:current-route :path-params :eid])
+   (let [eid (get-in db [:current-route :query-params :eid])
          history (get-in db [:entity :http :history])]
      {:eid eid
       :entity-history history})))
@@ -145,7 +150,7 @@
 (rf/reg-sub
  ::entity-right-pane-history-diffs
  (fn [db _]
-   (let [ eid (get-in db [:current-route :path-params :eid])
+   (let [eid (get-in db [:current-route :query-params :eid])
          history (get-in db [:entity :http :history])
          entity-history (history-docs->diffs history)]
      {:eid eid

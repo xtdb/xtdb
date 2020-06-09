@@ -31,6 +31,7 @@
            [java.io Closeable IOException OutputStream]
            java.time.Duration
            java.util.Date
+           java.text.SimpleDateFormat
            [java.net URLDecoder URLEncoder]
            org.eclipse.jetty.server.Server
            [com.nimbusds.jose.jwk JWK JWKSet KeyType RSAKey ECKey]
@@ -90,6 +91,10 @@
    {:status status
     :headers headers
     :body body}))
+
+(defn- redirect-response [url]
+  {:status 302
+   :headers {"Location" url}})
 
 (defn- success-response [m]
   (response (if (some? m) 200 404)
@@ -393,6 +398,9 @@
 (defn- handler [request {:keys [crux-node ::read-only?]}]
   (condp check-path request
     [#"^/$" [:get]]
+    (redirect-response "/_crux/index")
+
+    [#"^/_crux/status" [:get]]
     (status crux-node)
 
     [#"^/document/.+$" [:get :post]]
@@ -469,20 +477,71 @@
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       nil)))
 
+(defn html-request? [request]
+  (= (get-in request [:muuntaja/response :format]) "text/html"))
+
+(defn- root-page []
+  [:div.root-contents
+   [:p "Welcome to the Crux Console! Get started below:"]
+   [:p [:a {:href "/_crux/query"} "Performing a query"]]
+   [:p [:a {:href "/_crux/entity"} "Searching for an entity"]]])
+
+(defn- root-handler [^ICruxAPI crux-node options request]
+  {:status 200
+   :headers {"Content-Location" "/_crux/index.html"}
+   :body (when (html-request? request)
+           (raw-html
+            {:body (root-page)
+             :title "/_crux"
+             :options options}))})
+
+(def ^SimpleDateFormat default-date-formatter (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss.SSS"))
+
+(defn- entity-root-html []
+  [:div.entity-root
+   [:div.entity-root__title
+    "Getting Started"]
+   [:p "To look for a particular entity, simply use the entity search below:"]
+   [:div.entity-root__contents
+    [:div.entity-editor__title
+     "Entity selector"]
+    [:div.entity-editor__contents
+     [:form
+      {:action "/_crux/entity"}
+      [:textarea.textarea
+       {:name "eid"
+        :rows 1}]
+      [:div.entity-editor-datetime
+       [:b "Valid Time"]
+       [:input.input.input-time
+        {:type "datetime-local"
+         :name "valid-time"
+         :step "0.01"
+         :value (.format default-date-formatter (Date.))}]
+       [:b "Transaction Time"]
+       [:input.input.input-time
+        {:type "datetime-local"
+         :name "transaction-time"
+         :step "0.01"}]]
+      [:button.button
+       {:type "submit"}
+       "Submit Query"]]]]])
+
 (defn link-all-entities
   [db path result]
   (letfn [(recur-on-result [result links]
-             (if (and (c/valid-id? result)
-                      (api/entity db result))
-               (let [query-params (format "?valid-time=%s&transaction-time=%s"
-                                          (.toInstant ^Date (api/valid-time db))
-                                          (.toInstant ^Date (api/transaction-time db)))
-                     encoded-eid (URLEncoder/encode (str result) "UTF-8")]
-                 (assoc links result (str path "/" encoded-eid query-params)))
-               (cond
-                 (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
-                 (sequential? result) (apply merge (map #(recur-on-result % links) result))
-                 :else links)))]
+            (if (and (c/valid-id? result)
+                     (api/entity db result))
+              (let [encoded-eid (URLEncoder/encode (str result) "UTF-8")
+                    query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
+                                         encoded-eid
+                                         (.toInstant ^Date (api/valid-time db))
+                                         (.toInstant ^Date (api/transaction-time db)))]
+                (assoc links result (str path query-params)))
+              (cond
+                (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
+                (sequential? result) (apply merge (map #(recur-on-result % links) result))
+                :else links)))]
     (recur-on-result result {})))
 
 (defn resolve-entity-map [linked-entities entity-map]
@@ -548,56 +607,88 @@
       [:div.entity-histories
        [:strong (str eid)] " entity not found"])]])
 
-(defn html-request? [request]
-  (= (get-in request [:muuntaja/response :format]) "text/html"))
-
-(defn- entity-state [^ICruxAPI crux-node options {{:strs [history sort-order
+(defn- entity-state [^ICruxAPI crux-node options {{:strs [eid history sort-order
                                                           valid-time transaction-time
                                                           start-valid-time start-transaction-time
                                                           end-valid-time end-transaction-time
                                                           with-corrections with-docs link-entities?]} :query-params
                                                   :as request}]
-  (let [[_ encoded-eid] (re-find #"^/_entity/(.+)$" (req/path-info request))
-        eid (or (some-> encoded-eid URLDecoder/decode c/id-edn-reader)
-                (throw (IllegalArgumentException. "missing eid")))
-        vt (some-> valid-time
-                   (instant/read-instant-date))
-        tt (some-> transaction-time
-                   (instant/read-instant-date))
-        db (db-for-request crux-node {:valid-time vt
-                                      :transact-time tt})
-        html? (html-request? request)]
-    (if history
-      (let [sort-order (or (some-> sort-order keyword)
-                           (throw (IllegalArgumentException. "missing sort-order query parameter")))
-            history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
-                          :with-docs? (or html? (some-> ^String with-docs Boolean/valueOf))
-                          :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
-                                  :crux.tx/tx-time (some-> start-transaction-time (instant/read-instant-date))}
-                          :end {:crux.db/valid-time (some-> end-valid-time (instant/read-instant-date))
-                                :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
-            entity-history (api/entity-history db eid sort-order history-opts)]
-        {:status (if (not-empty entity-history) 200 404)
-         :body  (if html?
-                  (raw-html
-                   {:body (entity-history->html encoded-eid entity-history)
-                    :title "/_entity?history=true"
-                    :options options})
-                  ;; Stringifying #crux/id values, caused issues with AJAX
-                  (map #(update % :crux.db/content-hash str) entity-history))})
-      (let [entity-map (api/entity db eid)
-            linked-entities #(link-all-entities db  "/_entity" entity-map)]
-        {:status (if (some? entity-map) 200 404)
-         :body (cond
-                 html? (raw-html
-                        {:body (entity->html encoded-eid linked-entities entity-map vt tt)
-                         :title "/_entity"
-                         :options options})
+  (let [html? (html-request? request)]
+    (if (nil? eid)
+      (if html?
+        {:status 200
+         :body (raw-html
+                {:body (entity-root-html)
+                 :title "/entity"
+                 :options options})}
+        (throw (IllegalArgumentException. "missing eid")))
+      (let [decoded-eid (-> eid URLDecoder/decode c/id-edn-reader)
+            vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
+            tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
+            db (db-for-request crux-node {:valid-time vt
+                                          :transact-time tt})]
+        (if history
+          (let [sort-order (or (some-> sort-order keyword)
+                               (throw (IllegalArgumentException. "missing sort-order query parameter")))
+                history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
+                              :with-docs? (or html? (some-> ^String with-docs Boolean/valueOf))
+                              :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
+                                      :crux.tx/tx-time (some-> start-transaction-time (instant/read-instant-date))}
+                              :end {:crux.db/valid-time (some-> end-valid-time (instant/read-instant-date))
+                                    :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
+                entity-history (api/entity-history db decoded-eid sort-order history-opts)]
+            {:status (if (not-empty entity-history) 200 404)
+             :body  (if html?
+                      (raw-html
+                       {:body (entity-history->html eid entity-history)
+                        :title "/entity?history=true"
+                        :options options})
+                      ;; Stringifying #crux/id values, caused issues with AJAX
+                      (map #(update % :crux.db/content-hash str) entity-history))})
+          (let [entity-map (api/entity db decoded-eid)
+                linked-entities #(link-all-entities db  "/_crux/entity" entity-map)]
+            {:status (if (some? entity-map) 200 404)
+             :body (cond
+                     html? (raw-html
+                            {:body (entity->html eid linked-entities entity-map vt tt)
+                             :title "/entity"
+                             :options options})
 
-                 link-entities? {"linked-entities" (linked-entities)
-                                 "entity" entity-map}
+                     link-entities? {"linked-entities" (linked-entities)
+                                     "entity" entity-map}
 
-                 :else entity-map)}))))
+                     :else entity-map)}))))))
+
+(defn- query-root-html []
+  [:div.query-root
+   [:div.query-root__title
+    "Getting Started"]
+   [:div.query-root__contents
+    [:p "To perform a query, use the editor below:"]
+    [:div.query-editor__title
+     "Query editor"]
+    [:div.query-editor__contents
+     [:form
+      {:action "/_crux/query"}
+      [:textarea.textarea
+       {:name "q"
+        :rows 10
+        :cols 40}]
+      [:div.query-editor-datetime
+       [:b "Valid Time"]
+       [:input.input.input-time
+        {:type "datetime-local"
+         :name "valid-time"
+         :step "0.01"
+         :value (.format default-date-formatter (Date.))}]
+       [:b "Transaction Time"]
+       [:input.input.input-time
+        {:type "datetime-local"
+         :name "transaction-time"
+         :step "0.01"}]]
+      [:button.button
+       {:type "submit"}
+       "Submit Query"]]]]])
 
 (defn- vectorize-param [param]
   (if (vector? param) param [param]))
@@ -619,16 +710,17 @@
   (->> (apply concat results)
        (filter (every-pred c/valid-id? #(api/entity db %)))
        (map (fn [id]
-              (let [query-params (format "?valid-time=%s&transaction-time=%s"
+              (let [encoded-eid (URLEncoder/encode (str id) "UTF-8")
+                    query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
+                                         encoded-eid
                                          (.toInstant ^Date (api/valid-time db))
-                                         (.toInstant ^Date (api/transaction-time db)))
-                    encoded-eid (URLEncoder/encode (str id) "UTF-8")]
-                [id (str path "/" encoded-eid query-params)])))
+                                         (.toInstant ^Date (api/transaction-time db)))]
+                [id (str path query-params)])))
        (into {})))
 
 (defn resolve-prev-next-offset
   [query-params prev-offset next-offset]
-  (let [url (str "/_query?"
+  (let [url (str "/_crux/query?"
                  (subs
                   (->> (dissoc query-params "offset")
                        (reduce-kv (fn [coll k v]
@@ -665,7 +757,7 @@
                "Nothing to show"]]])]]
     [:table.table__foot]]])
 
-(defn data-browser-query [^ICruxAPI crux-node options request]
+(defn data-browser-query [^ICruxAPI crux-node options {{:strs [valid-time transaction-time q]} :query-params :as request}]
   (let [query-params (:query-params request)
         link-entities? (get query-params "link-entities?")
         html? (html-request? request)]
@@ -674,48 +766,37 @@
       (if html?
         {:status 200
          :body (raw-html
-                {:body [:form
-                        {:action "/_query"}
-                        [:textarea.textarea
-                         {:name "q"
-                          :cols 40
-                          :rows 10}]
-                        [:br]
-                        [:br]
-                        [:button.button
-                         {:type "submit"}
-                         "Submit Query"]]
-                 :title "/_query"
+                {:body (query-root-html)
+                 :title "/query"
                  :options options})}
         {:status 400
          :body "No query provided."})
 
       :else
       (try
-        (let [query (cond-> (or (some-> (get query-params "q")
-                                        (edn/read-string))
+        (let [query (cond-> (or (some-> q (edn/read-string))
                                 (build-query query-params))
                       html? (dissoc :full-results?))
-              db (db-for-request crux-node {:valid-time (some-> (get query-params "valid-time")
-                                                                (instant/read-instant-date))
-                                            :transact-time (some-> (get query-params "transaction-time")
-                                                                   (instant/read-instant-date))})
+              vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
+              tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
+              db (db-for-request crux-node {:valid-time vt
+                                            :transact-time tt})
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [links (link-top-level-entities db  "/_entity" results)]
+                   html? (let [links (link-top-level-entities db  "/_crux/entity" results)]
                            (raw-html
                             {:body (query->html links query results)
-                             :title "/_query"
+                             :title "/query"
                              :options options}))
-                   link-entities? {"linked-entities" (link-top-level-entities db  "/_entity" results)
+                   link-entities? {"linked-entities" (link-top-level-entities db  "/_crux/entity" results)
                                    "query-results" results}
                    :else results)})
         (catch Exception e
           {:status 400
            :body (if html?
                    (raw-html
-                    {:title "/_query"
+                    {:title "/query"
                      :body
                      [:div.error-box (.getMessage e)]})
                    (with-out-str
@@ -723,10 +804,16 @@
 
 (defn- data-browser-handler [crux-node options request]
   (condp check-path request
-    [#"^/_entity/.+$" [:get]]
+    [#"^/_crux/index$" [:get]]
+    (root-handler crux-node options request)
+
+    [#"^/_crux/index.html$" [:get]]
+    (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
+
+    [#"^/_crux/entity$" [:get]]
     (entity-state crux-node options request)
 
-    [#"^/_query" [:get]]
+    [#"^/_crux/query" [:get]]
     (data-browser-query crux-node options request)
 
     nil))
@@ -801,7 +888,6 @@
                                        (-> (some-fn (-> #(handler % {:crux-node node, ::read-only? read-only?})
                                                         (p/wrap-params)
                                                         (wrap-exception-handling))
-
                                                     (-> (partial data-browser-handler node options)
                                                         (p/wrap-params)
                                                         (wrap-resource "public")

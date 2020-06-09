@@ -164,20 +164,29 @@
 (defn query-right-pane
   []
   (let [right-pane-view @(rf/subscribe [::sub/query-right-pane-view])]
-    [:<>
-     [:div.pane-nav
-      [:div.pane-nav__tab
-       "Table"]
-      #_[:div.pane-nav__tab
-       {:class (if (= right-pane-view :graph)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-query-right-pane-view :graph])}
-         "Graph"]]
-     (case right-pane-view
-       :table [query-table]
-       :graph [:div "this is graph"]
-       nil)]))
+    (if (= right-pane-view :query-root)
+      [:div.query-root
+       [:div.query-root__title
+        "Getting Started"]
+       [:p "To perform a query:"]
+       [:ul
+        [:li "Enter the desired query into the query editor."]
+        [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
+        [:li "Click " [:b "submit query"] " to perform the query and get the results in a table."]]]
+      [:<>
+       [:div.pane-nav
+        [:div.pane-nav__tab
+         "Table"]
+        #_[:div.pane-nav__tab
+           {:class (if (= right-pane-view :graph)
+                     "pane-nav__tab--active"
+                     "pane-nav__tab--hover")
+            :on-click #(rf/dispatch [::events/set-query-right-pane-view :graph])}
+           "Graph"]]
+       (case right-pane-view
+         :table [query-table]
+         :graph [:div "this is graph"]
+         nil)])))
 
 (defn- entity->hiccup
   [links edn]
@@ -297,24 +306,33 @@
 
 (defn entity-right-pane []
   (let [right-pane-view @(rf/subscribe [::sub/entity-right-pane-view])]
-    [:<>
-     [:div.pane-nav
-      [:div.pane-nav__tab
-       {:class (if (= right-pane-view :document)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-document])}
-       "Document"]
-      [:div.pane-nav__tab
-       {:class (if (= right-pane-view :history)
-                 "pane-nav__tab--active"
-                 "pane-nav__tab--hover")
-        :on-click #(rf/dispatch [::events/set-entity-right-pane-history])}
-       "History"]]
-     (case right-pane-view
-       :document [entity-document]
-       :history [entity-history-document]
-       nil)]))
+    (if (= right-pane-view :entity-root)
+      [:div.entity-root
+       [:div.entity-root__title
+        "Getting Started"]
+       [:p "To look for a particular entity:"]
+       [:ul
+        [:li "Enter the name of the entity to search for in the search box (for example, " [:i ":bar"] ")"]
+        [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
+        [:li "Click " [:b "submit entity"] " to go to the entity's page"]]]
+      [:<>
+       [:div.pane-nav
+        [:div.pane-nav__tab
+         {:class (if (= right-pane-view :document)
+                   "pane-nav__tab--active"
+                   "pane-nav__tab--hover")
+          :on-click #(rf/dispatch [::events/set-entity-right-pane-document])}
+         "Document"]
+        [:div.pane-nav__tab
+         {:class (if (= right-pane-view :history)
+                   "pane-nav__tab--active"
+                   "pane-nav__tab--hover")
+          :on-click #(rf/dispatch [::events/set-entity-right-pane-history])}
+         "History"]]
+       (case right-pane-view
+         :document [entity-document]
+         :history [entity-history-document]
+         nil)])))
 
 (defn left-pane
   []
@@ -350,19 +368,29 @@
       [query-form]
       [entity-form]]]))
 
+(defn root-page
+  []
+  [:div.root-contents
+   [:p "Welcome to the Crux Console! Get started below:"]
+   [:p [:a {:href "/_crux/query" :on-click #(rf/dispatch [::events/navigate-to-root-view :query])} "Performing a query"]]
+   [:p [:a {:href "/_crux/entity" :on-click #(rf/dispatch [::events/navigate-to-root-view :entity])} "Searching for an entity"]]])
+
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:<>
      #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
      [:div.container.page-pane
-      (when name [left-pane])
-      [:div.right-pane
-       [:div.back-button
-        [:a
-         {:on-click common/back-page}
-         [:i.fas.fa-chevron-left]
-         [:span.back-button__text "Back"]]]
-       (case name
-         :query [query-right-pane]
-         :entity [entity-right-pane]
-         [:div "no matching"])]]]))
+      (if (= name :homepage)
+        [root-page]
+        [:<>
+         (when name [left-pane])
+         [:div.right-pane
+          [:div.back-button
+           [:a
+            {:on-click common/back-page}
+            [:i.fas.fa-chevron-left]
+            [:span.back-button__text "Back"]]]
+          (case name
+            :query [query-right-pane]
+            :entity [entity-right-pane]
+            [:div "no matching"])]])]]))

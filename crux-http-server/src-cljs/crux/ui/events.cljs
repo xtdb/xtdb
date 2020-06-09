@@ -24,6 +24,12 @@
        (js/console.warn "Metadata not found")))))
 
 (rf/reg-event-db
+ ::navigate-to-root-view
+ (fn [db [_ view]]
+   (-> (assoc-in db [:left-pane :visible?] true)
+       (assoc-in [:left-pane :view] view))))
+
+(rf/reg-event-db
  ::toggle-left-pane
  (fn [db _]
    (update-in db [:left-pane :visible?] not)))
@@ -64,20 +70,18 @@
 (rf/reg-event-fx
  ::set-entity-right-pane-document
  (fn [{:keys [db]} _]
-   (let [eid (get-in db [:current-route :path-params :eid])
-         query-params (-> (get-in db [:current-route :query-params])
-                          (select-keys [:valid-time :transaction-time]))]
-     {:dispatch [:navigate :entity {:eid eid} query-params]})))
+   (let [query-params (-> (get-in db [:current-route :query-params])
+                          (select-keys [:valid-time :transaction-time :eid]))]
+     {:dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-fx
  ::set-entity-right-pane-history
  (fn [{:keys [db]} _]
-   (let [eid (get-in db [:current-route :path-params :eid])
-         query-params (-> (get-in db [:current-route :query-params])
+   (let [query-params (-> (get-in db [:current-route :query-params])
                           (assoc :history true)
                           (assoc :with-docs true)
                           (assoc :sort-order "desc"))]
-     {:dispatch [:navigate :entity {:eid eid} query-params]})))
+     {:dispatch [:navigate :entity nil query-params]})))
 
 
 (rf/reg-event-db
@@ -90,11 +94,12 @@
  (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values}]]
    (let [query-params (->>
                        {:valid-time (common/date-time->datetime vtd vtt)
-                        :transaction-time (common/date-time->datetime ttd ttt)}
+                        :transaction-time (common/date-time->datetime ttd ttt)
+                        :eid eid}
                        (remove #(nil? (second %)))
                        (into {}))]
      {:db db
-      :dispatch [:navigate :entity {:eid (string/trim eid)} query-params]})))
+      :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-db
  ::entity-right-pane-document-error
