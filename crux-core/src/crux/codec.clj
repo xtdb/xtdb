@@ -291,13 +291,13 @@
 
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
-    (case (.getByte (value-buffer-type-id buffer) 0)
+    (case (.getByte buffer 0)
       (1 2 3 4 7 8) true
       0 (= buffer nil-id-buffer)
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
-  (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
+  (let [type-id (.getByte buffer 0)]
     (case type-id
       1 (decode-long buffer) ;; long-value-type-id
       2 (decode-double buffer) ;; double-value-type-id
