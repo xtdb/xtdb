@@ -195,20 +195,24 @@
 
 (defn query-table
   []
-  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])]
+  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
+        loading? @(rf/subscribe [::sub/query-result-pane-loading?])]
     [:<>
-     (if error
-       [:div.error-box error]
-       [:<>
-        [table/table data]
-        [:div.query-table-downloads
-         "Download as:"
-         [:a.query-table-downloads__link
-          {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
-          "CSV"]
-         [:a.query-table-downloads__link
-          {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
-          "TSV"]]])]))
+     (cond
+       error [:div.error-box error]
+       (and
+        (:rows data)
+        (empty? (:rows data))) [:div.no-results "No results found!"]
+       :else [:<>
+              [table/table data]
+              [:div.query-table-downloads
+               "Download as:"
+               [:a.query-table-downloads__link
+                {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
+                "CSV"]
+               [:a.query-table-downloads__link
+                {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
+                "TSV"]]])]))
 
 (defn vt-tt-entity-box
   [vt tt]

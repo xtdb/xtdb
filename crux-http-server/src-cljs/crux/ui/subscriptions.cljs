@@ -72,12 +72,13 @@
                                v))
                            :render-only #{:filter :sort}})
                         find-clause)
-           rows (map #(zipmap find-clause %) query-results)]
+           rows (when query-results
+                  (map #(zipmap find-clause %) query-results))]
        {:data
         {:columns columns
          :rows rows
          :offset offset
-         :loading? table-loading?
+         :loading? (or (nil? table-loading?) table-loading?)
          :filters {:input (into #{} find-clause)}}}))))
 
 (rf/reg-sub

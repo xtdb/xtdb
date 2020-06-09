@@ -100,20 +100,16 @@
 (defn body-rows
   [data table-atom rows]
   (let [columns (utils/table-columns data @table-atom)]
-    (if (seq rows)
-      [:tbody.table__body
-       (for [row rows]
-         ^{:key row}
-         [:tr.table__row.body__row
-          (for [{:keys [column-key render-fn]} columns]
-            ^{:key (str row column-key)}
-            [:td.table__cell.body__cell
-             (if render-fn
-               (render-fn row (column-key row))
-               (column-key row))])])]
-      [:tbody.table__body.table__no-data
-       [:tr [:td.td__no-data
-             "Nothing to show"]]])))
+    [:tbody.table__body
+     (for [row rows]
+       ^{:key row}
+       [:tr.table__row.body__row
+        (for [{:keys [column-key render-fn]} columns]
+          ^{:key (str row column-key)}
+          [:td.table__cell.body__cell
+           (if render-fn
+             (render-fn row (column-key row))
+             (column-key row))])])]))
 
 (defn filter-all
   [table-atom]
