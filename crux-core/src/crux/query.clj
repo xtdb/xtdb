@@ -672,7 +672,7 @@
                                                                       (assoc *recursion-table* cache-key [])
                                                                       *recursion-table*)]
                                           (let [{:keys [n-ary-join
-                                                        var->bindings]} (build-sub-query index-store db where args rule-name->rules stats false)
+                                                        var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
                                             (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                               (if has-free-vars?
@@ -737,7 +737,7 @@
                           [(->> (for [var-binding not-var-bindings]
                                   (bound-result-for-var index-store var-binding join-keys))
                                 (zipmap not-vars))])
-                   {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats false)]
+                   {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
 (defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys]
@@ -891,7 +891,7 @@
            :triple triple-clauses
            :pred (vec (concat pred-clauses leaf-preds)))))
 
-(defn- compile-sub-query [encode-value-fn where arg-vars rule-name->rules stats root?]
+(defn- compile-sub-query [encode-value-fn where arg-vars rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
         {triple-clauses :triple
          range-clauses :range
@@ -901,8 +901,7 @@
          not-join-clauses :not-join
          or-clauses :or
          or-join-clauses :or-join
-         :as type->clauses} (cond-> (normalize-clauses where)
-                              root? (expand-leaf-preds arg-vars stats))
+         :as type->clauses} (expand-leaf-preds (normalize-clauses where) arg-vars stats)
         {:keys [e-vars
                 v-vars
                 unification-vars
@@ -991,7 +990,7 @@
             (assoc acc id (idx-fn db index-store compiled-query))))
         {})))
 
-(defn- build-sub-query [index-store {:keys [query-engine] :as db} where args rule-name->rules stats root?]
+(defn- build-sub-query [index-store {:keys [query-engine] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
@@ -1007,10 +1006,10 @@
                 attr-stats]
          :as compiled-query} (lru/compute-if-absent
                               query-cache
-                              [where arg-vars rule-name->rules root?]
+                              [where arg-vars rule-name->rules]
                               identity
                               (fn [_]
-                                (compile-sub-query encode-value-fn where arg-vars rule-name->rules stats root?)))
+                                (compile-sub-query encode-value-fn where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx db index-store compiled-query)
         constrain-result-fn (fn [join-keys]
                               (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys))
@@ -1082,7 +1081,7 @@
 (defn query-plan-for [q encode-value-fn stats]
   (s/assert ::query q)
   (let [{:keys [where args rules]} (s/conform ::query q)]
-    (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats true)))
+    (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
 
 (defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
@@ -1185,7 +1184,7 @@
            db (assoc db :entity-resolver-fn (or (:entity-resolver-fn db)
                                                 (new-entity-resolver-fn db)))
            {:keys [n-ary-join
-                   var->bindings]} (build-sub-query index-store db where args rule-name->rules stats true)
+                   var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)
            find-var-bindings (map var->bindings find)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
