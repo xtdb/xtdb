@@ -1060,7 +1060,7 @@
 (defn- with-entity-resolver-cache [entity-resolver-fn options]
   (let [entity-cache (lru/new-cache (::entity-cache-size options))]
     (fn [k]
-      (lru/compute-if-absent entity-cache k identity entity-resolver-fn))))
+      (lru/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
 (defn query
   ([{:keys [valid-time transact-time query-engine] :as db} ^ConformedQuery conformed-q]
