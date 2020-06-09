@@ -183,6 +183,7 @@
 (defn direct-byte-buffer ^java.nio.ByteBuffer [b]
   (let [b (->off-heap b)]
     (-> (.byteBuffer b)
+        (.duplicate)
         (.position 0)
         (.limit (.capacity b)))))
 
