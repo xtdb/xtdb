@@ -579,8 +579,8 @@
 ;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
   (let [eid (get (first args) e)
-        v (c/->value-buffer v)
-        [found-v] (db/aev index-store (c/->id-buffer a) eid v entity-resolver-fn)]
+        v (db/encode-value index-store v)
+        [found-v] (db/aev index-store a eid v entity-resolver-fn)]
     (when (and found-v (mem/buffers=? v found-v))
       [])))
 
@@ -1020,7 +1020,7 @@
 (defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
          (if-let [content-hash (and (c/valid-id? value)
-                                    (c/new-id (entity-resolver-fn value)))]
+                                    (c/new-id (entity-resolver-fn (db/encode-value index-store value))))]
            (-> (db/fetch-docs document-store #{content-hash})
                (get content-hash))
            value))))
