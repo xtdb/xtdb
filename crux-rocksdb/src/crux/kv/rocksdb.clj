@@ -6,8 +6,6 @@
             [crux.kv.rocksdb.loader]
             [crux.memory :as mem])
   (:import java.io.Closeable
-           java.nio.ByteBuffer
-           java.util.function.ToIntFunction
            (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
                         Options ReadOptions RocksDB RocksIterator
                         BlockBasedTableConfig WriteBatch WriteOptions
@@ -15,32 +13,16 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:const ^:private initial-read-buffer-limit 128)
-
-(defn- read-value [^ToIntFunction f]
-  (loop [limit initial-read-buffer-limit]
-    (let [out (mem/direct-byte-buffer (mem/allocate-unpooled-buffer limit))
-          result (.applyAsInt f out)]
-      (cond
-        (= result RocksDB/NOT_FOUND)
-        nil
-
-        (< limit result)
-        (recur result)
-
-        :else
-        (mem/as-buffer out)))))
-
+;; NOTE: We're returning on-heap buffers simply wrapping arrays
+;; here. This may or may not work later down the line.
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
-    (read-value (reify ToIntFunction
-                  (applyAsInt [_ out]
-                    (.key i ^ByteBuffer out))))))
+    (mem/on-heap-buffer (.key i))))
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
   (seek [this k]
-    (.seek i (mem/direct-byte-buffer k))
+    (.seek i (mem/->on-heap k))
     (iterator->key i))
 
   (next [this]
@@ -52,9 +34,7 @@
     (iterator->key i))
 
   (value [this]
-    (read-value (reify ToIntFunction
-                  (applyAsInt [_ out]
-                    (.value i ^ByteBuffer out)))))
+    (mem/on-heap-buffer (.value i)))
 
   Closeable
   (close [this]
@@ -66,9 +46,7 @@
     (->RocksKvIterator (.newIterator db read-options)))
 
   (get-value [this k]
-    (read-value (reify ToIntFunction
-                  (applyAsInt [_ out]
-                    (.get db read-options (mem/direct-byte-buffer k) ^ByteBuffer out)))))
+    (some-> (.get db read-options (mem/->on-heap k)) (mem/on-heap-buffer)))
 
   Closeable
   (close [_]
@@ -101,13 +79,13 @@
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]
       (doseq [[k v] kvs]
-        (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v)))
+        (.put wb (mem/->on-heap k) (mem/->on-heap v)))
       (.write db write-options wb)))
 
   (delete [{:keys [^RocksDB db ^WriteOptions write-options]} ks]
     (with-open [wb (WriteBatch.)]
       (doseq [k ks]
-        (.remove wb (mem/direct-byte-buffer k)))
+        (.delete wb (mem/->on-heap k)))
       (.write db write-options wb)))
 
   (compact [{:keys [^RocksDB db]}]
@@ -161,11 +139,11 @@
                      write-opts (doto (WriteOptions.)
                                   (.setSync (boolean sync?))
                                   (.setDisableWAL (boolean disable-wal?)))]
-                 (-> (map->RocksKv {:db-dir db-dir
-                                    :db db
-                                    :options opts
-                                    :stats stats
-                                    :write-options write-opts}))))
+                 (map->RocksKv {:db-dir db-dir
+                                :db db
+                                :options opts
+                                :stats stats
+                                :write-options write-opts})))
 
    :args (-> (merge kv/options
                     {::db-options {:doc "RocksDB Options"
