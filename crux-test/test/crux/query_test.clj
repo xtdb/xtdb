@@ -963,6 +963,68 @@
                                                         :where [[p :name n]
                                                                 [(!= n #{})]]})))))
 
+(t/deftest test-get-attr
+  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}]))
+  (t/testing "existing attribute"
+    (t/is (= #{[:ivan 21]}
+             (api/q (api/db *api*) '{:find [e age]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :age) age]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [e age]
+                                          :where [[e :name "Oleg"]
+                                                  [(get-attr e :age) age]]})))
+
+
+    (t/is (= #{}
+             (api/q (api/db *api*) '{:find [e age]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :age) age]
+                                             [(> age 30)]]}))))
+
+  (t/testing "many valued attribute"
+    (t/is (= #{[:ivan :petr]
+               [:ivan :oleg]}
+             (api/q (api/db *api*) '{:find [e friend]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :friends) friend]]}))))
+
+  (t/testing "unknown attribute"
+    (t/is (empty? (api/q (api/db *api*) '{:find [e email]
+                                          :where [[e :name "Ivan"]
+                                                  [(get-attr e :email) email]]}))))
+
+  (t/testing "optional found attribute"
+    (t/is (= #{[:ivan 21]}
+             (api/q (api/db *api*) '{:find [e age]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :age 0) age]]}))))
+
+  (t/testing "optional not found attribute"
+    (t/is (= #{[:ivan "N/A"]}
+             (api/q (api/db *api*) '{:find [e email]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :email "N/A") email]]})))
+
+    (t/is (= #{[:ivan "ivan@example.com"]
+               [:ivan "ivanov@example.com"]}
+             (api/q (api/db *api*) '{:find [e email]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :email ["ivan@example.com"
+                                                                  "ivan@example.com"
+                                                                  "ivanov@example.com"]) email]]})))
+
+    (t/is (= #{[:ivan "ivan@example.com"]
+               [:ivan "ivanov@example.com"]}
+             (api/q (api/db *api*) '{:find [e email]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :email #{"ivan@example.com"
+                                                                   "ivanov@example.com"}) email]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [e email]
+                                          :where [[e :name "Ivan"]
+                                                  [(get-attr e :email #{}) email]]})))))
+
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
              [:range [[:sym-val {:op <, :sym age, :val 20}]]]]
@@ -2916,13 +2978,123 @@
                                '{:find [?e] :where [[?e :crux.db/id]]}))))
       (let [single-field-ns-start (System/nanoTime)]
         (t/is (= n (count (api/q (api/db *api*)
-                                 '{:find [?e] :where [[?e :age ?age]]}))))
+                                 '{:find [?e ?age] :where [[?e :age ?age]]}))))
         (let [single-field-ns (- (System/nanoTime) single-field-ns-start)
-              multiple-fields-ns-start (System/nanoTime)]
-          (t/is (= n (count (api/q (api/db *api*)
-                                   '{:find [?e] :where [[?e :age ?age]
-                                                        [?e :salary ?salary]
-                                                        [?e :sex ?sex]]}))))
+              _ (prn :single-field-ns--- single-field-ns)
+              multiple-fields-ns-start (System/nanoTime)
+              result (api/q (api/db *api*)
+                            '{:find [?e ?age ?salary ?sex]
+                              :where [[?e :age ?age]
+                                      [?e :salary ?salary]
+                                      [?e :sex ?sex]]})]
+          (t/is (= n (count result)))
           (let [multiple-field-ns (- (System/nanoTime) multiple-fields-ns-start)]
+            (prn :multiple-field-ns- multiple-field-ns)
             (t/is (< (double (/ multiple-field-ns single-field-ns)) acceptable-slowdown-factor)
-                  (str (/ single-field-ns 1000000.0) " " (/ multiple-field-ns 1000000.0))))))))
+                  (str (/ single-field-ns 1000000.0) " " (/ multiple-field-ns 1000000.0))))
+
+          (let [pred-fn-ns-start (System/nanoTime)]
+            (with-open [db (api/open-db *api*)]
+              (t/is (= result (api/q db
+                                     '{:find [?e ?age ?salary ?sex]
+                                       :where [[?e :age ?age]
+                                               [(get-attr ?e :salary) ?salary]
+                                               [(get-attr ?e :sex) ?sex]]}))))
+            (let [pred-fn-ns (- (System/nanoTime) pred-fn-ns-start)]
+              (prn :pred-fn-ns-------- pred-fn-ns)
+              (t/is (< (double (/ pred-fn-ns single-field-ns)) acceptable-slowdown-factor)
+                    (str (/ single-field-ns 1000000.0) " " (/ pred-fn-ns 1000000.0)))))
+
+
+          (let [doc-fields-ns-start (System/nanoTime)]
+            (with-open [db (api/open-db *api*)]
+              (let [{:keys [index-store query-engine entity-resolver-fn]} db
+                    {:keys [document-store]} query-engine]
+                (t/is (= result
+                         (set (->> (for [e (db/ae index-store :age nil entity-resolver-fn)
+                                         :let [content-hash (c/new-id (entity-resolver-fn e))
+                                               doc (-> (db/fetch-docs document-store #{content-hash})
+                                                       (get content-hash))
+                                               {:keys [crux.db/id age salary sex]} doc
+                                               tuple [id age salary sex]]]
+                                     (if (not-any? c/multiple-values? tuple)
+                                       [tuple]
+                                       (for [e (c/vectorize-value id)
+                                             age (c/vectorize-value age)
+                                             salary (c/vectorize-value salary)
+                                             sex (c/vectorize-value sex)]
+                                         [e age salary sex])))
+                                   (apply concat)))))))
+            (let [doc-field-ns (- (System/nanoTime) doc-fields-ns-start)]
+              (prn :doc-field-ns------ doc-field-ns)
+              (t/is (< (double (/ doc-field-ns single-field-ns)) acceptable-slowdown-factor)
+                    (str (/ single-field-ns 1000000.0) " " (/ doc-field-ns 1000000.0)))))
+
+          (let [hardcoded-fields-ns-start (System/nanoTime)]
+            (with-open [db (api/open-db *api*)]
+              (let [{:keys [index-store query-engine entity-resolver-fn]} db
+                    {:keys [document-store]} query-engine]
+                (t/is (= result
+                         (set (for [e (db/ae index-store :age nil entity-resolver-fn)
+                                    :let [e-decoded (db/decode-value index-store e)]
+                                    age (db/aev index-store :age e nil entity-resolver-fn)
+                                    :let [age-decoded (db/decode-value index-store age)]
+                                    salary (db/aev index-store :salary e nil entity-resolver-fn)
+                                    :let [salary-decoded (db/decode-value index-store salary)]
+                                    sex (db/aev index-store :sex e nil entity-resolver-fn)
+                                    :let [sex-decoded (db/decode-value index-store sex)]]
+                                [e-decoded
+                                 age-decoded
+                                 salary-decoded
+                                 sex-decoded]))))))
+            (let [hardcoded-field-ns (- (System/nanoTime) hardcoded-fields-ns-start)]
+              (prn :hardcoded-field-ns hardcoded-field-ns)
+              (t/is (< (double (/ hardcoded-field-ns single-field-ns)) acceptable-slowdown-factor)
+                    (str (/ single-field-ns 1000000.0) " " (/ hardcoded-field-ns 1000000.0)))))
+
+          (let [full-results-ns-start (System/nanoTime)]
+            (with-open [db (api/open-db *api*)]
+              (let [{:keys [index-store query-engine entity-resolver-fn]} db
+                    {:keys [document-store]} query-engine]
+                (t/is (= result
+                         (->> (for [[e] (api/q db '{:find [?e] :where [[?e :age]] :full-results? true})
+                                    :let [{:keys [crux.db/id age salary sex]} e
+                                          tuple [id age salary sex]]]
+                                (if (not-any? c/multiple-values? tuple)
+                                  [tuple]
+                                  (for [e (c/vectorize-value id)
+                                        age (c/vectorize-value age)
+                                        salary (c/vectorize-value salary)
+                                        sex (c/vectorize-value sex)]
+                                    [e age salary sex])))
+                              (reduce into #{}))))))
+            (let [full-results-ns (- (System/nanoTime) full-results-ns-start)]
+              (prn :full-results-ns--- full-results-ns)
+              (t/is (< (double (/ full-results-ns single-field-ns)) acceptable-slowdown-factor)
+                    (str (/ single-field-ns 1000000.0) " " (/ full-results-ns 1000000.0)))))
+
+          (api/q (api/db *api*) '{:find [?e] :where [[?e :age]]})
+
+          (let [projection-ns-start (System/nanoTime)]
+            (with-open [db (api/open-db *api*)]
+              (let [{:keys [index-store query-engine entity-resolver-fn]} db
+                    {:keys [document-store]} query-engine]
+                (t/is (= result
+                         (->> (for [[e] (api/q db '{:find [?e] :where [[?e :age]]})
+                                    :let [content-hash (c/new-id (entity-resolver-fn (db/encode-value index-store e)))
+                                          doc (-> (db/fetch-docs document-store #{content-hash})
+                                                  (get content-hash))
+                                          {:keys [crux.db/id age salary sex]} doc
+                                          tuple [id age salary sex]]]
+                                (if (not-any? c/multiple-values? tuple)
+                                  [tuple]
+                                  (for [e (c/vectorize-value id)
+                                        age (c/vectorize-value age)
+                                        salary (c/vectorize-value salary)
+                                        sex (c/vectorize-value sex)]
+                                    [e age salary sex])))
+                              (reduce into #{}))))))
+            (let [projection-ns (- (System/nanoTime) projection-ns-start)]
+              (prn :projection-ns----- projection-ns)
+              (t/is (< (double (/ projection-ns single-field-ns)) acceptable-slowdown-factor)
+                    (str (/ single-field-ns 1000000.0) " " (/ projection-ns 1000000.0)))))))))

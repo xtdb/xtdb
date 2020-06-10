@@ -865,11 +865,11 @@
                           arg-vars
                           stats]
   (let [collected-vars (collect-vars type->clauses)
-        all-non-v-vars (set (concat arg-vars (mapcat val (dissoc collected-vars :v-vars))))
+        invalid-leaf-vars (set (concat arg-vars (:e-vars collected-vars)))
         non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
-        potential-leaf-v-vars (set/difference (:v-vars collected-vars) all-non-v-vars non-leaf-v-vars)
+        potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
         leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
                                :when (> (count leaf-group) 1)]
                            [e-var (sort-triple-clauses stats leaf-group)])

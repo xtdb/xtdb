@@ -334,7 +334,8 @@
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
    (update-relation-virtual-index! relation tuples layered-range-constraints (.encode_value_fn relation) false))
   ([^RelationVirtualIndex relation tuples layered-range-constraints encode-value-fn single-values?]
-   (let [tree (if single-values?
+   (let [layered-range-constraints (or layered-range-constraints (.layered-range-constraints relation))
+         tree (if single-values?
                 (reduce
                  (fn [^TreeMap acc v]
                    (doto acc
