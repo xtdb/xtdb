@@ -129,7 +129,7 @@
     (->> #(let [iterators (->> (for [idx indexes]
                                  (new-unary-join-iterator-state idx (db/seek-values idx k)))
                                (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
-                               (vec))]
+                               (to-array))]
             (UnaryJoinIteratorsThunkState. iterators 0))
          (set! (.thunk state)))
     (db/next-values this))
@@ -137,20 +137,19 @@
   (next-values [this]
     (when-let [iterators-thunk (.thunk state)]
       (when-let [iterators-thunk ^UnaryJoinIteratorsThunkState (iterators-thunk)]
-        (let [iterators (.iterators iterators-thunk)
+        (let [iterators ^objects (.iterators iterators-thunk)
               index (.index iterators-thunk)
-              iterator-state ^UnaryJoinIteratorState (nth iterators index nil)
-              max-index (mod (dec index) (count iterators))
-              max-k (.key ^UnaryJoinIteratorState (nth iterators max-index nil))
+              iterator-state ^UnaryJoinIteratorState (aget iterators index)
+              max-index (mod (dec index) (alength iterators))
+              max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
               match? (mem/buffers=? (.key iterator-state) max-k)
               idx (.idx iterator-state)]
           (->> #(let [v (if match?
                           (db/next-values idx)
                           (db/seek-values idx max-k))]
                   (when v
-                    (set! (.iterators iterators-thunk)
-                          (assoc iterators index (new-unary-join-iterator-state idx v)))
-                    (set! (.index iterators-thunk) (mod (inc index) (count iterators)))
+                    (set! (.-key iterator-state) v)
+                    (set! (.index iterators-thunk) (mod (inc index) (alength iterators)))
                     iterators-thunk))
                (set! (.thunk state)))
           (if match?
