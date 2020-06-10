@@ -77,8 +77,10 @@ jobs:
       - run:
           command: |
             export LEIN_JVM_OPTS=-Xmx2G
-            lein sub install
+            lein sub -s crux-http-server install
 
+
+      - run: lein sub install
       - run: lein do sub test, check
       - store_test_results:
           path: "crux-test/target/test-results"
