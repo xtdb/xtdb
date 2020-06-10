@@ -561,13 +561,13 @@
   (let [arg-bindings (rest arg-bindings)
         [e-var attr not-found] arg-bindings
         not-found? (= 3 (count arg-bindings))
-        not-found (c/vectorize-value not-found)
+        not-found (mapv encode-value-fn (c/vectorize-value not-found))
         e-result-index (.result-index ^VarBinding e-var)]
     (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
       (let [e (.get join-keys e-result-index)
             vs (db/aev index-store attr e nil entity-resolver-fn)]
         (if-let [values (if (and (empty? vs) not-found?)
-                          (mapv #(db/encode-value index-store %) not-found)
+                          not-found
                           (not-empty vs))]
           (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values nil identity true)
               true)
