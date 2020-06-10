@@ -975,7 +975,6 @@
                                           :where [[e :name "Oleg"]
                                                   [(get-attr e :age) age]]})))
 
-
     (t/is (= #{}
              (api/q (api/db *api*) '{:find [e age]
                                      :where [[e :name "Ivan"]
@@ -3004,7 +3003,6 @@
               (prn :pred-fn-ns-------- pred-fn-ns)
               (t/is (< (double (/ pred-fn-ns single-field-ns)) acceptable-slowdown-factor)
                     (str (/ single-field-ns 1000000.0) " " (/ pred-fn-ns 1000000.0)))))
-
 
           (let [doc-fields-ns-start (System/nanoTime)]
             (with-open [db (api/open-db *api*)]
