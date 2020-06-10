@@ -1,7 +1,6 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
-            [crux.memory :as mem]
-            [taoensso.nippy :as nippy])
+            [crux.memory :as mem])
   (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
             RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
            java.util.function.Function
@@ -130,7 +129,7 @@
     (->> #(let [iterators (->> (for [idx indexes]
                                  (new-unary-join-iterator-state idx (db/seek-values idx k)))
                                (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
-                               (vec))]
+                               (to-array))]
             (UnaryJoinIteratorsThunkState. iterators 0))
          (set! (.thunk state)))
     (db/next-values this))
@@ -138,20 +137,19 @@
   (next-values [this]
     (when-let [iterators-thunk (.thunk state)]
       (when-let [iterators-thunk ^UnaryJoinIteratorsThunkState (iterators-thunk)]
-        (let [iterators (.iterators iterators-thunk)
+        (let [iterators ^objects (.iterators iterators-thunk)
               index (.index iterators-thunk)
-              iterator-state ^UnaryJoinIteratorState (nth iterators index nil)
-              max-index (mod (dec index) (count iterators))
-              max-k (.key ^UnaryJoinIteratorState (nth iterators max-index nil))
+              iterator-state ^UnaryJoinIteratorState (aget iterators index)
+              max-index (mod (dec index) (alength iterators))
+              max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
               match? (mem/buffers=? (.key iterator-state) max-k)
               idx (.idx iterator-state)]
           (->> #(let [v (if match?
                           (db/next-values idx)
                           (db/seek-values idx max-k))]
                   (when v
-                    (set! (.iterators iterators-thunk)
-                          (assoc iterators index (new-unary-join-iterator-state idx v)))
-                    (set! (.index iterators-thunk) (mod (inc index) (count iterators)))
+                    (set! (.-key iterator-state) v)
+                    (set! (.index iterators-thunk) (mod (inc index) (alength iterators)))
                     iterators-thunk))
                (set! (.thunk state)))
           (if match?
@@ -334,8 +332,16 @@
   ([^RelationVirtualIndex relation tuples]
    (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (let [encode-value-fn (.encode_value_fn relation)
-         tree (binding [nippy/*freeze-fallback* :write-unfreezable]
+   (update-relation-virtual-index! relation tuples layered-range-constraints (.encode_value_fn relation) false))
+  ([^RelationVirtualIndex relation tuples layered-range-constraints encode-value-fn single-values?]
+   (let [layered-range-constraints (or layered-range-constraints (.layered-range-constraints relation))
+         tree (if single-values?
+                (reduce
+                 (fn [^TreeMap acc v]
+                   (doto acc
+                     (.put (encode-value-fn v) nil)))
+                 (TreeMap. mem/buffer-comparator)
+                 tuples)
                 (reduce
                  (fn [acc tuple]
                    (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
@@ -370,5 +376,4 @@
   (next-values [_]))
 
 (defn new-singleton-virtual-index [v encode-value-fn]
-  (binding [nippy/*freeze-fallback* :write-unfreezable]
-    (->SingletonVirtualIndex (encode-value-fn v))))
+  (->SingletonVirtualIndex (encode-value-fn v)))
