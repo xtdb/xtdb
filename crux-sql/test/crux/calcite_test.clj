@@ -296,7 +296,12 @@
                  (sort-by :name (query q)))))))
 
   (t/testing "in OR conditional with args"
-    (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Malcolm' OR AGE = (2 * 21)"]
+    (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Malcolm' OR AGE = (2 * YEARS_WORKED)"]
+      (t/is (= (str "CruxToEnumerableConverter\n"
+                    "  CruxProject(NAME=[$1])\n"
+                    "    CruxFilter(condition=[OR(=($1, 'Malcolm'), =($2, *(2, $3)))])\n"
+                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+               (explain q)))
       (t/is (= [{:name "Ivan"} {:name "Malcolm"}]
                (sort-by :name (query q))))))
 
