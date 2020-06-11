@@ -40,7 +40,17 @@
   (next-values [this]
     (when-let [v (db/next-values idx)]
       (when (pred v)
-        v))))
+        v)))
+
+  db/LayeredIndex
+  (open-level [_]
+    (db/open-level idx))
+
+  (close-level [_]
+    (db/close-level idx))
+
+  (max-depth [_]
+    (db/max-depth idx)))
 
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
@@ -81,7 +91,17 @@
         (db/next-values idx)))
 
   (next-values [this]
-    (db/next-values idx)))
+    (db/next-values idx))
+
+  db/LayeredIndex
+  (open-level [_]
+    (db/open-level idx))
+
+  (close-level [_]
+    (db/close-level idx))
+
+  (max-depth [_]
+    (db/max-depth idx)))
 
 (defn new-greater-than-virtual-index [idx ^DirectBuffer min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
@@ -280,7 +300,7 @@
 (defn- new-sorted-virtual-index [m]
   (->SortedVirtualIndex m (SortedVirtualIndexState. nil)))
 
-(defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state layered-range-constraints encode-value-fn]
+(defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state encode-value-fn]
   db/Index
   (seek-values [this k]
     (when-let [k (db/seek-values (last (.indexes state)) (or k mem/empty-buffer))]
@@ -300,9 +320,7 @@
           level (count path)]
       (set! (.path state) path)
       (set! (.indexes state) (conj (.indexes state)
-                                   (wrap-with-range-constraints
-                                    (new-sorted-virtual-index (get-in (.tree state) path))
-                                    (get layered-range-constraints level))))
+                                   (new-sorted-virtual-index (get-in (.tree state) path))))
       (set! (.key state) nil))
     nil)
 
@@ -330,12 +348,9 @@
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
-   (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
-  ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (update-relation-virtual-index! relation tuples layered-range-constraints (.encode_value_fn relation) false))
-  ([^RelationVirtualIndex relation tuples layered-range-constraints encode-value-fn single-values?]
-   (let [layered-range-constraints (or layered-range-constraints (.layered-range-constraints relation))
-         tree (if single-values?
+   (update-relation-virtual-index! relation tuples (.encode_value_fn relation) false))
+  ([^RelationVirtualIndex relation tuples encode-value-fn single-values?]
+   (let [tree (if single-values?
                 (reduce
                  (fn [^TreeMap acc v]
                    (doto acc
@@ -347,9 +362,7 @@
                    (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
-         root-level (wrap-with-range-constraints
-                     (new-sorted-virtual-index tree)
-                     (get layered-range-constraints 0))
+         root-level (new-sorted-virtual-index tree)
          state ^RelationVirtualIndexState (.state relation)]
      (set! (.tree state) tree)
      (set! (.path state) [])
@@ -357,15 +370,11 @@
      (set! (.key state) nil)
      relation)))
 
-(defn new-relation-virtual-index
-  ([tuples max-depth encode-value-fn]
-   (new-relation-virtual-index tuples max-depth encode-value-fn nil))
-  ([tuples max-depth encode-value-fn layered-range-constraints]
-   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
-                                                           (RelationVirtualIndexState. nil nil nil nil)
-                                                           layered-range-constraints
-                                                           encode-value-fn)
-                                   tuples)))
+(defn new-relation-virtual-index [tuples max-depth encode-value-fn]
+  (update-relation-virtual-index! (->RelationVirtualIndex max-depth
+                                                          (RelationVirtualIndexState. nil nil nil nil)
+                                                          encode-value-fn)
+                                  tuples))
 
 (defrecord SingletonVirtualIndex [v]
   db/Index
