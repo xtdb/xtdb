@@ -359,7 +359,7 @@
 (def ^AWSLogsClient log-client
   (try
     (AWSLogsClientBuilder/defaultClient)
-    (catch SdkClientException e
+    (catch com.amazonaws.SdkClientException e
       (log/info "AWS credentials not found! Cannot get comparison times."))))
 
 (defn get-comparison-times [results]
