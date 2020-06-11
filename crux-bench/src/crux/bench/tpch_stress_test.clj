@@ -33,5 +33,5 @@
                                                                             [e :l_shipinstruct l_shipinstruct]
                                                                             [e :l_shipmode l_shipmode]
                                                                             [e :l_comment l_comment]]))
-                                                :timeout 100000}))})
+                                                :timeout 1000000}))})
        {:run-success? true}))))
