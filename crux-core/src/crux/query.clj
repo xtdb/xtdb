@@ -24,8 +24,7 @@
 (defn- logic-var? [x]
   (symbol? x))
 
-(def ^:private literal? (complement logic-var?))
-(def ^:private db-ident? c/valid-id?)
+(def ^:private literal? (complement (some-fn vector? logic-var?)))
 
 (declare pred-constraint)
 
@@ -37,10 +36,9 @@
 
 (def ^:private built-ins '#{and})
 
-(s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
-                                      :a (s/and db-ident?
-                                                some?)
-                                      :v (s/? some?))))
+(s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? c/valid-id? set?)
+                                      :a (s/and c/valid-id? some?)
+                                      :v (s/? (some-fn logic-var? literal?)))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
@@ -123,16 +121,16 @@
 (defmulti pred-args-spec first)
 
 (defmethod pred-args-spec 'get-attr [_]
-  (s/cat :pred-fn  #{'get-attr} :args (s/alt :e-var logic-var? :attr literal? :not-found (s/? literal?)) :return logic-var?))
+  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? literal?))) :return logic-var?))
 
 (defmethod pred-args-spec '== [_]
-  (s/cat :pred-fn #{'==} :args (s/alt :x some? :y some?)))
+  (s/cat :pred-fn #{'==} :args (s/tuple some? some?)))
 
 (defmethod pred-args-spec '!= [_]
-  (s/cat :pred-fn #{'!=} :args (s/alt :x some? :y some?)))
+  (s/cat :pred-fn #{'!=} :args (s/tuple some? some?)))
 
 (defmethod pred-args-spec :default [_]
-  (s/cat :pred-fn (s/or :var logic-var? :fn fn?) :args (s/* any?) :return (s/? logic-var?)))
+  (s/cat :pred-fn (s/or :var logic-var? :fn fn?) :args (s/coll-of any?) :return (s/? logic-var?)))
 
 (s/def ::pred-args (s/multi-spec pred-args-spec first))
 
@@ -316,6 +314,12 @@
   (sort-by (fn [{:keys [a]}]
              (get stats a 0)) triple-clauses))
 
+(defn- new-literal-index [index-store v]
+  (let [encode-value-fn (partial db/encode-value index-store)]
+    (if (c/multiple-values? v)
+      (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
+      (idx/new-singleton-virtual-index v encode-value-fn))))
+
 (defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
   (let [var->frequency (->> (concat (map :e triple-clauses)
                                     (map :v triple-clauses)
@@ -376,13 +380,13 @@
                                                            e [join]})
                    var->joins (if (literal? e)
                                 (merge-with into var->joins {e [{:idx-fn
-                                                                 (fn [db index-store _]
-                                                                   (idx/new-singleton-virtual-index e (partial db/encode-value index-store)))}]})
+                                                                 (fn [db index-store compiled-query]
+                                                                   (new-literal-index index-store e))}]})
                                 var->joins)
                    var->joins (if (literal? v)
                                 (merge-with into var->joins {v [{:idx-fn
-                                                                 (fn [db index-store _]
-                                                                   (idx/new-singleton-virtual-index v (partial db/encode-value index-store)))}]})
+                                                                 (fn [db index-store compiled-query]
+                                                                   (new-literal-index index-store v))}]})
                                 var->joins)]
                var->joins))
            var->joins))]))
@@ -447,7 +451,8 @@
          (and (= :triple type)
               (contains? vars e)
               (logic-var? e)
-              (literal? v)))))
+              (literal? v)
+              (not (c/multiple-values? v))))))
 
 (defn- or-joins [rules or-type or-clauses var->joins known-vars]
   (->> (sort-by clause-complexity or-clauses)
@@ -616,7 +621,7 @@
                                (get var->bindings arg)
                                arg))]]
     (do (validate-existing-vars var->bindings clause pred-vars)
-        (s/assert ::pred-args (cond-> [pred-fn args]
+        (s/assert ::pred-args (cond-> [pred-fn (vec args)]
                                 return (conj return)))
         {:join-depth pred-join-depth
          :constraint-fn (pred-constraint clause encode-value-fn idx-id arg-bindings)})))
