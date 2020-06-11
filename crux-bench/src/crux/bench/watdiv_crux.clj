@@ -21,9 +21,10 @@
                      (into {}))})))
 
 (def parsed-db-results
-  {:rdf4j (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200406-170508Z.edn") parse-results)
-   :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200406-171121Z.edn") parse-results)
-   :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200406-170841Z.edn") parse-results)})
+  (delay
+    {:rdf4j (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200406-170508Z.edn") parse-results)
+     :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200406-171121Z.edn") parse-results)
+     :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200406-170841Z.edn") parse-results)}))
 
 (defn ingest-crux
   [node]
@@ -33,17 +34,18 @@
                                              (rdf/submit-ntriples node in 1000))]
         (crux/await-tx node last-tx)
         {:entity-count entity-count
-         :neo4j-time-taken-ms (get-in parsed-db-results [:neo4j :ingest])
-         :rdf4j-time-taken-ms (get-in parsed-db-results [:rdf4j :ingest])
-         :datomic-time-taken-ms (get-in parsed-db-results [:datomic :ingest])}))))
+         :neo4j-time-taken-ms (get-in @parsed-db-results [:neo4j :ingest])
+         :rdf4j-time-taken-ms (get-in @parsed-db-results [:rdf4j :ingest])
+         :datomic-time-taken-ms (get-in @parsed-db-results [:datomic :ingest])}))))
 
 (def db-query-results
-  {:rdf4j (get-in parsed-db-results [:rdf4j :queries])
-   :neo4j (get-in parsed-db-results [:neo4j :queries])
-   :datomic (get-in parsed-db-results [:datomic :queries])})
+  (delay
+    {:rdf4j (get-in @parsed-db-results [:rdf4j :queries])
+     :neo4j (get-in @parsed-db-results [:neo4j :queries])
+     :datomic (get-in @parsed-db-results [:datomic :queries])}))
 
 (defn get-db-results-at-idx [idx]
-  (->> (for [[db-name db-results] db-query-results]
+  (->> (for [[db-name db-results] @db-query-results]
          (let [time-taken-ms (get-in db-results [idx :time-taken-ms])
                result-count (get-in db-results [idx :result-count])]
            [db-name {:db-time-taken-ms time-taken-ms
@@ -83,7 +85,7 @@
                                              :time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
                                              :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))})
                                      (render-duration :db-time-taken-ms :db-time-taken))))
-                             (keys db-query-results)))]
+                             (keys @db-query-results)))]
     (run! (comp println json/write-str) summarised-results)
     summarised-results))
 

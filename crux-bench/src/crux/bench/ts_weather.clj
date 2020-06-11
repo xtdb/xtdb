@@ -22,13 +22,14 @@
 (def ^:const conditions-chunk-size 1000)
 
 (def location-docs
-  (when locations-csv-resource
-    (with-open [rdr (io/reader locations-csv-resource)]
-      (vec (for [location (line-seq rdr)
-                 :let [[device-id location environment] (str/split location #",")]]
-             {:crux.db/id (keyword "location" device-id)
-              :location/location (keyword location)
-              :location/environment (keyword environment)})))))
+  (delay
+    (when locations-csv-resource
+      (with-open [rdr (io/reader locations-csv-resource)]
+        (vec (for [location (line-seq rdr)
+                   :let [[device-id location environment] (str/split location #",")]]
+               {:crux.db/id (keyword "location" device-id)
+                :location/location (keyword location)
+                :location/environment (keyword environment)}))))))
 
 (defn with-condition-docs [f]
   (when conditions-csv-resource
@@ -48,7 +49,7 @@
 (defn submit-ts-weather-data [node]
   (bench/run-bench :ingest
     (bench/with-additional-index-metrics node
-      (let [location-tx-ops (vec (for [location-doc location-docs]
+      (let [location-tx-ops (vec (for [location-doc @location-docs]
                                    [:crux.tx/put location-doc]))
             _ (api/submit-tx node location-tx-ops)
             last-tx (with-condition-docs
