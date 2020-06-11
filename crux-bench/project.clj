@@ -18,7 +18,6 @@
                  [com.amazonaws/aws-java-sdk-ses "1.11.720"]
                  [com.amazonaws/aws-java-sdk-logs "1.11.720"]
                  [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
-                 [io.airlift.tpch/tpch "0.10"]
 
                  ;; rdf
                  [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
