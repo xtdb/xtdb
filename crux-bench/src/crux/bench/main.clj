@@ -43,7 +43,7 @@
    :tpch-stress (fn [nodes]
                   (bench/with-nodes [node (select-keys nodes #{"standalone-rocksdb"})]
                     (-> (bench/with-comparison-times
-                          (tpch-stress/run-tpch-stress-test node {:query-count 5}))
+                          (tpch-stress/run-tpch-stress-test node {:query-count 15}))
                         (doto post-to-slack))))})
 
 (defn parse-args [args]
