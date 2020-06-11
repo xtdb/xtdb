@@ -1009,20 +1009,60 @@
                [:ivan "ivanov@example.com"]}
              (api/q (api/db *api*) '{:find [e email]
                                      :where [[e :name "Ivan"]
-                                             [(get-attr e :email ["ivan@example.com"
-                                                                  "ivan@example.com"
-                                                                  "ivanov@example.com"]) email]]})))
-
-    (t/is (= #{[:ivan "ivan@example.com"]
-               [:ivan "ivanov@example.com"]}
-             (api/q (api/db *api*) '{:find [e email]
-                                     :where [[e :name "Ivan"]
                                              [(get-attr e :email #{"ivan@example.com"
                                                                    "ivanov@example.com"}) email]]})))
 
     (t/is (empty? (api/q (api/db *api*) '{:find [e email]
                                           :where [[e :name "Ivan"]
                                                   [(get-attr e :email #{}) email]]})))))
+
+(t/deftest test-multiple-values-literals
+  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}
+                                    {:crux.db/id :petr :name "Petr" :age 30 :friends #{:ivan}}]))
+  (t/testing "set"
+    (t/is (empty? (api/q (api/db *api*) '{:find [e]
+                                          :where [[e :name #{}]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [e]
+                                          :where [[e :name #{"Oleg"}]]})))
+
+    (t/is (= #{[:ivan]}
+             (api/q (api/db *api*) '{:find [e]
+                                     :where [[e :name #{"Ivan" "Oleg"}]]})))
+
+    (t/is (= #{[:ivan] [:petr]}
+             (api/q (api/db *api*) '{:find [e]
+                                     :where [[e :name #{"Ivan" "Petr"}]]})))
+
+    (t/is (= #{[:ivan]}
+             (api/q (api/db *api*) '{:find [e]
+                                     :where [[e :friends #{:petr :oleg}]]})))
+
+    (t/is (= #{[:ivan] [:petr]}
+             (api/q (api/db *api*) '{:find [e]
+                                     :where [[e :friends #{:petr :ivan}]]}))))
+
+  (t/testing "entity position"
+    (t/is (empty? (api/q (api/db *api*) '{:find [name]
+                                          :where [[#{} :name name]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [name]
+                                          :where [[#{:oleg} :name name]]})))
+
+    (t/is (= #{["Ivan"]}
+             (api/q (api/db *api*) '{:find [name]
+                                     :where [[#{:ivan :oleg} :name name]]})))
+
+    (t/is (= #{["Ivan"] ["Petr"]}
+             (api/q (api/db *api*) '{:find [name]
+                                     :where [[#{:ivan :petr} :name name]]}))))
+
+  (t/testing "vectors are not supported"
+    (t/is (thrown-with-msg?
+           RuntimeException
+           #"Spec assertion failed"
+           (api/q (api/db *api*) '{:find [e]
+                                   :where [[e :name [:ivan]]]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
