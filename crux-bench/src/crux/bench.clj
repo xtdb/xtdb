@@ -330,14 +330,15 @@
                             (.format (java.text.SimpleDateFormat. "yyyyMMdd-HHmmss")))]
     (format "%s-%s/%s-%sZ.edn" database version database formatted-date)))
 
-(def ^software.amazon.awssdk.services.s3.S3Client s3-client
-  (-> (S3Client/builder)
-      (.region Region/EU_WEST_2)
-      (.build)))
+(def s3-client
+  (delay
+    (-> (S3Client/builder)
+        (.region Region/EU_WEST_2)
+        (.build))))
 
 (defn save-to-s3 [{:keys [database version]} ^File file]
   (try
-    (.putObject s3-client
+    (.putObject ^S3Client @s3-client
                 (-> (PutObjectRequest/builder)
                     (.bucket "crux-bench")
                     (.key (generate-s3-filename database version))
@@ -348,7 +349,7 @@
 
 (defn load-from-s3 [key]
   (try
-    (.getObject s3-client
+    (.getObject ^S3Client @s3-client
                 (-> (GetObjectRequest/builder)
                     (.bucket "crux-bench")
                     (.key key)
@@ -356,36 +357,38 @@
     (catch SdkClientException e
       (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
 
-(def ^AWSLogsClient log-client
-  (try
-    (AWSLogsClientBuilder/defaultClient)
-    (catch com.amazonaws.SdkClientException e
-      (log/info "AWS credentials not found! Cannot get comparison times."))))
+(def log-client
+  (delay
+    (try
+      (AWSLogsClientBuilder/defaultClient)
+      (catch com.amazonaws.SdkClientException e
+        (log/info "AWS credentials not found! Cannot get comparison times.")))))
 
 (defn get-comparison-times [results]
   (let [query-requests (for [{:keys [crux-node-type bench-type bench-ns time-taken-ms] :as result} results]
-                         (let [query-id (-> (.startQuery log-client (-> (StartQueryRequest.)
-                                                                        (.withLogGroupName "crux-bench")
-                                                                        (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
-                                                                                                   crux-node-type (name bench-type) (name bench-ns)))
-                                                                        (.withStartTime (-> (Date.)
-                                                                                            (.toInstant)
-                                                                                            (.minus (Duration/ofDays 7))
-                                                                                            (.toEpochMilli)))
-                                                                        (.withEndTime (.getTime (Date.)))))
+                         (let [query-id (-> (.startQuery ^AWSLogsClient @log-client
+                                                         (-> (StartQueryRequest.)
+                                                             (.withLogGroupName "crux-bench")
+                                                             (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
+                                                                                        crux-node-type (name bench-type) (name bench-ns)))
+                                                             (.withStartTime (-> (Date.)
+                                                                                 (.toInstant)
+                                                                                 (.minus (Duration/ofDays 7))
+                                                                                 (.toEpochMilli)))
+                                                             (.withEndTime (.getTime (Date.)))))
                                             (.getQueryId))]
                            (-> (GetQueryResultsRequest.)
                                (.withQueryId query-id))))]
 
     (while (not-any? (fn [query-request]
                        (= "Complete"
-                          (->> (.getQueryResults log-client query-request)
+                          (->> (.getQueryResults ^AWSLogsClient @log-client query-request)
                                (.getStatus))))
                      query-requests)
       (Thread/sleep 100))
 
     (map (fn [query-request]
-           (->> (map first (-> (.getQueryResults log-client query-request)
+           (->> (map first (-> (.getQueryResults ^AWSLogsClient @log-client query-request)
                                (.getResults)))
                 (map #(.getValue ^ResultField %))
                 (map #(Integer/parseInt %))))
