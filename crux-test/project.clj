@@ -44,6 +44,9 @@
                  [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [commons-codec net.minidev/json-smart]]
                  [net.minidev/json-smart "2.3"]
 
+                 ;; TPCH Fixture
+                 [io.airlift.tpch/tpch "0.10"]
+
                  ;; dependency conflict resolution
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]

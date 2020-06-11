@@ -6,6 +6,7 @@
             [crux.bench.ts-devices :as devices]
             [crux.bench.ts-weather :as weather]
             [crux.bench.watdiv-crux :as watdiv-crux]
+            [crux.bench.tpch-stress-test :as tpch-stress]
             [clojure.set :as set]))
 
 (defn post-to-slack [results]
@@ -38,7 +39,12 @@
                  (-> (concat (->> ingest-results (map watdiv-crux/render-comparison-durations))
                              (watdiv-crux/summarise-query-results query-results))
                      (bench/with-comparison-times)
-                     (doto post-to-slack)))))})
+                     (doto post-to-slack)))))
+   :tpch-stress (fn [nodes]
+                  (bench/with-nodes [node (select-keys nodes #{"standalone-rocksdb"})]
+                    (-> (bench/with-comparison-times
+                          (tpch-stress/run-tpch-stress-test node {:query-count 15 :field-count 10}))
+                        (doto post-to-slack))))})
 
 (defn parse-args [args]
   (let [{:keys [options summary errors]}
