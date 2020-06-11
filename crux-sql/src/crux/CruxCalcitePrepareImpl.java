@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.HashMap;
 
 public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
-    private static final Pattern PATTERN  = Pattern.compile("((TRANSACTIONTIME|VALIDTIME)\\s\\(\\'(.*?)\\'\\))");
+    private static final Pattern PATTERN  = Pattern.compile("((TRANSACTIONTIME|VALIDTIME)\\s*\\(\\'(.*?)\\'\\))");
 
     public CruxCalcitePrepareImpl() {
         super();
