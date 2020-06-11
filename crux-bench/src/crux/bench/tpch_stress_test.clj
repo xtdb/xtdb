@@ -1,6 +1,7 @@
 (ns crux.bench.tpch-stress-test
   (:require [crux.bench :as bench]
             [crux.api :as crux]
+            [clojure.tools.logging :as log]
             [crux.fixtures.tpch :as tpch]))
 
 (defn- load-tpch-docs [node]
@@ -14,8 +15,9 @@
       (load-tpch-docs node)
       (bench/run-bench
        :query-stress
-       (dotimes [_ query-count]
-         {:count (count (crux/q (crux/db node) {:find '[l_orderkey],
+        (dotimes [n query-count]
+          (log/info (format "Starting query #%s" n))
+          {:count (count (crux/q (crux/db node) {:find '[l_orderkey],
                                                 :where (vec
                                                         (take field-count '[[e :l_orderkey l_orderkey]
                                                                             [e :l_partkey l_partkey]
