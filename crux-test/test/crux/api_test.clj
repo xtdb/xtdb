@@ -44,10 +44,13 @@
       #_(select-keys [:local-standalone :remote])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
+(def ^:dynamic *node-type*)
+
 (defn- with-each-api-implementation [f]
   (doseq [[node-type run-tests] api-implementations]
-    (t/testing (str node-type)
-      (run-tests f))))
+    (binding [*node-type* node-type]
+      (t/testing (str node-type)
+        (run-tests f)))))
 
 (t/use-fixtures :once
   (fn [f]
