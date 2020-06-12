@@ -1024,18 +1024,20 @@
 
 (defn- add-logic-var-constraints [{:keys [var->logic-var-range-constraint-fns]
                                    :as compiled-query}]
-  (let [logic-var+range-constraint (for [[v fs] var->logic-var-range-constraint-fns
-                                         f fs]
-                                     [v (f)])]
-    (-> compiled-query
-        (update :depth->constraints update-depth->constraints (map second logic-var+range-constraint))
-        (update :var->range-constraints (fn [var->range-constraints]
-                                          (reduce (fn [acc [v {:keys [range-constraint-wrapper-fn]}]]
-                                                    (update acc v (fn [x]
-                                                                    (cond-> range-constraint-wrapper-fn
-                                                                      x (comp x)))))
-                                                  var->range-constraints
-                                                  logic-var+range-constraint))))))
+  (if (seq var->logic-var-range-constraint-fns)
+    (let [logic-var+range-constraint (for [[v fs] var->logic-var-range-constraint-fns
+                                           f fs]
+                                       [v (f)])]
+      (-> compiled-query
+          (update :depth->constraints update-depth->constraints (map second logic-var+range-constraint))
+          (update :var->range-constraints (fn [var->range-constraints]
+                                            (reduce (fn [acc [v {:keys [range-constraint-wrapper-fn]}]]
+                                                      (update acc v (fn [x]
+                                                                      (cond-> range-constraint-wrapper-fn
+                                                                        x (comp x)))))
+                                                    var->range-constraints
+                                                    logic-var+range-constraint)))))
+    compiled-query))
 
 (defn- build-sub-query [index-store {:keys [query-engine] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
