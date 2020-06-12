@@ -9,31 +9,43 @@
    (bench/with-additional-index-metrics node
      (tpch/load-docs! node))))
 
-(defn run-stress-queries [node {:keys [query-count field-count] :as opts}]
-  (bench/run-bench :query-stress
-    (dotimes [n query-count]
-      (log/info (format "Starting query #%s" n))
-      {:count (count (crux/q (crux/db node)
-                             {:find '[l_orderkey],
-                              :where (vec
-                                      (take field-count '[[e :l_orderkey l_orderkey]
-                                                          [e :l_partkey l_partkey]
-                                                          [e :l_suppkey l_suppkey]
-                                                          [e :l_linenumber l_linenumber]
-                                                          [e :l_quantity l_quantity]
-                                                          [e :l_extendedprice l_extendedprice]
-                                                          [e :l_discount l_discount]
-                                                          [e :l_tax l_tax]
-                                                          [e :l_returnflag l_returnflag]
-                                                          [e :l_linestatus l_linestatus]
-                                                          [e :l_shipdate l_shipdate]
-                                                          [e :l_commitdate l_commitdate]
-                                                          [e :l_receiptdate l_receiptdate]
-                                                          [e :l_shipinstruct l_shipinstruct]
-                                                          [e :l_shipmode l_shipmode]
-                                                          [e :l_comment l_comment]]))
-                              :timeout 1000000}))})
-    {:run-success? true}))
+(def fields '{:l_orderkey l_orderkey
+              :l_partkey l_partkey
+              :l_suppkey l_suppkey
+              :l_linenumber l_linenumber
+              :l_quantity l_quantity
+              :l_extendedprice l_extendedprice
+              :l_discount l_discount
+              :l_tax l_tax
+              :l_returnflag l_returnflag
+              :l_linestatus l_linestatus
+              :l_shipdate l_shipdate
+              :l_commitdate l_commitdate
+              :l_receiptdate l_receiptdate
+              :l_shipinstruct l_shipinstruct
+              :l_shipmode l_shipmode
+              :l_comment l_comment})
+
+(defn run-stress-queries [node {:keys [query-count field-count] :or {query-count 50 field-count (count fields)} :as opts}]
+  (let [q {:find '[e],
+           :where (->> fields
+                       (take field-count)
+                       (mapcat (fn [[a v]] [['e a v] [(list 'identity v) (gensym)]]))
+                       vec)
+           :timeout 1000000}]
+    (log/infof "Stressing query: %s" (prn-str q))
+    (bench/run-bench :query-stress
+      (bench/with-thread-pool
+        opts
+        (fn [{:keys [idx q]}]
+          (log/info (format "Starting query #%s" idx))
+          {:count (count (crux/q (crux/db node) q))})
+        (->> q
+             (repeat query-count)
+             (map-indexed (fn [idx q] {:idx idx, :q q}))))
+      {:run-success? true
+       :num-queries query-count
+       :num-fields field-count})))
 
 (defn run-tpch-stress-test [node {:keys [query-count field-count] :as opts}]
   (bench/with-bench-ns :tpch-stress
@@ -44,5 +56,5 @@
 (comment
   (let [node (user/crux-node)]
     (bench/with-bench-ns :tpch-stress
-      #_(load-tpch-docs node)
-      #_(run-stress-queries node {:query-count 15, :field-count 10}))))
+      (load-tpch-docs node)
+      (run-stress-queries node {}))))

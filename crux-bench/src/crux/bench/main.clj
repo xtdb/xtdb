@@ -14,25 +14,25 @@
     (-> (bench/results->slack-message) (bench/post-to-slack))))
 
 (def bench-tests
-  {:sorted-maps (fn [nodes]
+  {:sorted-maps (fn [nodes _]
                   (bench/with-nodes [node (select-keys nodes #{"embedded-kafka-rocksdb"})]
                     (-> (bench/with-comparison-times
                           (sorted-maps/run-sorted-maps-microbench node))
                         (doto post-to-slack))))
 
-   :ts-devices (fn [nodes]
+   :ts-devices (fn [nodes _]
                  (bench/with-nodes [node nodes]
                    (-> (bench/with-comparison-times
                          (devices/run-devices-bench node))
                        (doto post-to-slack))))
 
-   :ts-weather (fn [nodes]
+   :ts-weather (fn [nodes _]
                  (bench/with-nodes [node nodes]
                    (-> (bench/with-comparison-times
                          (weather/run-weather-bench node))
                        (doto post-to-slack))))
 
-   :watdiv (fn [nodes]
+   :watdiv (fn [nodes _]
              (bench/with-nodes [node nodes]
                (let [[ingest-results query-results] (->> (watdiv-crux/run-watdiv-bench node {:test-count 100})
                                                          (split-at 2))]
@@ -40,10 +40,11 @@
                              (watdiv-crux/summarise-query-results query-results))
                      (bench/with-comparison-times)
                      (doto post-to-slack)))))
-   :tpch-stress (fn [nodes]
+   :tpch-stress (fn [nodes {:keys [tpch-query-count tpch-field-count] :as opts}]
                   (bench/with-nodes [node (select-keys nodes #{"standalone-rocksdb"})]
                     (-> (bench/with-comparison-times
-                          (tpch-stress/run-tpch-stress-test node {:query-count 15 :field-count 10}))
+                          (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
+                                                                  :field-count tpch-field-count}))
                         (doto post-to-slack))))})
 
 (defn parse-args [args]
@@ -57,7 +58,17 @@
                          [nil "--tests test1,test2" "Tests to run"
                           :id :selected-tests
                           :default (set (keys bench-tests))
-                          :parse-fn #(into #{} (map keyword (set (string/split % #","))))]])]
+                          :parse-fn #(into #{} (map keyword (set (string/split % #","))))]
+
+                         [nil "--tpch-query-count 20" "Number of queries to run on TPCH stress"
+                          :id :tpch-query-count
+                          :default 20
+                          :parse-fn #(Long/parseLong %)]
+
+                         [nil "--tpch-field-count 10" "Number of fields to run queries with on TPCH stress"
+                          :id :tpch-field-count
+                          :default 10
+                          :parse-fn #(Long/parseLong %)]])]
     (if errors
       (binding [*out* *err*]
         (run! println errors)
@@ -65,11 +76,11 @@
 
       options)))
 
-(defn run-benches [{:keys [selected-nodes selected-tests]}]
+(defn run-benches [{:keys [selected-nodes selected-tests] :as opts}]
   (let [nodes (select-keys bench/nodes selected-nodes)]
     (bench/with-embedded-kafka
       (->> (for [test-fn (vals (select-keys bench-tests selected-tests))]
-             (test-fn nodes))
+             (test-fn nodes opts))
            (into [] (mapcat identity))))))
 
 (defn -main [& args]
