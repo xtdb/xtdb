@@ -3,6 +3,7 @@
             [crux.memory :as mem])
   (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
             RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
+           clojure.lang.Box
            java.util.function.Function
            [java.util Comparator Iterator NavigableMap TreeMap]
            org.agrona.DirectBuffer))
@@ -55,15 +56,15 @@
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
    (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
-  ([compare-pred compare-v max-length]
-   (if @compare-v
+  ([compare-pred ^Box compare-v max-length]
+   (if (.val compare-v)
      (fn [value]
-       (and value (compare-pred (mem/compare-buffers value @compare-v max-length))))
+       (and value (compare-pred (mem/compare-buffers value (.val compare-v) max-length))))
      (constantly true))))
 
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) (delay prefix-v) (.capacity prefix-v))
-        pred (value-comparsion-predicate zero? (delay prefix-v) (.capacity prefix-v))]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) (Box. prefix-v) (.capacity prefix-v))
+        pred (value-comparsion-predicate zero? (Box. prefix-v) (.capacity prefix-v))]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred k)
                                           k
@@ -77,12 +78,12 @@
   (let [pred (value-comparsion-predicate neg? max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-greater-than-equal-virtual-index [idx min-v]
+(defn new-greater-than-equal-virtual-index [idx ^Box min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
-                                          @min-v)))))
+                                          (.val min-v))))))
 
 (defrecord GreaterThanVirtualIndex [idx]
   db/Index
@@ -103,20 +104,20 @@
   (max-depth [_]
     (db/max-depth idx)))
 
-(defn new-greater-than-virtual-index [idx min-v]
+(defn new-greater-than-virtual-index [idx ^Box min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred k)
                                                   k
-                                                  @min-v)))]
+                                                  (.val min-v))))]
     (->GreaterThanVirtualIndex idx)))
 
-(defn new-equals-virtual-index [idx v]
+(defn new-equals-virtual-index [idx ^Box v]
   (let [pred (value-comparsion-predicate zero? v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
-                                          @v)))))
+                                          (.val v))))))
 
 (defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints

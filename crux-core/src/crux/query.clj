@@ -13,7 +13,7 @@
             [crux.bus :as bus]
             [crux.api :as api]
             [taoensso.nippy :as nippy])
-  (:import clojure.lang.ExceptionInfo
+  (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
@@ -516,6 +516,12 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
+(defn- calculate-constraint-join-depth [var->bindings vars]
+  (->> (for [var vars]
+         (get-in var->bindings [var :result-index] -1))
+       (apply max -1)
+       (long)
+       (inc)))
 
 ;; TODO: Get rid of assumption that value-buffer-type-id is always one
 ;; byte. Or better, move construction or handling of ranges to the
@@ -526,7 +532,7 @@
                          :when (logic-var? sym)
                          :let [val (encode-value-fn val)
                                type-prefix (c/value-buffer-type-id val)
-                               val (delay val)]]
+                               val (Box. val)]]
                      (case op
                        = #(idx/new-equals-virtual-index % val)
                        < #(-> (idx/new-less-than-virtual-index % val)
@@ -553,8 +559,9 @@
                         op)]]
          {second-sym
           [(fn []
-             (let [val (volatile! mem/empty-buffer)]
-               {:join-depth (calculate-constraint-join-depth var->bindings [first-sym])
+             (let [val (Box. mem/empty-buffer)
+                   range-join-depth (calculate-constraint-join-depth var->bindings [first-sym])]
+               {:join-depth range-join-depth
                 :build-range-constraint-index-fn
                 (case op
                   = #(idx/new-equals-virtual-index % val)
@@ -564,19 +571,12 @@
                   >= #(idx/new-greater-than-equal-virtual-index % val))
                 :constraint-fn
                 (fn range-constraint [index-store db idx-id->idx ^List join-keys]
-                  (vreset! val (.get join-keys first-index))
+                  (set! (.-val val) (.get join-keys first-index))
                   true)}))]})
        (apply merge-with into {})))
 
 (defn- bound-result-for-var [index-store ^VarBinding var-binding ^List join-keys]
   (db/decode-value index-store (.get join-keys (.result-index var-binding))))
-
-(defn- calculate-constraint-join-depth [var->bindings vars]
-  (->> (for [var vars]
-         (get-in var->bindings [var :result-index] -1))
-       (apply max -1)
-       (long)
-       (inc)))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars

@@ -3,7 +3,8 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as f]
-            [crux.index :as idx]))
+            [crux.index :as idx])
+  (:import clojure.lang.Box))
 
 (t/deftest test-can-perform-unary-join
   (let [a-idx (idx/new-relation-virtual-index [[0]
@@ -108,41 +109,41 @@
                   (map c/decode-value-buffer))))
 
     (t/is (= [1 2 3]
-             (->> (idx/idx->seq (idx/new-less-than-virtual-index r (delay (c/->value-buffer 4))))
+             (->> (idx/idx->seq (idx/new-less-than-virtual-index r (Box. (c/->value-buffer 4))))
                   (map c/decode-value-buffer))))
 
     (t/is (= [1 2 3 4]
-             (->> (idx/idx->seq (idx/new-less-than-equal-virtual-index r (delay (c/->value-buffer 4))))
+             (->> (idx/idx->seq (idx/new-less-than-equal-virtual-index r (Box. (c/->value-buffer 4))))
                   (map c/decode-value-buffer))))
 
     (t/is (= [3 4 5]
-             (->> (idx/idx->seq (idx/new-greater-than-virtual-index r (delay (c/->value-buffer 2))))
+             (->> (idx/idx->seq (idx/new-greater-than-virtual-index r (Box. (c/->value-buffer 2))))
                   (map c/decode-value-buffer))))
 
     (t/is (= [2 3 4 5]
-             (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r (delay (c/->value-buffer 2))))
+             (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r (Box. (c/->value-buffer 2))))
                   (map c/decode-value-buffer))))
 
     (t/is (= [2]
-             (->> (idx/idx->seq (idx/new-equals-virtual-index r (delay (c/->value-buffer 2))))
+             (->> (idx/idx->seq (idx/new-equals-virtual-index r (Box. (c/->value-buffer 2))))
                   (map c/decode-value-buffer))))
 
-    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (delay (c/->value-buffer 0))))))
-    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (delay (c/->value-buffer 6))))))
+    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (Box. (c/->value-buffer 0))))))
+    (t/is (empty? (idx/idx->seq (idx/new-equals-virtual-index r (Box. (c/->value-buffer 6))))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= 2 (c/decode-value-buffer (db/seek-values (idx/new-greater-than-equal-virtual-index r (delay (c/->value-buffer 2))) (c/->value-buffer nil)))))
-      (t/is (= 3 (c/decode-value-buffer (db/seek-values (idx/new-greater-than-virtual-index r (delay (c/->value-buffer 2))) (c/->value-buffer 1))))))
+      (t/is (= 2 (c/decode-value-buffer (db/seek-values (idx/new-greater-than-equal-virtual-index r (Box. (c/->value-buffer 2))) (c/->value-buffer nil)))))
+      (t/is (= 3 (c/decode-value-buffer (db/seek-values (idx/new-greater-than-virtual-index r (Box. (c/->value-buffer 2))) (c/->value-buffer 1))))))
 
     (t/testing "combining indexes"
       (t/is (= [2 3 4]
                (->> (idx/idx->seq (-> r
-                                      (idx/new-greater-than-equal-virtual-index (delay (c/->value-buffer 2)))
-                                      (idx/new-less-than-virtual-index (delay (c/->value-buffer 5)))))
+                                      (idx/new-greater-than-equal-virtual-index (Box. (c/->value-buffer 2)))
+                                      (idx/new-less-than-virtual-index (Box. (c/->value-buffer 5)))))
                     (map c/decode-value-buffer)))))
 
     (t/testing "incompatible type"
-      (t/is (empty? (->> (idx/idx->seq (-> (idx/new-greater-than-equal-virtual-index r (delay (c/->value-buffer "foo")))))
+      (t/is (empty? (->> (idx/idx->seq (-> (idx/new-greater-than-equal-virtual-index r (Box. (c/->value-buffer "foo")))))
                          (map c/decode-value-buffer)))))))
 
 ;; NOTE: variable order must align up with relation position order
