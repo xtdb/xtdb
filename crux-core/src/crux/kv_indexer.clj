@@ -472,6 +472,11 @@
 
 (declare new-kv-index-store)
 
+(defn- advance-iterator-to-hash-cache-value [i value-buffer]
+  (let [hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
+        found-k (kv/seek i hash-cache-prefix-key)]
+    (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key))))
+
 (defrecord KvIndexStore [snapshot
                          close-snapshot?
                          level-1-iterator-delay
@@ -624,15 +629,14 @@
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
       (or (.get temp-hash-cache value-buffer)
-          (let [i @decode-value-iterator-delay
-                hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
-                found-k (kv/seek i hash-cache-prefix-key)]
-            (when (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key))
+          (let [i @decode-value-iterator-delay]
+            (when (advance-iterator-to-hash-cache-value i value-buffer)
               (some-> (kv/value i) (mem/<-nippy-buffer)))))))
 
   (encode-value [this value]
     (let [value-buffer (c/->value-buffer value)]
-      (when-not (c/can-decode-value-buffer? value-buffer)
+      (when (and (not (c/can-decode-value-buffer? value-buffer))
+                 (not (advance-iterator-to-hash-cache-value @decode-value-iterator-delay value-buffer)))
         (.put temp-hash-cache (mem/copy-to-unpooled-buffer value-buffer) value))
       value-buffer))
 
