@@ -1,5 +1,6 @@
 (ns crux.ui.subscriptions
   (:require
+   [clojure.string :as string]
    [cljs.reader :as reader]
    [crux.ui.common :as common]
    [re-frame.core :as rf]
@@ -103,6 +104,13 @@
      (nil? (get-in db [:current-route :query-params :eid])) :entity-root
      (get-in db [:current-route :query-params :history]) :history
      :else :document)))
+
+(rf/reg-sub
+ ::query-data-download-link
+ (fn [db [_ link-type]]
+   (let [query-params (get-in db [:current-route :query-params])]
+     (-> (common/route->url :query {} query-params)
+         (string/replace #"query" (str "query." link-type))))))
 
 (rf/reg-sub
  ::entity-right-pane-document

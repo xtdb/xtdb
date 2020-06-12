@@ -341,6 +341,16 @@ ul.entity-group__value {
     @extend .rotating;
 }
 
+.query-table-downloads {
+    text-align: right;
+    margin-top: 1.0rem;
+}
+
+.query-table-downloads__link {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+}
+
 .back-button {
     cursor: pointer;
     font-weight: bold;

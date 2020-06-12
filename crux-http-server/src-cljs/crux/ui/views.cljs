@@ -159,7 +159,16 @@
     [:<>
      (if error
        [:div.error-box error]
-       [table/table data])]))
+       [:<>
+        [table/table data]
+        [:div.query-table-downloads
+         "Download as:"
+         [:a.query-table-downloads__link
+          {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
+          "CSV"]
+         [:a.query-table-downloads__link
+          {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
+          "TSV"]]])]))
 
 (defn query-right-pane
   []
