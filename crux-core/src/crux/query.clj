@@ -65,7 +65,10 @@
                                                      :val literal?)
                                      :val-sym (s/cat :op ::range-op
                                                      :val literal?
-                                                     :sym logic-var?)))))
+                                                     :sym logic-var?)
+                                     :sym-sym (s/cat :op ::range-op
+                                                     :sym-a logic-var?
+                                                     :sym-b logic-var?)))))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
 
@@ -195,7 +198,8 @@
              :range (let [[order clause] (first clause)
                           {:keys [op sym val] :as clause} (cond-> clause
                                                             (= :val-sym order) (update :op range->inverse-range))]
-                      (if-not (logic-var? sym)
+                      (if (and (not= :sym-sym order)
+                               (not (logic-var? sym)))
                         {:pred [{:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
                                         :args [sym val]}}]}
                         {:range [clause]}))
@@ -242,7 +246,9 @@
      :pred-return-vars (set (for [{:keys [pred return]} pred-clauses
                                   :when (logic-var? return)]
                               return))
-     :range-vars (set (for [{:keys [sym]} range-clauses]
+     :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
+                            sym [sym sym-a sym-b]
+                            :when (logic-var? sym)]
                         sym))
      :or-vars (apply set/union (vals or-vars))
      :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
@@ -250,27 +256,6 @@
                                       :when (logic-var? arg)]
                                   arg))
                            or-join-vars)}))
-
-;; TODO: Get rid of assumption that value-buffer-type-id is always one
-;; byte. Or better, move construction or handling of ranges to the
-;; IndexStore and remove the need for the type-prefix completely.
-(defn- build-var-range-constraints [encode-value-fn range-clauses]
-  (->> (for [[var clauses] (group-by :sym range-clauses)]
-         [var (->> (for [{:keys [op val sym]} clauses
-                         :let [val (encode-value-fn val)
-                               type-prefix (c/value-buffer-type-id val)]]
-                     (case op
-                       = #(idx/new-equals-virtual-index % val)
-                       < #(-> (idx/new-less-than-virtual-index % val)
-                              (idx/new-prefix-equal-virtual-index type-prefix))
-                       <= #(-> (idx/new-less-than-equal-virtual-index % val)
-                               (idx/new-prefix-equal-virtual-index type-prefix))
-                       > #(-> (idx/new-greater-than-virtual-index % val)
-                              (idx/new-prefix-equal-virtual-index type-prefix))
-                       >= #(-> (idx/new-greater-than-equal-virtual-index % val)
-                               (idx/new-prefix-equal-virtual-index type-prefix))))
-                   (apply comp))])
-       (into {})))
 
 (defn- arg-for-var [arg var]
   (second
@@ -530,6 +515,58 @@
              :let [result-index (get var->values-result-index var)]]
          [var (value-var-binding var result-index :or)])
        (into {})))
+
+
+;; TODO: Get rid of assumption that value-buffer-type-id is always one
+;; byte. Or better, move construction or handling of ranges to the
+;; IndexStore and remove the need for the type-prefix completely.
+(defn- build-var-range-constraints [encode-value-fn range-clauses]
+  (->> (for [[var clauses] (group-by :sym range-clauses)]
+         [var (->> (for [{:keys [op val sym]} clauses
+                         :when (logic-var? sym)
+                         :let [val (encode-value-fn val)
+                               type-prefix (c/value-buffer-type-id val)
+                               val (delay val)]]
+                     (case op
+                       = #(idx/new-equals-virtual-index % val)
+                       < #(-> (idx/new-less-than-virtual-index % val)
+                              (idx/new-prefix-equal-virtual-index type-prefix))
+                       <= #(-> (idx/new-less-than-equal-virtual-index % val)
+                               (idx/new-prefix-equal-virtual-index type-prefix))
+                       > #(-> (idx/new-greater-than-virtual-index % val)
+                              (idx/new-prefix-equal-virtual-index type-prefix))
+                       >= #(-> (idx/new-greater-than-equal-virtual-index % val)
+                               (idx/new-prefix-equal-virtual-index type-prefix))))
+                   (apply comp))])
+       (into {})))
+
+(defn- build-logic-var-range-constraints [encode-value-fn range-clauses var->bindings]
+  (->> (for [{:keys [op sym-a sym-b] :as clause} range-clauses
+             :when (and (logic-var? sym-a)
+                        (logic-var? sym-b))
+             :let [sym+index [[sym-a (.result-index ^VarBinding (get var->bindings sym-a))]
+                              [sym-b (.result-index ^VarBinding (get var->bindings sym-b))]]
+                   [[first-sym first-index]
+                    [second-sym second-index] :as sym+index] (sort-by second sym+index)
+                   op (if (= sym-b first-sym)
+                        (get range->inverse-range op)
+                        op)]]
+         {second-sym
+          [(fn []
+             (let [val (volatile! mem/empty-buffer)]
+               {:join-depth (calculate-constraint-join-depth var->bindings [first-sym])
+                :build-range-constraint-index-fn
+                (case op
+                  = #(idx/new-equals-virtual-index % val)
+                  < #(idx/new-less-than-virtual-index % val)
+                  <= #(idx/new-less-than-equal-virtual-index % val)
+                  > #(idx/new-greater-than-virtual-index % val)
+                  >= #(idx/new-greater-than-equal-virtual-index % val))
+                :constraint-fn
+                (fn range-constraint [index-store db idx-id->idx ^List join-keys]
+                  (vreset! val (.get join-keys first-index))
+                  true)}))]})
+       (apply merge-with into {})))
 
 (defn- bound-result-for-var [index-store ^VarBinding var-binding ^List join-keys]
   (db/decode-value index-store (.get join-keys (.result-index var-binding))))
@@ -874,6 +911,13 @@
            :triple triple-clauses
            :pred (vec (concat pred-clauses leaf-preds)))))
 
+(defn- update-depth->constraints [depth->join-depth constraints]
+  (reduce
+   (fn [acc {:keys [join-depth constraint-fn]}]
+     (update acc join-depth (fnil conj []) constraint-fn))
+   depth->join-depth
+   constraints))
+
 (defn- compile-sub-query [encode-value-fn where arg-vars rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
         {triple-clauses :triple
@@ -935,6 +979,7 @@
                                                  join-depth
                                                  (keys var->attr)))
         var->range-constraints (build-var-range-constraints encode-value-fn range-clauses)
+        var->logic-var-range-constraints (build-logic-var-range-constraints encode-value-fn range-clauses var->bindings)
         not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
         not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
         pred-constraints (build-pred-constraints encode-value-fn pred-clause+idx-ids var->bindings)
@@ -944,12 +989,10 @@
                                         not-constraints
                                         not-join-constraints
                                         or-constraints)
-                                (reduce
-                                 (fn [acc {:keys [join-depth constraint-fn]}]
-                                   (update acc join-depth (fnil conj []) constraint-fn))
-                                 (vec (repeat join-depth nil))))]
+                                (update-depth->constraints (vec (repeat join-depth nil))))]
     {:depth->constraints depth->constraints
      :var->range-constraints var->range-constraints
+     :var->logic-var-range-constraints var->logic-var-range-constraints
      :vars-in-join-order vars-in-join-order
      :var->joins var->joins
      :var->bindings var->bindings
@@ -978,6 +1021,7 @@
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
+                var->logic-var-range-constraints
                 var->joins
                 var->bindings
                 arg-vars-in-join-order
@@ -990,14 +1034,25 @@
                               (fn [_]
                                 (compile-sub-query encode-value-fn where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx db index-store compiled-query)
-        constrain-result-fn (fn [join-keys]
-                              (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys))
+        logic-var-range-constraint-groups (for [[v fs] var->logic-var-range-constraints
+                                                f fs]
+                                            [v (f)])
+        depth->constraints (update-depth->constraints depth->constraints (map second logic-var-range-constraint-groups))
+        var->range-constraints (reduce
+                                (fn [acc [v {:keys [build-range-constraint-index-fn]}]]
+                                  (update acc v (fn [x]
+                                                  (cond-> build-range-constraint-index-fn
+                                                    x (comp x)))))
+                                var->range-constraints
+                                logic-var-range-constraint-groups)
         unary-join-indexes (for [v vars-in-join-order]
                              (-> (idx/new-unary-join-virtual-index
                                   (vec (for [{:keys [id idx-fn] :as join} (get var->joins v)]
                                          (or (get idx-id->idx id)
                                              (idx-fn db index-store compiled-query)))))
-                                 (idx/wrap-with-range-constraints (get var->range-constraints v))))]
+                                 (idx/wrap-with-range-constraints (get var->range-constraints v))))
+        constrain-result-fn (fn [join-keys]
+                              (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys))]
     (when (and (seq args) args-idx-id)
       (binding [nippy/*freeze-fallback* :write-unfreezable]
         (idx/update-relation-virtual-index!

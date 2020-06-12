@@ -55,34 +55,34 @@
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
    (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
-  ([compare-pred ^DirectBuffer compare-v max-length]
-   (if compare-v
+  ([compare-pred compare-v max-length]
+   (if @compare-v
      (fn [value]
-       (and value (compare-pred (mem/compare-buffers value compare-v max-length))))
+       (and value (compare-pred (mem/compare-buffers value @compare-v max-length))))
      (constantly true))))
 
 (defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (.capacity prefix-v))
-        pred (value-comparsion-predicate zero? prefix-v (.capacity prefix-v))]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) (delay prefix-v) (.capacity prefix-v))
+        pred (value-comparsion-predicate zero? (delay prefix-v) (.capacity prefix-v))]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred k)
                                           k
                                           prefix-v)))))
 
-(defn new-less-than-equal-virtual-index [idx ^DirectBuffer max-v]
+(defn new-less-than-equal-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-less-than-virtual-index [idx ^DirectBuffer max-v]
+(defn new-less-than-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate neg? max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-greater-than-equal-virtual-index [idx ^DirectBuffer min-v]
+(defn new-greater-than-equal-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
-                                          min-v)))))
+                                          @min-v)))))
 
 (defrecord GreaterThanVirtualIndex [idx]
   db/Index
@@ -103,20 +103,20 @@
   (max-depth [_]
     (db/max-depth idx)))
 
-(defn new-greater-than-virtual-index [idx ^DirectBuffer min-v]
+(defn new-greater-than-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred k)
                                                   k
-                                                  min-v)))]
+                                                  @min-v)))]
     (->GreaterThanVirtualIndex idx)))
 
-(defn new-equals-virtual-index [idx ^DirectBuffer v]
+(defn new-equals-virtual-index [idx v]
   (let [pred (value-comparsion-predicate zero? v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
-                                          v)))))
+                                          @v)))))
 
 (defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints
