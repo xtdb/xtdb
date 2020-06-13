@@ -56,7 +56,7 @@
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
    (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
-  ([compare-pred ^Box compare-v max-length]
+  ([compare-pred ^Box compare-v ^long max-length]
    (if (.val compare-v)
      (fn [value]
        (and value (compare-pred (mem/compare-buffers value (.val compare-v) max-length))))
