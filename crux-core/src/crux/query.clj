@@ -303,10 +303,10 @@
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
 
-(defn- triple-joins [triple-clauses range-clauses var->joins arg-vars stats]
+(defn- triple-joins [triple-clauses  var->joins arg-vars range-vars stats]
   (let [var->frequency (->> (concat (map :e triple-clauses)
                                     (map :v triple-clauses)
-                                    (map :sym range-clauses))
+                                    range-vars)
                             (filter logic-var?)
                             (frequencies))
         triple-clauses (sort-triple-clauses stats triple-clauses)
@@ -934,13 +934,14 @@
          :as type->clauses} (expand-leaf-preds (normalize-clauses where) arg-vars stats)
         {:keys [e-vars
                 v-vars
+                range-vars
                 pred-vars
                 pred-return-vars]} (collect-vars type->clauses)
         var->joins {}
         [triple-join-deps var->joins] (triple-joins triple-clauses
-                                                    range-clauses
                                                     var->joins
                                                     arg-vars
+                                                    range-vars
                                                     stats)
         [args-idx-id var->joins] (arg-joins arg-vars
                                             e-vars
