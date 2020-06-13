@@ -533,6 +533,18 @@
        (long)
        (inc)))
 
+(defn- new-range-constraint-wrapper-fn [op ^Box val]
+  (case op
+    = #(idx/new-equals-virtual-index % val)
+    < #(-> (idx/new-less-than-virtual-index % val)
+           (idx/new-prefix-equal-virtual-index val c/value-type-id-size))
+    <= #(-> (idx/new-less-than-equal-virtual-index % val)
+            (idx/new-prefix-equal-virtual-index val c/value-type-id-size))
+    > #(-> (idx/new-greater-than-virtual-index % val)
+           (idx/new-prefix-equal-virtual-index val c/value-type-id-size))
+    >= #(-> (idx/new-greater-than-equal-virtual-index % val)
+            (idx/new-prefix-equal-virtual-index val c/value-type-id-size))))
+
 ;; TODO: Get rid of assumption that value-buffer-type-id is always one
 ;; byte. Or better, move construction or handling of ranges to the
 ;; IndexStore and remove the need for the type-prefix completely.
@@ -540,19 +552,8 @@
   (->> (for [[var clauses] (group-by :sym range-clauses)]
          [var (->> (for [{:keys [op val sym]} clauses
                          :when (logic-var? sym)
-                         :let [val (encode-value-fn val)
-                               type-prefix (c/value-buffer-type-id val)
-                               val (Box. val)]]
-                     (case op
-                       = #(idx/new-equals-virtual-index % val)
-                       < #(-> (idx/new-less-than-virtual-index % val)
-                              (idx/new-prefix-equal-virtual-index type-prefix))
-                       <= #(-> (idx/new-less-than-equal-virtual-index % val)
-                               (idx/new-prefix-equal-virtual-index type-prefix))
-                       > #(-> (idx/new-greater-than-virtual-index % val)
-                              (idx/new-prefix-equal-virtual-index type-prefix))
-                       >= #(-> (idx/new-greater-than-equal-virtual-index % val)
-                               (idx/new-prefix-equal-virtual-index type-prefix))))
+                         :let [val (encode-value-fn val)]]
+                     (new-range-constraint-wrapper-fn op (Box. val)))
                    (apply comp))])
        (into {})))
 
@@ -569,20 +570,13 @@
                         op)]]
          {second-sym
           [(fn []
-             (let [val (Box. mem/empty-buffer)
-                   range-join-depth (calculate-constraint-join-depth var->bindings [first-sym])]
+             (let [range-join-depth (calculate-constraint-join-depth var->bindings [first-sym])
+                   val (Box. mem/empty-buffer)]
                {:join-depth range-join-depth
-                :range-constraint-wrapper-fn
-                (case op
-                  = #(idx/new-equals-virtual-index % val)
-                  < #(idx/new-less-than-virtual-index % val)
-                  <= #(idx/new-less-than-equal-virtual-index % val)
-                  > #(idx/new-greater-than-virtual-index % val)
-                  >= #(idx/new-greater-than-equal-virtual-index % val))
-                :constraint-fn
-                (fn range-constraint [index-store db idx-id->idx ^List join-keys]
-                  (set! (.-val val) (.get join-keys first-index))
-                  true)}))]})
+                :range-constraint-wrapper-fn (new-range-constraint-wrapper-fn op val)
+                :constraint-fn (fn range-constraint [index-store db idx-id->idx ^List join-keys]
+                                 (set! (.-val val) (.get join-keys first-index))
+                                 true)}))]})
        (apply merge-with into {})))
 
 (defn- bound-result-for-var [index-store ^VarBinding var-binding ^List join-keys]

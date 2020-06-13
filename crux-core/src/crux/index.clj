@@ -62,13 +62,13 @@
        (and value (compare-pred (mem/compare-buffers value (.val compare-v) max-length))))
      (constantly true))))
 
-(defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) (Box. prefix-v) (.capacity prefix-v))
-        pred (value-comparsion-predicate zero? (Box. prefix-v) (.capacity prefix-v))]
+(defn new-prefix-equal-virtual-index [idx ^Box prefix-v ^long prefix-size]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v prefix-size)
+        pred (value-comparsion-predicate zero? prefix-v prefix-size)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred k)
                                           k
-                                          prefix-v)))))
+                                          (mem/limit-buffer (.val prefix-v) prefix-size))))))
 
 (defn new-less-than-equal-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
