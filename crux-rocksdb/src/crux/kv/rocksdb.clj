@@ -64,7 +64,6 @@
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
                          (doto (ReadOptions.)
-                           (.setPinData true)
                            (.setSnapshot snapshot))
                          snapshot)))
 
