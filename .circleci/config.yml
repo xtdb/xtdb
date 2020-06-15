@@ -112,6 +112,19 @@ jobs:
         - checkout
         - attach_workspace:
             at: ~/
+
+        - run: md5sum ~/crux/crux-bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
+        - restore_cache:
+            keys:
+              - v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
+              # fallback to using the latest cache if no exact match is found
+              - v1-dataset-
+
+        - run:
+            command: |
+              export LEIN_JVM_OPTS=-Xmx2G
+              lein sub install
+
         - run: sh ./crux-bench/bin/download-dataset.sh
         - run: lein sub -s crux-bench uberjar
         - run:
@@ -129,6 +142,11 @@ jobs:
               path: "crux-bench/"
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
+        - save_cache:
+            paths:
+              - ~/crux/crux-bench/data/
+            key: v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
+
 
   create-artifacts:
     docker:
