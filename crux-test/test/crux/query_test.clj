@@ -1328,6 +1328,33 @@
                      (repeatedly n))]
     (t/is (>= (/ (reduce + factors) n) acceptable-limit-slowdown))))
 
+;; TODO: validate this test.
+(t/deftest test-range-args-performance-906
+  (fix/transact! *api* (fix/people
+                        (for [n (range 10000)]
+                          {:crux.db/id (keyword (str "oleg-" n))
+                           :name "Oleg"
+                           :number n})))
+
+  (let [acceptable-slowdown-factor 1.5
+        literal-ns-start (System/nanoTime)]
+    (t/is (= #{[:oleg-9999]}
+             (api/q (api/db *api*) '{:find [e]
+                                     :where [[e :number a]
+                                             [e :name n]
+                                             [(>= a 9999)]]})))
+    (let [literal-ns (- (System/nanoTime) literal-ns-start)
+          args-ns-start (System/nanoTime)]
+      (t/is (= #{[:oleg-9999]}
+               (api/q (api/db *api*) '{:find [e]
+                                       :where [[e :number a]
+                                               [e :name n]
+                                               [(>= a b)]]
+                                       :args [{:b 9999}]})))
+      (let [args-ns (- (System/nanoTime) args-ns-start)]
+        (t/is (< (double (/ args-ns literal-ns)) acceptable-slowdown-factor)
+              (pr-str args-ns " " literal-ns))))))
+
 ;; https://github.com/juxt/crux/issues/71
 
 (t/deftest test-query-limits-bug-71
