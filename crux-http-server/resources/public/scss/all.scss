@@ -246,6 +246,18 @@ ul.entity-group__value {
     align-items: flex-start;
 }
 
+.entity-raw-edn__container {
+    display: flex;
+    align-items: flex-start;
+}
+
+.entity-raw-edn {
+    margin-right: 4rem;
+    @extend .common-entity-box;
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
 .entity-history__toggle-buttons {
     display: flex;
     margin: 1rem 0;

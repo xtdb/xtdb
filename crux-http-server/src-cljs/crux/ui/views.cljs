@@ -313,6 +313,20 @@
                            [vt-tt-entity-box valid-time tx-time]])])
           :else nil))]]))
 
+(defn entity-raw-edn
+  []
+  (let [{:keys [document error]}
+        @(rf/subscribe [::sub/entity-right-pane-document])
+        loading? @(rf/subscribe [::sub/entity-right-pane-loading?])]
+    [:div.entity-raw-edn__container
+     (if loading?
+       [:div.entity-map.entity-map--loading
+        [:i.fas.fa-spinner.entity-map__load-icon]]
+       (if error
+         [:div.error-box error]
+         [:div.entity-raw-edn
+          (with-out-str (pprint/pprint document))]))]))
+
 (defn entity-right-pane []
   (let [right-pane-view @(rf/subscribe [::sub/entity-right-pane-view])]
     (if (= right-pane-view :entity-root)
@@ -325,23 +339,30 @@
         [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
         [:li "Click " [:b "submit entity"] " to go to the entity's page"]]]
       [:<>
-       [:div.pane-nav
-        [:div.pane-nav__tab
-         {:class (if (= right-pane-view :document)
-                   "pane-nav__tab--active"
-                   "pane-nav__tab--hover")
-          :on-click #(rf/dispatch [::events/set-entity-right-pane-document])}
-         "Document"]
-        [:div.pane-nav__tab
-         {:class (if (= right-pane-view :history)
-                   "pane-nav__tab--active"
-                   "pane-nav__tab--hover")
-          :on-click #(rf/dispatch [::events/set-entity-right-pane-history])}
-         "History"]]
-       (case right-pane-view
-         :document [entity-document]
-         :history [entity-history-document]
-         nil)])))
+     [:div.pane-nav
+      [:div.pane-nav__tab
+       {:class (if (= right-pane-view :document)
+                 "pane-nav__tab--active"
+                 "pane-nav__tab--hover")
+        :on-click #(rf/dispatch [::events/set-entity-right-pane-document])}
+       "Document"]
+      [:div.pane-nav__tab
+       {:class (if (= right-pane-view :history)
+                 "pane-nav__tab--active"
+                 "pane-nav__tab--hover")
+        :on-click #(rf/dispatch [::events/set-entity-right-pane-history])}
+       "History"]
+      [:div.pane-nav__tab
+       {:class (if (= right-pane-view :raw-edn)
+                 "pane-nav__tab--active"
+                 "pane-nav__tab--hover")
+        :on-click #(rf/dispatch [::events/set-entity-right-pane-raw-edn])}
+       "Raw EDN"]]
+     (case right-pane-view
+       :document [entity-document]
+       :history [entity-history-document]
+       :raw-edn [entity-raw-edn]
+       nil)])))
 
 (defn left-pane
   []

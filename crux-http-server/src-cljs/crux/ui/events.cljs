@@ -72,7 +72,8 @@
  (fn [{:keys [db]} _]
    (let [query-params (-> (get-in db [:current-route :query-params])
                           (select-keys [:valid-time :transaction-time :eid]))]
-     {:dispatch [:navigate :entity nil query-params]})))
+     {:db (assoc-in db [:entity :right-pane :view] :document)
+      :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-fx
  ::set-entity-right-pane-history
@@ -81,8 +82,16 @@
                           (assoc :history true)
                           (assoc :with-docs true)
                           (assoc :sort-order "desc"))]
-     {:dispatch [:navigate :entity nil query-params]})))
+     {:db (assoc-in db [:entity :right-pane :view] :history)
+      :dispatch [:navigate :entity nil query-params]})))
 
+(rf/reg-event-fx
+ ::set-entity-right-pane-raw-edn
+ (fn [{:keys [db]} _]
+   (let [query-params (-> (get-in db [:current-route :query-params])
+                          (select-keys [:valid-time :transaction-time :eid]))]
+     {:db (assoc-in db [:entity :right-pane :view] :raw-edn)
+      :dispatch [:navigate :entity nil query-params]})))
 
 (rf/reg-event-db
  ::set-entity-right-pane-loading
