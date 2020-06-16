@@ -3,6 +3,7 @@
             [crux.memory :as mem])
   (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
             RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
+           clojure.lang.Box
            java.util.function.Function
            [java.util Comparator Iterator NavigableMap TreeMap]
            org.agrona.DirectBuffer))
@@ -40,39 +41,49 @@
   (next-values [this]
     (when-let [v (db/next-values idx)]
       (when (pred v)
-        v))))
+        v)))
+
+  db/LayeredIndex
+  (open-level [_]
+    (db/open-level idx))
+
+  (close-level [_]
+    (db/close-level idx))
+
+  (max-depth [_]
+    (db/max-depth idx)))
 
 (defn- value-comparsion-predicate
   ([compare-pred compare-v]
    (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
-  ([compare-pred ^DirectBuffer compare-v max-length]
-   (if compare-v
+  ([compare-pred ^Box compare-v ^long max-length]
+   (if (.val compare-v)
      (fn [value]
-       (and value (compare-pred (mem/compare-buffers value compare-v max-length))))
+       (and value (compare-pred (mem/compare-buffers value (.val compare-v) max-length))))
      (constantly true))))
 
-(defn new-prefix-equal-virtual-index [idx ^DirectBuffer prefix-v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (.capacity prefix-v))
-        pred (value-comparsion-predicate zero? prefix-v (.capacity prefix-v))]
+(defn new-prefix-equal-virtual-index [idx ^Box prefix-v ^long prefix-size]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v prefix-size)
+        pred (value-comparsion-predicate zero? prefix-v prefix-size)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred k)
                                           k
-                                          prefix-v)))))
+                                          (mem/limit-buffer (.val prefix-v) prefix-size))))))
 
-(defn new-less-than-equal-virtual-index [idx ^DirectBuffer max-v]
+(defn new-less-than-equal-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-less-than-virtual-index [idx ^DirectBuffer max-v]
+(defn new-less-than-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate neg? max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn new-greater-than-equal-virtual-index [idx ^DirectBuffer min-v]
+(defn new-greater-than-equal-virtual-index [idx ^Box min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
-                                          min-v)))))
+                                          (.val min-v))))))
 
 (defrecord GreaterThanVirtualIndex [idx]
   db/Index
@@ -81,22 +92,32 @@
         (db/next-values idx)))
 
   (next-values [this]
-    (db/next-values idx)))
+    (db/next-values idx))
 
-(defn new-greater-than-virtual-index [idx ^DirectBuffer min-v]
+  db/LayeredIndex
+  (open-level [_]
+    (db/open-level idx))
+
+  (close-level [_]
+    (db/close-level idx))
+
+  (max-depth [_]
+    (db/max-depth idx)))
+
+(defn new-greater-than-virtual-index [idx ^Box min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred k)
                                                   k
-                                                  min-v)))]
+                                                  (.val min-v))))]
     (->GreaterThanVirtualIndex idx)))
 
-(defn new-equals-virtual-index [idx ^DirectBuffer v]
+(defn new-equals-virtual-index [idx ^Box v]
   (let [pred (value-comparsion-predicate zero? v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
-                                          v)))))
+                                          (.val v))))))
 
 (defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints
@@ -280,7 +301,7 @@
 (defn- new-sorted-virtual-index [m]
   (->SortedVirtualIndex m (SortedVirtualIndexState. nil)))
 
-(defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state layered-range-constraints encode-value-fn]
+(defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state encode-value-fn]
   db/Index
   (seek-values [this k]
     (when-let [k (db/seek-values (last (.indexes state)) (or k mem/empty-buffer))]
@@ -300,9 +321,7 @@
           level (count path)]
       (set! (.path state) path)
       (set! (.indexes state) (conj (.indexes state)
-                                   (wrap-with-range-constraints
-                                    (new-sorted-virtual-index (get-in (.tree state) path))
-                                    (get layered-range-constraints level))))
+                                   (new-sorted-virtual-index (get-in (.tree state) path))))
       (set! (.key state) nil))
     nil)
 
@@ -330,12 +349,9 @@
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
-   (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
-  ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (update-relation-virtual-index! relation tuples layered-range-constraints (.encode_value_fn relation) false))
-  ([^RelationVirtualIndex relation tuples layered-range-constraints encode-value-fn single-values?]
-   (let [layered-range-constraints (or layered-range-constraints (.layered-range-constraints relation))
-         tree (if single-values?
+   (update-relation-virtual-index! relation tuples (.encode_value_fn relation) false))
+  ([^RelationVirtualIndex relation tuples encode-value-fn single-values?]
+   (let [tree (if single-values?
                 (reduce
                  (fn [^TreeMap acc v]
                    (doto acc
@@ -347,9 +363,7 @@
                    (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
-         root-level (wrap-with-range-constraints
-                     (new-sorted-virtual-index tree)
-                     (get layered-range-constraints 0))
+         root-level (new-sorted-virtual-index tree)
          state ^RelationVirtualIndexState (.state relation)]
      (set! (.tree state) tree)
      (set! (.path state) [])
@@ -357,15 +371,11 @@
      (set! (.key state) nil)
      relation)))
 
-(defn new-relation-virtual-index
-  ([tuples max-depth encode-value-fn]
-   (new-relation-virtual-index tuples max-depth encode-value-fn nil))
-  ([tuples max-depth encode-value-fn layered-range-constraints]
-   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
-                                                           (RelationVirtualIndexState. nil nil nil nil)
-                                                           layered-range-constraints
-                                                           encode-value-fn)
-                                   tuples)))
+(defn new-relation-virtual-index [tuples max-depth encode-value-fn]
+  (update-relation-virtual-index! (->RelationVirtualIndex max-depth
+                                                          (RelationVirtualIndexState. nil nil nil nil)
+                                                          encode-value-fn)
+                                  tuples))
 
 (defrecord SingletonVirtualIndex [v]
   db/Index
