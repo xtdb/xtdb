@@ -3034,6 +3034,14 @@
                   '{:find [?name foo], :where [[?id :name ?name]],
                     :args [{foo nil}]}))))
 
+(t/deftest test-leaf-vars-and-ors
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :field1 1 :field2 2}]])
+  (t/is (= #{[:foo]}
+           (api/q (api/db *api*)'{:find [?id], :where [[?id :field1 ?field1]
+                                                       [?id :field2 ?field2]
+                                                       (or (and [(boolean ?field2)]))]
+                                  :args []}))))
+
 ;; TODO: shows slowdown when scanning several attributes without any
 ;; filters.
 #_(t/deftest test-multiple-fields-sql-performance
