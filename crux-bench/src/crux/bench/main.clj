@@ -57,17 +57,17 @@
 
                          [nil "--tests test1,test2" "Tests to run"
                           :id :selected-tests
-                          :default (set (keys bench-tests))
+                          :default (set (keys (dissoc bench-tests :tpch-stress)))
                           :parse-fn #(into #{} (map keyword (set (string/split % #","))))]
 
                          [nil "--tpch-query-count 20" "Number of queries to run on TPCH stress"
                           :id :tpch-query-count
-                          :default 20
+                          :default 35
                           :parse-fn #(Long/parseLong %)]
 
                          [nil "--tpch-field-count 10" "Number of fields to run queries with on TPCH stress"
                           :id :tpch-field-count
-                          :default 10
+                          :default (count tpch-stress/fields)
                           :parse-fn #(Long/parseLong %)]])]
     (if errors
       (binding [*out* *err*]
