@@ -99,6 +99,13 @@
      (or (get-in db [:entity :right-pane :view]) :document))))
 
 (rf/reg-sub
+ ::query-pane-view
+ (fn [db _]
+   (if (empty? (get-in db [:current-route :query-params]))
+     :query-root
+     :table)))
+
+(rf/reg-sub
  ::query-data-download-link
  (fn [db [_ link-type]]
    (let [query-params (get-in db [:current-route :query-params])]

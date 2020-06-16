@@ -357,6 +357,20 @@
           :raw-edn [entity-raw-edn]
           nil)]])))
 
+(defn query-pane
+  []
+  (let [pane-view @(rf/subscribe [::sub/query-pane-view])]
+    (if (= pane-view :query-root)
+      [:div.query-root
+       [:div.query-root__title
+        "Getting Started"]
+       [:p "To perform a query:"]
+       [:ul
+        [:li "Enter the desired query into the query editor."]
+        [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
+        [:li "Click " [:b "submit query"] " to perform the query and get the results in a table."]]]
+      [query-table])))
+
 (defn form-pane
   []
   (let [form-pane-hidden? @(rf/subscribe [::sub/form-pane-hidden?])
@@ -421,6 +435,6 @@
          (when name [form-pane])
          [:div.result-pane
           (case name
-            :query [query-table]
+            :query [query-pane]
             :entity [entity-pane]
             [:div "no matching"])]])]]))
