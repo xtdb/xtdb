@@ -41,7 +41,7 @@
                      (bench/with-comparison-times)
                      (doto post-to-slack)))))
    :tpch-stress (fn [nodes {:keys [tpch-query-count tpch-field-count] :as opts}]
-                  (bench/with-nodes [node (select-keys nodes #{"standalone-rocksdb"})]
+                  (bench/with-nodes [node nodes]
                     (-> (bench/with-comparison-times
                           (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
                                                                   :field-count tpch-field-count}))
@@ -52,22 +52,22 @@
         (cli/parse-opts args
                         [[nil "--nodes node1,node2" "Node types"
                           :id :selected-nodes
-                          :default (set (keys bench/nodes))
+                          :default (set (keys (dissoc bench/nodes "standalone-lmdb" "kafka-lmdb")))
                           :parse-fn #(set (string/split % #","))]
 
                          [nil "--tests test1,test2" "Tests to run"
                           :id :selected-tests
-                          :default (set (keys bench-tests))
+                          :default (set (keys (dissoc bench-tests :tpch-stress)))
                           :parse-fn #(into #{} (map keyword (set (string/split % #","))))]
 
                          [nil "--tpch-query-count 20" "Number of queries to run on TPCH stress"
                           :id :tpch-query-count
-                          :default 20
+                          :default 35
                           :parse-fn #(Long/parseLong %)]
 
                          [nil "--tpch-field-count 10" "Number of fields to run queries with on TPCH stress"
                           :id :tpch-field-count
-                          :default 10
+                          :default (count tpch-stress/fields)
                           :parse-fn #(Long/parseLong %)]])]
     (if errors
       (binding [*out* *err*]

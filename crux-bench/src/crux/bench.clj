@@ -259,8 +259,8 @@
         :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
         :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
         :crux.kv/db-dir (str (io/file data-dir "kv/embedded-kafka-rocksdb"))}))
-   #_"standalone-lmdb"
-   #_(fn [data-dir]
+   "standalone-lmdb"
+   (fn [data-dir]
        {:crux.node/topology '[crux.standalone/topology
                               crux.metrics.dropwizard.cloudwatch/reporter
                               crux.kv.lmdb/kv-store]
@@ -268,8 +268,8 @@
         :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
         :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))})
 
-   #_"kafka-lmdb"
-   #_(fn [data-dir]
+   "kafka-lmdb"
+   (fn [data-dir]
        (let [uuid (UUID/randomUUID)]
          {:crux.node/topology '[crux.kafka/topology
                                 crux.metrics.dropwizard.cloudwatch/reporter

@@ -9,7 +9,7 @@ while [[ "$#" -gt 0 ]]; do
         -r|--rev)
             REV="$2";
             shift 2;;
-        --tpch-query-count|--tpch-field-count)
+        --nodes|--tpch-query-count|--tpch-field-count)
             COMMAND+=", \"$1\", \"$2\""
             shift 2;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
