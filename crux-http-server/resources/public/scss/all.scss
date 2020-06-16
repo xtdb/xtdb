@@ -59,6 +59,18 @@ html, body {
     position: relative;
 }
 
+.button-line {
+    display:flex;
+    align-items: start;
+    flex-direction: column;
+}
+
+.button-hint {
+    margin-top: 0.5rem;
+    color: grey;
+    font-size: 0.8rem;
+}
+
 .select {
     display: inline-block;
     position: relative;
@@ -607,7 +619,7 @@ ul.entity-group__value li::before {
     margin-left:auto;
 }
 
-.query-form__button {
+.form__button {
     background: #4CAF50;
     color: white;
 }

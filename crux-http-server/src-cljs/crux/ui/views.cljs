@@ -65,86 +65,101 @@
                            "Fill out both inputs or none")}]
     (when (some some? (vals validation)) validation)))
 
+(defn- submit-form-on-keypress [evt form-id]
+  (when (and (.-ctrlKey evt) (= 13 (.-keyCode evt)))
+    (let [form-button (js/document.querySelector (str form-id " button"))]
+      (.click form-button))))
+
 (defn query-form
   []
   ;; we need to create a cm instance holder to modify the CodeMirror code
-  (let [cm-instance (atom nil)]
-    (fn []
-      [fork/form {:form-id "form-query"
-                  :validation query-validation
-                  :prevent-default? true
-                  :clean-on-unmount? true
-                  :initial-values @(rf/subscribe [::sub/initial-values-query])
-                  :on-submit #(do
-                                (rf/dispatch [::events/toggle-form-history :query false])
-                                (rf/dispatch [::events/go-to-query-view %]))}
-       (fn [{:keys [values
-                    errors
-                    touched
-                    set-values
-                    set-touched
-                    form-id
-                    handle-submit] :as props}]
-         (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
-               form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])
-               query-history-list @(rf/subscribe [::sub/query-form-history])
-               disabled? (or loading? (some some? (vals errors)))]
-           [:<>
-            [:form
-             {:id form-id
-              :on-submit handle-submit}
-             [:div.input-textarea
-              [cm/code-mirror (get values "q")
-               {:cm-instance cm-instance
-                :class "cm-textarea__query"
-                :on-change #(set-values {"q" %})
-                :on-blur #(set-touched "q")}]
-              [:div.expand-collapse__group.form-pane__history
-               {:on-click #(rf/dispatch [::events/toggle-form-history :query])}
-               [:span.expand-collapse__txt
-                [:span.form-pane__arrow
-                 [common/arrow-svg form-pane-history-q]
-                 "History"]]]
-              [:div.expand-collapse-transition
-               {:class (if form-pane-history-q "expand" "collapse")}
-               [:div.form-pane__history-scrollable
-                (map-indexed
-                 (fn [idx {:strs [q vtd vtt ttd ttt]}]
-                   ^{:key (gensym)}
-                   [:div.form-pane__history-scrollable-el
-                    [:div.form-pane__history-delete
-                     {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-                     [:i.fas.fa-trash-alt]]
-                    [:div.form-pane__history-scrollable-el-left
-                     {:on-click #(do
-                                   (rf/dispatch [::events/toggle-form-history :query])
-                                   (.setValue @cm-instance q)
-                                   (set-values
-                                    {"q" q
-                                     "vtd" vtd
-                                     "vtt" vtt
-                                     "ttd" ttd
-                                     "ttt" ttt}))}
-                     [:div
-                      {:style {:margin-bottom "1rem"}}
-                      [:span.form-pane__history-headings "Valid Time: "]
-                      [:span.form-pane__history-txt (str vtd " " vtt)]]
-                     (when (and ttd ttt)
-                       [:div
-                        [:span.form-pane__history-headings "Transaction Time: "]
-                        [:span.form-pane__history-txt (str ttd " " ttt)]])
-                     [:div {:style {:margin-top "1rem"}}
-                      [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
-                 query-history-list)]]
-              (when (and (get touched "q")
-                         (get errors "q"))
-                [:p.input-error (get errors "q")])]
-             [vt-tt-inputs props]
-             [:button.button
-              {:class (when-not disabled? "query-form__button")
-               :type "submit"
-               :disabled disabled?}
-              "Submit Query"]]]))])))
+  (let [cm-instance (atom nil)
+        form-id "#form-query"]
+    (r/create-class {:component-did-mount (fn []
+                                            (-> (js/document.querySelector form-id)
+                                                (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+                     :component-will-unmount (fn []
+                                               (-> (js/document.querySelector form-id)
+                                                   (.removeEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+                     :reagent-render
+                     (fn []
+                       [fork/form {:form-id (subs form-id 1)
+                                   :validation query-validation
+                                   :prevent-default? true
+                                   :clean-on-unmount? true
+                                   :initial-values @(rf/subscribe [::sub/initial-values-query])
+                                   :on-submit #(do
+                                                 (rf/dispatch [::events/toggle-form-history :query false])
+                                                 (rf/dispatch [::events/go-to-query-view %]))}
+                        (fn [{:keys [values
+                                     errors
+                                     touched
+                                     set-values
+                                     set-touched
+                                     form-id
+                                     handle-submit] :as props}]
+                          (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
+                                form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])
+                                query-history-list @(rf/subscribe [::sub/query-form-history])
+                                disabled? (or loading? (some some? (vals errors)))]
+                            [:<>
+                             [:form
+                              {:id form-id
+                               :on-submit handle-submit}
+                              [:div.input-textarea
+                               [cm/code-mirror (get values "q")
+                                {:cm-instance cm-instance
+                                 :class "cm-textarea__query"
+                                 :on-change #(set-values {"q" %})
+                                 :on-blur #(set-touched "q")}]
+                               [:div.expand-collapse__group.form-pane__history
+                                {:on-click #(rf/dispatch [::events/toggle-form-history :query])}
+                                [:span.expand-collapse__txt
+                                 [:span.form-pane__arrow
+                                  [common/arrow-svg form-pane-history-q]
+                                  "History"]]]
+                               [:div.expand-collapse-transition
+                                {:class (if form-pane-history-q "expand" "collapse")}
+                                [:div.form-pane__history-scrollable
+                                 (map-indexed
+                                  (fn [idx {:strs [q vtd vtt ttd ttt]}]
+                                    ^{:key (gensym)}
+                                    [:div.form-pane__history-scrollable-el
+                                     [:div.form-pane__history-delete
+                                      {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+                                      [:i.fas.fa-trash-alt]]
+                                     [:div.form-pane__history-scrollable-el-left
+                                      {:on-click #(do
+                                                    (rf/dispatch [::events/toggle-form-history :query])
+                                                    (.setValue @cm-instance q)
+                                                    (set-values
+                                                     {"q" q
+                                                      "vtd" vtd
+                                                      "vtt" vtt
+                                                      "ttd" ttd
+                                                      "ttt" ttt}))}
+                                      [:div
+                                       {:style {:margin-bottom "1rem"}}
+                                       [:span.form-pane__history-headings "Valid Time: "]
+                                       [:span.form-pane__history-txt (str vtd " " vtt)]]
+                                      (when (and ttd ttt)
+                                        [:div
+                                         [:span.form-pane__history-headings "Transaction Time: "]
+                                         [:span.form-pane__history-txt (str ttd " " ttt)]])
+                                      [:div {:style {:margin-top "1rem"}}
+                                       [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+                                  query-history-list)]]
+                               (when (and (get touched "q")
+                                          (get errors "q"))
+                                 [:p.input-error (get errors "q")])]
+                              [vt-tt-inputs props]
+                              [:div.button-line
+                               [:button.button
+                                {:type "submit"
+                                 :class (when-not disabled? "form__button")
+                                 :disabled disabled?}
+                                "Submit Query"]
+                               [:p.button-hint "(Ctrl + Enter)"]]]]))])})))
 
 (defn entity-validation
   [values]
@@ -160,38 +175,50 @@
 
 (defn entity-form
   []
-  [fork/form {:form-id "form-entity"
-              :prevent-default? true
-              :clean-on-unmount? true
-              :validation entity-validation
-              :initial-values @(rf/subscribe [::sub/initial-values-entity])
-              :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
-   (fn [{:keys [values
-                touched
-                errors
-                form-id
-                set-values
-                set-touched
-                handle-submit] :as props}]
-     (let [loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
-           disabled? (or loading? (some some? (vals errors)))]
-       [:form
-        {:id form-id
-         :on-submit handle-submit}
-        [:div.input-textarea
-         [cm/code-mirror (get values "eid")
-          {:class "cm-textarea__entity"
-           :on-change #(set-values {"eid" %})
-           :on-blur #(set-touched "eid")}]
-         (when (and (get touched "eid")
-                    (get errors "eid"))
-           [:p.input-error (get errors "eid")])]
-        [vt-tt-inputs props]
-        [:button.button
-         {:type "submit"
-          :class (when-not disabled? "query-form__button")
-          :disabled disabled?}
-         "Submit Entity"]]))])
+  (let [form-id "#form-entity"]
+    (r/create-class
+     {:component-did-mount (fn []
+                             (-> (js/document.querySelector form-id)
+                                 (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+      :component-will-unmount (fn []
+                                (-> (js/document.querySelector form-id)
+                                    (.removeEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+      :reagent-render
+      (fn []
+        [fork/form {:form-id (subs form-id 1)
+                    :prevent-default? true
+                    :clean-on-unmount? true
+                    :validation entity-validation
+                    :initial-values @(rf/subscribe [::sub/initial-values-entity])
+                    :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
+         (fn [{:keys [values
+                      touched
+                      errors
+                      form-id
+                      set-values
+                      set-touched
+                      handle-submit] :as props}]
+           (let [loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
+                 disabled? (or loading? (some some? (vals errors)))]
+             [:form
+              {:id form-id
+               :on-submit handle-submit}
+              [:div.input-textarea
+               [cm/code-mirror (get values "eid")
+                {:class "cm-textarea__entity"
+                 :on-change #(set-values {"eid" %})
+                 :on-blur #(set-touched "eid")}]
+               (when (and (get touched "eid")
+                          (get errors "eid"))
+                 [:p.input-error (get errors "eid")])]
+              [vt-tt-inputs props]
+              [:div.button-line
+               [:button.button
+                 {:type "submit"
+                  :class (when-not disabled? "form__button")
+                  :disabled disabled?}
+                "Submit Entity"]
+               [:p.button-hint "(Ctrl + Enter)"]]]))])})))
 
 (defn query-table
   []
