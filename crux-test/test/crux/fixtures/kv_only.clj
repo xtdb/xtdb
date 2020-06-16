@@ -7,16 +7,19 @@
 
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-module* 'crux.kv.rocksdb/kv)
-(def ^:dynamic *sync* false)
+(def ^:dynamic *kv-opts* {})
 
 (defn ^Closeable start-kv-store [opts]
   (topo/start-component *kv-module* nil opts))
 
+(defn with-kv-opts [opts f]
+  (binding [*kv-opts* opts]
+    (f)))
+
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
-      (with-open [kv (start-kv-store {:crux.kv/db-dir (str db-dir)
-                                      :crux.kv/sync? *sync*})]
+      (with-open [kv (start-kv-store (assoc *kv-opts* :crux.kv/db-dir (str db-dir)))]
         (binding [*kv* kv]
           (f)))
       (finally

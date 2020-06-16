@@ -8,6 +8,7 @@
             [crux.memory :as mem])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
+           java.util.concurrent.locks.StampedLock
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
            [org.lwjgl.system MemoryStack MemoryUtil]
@@ -29,29 +30,36 @@
 ;; transactions. Also, when file reached 4Gb it crashed. MDB_WRITEMAP
 ;; and MDB_MAPASYNC might solve this, but doesn't allow nested
 ;; transactions. See: https://github.com/dw/py-lmdb/issues/113
-(defn- increase-mapsize [env ^long factor]
-  (with-open [stack (MemoryStack/stackPush)]
-    (let [info (MDBEnvInfo/mallocStack stack)]
-      (success? (LMDB/mdb_env_info env info))
-      (let [new-mapsize (* factor (.me_mapsize info))]
-        (log/debug "Increasing mapsize to:" new-mapsize)
-        (env-set-mapsize env new-mapsize)))))
+(defn- increase-mapsize [^StampedLock mapsize-lock env ^long factor]
+  (cio/with-write-lock mapsize-lock
+    (with-open [stack (MemoryStack/stackPush)]
+      (let [info (MDBEnvInfo/mallocStack stack)]
+        (success? (LMDB/mdb_env_info env info))
+        (let [new-mapsize (* factor (.me_mapsize info))]
+          (log/debug "Increasing mapsize to:" new-mapsize)
+          (env-set-mapsize env new-mapsize))))))
 
-(defrecord LMDBTransaction [^long txn]
+(defrecord LMDBTransaction [^long txn close-fn]
   Closeable
   (close [_]
     (let [rc (LMDB/mdb_txn_commit txn)]
+      (close-fn)
       (when-not (= LMDB/MDB_BAD_TXN rc)
         (success? rc)))))
 
-(defn- new-transaction ^crux.kv.lmdb.LMDBTransaction [env flags]
-  (with-open [stack (MemoryStack/stackPush)]
-    (let [pp (.mallocPointer stack 1)
-          rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
-      (if (= LMDB/MDB_MAP_RESIZED rc)
-        (env-set-mapsize env 0)
-        (success? rc))
-      (->LMDBTransaction (.get pp)))))
+(defn- new-transaction ^crux.kv.lmdb.LMDBTransaction [^StampedLock mapsize-lock env flags]
+  (let [txn-stamp (.readLock mapsize-lock)]
+    (try
+      (with-open [stack (MemoryStack/stackPush)]
+        (let [pp (.mallocPointer stack 1)
+              rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
+          (if (= LMDB/MDB_MAP_RESIZED rc)
+            (env-set-mapsize env 0)
+            (success? rc))
+          (->LMDBTransaction (.get pp) #(.unlock mapsize-lock txn-stamp))))
+      (catch Throwable t
+        (.unlock mapsize-lock txn-stamp)
+        (throw t)))))
 
 (defn- env-create []
   (with-open [stack (MemoryStack/stackPush)]
@@ -76,9 +84,9 @@
     (.mkdirs file)
     (success? (LMDB/mdb_env_copy env (.getAbsolutePath file)))))
 
-(defn- dbi-open [env]
+(defn- dbi-open [mapsize-lock env]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction env LMDB/MDB_RDONLY)]
+              tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
     (let [{:keys [^long txn]} tx
           ip (.mallocInt stack 1)
           ^CharSequence name nil]
@@ -102,9 +110,9 @@
       (success? rc)
       (UnsafeBuffer. (.mv_data kv) 0 (.mv_size kv)))))
 
-(defn- cursor-put [env dbi kvs]
+(defn- cursor-put [mapsize-lock env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction env 0)
+              tx (new-transaction mapsize-lock env 0)
               cursor (new-cursor dbi (:txn tx))]
     (let [{:keys [cursor]} cursor
           kv (MDBVal/mallocStack stack)
@@ -123,9 +131,9 @@
 
 ;; TODO: Figure out why LMDB crashes if we remove the sort here. The
 ;; root cause is likely something else.
-(defn- tx-delete [env dbi ks]
+(defn- tx-delete [mapsize-lock env dbi ks]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction env 0)]
+              tx (new-transaction mapsize-lock env 0)]
     (let [{:keys [^long txn]} tx
           kv (MDBVal/mallocStack stack)
           kb (ExpandableDirectByteBuffer.)]
@@ -198,33 +206,33 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
-(defrecord LMDBKv [db-dir env env-flags dbi]
+(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock]
   kv/KvStore
   (new-snapshot [_]
-    (let [tx (new-transaction env LMDB/MDB_RDONLY)]
+    (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
       (->LMDBKvSnapshot env dbi tx)))
 
   (store [this kvs]
     (try
-      (cursor-put env dbi kvs)
+      (cursor-put mapsize-lock env dbi kvs)
       (catch ExceptionInfo e
         (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
           (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
             (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
               (throw (IllegalStateException. "Too large size of key values to store at once.")))
-            (increase-mapsize env *mapsize-increase-factor*)
+            (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
             (kv/store this kvs))
           (throw e)))))
 
   (delete [this ks]
     (try
-      (tx-delete env dbi ks)
+      (tx-delete mapsize-lock env dbi ks)
       (catch ExceptionInfo e
         (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
           (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
             (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
               (throw (IllegalStateException. "Too large size of keys to delete at once.")))
-            (increase-mapsize env *mapsize-increase-factor*)
+            (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
             (kv/delete this ks))
           (throw e)))))
 
@@ -238,7 +246,7 @@
 
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
-                tx (new-transaction env LMDB/MDB_RDONLY)]
+                tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
       (let [stat (MDBStat/mallocStack stack)]
         (LMDB/mdb_stat (.txn tx) dbi stat)
         (.ms_entries stat))))
@@ -251,29 +259,36 @@
 
   Closeable
   (close [_]
-    (env-close env)))
+    (cio/with-write-lock mapsize-lock
+      (env-close env))))
 
 (def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags] :as options}]
+  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags ::env-mapsize] :as options}]
                (let [env-flags (or env-flags
                                    (bit-or default-env-flags
                                            (if sync?
                                              0
                                              no-sync-env-flags)))
-                     env (env-create)]
+                     env (env-create)
+                     mapsize-lock (StampedLock.)]
                  (try
                    (env-open env db-dir env-flags)
+                   (when env-mapsize
+                     (env-set-mapsize env env-mapsize))
                    (-> (map->LMDBKv {:db-dir db-dir
                                      :env env
                                      :env-flags env-flags
-                                     :dbi (dbi-open env)}))
+                                     :dbi (dbi-open mapsize-lock env)
+                                     :mapsize-lock mapsize-lock}))
                    (catch Throwable t
                      (env-close env)
                      (throw t)))))
 
    :args (-> (merge kv/options
                     {::env-flags {:doc "LMDB Flags"
-                                  :crux.config/type :crux.config/nat-int}})
+                                  :crux.config/type :crux.config/nat-int}
+                     ::env-mapsize {:doc "LMDB Map size"
+                                    :crux.config/type :crux.config/nat-int}})
              (update ::kv/db-dir assoc :required? true, :default "data"))})
 
 (def kv-store {:crux.node/kv-store kv})

@@ -14,9 +14,11 @@
            org.agrona.concurrent.UnsafeBuffer))
 
 (t/use-fixtures :each
-                fkv/with-each-kv-store-implementation
-                fkv/with-kv-store
-                f/with-silent-test-check)
+  (partial fkv/with-kv-opts {:crux.kv.lmdb/env-mapsize 4096
+                             :crux.kv.lmdb.jnr/env-mapsize 4096})
+  fkv/with-each-kv-store-implementation
+  fkv/with-kv-store
+  f/with-silent-test-check)
 
 (declare value seek seek-and-iterate long->bytes bytes->long compare-bytes bytes=?)
 (t/deftest test-store-and-value []
@@ -122,7 +124,7 @@
     (t/is (= "awesome" (String. ^bytes (value *kv* (.getBytes "key-with-a-long-prefix-3")))))))
 
 (t/deftest test-sanity-check-can-start-with-sync-enabled
-  (binding [fkv/*sync* true]
+  (binding [fkv/*kv-opts* {:crux.kv/sync? true}]
     (fkv/with-kv-store
       (fn []
         (kv/store fkv/*kv* [[(long->bytes 1) (.getBytes "Crux")]])
@@ -138,6 +140,18 @@
   (with-open [snapshot (kv/new-snapshot *kv*)]
     (t/is (= "Crux" (String. (mem/->on-heap (kv/get-value snapshot (long->bytes 1))))))
     (t/is (nil? (kv/get-value snapshot (long->bytes 2))))))
+
+(t/deftest test-can-read-write-concurrently
+  (let [w-fs (for [_ (range 128)]
+               (future
+                 (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])))]
+    @(first w-fs)
+    (let [r-fs (for [_ (range 128)]
+                 (future
+                   (String. ^bytes (value *kv* (long->bytes 1)))))]
+      (mapv deref w-fs)
+      (doseq [r-f r-fs]
+        (t/is (= "Crux" @r-f))))))
 
 (t/deftest test-prev-and-next []
   (doseq [[^String k v] {"a" 1 "c" 3}]
