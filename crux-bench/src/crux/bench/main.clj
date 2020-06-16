@@ -52,7 +52,7 @@
         (cli/parse-opts args
                         [[nil "--nodes node1,node2" "Node types"
                           :id :selected-nodes
-                          :default (set (keys bench/nodes))
+                          :default (set (keys (dissoc bench/nodes "standalone-lmdb" "kafka-lmdb")))
                           :parse-fn #(set (string/split % #","))]
 
                          [nil "--tests test1,test2" "Tests to run"
