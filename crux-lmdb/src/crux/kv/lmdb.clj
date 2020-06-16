@@ -42,10 +42,12 @@
 (defrecord LMDBTransaction [^long txn close-fn]
   Closeable
   (close [_]
-    (let [rc (LMDB/mdb_txn_commit txn)]
-      (close-fn)
-      (when-not (= LMDB/MDB_BAD_TXN rc)
-        (success? rc)))))
+    (try
+      (let [rc (LMDB/mdb_txn_commit txn)]
+        (when-not (= LMDB/MDB_BAD_TXN rc)
+          (success? rc)))
+      (finally
+        (close-fn)))))
 
 (defn- new-transaction ^crux.kv.lmdb.LMDBTransaction [^StampedLock mapsize-lock env flags]
   (let [txn-stamp (.readLock mapsize-lock)]
