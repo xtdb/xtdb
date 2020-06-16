@@ -3,6 +3,7 @@
 
   The optional SPARQL handler requires juxt.crux/rdf."
   (:require [clojure.edn :as edn]
+            [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.set :as set]
@@ -760,7 +761,9 @@
 (defn data-browser-query [^ICruxAPI crux-node options {{:strs [valid-time transaction-time q]} :query-params :as request}]
   (let [query-params (:query-params request)
         link-entities? (get query-params "link-entities?")
-        html? (html-request? request)]
+        html? (html-request? request)
+        csv? (= (get-in request [:muuntaja/response :format]) "text/csv")
+        tsv? (= (get-in request [:muuntaja/response :format]) "text/tsv")]
     (cond
       (empty? query-params)
       (if html?
@@ -776,7 +779,7 @@
       (try
         (let [query (cond-> (or (some-> q (edn/read-string))
                                 (build-query query-params))
-                      html? (dissoc :full-results?))
+                      (or html? csv? tsv?) (dissoc :full-results?))
               vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
               tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
               db (db-for-request crux-node {:valid-time vt
@@ -789,6 +792,10 @@
                             {:body (query->html links query results)
                              :title "/query"
                              :options options}))
+                   csv? (with-out-str
+                          (csv/write-csv *out* results))
+                   tsv? (with-out-str
+                          (csv/write-csv *out* results :separator \tab))
                    link-entities? {"linked-entities" (link-top-level-entities db  "/_crux/entity" results)
                                    "query-results" results}
                    :else results)})
@@ -813,8 +820,14 @@
     [#"^/_crux/entity$" [:get]]
     (entity-state crux-node options request)
 
-    [#"^/_crux/query" [:get]]
+    [#"^/_crux/query$" [:get]]
     (data-browser-query crux-node options request)
+
+    [#"^/_crux/query.csv$" [:get]]
+    (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/csv"))
+
+    [#"^/_crux/query.tsv$" [:get]]
+    (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/tsv"))
 
     nil))
 
@@ -846,7 +859,7 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options))))
 
-(defn- html-encoder [_]
+(defn- unsupported-encoder [_]
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data charset]
@@ -882,6 +895,15 @@
 
       (handler request))))
 
+(def muuntaja-handler
+  (-> m/default-options
+      (assoc-in [:formats "text/html"] (mfc/map->Format {:name "text/html"
+                                                         :encoder [unsupported-encoder]}))
+      (assoc-in [:formats "text/csv"] (mfc/map->Format {:name "text/csv"
+                                                        :encoder [unsupported-encoder]}))
+      (assoc-in [:formats "text/tsv"] (mfc/map->Format {:name "text/tsv"
+                                                        :encoder [unsupported-encoder]}))))
+
 (def module
   {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port read-only? ^String jwks] :as options}]
                          (let [server (j/run-jetty
@@ -891,10 +913,7 @@
                                                     (-> (partial data-browser-handler node options)
                                                         (p/wrap-params)
                                                         (wrap-resource "public")
-                                                        (wrap-format (assoc-in m/default-options
-                                                                               [:formats "text/html"]
-                                                                               (mfc/map->Format {:name "text/html"
-                                                                                                 :encoder [html-encoder]})))
+                                                        (wrap-format muuntaja-handler)
                                                         (wrap-exception-handling))
 
                                                     (fn [request]
