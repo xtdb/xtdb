@@ -41,7 +41,7 @@
                      (bench/with-comparison-times)
                      (doto post-to-slack)))))
    :tpch-stress (fn [nodes {:keys [tpch-query-count tpch-field-count] :as opts}]
-                  (bench/with-nodes [node (select-keys nodes #{"standalone-rocksdb"})]
+                  (bench/with-nodes [node nodes]
                     (-> (bench/with-comparison-times
                           (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
                                                                   :field-count tpch-field-count}))
