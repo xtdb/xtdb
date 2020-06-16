@@ -9,10 +9,9 @@
             [crux.index :as idx])
   (:import java.io.Closeable
            clojure.lang.MapEntry
-           (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
+           (org.rocksdb Checkpoint CompressionType FlushOptions
                         Options ReadOptions RocksDB RocksIterator
-                        BlockBasedTableConfig WriteBatch WriteOptions
-                        Statistics StatsLevel)))
+                        WriteBatch WriteOptions Statistics StatsLevel)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -59,23 +58,12 @@
 (def ^:private default-block-cache-size (* 128 1024 1024))
 (def ^:private default-block-size (* 16 1024))
 
-;; See https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning
-(defn- apply-recommended-options ^org.rocksdb.Options [^Options options]
-  (doto options
-    (.setTableFormatConfig (doto (BlockBasedTableConfig.)
-                             (.setBlockCache (LRUCache. default-block-cache-size))
-                             (.setBlockSize default-block-size)
-                             (.setCacheIndexAndFilterBlocks true)
-                             (.setPinL0FilterAndIndexBlocksInCache true)))
-    (.setIncreaseParallelism (max (.availableProcessors (Runtime/getRuntime)) 2))))
-
 (defrecord RocksKv [db-dir]
   kv/KvStore
   (new-snapshot [{:keys [^RocksDB db]}]
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
                          (doto (ReadOptions.)
-                           (.setPinData true)
                            (.setSnapshot snapshot))
                          snapshot)))
 
