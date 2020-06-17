@@ -1355,7 +1355,7 @@
         (t/is (< (double (/ args-ns literal-ns)) acceptable-slowdown-factor)
               (pr-str args-ns " " literal-ns))))))
 
-(t/deftest test-or-range-vars-bug
+(t/deftest test-or-range-vars-bug-949
   (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 30}]))
   (t/is (= #{[:ivan "Ivan"]}
            (api/q (api/db *api*)
