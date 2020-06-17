@@ -6,7 +6,7 @@ clojure -Sdeps '{:deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.
         -m mach.pack.alpha.capsule ${UBERJAR_NAME:-crux.jar} \
         -e config \
         --application-id crux \
-        --application-version derived-from-git \
+        --application-version crux-git-version \
         -m crux.main
 
 rm -rf config/

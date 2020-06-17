@@ -1,12 +1,12 @@
-(defproject juxt/crux-kafka-connect "derived-from-git"
+(defproject juxt/crux-kafka-connect "crux-git-version-beta"
   :description "Crux Kafka Connect"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "0.5.0"]
-                 [juxt/crux-core "derived-from-git"]
-                 [juxt/crux-http-client "derived-from-git"]
+                 [juxt/crux-core "crux-git-version-beta"]
+                 [juxt/crux-http-client "crux-git-version-beta"]
                  [cheshire "5.9.0"]
                  [com.taoensso/nippy "2.14.0" :exclusions [org.tukaani/xz]]
                  ^:source-dep [org.tukaani/xz "1.6"]
@@ -35,7 +35,7 @@
                            :tags ["Database"
                                   "Crux"]
 
-                           :version "derived-from-git"}
+                           :version "crux-git-version-beta"}
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-Xlint:all,-options,-path"

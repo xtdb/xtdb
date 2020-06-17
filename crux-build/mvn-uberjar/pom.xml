@@ -5,8 +5,8 @@
   <properties>
       <crux.group-id>juxt</crux.group-id>
       <crux.artifact-id>crux-custom</crux.artifact-id>
-      <crux.crux-version>derived-from-git</crux.crux-version>
-      <crux.artifact-version>derived-from-git</crux.artifact-version>
+      <crux.crux-version>crux-git-version</crux.crux-version>
+      <crux.artifact-version>crux-git-version</crux.artifact-version>
       <crux.uberjar-name>crux.jar</crux.uberjar-name>
   </properties>
 
@@ -37,19 +37,19 @@
     <dependency>
       <groupId>juxt</groupId>
       <artifactId>crux-core</artifactId>
-      <version>${crux.crux-version}</version>
+      <version>${crux.crux-version}-beta</version>
     </dependency>
 
     <dependency>
         <groupId>juxt</groupId>
         <artifactId>crux-http-server</artifactId>
-        <version>${crux.crux-version}</version>
+        <version>${crux.crux-version}-alpha</version>
     </dependency>
 
     <dependency>
       <groupId>juxt</groupId>
       <artifactId>crux-cli</artifactId>
-      <version>${crux.crux-version}</version>
+      <version>${crux.crux-version}-beta</version>
     </dependency>
   </dependencies>
 

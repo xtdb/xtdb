@@ -1,1 +1,1 @@
-(defproject juxt/docs "derived-from-git")
+(defproject juxt/docs "crux-git-version")
