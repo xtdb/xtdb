@@ -1,10 +1,10 @@
-(defproject juxt/soak "derived-from-git"
+(defproject juxt/soak "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/data.json "0.2.7"]
-                 [juxt/crux-core "derived-from-git"]
-                 [juxt/crux-kafka "derived-from-git"]
-                 [juxt/crux-rocksdb "derived-from-git"]
-                 [juxt/crux-metrics "derived-from-git"]
+                 [juxt/crux-core "crux-git-version-beta"]
+                 [juxt/crux-kafka "crux-git-version-beta"]
+                 [juxt/crux-rocksdb "crux-git-version-beta"]
+                 [juxt/crux-metrics "crux-git-version-alpha"]
 
                  [bidi "2.1.6"]
                  [hiccup "2.0.0-alpha2"]
