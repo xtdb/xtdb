@@ -22,8 +22,8 @@ SHA="$(git rev-parse ${REV})"
 
 TASKDEF_ARN=$(aws ecs register-task-definition\
                   --family "crux-bench-dev" \
-                  --cpu "4 vCPU" \
-                  --memory "12GB" \
+                  --cpu "2 vCPU" \
+                  --memory "4GB" \
                   --task-role-arn "arn:aws:iam::955308952094:role/crux-bench-ECSTaskRole-1QHM7XK4QT25X" \
                   --execution-role-arn "arn:aws:iam::955308952094:role/crux-bench-ECSTaskExecutionRole-14WW8A7NF1D2V" \
                   --network-mode "awsvpc" \
