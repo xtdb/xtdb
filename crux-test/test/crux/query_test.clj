@@ -1355,6 +1355,17 @@
         (t/is (< (double (/ args-ns literal-ns)) acceptable-slowdown-factor)
               (pr-str args-ns " " literal-ns))))))
 
+(t/deftest test-or-range-vars-bug
+  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 30}]))
+  (t/is (= #{[:ivan "Ivan"]}
+           (api/q (api/db *api*)
+                  '{:find [e name]
+                    :where [[e :name name]
+                            [(get-attr e :age) age]
+                            (or [(= x y)])
+                            [(str age) x]
+                            [(str age) y]]}))))
+
 ;; https://github.com/juxt/crux/issues/71
 
 (t/deftest test-query-limits-bug-71
