@@ -9,6 +9,7 @@
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            java.util.concurrent.locks.StampedLock
+           java.util.concurrent.TimeUnit
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
            [org.lwjgl.system MemoryStack MemoryUtil]
@@ -26,18 +27,26 @@
 (defn- env-set-mapsize [^long env ^long size]
   (success? (LMDB/mdb_env_set_mapsize env size)))
 
+(defn- acquire-write-lock ^long [^StampedLock mapsize-lock]
+  (let [stamp (.tryWriteLock mapsize-lock 10 TimeUnit/SECONDS)]
+    (assert (pos? stamp) "LMDB write lock timeout")
+    stamp))
+
 ;; TODO: Note, this has to be done when there are no open
 ;; transactions. Also, when file reached 4Gb it crashed. MDB_WRITEMAP
 ;; and MDB_MAPASYNC might solve this, but doesn't allow nested
 ;; transactions. See: https://github.com/dw/py-lmdb/issues/113
 (defn- increase-mapsize [^StampedLock mapsize-lock env ^long factor]
-  (cio/with-write-lock mapsize-lock
-    (with-open [stack (MemoryStack/stackPush)]
-      (let [info (MDBEnvInfo/mallocStack stack)]
-        (success? (LMDB/mdb_env_info env info))
-        (let [new-mapsize (* factor (.me_mapsize info))]
-          (log/debug "Increasing mapsize to:" new-mapsize)
-          (env-set-mapsize env new-mapsize))))))
+  (let [stamp (acquire-write-lock mapsize-lock)]
+    (try
+      (with-open [stack (MemoryStack/stackPush)]
+        (let [info (MDBEnvInfo/mallocStack stack)]
+          (success? (LMDB/mdb_env_info env info))
+          (let [new-mapsize (* factor (.me_mapsize info))]
+            (log/debug "Increasing mapsize to:" new-mapsize)
+            (env-set-mapsize env new-mapsize))))
+      (finally
+        (.unlock mapsize-lock stamp)))))
 
 (defrecord LMDBTransaction [^long txn close-fn]
   Closeable
@@ -261,8 +270,11 @@
 
   Closeable
   (close [_]
-    (cio/with-write-lock mapsize-lock
-      (env-close env))))
+    (let [stamp (acquire-write-lock mapsize-lock)]
+      (try
+        (env-close env)
+        (finally
+          (.unlock mapsize-lock stamp))))))
 
 (def kv
   {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags ::env-mapsize] :as options}]
