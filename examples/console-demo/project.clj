@@ -1,8 +1,8 @@
-(defproject juxt/console-demo "derived-from-git"
+(defproject juxt/console-demo "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [juxt/crux-core "derived-from-git"]
-                 [juxt/crux-rocksdb "derived-from-git"]
-                 [juxt/crux-http-server "derived-from-git"]
+                 [juxt/crux-core "crux-git-version-beta"]
+                 [juxt/crux-rocksdb "crux-git-version-beta"]
+                 [juxt/crux-http-server "crux-git-version-alpha"]
                  [integrant "0.8.0"]
                  [integrant/repl "0.3.1"]]
 

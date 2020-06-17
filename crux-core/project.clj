@@ -1,4 +1,4 @@
-(defproject juxt/crux-core "derived-from-git"
+(defproject juxt/crux-core "crux-git-version-beta"
   :description "An open source document database with bitemporal graph queries"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
@@ -14,7 +14,7 @@
                  [org.agrona/agrona "1.0.7"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[juxt/crux-test "derived-from-git" :scope "test"]
+             :test {:dependencies [[juxt/crux-test "crux-git-version" :scope "test"]
                                    [org.clojure/test.check "0.10.0"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]

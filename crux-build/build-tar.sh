@@ -1,5 +1,5 @@
 #!/bin/bash
-CRUX_VERSION_SUB="s/derived-from-git/${CRUX_VERSION:-$(git describe --tags)}/g"
+CRUX_VERSION_SUB="s/crux-git-version/${CRUX_VERSION:-$(git describe --tags)}/g"
 DEPS_EDN="${DEPS_EDN:-deps.edn}"
 CRUX_EDN="${CRUX_EDN:-crux.edn}"
 LOGBACK_XML="${LOGBACK_XML:-logback.xml}"

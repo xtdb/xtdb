@@ -1,14 +1,14 @@
-(defproject juxt/crux-bench "derived-from-git"
+(defproject juxt/crux-bench "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/data.json "0.2.7"]
                  [org.clojure/tools.cli "1.0.194"]
-                 [juxt/crux-core "derived-from-git"]
-                 [juxt/crux-kafka "derived-from-git"]
-                 [juxt/crux-kafka-embedded "derived-from-git"]
-                 [juxt/crux-rocksdb "derived-from-git"]
-                 [juxt/crux-lmdb "derived-from-git"]
-                 [juxt/crux-metrics "derived-from-git"]
-                 [juxt/crux-test "derived-from-git" :exclusions [org.apache.commons/commons-lang3
+                 [juxt/crux-core "crux-git-version-beta"]
+                 [juxt/crux-kafka "crux-git-version-beta"]
+                 [juxt/crux-kafka-embedded "crux-git-version-beta"]
+                 [juxt/crux-rocksdb "crux-git-version-beta"]
+                 [juxt/crux-lmdb "crux-git-version-alpha"]
+                 [juxt/crux-metrics "crux-git-version-alpha"]
+                 [juxt/crux-test "crux-git-version" :exclusions [org.apache.commons/commons-lang3
                                                                  org.slf4j/jcl-over-slf4j
                                                                  joda-time]]
                  [ch.qos.logback/logback-classic "1.2.3"]
