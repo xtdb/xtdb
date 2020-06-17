@@ -5,6 +5,7 @@
                    ["Configuration" {:file "docs/configuration.adoc"}]
                    ["Transactions" {:file "docs/transactions.adoc"}]
                    ["Queries" {:file "docs/queries.adoc"}]
+                   ["SQL" {:file "docs/sql.adoc"}]
                    ["Advanced" {:file "docs/advanced.adoc"}]
                    ["Kafka Connect Crux" {:file "docs/kafka-connect-crux.adoc"}]
                    ["About Crux" {:file "docs/about.adoc"}]]}

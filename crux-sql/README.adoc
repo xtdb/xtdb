@@ -1,4 +1,4 @@
-= crux-sql
+= SQL
 
 SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
 
@@ -10,7 +10,7 @@ First, add the `crux-sql` dependency to your project:
 
 [source,clojure]
 ----
-[juxt/crux-sql "RELEASE"]]
+[juxt/crux-sql "RELEASE"]
 ----
 
 Then add the calcite module to your topology:
