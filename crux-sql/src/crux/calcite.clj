@@ -333,21 +333,21 @@
       []
     (enumerator []
       (let [_ (log/debug "Executing query:" q)
-            db (crux/open-db node valid-time transaction-time)
-            results (atom (crux/q db q))
+            results (crux/open-q (crux/db node valid-time transaction-time) q)
+            next-results (atom (iterator-seq results))
             current (atom nil)]
         (proxy [org.apache.calcite.linq4j.Enumerator]
             []
           (current []
             (transform-result column-types @current))
           (moveNext []
-            (reset! current (first @results))
-            (swap! results next)
+            (reset! current (first @next-results))
+            (swap! next-results next)
             (boolean @current))
           (reset []
             (throw (UnsupportedOperationException.)))
           (close []
-            (.close db)))))))
+            (.close results)))))))
 
 (defn ^Enumerable scan [node ^Pair schema+expressions column-types ^DataContext data-context]
   (try
