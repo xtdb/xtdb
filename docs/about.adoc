@@ -1,16 +1,6 @@
 [#about]
 = About Crux
 
-[#about-background]
-== Background
-
-JUXT has been working on Crux since 2017, following a set of experiences where bitemporality proved challenging to implement at-scale using existing off-the-shelf technologies. Crux has been built by a very small core team who have, by necessity, had to keep the requirements and implemented scope to a minimum. Crux represents a strong foundation for further research and development efforts and provides a basis on which JUXT can release and support a broad variety of open source software products.
-
-[#about-vision]
-== Vision
-
-Crux ultimately aims to make the use of bitemporal modelling intuitive and accessible to as wide an audience as possible. Whilst bitemporality is only considered _absolutely essential_ for a small number of use-cases, we believe that broad usage bitemporality could significantly reduce the hidden complexity in our global information systems.
-
 [#about-team]
 == Team
 
