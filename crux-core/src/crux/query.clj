@@ -36,13 +36,16 @@
 
 (def ^:private built-ins '#{and})
 
+(defn- pred-constraint? [x]
+  (contains? (methods pred-constraint) x))
+
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? c/valid-id? set?)
                                       :a (s/and c/valid-id? some?)
                                       :v (s/? (some-fn logic-var? literal?)))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
-                        (s/conformer #(or (if (contains? (methods pred-constraint) %)
+                        (s/conformer #(or (if (pred-constraint? %)
                                             %
                                             (some->> (if (qualified-symbol? %)
                                                        (requiring-resolve %)
@@ -250,7 +253,8 @@
      :not-vars (->> (vals not-vars)
                     (reduce into not-join-vars))
      :pred-vars (set (for [{:keys [pred return]} pred-clauses
-                           arg (cons return (cons (:pred-fn pred) (:args pred)))
+                           arg (cons return (cond->> (:args pred)
+                                              (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred))))
                            :when (logic-var? arg)]
                        arg))
      :pred-return-vars (set (for [{:keys [pred return]} pred-clauses
@@ -584,7 +588,7 @@
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
-          :when (not (or (contains? (methods pred-constraint) var)
+          :when (not (or (pred-constraint? var)
                          (contains? var->bindings var)))]
     (throw (IllegalArgumentException.
             (str "Clause refers to unknown variable: "
@@ -645,7 +649,8 @@
               pred-vars (filter logic-var? (cons pred-fn args))
               pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars)
               arg-bindings (for [arg (cons pred-fn args)]
-                             (if (logic-var? arg)
+                             (if (and (logic-var? arg)
+                                      (not (pred-constraint? arg)))
                                (get var->bindings arg)
                                arg))]]
     (do (validate-existing-vars var->bindings clause pred-vars)
@@ -838,7 +843,6 @@
                                                 body-vars (->> (collect-vars (normalize-clauses body))
                                                                (vals)
                                                                (reduce into #{}))
-                                                body-vars (remove (methods pred-constraint) body-vars)
                                                 body-var->hidden-var (zipmap body-vars
                                                                              (map gensym body-vars))]]
                                       (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))
@@ -873,7 +877,8 @@
   (let [new-known-vars (->> pred-clauses
                             (reduce
                              (fn [acc {:keys [pred return]}]
-                               (if (->> (cons (:pred-fn pred) (:args pred))
+                               (if (->> (cond->> (:args pred)
+                                          (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))
                                         (filter logic-var?)
                                         (set)
                                         (set/superset? acc))
@@ -897,7 +902,7 @@
                           arg-vars
                           stats]
   (let [collected-vars (collect-vars type->clauses)
-        invalid-leaf-vars (set (concat arg-vars (:rule-vars collected-vars) (:e-vars collected-vars) (:or-vars collected-vars)))
+        invalid-leaf-vars (set (concat arg-vars (:e-vars collected-vars)))
         non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
