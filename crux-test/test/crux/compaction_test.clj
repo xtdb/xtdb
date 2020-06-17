@@ -33,4 +33,4 @@
 
     (with-open [api2 (Crux/startNode opts)]
       (api/await-tx api2 tx nil)
-      (t/is (= 2 (count (api/history api2 :foo)))))))
+      (t/is (= 2 (count (api/entity-history (api/db api2) :foo :asc)))))))

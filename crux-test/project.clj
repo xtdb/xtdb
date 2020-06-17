@@ -1,19 +1,19 @@
-(defproject juxt/crux-test "derived-from-git"
+(defproject juxt/crux-test "crux-git-version"
   :description "Crux Tests Project"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [juxt/crux-core "derived-from-git"]
-                 [juxt/crux-rocksdb "derived-from-git"]
-                 [juxt/crux-lmdb "derived-from-git"]
-                 [juxt/crux-kafka "derived-from-git" :exclusions [commons-codec]]
-                 [juxt/crux-kafka-connect "derived-from-git"]
-                 [juxt/crux-kafka-embedded "derived-from-git"]
-                 [juxt/crux-jdbc "derived-from-git"]
-                 [juxt/crux-http-server "derived-from-git" :exclusions [commons-codec]]
-                 [juxt/crux-metrics "derived-from-git"]
-                 [juxt/crux-rdf "derived-from-git"]
+                 [juxt/crux-core "crux-git-version-beta"]
+                 [juxt/crux-rocksdb "crux-git-version-beta"]
+                 [juxt/crux-lmdb "crux-git-version-alpha"]
+                 [juxt/crux-kafka "crux-git-version-beta" :exclusions [commons-codec]]
+                 [juxt/crux-kafka-connect "crux-git-version-beta"]
+                 [juxt/crux-kafka-embedded "crux-git-version-beta"]
+                 [juxt/crux-jdbc "crux-git-version-beta"]
+                 [juxt/crux-http-server "crux-git-version-alpha" :exclusions [commons-codec]]
+                 [juxt/crux-metrics "crux-git-version-alpha"]
+                 [juxt/crux-rdf "crux-git-version-alpha"]
 
                  ;; JDBC
                  [com.zaxxer/HikariCP "3.3.1"]

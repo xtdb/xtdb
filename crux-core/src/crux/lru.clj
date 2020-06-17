@@ -1,6 +1,5 @@
 (ns ^:no-doc crux.lru
   (:require [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv])
   (:import [clojure.lang Counted ILookup]
@@ -56,89 +55,3 @@
       Counted
       (count [_]
         (.size cache)))))
-
-(defn- ensure-iterator-open [^AtomicBoolean closed-state]
-  (when (.get closed-state)
-    (throw (IllegalStateException. "Iterator closed."))))
-
-(defrecord CachedIterator [i ^StampedLock lock ^AtomicBoolean closed-state]
-  kv/KvIterator
-  (seek [_ k]
-    (cio/with-read-lock lock
-      (ensure-iterator-open closed-state)
-      (kv/seek i k)))
-
-  (next [_]
-    (cio/with-read-lock lock
-      (ensure-iterator-open closed-state)
-      (kv/next i)))
-
-  (prev [_]
-    (cio/with-read-lock lock
-      (ensure-iterator-open closed-state)
-      (kv/prev i)))
-
-  (value [_]
-    (cio/with-read-lock lock
-      (ensure-iterator-open closed-state)
-      (kv/value i)))
-
-  Closeable
-  (close [_]
-    (cio/with-write-lock lock
-      (ensure-iterator-open closed-state)
-      (.set closed-state true))))
-
-(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? ^StampedLock lock iterators-state]
-  kv/KvSnapshot
-  (new-iterator [_]
-    (if-let [^CachedIterator i (->> @iterators-state
-                                    (filter (fn [^CachedIterator i]
-                                              (.get ^AtomicBoolean (.closed-state i))))
-                                    (first))]
-      (if (.compareAndSet ^AtomicBoolean (.closed-state i) true false)
-        i
-        (recur))
-      (let [i (kv/new-iterator snapshot)
-            i (->CachedIterator i lock (AtomicBoolean.))]
-        (swap! iterators-state conj i)
-        i)))
-
-  (get-value [_ k]
-    (kv/get-value snapshot k))
-
-  Closeable
-  (close [_]
-    (doseq [^CachedIterator i @iterators-state]
-      (cio/with-write-lock lock
-        (.set ^AtomicBoolean (.closed-state i) true)
-        (.close ^Closeable (.i i))))
-
-    (when close-snapshot?
-      (.close snapshot))))
-
-(defn new-cached-snapshot ^crux.lru.CachedSnapshot [snapshot close-snapshot?]
-  (->CachedSnapshot snapshot close-snapshot? (StampedLock.) (atom #{})))
-
-(defrecord CachedSnapshotKvStore [kv]
-  kv/KvStore
-  (new-snapshot [_] (new-cached-snapshot (kv/new-snapshot kv) true))
-  (store [_ kvs] (kv/store kv kvs))
-  (delete [_ ks] (kv/delete kv ks))
-  (fsync [_] (kv/fsync kv))
-  (compact [_] (kv/compact kv))
-  (backup [_ dir] (kv/backup kv dir))
-  (count-keys [_] (kv/count-keys kv))
-  (db-dir [_] (kv/db-dir kv))
-  (kv-name [_] (kv/kv-name kv))
-
-  Closeable
-  (close [_] (.close ^Closeable kv)))
-
-;; TODO: The options are kept to avoid having to change all kv stores
-;; using wrap-lru-cache.
-(def options {})
-
-(defn wrap-lru-cache ^java.io.Closeable [kv _]
-  (cond-> kv
-    (not (instance? CachedSnapshotKvStore kv)) (->CachedSnapshotKvStore)))

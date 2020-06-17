@@ -21,61 +21,45 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 6)
+(def ^:const index-version 8)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
 
-;; index for actual document store
-(def ^:const ^:private content-hash->doc-index-id 0)
+;; index for object store
+(def ^:const content-hash->doc-index-id 0)
 
-
-;; two main indexes for querying
-(def ^:const ^:private avec-index-id 1)
-(def ^:const ^:private aecv-index-id 2)
-
-;; how they work
-(comment
-  (api/submit-tx syst [:crux.tx/put {:crux.db/id :ids/ivan :name "ivan"}])
-
-  ;; [roughly speaking] for queries by attr name and value
-  ;; in avec-index-id
-  ;; [:name "ivan" :ids/ivan "ivan-content-hash"]
-
-  ;; [roughly speaking] for entity queries by id
-  ;; in aecv-index-id
-  ;; [:name :ids/ivan "ivan-content-hash" "ivan"]
-
-  (api/q db {:find ?e
-             :where
-             [?e :name "ivan"]}))
+(def ^:const ave-index-id 1)
+(def ^:const ecav-index-id 2)
+(def ^:const hash-cache-index-id 3)
 
 ;; main bitemp index [reverse]
-(def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 3)
-
-;; for crux own needs
-(def ^:const ^:private meta-key->value-index-id 4)
-
-;; Repurpose old id from internal tx-log used for testing for failed tx
-;; ids.
-(def ^:const ^:private failed-tx-id-index-id 5)
-
-;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
-(def ^:const ^:private index-version-index-id 6)
+(def ^:const entity+vt+tt+tx-id->content-hash-index-id 4)
 
 ;; second bitemp index [also reverse]
 ;; z combines vt and tt
 ;; used when a lookup by the first index fails
-(def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
+(def ^:const entity+z+tx-id->content-hash-index-id 5)
+
+;; for crux own needs
+(def ^:const meta-key->value-index-id 6)
+
+(def ^:const failed-tx-id-index-id 7)
+
+;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
+(def ^:const index-version-index-id 8)
 
 ;; used in standalone TxLog
-(def ^:const ^:private tx-events-index-id 8)
+(def ^:const tx-events-index-id 9)
 
-(def ^:const ^:private value-type-id-size Byte/BYTES)
+
+;; prefix indexes
+(def ^:const av-index-id 10)
+(def ^:const ae-index-id 11)
+
+(def ^:const value-type-id-size Byte/BYTES)
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
-
-(def empty-buffer (mem/allocate-unpooled-buffer 0))
 
 (def ^:const ^:private max-string-index-length 128)
 
@@ -96,6 +80,8 @@
 (def ^:private string-value-type-id 4)
 (def ^:private bytes-value-type-id 5)
 (def ^:private object-value-type-id 6)
+(def ^:private boolean-value-type-id 7)
+(def ^:private char-value-type-id 8)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -155,6 +141,16 @@
   (value->buffer [this to]
     (throw (UnsupportedOperationException. "Byte arrays as values is not supported.")))
 
+  Boolean
+  (value->buffer [this ^MutableDirectBuffer to]
+    (mem/limit-buffer
+     (doto to
+       (.putByte 0 boolean-value-type-id)
+       (.putByte value-type-id-size ^byte (if this
+                                            1
+                                            0)))
+     (+ value-type-id-size Byte/BYTES)))
+
   Byte
   (value->buffer [this to]
     (value->buffer (long this) to))
@@ -195,8 +191,12 @@
       (.putByte 0 (byte date-value-type-id))))
 
   Character
-  (value->buffer [this to]
-    (value->buffer (str this) to))
+  (value->buffer [this ^MutableDirectBuffer to]
+    (mem/limit-buffer
+     (doto to
+       (.putByte 0 char-value-type-id)
+       (.putChar value-type-id-size this ByteOrder/BIG_ENDIAN))
+     (+ value-type-id-size Character/BYTES)))
 
   String
   (value->buffer [this ^MutableDirectBuffer to]
@@ -268,7 +268,7 @@
 
 (defn- decode-double ^double [^DirectBuffer buffer]
   (let [l (dec (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN))
-        l (bit-xor l (bit-or (bit-shift-right (bit-xor l Long/MIN_VALUE) (dec Long/SIZE)) Long/MIN_VALUE))]
+        l (bit-xor l (bit-or (bit-shift-right (bit-not l) (dec Long/SIZE)) Long/MIN_VALUE))]
     (Double/longBitsToDouble l)))
 
 (defn- decode-string ^String [^DirectBuffer buffer]
@@ -283,35 +283,30 @@
           (aset bs (dec idx) (unchecked-byte (- b offset)))
           (recur (inc idx)))))))
 
-;; TODO: Booleans should really have their own value type and encode
-;; as single bytes, but this change would require an index bump.
+(defn- decode-boolean ^Boolean [^DirectBuffer buffer]
+  (= 1 (.getByte buffer value-type-id-size)))
 
-(def ^:private true-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer true)))
-(def ^:private false-value-buffer (mem/copy-to-unpooled-buffer (->value-buffer false)))
+(defn- decode-char ^Character [^DirectBuffer buffer]
+  (.getChar buffer value-type-id-size ByteOrder/BIG_ENDIAN))
 
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
-  (when buffer
-    (case (.getByte (value-buffer-type-id buffer) 0)
+  (when (and buffer (pos? (.capacity buffer)))
+    (case (.getByte buffer 0)
+      (1 2 3 4 7 8) true
       0 (= buffer nil-id-buffer)
-      (1 2 3 4) true
-      6 (or (= buffer true-value-buffer)
-            (= buffer false-value-buffer))
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
-  (let [type-id (.getByte (value-buffer-type-id buffer) 0)]
+  (let [type-id (.getByte buffer 0)]
     (case type-id
-      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
-          nil
-          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
       1 (decode-long buffer) ;; long-value-type-id
       2 (decode-double buffer) ;; double-value-type-id
       3 (Date. (decode-long buffer)) ;; date-value-type-id
       4 (decode-string buffer) ;; string-value-type-id
-      6 (cond ;; object-value-type-id
-          (= buffer true-value-buffer) true
-          (= buffer false-value-buffer) false
-          :else
+      7 (decode-boolean buffer) ;; boolean-value-type-id
+      8 (decode-char buffer) ;; char-value-type-id
+      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
+          nil
           (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
       (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
@@ -551,104 +546,7 @@
                         (->> (.readFully data-input))))
       0))
 
-(defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
-  (assert (= id-size (.capacity content-hash)) (mem/buffer->hex content-hash))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (mem/limit-buffer
-     (doto b
-       (.putByte 0 content-hash->doc-index-id)
-       (.putBytes index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash)))
-     (+ index-id-size id-size))))
-
-(defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
-  (assert (= (+ index-id-size id-size) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= content-hash->doc-index-id index-id))
-    (Id. (mem/slice-buffer k index-id-size id-size) 0)))
-
-(defn encode-avec-key-to
-  (^org.agrona.MutableDirectBuffer[b attr]
-   (encode-avec-key-to b attr empty-buffer empty-buffer empty-buffer))
-  (^org.agrona.MutableDirectBuffer[b attr v]
-   (encode-avec-key-to b attr v empty-buffer empty-buffer))
-  (^org.agrona.MutableDirectBuffer[b attr v entity]
-   (encode-avec-key-to b attr v entity empty-buffer))
-  (^org.agrona.MutableDirectBuffer
-   [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity ^DirectBuffer content-hash]
-   (assert (= id-size (.capacity attr)) (mem/buffer->hex attr))
-   (assert (or (= id-size (.capacity entity))
-               (zero? (.capacity entity))) (mem/buffer->hex entity))
-   (assert (or (= id-size (.capacity content-hash))
-               (zero? (.capacity content-hash))) (mem/buffer->hex content-hash))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (.capacity v) (.capacity entity) (.capacity content-hash))))]
-     (mem/limit-buffer
-      (doto b
-        (.putByte 0 avec-index-id)
-        (.putBytes index-id-size attr 0 id-size)
-        (.putBytes (+ index-id-size id-size) v 0 (.capacity v))
-        (.putBytes (+ index-id-size id-size (.capacity v)) entity 0 (.capacity entity))
-        (.putBytes (+ index-id-size id-size (.capacity v) (.capacity entity)) content-hash 0 (.capacity content-hash)))
-      (+ index-id-size id-size (.capacity v) (.capacity entity) (.capacity content-hash))))))
-
-(defrecord EntityValueContentHash [eid value content-hash])
-
-(defn decode-avec-key->evc-from
-  ^crux.codec.EntityValueContentHash [^DirectBuffer k]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ index-id-size id-size id-size id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= avec-index-id index-id))
-      (let [value-size (- length id-size id-size id-size index-id-size)
-            value (mem/slice-buffer k (+ index-id-size id-size) value-size)
-            entity (Id. (mem/slice-buffer k (+ index-id-size id-size value-size) id-size) 0)
-            content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size value-size id-size) id-size) 0)]
-        (->EntityValueContentHash entity value content-hash)))))
-
-(defn encode-aecv-key-to
-  (^org.agrona.MutableDirectBuffer [b attr]
-   (encode-aecv-key-to b attr empty-buffer empty-buffer empty-buffer))
-  (^org.agrona.MutableDirectBuffer [b attr entity]
-   (encode-aecv-key-to b attr entity empty-buffer empty-buffer))
-  (^org.agrona.MutableDirectBuffer [b attr entity content-hash]
-   (encode-aecv-key-to b attr entity content-hash empty-buffer))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer v]
-   (assert (= id-size (.capacity attr)) (mem/buffer->hex attr))
-   (assert (or (= id-size (.capacity content-hash))
-               (zero? (.capacity content-hash))) (mem/buffer->hex content-hash))
-   (assert (or (= id-size (.capacity entity))
-               (zero? (.capacity entity))) (mem/buffer->hex entity))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (.capacity entity) (.capacity content-hash) (.capacity v))))]
-     (mem/limit-buffer
-      (doto b
-        (.putByte 0 aecv-index-id)
-        (.putBytes index-id-size attr 0 id-size)
-        (.putBytes (+ index-id-size id-size) entity 0 (.capacity entity))
-        (.putBytes (+ index-id-size id-size (.capacity entity)) content-hash 0 (.capacity content-hash))
-        (.putBytes (+ index-id-size id-size (.capacity entity) (.capacity content-hash)) v 0 (.capacity v)))
-      (+ index-id-size id-size (.capacity entity) (.capacity content-hash) (.capacity v))))))
-
-(defn decode-aecv-key->evc-from
-  ^crux.codec.EntityValueContentHash [^DirectBuffer k]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ index-id-size id-size id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= aecv-index-id index-id))
-      (let [value-size (- length id-size id-size id-size index-id-size)
-            entity (Id. (mem/slice-buffer k (+ index-id-size id-size) id-size) 0)
-            content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size id-size) id-size) 0)
-            value (mem/slice-buffer k (+ index-id-size id-size id-size id-size) value-size)]
-        (->EntityValueContentHash entity value content-hash)))))
-
-(defn encode-meta-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
-  (assert (= id-size (.capacity k)) (mem/buffer->hex k))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (mem/limit-buffer
-     (doto b
-       (.putByte 0 meta-key->value-index-id)
-       (.putBytes index-id-size k 0 (.capacity k)))
-     (+ index-id-size id-size))))
-
-(defn- descending-long ^long [^long l]
+(defn descending-long ^long [^long l]
   (bit-xor (bit-not l) Long/MIN_VALUE))
 
 (defn date->reverse-time-ms ^long [^Date date]
@@ -657,150 +555,36 @@
 (defn reverse-time-ms->date ^java.util.Date [^long reverse-time-ms]
   (Date. (descending-long reverse-time-ms)))
 
-(defn- maybe-long-size ^long [x]
+(defn maybe-long-size ^long [x]
   (if x
     Long/BYTES
     0))
-
-(defn encode-entity+vt+tt+tx-id-key-to
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-entity+vt+tt+tx-id-key-to b empty-buffer nil nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
-   (encode-entity+vt+tt+tx-id-key-to b entity nil nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity valid-time]
-   (encode-entity+vt+tt+tx-id-key-to b entity valid-time nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^Date valid-time ^Date transact-time ^Long tx-id]
-   (assert (or (= id-size (.capacity entity))
-               (zero? (.capacity entity))) (mem/buffer->hex entity))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ index-id-size (.capacity entity))
-                                                             valid-time (+ Long/BYTES)
-                                                             transact-time (+ Long/BYTES)
-                                                             tx-id (+ Long/BYTES))))]
-     (.putByte b 0 entity+vt+tt+tx-id->content-hash-index-id)
-     (.putBytes b index-id-size entity 0 (.capacity entity))
-     (when valid-time
-       (.putLong b (+ index-id-size id-size) (date->reverse-time-ms valid-time) ByteOrder/BIG_ENDIAN))
-     (when transact-time
-       (.putLong b (+ index-id-size id-size Long/BYTES) (date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN))
-     (when tx-id
-       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) (descending-long tx-id) ByteOrder/BIG_ENDIAN))
-     (->> (+ index-id-size (.capacity entity)
-             (maybe-long-size valid-time) (maybe-long-size transact-time) (maybe-long-size tx-id))
-          (mem/limit-buffer b)))))
 
 (defrecord EntityTx [^Id eid ^Date vt ^Date tt ^long tx-id ^Id content-hash]
   IdToBuffer
   (id->buffer [this to]
     (id->buffer eid to)))
 
-(defn decode-entity+vt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
-  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= entity+vt+tt+tx-id->content-hash-index-id index-id))
-    (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
-          valid-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
-          transact-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
-          tx-id (descending-long (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
-      (->EntityTx entity valid-time transact-time tx-id nil))))
-
-(defn encode-entity-tx-z-number [valid-time transaction-time]
-  (morton/longs->morton-number (date->reverse-time-ms valid-time)
-                               (date->reverse-time-ms transaction-time)))
-
-(defn encode-entity+z+tx-id-key-to
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-entity+z+tx-id-key-to b empty-buffer nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
-   (encode-entity+z+tx-id-key-to b entity nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity z]
-   (encode-entity+z+tx-id-key-to b entity z nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity z ^Long tx-id]
-   (assert (or (= id-size (.capacity entity))
-               (zero? (.capacity entity))) (mem/buffer->hex entity))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ index-id-size (.capacity entity))
-                                                             z (+ (* 2 Long/BYTES))
-                                                             tx-id (+ Long/BYTES))))
-         [upper-morton lower-morton] (when z
-                                       (morton/morton-number->interleaved-longs z))]
-     (.putByte b 0 entity+z+tx-id->content-hash-index-id)
-     (.putBytes b index-id-size entity 0 (.capacity entity))
-     (when z
-       (.putLong b (+ index-id-size id-size) upper-morton ByteOrder/BIG_ENDIAN)
-       (.putLong b (+ index-id-size id-size Long/BYTES) lower-morton ByteOrder/BIG_ENDIAN))
-     (when tx-id
-       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) (descending-long tx-id) ByteOrder/BIG_ENDIAN))
-     (->> (+ index-id-size (.capacity entity) (if z (* 2 Long/BYTES) 0) (maybe-long-size tx-id))
-          (mem/limit-buffer b)))))
-
-(defn decode-entity+z+tx-id-key-as-z-number-from [^DirectBuffer k]
-  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= entity+z+tx-id->content-hash-index-id index-id))
-    (morton/interleaved-longs->morton-number
-     (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN)
-     (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))))
-
-(defn decode-entity+z+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
-  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= entity+z+tx-id->content-hash-index-id index-id))
-    (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
-          [valid-time transaction-time] (morton/morton-number->longs (decode-entity+z+tx-id-key-as-z-number-from k))
-          tx-id (descending-long (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))]
-      (->EntityTx entity (reverse-time-ms->date valid-time) (reverse-time-ms->date transaction-time) tx-id nil))))
-
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
-    {:crux.db/id (str (.eid entity-tx))
-     :crux.db/content-hash (str (.content-hash entity-tx))
+    {:crux.db/id (.eid entity-tx)
+     :crux.db/content-hash (.content-hash entity-tx)
      :crux.db/valid-time (.vt entity-tx)
      :crux.tx/tx-time (.tt entity-tx)
      :crux.tx/tx-id (.tx-id entity-tx)}))
 
-(defn encode-failed-tx-id-key-to
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-failed-tx-id-key-to b nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b tx-id]
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size (maybe-long-size tx-id))))]
-     (.putByte b 0 failed-tx-id-index-id)
-     (when tx-id
-       (.putLong b index-id-size (descending-long tx-id) ByteOrder/BIG_ENDIAN))
-     (mem/limit-buffer b (+ index-id-size (maybe-long-size tx-id))))))
+(defn multiple-values? [v]
+  (or (vector? v) (set? v)))
 
-(defn decode-failed-tx-id-key-from [^DirectBuffer k]
-  (assert (= (+ index-id-size Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= failed-tx-id-index-id index-id))
-    (descending-long (.getLong k index-id-size ByteOrder/BIG_ENDIAN))))
+(defn vectorize-value [v]
+  (cond-> v
+    (not (multiple-values? v))
+    (vector)))
 
-(defn encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-id-size))]
-    (.putByte b 0 index-version-index-id)
-    (mem/limit-buffer b index-id-size)))
+(defn evicted-doc?
+  [{:crux.db/keys [id evicted?] :as doc}]
+  (boolean (or (= :crux.db/evicted id) evicted?)))
 
-(defn encode-index-version-value-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^long version]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-version-size))]
-    (doto b
-      (.putLong 0 version ByteOrder/BIG_ENDIAN))
-    (mem/limit-buffer b index-version-size)))
-
-(defn decode-index-version-value-from ^long [^MutableDirectBuffer b]
-  (.getLong b 0 ByteOrder/BIG_ENDIAN))
-
-(defn encode-tx-event-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b, {:crux.tx/keys [tx-id tx-time]}]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size Long/BYTES Long/BYTES)))]
-    (doto b
-      (.putByte 0 tx-events-index-id)
-      (.putLong index-id-size tx-id ByteOrder/BIG_ENDIAN)
-      (.putLong (+ index-id-size Long/BYTES)
-                (date->reverse-time-ms (or tx-time (Date.)))
-                ByteOrder/BIG_ENDIAN))))
-
-(defn tx-event-key? [^DirectBuffer k]
-  (= tx-events-index-id (.getByte k 0)))
-
-(defn decode-tx-event-key-from [^DirectBuffer k]
-  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (assert (tx-event-key? k))
-  {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
-   :crux.tx/tx-time (reverse-time-ms->date (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
+(defn keep-non-evicted-doc [doc]
+  (when-not (evicted-doc? doc)
+    doc))

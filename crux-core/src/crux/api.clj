@@ -16,9 +16,11 @@
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 (s/def :crux.db/evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
-(s/def :crux.db.fn/body (s/cat :fn #{'fn}
-                               :args (s/coll-of symbol? :kind vector? :min-count 1)
-                               :body (s/* any?)))
+
+(s/def :crux.db/fn
+  (s/cat :fn #{'fn}
+         :args (s/coll-of symbol? :kind vector? :min-count 1)
+         :body (s/* any?)))
 
 (defn- conform-tx-ops [tx-ops]
   (->> tx-ops
@@ -28,8 +30,7 @@
                tx-op)))
        (mapv vec)))
 
-(defprotocol PCruxNode
-  "Provides API access to Crux."
+(defprotocol DBProvider
   (db
     ^crux.api.ICruxDatasource [node]
     ^crux.api.ICruxDatasource [node ^Date valid-time]
@@ -60,34 +61,13 @@
 
   This DB opens up shared resources to make multiple requests faster - it must
   be `.close`d when you've finished using it (for example, in a `with-open`
-  block)")
+  block)"))
 
-  (document [node content-hash]
-    "Reads a document from the document store based on its
-  content hash.")
+(defprotocol TransactionFnContext
+  (indexing-tx [tx-fn-ctx]))
 
-  (documents [node content-hashes-set]
-    "Reads the set of documents from the document store based on their
-  respective content hashes. Returns a map content-hash->document")
-
-  (history [node eid]
-    "Returns the transaction history of an entity, in reverse
-  chronological order. Includes corrections, but does not include
-  the actual documents.")
-
-  (history-range [node eid
-                  ^Date valid-time-start
-                  ^Date transaction-time-start
-                  ^Date valid-time-end
-                  ^Date transaction-time-end]
-    "Returns the transaction history of an entity, ordered by valid
-  time / transaction time in chronological order, earliest
-  first. Includes corrections, but does not include the actual
-  documents.
-
-  Giving nil as any of the date arguments makes the range open
-  ended for that value.")
-
+(defprotocol PCruxNode
+  "Provides API access to Crux."
   (status [node]
     "Returns the status of this node as a map.")
 
@@ -101,7 +81,6 @@
   (sync
     [node]
     [node ^Duration timeout]
-    ^:deprecated [node ^Date transaction-time ^Duration timeout]
     "Blocks until the node has caught up indexing to the latest tx available at
   the time this method is called. Will throw an exception on timeout. The
   returned date is the latest transaction time indexed by this node. This can be
@@ -178,7 +157,7 @@
                    (:crux.db/valid-time end)
                    (:crux.tx/tx-time end)))
 
-(extend-protocol PCruxNode
+(extend-protocol DBProvider
   ICruxAPI
   (db
     ([this] (.db this))
@@ -188,16 +167,10 @@
   (open-db
     ([this] (.openDB this))
     ([this ^Date valid-time] (.openDB this valid-time))
-    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time)))
+    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time))))
 
-  (document [this content-hash] (.document this content-hash))
-  (documents [this content-hash-set] (.documents this content-hash-set))
-
-  (history [this eid] (.history this eid))
-
-  (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
-
+(extend-protocol PCruxNode
+  ICruxAPI
   (status [this] (.status this))
 
   (tx-committed? [this submitted-tx] (.hasTxCommitted this submitted-tx))
@@ -241,9 +214,7 @@
   "Represents the database as of a specific valid and
   transaction time."
 
-  (entity
-    [db eid]
-    ^:deprecated [db snapshot eid]
+  (entity [db eid]
     "queries a document map for an entity.
   eid is an object which can be coerced into an entity id.
   returns the entity document map.")
@@ -253,20 +224,10 @@
   include tx-id and tx-time.
   eid is an object that can be coerced into an entity id.")
 
-  (new-snapshot ^java.io.Closeable ^:deprecated [db]
-    "Returns a new implementation-specific snapshot allowing for multiple
-  entity calls to share the same KV store snapshot.
-  returns an implementation specific snapshot")
-
-  (q
-    [db query]
-    ^:deprecated [db snapshot query]
+  (q [db query]
     "q[uery] a Crux db.
   query param is a datalog query in map, vector or string form.
-  First signature will evaluate eagerly and will return a set or vector
-  of result tuples.
-  Second signature accepts a db snapshot, see `new-snapshot`.
-  Evaluates *lazily* consequently returns lazy sequence of result tuples.")
+  Returns a set or vector of result tuples.")
 
   (open-q ^java.io.Closeable [db query]
     "lazily q[uery] a Crux db.
@@ -281,33 +242,7 @@
     (doseq [row res]
       ...))
 
-  Once the sequence is closed, attempting to iterate it is undefined.
-  ")
-
-  (history-ascending
-    [db eid]
-    ^:deprecated [db snapshot eid]
-    "Retrieves entity history (lazily, in the deprecated 3-arg arity - see
-  `open-history-ascending`) in chronological order from and including the valid
-  time of the db while respecting transaction time. Includes the documents.")
-
-  (open-history-ascending ^java.io.Closeable [db eid]
-    "Retrieves entity history lazily in chronological order
-  from and including the valid time of the db while respecting
-  transaction time. Includes the documents.")
-
-  (history-descending
-    [db eid]
-    ^:deprecated [db snapshot eid]
-    "Retrieves entity history (lazily, in the deprecated 3-arg arity - see
-  `open-history-descending`) in reverse chronological order from and including
-  the valid time of the db while respecting transaction time. Includes the
-  documents.")
-
-  (open-history-descending ^java.io.Closeable [db eid]
-    "Retrieves entity history lazily in reverse chronological order
-  from and including the valid time of the db while respecting
-  transaction time. Includes the documents.")
+  Once the sequence is closed, attempting to iterate it is undefined.")
 
   (entity-history
     [db eid sort-order]
@@ -359,41 +294,16 @@
 
 (extend-protocol PCruxDatasource
   ICruxDatasource
-  (entity
-    ([this eid]
-     (.entity this eid))
-    ([this snapshot eid]
-     (.entity this snapshot eid)))
+  (entity [this eid] (.entity this eid))
+  (entity-tx [this eid] (.entityTx this eid))
 
-  (entity-tx [this eid]
-    (.entityTx this eid))
-
-  (new-snapshot [this]
-    (.newSnapshot this))
-
-  (q
-    ([this query]
-     (.query this query))
-    ([this snapshot query]
-     (.q this snapshot query)))
-
+  (q [this query] (.query this query))
   (open-q [this query] (.openQuery this query))
-
-  (history-ascending
-    ([this eid] (.historyAscending this eid))
-    ([this snapshot eid] (.historyAscending this snapshot eid)))
-
-  (open-history-ascending [this eid] (.openHistoryAscending this eid))
-
-  (history-descending
-    ([this eid] (.historyDescending this eid))
-    ([this snapshot eid] (.historyDescending this snapshot eid)))
-
-  (open-history-descending [this eid] (.openHistoryDescending this eid))
 
   (entity-history
     ([this eid sort-order] (entity-history this eid sort-order {}))
     ([this eid sort-order opts] (.entityHistory this eid (->HistoryOptions sort-order opts))))
+
   (open-entity-history
     ([this eid sort-order] (open-entity-history this eid sort-order {}))
     ([this eid sort-order opts] (.openEntityHistory this eid (->HistoryOptions sort-order opts))))

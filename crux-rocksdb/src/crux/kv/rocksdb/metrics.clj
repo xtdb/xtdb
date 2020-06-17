@@ -22,13 +22,13 @@
                (let [meters (->> (seq (TickerType/values))
                                  (into {} (map (fn [^TickerType ticker-type]
                                                  [ticker-type (dw/meter registry ["rocksdb" (ticker-type-name ticker-type)])]))))
-                     collector (doto (->collector (get-in kv-store [:kv :stats])
+                     collector (doto (->collector (:stats kv-store)
                                                   (fn [{:keys [ticker-type ticker-count]}]
                                                     (some-> (get meters ticker-type) (dw/mark! ticker-count)))
                                                   bin-size)
                                  .start)]
                  (dw/gauge registry ["rocksdb" "num-snapshots"]
-                           #(.getLongProperty ^RocksDB (get-in kv-store [:kv :db]) "rocksdb.num-snapshots"))
+                           #(.getLongProperty ^RocksDB (:db kv-store) "rocksdb.num-snapshots"))
                  (reify Closeable
                    (close [_]
                      (.shutDown collector shutdown-timeout)))))

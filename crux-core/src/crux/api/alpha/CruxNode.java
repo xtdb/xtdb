@@ -3,6 +3,9 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.ICruxAPI;
+import crux.api.HistoryOptions;
+import crux.api.ICursor;
+import crux.api.HistoryOptions.SortOrder;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -10,7 +13,10 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
@@ -85,24 +91,6 @@ public class CruxNode implements AutoCloseable {
      */
     public Database db(Date validTime, Date transactionTime) {
         return database(node, validTime, transactionTime);
-    }
-
-    private Document document(Object contentHash) {
-        Map<Keyword, Object> doc = node.document(contentHash);
-        return Document.document(doc);
-    }
-
-    /**
-     * Returns the transaction history of an entity, in reverse chronological order. Includes corrections, but does not include the actual documents
-     * @param id Id of the entity to get the history for
-     * @return Iterable set of Documents containing transaction information
-     */
-    public Iterable<Document> history(CruxId id) {
-        @SuppressWarnings("deprecation")
-        List<Map<Keyword,Object>> history = node.history(id.toEdn());
-        return history.stream()
-            .map(this::document)
-            .collect(Collectors.toList());
     }
 
     /**

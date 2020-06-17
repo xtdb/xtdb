@@ -1,5 +1,5 @@
 #!/bin/bash
-CRUX_VERSION_SUB="s/derived-from-git/${CRUX_VERSION:-$(git describe --tags)}/g"
+CRUX_VERSION_SUB="s/crux-git-version/${CRUX_VERSION:-$(git describe --tags)}/g"
 DEPS_EDN="${DEPS_EDN:-deps.edn}"
 CRUX_EDN="${CRUX_EDN:-crux.edn}"
 LOGBACK_XML="${LOGBACK_XML:-logback.xml}"
@@ -19,7 +19,7 @@ cp docker/$CRUX_EDN crux-builder/docker/crux.edn
 cp docker/build-docker.sh docker/Dockerfile crux-builder/docker/
 sed $DEPS_EDN -e $CRUX_VERSION_SUB > crux-builder/docker/deps.edn
 
-cp mvn-uberjar/pom.xml crux-builder/mvn-uberjar/
+sed mvn-uberjar/pom.xml -e $CRUX_VERSION_SUB > crux-builder/mvn-uberjar/pom.xml
 mkdir -p crux-builder/mvn-uberjar/src/main/resources/
 cp $LOGBACK_XML crux-builder/mvn-uberjar/src/main/resources/logback.xml
 cp mvn-uberjar/$CRUX_EDN crux-builder/mvn-uberjar/src/main/resources/crux.edn

@@ -16,11 +16,11 @@
 ;; tag::Indexer[]
 (defprotocol Indexer
   (index-docs [this docs])
-  (unindex-docs [this docs])
+  (unindex-eids [this eids])
   (index-entity-txs [this tx entity-txs])
   (mark-tx-as-failed [this tx])
   (store-index-meta [this k v])
-  (read-index-meta [this k])
+  (read-index-meta [this k] [this k not-found])
   (latest-completed-tx [this])
   (tx-failed? [this tx-id])
   (open-index-store ^java.io.Closeable [this]))
@@ -32,13 +32,11 @@
   (ave [this a v min-e entity-resolver-fn])
   (ae [this a min-e entity-resolver-fn])
   (aev [this a e min-v entity-resolver-fn])
+  (entity-as-of-resolver [this eid valid-time transact-time])
   (entity-as-of [this eid valid-time transact-time])
-  (entity-history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
-  (open-entity-history ^crux.api.ICursor [this eid sort-order opts])
-  (all-content-hashes [this eid])
-  (decode-value [this a content-hash value-buffer])
+  (entity-history [this eid sort-order opts])
+  (decode-value [this value-buffer])
   (encode-value [this value])
-  (get-document [this content-hash])
   (open-nested-index-store ^java.io.Closeable [this]))
 ;; end::IndexStore[]
 

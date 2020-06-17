@@ -2,14 +2,15 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.io :as cio])
-  (:import [java.io DataOutputStream]
+            [crux.io :as cio]
+            [taoensso.nippy :as nippy])
+  (:import [java.io DataInputStream DataOutputStream]
            java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           org.agrona.io.ExpandableDirectBufferOutputStream
+           [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
 
 (defprotocol MemoryRegion
@@ -49,6 +50,8 @@
 (defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
+(def empty-buffer (allocate-unpooled-buffer 0))
+
 (def ^:private ^:const alignment-round-mask 0xf)
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
@@ -74,7 +77,7 @@
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
-   (copy-buffer from (capacity from)))
+   (copy-buffer from (.capacity from)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit]
    (copy-buffer from limit (allocate-buffer limit)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit ^MutableDirectBuffer to]
@@ -82,7 +85,7 @@
      (.putBytes 0 from 0 limit))))
 
 (defn copy-to-unpooled-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
-  (copy-buffer from (capacity from) (allocate-unpooled-buffer (capacity from))))
+  (copy-buffer from (.capacity from) (allocate-unpooled-buffer (.capacity from))))
 
 (defn slice-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long offset ^long limit]
   (UnsafeBuffer. buffer offset limit))
@@ -222,3 +225,9 @@
                (recur (dec idx)))
            (doto buffer
              (.putByte idx (unchecked-byte (inc b))))))))))
+
+(defn <-nippy-buffer [buf]
+  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+
+(defn ->nippy-buffer [v]
+  (->off-heap (nippy/fast-freeze v)))

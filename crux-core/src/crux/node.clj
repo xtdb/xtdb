@@ -8,7 +8,6 @@
             [crux.codec :as c]
             [crux.config :as cc]
             [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -46,54 +45,14 @@
   (db [this valid-time tx-time]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [latest-tx-time (:crux.tx/tx-time (.latestCompletedTx this))
-            _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-                (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
-                                                        tx-time latest-tx-time)
-                                                tx-time latest-tx-time)))
-            valid-time (or valid-time (cio/next-monotonic-date))
-            tx-time (or tx-time latest-tx-time valid-time)]
-
-        (q/db query-engine valid-time tx-time))))
+      (api/db query-engine valid-time tx-time)))
 
   (openDB [this] (.openDB this nil nil))
   (openDB [this valid-time] (.openDB this valid-time nil))
   (openDB [this valid-time tx-time]
-    (let [db (.db this valid-time tx-time)]
-      (assoc db :index-store (q/open-index-store db))))
-
-  (document [this content-hash]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (with-open [index-store (db/open-index-store indexer)]
-        (-> (db/get-single-object object-store index-store (c/new-id content-hash))
-            (idx/keep-non-evicted-doc)))))
-
-  (documents [this content-hash-set]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (with-open [index-store (db/open-index-store indexer)]
-        (->> (db/get-objects object-store index-store (map c/new-id content-hash-set))
-             (into {} (remove (comp idx/evicted-doc? val)))))))
-
-  (history [this eid]
-    (reverse (.historyRange this eid nil nil nil nil)))
-
-  (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (let [latest-tx-time (:crux.tx/tx-time (.latestCompletedTx this))]
-        (when (and transaction-time-end
-                   (or (nil? latest-tx-time)
-                       (pos? (compare transaction-time-end latest-tx-time))))
-          (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
-                                                  transaction-time-end latest-tx-time)
-                                          transaction-time-end latest-tx-time))))
-
-      (with-open [index-store (db/open-index-store indexer)]
-        (->> (db/entity-history-range index-store eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
-             (mapv c/entity-tx->edn)
-             (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time))))))
+      (api/open-db query-engine valid-time tx-time)))
 
   (status [this]
     (cio/with-read-lock lock
@@ -124,7 +83,7 @@
            (NodeOutOfSyncException.
             (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
             tx-time latest-tx-time))
-          (db/tx-failed? indexer tx-id)))))
+          (not (db/tx-failed? indexer tx-id))))))
 
   (openTxLog ^ICursor [this after-tx-id with-ops?]
     (cio/with-read-lock lock
@@ -137,7 +96,7 @@
         (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
               index-store (db/open-index-store indexer)
               tx-log (-> (iterator-seq tx-log-iterator)
-                         (->> (filter #(db/tx-failed? indexer (:crux.tx/tx-id %))))
+                         (->> (remove #(db/tx-failed? indexer (:crux.tx/tx-id %))))
                          (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events]
                                                        :as tx-log-entry}]
                                                    (-> tx-log-entry

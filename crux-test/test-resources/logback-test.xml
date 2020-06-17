@@ -19,7 +19,8 @@
     <logger name="crux.jdbc" level="WARN" />
     <logger name="crux.kv.memdb" level="ERROR" />
     <logger name="crux.rdf" level="ERROR" />
-    <logger name="crux.tx" level="WARN" />
+    <logger name="crux.tx" level="ERROR" />
+
     <logger name="org.apache.kafka" level="ERROR" />
     <logger name="org.apache.zookeeper" level="ERROR" />
     <logger name="kafka" level="ERROR" />

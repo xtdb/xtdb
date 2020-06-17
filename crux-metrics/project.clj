@@ -1,10 +1,10 @@
-(defproject juxt/crux-metrics "derived-from-git"
+(defproject juxt/crux-metrics "crux-git-version-alpha"
   :description "Provides Metrics for Crux nodes"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [juxt/crux-core "derived-from-git"]
+                 [juxt/crux-core "crux-git-version-beta"]
                  [io.dropwizard.metrics/metrics-core "4.1.2"]]
 
   :profiles {:provided
