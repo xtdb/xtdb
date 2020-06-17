@@ -28,7 +28,7 @@
   (success? (LMDB/mdb_env_set_mapsize env size)))
 
 (defn- acquire-write-lock ^long [^StampedLock mapsize-lock]
-  (let [stamp (.tryWriteLock mapsize-lock 10 TimeUnit/SECONDS)]
+  (let [stamp (.tryWriteLock mapsize-lock 120 TimeUnit/SECONDS)]
     (assert (pos? stamp) "LMDB write lock timeout")
     stamp))
 
