@@ -1,6 +1,6 @@
 = crux-sql
 
-SQL adapter for Crux, built on top of https://calcite.apache.org/[Apache Calcite].
+SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
 
 == Setup
 
@@ -37,6 +37,13 @@ A SQL table is a schema that maps Crux attributes to SQL table
 columns. Any document in Crux that matches the `crux.sql.table/query`
 in the schema document is eligible to be returned via the SQL query.
 
+SQL table column names are mapped from the symbols used by the
+`:crux.sql.table/query` query backing the table and referred to by
+`:crux.sql.table/columns`.
+
+Note that in the case where symbols are prefixed with `?`, then `?` is
+stripped for the SQL column name.
+
 For example with the following Crux transaction operation:
 
 [source,clojure]
@@ -70,8 +77,31 @@ Returns:
 [{:name "Ivan"}]
 ----
 
-Note that using JDBC PreparedStatements for queries will be
-significantly faster.
+Note that using JDBC PreparedStatements for queries will be faster.
+
+== Bitemporal Querying
+
+To query using `VALID TIME`:
+
+[source,sql]
+----
+VALIDTIME ('2016-12-01T10:13:30Z')
+SELECT * FROM PERSON
+----
+
+Use `TRANSACTION TIME` also for query consistency:
+
+[source,sql]
+----
+VALIDTIME ('2016-12-01T10:13:30Z')
+TRANSACTIONTIME ('2016-12-01T10:13:30Z')
+SELECT * FROM PERSON
+----
+
+Both `VALIDTIME` and `TRANSACTIONTIME` take an
+https://en.wikipedia.org/wiki/ISO_8601[ISO-8601] date-string, which is
+then parsed using Java's
+https://docs.oracle.com/javase/8/docs/api/java/time/ZonedDateTime.html[ZonedDateTime].
 
 == Connecting
 
@@ -115,16 +145,6 @@ install https://get-coursier.io/docs/cli-installation[Coursier] and run:
 coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n crux -p crux -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf" -d org.apache.calcite.avatica.remote.Driver
 ----
 
-== Column Names
-
-SQL table column names are mapped from the symbols used by the
-`:crux.sql.table/query` query backing the table and referred to by
-`:crux.sql.table/columns`.
-
-Note that in the case where symbols are prefixed with `?`, then `?` is
-stripped for the SQL column name.
-
-
 == Column Types
 
 We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.html[`java.sql.Types`]:
@@ -163,4 +183,7 @@ inside of prepared statements.
 == Current Limitations
 
 * We support a range of calculations (ceil, lower, upper, concat), but
-we do not support all. A notable exception is `cast`.
+we do not support all.
+
+* Projections, filters and inner-joins are handled by Crux. Left outer
+  joins and aggregations are handled by Calcite in memory.
