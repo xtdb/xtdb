@@ -53,4 +53,10 @@
   (doseq [^TpchTable t (TpchTable/getTables)]
     (let [docs (tpch-table->docs t)]
       (println "Transacting" (count docs) (.getTableName t))
-      (fix/transact! node (tpch-table->docs t)))))
+      (let [last-tx (->> docs
+                         (partition-all 1000)
+                         (reduce (fn [last-tx chunk]
+                                   (c/submit-tx node (vec (for [doc chunk]
+                                                            [:crux.tx/put doc]))))
+                                 nil))]
+        (c/await-tx node last-tx)))))
