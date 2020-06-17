@@ -196,14 +196,14 @@
   "Swaps out Calcs/Predicates for symbols and clauses."
   [schema nodes]
   (let [args (atom {})
-        literals (atom {})
+        exprs (atom {})
         clauses (atom [])]
     [(postwalk (fn [x]
                  (condp instance? x
 
                    Expression
                    (let [s (gensym)]
-                     (swap! literals assoc s x)
+                     (swap! exprs assoc s x)
                      s)
 
                    ArbitraryFn
@@ -218,7 +218,7 @@
 
                    RexLiteral
                    (let [s (gensym)]
-                     (swap! literals assoc s (->literal-expression x))
+                     (swap! exprs assoc s (->literal-expression x))
                      s)
 
                    RexInputRef
@@ -226,7 +226,7 @@
 
                    x))
                nodes)
-     @clauses @literals @args]))
+     @clauses @exprs @args]))
 
 (defn- ground-vars [or-statement]
   (let [vars (distinct (mapcat #(filter symbol? (rest (first %))) or-statement))]
@@ -261,23 +261,23 @@
 
 (defn enrich-filter [schema ^RexNode filter]
   (log/debug "Enriching with filter" filter)
-  (let [[filters clauses literals args] (->vars+clauses+exprs schema (->ast filter schema))]
+  (let [[filters clauses exprs args] (->vars+clauses+exprs schema (->ast filter schema))]
     (-> schema
         (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value (->where filters)))
         (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args)
-        (update :literals merge literals))))
+        (update :exprs merge exprs))))
 
 (defn enrich-project [schema projects]
   (log/debug "Enriching project with" projects)
-  (let [[projects clauses literals] (->> (for [rex-node (map #(.-left ^Pair %) projects)]
+  (let [[projects clauses exprs] (->> (for [rex-node (map #(.-left ^Pair %) projects)]
                                            (->ast rex-node schema))
                                          (->vars+clauses+exprs schema))]
     (-> schema
         (assoc-in [:crux.sql.table/query :find] (vec projects))
         (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
-        (update :literals merge literals))))
+        (update :exprs merge exprs))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (log/debug "Enriching join with" condition)
@@ -288,7 +288,7 @@
         s3 (-> s1
                (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
                (update-in [:crux.sql.table/query :args] (partial apply merge))
-               (update :literals merge (:literals s2)))]
+               (update :exprs merge (:exprs s2)))]
     (enrich-filter s3 condition)))
 
 (defn enrich-sort-by [schema sort-fields]
@@ -368,10 +368,10 @@
       (throw e))))
 
 (defn ->expr [schema]
-  (Expressions/constant (Pair. (Expressions/constant (prn-str (dissoc schema :literals)))
+  (Expressions/constant (Pair. (Expressions/constant (prn-str (dissoc schema :exprs)))
                                (Expressions/newArrayInit Pair ^List (map (fn [[k l]]
                                                                            (Expressions/constant (Pair. (str k) l)))
-                                                                         (:literals schema))))))
+                                                                         (:exprs schema))))))
 
 (defn ->column-types [^RelDataType x]
   (Expressions/constant ^List (map #(.getJavaClass jtf (.getType ^RelDataTypeField %)) (.getFieldList x))))
