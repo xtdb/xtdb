@@ -325,19 +325,19 @@
 
   Keyword
   (id->buffer [this to]
-    (id-function to (.getBytes (subs (str this) 1))))
+    (id-function to (.getBytes (subs (str this) 1) StandardCharsets/UTF_8)))
 
   UUID
   (id->buffer [this to]
-    (id-function to (.getBytes (str this))))
+    (id-function to (.getBytes (str this) StandardCharsets/UTF_8)))
 
   URI
   (id->buffer [this to]
-    (id-function to (.getBytes (str (.normalize this)))))
+    (id-function to (.getBytes (str (.normalize this)) StandardCharsets/UTF_8)))
 
   URL
   (id->buffer [this to]
-    (id-function to (.getBytes (.toExternalForm this))))
+    (id-function to (.getBytes (.toExternalForm this) StandardCharsets/UTF_8)))
 
   String
   (id->buffer [this to]
@@ -351,9 +351,9 @@
                       (maybe-url-str this)
                       (maybe-map-str this))]
         (id->buffer id to)
-        (id-function to (nippy/fast-freeze this)))))
+        (id-function to (.getBytes this StandardCharsets/UTF_8)))))
 
-  Collection
+  Set
   (id->buffer [this to]
     (id-function to (binding [*sort-unordered-colls* true]
                       (nippy/fast-freeze this))))
