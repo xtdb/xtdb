@@ -399,10 +399,6 @@
     (id-function to (binding [*sort-unordered-colls* true]
                       (nippy/fast-freeze this))))
 
-  Collection
-  (id->buffer [this to]
-    (throw (IllegalArgumentException. "Collections cannot be ids.")))
-
   Object
   (id->buffer [this to]
     (id-function to (nippy/fast-freeze this)))
@@ -546,7 +542,8 @@
 
 (defn valid-id? [x]
   (try
-    (= id-size (.capacity (->id-buffer x)))
+    (and (not (instance? Collection x))
+         (= id-size (.capacity (->id-buffer x))))
     (catch IllegalArgumentException _
       false)))
 
