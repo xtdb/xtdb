@@ -511,6 +511,10 @@
     (catch IllegalArgumentException _
       false)))
 
+(defn id-buffer? [^DirectBuffer buffer]
+  (and (= id-size (.capacity buffer))
+       (= id-value-type-id (.getByte buffer 0))))
+
 (nippy/extend-freeze
  Id
  :crux.codec/id
