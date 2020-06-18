@@ -90,7 +90,7 @@
     (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))))
 
 (t/deftest test-status
-  (t/is (= (merge {:crux.index/index-version 8}
+  (t/is (= (merge {:crux.index/index-version 9}
                   (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                     {:crux.zk/zk-active? true}))
            (select-keys (api/status *api*) [:crux.index/index-version :crux.zk/zk-active?])))
