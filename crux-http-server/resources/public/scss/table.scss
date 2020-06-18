@@ -522,6 +522,7 @@ $spacing: 0.5rem;
 
     .pagination__arrow-nav--disabled {
 	opacity: 0;
+	pointer-events:none;
     }
     .pagination__arrow-nav--disabled:hover {
 	cursor: initial;

@@ -99,11 +99,32 @@
                          :transaction-time (common/date-time->datetime ttd ttt)})
                        (remove #(nil? (second %)))
                        (into {}))
+         limit (:limit query-params 100)
          current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
          updated-history (conj (into [] (remove #(= query-params %) current-storage)) query-params)]
      {:db (assoc db :query-history updated-history)
-      :dispatch [:navigate :query {} query-params]
+      :dispatch [:navigate :query {} (assoc query-params :limit limit)]
       :local-storage ["query" updated-history]})))
+
+(rf/reg-event-fx
+ ::goto-previous-query-page
+ (fn [{:keys [db]} _]
+   (let [query-params (get-in db [:current-route :query-params])
+         offset (js/parseInt (get-in db [:current-route :query-params :offset] 0))
+         limit (js/parseInt (get-in db [:current-route :query-params :limit] 100))]
+     {:db db
+      :dispatch [:navigate :query {} (assoc query-params :offset (-> (- offset limit)
+                                                                     (max 0)
+                                                                     str))]})))
+
+(rf/reg-event-fx
+ ::goto-next-query-page
+ (fn [{:keys [db]} _]
+   (let [query-params (get-in db [:current-route :query-params])
+         offset (js/parseInt (get-in db [:current-route :query-params :offset] 0))
+         limit (js/parseInt (get-in db [:current-route :query-params :limit] 100))]
+     {:db db
+      :dispatch [:navigate :query {} (assoc query-params :offset (-> (+ offset limit) str))]})))
 
 (rf/reg-event-fx
  ::set-entity-pane-document

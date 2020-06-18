@@ -82,6 +82,16 @@
          :filters {:input (into #{} find-clause)}}}))))
 
 (rf/reg-sub
+ ::query-limit
+ (fn [db _]
+   (js/parseInt (get-in db [:current-route :query-params :limit] 100))))
+
+(rf/reg-sub
+ ::query-offset
+ (fn [db _]
+   (js/parseInt (get-in db [:current-route :query-params :offset] 0))))
+
+(rf/reg-sub
  ::query-result-pane-loading?
  (fn [db _]
    (get-in db [:query :result-pane :loading?])))
@@ -108,7 +118,8 @@
 (rf/reg-sub
  ::query-data-download-link
  (fn [db [_ link-type]]
-   (let [query-params (get-in db [:current-route :query-params])]
+   (let [query-params (-> (get-in db [:current-route :query-params])
+                          (dissoc :limit :offset))]
      (-> (common/route->url :query {} query-params)
          (string/replace #"query" (str "query." link-type))))))
 

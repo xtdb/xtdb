@@ -8,7 +8,10 @@
 (rf/reg-event-fx
  ::fetch-query-table
  (fn [{:keys [db]} _]
-   (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)]
+   (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
+         ;; Get back one more result than necessary - won't be rendered,
+         ;; but used to check if there are more results in the table
+         limit (+ 1 (js/parseInt (:limit query-params 100)))]
      (when (seq query-params)
        {:scroll-top nil
         :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
@@ -16,7 +19,9 @@
         :http-xhrio {:method :get
                      :uri (common/route->url :query
                                              {}
-                                             (assoc query-params :link-entities? true))
+                                             (assoc query-params
+                                                    :link-entities? true
+                                                    :limit limit))
                      :response-format (ajax-edn/edn-response-format)
                      :on-success [::success-fetch-query-table]
                      :on-failure [::fail-fetch-query-table]}}))))
