@@ -16,7 +16,7 @@
       (assert (re-find #"^\d+\.\d+\-\d+\.\d+\.\d+(-(alpha|beta))?$" tag) (str "Tag format unexpected: " tag))
       (if (and (not ahead?) (not dirty?))
         {:prefix tag}
-        (let [[_ prefix minor-version suffix] (re-find #"^(.*\.)(\d)(-(alpha|beta))+$" tag)]
+        (let [[_ prefix minor-version suffix] (re-find #"^(.*\.)(\d+)(-(alpha|beta))?$" tag)]
           {:prefix (str prefix (inc (Integer/parseInt minor-version)))
            :suffix "-SNAPSHOT"})))))
 
