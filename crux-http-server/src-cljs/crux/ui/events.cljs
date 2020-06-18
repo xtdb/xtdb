@@ -40,6 +40,16 @@
    (update-in db [:form-pane :history component] #(if (seq bool) (first bool) (not %)))))
 
 (rf/reg-event-db
+ ::toggle-show-vt
+ (fn [db [_ component bool]]
+   (update-in db [:form-pane :show-vt? component] #(if (nil? %) (not bool) (not %)))))
+
+(rf/reg-event-db
+ ::toggle-show-tt
+ (fn [db [_ component bool]]
+   (update-in db [:form-pane :show-tt? component] #(if (nil? %) (not bool) (not %)))))
+
+(rf/reg-event-db
  ::set-form-pane-view
  (fn [db [_ view]]
    (assoc-in db [:form-pane :view] view)))

@@ -205,6 +205,18 @@
        (:query-history db))))))
 
 (rf/reg-sub
+ ::show-vt?
+ (fn [db [_ component]]
+   (let [url-has-vt? (contains? (get-in db [:current-route :query-params]) :valid-time)]
+     (get-in db [:form-pane :show-vt? component] url-has-vt?))))
+
+(rf/reg-sub
+ ::show-tt?
+ (fn [db [_ component]]
+   (let [url-has-tt? (contains? (get-in db [:current-route :query-params]) :transaction-time)]
+     (get-in db [:form-pane :show-tt? component] url-has-tt?))))
+
+(rf/reg-sub
  ::entity-form-history
  (fn [db _]
    (:entity-history db)))

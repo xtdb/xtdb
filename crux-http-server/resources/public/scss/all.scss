@@ -151,6 +151,7 @@ html, body {
 }
 
 .form-pane__history-scrollable {
+    margin-bottom: 1rem;
     margin-top: 1rem;
     border: 1px solid #dbdbdb;
     max-height: 400px;
@@ -611,6 +612,29 @@ ul.entity-group__value li::before {
 .form-pane__content {
     margin-top: 1rem;
 }
+
+.query-form-options {
+    display:flex;
+    margin-bottom: 0.75rem;
+}
+
+.vt-tt-icons {
+    font-size: 1.1rem;
+    margin-left:0.25rem;
+    cursor: pointer;
+    margin-right: 0.75rem;
+}
+
+.vt-tt-icon-text {
+    margin-left: 0.2rem;
+    font-family: 'LatoWeb';
+    font-weight: normal;
+}
+
+.vt-tt-icon-text--active {
+    font-weight: bold;
+}
+
 
 .form-pane__history {
     padding: .6rem;

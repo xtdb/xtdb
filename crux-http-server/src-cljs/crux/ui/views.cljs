@@ -11,47 +11,69 @@
    [reagent.core :as r]
    [re-frame.core :as rf]))
 
+(defn vt-tt-icons
+  [component]
+  (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
+        show-tt? @(rf/subscribe [::sub/show-tt? component])]
+    [:<>
+     [:i.fas.fa-history.vt-tt-icons
+      {:on-click #(rf/dispatch [::events/toggle-show-vt component show-vt?])
+       :title "Valid Time"}
+      [:span.vt-tt-icon-text
+       {:class (when show-vt? "vt-tt-icon-text--active")}
+       "Valid Time"]]
+     [:i.fas.fa-clock.vt-tt-icons
+      {:on-click #(rf/dispatch [::events/toggle-show-tt component show-tt?])
+       :title "Transaction Time"}
+      [:span.vt-tt-icon-text
+       {:class (when show-tt? "vt-tt-icon-text--active")}
+       "Transaction Time"]]]))
+
 (defn vt-tt-inputs
-  [{:keys [values touched errors handle-change handle-blur]}]
-  [:div.crux-time
-   [:div.input-group
-    [:div.input-group-label.label
-     [:label "Valid Time"]]
-    [:input.input.input-time
-     {:type "date"
-      :name "vtd"
-      :value (get values "vtd")
-      :on-change handle-change
-      :on-blur handle-blur}]
-    [:input.input.input-time
-     {:type "time"
-      :name "vtt"
-      :value (get values "vtt")
-      :on-change handle-change
-      :on-blur handle-blur}]
-    (when (and (or (get touched "vtd")
-                   (get touched "vtt"))
-               (get errors "vt"))
-      [:p.input-error (get errors "vt")])]
-   [:div.input-group
-    [:div.input-group-label.label
-     [:label "Transaction Time" ]]
-    [:input.input.input-time
-     {:type "date"
-      :name "ttd"
-      :value (get values "ttd")
-      :on-change handle-change
-      :on-blur handle-blur}]
-    [:input.input.input-time
-     {:type "time"
-      :name "ttt"
-      :value (get values "ttt")
-      :on-change handle-change
-      :on-blur handle-blur}]
-    (when (and (or (get touched "ttd")
-                   (get touched "ttt"))
-               (get errors "tt"))
-      [:p.input-error (get errors "tt")])]])
+  [{:keys [values touched errors handle-change handle-blur]} component]
+  (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
+        show-tt? @(rf/subscribe [::sub/show-tt? component])]
+    [:div.crux-time
+     [:div.input-group
+      {:class (when-not show-vt? "hidden")}
+      [:div.input-group-label.label
+       [:label "Valid Time"]]
+      [:input.input.input-time
+       {:type "date"
+        :name "vtd"
+        :value (get values "vtd")
+        :on-change handle-change
+        :on-blur handle-blur}]
+      [:input.input.input-time
+       {:type "time"
+        :name "vtt"
+        :value (get values "vtt")
+        :on-change handle-change
+        :on-blur handle-blur}]
+      (when (and (or (get touched "vtd")
+                     (get touched "vtt"))
+                 (get errors "vt"))
+        [:p.input-error (get errors "vt")])]
+     [:div.input-group
+      {:class (when-not show-tt? "hidden")}
+      [:div.input-group-label.label
+       [:label "Transaction Time" ]]
+      [:input.input.input-time
+       {:type "date"
+        :name "ttd"
+        :value (get values "ttd")
+        :on-change handle-change
+        :on-blur handle-blur}]
+      [:input.input.input-time
+       {:type "time"
+        :name "ttt"
+        :value (get values "ttt")
+        :on-change handle-change
+        :on-blur handle-blur}]
+      (when (and (or (get touched "ttd")
+                     (get touched "ttt"))
+                 (get errors "tt"))
+        [:p.input-error (get errors "tt")])]]))
 
 (defn query-validation
   [values]
@@ -111,48 +133,49 @@
                                 {:cm-instance cm-instance
                                  :class "cm-textarea__query"
                                  :on-change #(set-values {"q" %})
-                                 :on-blur #(set-touched "q")}]
+                                 :on-blur #(set-touched "q")}]]
+                              [:div.query-form-options
+                               [vt-tt-icons :query]
                                [:div.expand-collapse__group.form-pane__history
                                 {:on-click #(rf/dispatch [::events/toggle-form-history :query])}
                                 [:span.expand-collapse__txt
                                  [:span.form-pane__arrow
-                                  [common/arrow-svg form-pane-history-q]
-                                  "History"]]]
-                               [:div.expand-collapse-transition
-                                {:class (if form-pane-history-q "expand" "collapse")}
-                                [:div.form-pane__history-scrollable
-                                 (map-indexed
-                                  (fn [idx {:strs [q vtd vtt ttd ttt]}]
-                                    ^{:key (gensym)}
-                                    [:div.form-pane__history-scrollable-el
-                                     [:div.form-pane__history-delete
-                                      {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-                                      [:i.fas.fa-trash-alt]]
-                                     [:div.form-pane__history-scrollable-el-left
-                                      {:on-click #(do
-                                                    (rf/dispatch [::events/toggle-form-history :query])
-                                                    (.setValue @cm-instance q)
-                                                    (set-values
-                                                     {"q" q
-                                                      "vtd" vtd
-                                                      "vtt" vtt
-                                                      "ttd" ttd
-                                                      "ttt" ttt}))}
-                                      [:div
-                                       {:style {:margin-bottom "1rem"}}
-                                       [:span.form-pane__history-headings "Valid Time: "]
-                                       [:span.form-pane__history-txt (str vtd " " vtt)]]
-                                      (when (and ttd ttt)
-                                        [:div
-                                         [:span.form-pane__history-headings "Transaction Time: "]
-                                         [:span.form-pane__history-txt (str ttd " " ttt)]])
-                                      [:div {:style {:margin-top "1rem"}}
-                                       [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
-                                  query-history-list)]]
-                               (when (and (get touched "q")
-                                          (get errors "q"))
-                                 [:p.input-error (get errors "q")])]
-                              [vt-tt-inputs props]
+                                  [common/arrow-svg form-pane-history-q] "Query History"]]]]
+                              [:div
+                               {:class (if form-pane-history-q "expand" "collapse")}
+                               [:div.form-pane__history-scrollable
+                                (map-indexed
+                                 (fn [idx {:strs [q vtd vtt ttd ttt]}]
+                                   ^{:key (gensym)}
+                                   [:div.form-pane__history-scrollable-el
+                                    [:div.form-pane__history-delete
+                                     {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+                                     [:i.fas.fa-trash-alt]]
+                                    [:div.form-pane__history-scrollable-el-left
+                                     {:on-click #(do
+                                                   (rf/dispatch [::events/toggle-form-history :query])
+                                                   (.setValue @cm-instance q)
+                                                   (set-values
+                                                    {"q" q
+                                                     "vtd" vtd
+                                                     "vtt" vtt
+                                                     "ttd" ttd
+                                                     "ttt" ttt}))}
+                                     [:div
+                                      {:style {:margin-bottom "1rem"}}
+                                      [:span.form-pane__history-headings "Valid Time: "]
+                                      [:span.form-pane__history-txt (str vtd " " vtt)]]
+                                     (when (and ttd ttt)
+                                       [:div
+                                        [:span.form-pane__history-headings "Transaction Time: "]
+                                        [:span.form-pane__history-txt (str ttd " " ttt)]])
+                                     [:div {:style {:margin-top "1rem"}}
+                                      [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+                                 query-history-list)]]
+                              (when (and (get touched "q")
+                                         (get errors "q"))
+                                [:p.input-error (get errors "q")])
+                              [vt-tt-inputs props :query]
                               [:div.button-line
                                [:button.button
                                 {:type "submit"
@@ -211,12 +234,14 @@
                (when (and (get touched "eid")
                           (get errors "eid"))
                  [:p.input-error (get errors "eid")])]
-              [vt-tt-inputs props]
+              [:div.query-form-options
+               [vt-tt-icons :entity]]
+              [vt-tt-inputs props :entity]
               [:div.button-line
                [:button.button
-                 {:type "submit"
-                  :class (when-not disabled? "form__button")
-                  :disabled disabled?}
+                {:type "submit"
+                 :class (when-not disabled? "form__button")
+                 :disabled disabled?}
                 "Submit Entity"]
                [:p.button-hint "(Ctrl + Enter)"]]]))])})))
 
