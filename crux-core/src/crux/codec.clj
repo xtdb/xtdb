@@ -386,7 +386,23 @@
                       (maybe-url-str this)
                       (maybe-map-str this))]
         (id->buffer id to)
-        (throw (IllegalArgumentException. (format "Not a %s hex, keyword, EDN map, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
+        (id-function to (nippy/fast-freeze this)))))
+
+  Number
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Character
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Date
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Boolean
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
 
   Map
   (id->buffer [this to]

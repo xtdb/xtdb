@@ -1407,15 +1407,7 @@
                                              (or-join [e x]
                                                       [e :extra x]
                                                       (and [(identity :none) x]
-                                                           (not [e :extra])))]}))))
-
-  ;; NOTE: This is the actual root cause of the bug, when editing a
-  ;; message the id was transacted as a raw string.
-  (t/testing "entity ids cannot be raw strings"
-    (let [id (UUID/randomUUID)
-          id-str (str id)]
-      (t/is (thrown-with-msg? IllegalArgumentException #"invalid entity id"
-                              (fix/transact! *api* (fix/people [{:crux.db/id id-str :name "Ivan" :version 2}])))))))
+                                                           (not [e :extra])))]})))))
 
 (t/deftest test-arguments-bug-247
   (t/is (= #{} (api/q (api/db *api*)
@@ -2420,6 +2412,44 @@
              (api/q (api/db *api*)
                     '{:find [x]
                       :where [[(hash-map) x]]})))))
+
+(t/deftest test-can-use-any-value-as-entity-id
+  (fix/transact! *api* [{:crux.db/id "ivan@example.com" :name "Ivan"}
+                        {:crux.db/id 42 :name "Petr"}
+                        {:crux.db/id true :name "Oleg" :friends ["ivan@example.com" 42 3.14]}
+                        {:crux.db/id 3.14 :name "Pi" :boss "ivan@example.com"}])
+  (t/is (= #{["Ivan"]}
+           (api/q (api/db *api*)
+                  '{:find [name]
+                    :where [["ivan@example.com" :name name]]})))
+  (t/is (= #{["Petr"]}
+           (api/q (api/db *api*)
+                  '{:find [name]
+                    :where [[42 :name name]]})))
+  (t/is (= #{["Oleg"]}
+           (api/q (api/db *api*)
+                  '{:find [name]
+                    :where [[true :name name]]})))
+  (t/is (= #{["Pi"]}
+           (api/q (api/db *api*)
+                  '{:find [name]
+                    :where [[3.14 :name name]]})))
+
+  (t/testing "join"
+    (t/is (= #{["ivan@example.com" "Ivan"]}
+             (api/q (api/db *api*)
+                    '{:find [boss name]
+                      :where [[boss :name name]
+                              [pi :boss boss]
+                              [pi :name "Pi"]]})))
+
+    (t/is (= #{["Ivan"]
+               ["Petr"]
+               ["Pi"]}
+             (api/q (api/db *api*)
+                    '{:find [name]
+                      :where [[true :friends f]
+                              [f :name name]]})))))
 
 ;; Tests from Racket Datalog
 ;; https://github.com/racket/datalog/tree/master/tests/examples

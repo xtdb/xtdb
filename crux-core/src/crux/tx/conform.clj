@@ -4,7 +4,7 @@
   (:import (java.util UUID)))
 
 (defn- check-eid [eid op]
-  (when-not (and eid (c/valid-id? eid) (not (string? eid)))
+  (when-not (and eid (c/valid-id? eid))
     (throw (ex-info "invalid entity id" {:eid eid, :op op}))))
 
 (defn- check-doc [doc op]

@@ -1136,8 +1136,7 @@
 
 (defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
-         (if-let [content-hash (and (c/valid-id? value)
-                                    (c/new-id (entity-resolver-fn (db/encode-value index-store value))))]
+         (if-let [content-hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
            (-> (db/fetch-docs document-store #{content-hash})
                (get content-hash))
            value))))
