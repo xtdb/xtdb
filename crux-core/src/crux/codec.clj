@@ -12,7 +12,7 @@
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
            java.nio.charset.StandardCharsets
-           [java.util Arrays Date Map UUID Set]
+           [java.util Arrays Collection Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -250,6 +250,12 @@
   (value->buffer [this to]
     (id->buffer this to))
 
+  Collection
+  (value->buffer [this to]
+    (doto (id-function to (binding [*sort-unordered-colls* true]
+                            (nippy/fast-freeze this)))
+      (.putByte 0 (byte object-value-type-id))))
+
   Object
   (value->buffer [this ^MutableDirectBuffer to]
     (if (satisfies? IdToBuffer this)
@@ -388,26 +394,18 @@
         (id->buffer id to)
         (id-function to (nippy/fast-freeze this)))))
 
-  Number
-  (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
-
-  Character
-  (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
-
-  Date
-  (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
-
-  Boolean
-  (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
-
   Map
   (id->buffer [this to]
     (id-function to (binding [*sort-unordered-colls* true]
                       (nippy/fast-freeze this))))
+
+  Collection
+  (id->buffer [this to]
+    (throw (IllegalArgumentException. "Collections cannot be ids.")))
+
+  Object
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
 
   nil
   (id->buffer [this to]
@@ -543,6 +541,8 @@
  :crux.codec/edn-id
  [data-input]
  (id-edn-reader (nippy/thaw-from-in! data-input)))
+
+(declare multiple-values?)
 
 (defn valid-id? [x]
   (try

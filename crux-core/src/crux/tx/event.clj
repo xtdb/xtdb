@@ -4,7 +4,7 @@
   (:import java.util.Date))
 
 (def ^:private date? (partial instance? Date))
-(def ^:private id? (partial satisfies? c/IdToBuffer))
+(def ^:private id? c/valid-id?)
 
 (defmulti tx-event first)
 

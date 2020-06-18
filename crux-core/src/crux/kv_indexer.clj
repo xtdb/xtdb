@@ -710,9 +710,10 @@
                                     (let [av-i @(:level-1-iterator-delay index-store)
                                           ecav-i @(:level-2-iterator-delay index-store)]
                                       (->> (for [eid eids
-                                                 :let [eid-value-buffer (c/->value-buffer eid)]
+                                                 :let [eid-value-buffer (db/encode-value index-store eid)]
                                                  ecav-key (all-keys-in-prefix ecav-i
-                                                                              (encode-ecav-key-to nil (c/->id-buffer eid)))]
+                                                                              (encode-ecav-key-to nil
+                                                                                                  (c/->id-buffer eid)))]
                                              [eid-value-buffer ecav-key])
 
                                            (reduce (fn [acc [eid-value-buffer ecav-key]]
@@ -728,7 +729,8 @@
                                                                               count)
                                                                          1)]
                                                        (cond-> acc
-                                                         true (update :tombstones assoc (.content-hash quad) {:crux.db/id (.eid quad), :crux.db/evicted? true})
+                                                         true (update :tombstones assoc (.content-hash quad) {:crux.db/id (.eid quad)
+                                                                                                              :crux.db/evicted? true})
                                                          true (update :ks conj
                                                                       (encode-ave-key-to nil
                                                                                          attr-buffer
