@@ -1429,7 +1429,7 @@
 (t/deftest test-optimise-range-constraints-bug-505
   (let [tx (vec (for [i (range 5000)]
                   [:crux.tx/put
-                   {:crux.db/id (keyword (str i))
+                   {:crux.db/id (keyword (str "id-" i))
                     :offer i}]))
         submitted-tx (doto (api/submit-tx *api* tx)
                        (->> (api/await-tx *api*)))])
@@ -1439,7 +1439,7 @@
         range-slowdown-factor 100
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
-                        (t/is (= :0 (:crux.db/id (api/entity db :0)))))
+                        (t/is (= :id-0 (:crux.db/id (api/entity db :id-0)))))
                       (- (System/nanoTime) start-time))
         base-query '{:find [i]
                      :where [[_ :offer i]
@@ -1727,12 +1727,12 @@
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
 
 (defn- populate-datascript-test-db []
-  (fix/transact! *api* [{:crux.db/id :1 :name "Ivan" :age 10}
-                        {:crux.db/id :2 :name "Ivan" :age 20}
-                        {:crux.db/id :3 :name "Oleg" :age 10}
-                        {:crux.db/id :4 :name "Oleg" :age 20}
-                        {:crux.db/id :5 :name "Ivan" :age 10}
-                        {:crux.db/id :6 :name "Ivan" :age 20}]))
+  (fix/transact! *api* [{:crux.db/id 1 :name "Ivan" :age 10}
+                        {:crux.db/id 2 :name "Ivan" :age 20}
+                        {:crux.db/id 3 :name "Oleg" :age 10}
+                        {:crux.db/id 4 :name "Oleg" :age 20}
+                        {:crux.db/id 5 :name "Ivan" :age 10}
+                        {:crux.db/id 6 :name "Ivan" :age 20}]))
 
 (t/deftest datascript-test-not
   (populate-datascript-test-db)
@@ -1741,18 +1741,18 @@
                       (into #{} (map vector) res))
       [[?e :name]
        (not [?e :name "Ivan"])]
-      #{:3 :4}
+      #{3 4}
 
       [[?e :name]
        (not
         [?e :name "Ivan"]
         [?e :age  10])]
-      #{:2 :3 :4 :6}
+      #{2 3 4 6}
 
       [[?e :name]
        (not [?e :name "Ivan"])
        (not [?e :age 10])]
-      #{:4}
+      #{4}
 
       ;; full exclude
       [[?e :name]
@@ -1762,19 +1762,19 @@
       ;; not-intersecting rels
       [[?e :name "Ivan"]
        (not [?e :name "Oleg"])]
-      #{:1 :2 :5 :6}
+      #{1 2 5 6}
 
       ;; exclude empty set
       [[?e :name]
        (not [?e :name "Ivan"]
             [?e :name "Oleg"])]
-      #{:1 :2 :3 :4 :5 :6}
+      #{1 2 3 4 5 6}
 
       ;; nested excludes
       [[?e :name]
        (not [?e :name "Ivan"]
             (not [?e :age 10]))]
-      #{:1 :3 :4 :5})))
+      #{1 3 4 5})))
 
 (t/deftest datascript-test-not-join
   (populate-datascript-test-db)
@@ -1786,7 +1786,7 @@
                               (not-join [?e]
                                         [?e :name "Oleg"]
                                         [?e :age ?a])]})
-             #{[:1 10] [:2 20] [:5 10] [:6 20]}))
+             #{[1 10] [2 20] [5 10] [6 20]}))
 
     (t/is (= (api/q db
                     '{:find [?e ?a]
@@ -1797,7 +1797,7 @@
                                         [?e :name "Oleg"]
                                         [?e :age  10]
                                         [?e :age ?a])]})
-             #{[:1 10] [:5 10]}))))
+             #{[1 10] [5 10]}))))
 
 (t/deftest datascript-test-not-impl-edge-cases
   (populate-datascript-test-db)
@@ -1808,7 +1808,7 @@
       [[?e :name "Oleg"]
        [?e :age  10]
        (not [?e :age 20])]
-      #{:3}
+      #{3}
 
       ;; const \ const
       [[?e :name "Oleg"]
@@ -1819,7 +1819,7 @@
       ;; rel \ const
       [[?e :name "Oleg"]
        (not [?e :age 10])]
-      #{:4})
+      #{4})
 
     ;; 2 rels \ 2 rels
     (t/is (= (api/q db
@@ -1828,7 +1828,7 @@
                               [?e2 :name "Ivan"]
                               (not [?e :age 10]
                                    [?e2 :age 20])]})
-             #{[:2 :1] [:6 :5] [:1 :1] [:2 :2] [:5 :5] [:6 :6] [:2 :5] [:1 :5] [:2 :6] [:6 :1] [:5 :1] [:6 :2]}))
+             #{[2 1] [6 5] [1 1] [2 2] [5 5] [6 6] [2 5] [1 5] [2 6] [6 1] [5 1] [6 2]}))
 
     ;; 2 rels \ rel + const
     (t/is (= (api/q db
@@ -1837,7 +1837,7 @@
                               [?e2 :name "Oleg"]
                               (not [?e :age 10]
                                    [?e2 :age 20])]})
-             #{[:2 :3] [:1 :3] [:2 :4] [:6 :3] [:5 :3] [:6 :4]}))
+             #{[2 3] [1 3] [2 4] [6 3] [5 3] [6 4]}))
 
     ;; 2 rels \ 2 consts
     (t/is (= (api/q db
@@ -1846,7 +1846,7 @@
                               [?e2 :name "Oleg"]
                               (not [?e :age 10]
                                    [?e2 :age 20])]})
-             #{[:4 :3] [:3 :3] [:4 :4]}))))
+             #{[4 3] [3 3] [4 4]}))))
 
 (t/deftest datascript-test-or
   (populate-datascript-test-db)
@@ -1857,12 +1857,12 @@
       ;; intersecting results
       [(or [?e :name "Oleg"]
            [?e :age 10])]
-      #{:1 :3 :4 :5}
+      #{1 3 4 5}
 
       ;; one branch empty
       [(or [?e :name "Oleg"]
            [?e :age 30])]
-      #{:3 :4}
+      #{3 4}
 
       ;; both empty
       [(or [?e :name "Petr"]
@@ -1873,15 +1873,15 @@
       [[?e :name "Ivan"]
        (or [?e :name "Oleg"]
            [?e :age 10])]
-      #{:1 :5}
+      #{1 5}
 
       ;; join with 2 vars
       [[?e :age ?a]
        (or (and [?e :name "Ivan"]
-                [:1  :age  ?a])
+                [1  :age  ?a])
            (and [?e :name "Oleg"]
-                [:2  :age  ?a]))]
-      #{:1 :5 :4})))
+                [2  :age  ?a]))]
+      #{1 5 4})))
 
 (t/deftest datascript-test-or-join
   (populate-datascript-test-db)
@@ -1892,31 +1892,28 @@
                 [?e :name ?n]
                 (and [?e :age ?a]
                      [?e :name ?n]))]
-      #{:1 :2 :3 :4 :5 :6}
+      #{1 2 3 4 5 6}
 
       [[?e  :name ?a]
        [?e2 :name ?a]
        (or-join [?e]
                 (and [?e  :age ?a]
                      [?e2 :age ?a]))]
-      #{:1 :2 :3 :4 :5 :6})))
-
-(defn even-kw? [x]
-  (even? (Long/parseLong (name x))))
+      #{1 2 3 4 5 6})))
 
 (t/deftest test-rules
-  (fix/transact! *api* [{:crux.db/id :5 :follow :3}
-                        {:crux.db/id :1 :follow :2}
-                        {:crux.db/id :2 :follow #{:3 :4}}
-                        {:crux.db/id :3 :follow :4}
-                        {:crux.db/id :4 :follow :6}])
+  (fix/transact! *api* [{:crux.db/id 5 :follow 3}
+                        {:crux.db/id 1 :follow 2}
+                        {:crux.db/id 2 :follow #{3 4}}
+                        {:crux.db/id 3 :follow 4}
+                        {:crux.db/id 4 :follow 6}])
   (let [db (api/db *api*)]
     (t/is (= (api/q db
                     '{:find  [?e1 ?e2]
                       :where [(follow ?e1 ?e2)]
                       :rules [[(follow ?x ?y)
                                [?x :follow ?y]]]})
-             #{[:1 :2] [:2 :3] [:3 :4] [:2 :4] [:5 :3] [:4 :6]}))
+             #{[1 2] [2 3] [3 4] [2 4] [5 3] [4 6]}))
 
     ;; NOTE: Crux does not support vars in attribute position, so
     ;; :follow is explicit.
@@ -1925,10 +1922,10 @@
                       '{:find [?y ?x]
                         :where [[_ :follow ?x]
                                 (rule ?x ?y)
-                                [(crux.query-test/even-kw? ?x)]]
+                                [(even? ?x)]]
                         :rules [[(rule ?a ?b)
                                  [?a :follow ?b]]]})
-               #{[:3 :2] [:6 :4] [:4 :2]})))
+               #{[3 2] [6 4] [4 2]})))
 
     ;; NOTE: Crux does not support vars in attribute position.
     #_(t/testing "Rule context is isolated from outer context"
@@ -1944,26 +1941,26 @@
       (t/is (= (api/q db
                       '{:find [?e2]
                         :where [(follow ?e1 ?e2)]
-                        :args [{:?e1 :1}]
+                        :args [{:?e1 1}]
                         :rules [[(follow ?e2 ?e1)
                                  [?e2 :follow ?e1]]
                                 [(follow ?e2 ?e1)
                                  [?e2 :follow ?t]
                                  [?t  :follow ?e1]]]})
-               #{[:2] [:3] [:4]})))
+               #{[2] [3] [4]})))
 
 
     (t/testing "Recursive rules"
       (t/is (= (api/q db
                       '{:find  [?e2]
                         :where [(follow ?e1 ?e2)]
-                        :args [{:?e1 :1}]
+                        :args [{:?e1 1}]
                         :rules [[(follow ?e1 ?e2)
                                  [?e1 :follow ?e2]]
                                 [(follow ?e1 ?e2)
                                  [?e1 :follow ?t]
                                  (follow ?t ?e2)]]})
-               #{[:2] [:3] [:4] [:6]})))
+               #{[2] [3] [4] [6]})))
 
     (t/testing "Passing ins to rule"
       (t/is (= (api/q db
@@ -1973,8 +1970,8 @@
                                  [?e :follow ?e2]
                                  [(?pred ?e)]
                                  [(?pred ?e2)]]]
-                       :args [{:?even even-kw?}]})
-               #{[:4 :6] [:2 :4]})))
+                       :args [{:?even even?}]})
+               #{[4 6] [2 4]})))
 
     (t/testing "Using built-ins inside rule"
       (t/is (= (api/q db
@@ -1982,14 +1979,14 @@
                         :where [(match ?x ?y)]
                         :rules [[(match ?e ?e2)
                                  [?e :follow ?e2]
-                                 [(crux.query-test/even-kw? ?e)]
-                                 [(crux.query-test/even-kw? ?e2)]]]})
-               #{[:4 :6] [:2 :4]})))))
+                                 [(even? ?e)]
+                                 [(even? ?e2)]]]})
+               #{[4 6] [2 4]})))))
 
 (t/deftest test-rules-with-recursion-1
-  (fix/transact! *api* [{:crux.db/id :1 :follow :2}
-                        {:crux.db/id :2 :follow :3}
-                        {:crux.db/id :3 :follow :1}])
+  (fix/transact! *api* [{:crux.db/id 1 :follow 2}
+                        {:crux.db/id 2 :follow 3}
+                        {:crux.db/id 3 :follow 1}])
   (t/is (= (api/q (api/db *api*)
                   '{:find [?e1 ?e2]
                     :where [(follow ?e1 ?e2)]
@@ -1997,11 +1994,11 @@
                              [?e1 :follow ?e2]]
                             [(follow ?e1 ?e2)
                              (follow ?e2 ?e1)]]})
-           #{[:1 :2] [:2 :3] [:3 :1] [:2 :1] [:3 :2] [:1 :3]})))
+           #{[1 2] [2 3] [3 1] [2 1] [3 2] [1 3]})))
 
 (t/deftest test-rules-with-recursion-2
-  (fix/transact! *api* [{:crux.db/id :1 :follow :2}
-                        {:crux.db/id :2 :follow :3}])
+  (fix/transact! *api* [{:crux.db/id 1 :follow 2}
+                        {:crux.db/id 2 :follow 3}])
   (t/is (= (api/q (api/db *api*)
                   '{:find [?e1 ?e2]
                     :where [(follow ?e1 ?e2)]
@@ -2009,10 +2006,10 @@
                              [?e1 :follow ?e2]]
                             [(follow ?e1 ?e2)
                              (follow ?e2 ?e1)]]})
-           #{[:1 :2] [:2 :3] [:2 :1] [:3 :2]})))
+           #{[1 2] [2 3] [2 1] [3 2]})))
 
 (t/deftest test-calling-rule-twice-44
-  (fix/transact! *api* [{:crux.db/id :1 :attr "a"}])
+  (fix/transact! *api* [{:crux.db/id 1 :attr "a"}])
   (let [db (api/db *api*)]
     (t/is (api/q db
                  {:find '[?p]
@@ -2024,12 +2021,12 @@
                   :args [{:?fn (constantly true)}]}))))
 
 (t/deftest test-mutually-recursive-rules
-  (fix/transact! *api* [{:crux.db/id :0 :f1 :1}
-                        {:crux.db/id :1 :f2 :2}
-                        {:crux.db/id :2 :f1 :3}
-                        {:crux.db/id :3 :f2 :4}
-                        {:crux.db/id :4 :f1 :5}
-                        {:crux.db/id :5 :f2 :6}])
+  (fix/transact! *api* [{:crux.db/id 0 :f1 1}
+                        {:crux.db/id 1 :f2 2}
+                        {:crux.db/id 2 :f1 3}
+                        {:crux.db/id 3 :f2 4}
+                        {:crux.db/id 4 :f1 5}
+                        {:crux.db/id 5 :f2 6}])
   (let [db (api/db *api*)]
     (t/is (= (api/q db
                     '{:find [?e1 ?e2]
@@ -2044,16 +2041,16 @@
                               [(f2 ?e1 ?e2)
                                [?t :f2 ?e2]
                                (f1 ?e1 ?t)]]})
-             #{[:0 :1] [:0 :3] [:0 :5]
-               [:1 :3] [:1 :5]
-               [:2 :3] [:2 :5]
-               [:3 :5]
-               [:4 :5]}))))
+             #{[0 1] [0 3] [0 5]
+               [1 3] [1 5]
+               [2 3] [2 5]
+               [3 5]
+               [4 5]}))))
 
 ;; https://github.com/tonsky/datascript/issues/218
 (t/deftest datascript-test-rules-false-arguments
-  (fix/transact! *api* [{:crux.db/id :1 :attr true}
-                        {:crux.db/id :2 :attr false}])
+  (fix/transact! *api* [{:crux.db/id 1 :attr true}
+                        {:crux.db/id 2 :attr false}])
   (let [db (api/db *api*)
         rules '[[(is ?id ?val)
                  [?id :attr ?val]]]]
@@ -2061,21 +2058,21 @@
                     {:find '[?id]
                      :where '[(is ?id true)]
                      :rules rules})
-             #{[:1]}))
+             #{[1]}))
     (t/is (= (api/q db
                     {:find '[?id]
                      :where '[(is ?id false)]
                      :rules rules})
-             #{[:2]}))))
+             #{[2]}))))
 
 (defn- even-or-nil? [x]
   (when (even? x)
     x))
 
 (t/deftest data-script-test-query-fns
-  (fix/transact! *api* [{:crux.db/id :1 :name "Ivan" :age 15}
-                        {:crux.db/id :2 :name "Petr" :age 22 :height 240 :parent :1}
-                        {:crux.db/id :3 :name "Slava" :age 37 :parent :2}])
+  (fix/transact! *api* [{:crux.db/id 1 :name "Ivan" :age 15}
+                        {:crux.db/id 2 :name "Petr" :age 22 :height 240 :parent 1}
+                        {:crux.db/id 3 :name "Slava" :age 37 :parent 2}])
   (let [db (api/db *api*)]
     (t/testing "predicate without free variables"
       (t/is (= (api/q db
@@ -2131,7 +2128,7 @@
                         :where [[?e1 :age ?a1]
                                 [?e2 :age ?a2]
                                 [(< ?a1 18 ?a2)]]})
-               #{[:1 :2] [:1 :3]}))
+               #{[1 2] [1 3]}))
 
       (t/is (= (api/q db
                       '{:find [?x ?c]
@@ -2162,7 +2159,7 @@
                        :where '[[?e :age ?a]
                                 [(?adult ?a)]]
                        :args [{:?adult #(> % 18)}]})
-               #{[:2] [:3]})))
+               #{[2] [3]})))
 
     (t/testing "Calling a function"
       (t/is (= (api/q db
@@ -2172,7 +2169,7 @@
                                 [?e3 :age ?a3]
                                 [(+ ?a1 ?a2) ?a12]
                                 [(= ?a12 ?a3)]]})
-               #{[:1 :2 :3] [:2 :1 :3]})))
+               #{[1 2 3] [2 1 3]})))
 
     (t/testing "Two conflicting function values for one binding."
       (t/is (= (api/q db
@@ -2234,8 +2231,8 @@
                       '{:find [?e ?y]
                         :where [[?e :salary ?x]
                                 [(+ ?x 100) ?y]
-                                [:0 :age 15]
-                                [:1 :age 35]]})
+                                [0 :age 15]
+                                [1 :age 35]]})
                #{})))
 
     ;; Crux supports nil and false results.
@@ -2276,36 +2273,32 @@
                  #{})))))
 
 
-(defn kw-less-than? [x y]
-  (< (Long/parseLong (name x))
-     (Long/parseLong (name y))))
-
 (t/deftest datascript-test-predicates
-  (fix/transact! *api* [{:crux.db/id :1 :name "Ivan" :age 10}
-                        {:crux.db/id :2 :name "Ivan" :age 20}
-                        {:crux.db/id :3 :name "Oleg" :age 10}
-                        {:crux.db/id :4 :name "Oleg" :age 20}])
+  (fix/transact! *api* [{:crux.db/id 1 :name "Ivan" :age 10}
+                        {:crux.db/id 2 :name "Ivan" :age 20}
+                        {:crux.db/id 3 :name "Oleg" :age 10}
+                        {:crux.db/id 4 :name "Oleg" :age 20}])
   (let [db (api/db *api*)]
     (t/are [q res] (= (api/q db (quote q)) res)
       ;; plain predicate
       {:find [?e ?a]
        :where [[?e :age ?a]
                [(> ?a 10)]]}
-      #{[:2 20] [:4 20]}
+      #{[2 20] [4 20]}
 
       ;; join in predicate
       {:find [?e ?e2]
        :where [[?e  :name]
                [?e2 :name]
-               [(crux.query-test/kw-less-than? ?e ?e2)]]}
-      #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
+               [(< ?e ?e2)]]}
+      #{[1 2] [1 3] [1 4] [2 3] [2 4] [3 4]}
 
       ;; join with extra symbols
       {:find [?e ?e2]
        :where [[?e  :age ?a]
                [?e2 :age ?a2]
-               [(crux.query-test/kw-less-than? ?e ?e2)]]}
-      #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
+               [(< ?e ?e2)]]}
+      #{[1 2] [1 3] [1 4] [2 3] [2 4] [3 4]}
 
       ;; empty result
       {:find [?e ?e2]
@@ -2318,14 +2311,14 @@
       {:find [?e]
        :where [[?e :name "Ivan"]
                [?e :age 20]
-               [(= ?e :2)]]}
-      #{[:2]}
+               [(= ?e 2)]]}
+      #{[2]}
 
       ;; pred over const, false
       {:find [?e]
        :where [[?e :name "Ivan"]
                [?e :age 20]
-               [(= ?e :1)]]}
+               [(= ?e 1)]]}
       #{})
 
     ;; NOTE: Crux does not support source vars.
@@ -2340,7 +2333,7 @@
 
 
 (t/deftest datascript-test-issue-180
-  (fix/transact! *api* [{:crux.db/id :1 :age 20}])
+  (fix/transact! *api* [{:crux.db/id 1 :age 20}])
   (let [db (api/db *api*)]
     (t/is (= #{}
              (api/q db
