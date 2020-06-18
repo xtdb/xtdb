@@ -81,5 +81,5 @@
                       (= v (c/decode-value-buffer buffer)))
                     (and (string? v)
                          (> (count v) @#'c/max-string-index-length)
-                         (= @#'c/object-value-type-id
+                         (= @#'c/id-value-type-id
                             (.getByte (c/value-buffer-type-id buffer) 0)))))))
