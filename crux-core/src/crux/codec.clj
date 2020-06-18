@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 8)
+(def ^:const index-version 9)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -501,8 +501,6 @@
  :crux.codec/edn-id
  [data-input]
  (id-edn-reader (nippy/thaw-from-in! data-input)))
-
-(declare multiple-values?)
 
 (defn valid-id? [x]
   (try
