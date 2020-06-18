@@ -79,8 +79,6 @@
 (def ^:private double-value-type-id 2)
 (def ^:private date-value-type-id 3)
 (def ^:private string-value-type-id 4)
-(def ^:private bytes-value-type-id 5)
-(def ^:private object-value-type-id 6)
 (def ^:private boolean-value-type-id 7)
 (def ^:private char-value-type-id 8)
 
@@ -202,8 +200,7 @@
   String
   (value->buffer [this ^MutableDirectBuffer to]
     (if (< max-string-index-length (count this))
-      (doto (id-function to (nippy/fast-freeze this))
-        (.putByte 0 (byte object-value-type-id)))
+      (id->buffer this to)
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
@@ -218,51 +215,13 @@
               (.putByte to (inc idx) (byte (+ offset b)))
               (recur (inc idx))))))))
 
-  nil
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  Keyword
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  UUID
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  URI
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  URL
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  Map
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  DirectBuffer
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  ByteBuffer
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  Collection
-  (value->buffer [this to]
-    (doto (id-function to (binding [*sort-unordered-colls* true]
-                            (nippy/fast-freeze this)))
-      (.putByte 0 (byte object-value-type-id))))
-
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (if (satisfies? IdToBuffer this)
-      (id->buffer this to)
-      (doto (id-function to (binding [*sort-unordered-colls* true]
-                              (nippy/fast-freeze this)))
-        (.putByte 0 (byte object-value-type-id))))))
+    (id->buffer this to))
+
+  nil
+  (value->buffer [this to]
+    (id->buffer this to)))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
   (value->buffer x (ExpandableDirectByteBuffer. 32)))
