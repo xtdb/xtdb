@@ -701,23 +701,25 @@
 
   (unindex-eids [this eids]
     (with-open [snapshot (kv/new-snapshot kv-store)
-                i (kv/new-iterator snapshot)]
+                ecav-i (kv/new-iterator snapshot)
+                av-i (kv/new-iterator snapshot)]
       (let [{:keys [tombstones ks]} (->> (for [eid eids
-                                               ecav-key (all-keys-in-prefix i
-                                                                            (encode-ecav-key-to (.get seek-buffer-tl)
-                                                                                                (c/->id-buffer eid)))]
+                                               ecav-key (all-keys-in-prefix ecav-i (encode-ecav-key-to nil (c/->id-buffer eid)))]
                                            ecav-key)
 
                                          (reduce (fn [acc ecav-key]
                                                    (let [quad (decode-ecav-key-from ecav-key)
                                                          eid-buffer (c/->id-buffer (.eid quad))
-                                                         value-buffer (.value quad)]
+                                                         value-buffer (.value quad)
+                                                         shared-av? (> (->> (all-keys-in-prefix av-i (encode-ave-key-to (.get seek-buffer-tl)
+                                                                                                                        (c/->id-buffer (.attr quad))
+                                                                                                                        (.value quad)))
+                                                                            (take 2)
+                                                                            count)
+                                                                       1)]
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (.eid quad), :crux.db/evicted? true})
                                                        true (update :ks conj
-                                                                    (encode-av-key-to nil
-                                                                                      (c/->id-buffer (.attr quad))
-                                                                                      value-buffer)
                                                                     (encode-ave-key-to nil
                                                                                        (c/->id-buffer (.attr quad))
                                                                                        value-buffer
@@ -726,6 +728,10 @@
                                                                                       (c/->id-buffer (.attr quad))
                                                                                       eid-buffer)
                                                                     ecav-key)
+                                                       (not shared-av?) (update :ks conj
+                                                                                (encode-av-key-to nil
+                                                                                                  (c/->id-buffer (.attr quad))
+                                                                                                  value-buffer))
                                                        (not (c/can-decode-value-buffer? value-buffer))
                                                        (update :ks conj (encode-hash-cache-key-to nil value-buffer eid-buffer)))))
                                                  {:tombstones {}

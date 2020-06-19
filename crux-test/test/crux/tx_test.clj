@@ -802,3 +802,13 @@
       (t/is (thrown-with-msg? Exception #"Transaction consumer aborted"
                               (deref !fut 1000 ::timeout)))
       (future-cancel !fut))))
+
+(t/deftest test-evict-documents-with-common-attributes
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 1}]
+                        [:crux.tx/put {:crux.db/id :bar, :count 1}]])
+
+  (fix/submit+await-tx [[:crux.tx/evict :foo]])
+
+  (t/is (= #{[:bar]}
+           (api/q (api/db *api*) '{:find [?e]
+                                   :where [[?e :count 1]]}))))
