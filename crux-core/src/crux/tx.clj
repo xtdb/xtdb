@@ -211,7 +211,6 @@
                                        {:keys [index-store query-engine], :as tx-consumer}]
   (let [fn-id (c/new-id k)
         db (api/db query-engine tx-time)
-        tx-fn (->tx-fn (q/entity db index-store fn-id))
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
         args-content-hash (c/new-id args-doc)
 
@@ -228,7 +227,7 @@
 
               :else (try
                       (let [ctx (->TxFnContext query-engine tx)
-                            res (apply tx-fn ctx args)]
+                            res (apply (->tx-fn (q/entity db index-store fn-id)) ctx args)]
                         (if (false? res)
                           {:failed? true}
 
