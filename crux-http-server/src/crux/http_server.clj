@@ -30,9 +30,9 @@
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
-           java.time.Duration
+           [java.time Duration ZonedDateTime]
            java.util.Date
-           java.text.SimpleDateFormat
+           java.time.format.DateTimeFormatter
            [java.net URLDecoder URLEncoder]
            org.eclipse.jetty.server.Server
            [com.nimbusds.jose.jwk JWK JWKSet KeyType RSAKey ECKey]
@@ -409,7 +409,7 @@
              :title "/_crux"
              :options options}))})
 
-(def ^SimpleDateFormat default-date-formatter (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss.SSS"))
+(def ^DateTimeFormatter default-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
 (defn- entity-root-html []
   [:div.entity-root
@@ -431,7 +431,7 @@
         {:type "datetime-local"
          :name "valid-time"
          :step "0.01"
-         :value (.format default-date-formatter (Date.))}]
+         :value (.format default-date-formatter (ZonedDateTime/now))}]
        [:b "Transaction Time"]
        [:input.input.input-time
         {:type "datetime-local"
@@ -594,7 +594,7 @@
         {:type "datetime-local"
          :name "valid-time"
          :step "0.01"
-         :value (.format default-date-formatter (Date.))}]
+         :value (.format default-date-formatter (ZonedDateTime/now))}]
        [:b "Transaction Time"]
        [:input.input.input-time
         {:type "datetime-local"
