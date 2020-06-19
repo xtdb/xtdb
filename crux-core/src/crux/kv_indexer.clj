@@ -688,13 +688,14 @@
                                           ecav-i @(:level-2-iterator-delay index-store)]
                                       (->> (for [eid eids
                                                  :let [eid-value-buffer (db/encode-value index-store eid)]
-                                                 ecav-key (all-keys-in-prefix evav-i
+                                                 ecav-key (all-keys-in-prefix ecav-i
                                                                               (encode-ecav-key-to nil eid-value-buffer))]
                                              [eid-value-buffer ecav-key])
 
                                            (reduce (fn [acc [^DirectBuffer eid-value-buffer ecav-key]]
                                                      (let [quad ^Quad (decode-ecav-key-from ecav-key (.capacity eid-value-buffer))
                                                            attr-buffer (c/->id-buffer (.attr quad))
+                                                           eid-buffer (value-buffer->id-buffer index-store (.eid quad))
                                                            value-buffer (.value quad)
                                                            shared-av? (> (->> (all-keys-in-prefix av-i (encode-ave-key-to nil
                                                                                                                           attr-buffer
@@ -702,30 +703,29 @@
                                                                               (take 2)
                                                                               count)
                                                                          1)]
-                                                       eid-buffer (value-buffer->id-buffer index-store (.eid quad))]
-                                                     (cond-> acc
-                                                       true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid-buffer)
-                                                                                                            :crux.db/evicted? true})
-                                                       true (update :ks conj
-                                                                    (encode-ave-key-to nil
-                                                                                       attr-buffer
-                                                                                       value-buffer
-                                                                                       eid-value-buffer)
-                                                                    (encode-ae-key-to nil
-                                                                                      attr-buffer
-                                                                                      eid-value-buffer)
-                                                                    ecav-key)
-                                                       (not shared-av?) (update :ks conj
-                                                                                (encode-av-key-to nil
-                                                                                                  attr-buffer
-                                                                                                  value-buffer))
-                                                       (not (c/can-decode-value-buffer? value-buffer))
-                                                       (update :ks conj (encode-hash-cache-key-to nil value-buffer eid-buffer)))))
-                                           {:tombstones {}
-                                            :ks #{}}))))]
+                                                       (cond-> acc
+                                                         true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid-buffer)
+                                                                                                              :crux.db/evicted? true})
+                                                         true (update :ks conj
+                                                                      (encode-ae-key-to nil
+                                                                                        attr-buffer
+                                                                                        eid-value-buffer)
+                                                                      (encode-ave-key-to nil
+                                                                                         attr-buffer
+                                                                                         value-buffer
+                                                                                         eid-value-buffer)
+                                                                      ecav-key)
+                                                         (not shared-av?) (update :ks conj
+                                                                                  (encode-av-key-to nil
+                                                                                                    attr-buffer
+                                                                                                    value-buffer))
+                                                         (not (c/can-decode-value-buffer? value-buffer))
+                                                         (update :ks conj (encode-hash-cache-key-to nil value-buffer eid-buffer)))))
+                                                   {:tombstones {}
+                                                    :ks #{}}))))]
 
-    (kv/delete kv-store ks)
-    {:tombstones tombstones}))
+      (kv/delete kv-store ks)
+      {:tombstones tombstones}))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(meta-kv ::latest-completed-tx tx)
