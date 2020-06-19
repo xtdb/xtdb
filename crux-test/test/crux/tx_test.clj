@@ -572,6 +572,27 @@
             (fix/submit+await-tx '[[:crux.tx/fn :invalid-fn]])
             (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op" (some-> (#'tx/reset-tx-fn-error) throw))))
 
+          (t/testing "no :crux.db/fn"
+            (fix/submit+await-tx [[:crux.tx/put
+                                   {:crux.db/id :no-fn}]])
+            (fix/submit+await-tx '[[:crux.tx/fn :no-fn]])
+            (t/is (thrown? NullPointerException (some-> (#'tx/reset-tx-fn-error) throw))))
+
+          (t/testing "not a fn"
+            (fix/submit+await-tx [[:crux.tx/put
+                                   {:crux.db/id :not-a-fn
+                                    :crux.db/fn 0}]])
+            (fix/submit+await-tx '[[:crux.tx/fn :not-a-fn]])
+            (t/is (thrown? ClassCastException (some-> (#'tx/reset-tx-fn-error) throw))))
+
+          (t/testing "compilation errors"
+            (fix/submit+await-tx [[:crux.tx/put
+                                   {:crux.db/id :compilation-error-fn
+                                    :crux.db/fn '(fn [ctx]
+                                                   unknown-symbol)}]])
+            (fix/submit+await-tx '[[:crux.tx/fn :compilation-error-fn]])
+            (t/is (thrown-with-msg? Exception #"Syntax error compiling" (some-> (#'tx/reset-tx-fn-error) throw))))
+
           (t/testing "exception thrown"
             (fix/submit+await-tx [[:crux.tx/put
                                    {:crux.db/id :exception-fn
