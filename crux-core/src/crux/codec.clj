@@ -47,6 +47,7 @@
 (def ^:const failed-tx-id-index-id 7)
 
 ;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
+;; if you're going to shuffle index numbers around on a version bump, don't move this one.
 (def ^:const index-version-index-id 8)
 
 ;; used in standalone TxLog
