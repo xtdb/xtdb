@@ -75,12 +75,15 @@
   (value->buffer ^org.agrona.MutableDirectBuffer [this ^MutableDirectBuffer to]))
 
 (def ^:private id-value-type-id 0)
-(def ^:private long-value-type-id 1)
-(def ^:private double-value-type-id 2)
-(def ^:private date-value-type-id 3)
-(def ^:private string-value-type-id 4)
-(def ^:private boolean-value-type-id 7)
-(def ^:private char-value-type-id 8)
+(def ^:private object-value-type-id 1)
+(def ^:private clob-value-type-id 2)
+(def ^:private nil-value-type-id 3)
+(def ^:private boolean-value-type-id 4)
+(def ^:private long-value-type-id 5)
+(def ^:private double-value-type-id 6)
+(def ^:private date-value-type-id 7)
+(def ^:private string-value-type-id 8)
+(def ^:private char-value-type-id 9)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -182,7 +185,7 @@
        (doto to
          (.putByte 0 double-value-type-id)
          (.putLong value-type-id-size l ByteOrder/BIG_ENDIAN))
-       (+ value-type-id-size Long/BYTES))))
+       (+ value-type-id-size Double/BYTES))))
 
   Date
   (value->buffer [this ^MutableDirectBuffer to]
@@ -200,7 +203,8 @@
   String
   (value->buffer [this ^MutableDirectBuffer to]
     (if (< max-string-index-length (count this))
-      (id->buffer this to)
+      (doto (id->buffer this to)
+        (.putByte 0 clob-value-type-id))
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
@@ -217,11 +221,16 @@
 
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (id->buffer this to))
+    (doto (id-function to (binding [*sort-unordered-colls* true]
+                            (nippy/fast-freeze this)))
+      (.putByte 0 object-value-type-id)))
 
   nil
-  (value->buffer [this to]
-    (id->buffer this to)))
+  (value->buffer [this ^MutableDirectBuffer to]
+    (mem/limit-buffer
+     (doto to
+       (.putByte 0 nil-value-type-id))
+     value-type-id-size)))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
   (value->buffer x (ExpandableDirectByteBuffer. 32)))
@@ -258,22 +267,19 @@
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (1 2 3 4 7 8) true
-      0 (= buffer nil-id-buffer)
+      (3 4 5 6 7 8 9) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
   (let [type-id (.getByte buffer 0)]
     (case type-id
-      1 (decode-long buffer) ;; long-value-type-id
-      2 (decode-double buffer) ;; double-value-type-id
-      3 (Date. (decode-long buffer)) ;; date-value-type-id
-      4 (decode-string buffer) ;; string-value-type-id
-      7 (decode-boolean buffer) ;; boolean-value-type-id
-      8 (decode-char buffer) ;; char-value-type-id
-      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
-          nil
-          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
+      3 nil ;; nil-value-type-id
+      4 (decode-boolean buffer) ;; boolean-value-type-id
+      5 (decode-long buffer) ;; long-value-type-id
+      6 (decode-double buffer) ;; double-value-type-id
+      7 (Date. (decode-long buffer)) ;; date-value-type-id
+      8 (decode-string buffer) ;; string-value-type-id
+      9 (decode-char buffer) ;; char-value-type-id
       (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
 (def ^:private hex-id-pattern
@@ -353,19 +359,26 @@
         (id->buffer id to)
         (id-function to (.getBytes this StandardCharsets/UTF_8)))))
 
-  Set
+  Boolean
   (id->buffer [this to]
-    (id-function to (binding [*sort-unordered-colls* true]
-                      (nippy/fast-freeze this))))
+    (id-function to (nippy/fast-freeze this)))
+
+  Number
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Date
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Character
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
 
   Map
   (id->buffer [this to]
     (id-function to (binding [*sort-unordered-colls* true]
                       (nippy/fast-freeze this))))
-
-  Object
-  (id->buffer [this to]
-    (id-function to (nippy/fast-freeze this)))
 
   nil
   (id->buffer [this to]
@@ -504,8 +517,7 @@
 
 (defn valid-id? [x]
   (try
-    (and (not (instance? Collection x))
-         (= id-size (.capacity (->id-buffer x))))
+    (= id-size (.capacity (->id-buffer x)))
     (catch IllegalArgumentException _
       false)))
 

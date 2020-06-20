@@ -1256,8 +1256,8 @@
                     (build-full-results db bound-result-tuple)
                     (vec bound-result-tuple)))
 
-         true (dedupe)
          order-by (cio/external-sort (order-by-comparator find order-by))
+         true (dedupe)
          offset (drop offset)
          limit (take limit))))))
 

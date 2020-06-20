@@ -2997,11 +2997,11 @@
 
     (t/testing "query with order-by returns distinct results"
       (t/is (= [[30] [25] [20]]
-               (api/q db '{:find [a] :where [[_ :age a]], :order-by [[a :desc]]}))))
+               (api/q db '{:find [a] :where [[e :age a]], :order-by [[a :desc]]}))))
 
-    (t/testing "lazy query returns distinct results"
+    (t/testing "lazy query does not return distinct results"
       (with-open [res (api/open-q db '{:find [a] :where [[_ :age a]]})]
-        (t/is (= [[20] [25] [30]]
+        (t/is (= [[20] [20] [25] [30]]
                  (sort (iterator-seq res))))))))
 
 (t/deftest test-unsorted-args-697
