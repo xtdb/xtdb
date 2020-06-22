@@ -200,20 +200,13 @@
 (rf/reg-sub
  ::query-form-history
  (fn [db _]
-   (let [valid-time #(common/datetime->date-time
-                      (str (:valid-time % (t/now))))
-         transaction-time #(common/datetime->date-time
-                            (:transaction-time %))]
-     (reverse
-      (mapv
-       (fn [x]
-         {"q" (common/query-params->formatted-edn-string
-               (dissoc x :valid-time :transaction-time))
-          "vtd" (:date (valid-time x))
-          "vtt" (:time (valid-time x))
-          "ttd" (:date (transaction-time x))
-          "ttt" (:time (transaction-time x))})
-       (:query-history db))))))
+   (mapv
+    (fn [x]
+      {"q" (common/query-params->formatted-edn-string
+            (dissoc x :valid-time :transaction-time))
+       "valid-time" (:valid-time x)
+       "transaction-time" (:transaction-time x)})
+    (:query-history db))))
 
 (rf/reg-sub
  ::show-vt?

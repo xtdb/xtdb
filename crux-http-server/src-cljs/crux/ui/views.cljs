@@ -108,9 +108,7 @@
                                    :prevent-default? true
                                    :clean-on-unmount? true
                                    :initial-values @(rf/subscribe [::sub/initial-values-query])
-                                   :on-submit #(do
-                                                 (rf/dispatch [::events/toggle-form-history :query false])
-                                                 (rf/dispatch [::events/go-to-query-view %]))}
+                                   :on-submit #(rf/dispatch [::events/go-to-query-view %])}
                         (fn [{:keys [values
                                      errors
                                      touched
@@ -119,8 +117,6 @@
                                      form-id
                                      handle-submit] :as props}]
                           (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
-                                form-pane-history-q @(rf/subscribe [::sub/form-pane-history :query])
-                                query-history-list @(rf/subscribe [::sub/query-form-history])
                                 disabled? (or loading? (some some? (vals errors)))]
                             [:<>
                              [:form
@@ -133,43 +129,7 @@
                                  :on-change #(set-values {"q" %})
                                  :on-blur #(set-touched "q")}]]
                               [:div.query-form-options
-                               [vt-tt-display :query]
-                               [:div.expand-collapse__group.form-pane__history
-                                {:on-click #(rf/dispatch [::events/toggle-form-history :query])}
-                                [:span.expand-collapse__txt
-                                 [:span.form-pane__arrow
-                                  [common/arrow-svg form-pane-history-q] "Query History"]]]]
-                              [:div
-                               {:class (if form-pane-history-q "expand" "collapse")}
-                               [:div.form-pane__history-scrollable
-                                (map-indexed
-                                 (fn [idx {:strs [q vtd vtt ttd ttt]}]
-                                   ^{:key (gensym)}
-                                   [:div.form-pane__history-scrollable-el
-                                    [:div.form-pane__history-delete
-                                     {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-                                     [:i.fas.fa-trash-alt]]
-                                    [:div.form-pane__history-scrollable-el-left
-                                     {:on-click #(do
-                                                   (rf/dispatch [::events/toggle-form-history :query])
-                                                   (.setValue @cm-instance q)
-                                                   (set-values
-                                                    {"q" q
-                                                     "vtd" vtd
-                                                     "vtt" vtt
-                                                     "ttd" ttd
-                                                     "ttt" ttt}))}
-                                     [:div
-                                      {:style {:margin-bottom "1rem"}}
-                                      [:span.form-pane__history-headings "Valid Time: "]
-                                      [:span.form-pane__history-txt (str vtd " " vtt)]]
-                                     (when (and ttd ttt)
-                                       [:div
-                                        [:span.form-pane__history-headings "Transaction Time: "]
-                                        [:span.form-pane__history-txt (str ttd " " ttt)]])
-                                     [:div {:style {:margin-top "1rem"}}
-                                      [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
-                                 query-history-list)]]
+                               [vt-tt-display :query]]
                               (when (and (get touched "q")
                                          (get errors "q"))
                                 [:p.input-error (get errors "q")])
@@ -242,6 +202,32 @@
                  :disabled disabled?}
                 "Submit Entity"]
                [:p.button-hint "(Ctrl + Enter)"]]]))])})))
+
+(defn query-history
+  []
+  (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
+    [:div.form-pane__history-scrollable
+     (map-indexed
+      (fn [idx {:strs [q valid-time transaction-time] :as history-q}]
+        ^{:key (gensym)}
+        [:div.form-pane__history-scrollable-el
+         [:div.form-pane__history-delete
+          {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+          [:i.fas.fa-trash-alt]]
+         [:div.form-pane__history-scrollable-el-left
+          {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
+          (when valid-time
+            [:div
+             {:style {:margin-bottom "1rem"}}
+             [:span.form-pane__history-headings "Valid Time: "]
+             [:span.form-pane__history-txt valid-time]])
+          (when transaction-time
+            [:div
+             [:span.form-pane__history-headings "Transaction Time: "]
+             [:span.form-pane__history-txt transaction-time]])
+          [:div {:style {:margin-top "1rem"}}
+           [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+      query-history-list)]))
 
 (defn query-table
   []
@@ -444,13 +430,21 @@
         {:class (when (= :entity form-pane-view)
                   "form-pane__tab--selected")
          :on-click #(rf/dispatch [::events/set-form-pane-view :entity])}
-        "Entity"]]
+        "Entity"]
+       [:a.form-pane__tab
+        {:class (when (= :query-history form-pane-view)
+                  "form-pane__tab--selected")
+         :on-click #(rf/dispatch [::events/set-form-pane-view :query-history])}
+        "Query History"]]
       [:div
        {:class (if (= :query form-pane-view) "visible" "hidden")}
        [query-form]]
       [:div
        {:class (if (= :entity form-pane-view) "visible" "hidden")}
-       [entity-form]]]]))
+       [entity-form]]
+      [:div
+       {:class (if (= :query-history form-pane-view) "visible" "hidden")}
+       [query-history]]]]))
 
 (defn root-page
   []

@@ -93,17 +93,20 @@
  (fn [{:keys [db]} [_ {:keys [values]}]]
    (let [{:strs [q vtd vtt ttd ttt]} values
          query-params (->>
-                       (merge
-                        (common/edn->query-params (reader/read-string q))
-                        {:valid-time (common/date-time->datetime vtd vtt)
-                         :transaction-time (common/date-time->datetime ttd ttt)})
+                       (->
+                        (merge
+                         (common/edn->query-params (reader/read-string q))
+                         {:valid-time (common/date-time->datetime vtd vtt)
+                          :transaction-time (common/date-time->datetime ttd ttt)})
+                        (update :limit (fnil identity "100")))
                        (remove #(nil? (second %)))
                        (into {}))
-         limit (:limit query-params 100)
+         history-elem (-> (update query-params :valid-time common/iso-format-datetime)
+                          (update :transaction-time common/iso-format-datetime))
          current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
-         updated-history (conj (into [] (remove #(= query-params %) current-storage)) query-params)]
+         updated-history (conj (into [] (remove #(= history-elem %) current-storage)) history-elem)]
      {:db (assoc db :query-history updated-history)
-      :dispatch [:navigate :query {} (assoc query-params :limit limit)]
+      :dispatch [:navigate :query {} query-params]
       :local-storage ["query" updated-history]})))
 
 (rf/reg-event-fx
@@ -125,6 +128,19 @@
          limit (js/parseInt (get-in db [:current-route :query-params :limit] 100))]
      {:db db
       :dispatch [:navigate :query {} (assoc query-params :offset (-> (+ offset limit) str))]})))
+
+(rf/reg-event-fx
+ ::go-to-historical-query
+ (fn [{:keys [db]} [_ history-q]]
+   (let [{:strs [q valid-time transaction-time]} history-q
+         query-params (->>
+                       (merge
+                        (common/edn->query-params (reader/read-string q))
+                        {:valid-time (some-> valid-time)
+                         :transaction-time (some-> transaction-time)})
+                       (remove #(nil? (second %)))
+                       (into {}))]
+     {:dispatch [:navigate :query {} query-params]})))
 
 (rf/reg-event-fx
  ::set-entity-pane-document
