@@ -11,23 +11,21 @@
    [reagent.core :as r]
    [re-frame.core :as rf]))
 
-(defn vt-tt-icons
+(defn vt-tt-display
   [component]
   (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
         show-tt? @(rf/subscribe [::sub/show-tt? component])]
     [:<>
-     [:i.fas.fa-history.vt-tt-icons
-      {:on-click #(rf/dispatch [::events/toggle-show-vt component show-vt?])
-       :title "Valid Time"}
-      [:span.vt-tt-icon-text
-       {:class (when show-vt? "vt-tt-icon-text--active")}
-       "Valid Time"]]
-     [:i.fas.fa-clock.vt-tt-icons
-      {:on-click #(rf/dispatch [::events/toggle-show-tt component show-tt?])
-       :title "Transaction Time"}
-      [:span.vt-tt-icon-text
-       {:class (when show-tt? "vt-tt-icon-text--active")}
-       "Transaction Time"]]]))
+     [:div.expand-collapse__group
+      {:on-click #(rf/dispatch [::events/toggle-show-vt component show-vt?])}
+      [:span.expand-collapse__txt
+       [:span.form-pane__arrow
+        [common/arrow-svg show-vt?] "Valid Time"]]]
+     [:div.expand-collapse__group
+      {:on-click #(rf/dispatch [::events/toggle-show-tt component show-tt?])}
+      [:span.expand-collapse__txt
+       [:span.form-pane__arrow
+        [common/arrow-svg show-tt?] "Transaction Time"]]]]))
 
 (defn vt-tt-inputs
   [{:keys [values touched errors handle-change handle-blur]} component]
@@ -135,7 +133,7 @@
                                  :on-change #(set-values {"q" %})
                                  :on-blur #(set-touched "q")}]]
                               [:div.query-form-options
-                               [vt-tt-icons :query]
+                               [vt-tt-display :query]
                                [:div.expand-collapse__group.form-pane__history
                                 {:on-click #(rf/dispatch [::events/toggle-form-history :query])}
                                 [:span.expand-collapse__txt
@@ -235,7 +233,7 @@
                           (get errors "eid"))
                  [:p.input-error (get errors "eid")])]
               [:div.query-form-options
-               [vt-tt-icons :entity]]
+               [vt-tt-display :entity]]
               [vt-tt-inputs props :entity]
               [:div.button-line
                [:button.button
