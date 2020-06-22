@@ -3,6 +3,8 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.document-store :as ds]
+            [crux.lru :as lru]
             [crux.node :as n]
             [crux.tx :as tx]
             [next.jdbc :as jdbc]
@@ -161,6 +163,8 @@
                                   (->JdbcTxLog ds dbtype))
                       :deps [::ds]}
 
-          ::n/document-store {:start-fn (fn [{::keys [ds]} {::keys [dbtype]}]
-                                          (->JdbcDocumentStore ds dbtype))
+          ::n/document-store {:start-fn (fn [{::keys [ds]} {:crux.document-store/keys [doc-cache-size] ::keys [dbtype]}]
+                                          (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
+                                                                    (->JdbcDocumentStore ds dbtype)))
+                              :args {:crux.document-store/doc-cache-size ds/doc-cache-size-opt}
                               :deps [::ds]}}))

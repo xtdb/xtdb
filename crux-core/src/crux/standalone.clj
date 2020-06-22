@@ -100,17 +100,8 @@
   (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "crux-standalone-tx-log"))
                      (:kv-store event-log)))
 
-(defrecord StandaloneDocumentStore [event-log-kv-store event-log-object-store]
-  db/DocumentStore
-  (submit-docs [this id-and-docs]
-    (db/put-objects event-log-object-store id-and-docs))
-
-  (fetch-docs [this ids]
-    (with-open [snapshot (kv/new-snapshot event-log-kv-store)]
-      (db/get-objects event-log-object-store snapshot ids))))
-
-(defn- ->document-store [{{:keys [kv-store object-store]} ::event-log} _]
-  (->StandaloneDocumentStore kv-store object-store))
+(defn- ->document-store [{{:keys [document-store]} ::event-log} _]
+  document-store)
 
 (def ^:private event-log-args
   {::event-log-kv-store {:doc "The KV store to use for the standalone event log"
@@ -125,29 +116,29 @@
                       :default true
                       :crux.config/type :crux.config/boolean}
 
-   ::event-log-object-store {:doc "The object store to use for the standalone event log"
-                             :default 'crux.object-store/kv-object-store
-                             :crux.config/type :crux.config/module}})
+   ::event-log-document-store {:doc "The document store to use for the standalone event log"
+                               :default 'crux.document-store/kv-document-store
+                               :crux.config/type :crux.config/module}})
 
-(defrecord EventLog [kv-store object-store]
+(defrecord EventLog [kv-store document-store]
   Closeable
   (close [_]
     (cio/try-close kv-store)
-    (cio/try-close object-store)))
+    (cio/try-close document-store)))
 
-(defn ->event-log [deps {::keys [event-log-kv-store event-log-object-store] :as args}]
+(defn ->event-log [deps {::keys [event-log-kv-store event-log-document-store] :as args}]
   (let [args (-> args
                  (set/rename-keys {::event-log-dir :crux.kv/db-dir
                                    ::event-log-sync? :crux.kv/sync?}))
         kv-store (topo/start-component event-log-kv-store {} args)
-        object-store (topo/start-component event-log-object-store {::n/kv-store kv-store} args)]
-    (->EventLog kv-store object-store)))
+        document-store (topo/start-component event-log-document-store (assoc deps ::n/kv-store kv-store) args)]
+    (->EventLog kv-store document-store)))
 
 (def topology
   (merge n/base-topology
          {::event-log {:start-fn ->event-log
                        :args event-log-args}
           ::n/tx-log {:start-fn ->tx-log
-                      :deps [::n/kv-store ::n/object-store ::n/document-store ::event-log]}
+                      :deps [::n/kv-store ::n/document-store ::event-log]}
           ::n/document-store {:start-fn ->document-store
                               :deps [::event-log]}}))
