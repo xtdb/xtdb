@@ -15,7 +15,8 @@
             [taoensso.nippy :as nippy]
             [crux.tx.event :as txe]
             [clojure.string :as string]
-            [crux.tx.conform :as txc])
+            [crux.tx.conform :as txc]
+            [crux.api :as crux])
   (:import [java.util Date]
            [java.time Duration]
            [crux.codec EntityTx]))
@@ -607,6 +608,19 @@
               (fix/submit+await-tx [[:crux.tx/fn :update-attribute-fn :ivan :age `dec]])
               (some-> (#'tx/reset-tx-fn-error) throw)
               (t/is (= v3-ivan (api/entity (api/db *api*) :ivan))))))
+
+        (t/testing "sees in-transaction version of entities (including itself)"
+          (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo 1}]])
+          (let [tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo 2}]
+                                         [:crux.tx/put {:crux.db/id :doubling-fn
+                                                        :crux.db/fn '(fn [ctx]
+                                                                       [[:crux.tx/put (-> (crux.api/entity (crux.api/db ctx) :foo)
+                                                                                          (update :foo * 2))]])}]
+                                         [:crux.tx/fn :doubling-fn]])]
+
+            (t/is (crux/tx-committed? *api* tx))
+            (t/is (= {:crux.db/id :foo, :foo 4}
+                     (crux/entity (crux/db *api*) :foo)))))
 
         (t/testing "function ops can return other function ops"
           (let [returns-fn {:crux.db/id :returns-fn
