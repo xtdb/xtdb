@@ -1383,7 +1383,7 @@
                                            ::tx/tx-id 0})
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
           docs (into {} (mapcat :docs) conformed-tx-ops)
-          document-store (doto (fork/->ForkedDocumentStore document-store (atom {}))
+          document-store (doto (fork/->forked-document-store document-store)
                            (db/submit-docs docs))
           indexer (doto (fork/->forked-indexer indexer (kvi/->KvIndexer (mem-kv/->mem-kv))
                                                valid-time transact-time)

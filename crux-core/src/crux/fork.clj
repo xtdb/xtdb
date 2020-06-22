@@ -61,8 +61,8 @@
   (entity-as-of [this eid valid-time transact-time]
     (->> [(when-not (contains? (into #{} (map #(db/encode-value inner-index-store %)) evicted-eids) eid)
             (db/entity-as-of inner-index-store eid
-                             (date-min valid-time capped-valid-time)
-                             (date-min transact-time capped-transact-time)))
+                             (cond-> valid-time capped-valid-time (date-min capped-valid-time))
+                             (cond-> transact-time capped-transact-time (date-min capped-transact-time))))
           (db/entity-as-of mem-index-store eid valid-time transact-time)]
          (remove nil?)
          (sort-by (juxt #(.vt ^EntityTx %) #(.tx-id ^EntityTx %)))
@@ -73,11 +73,11 @@
                   (db/entity-history inner-index-store eid sort-order
                                      (case sort-order
                                        :asc (-> opts
-                                                (update-in [:end :crux.db/valid-time] date-min (inc-date capped-valid-time))
-                                                (update-in [:end :crux.tx/tx-time] date-min (inc-date capped-transact-time)))
+                                                (cond-> capped-valid-time (update-in [:end :crux.db/valid-time] date-min (inc-date capped-valid-time)))
+                                                (cond-> capped-transact-time (update-in [:end :crux.tx/tx-time] date-min (inc-date capped-transact-time))))
                                        :desc (-> opts
-                                                 (update-in [:start :crux.db/valid-time] date-min capped-valid-time)
-                                                 (update-in [:start :crux.tx/tx-time] date-min capped-transact-time)))))
+                                                 (cond-> capped-valid-time (update-in [:start :crux.db/valid-time] date-min capped-valid-time))
+                                                 (cond-> capped-transact-time (update-in [:start :crux.tx/tx-time] date-min capped-transact-time))))))
                 (db/entity-history mem-index-store eid sort-order opts)
 
                 (case [sort-order (boolean (:with-corrections? opts))]
@@ -107,7 +107,7 @@
     (cio/try-close mem-index-store)
     (cio/try-close inner-index-store)))
 
-(defrecord ForkedIndexer [inner-indexer mem-indexer !evicted-eids capped-valid-time capped-transact-time]
+(defrecord ForkedIndexer [inner-indexer mem-indexer !evicted-eids !etxs capped-valid-time capped-transact-time]
   db/Indexer
   (index-docs [this docs]
     (db/index-docs mem-indexer docs))
@@ -130,6 +130,10 @@
         {:tombstones tombstones})))
 
   (index-entity-txs [this tx entity-txs]
+    (swap! !etxs merge (->> entity-txs
+                            (into {} (map (juxt (fn [^EntityTx etx]
+                                                  [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
+                                                identity)))))
     (db/index-entity-txs mem-indexer tx entity-txs))
 
   (store-index-meta [this k v]
@@ -162,10 +166,16 @@
                         capped-valid-time
                         capped-transact-time)))
 
+(defn newly-evicted-eids [indexer]
+  @(:!evicted-eids indexer))
+
+(defn new-etxs [indexer]
+  (vals @(:!etxs indexer)))
+
 (defn ->forked-indexer [inner-indexer mem-indexer
                         capped-valid-time capped-transact-time]
   (->ForkedIndexer inner-indexer mem-indexer
-                   (atom #{})
+                   (atom #{}) (atom {})
                    capped-valid-time capped-transact-time))
 
 (defrecord ForkedDocumentStore [doc-store !docs]
@@ -176,3 +186,9 @@
   (fetch-docs [_ ids]
     (let [overridden-docs (select-keys @!docs ids)]
       (into overridden-docs (db/fetch-docs doc-store (set/difference (set ids) (set (keys overridden-docs))))))))
+
+(defn new-docs [doc-store]
+  @(:!docs doc-store))
+
+(defn ->forked-document-store [doc-store]
+  (->ForkedDocumentStore doc-store (atom {})))

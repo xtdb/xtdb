@@ -6,8 +6,7 @@
             [crux.memory :as mem]
             [crux.status :as status]
             [crux.morton :as morton]
-            [crux.kv.memdb :as memdb]
-            [crux.tx :as tx])
+            [crux.kv.memdb :as memdb])
   (:import (crux.codec Id EntityTx)
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
