@@ -430,12 +430,9 @@
     [:div.form-pane
      [:div.expand-collapse__group
       {:on-click #(rf/dispatch [::events/toggle-form-pane])}
-      (if form-pane-hidden?
-        [:i.fas.fa-expand]
-        [:i.fas.fa-compress])
       [:span.expand-collapse__txt
-       {:style {:margin-left ".5rem"}}
-       "Console"]]
+       [:span.form-pane__arrow
+        [common/arrow-svg (not form-pane-hidden?)] "Console"]]]
 
      [:div.form-pane__content
       {:class (if form-pane-hidden? "collapse" "expand")}
