@@ -89,10 +89,7 @@
 
   Returns a crux.kafka.embedded_kafka.EmbeddedKafka component that
   implements java.io.Closeable, which allows ZooKeeper and Kafka to be
-  stopped by calling close.
-
-  NOTE: requires org.apache.kafka/kafka_2.11 and
-  org.apache.zookeeper/zookeeper on the classpath."
+  stopped by calling close."
   ^java.io.Closeable
   [{:crux.kafka.embedded/keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
     :or {zookeeper-port default-zookeeper-port
