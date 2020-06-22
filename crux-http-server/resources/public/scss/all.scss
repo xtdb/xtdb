@@ -595,14 +595,22 @@ ul.entity-group__value li::before {
 .form-pane__tab {
     cursor: pointer;
     font-size: .8rem;
+    padding: 0.4rem;
+    border-top: 1px solid transparent;
+    margin-bottom: -1px;
 }
 
 .form-pane__tab--selected {
     font-weight: bold;
+    border: 1px solid #bfbcbc;
+    border-bottom: 1px solid white;
 }
 
-.form-pane__tab:not(:last-child) {
-    margin-right: 1rem;
+.form-pane__tabs {
+    margin-top: 0.7rem;
+    margin-bottom: 1.4rem;
+    border-bottom: 1px solid #bfbcbc;
+    display: flex;
 }
 
 .form-pane__content {
