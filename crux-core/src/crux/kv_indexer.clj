@@ -710,7 +710,7 @@
                                               av-i (kv/new-iterator snapshot)]
                                     (->> (for [eid eids
                                                ecav-key (all-keys-in-prefix ecav-i
-                                                                            (encode-ecav-key-to (.get seek-buffer-tl)
+                                                                            (encode-ecav-key-to nil
                                                                                                 (c/->id-buffer eid)))]
                                            ecav-key)
 
