@@ -4,7 +4,7 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [juxt/crux-core "derived-from-git"]
+                 [juxt/crux-core "crux-git-version-beta"]
                  [cheshire "5.10.0"]
                  [org.apache.calcite/calcite-core "1.22.0"]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
@@ -17,7 +17,7 @@
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                  [commons-logging "1.2"]]
-  :profiles {:dev {:dependencies [[juxt/crux-test "derived-from-git"]
+  :profiles {:dev {:dependencies [[juxt/crux-test "crux-git-version"]
 
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [io.airlift.tpch/tpch "0.10"]
