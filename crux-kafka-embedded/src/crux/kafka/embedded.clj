@@ -3,10 +3,11 @@
   (:require [clojure.java.io :as io]
             [crux.io :as cio]
             [clojure.spec.alpha :as s])
-  (:import [kafka.server
-            KafkaConfig KafkaServerStartable]
-           [org.apache.zookeeper.server
-            ServerCnxnFactory ZooKeeperServer]
+  (:import [kafka.server KafkaConfig KafkaServer]
+           [org.apache.zookeeper.server ServerCnxnFactory ZooKeeperServer]
+           [org.apache.kafka.common.utils Time]
+           [scala Option]
+           [scala.collection Seq]
            java.io.Closeable))
 
 ;; Based on:
@@ -34,11 +35,11 @@
    "transaction.state.log.min.isr" "1"
    "auto.create.topics.enable" "false"})
 
-(defn start-kafka-broker ^KafkaServerStartable [config]
-  (doto (KafkaServerStartable. (KafkaConfig. (merge default-kafka-broker-config config)))
+(defn start-kafka-broker ^KafkaServer [config]
+  (doto (KafkaServer. (KafkaConfig. (merge default-kafka-broker-config config)) Time/SYSTEM (Option/empty) (Seq/empty))
     (.startup)))
 
-(defn stop-kafka-broker [^KafkaServerStartable broker]
+(defn stop-kafka-broker [^KafkaServer broker]
   (some-> broker .shutdown)
   (some-> broker .awaitShutdown))
 
