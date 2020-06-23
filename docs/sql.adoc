@@ -1,0 +1,3 @@
+[#sql]
+
+include::{path}/../crux-sql/README.adoc[]
