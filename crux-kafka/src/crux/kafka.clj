@@ -171,7 +171,7 @@
   (.flush producer))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               kv-store object-store
+                               kv-store random-access-document-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
@@ -186,8 +186,7 @@
     (loop [indexed {}]
       (let [missing-ids (set/difference (set ids) (set (keys indexed)))
             indexed (merge indexed (when (seq missing-ids)
-                                     (with-open [snapshot (kv/new-snapshot kv-store)]
-                                       (db/get-objects object-store snapshot missing-ids))))]
+                                     (db/fetch-docs random-access-document-store missing-ids)))]
         (if (= (count indexed) (count ids))
           indexed
           (do
@@ -218,7 +217,7 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{:keys [bus object-store kv-store indexer !error]}
+(defn- index-doc-log [{:keys [bus random-access-document-store indexer !error]}
                       {:keys [::doc-topic ::group-id kafka-config]}]
   (let [tp-offsets (read-doc-offsets indexer)]
     (try
@@ -228,7 +227,7 @@
         (loop [tp-offsets tp-offsets]
           (let [tp-offsets (->> (consumer-seqs consumer (Duration/ofSeconds 1))
                                 (reduce (fn [tp-offsets doc-records]
-                                          (db/put-objects object-store (->> doc-records (into {} (map doc-record->id+doc))))
+                                          (db/submit-docs random-access-document-store (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
                                             (->> (store-doc-offsets indexer))))
                                         tp-offsets))]
@@ -295,7 +294,7 @@
    :args default-options})
 
 (def document-store
-  {:start-fn (fn [{::keys [producer admin-client], ::n/keys [indexer kv-store object-store bus] :as deps}
+  {:start-fn (fn [{::keys [producer admin-client random-access-document-store], ::n/keys [indexer kv-store bus] :as deps}
                   {::keys [doc-topic doc-partitions] :as options}]
                (let [kafka-config (derive-kafka-config options)
                      doc-store (map->KafkaDocumentStore
@@ -303,7 +302,7 @@
                                  :doc-topic doc-topic
                                  :indexer indexer
                                  :kv-store kv-store
-                                 :object-store object-store
+                                 :random-access-document-store random-access-document-store
                                  :bus bus
                                  :!indexing-error (atom nil)})]
                  (ensure-topic-exists admin-client doc-topic doc-topic-config doc-partitions options)
@@ -312,13 +311,14 @@
                         (doto (Thread. #(index-doc-log doc-store (assoc options :kafka-config kafka-config)))
                           (.setName "crux-doc-consumer")
                           (.start)))))
-   :deps [::producer ::admin-client ::n/kv-store ::n/object-store ::n/indexer ::n/bus]
+   :deps [::producer ::admin-client ::random-access-document-store ::n/kv-store ::n/indexer ::n/bus]
    :args default-options})
 
 (def topology
   (merge n/base-topology
          {:crux.node/tx-log tx-log
           :crux.node/document-store document-store
+          ::random-access-document-store 'crux.document-store/kv-document-store
           ::admin-client admin-client
           ::producer producer
           ::latest-submitted-tx-consumer latest-submitted-tx-consumer}))

@@ -13,7 +13,7 @@ public class KafkaTopology extends EdnTopology {
     private static final Keyword KAFKA_TOPOLOGY = keyword("crux.kafka/topology");
     private static final Keyword NODE_TOPOLOGY = keyword("crux.node/topology");
     private static final Keyword KV_STORE = keyword("crux.node/kv-store");
-    private static final Keyword OBJECT_STORE = keyword("crux.node/object-store");
+    private static final Keyword DOCUMENT_STORE = keyword("crux.node/document-store");
     private static final Keyword DB_DIR = keyword("crux.kv/db-dir");
     private static final Keyword KV_SYNC = keyword("crux.kv/sync");
     private static final Keyword BOOTSTRAP_SERVERS = keyword("crux.kafka/bootstrap-servers");
@@ -66,8 +66,8 @@ public class KafkaTopology extends EdnTopology {
         return with(KV_STORE, kvStore);
     }
 
-    public KafkaTopology withObjectStore(String objectStore) {
-        return with(OBJECT_STORE, objectStore);
+    public KafkaTopology withDocumentStore(String documentStore) {
+        return with(DOCUMENT_STORE, documentStore);
     }
 
     public KafkaTopology withDbDir(String dbDir) {

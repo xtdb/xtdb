@@ -1,5 +1,7 @@
 (ns crux.s3
   (:require [crux.db :as db]
+            [crux.document-store :as ds]
+            [crux.lru :as lru]
             [crux.node :as n]
             [clojure.spec.alpha :as s]
             [taoensso.nippy :as nippy]
@@ -64,18 +66,21 @@
   {::configurator {:start-fn (fn [deps args]
                                (reify S3Configurator))}
 
-   ::n/document-store {:start-fn (fn [{::keys [^S3Configurator configurator]} {::keys [bucket prefix]}]
-                                   (->S3DocumentStore configurator
-                                                      (.makeClient configurator)
-                                                      bucket
-                                                      (cond
-                                                        (string/blank? prefix) ""
-                                                        (string/ends-with? prefix "/") prefix
-                                                        :else (str prefix "/"))))
+   ::n/document-store {:start-fn (fn [{::keys [^S3Configurator configurator]} {:crux.document-store/keys [doc-cache-size]
+                                                                               ::keys [bucket prefix]}]
+                                   (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
+                                                             (->S3DocumentStore configurator
+                                                                                (.makeClient configurator)
+                                                                                bucket
+                                                                                (cond
+                                                                                  (string/blank? prefix) ""
+                                                                                  (string/ends-with? prefix "/") prefix
+                                                                                  :else (str prefix "/")))))
                        :args {::bucket {:required? true,
                                         :crux.config/type ::bucket
                                         :doc "S3 bucket"}
                               ::prefix {:required? false,
                                         :crux.config/type ::prefix
-                                        :doc "S3 prefix"}}
+                                        :doc "S3 prefix"}
+                              :crux.document-store/doc-cache-size ds/doc-cache-size-opt}
                        :deps #{::configurator}}})
