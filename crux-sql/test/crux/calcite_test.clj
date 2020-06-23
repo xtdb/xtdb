@@ -466,7 +466,15 @@
                                                      :crux.sql.table/query '{:find [?id ?name ?born]}
                                                      :crux.sql.table/columns '{?id :keyword
                                                                                ?born :time}}])
-                              (query "SELECT * FROM PERSON"))))))
+                              (query "SELECT * FROM PERSON")))))
+  (t/testing "missing column definition"
+    (t/is (thrown-with-msg? java.lang.Exception #"Unrecognised column: \?name"
+                            (do
+                              (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
+                                                     :crux.sql.table/name "person"
+                                                     :crux.sql.table/query '{:find [?id ?name]}
+                                                     :crux.sql.table/columns '{?id :keyword}}])
+                              (query "SELECT * FROM PERSON")))))  )
 
 (t/deftest test-simple-joins
   (fix/transact! *api* '[{:crux.db/id :crux.sql.schema/person
