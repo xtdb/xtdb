@@ -263,8 +263,8 @@
   (log/debug "Enriching with filter" filter)
   (let [[filters clauses exprs args] (->vars+clauses+exprs schema (->ast filter schema))]
     (-> schema
-        (update-in [:crux.sql.table/query :where] (comp vec concat) (vectorize-value (->where filters)))
-        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
+        (update-in [:crux.sql.table/query :where] (fnil into []) (vectorize-value (->where filters)))
+        (update-in [:crux.sql.table/query :where] (fnil into []) clauses)
         ;; Todo consider case of multiple arg maps
         (update-in [:crux.sql.table/query :args] merge args)
         (update :exprs merge exprs))))
@@ -276,7 +276,7 @@
                                          (->vars+clauses+exprs schema))]
     (-> schema
         (assoc-in [:crux.sql.table/query :find] (vec projects))
-        (update-in [:crux.sql.table/query :where] (comp vec concat) clauses)
+        (update-in [:crux.sql.table/query :where] (fnil into []) clauses)
         (update :exprs merge exprs))))
 
 (defn enrich-join [s1 s2 join-type condition]
@@ -286,7 +286,7 @@
         s2-lvars (into {} (map #(vector % (gensym %))) (keys (:crux.sql.table/columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (-> s1
-               (assoc :crux.sql.table/query (merge-with (comp vec concat) q1 q2))
+               (assoc :crux.sql.table/query (merge-with (fnil into []) q1 q2))
                (update-in [:crux.sql.table/query :args] (partial apply merge))
                (update :exprs merge (:exprs s2)))]
     (enrich-filter s3 condition)))
