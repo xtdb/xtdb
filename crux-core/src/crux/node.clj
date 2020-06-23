@@ -93,10 +93,12 @@
                 (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
         (cio/->cursor #() [])
 
-        (let [tx-log-iterator (db/open-tx-log tx-log after-tx-id)
+        (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
+              tx-log-iterator (db/open-tx-log tx-log after-tx-id)
               index-store (db/open-index-store indexer)
               tx-log (-> (iterator-seq tx-log-iterator)
-                         (->> (remove #(db/tx-failed? indexer (:crux.tx/tx-id %))))
+                         (->> (remove #(db/tx-failed? indexer (:crux.tx/tx-id %)))
+                              (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id)))
                          (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events]
                                                        :as tx-log-entry}]
                                                    (-> tx-log-entry
