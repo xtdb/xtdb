@@ -405,9 +405,10 @@
   (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
     (doseq [c (:find query)]
       (let [col-name (->column-name c)
-            col-type ^SqlTypeName (java-sql-types->calcite-sql-type (columns c))]
-        (when-not col-type
-          (throw (IllegalArgumentException. (str "Unrecognized column: " c))))
+            col-def (columns c)
+            _ (when-not col-def
+                (throw (IllegalArgumentException. (str "Unrecognised column: " c))))
+            col-type ^SqlTypeName (java-sql-types->calcite-sql-type col-def)]
         (log/trace "Adding column" col-name col-type)
         (doto field-info
           (.add col-name col-type)
