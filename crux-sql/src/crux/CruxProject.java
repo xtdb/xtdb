@@ -23,7 +23,7 @@ public class CruxProject extends Project implements CruxRel {
         super(cluster, traitSet, ImmutableList.of(), input, projects, rowType);
         assert getConvention() == CruxRel.CONVENTION;
         this.projects = projects;
-        this.projectFn = CruxUtils.resolve("crux.calcite/enrich-project");
+        this.projectFn = CruxUtils.resolveWithErrorLogging("crux.calcite/enrich-project");
     }
 
     @Override public Project copy(RelTraitSet traitSet, RelNode input, List<RexNode> projects,

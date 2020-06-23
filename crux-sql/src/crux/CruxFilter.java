@@ -18,7 +18,7 @@ public class CruxFilter extends Filter implements CruxRel {
         super(cluster, traitSet, child, condition);
         assert getConvention() == CruxRel.CONVENTION;
         assert getConvention() == child.getConvention();
-        this.filterFn = CruxUtils.resolve("crux.calcite/enrich-filter");
+        this.filterFn = CruxUtils.resolveWithErrorLogging("crux.calcite/enrich-filter");
     }
 
     @Override public Filter copy(RelTraitSet relTraitSet, RelNode input, RexNode condition) {
