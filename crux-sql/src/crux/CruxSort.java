@@ -29,8 +29,8 @@ public class CruxSort extends Sort implements CruxRel {
         super(cluster, traitSet, child, collation, offset, fetch);
         assert getConvention() == CruxRel.CONVENTION;
         assert getConvention() == child.getConvention();
-        this.sortByFn = CruxUtils.resolve("crux.calcite/enrich-sort-by");
-        this.limitOffsetFn = CruxUtils.resolve("crux.calcite/enrich-limit-and-offset");
+        this.sortByFn = CruxUtils.resolveWithErrorLogging("crux.calcite/enrich-sort-by");
+        this.limitOffsetFn = CruxUtils.resolveWithErrorLogging("crux.calcite/enrich-limit-and-offset");
     }
 
     @Override public RelOptCost computeSelfCost(RelOptPlanner planner,
