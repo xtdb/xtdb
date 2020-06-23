@@ -5,19 +5,26 @@ import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 
+import clojure.lang.IFn;
+
 import java.lang.reflect.Type;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.Map;
 import java.util.HashMap;
 
 public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
     private static final Pattern PATTERN  = Pattern.compile("((TRANSACTIONTIME|VALIDTIME)\\s*\\(\\'(.*?)\\'\\))");
+    private final IFn parseDateFn;
 
     public CruxCalcitePrepareImpl() {
         super();
+        this.parseDateFn = CruxUtils.resolve("clojure.instant/read-instant-date");
+    }
+
+    private Date parseDate(String s) {
+        return (Date) parseDateFn.invoke(s);
     }
 
     @Override
@@ -30,11 +37,11 @@ public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
                 switch(matcher.group(2))
                 {
                     case "TRANSACTIONTIME":
-                        Date txTime = Date.from(ZonedDateTime.parse(matcher.group(3)).toInstant());
+                        Date txTime = parseDate(matcher.group(3));
                         internalParameters.put("TRANSACTIONTIME", txTime);
                         break;
                     case "VALIDTIME":
-                        Date validTime = Date.from(ZonedDateTime.parse(matcher.group(3)).toInstant());
+                        Date validTime = parseDate(matcher.group(3));
                         internalParameters.put("VALIDTIME", validTime);
                         break;
                 }
