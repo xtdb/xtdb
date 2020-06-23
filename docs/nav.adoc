@@ -19,6 +19,8 @@ include::{path}/transactions.adoc[leveloffset=+1]
 
 include::{path}/queries.adoc[leveloffset=+1]
 
+include::{path}/sql.adoc[leveloffset=+1]
+
 include::{path}/api.adoc[leveloffset=+1]
 
 include::{path}/advanced.adoc[leveloffset=+1]
