@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [cljs.pprint :as pprint]
+   [cljs.reader :as reader]
    [crux.ui.events :as events]
    [crux.ui.codemirror :as cm]
    [crux.ui.common :as common]
@@ -75,13 +76,21 @@
 
 (defn query-validation
   [values]
-  (let [invalid? #(empty? (string/trim (or (get values %) "")))
-        validation {"q" (when (invalid? "q") "Query box is empty")
+  (let [empty-string? #(empty? (string/trim (or (get values %) "")))
+        invalid-query? (try
+                         (let [query-edn (reader/read-string (get values "q"))]
+                           (cond
+                             (nil? query-edn)  "Query box is empty"
+                             (not (contains? query-edn :find)) "Query doesn't contain a 'find' clause"
+                             (not (contains? query-edn :where)) "Query doesn't contain a 'where' clause"))
+                         (catch js/Error e
+                           (str "Error reading query - " (.-message e))))
+        validation {"q" invalid-query?
                     "vt" (when (apply not= ((juxt #(% "vtd")
-                                                  #(% "vtt")) invalid?))
+                                                  #(% "vtt")) empty-string?))
                            "Fill out both inputs or none")
                     "tt" (when (apply not= ((juxt #(% "ttd")
-                                                  #(% "ttt")) invalid?))
+                                                  #(% "ttt")) empty-string?))
                            "Fill out both inputs or none")}]
     (when (some some? (vals validation)) validation)))
 
@@ -94,7 +103,8 @@
   []
   ;; we need to create a cm instance holder to modify the CodeMirror code
   (let [cm-instance (atom nil)
-        form-id "#form-query"]
+        form-id "#form-query"
+        query-root? (= :query-root @(rf/subscribe [::sub/query-pane-view]))]
     (r/create-class {:component-did-mount (fn []
                                             (-> (js/document.querySelector form-id)
                                                 (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
@@ -144,13 +154,14 @@
 
 (defn entity-validation
   [values]
-  (let [invalid? #(empty? (string/trim (or (get values %) "")))
-        validation {"eid" (when (invalid? "eid") "Entity id is empty")
+  (let [empty-string? #(empty? (string/trim (or (get values %) "")))
+        validation {"eid" (when (empty? (common/strip-commented-lines (get values "eid")))
+                            "Entity id is empty")
                     "vt" (when (apply not= ((juxt #(% "vtd")
-                                                   #(% "vtt")) invalid?))
+                                                  #(% "vtt")) empty-string?))
                            "Fill out both inputs or none")
                     "tt" (when (apply not= ((juxt #(% "ttd")
-                                                  #(% "ttt")) invalid?))
+                                                  #(% "ttt")) empty-string?))
                            "Fill out both inputs or none")}]
     (when (some some? (vals validation)) validation)))
 
@@ -360,17 +371,8 @@
 
 (defn entity-pane []
   (let [pane-view @(rf/subscribe [::sub/entity-pane-view])]
-    (if (= pane-view :entity-root)
-      [:div.entity-root
-       [:div.entity-root__title
-        "Getting Started"]
-       [:p "To look for a particular entity:"]
-       [:ul
-        [:li "Enter the name of the entity to search for in the search box (for example, " [:i ":bar"] ")"]
-        [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
-        [:li "Click " [:b "submit entity"] " to go to the entity's page"]]]
+    (when-not (= pane-view :entity-root)
       [:<>
-
        [:div.pane-nav
         [:div.pane-nav__tab
          {:class (when (= pane-view :document) "pane-nav__tab--active")
@@ -396,15 +398,7 @@
 (defn query-pane
   []
   (let [pane-view @(rf/subscribe [::sub/query-pane-view])]
-    (if (= pane-view :query-root)
-      [:div.query-root
-       [:div.query-root__title
-        "Getting Started"]
-       [:p "To perform a query:"]
-       [:ul
-        [:li "Enter the desired query into the query editor."]
-        [:li "Select a " [:b "valid time"] " and a " [:b "transaction time"] " (if needed)"]
-        [:li "Click " [:b "submit query"] " to perform the query and get the results in a table."]]]
+    (when-not (= pane-view :query-root)
       [query-table])))
 
 (defn form-pane

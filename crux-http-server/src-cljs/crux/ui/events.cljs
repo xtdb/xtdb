@@ -179,7 +179,7 @@
    (let [query-params (->>
                        {:valid-time (common/date-time->datetime vtd vtt)
                         :transaction-time (common/date-time->datetime ttd ttt)
-                        :eid eid}
+                        :eid (common/strip-commented-lines eid)}
                        (remove #(nil? (second %)))
                        (into {}))]
      {:db db

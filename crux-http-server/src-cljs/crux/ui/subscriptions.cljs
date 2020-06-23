@@ -16,38 +16,57 @@
  (fn [db _]
    (:current-route db)))
 
+(def query-root-str
+  (string/join "\n"
+               [";; To perform a query"
+                ";; Enter the desired query into the query editor."
+                ";; Select a valid time and a transaction time (if needed)"
+                ";; Click submit query to perform the query and get the results in a table"
+                ""
+                '{:find [?entity], :where [[?entity :crux.db/id _]], :limit 100}]))
+
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])
+         formatted-query (common/query-params->formatted-edn-string
+                (dissoc query-params :valid-time :transaction-time))
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params (t/now))))
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
-     (when (= :query handler)
-       {"q" (common/query-params->formatted-edn-string
-             (dissoc query-params :valid-time :transaction-time))
+     (if formatted-query
+       {"q" formatted-query
         "vtd" (:date valid-time)
         "vtt" (:time valid-time)
         "ttd" (:date transaction-time)
-        "ttt" (:time transaction-time)}))))
+        "ttt" (:time transaction-time)}
+       {"q" query-root-str}))))
+
+(def entity-root-str
+  (string/join "\n"
+               [";; To search for an entity:"
+                ";; Enter the name of the enitty to search for in the search box (for example, :bar)"
+                ";; Select a valid time and a transaction time (if needed)"
+                ";; Click submit entity to go to the entity's page"
+                ""
+                :bar]))
 
 (rf/reg-sub
  ::initial-values-entity
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params (t/now))))
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
-     (when (= :entity handler)
+     (if (:eid query-params)
        {"eid" (:eid query-params)
         "vtd" (:date valid-time)
         "vtt" (:time valid-time)
         "ttd" (:date transaction-time)
-        "ttt" (:time transaction-time)}))))
+        "ttt" (:time transaction-time)}
+       {"eid" entity-root-str}))))
 
 ;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
