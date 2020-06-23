@@ -20,17 +20,28 @@
 (s/def ::event (s/merge (s/keys :req [:crux/event-type])
                         (s/multi-spec event-spec :crux/event-type)))
 
+(defn- close-executor [^ExecutorService executor]
+  (try
+    (.shutdown executor)
+    (or (.awaitTermination executor 5 TimeUnit/SECONDS)
+        (.shutdownNow executor)
+        (log/warn "event bus listener not shut down after 5s"))
+    (catch Exception e
+      (log/error e "error closing listener"))))
+
 (defrecord EventBus [!listeners]
   EventSource
   (listen [this listen-ops f]
     (let [{:crux/keys [event-type]} listen-ops
-          listener {:executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
+          executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
+          listener {:executor executor
                     :f f
                     :crux/event-type event-type}]
       (swap! !listeners update event-type (fnil conj #{}) listener)
       (reify Closeable
         (close [_]
-          (swap! !listeners update event-type disj listener)))))
+          (swap! !listeners update event-type disj listener)
+          (close-executor executor)))))
 
   EventSink
   (send [_ {:crux/keys [event-type] :as event}]
@@ -41,14 +52,8 @@
 
   Closeable
   (close [_]
-    (doseq [{:keys [^ExecutorService executor]} (->> @!listeners (mapcat val))]
-      (try
-        (.shutdown executor)
-        (or (.awaitTermination executor 5 TimeUnit/SECONDS)
-            (.shutdownNow executor)
-            (log/warn "event bus listener not shut down after 5s"))
-        (catch Exception e
-          (log/error e "error closing listener"))))))
+    (doseq [{:keys [executor]} (->> @!listeners (mapcat val))]
+      (close-executor executor))))
 
 (def bus
   {:start-fn (fn [deps args]
