@@ -38,6 +38,12 @@
     (t/testing "new lines and spacing"
       (t/is (= "Ivan" (:name (first (query (str "VALIDTIME('2016-12-01T10:13:30Z') \n " q)))))))
 
+    (t/testing "RFC 3339"
+      (t/is (= "Ivan" (:name (first (query (str "VALIDTIME('2016-12-01') \n " q))))))
+      (t/is (= "Ivan" (:name (first (query (str "VALIDTIME('2016-12') \n " q))))))
+      (t/is (= "Ivan" (:name (first (query (str "VALIDTIME('2016') \n " q))))))
+      (t/is (= "Ivan" (:name (first (query (str "VALIDTIME('2016-12-01T10:13') \n " q)))))))
+
     (submit+await-tx [[:crux.tx/put {:crux.db/id id :name "Ivanb" :homeworld (str id) :age 21 :alive true} #inst "2016"]])
     (assert (= "Ivana" (:name (first (query q)))))
     (assert (= "Ivanb" (:name (first (query (str "VALIDTIME ('2016-12-01T10:13:30Z') " q))))))

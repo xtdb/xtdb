@@ -99,9 +99,21 @@ SELECT * FROM PERSON
 ----
 
 Both `VALIDTIME` and `TRANSACTIONTIME` take an
-https://en.wikipedia.org/wiki/ISO_8601[ISO-8601] date-string, which is
-then parsed using Java's
-https://docs.oracle.com/javase/8/docs/api/java/time/ZonedDateTime.html[ZonedDateTime].
+https://clojuredocs.org/clojure.instant/parse-timestamp[RFC 3339-like]
+timestamp string, which is compatible with
+https://en.wikipedia.org/wiki/ISO_8601[ISO-8601].
+
+Examples of RFC 3339-like supported syntax:
+
+[source,sql]
+----
+VALIDTIME ('2016-12-01')
+----
+
+[source,sql]
+----
+VALIDTIME ('2016')
+----
 
 == Connecting
 
