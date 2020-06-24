@@ -5,7 +5,7 @@
             [crux.kv :as kv]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import clojure.lang.Box
+  (:import [clojure.lang Box MapEntry]
            java.io.Closeable))
 
 (defn- persist-db [dir db]
@@ -68,9 +68,9 @@
     (->MemKvSnapshot @db))
 
   (store [_ kvs]
-    (swap! db into (vec (for [[k v] kvs]
-                          [(mem/copy-to-unpooled-buffer (mem/as-buffer k))
-                           (mem/copy-to-unpooled-buffer (mem/as-buffer v))])))
+    (swap! db into (for [[k v] kvs]
+                     (MapEntry/create (mem/copy-to-unpooled-buffer (mem/as-buffer k))
+                                      (mem/copy-to-unpooled-buffer (mem/as-buffer v)))))
     nil)
 
   (delete [_ ks]
