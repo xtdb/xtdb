@@ -294,18 +294,17 @@
     (throw (IllegalArgumentException.
             (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
 
-  (with-open [index-store (db/open-index-store indexer)]
-    (when (seq docs)
-      (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
+  (when (seq docs)
+    (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-      (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
-        (update-stats tx-consumer (->> (vals indexed-docs)
-                                       (map doc-predicate-stats)))
+    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
+      (update-stats tx-consumer (->> (vals indexed-docs)
+                                     (map doc-predicate-stats)))
 
-        (bus/send bus {:crux/event-type ::indexed-docs,
-                       :doc-ids (set (keys docs))
-                       :av-count (->> (vals indexed-docs) (apply concat) (count))
-                       :bytes-indexed bytes-indexed})))))
+      (bus/send bus {:crux/event-type ::indexed-docs,
+                     :doc-ids (set (keys docs))
+                     :av-count (->> (vals indexed-docs) (apply concat) (count))
+                     :bytes-indexed bytes-indexed}))))
 
 (defn index-tx [{:keys [bus indexer document-store] :as tx-consumer}
                 {::keys [tx-time tx-id] :as tx}
@@ -315,52 +314,53 @@
   (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
   (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
-  (with-open [index-store (db/open-index-store indexer)]
-    (let [tx-consumer (assoc tx-consumer :index-store index-store)
-          res (reduce (fn [{:keys [history] :as acc} tx-event]
-                        (let [{:keys [pre-commit-fn etxs evict-eids docs]} (index-tx-event tx-event tx (assoc tx-consumer :history history))]
-                          (if (and pre-commit-fn (not (pre-commit-fn)))
-                            (reduced {::aborted? true
-                                      :docs (merge (:docs acc) docs)})
-                            (-> acc
-                                (update :history with-etxs etxs)
-                                (update :evict-eids set/union evict-eids)
-                                (update :docs merge docs)))))
+  (let [res (with-open [index-store (db/open-index-store indexer)]
+              (let [tx-consumer (assoc tx-consumer :index-store index-store)]
+                (reduce (fn [{:keys [history] :as acc} tx-event]
+                          (let [tx-consumer (assoc tx-consumer :history history)
+                                {:keys [pre-commit-fn etxs evict-eids docs]} (index-tx-event tx-event tx tx-consumer)]
+                            (if (and pre-commit-fn (not (pre-commit-fn)))
+                              (reduced {::aborted? true
+                                        :docs (merge (:docs acc) docs)})
+                              (-> acc
+                                  (update :history with-etxs etxs)
+                                  (update :evict-eids set/union evict-eids)
+                                  (update :docs merge docs)))))
 
-                      {:history (->IndexStore+NewETXs index-store {})
-                       :evict-eids #{}
-                       :docs {}}
+                        {:history (->IndexStore+NewETXs index-store {})
+                         :evict-eids #{}
+                         :docs {}}
 
-                      tx-events)
-          committed? (not (::aborted? res))]
+                        tx-events)))
+        committed? (not (::aborted? res))]
 
-      (db/submit-docs document-store
-                      (cond->> (:docs res)
-                        (not committed?) (into {} (filter (comp :crux.db.fn/failed? val)))))
+    (db/submit-docs document-store
+                    (cond->> (:docs res)
+                      (not committed?) (into {} (filter (comp :crux.db.fn/failed? val)))))
 
-      (if committed?
-        (do
-          (when-let [evict-eids (not-empty (:evict-eids res))]
-            (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
-              (db/submit-docs document-store tombstones)))
+    (if committed?
+      (do
+        (when-let [evict-eids (not-empty (:evict-eids res))]
+          (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
+            (db/submit-docs document-store tombstones)))
 
-          (when-let [docs (not-empty (:docs res))]
-            (db/index-docs indexer docs)
-            (update-stats tx-consumer (->> (vals docs)
-                                           (map doc-predicate-stats)))
+        (when-let [docs (not-empty (:docs res))]
+          (db/index-docs indexer docs)
+          (update-stats tx-consumer (->> (vals docs)
+                                         (map doc-predicate-stats)))
 
-            (db/submit-docs document-store docs))
+          (db/submit-docs document-store docs))
 
-          (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
+        (db/index-entity-txs indexer tx (->> (get-in res [:history :etxs]) (mapcat val))))
 
-        (do
-          (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
-          (db/mark-tx-as-failed indexer tx)))
+      (do
+        (log/warn "Transaction aborted:" (cio/pr-edn-str tx-events) (cio/pr-edn-str tx-time) tx-id)
+        (db/mark-tx-as-failed indexer tx)))
 
-      (bus/send bus {:crux/event-type ::indexed-tx,
-                     ::submitted-tx tx,
-                     :committed? committed?
-                     ::txe/tx-events tx-events}))))
+    (bus/send bus {:crux/event-type ::indexed-tx,
+                   ::submitted-tx tx,
+                   :committed? committed?
+                   ::txe/tx-events tx-events})))
 
 (defn with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
   (case op

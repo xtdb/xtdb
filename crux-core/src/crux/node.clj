@@ -95,7 +95,6 @@
 
         (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
               tx-log-iterator (db/open-tx-log tx-log after-tx-id)
-              index-store (db/open-index-store indexer)
               tx-log (-> (iterator-seq tx-log-iterator)
                          (->> (remove #(db/tx-failed? indexer (:crux.tx/tx-id %)))
                               (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id)))
@@ -106,7 +105,6 @@
                                                        (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events)))))))]
 
           (cio/->cursor (fn []
-                          (.close index-store)
                           (.close tx-log-iterator))
                         tx-log)))))
 
@@ -137,8 +135,7 @@
                                     (select-keys ev [:committed?])
                                     (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
                                     (when (:with-tx-ops? event-opts)
-                                      (with-open [index-store (db/open-index-store indexer)]
-                                        {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)}))))))))
+                                      {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
   (latestCompletedTx [this]
     (db/latest-completed-tx indexer))
