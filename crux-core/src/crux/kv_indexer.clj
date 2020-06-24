@@ -687,8 +687,8 @@
 (defrecord KvIndexer [kv-store]
   db/Indexer
   (index-docs [this docs]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (let [docs (->> docs
+    (let [docs (with-open [snapshot (kv/new-snapshot kv-store)]
+                 (->> docs
                       (into {} (remove (let [crux-db-id (c/->id-buffer :crux.db/id)]
                                          (fn [[k doc]]
                                            (let [eid (c/->id-buffer (:crux.db/id doc))]
@@ -697,21 +697,21 @@
                                                                                         (c/->id-buffer k)
                                                                                         crux-db-id
                                                                                         eid)))))))
-                      not-empty)
+                      not-empty))
+          content-idx-kvs (->content-idx-kvs docs)]
 
-            content-idx-kvs (->content-idx-kvs docs)]
-
-        (some->> (seq content-idx-kvs) (kv/store kv-store))
-
-        {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
-         :indexed-docs docs})))
+      (some->> (seq content-idx-kvs) (kv/store kv-store))
+      {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
+       :indexed-docs docs}))
 
   (unindex-eids [this eids]
-    (with-open [snapshot (kv/new-snapshot kv-store)
-                ecav-i (kv/new-iterator snapshot)
-                av-i (kv/new-iterator snapshot)]
-      (let [{:keys [tombstones ks]} (->> (for [eid eids
-                                               ecav-key (all-keys-in-prefix ecav-i (encode-ecav-key-to nil (c/->id-buffer eid)))]
+    (let [{:keys [tombstones ks]} (with-open [snapshot (kv/new-snapshot kv-store)
+                                              ecav-i (kv/new-iterator snapshot)
+                                              av-i (kv/new-iterator snapshot)]
+                                    (->> (for [eid eids
+                                               ecav-key (all-keys-in-prefix ecav-i
+                                                                            (encode-ecav-key-to nil
+                                                                                                (c/->id-buffer eid)))]
                                            ecav-key)
 
                                          (reduce (fn [acc ecav-key]
@@ -742,10 +742,10 @@
                                                        (not (c/can-decode-value-buffer? value-buffer))
                                                        (update :ks conj (encode-hash-cache-key-to nil value-buffer eid-buffer)))))
                                                  {:tombstones {}
-                                                  :ks #{}}))]
+                                                  :ks #{}})))]
 
-        (kv/delete kv-store ks)
-        {:tombstones tombstones})))
+      (kv/delete kv-store ks)
+      {:tombstones tombstones}))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
     (kv/store kv-store [(meta-kv ::latest-completed-tx tx)
