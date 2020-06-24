@@ -11,6 +11,7 @@
            java.util.function.Supplier
            org.agrona.ExpandableDirectByteBuffer
            [org.agrona DirectBuffer MutableDirectBuffer]
+           clojure.lang.MapEntry
            crux.codec.Id
            crux.kv.KvSnapshot))
 
@@ -39,17 +40,18 @@
   db/DocumentStore
   (fetch-docs [this ids]
     (with-open [snapshot (kv/new-snapshot kv)]
-      (->> (for [id ids
-                 :let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))
-                       doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
-                 :when doc]
-             [id doc])
-           (into {}))))
+      (reduce
+       (fn [acc id]
+         (let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))]
+           (if-let [doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
+             (assoc acc id doc)
+             acc)))
+       {} ids)))
 
   (submit-docs [this id-and-docs]
     (kv/store kv (for [[id doc] id-and-docs]
-                   [(encode-doc-key-to nil (c/->id-buffer id))
-                    (mem/->nippy-buffer doc)])))
+                   (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
+                                    (mem/->nippy-buffer doc)))))
 
   Closeable
   (close [_]))
@@ -57,17 +59,18 @@
 (defrecord FileDocumentStore [dir]
   db/DocumentStore
   (fetch-docs [this ids]
-    (->> (for [id ids
-               :let [doc (let [doc-key (str (c/new-id id))
-                               doc-file (io/file dir doc-key)]
-                           (when (.exists doc-file)
-                             (with-open [in (FileInputStream. doc-file)]
-                               (some->> in
-                                        (DataInputStream.)
-                                        (nippy/thaw-from-in!)))))]
-               :when doc]
-           [id doc])
-         (into {})))
+    (reduce
+     (fn [acc id]
+       (let [doc-key (str (c/new-id id))
+             doc-file (io/file dir doc-key)]
+         (if-let [doc (when (.exists doc-file)
+                        (with-open [in (FileInputStream. doc-file)]
+                          (some->> in
+                                   (DataInputStream.)
+                                   (nippy/thaw-from-in!))))]
+           (assoc acc id doc)
+           acc)))
+     {} ids))
 
   (submit-docs [this id-and-docs]
     (doseq [[id doc] id-and-docs
@@ -82,11 +85,12 @@
   db/DocumentStore
   (fetch-docs [this ids]
     (let [ids (set ids)
-          cached-id->docs (->> (for [id ids
-                                     :let [doc (get cache (c/->id-buffer id))]
-                                     :when doc]
-                                 [id doc])
-                               (into {}))
+          cached-id->docs (reduce
+                           (fn [acc id]
+                             (if-let [doc (get cache (c/->id-buffer id))]
+                               (assoc acc id doc)
+                               acc))
+                           {} ids)
           missing-ids (set/difference ids (keys cached-id->docs))
           missing-id->docs (db/fetch-docs document-store missing-ids)]
       (reduce
@@ -106,7 +110,7 @@
      (vec (for [[id doc] id-and-docs]
             (do
               (lru/evict cache (c/->id-buffer id))
-              [id doc])))))
+              (MapEntry/create id doc))))))
 
   Closeable
   (close [_]))
