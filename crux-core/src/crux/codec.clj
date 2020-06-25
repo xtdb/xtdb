@@ -357,7 +357,7 @@
                       (maybe-url-str this)
                       (maybe-map-str this))]
         (id->buffer id to)
-        (id-function to (.getBytes this StandardCharsets/UTF_8)))))
+        (id-function to (nippy/fast-freeze this)))))
 
   Boolean
   (id->buffer [this to]
