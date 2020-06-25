@@ -453,18 +453,11 @@
          :on-click #(rf/dispatch [::events/navigate-to-root-view :entity])}
         "Searching for an entity"]]])
 
-(defn navbar
-  []
-  [:nav.nav
-   [:a {:href (common/route->url :homepage)}
-    [:img.crux-logo {:src "/crux-horizontal-bw.svg" }]]])
-
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:<>
      #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
      [:div.container.page-pane
-      [navbar]
       (if (= name :homepage)
         [root-page]
         [:<>

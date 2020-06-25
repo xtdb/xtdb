@@ -62,18 +62,16 @@
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
           [:title "Crux Console"]]
          [:body
+          [:nav.header
+           [:div.crux-logo
+            [:a {:href "/_crux/index"}
+             [:img.crux-logo__img {:src "/crux-horizontal-bw.svg" }]]]
+           [:div.header__links
+            [:a {:href "/_crux/query"} "Console"]
+            [:a {:href "https://opencrux.com/docs" :target "_blank"} "Docs"]]]
           [:div.console
-           [:div#app body]]
-          [:footer.footer
-           [:section.footer-section
-            [:img.footer__juxt-logo {:src "https://www.opencrux.com/images/juxt-logo-white.svg"}]
-            [:div.footer__juxt-info
-             [:p "Copyright © JUXT LTD 2012-2019"]
-             [:p [:strong "Headquarters:"]]
-             [:p "Technology House, 151 Silbury Blvd."]
-             [:p "Milton Keynes, MK9 1LH"]
-             [:p "United Kingdom"]
-             [:p "Company registration: 08457399"]]]]
+           [:div#app
+            [:div.container.page-pane body]]]
           [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])))
 
 (defn- body->edn [request]

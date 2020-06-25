@@ -9,17 +9,35 @@ html, body {
     box-sizing: border-box;
 }
 
-.nav {
+.header {
     background: #1e1e1e;
     width: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
     color: white;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.header__links {
+    font-size: 1rem;
+    margin-right: 2.5%;
+}
+
+.header__links a {
+    margin-left: 1rem;
+    color: #e1e0e0;
+    text-decoration:none;
+}
+
+.header__links a:hover {
+    color: white;
 }
 
 .crux-logo {
+    margin-left: 2.5%;
+}
+
+.crux-logo__img {
     height:5rem;
 }
 
@@ -306,7 +324,6 @@ html, body {
 }
 
 .page-pane {
-    margin-top: 120px;
     display: flex;
     flex-direction: column;
 }
@@ -694,23 +711,7 @@ ul.entity-group__value li::before {
     padding: 1rem;
     background: #333333;
     height: 300px;
-    display: flex;
     justify-content: space-between;
-}
-
-.footer-section {
-    display: flex;
-    flex-direction: column;
-}
-
-.footer__juxt-logo {
-    width: 4rem;
-    margin-bottom: 1rem;
-}
-
-.footer__juxt-info {
-    font-size: 0.6rem;
-    color: white;
 }
 
 @media screen and (max-width: 767px) {
