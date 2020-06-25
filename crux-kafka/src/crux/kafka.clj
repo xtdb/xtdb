@@ -314,6 +314,27 @@
    :deps [::producer ::admin-client ::random-access-document-store ::n/kv-store ::n/indexer ::n/bus]
    :args default-options})
 
+(defn- ->tx-consumer [{::n/keys [tx-log] :as deps} {::keys [tx-topic poll-wait-duration] :as args}]
+  (let [kafka-config (derive-kafka-config args)
+        tp (TopicPartition. tx-topic 0)
+        consumer (doto (create-consumer kafka-config)
+                   (.assign #{tp}))
+        polling-consumer (tx/->polling-tx-consumer
+                          deps args
+                          (fn [after-tx-id]
+                            (let [expected-position (or (some-> after-tx-id inc) 0)]
+                              (when-not (= (.position consumer tp) expected-position)
+                                (seek-consumer {tp expected-position})))
+
+                            (cio/->cursor (fn [])
+                                          (->> (consumer-seqs consumer poll-wait-duration)
+                                               (mapcat identity)
+                                               (map tx-record->tx-log-entry)))))]
+    (reify Closeable
+      (close [_]
+        (cio/try-close polling-consumer)
+        (cio/try-close consumer)))))
+
 (def topology
   (merge n/base-topology
          {:crux.node/tx-log tx-log
@@ -321,4 +342,12 @@
           ::random-access-document-store 'crux.document-store/kv-document-store
           ::admin-client admin-client
           ::producer producer
-          ::latest-submitted-tx-consumer latest-submitted-tx-consumer}))
+          ::latest-submitted-tx-consumer latest-submitted-tx-consumer
+          ::tx-consumer (merge (-> tx/polling-tx-consumer
+                                   (update :deps conj ::n/tx-log)
+                                   (update :args merge
+                                           default-options
+                                           {::poll-wait-duration {:crux.config/type :duration
+                                                                  :doc "How long to wait when polling Kafka"
+                                                                  :default (Duration/ofSeconds 1)}}))
+                               {:start-fn ->tx-consumer})}))

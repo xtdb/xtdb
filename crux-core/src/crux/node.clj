@@ -186,7 +186,6 @@
   {::kv-store 'crux.kv.memdb/kv
    ::indexer 'crux.kv-indexer/kv-indexer
    ::tx-ingester 'crux.tx/tx-ingester
-   ::tx-consumer 'crux.tx/polling-tx-consumer
    ::bus 'crux.bus/bus
    ::query-engine 'crux.query/query-engine
    ::node 'crux.node/node-component})
