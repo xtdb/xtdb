@@ -247,4 +247,4 @@
 (rf/reg-sub
  ::form-pane-hidden?
  (fn [db _]
-   (get-in db [:form-pane :hidden?] true)))
+   (get-in db [:form-pane :hidden?] false)))
