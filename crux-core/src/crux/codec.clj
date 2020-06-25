@@ -347,17 +347,7 @@
 
   String
   (id->buffer [this to]
-    (if (hex-id? this)
-      (let [^MutableDirectBuffer to (mem/limit-buffer to id-size)]
-        (.putByte to 0 id-value-type-id)
-        (mem/hex->buffer this (mem/slice-buffer to value-type-id-size hash/id-hash-size))
-        to)
-      (if-let [id (or (maybe-uuid-str this)
-                      (maybe-keyword-str this)
-                      (maybe-url-str this)
-                      (maybe-map-str this))]
-        (id->buffer id to)
-        (id-function to (nippy/fast-freeze this)))))
+    (id-function to (nippy/fast-freeze this)))
 
   Boolean
   (id->buffer [this to]
@@ -457,27 +447,27 @@
   (when id
     (Id. (mem/copy-to-unpooled-buffer (.buffer id)) 0)))
 
+(defn hex->id-buffer
+  ([hex] (hex->id-buffer hex (mem/allocate-buffer id-size)))
+  ([hex to]
+   (.putByte ^MutableDirectBuffer to 0 id-value-type-id)
+   (mem/hex->buffer hex (mem/slice-buffer to value-type-id-size hash/id-hash-size))
+   to))
+
 (deftype EDNId [hex original-id]
-  IdOrBuffer
-  (->id-buffer [this]
-    (->id-buffer (new-id hex)))
-
-  (new-id [this]
-    (new-id hex))
-
   IdToBuffer
   (id->buffer [this to]
-    (id->buffer (new-id hex) to))
+    (hex->id-buffer hex to))
 
   Object
   (toString [this]
     hex)
 
   (equals [this that]
-    (.equals (new-id hex) that))
+    (.equals (new-id this) (new-id that)))
 
   (hashCode [this]
-    (.hashCode (new-id hex)))
+    (.hashCode (new-id this)))
 
   IHashEq
   (hasheq [this]
@@ -485,10 +475,19 @@
 
   Comparable
   (compareTo [this that]
-    (.compareTo (new-id hex) that)))
+    (.compareTo (new-id this) (new-id that))))
 
 (defn id-edn-reader ^crux.codec.EDNId [id]
-  (->EDNId (str (new-id id)) id))
+  (->EDNId (if (string? id)
+             (if (hex-id? id)
+               id
+               (str (new-id (or (maybe-uuid-str id)
+                                (maybe-keyword-str id)
+                                (maybe-url-str id)
+                                (maybe-map-str id)
+                                (throw (IllegalArgumentException. "EDN reader doesn't support string IDs"))))))
+             (new-id id))
+           id))
 
 (defn read-edn-string-with-readers [s]
   (edn/read-string {:readers {'crux/id id-edn-reader}} s))

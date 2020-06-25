@@ -40,7 +40,7 @@
                                                      fix/with-kv-dir
                                                      fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
-      #_(select-keys [:local-standalone])
+      (select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
@@ -104,7 +104,7 @@
       (t/is (= submitted-tx (api/latest-completed-tx *api*))))))
 
 (t/deftest test-can-use-crux-ids
-  (let [id #crux/id :https://adam.com
+  (let [id #crux/id "https://adam.com"
         doc {:crux.db/id id, :name "Adam"}
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
     (.awaitTx *api* submitted-tx nil)
