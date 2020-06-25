@@ -13,7 +13,8 @@
             [taoensso.nippy :as nippy]
             [clojure.string :as str]
             [crux.io :as cio]
-            [crux.codec :as c])
+            [crux.codec :as c]
+            [crux.api :as api])
   (:import com.zaxxer.hikari.HikariDataSource
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
@@ -167,4 +168,11 @@
                                           (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
                                                                     (->JdbcDocumentStore ds dbtype)))
                               :args {:crux.document-store/doc-cache-size ds/doc-cache-size-opt}
-                              :deps [::ds]}}))
+                              :deps [::ds]}
+
+          ::tx-consumer (merge (-> tx/polling-tx-consumer
+                                   (update :deps conj ::n/tx-log))
+                               {:start-fn (fn [{::n/keys [tx-log] :as deps} args]
+                                            (tx/->polling-tx-consumer deps args
+                                                                      (fn [after-tx-id]
+                                                                        (db/open-tx-log tx-log after-tx-id))))})}))

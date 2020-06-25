@@ -410,19 +410,20 @@
                                :stats-executor (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))}))
    :deps [:crux.node/indexer :crux.node/document-store :crux.node/bus :crux.node/query-engine]})
 
-(defn- index-tx-log [{:keys [tx-log tx-ingester indexer]} {::keys [^Duration poll-sleep-duration]}]
+(defn- index-tx-log [{:crux.node/keys [tx-ingester indexer]} {::keys [^Duration poll-sleep-duration]} open-next-txs]
   (log/info "Started tx-consumer")
   (try
     (while true
-      (let [consumed-txs? (when-let [tx-stream (try
-                                                 (db/open-tx-log tx-log (::tx-id (db/latest-completed-tx indexer)))
-                                                 (catch InterruptedException e (throw e))
-                                                 (catch Exception e
-                                                   (log/warn e "Error reading TxLog, will retry")))]
+      (let [consumed-txs? (when-let [^crux.api.ICursor
+                                     txs (try
+                                           (open-next-txs (::tx-id (db/latest-completed-tx indexer)))
+                                           (catch InterruptedException e (throw e))
+                                           (catch Exception e
+                                             (log/warn e "Error polling for txs, will retry")))]
                             (try
-                              (let [tx-log-entries (iterator-seq tx-stream)
-                                    consumed-txs? (not (empty? tx-log-entries))]
-                                (doseq [{:keys [::txe/tx-events] :as tx} tx-log-entries
+                              (let [txs (iterator-seq txs)
+                                    consumed-txs? (not (empty? txs))]
+                                (doseq [{:keys [::txe/tx-events] :as tx} txs
                                         :let [tx (select-keys tx [::tx-time ::tx-id])]]
 
                                   (s/assert ::txe/tx-events tx-events)
@@ -437,9 +438,8 @@
                                     (throw (InterruptedException.))))
 
                                 consumed-txs?)
-
                               (finally
-                                (.close ^Closeable tx-stream))))]
+                                (.close txs))))]
         (when (Thread/interrupted)
           (throw (InterruptedException.)))
         (when-not consumed-txs?
@@ -449,24 +449,19 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defrecord PollingTxConsumer [^Thread executor-thread indexer tx-log tx-ingester]
-  Closeable
-  (close [_]
-    (when executor-thread
-      (.interrupt executor-thread)
-      (.join executor-thread))))
+(defn ->polling-tx-consumer ^java.io.Closeable [{:crux.node/keys [indexer tx-ingester] :as deps}
+                                                {::keys [poll-sleep-duration] :as args}
+                                                open-next-txs]
+  (let [executor-thread (doto (Thread. #(index-tx-log deps args open-next-txs))
+                          (.setName "crux-polling-tx-consumer")
+                          (.start))]
+    (reify Closeable
+      (close [_]
+        (.interrupt executor-thread)
+        (.join executor-thread)))))
 
 (def polling-tx-consumer
-  {:start-fn (fn [{:crux.node/keys [indexer tx-log tx-ingester]} args]
-               (let [tx-consumer (map->PollingTxConsumer {:indexer indexer
-                                                          :tx-log tx-log
-                                                          :tx-ingester tx-ingester})]
-                 (assoc tx-consumer
-                        :executor-thread
-                        (doto (Thread. #(index-tx-log tx-consumer args))
-                          (.setName "crux-tx-consumer")
-                          (.start)))))
-   :deps [:crux.node/tx-ingester :crux.node/indexer :crux.node/tx-log]
+  {:deps [:crux.node/tx-ingester :crux.node/indexer :crux.node/tx-log]
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})
