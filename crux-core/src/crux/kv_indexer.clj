@@ -661,11 +661,12 @@
     (let [crux-db-id (c/->id-buffer :crux.db/id)
           docs (with-open [snapshot (kv/new-snapshot kv-store)]
                  (->> docs
-                      (into {} (remove (fn [[_ doc]]
-                                         (let [eid-value (c/->value-buffer (:crux.db/id doc))]
+                      (into {} (remove (fn [[k doc]]
+                                         (let [eid-value (c/->value-buffer (:crux.db/id doc))
+                                               content-hash (c/->id-buffer k)]
                                            (kv/get-value snapshot (encode-ecav-key-to (.get seek-buffer-tl)
                                                                                       eid-value
-                                                                                      (c/->id-buffer doc)
+                                                                                      content-hash
                                                                                       crux-db-id
                                                                                       eid-value))))))
                       not-empty))
