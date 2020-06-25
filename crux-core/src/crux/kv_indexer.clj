@@ -680,7 +680,7 @@
                                               ecav-i (kv/new-iterator snapshot)
                                               av-i (kv/new-iterator snapshot)]
                                     (->> (for [eid eids
-                                               :let [eid-value-buffer (c/->value-buffer index-store eid)]
+                                               :let [eid-value-buffer (c/->value-buffer eid)]
                                                ecav-key (all-keys-in-prefix ecav-i
                                                                             (encode-ecav-key-to nil eid-value-buffer))]
                                            [eid eid-value-buffer ecav-key])
