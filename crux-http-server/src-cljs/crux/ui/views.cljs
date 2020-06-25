@@ -441,6 +441,29 @@
         {:class (if (= :query-history form-pane-view) "visible" "hidden")}
         [query-history]]]]]))
 
+(defn status-map->html-elements [status-map]
+  (into
+   [:div.node-info__content]
+   (map
+    (fn [[key value]]
+      (when value
+        [:p [:b (str key)] ": " (str value)]))
+    status-map)))
+
+(defn status-page
+  []
+  (let [status-map @(rf/subscribe [::sub/node-status])
+        options-map @(rf/subscribe [::sub/node-options])
+        loading? @(rf/subscribe [::sub/node-status-loading?])]
+    (when (and (some? loading?) (not loading?))
+      [:div.node-info__container
+       [:div.node-info
+        [:h2.node-info__title "Node Status"]
+        [status-map->html-elements status-map]]
+       [:div.node-info
+        [:h2.node-info__title "Node Options"]
+        [status-map->html-elements options-map]]])))
+
 (defn root-page
   []
   [:div.root-contents
@@ -458,12 +481,13 @@
     [:<>
      #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
      [:div.container.page-pane
-      (if (= name :homepage)
-        [root-page]
-        [:<>
-         (when name [form-pane])
-         [:div.result-pane
-          (case name
-            :query [query-pane]
-            :entity [entity-pane]
-            [:div "no matching"])]])]]))
+      (cond
+        (= name :homepage) [root-page]
+        (= name :status) [status-page]
+        :else [:<>
+               (when name [form-pane])
+               [:div.result-pane
+                (case name
+                  :query [query-pane]
+                  :entity [entity-pane]
+                  [:div "no matching"])]])]]))

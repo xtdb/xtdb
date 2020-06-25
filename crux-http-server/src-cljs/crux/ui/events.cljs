@@ -194,3 +194,8 @@
  ::set-entity-result-pane-history-diffs?
  (fn [db [_ bool]]
    (assoc-in db [:entity :result-pane :diffs?] bool)))
+
+(rf/reg-event-db
+ ::set-node-status-loading false
+ (fn [db [_ bool]]
+   (assoc-in db [:status :loading?] bool)))

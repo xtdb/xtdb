@@ -29,14 +29,13 @@
  ::initial-values-query
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         formatted-query (common/query-params->formatted-edn-string
-                (dissoc query-params :valid-time :transaction-time))
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params (t/now))))
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
-     (if formatted-query
-       {"q" formatted-query
+     (if (:find query-params)
+       {"q" (common/query-params->formatted-edn-string
+             (dissoc query-params :valid-time :transaction-time))
         "vtd" (:date valid-time)
         "vtt" (:time valid-time)
         "ttd" (:date transaction-time)
@@ -248,3 +247,18 @@
  ::form-pane-hidden?
  (fn [db _]
    (get-in db [:form-pane :hidden?] false)))
+
+(rf/reg-sub
+ ::node-status-loading?
+ (fn [db _]
+   (get-in db [:status :loading?])))
+
+(rf/reg-sub
+ ::node-status
+ (fn [db _]
+   (get-in db [:status :http])))
+
+(rf/reg-sub
+ ::node-options
+ (fn [db _]
+   (doto (:options db) prn)))

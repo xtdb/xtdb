@@ -48,6 +48,18 @@ html, body {
     margin-top: 2rem;
 }
 
+.node-info__title {
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.node-info__content {
+    padding: 1rem;
+    white-space: pre-wrap;
+    border: 1px solid;
+    width: max-content;
+}
+
 // override default table style for no js version
 .no-js-pagination__arrow-nav {
     color: #bdbdbd;

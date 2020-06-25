@@ -68,6 +68,7 @@
              [:img.crux-logo__img {:src "/crux-horizontal-bw.svg" }]]]
            [:div.header__links
             [:a {:href "/_crux/query"} "Console"]
+            [:a {:href "/_crux/status"} "Status"]
             [:a {:href "https://opencrux.com/docs" :target "_blank"} "Docs"]]]
           [:div.console
            [:div#app
@@ -128,14 +129,6 @@
 ;; ---------------------------------------------------
 ;; Services
 
-(defn- status [^ICruxAPI crux-node]
-  (let [status-map (.status crux-node)]
-    (if (or (not (contains? status-map :crux.zk/zk-active?))
-            (:crux.zk/zk-active? status-map))
-      (success-response status-map)
-      (response 500
-                {"Content-Type" "application/edn"}
-                (cio/pr-edn-str status-map)))))
 
 (defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
@@ -333,9 +326,6 @@
     [#"^/$" [:get]]
     (redirect-response "/_crux/index")
 
-    [#"^/_crux/status" [:get]]
-    (status crux-node)
-
     [#"^/entity/.+$" [:get]]
     (entity crux-node request)
 
@@ -406,6 +396,34 @@
             {:body (root-page)
              :title "/_crux"
              :options options}))})
+
+(defn status-map->html-elements [status-map]
+  (into
+   [:div.node-info__content]
+   (map
+    (fn [[key value]]
+      (when value
+        [:p [:b (str key)] ": " (str value)]))
+    status-map)))
+
+(defn- status [^ICruxAPI crux-node options request]
+  (let [status-map (api/status crux-node)]
+    {:status (if (or (not (contains? status-map :crux.zk/zk-active?))
+                     (:crux.zk/zk-active? status-map))
+               200
+               500)
+     :body (if (html-request? request)
+             (raw-html
+              {:body [:div.node-info__container
+                      [:div.node-info
+                       [:h2.node-info__title "Node Status"]
+                       (status-map->html-elements status-map)]
+                      [:div.node-info
+                       [:h2.node-info__title "Node Options"]
+                       (status-map->html-elements options)]]
+               :title "/_status"
+               :options options})
+             status-map)}))
 
 (def ^DateTimeFormatter default-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
@@ -738,6 +756,9 @@
 
     [#"^/_crux/index.html$" [:get]]
     (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
+
+    [#"^/_crux/status" [:get]]
+    (status crux-node options request)
 
     [#"^/_crux/entity$" [:get]]
     (entity-state crux-node options request)
