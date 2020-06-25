@@ -1274,7 +1274,7 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-(defrecord QueryDatasource [document-store indexer bus
+(defrecord QueryDatasource [document-store indexer bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             query-executor conform-cache query-cache
                             index-store
@@ -1373,30 +1373,24 @@
   (transactionTime [_] transact-time)
 
   (withTx [this tx-ops]
-    (let [{:keys [::tx/tx-time] :as tx} (if-let [latest-completed-tx (db/latest-completed-tx indexer)]
-                                          {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
-                                           ::tx/tx-time (Date. (max (System/currentTimeMillis)
-                                                                    (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))}
-                                          {::tx/tx-time (Date.)
-                                           ::tx/tx-id 0})
+    (let [tx (merge {:fork-at {::db/valid-time valid-time
+                               ::tx/tx-time transact-time}}
+                    (if-let [latest-completed-tx (db/latest-completed-tx indexer)]
+                      {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
+                       ::tx/tx-time (Date. (max (System/currentTimeMillis)
+                                                (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))
+                       ::db/valid-time valid-time}
+                      {::tx/tx-time (Date.)
+                       ::tx/tx-id 0}))
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
-          docs (into {} (mapcat :docs) conformed-tx-ops)
-          document-store (doto (fork/->forked-document-store document-store)
-                           (db/submit-docs docs))
-          indexer (doto (fork/->forked-indexer indexer (kvi/->KvIndexer (mem-kv/->mem-kv))
-                                               valid-time transact-time)
-                    (db/index-docs docs))]
+          in-flight-tx (db/begin-tx tx-ingester tx)]
 
-      (tx/index-tx {:document-store document-store
-                    :indexer indexer}
-                   (assoc tx :crux.db/valid-time valid-time)
-                   (map txc/->tx-event conformed-tx-ops))
+      (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
-      (map->QueryDatasource (merge this
-                                   {:valid-time valid-time
-                                    :transact-time tx-time
-                                    :document-store document-store
-                                    :indexer indexer})))))
+      ;; TODO what to do if the transaction doesn't commit?
+      (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
+
+      (api/db in-flight-tx valid-time))))
 
 (defrecord QueryEngine [^ExecutorService query-executor document-store
                         indexer bus
@@ -1414,9 +1408,15 @@
           valid-time (or valid-time (cio/next-monotonic-date))
           tx-time (or tx-time latest-tx-time valid-time)]
 
-      (map->QueryDatasource (merge this
-                                   {:valid-time valid-time
-                                    :transact-time tx-time}))))
+      ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
+      ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
+      (map->QueryDatasource (assoc this
+                                   :tx-ingester (tx/->tx-ingester {:indexer indexer
+                                                                   :document-store document-store
+                                                                   :bus bus
+                                                                   :query-engine this})
+                                   :valid-time valid-time
+                                   :transact-time tx-time))))
 
   (open-db [this] (api/open-db this nil nil))
   (open-db [this valid-time] (api/open-db this valid-time nil))
