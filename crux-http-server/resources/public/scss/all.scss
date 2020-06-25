@@ -41,6 +41,32 @@ html, body {
     height:5rem;
 }
 
+.root-contents {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.root-title {
+    letter-spacing: 0.05em;
+}
+
+.root-video {
+    width: 560px;
+    height: 315px;
+}
+
+.root-get-started {
+    text-decoration: none;
+    background: #4CAF50;
+    color: white;
+    padding: 0.8rem;
+    margin-top: 1rem;
+    letter-spacing: 0.05em;
+    font-weight: bold;
+}
+
 .console {
     max-width: 95%;
     min-height: 60vh;

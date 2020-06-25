@@ -384,9 +384,16 @@
 
 (defn- root-page []
   [:div.root-contents
-   [:p "Welcome to the Crux Console! Get started below:"]
-   [:p [:a {:href "/_crux/query"} "Performing a query"]]
-   [:p [:a {:href "/_crux/entity"} "Searching for an entity"]]])
+   [:h1.root-title "Welcome to the Crux Console!"]
+   [:h2.root-video__title "Take a short video tour:"]
+   [:iframe.root-video {:src "https://www.youtube.com/embed/StXLmWvb5Xs"
+                        :allow "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"}]
+   [:a.root-get-started.button
+    {:href "/_crux/query"}
+    "Start exploring your Crux node"]])
+    [:a.root-get-started
+     {:href "/_crux/query"}
+     "Start exploring your Crux node"]]])
 
 (defn- root-handler [^ICruxAPI crux-node options request]
   {:status 200
