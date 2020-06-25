@@ -688,7 +688,6 @@
                                          (reduce (fn [acc [eid ^DirectBuffer eid-value-buffer ecav-key]]
                                                    (let [quad ^Quad (decode-ecav-key-from ecav-key (.capacity eid-value-buffer))
                                                          attr-buffer (c/->id-buffer (.attr quad))
-                                                         eid-buffer (value-buffer->id-buffer index-store (.eid quad))
                                                          value-buffer (.value quad)
                                                          shared-av? (> (->> (all-keys-in-prefix av-i (encode-ave-key-to nil
                                                                                                                         attr-buffer
