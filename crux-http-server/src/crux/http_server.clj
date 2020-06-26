@@ -11,11 +11,11 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.instant :as instant]
+            [crux.api :as api]
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
-            [ring.middleware.cors :refer [wrap-cors]]
             [ring.middleware.resource :refer [wrap-resource]]
             [muuntaja.middleware :refer [wrap-format]]
             [muuntaja.core :as m]
@@ -25,9 +25,7 @@
             [ring.util.request :as req]
             [ring.util.response :as resp]
             [ring.util.time :as rt]
-            [hiccup.page :as page]
-            [hiccup2.core :as hiccup2]
-            [crux.api :as api])
+            [hiccup2.core :as hiccup2])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
            [java.time Duration ZonedDateTime ZoneId Instant]
@@ -763,27 +761,6 @@
   Closeable
   (close [_]
     (.stop server)))
-
-(defn ^:deprecated start-http-server
-  "Starts a HTTP server listening to the specified server-port, serving
-  the Crux HTTP API. Takes a either a crux.api.ICruxAPI or its
-  dependencies explicitly as arguments (internal use)."
-  ^java.io.Closeable
-  ([crux-node] (start-http-server crux-node {}))
-  ([crux-node
-    {:keys [server-port cors-access-control]
-     :or {server-port default-server-port cors-access-control []}
-     :as options}]
-   (let [wrap-cors' #(apply wrap-cors (cons % cors-access-control))
-         server (j/run-jetty (-> (partial handler crux-node)
-                                 (wrap-exception-handling)
-                                 (p/wrap-params)
-                                 (wrap-cors')
-                                 (wrap-exception-handling))
-                             {:port server-port
-                              :join? false})]
-     (log/info "HTTP server started on port: " server-port)
-     (->HTTPServer server options))))
 
 (defn- unsupported-encoder [_]
   (reify
