@@ -266,7 +266,8 @@
                               crux.kv.lmdb/kv-store]
         :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
         :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
-        :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))})
+        :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))
+        :crux.kv.lmdb/env-mapsize 4096})
 
    "kafka-lmdb"
    (fn [data-dir]
