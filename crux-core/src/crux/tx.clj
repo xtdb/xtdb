@@ -279,7 +279,7 @@
                                        (db/unindex-eids evict-eids)
                                        (db/index-entity-txs tx etxs))
                                      true)))))
-                           nil
+                           true
                            tx-events)
         new-docs (fork/new-docs forked-document-store)]
 
