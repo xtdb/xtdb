@@ -33,6 +33,9 @@ public interface ICruxDatasource extends Closeable {
     /**
      * Queries the db.
      *
+     * This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
+     * otherwise, it will return a vector of result tuples.
+     *
      * @param query the query in map, vector or string form.
      * @return      a set or vector of result tuples.
      */

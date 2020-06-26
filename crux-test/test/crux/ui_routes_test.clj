@@ -55,15 +55,18 @@
       (t/is (get (get-linked-entities "application/json") "ivan")))
 
     ;; Testing getting query results
-    (let [get-query (fn [accept-type] (-> (get-result-from-path "/_crux/query?find=[e]&where=[e+%3Acrux.db%2Fid+_]" accept-type)
-                                          (parse-body accept-type)))]
+    (let [get-query (fn [accept-type]
+                      (set (-> (get-result-from-path "/_crux/query?find=[e]&where=[e+%3Acrux.db%2Fid+_]" accept-type)
+                               (parse-body accept-type))))]
       (t/is (= #{[:ivan] [:peter]} (get-query "application/edn")))
-      (t/is (= [["ivan"] ["peter"]] (get-query "application/json")))
-      (t/is (= [[":ivan"] [":peter"]] (get-query "text/csv")))
-      (t/is (= [[":ivan"] [":peter"]] (get-query "text/tsv"))))
+      (t/is (= #{["ivan"] ["peter"]} (get-query "application/json")))
+      (t/is (= #{[":ivan"] [":peter"]} (get-query "text/csv")))
+      (t/is (= #{[":ivan"] [":peter"]} (get-query "text/tsv"))))
 
     ;; Test file-type based negotiation
-    (t/is (= [[":ivan"] [":peter"]] (-> (get-result-from-path "/_crux/query.csv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
-                                        (parse-body "text/csv"))))
-    (t/is (= [[":ivan"] [":peter"]] (-> (get-result-from-path "/_crux/query.tsv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
-                                        (parse-body "text/tsv"))))))
+    (t/is (= #{[":ivan"] [":peter"]}
+             (set (-> (get-result-from-path "/_crux/query.csv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
+                      (parse-body "text/csv")))))
+    (t/is (= #{[":ivan"] [":peter"]}
+             (set (-> (get-result-from-path "/_crux/query.tsv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
+                      (parse-body "text/tsv")))))))
