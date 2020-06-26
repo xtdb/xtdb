@@ -1225,7 +1225,7 @@
    (let [q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-         stats (db/read-index-meta indexer :crux.kv/stats)]
+         stats (db/read-index-meta indexer :crux/attribute-stats)]
      (log/debug :query (cio/pr-edn-str (-> q
                                            (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                            (dissoc :args))))

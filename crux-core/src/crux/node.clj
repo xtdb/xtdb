@@ -64,7 +64,7 @@
   (attributeStats [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/read-index-meta indexer :crux.kv/stats)))
+      (db/read-index-meta indexer :crux/attribute-stats)))
 
   (submitTx [this tx-ops]
     (cio/with-read-lock lock
