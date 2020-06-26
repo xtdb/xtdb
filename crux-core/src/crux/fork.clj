@@ -59,7 +59,7 @@
             c/->id-buffer))
 
   (entity-as-of [this eid valid-time transact-time]
-    (->> [(when-not (contains? (into #{} (map #(db/encode-value inner-index-store %)) evicted-eids) eid)
+    (->> [(when-not (contains? (into #{} (map #(c/->id-buffer %)) evicted-eids) eid)
             (db/entity-as-of inner-index-store eid
                              (cond-> valid-time capped-valid-time (date-min capped-valid-time))
                              (cond-> transact-time capped-transact-time (date-min capped-transact-time))))
