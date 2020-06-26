@@ -620,7 +620,7 @@
 
   (known-valid-times [this min-valid-time]
     (let [prefix (encode-known-vt-key-to nil)
-          i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
+          i (new-prefix-kv-iterator @entity-as-of-iterator-delay prefix)]
       (some->> (encode-known-vt-key-to (.get seek-buffer-tl) min-valid-time)
                (kv/seek i)
                ((fn step [^DirectBuffer k]
