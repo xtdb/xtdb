@@ -40,7 +40,7 @@
                                                      fix/with-kv-dir
                                                      fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
-      (select-keys [:local-standalone])
+      #_(select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
