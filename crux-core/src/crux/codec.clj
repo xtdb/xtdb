@@ -58,6 +58,9 @@
 (def ^:const av-index-id 10)
 (def ^:const ae-index-id 11)
 
+;; valid time range queries
+(def ^:const known-vts-index-id 12)
+
 (def ^:const value-type-id-size Byte/BYTES)
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))

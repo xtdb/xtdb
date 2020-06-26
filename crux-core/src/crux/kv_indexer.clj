@@ -210,6 +210,21 @@
              (c/maybe-long-size valid-time) (c/maybe-long-size transact-time) (c/maybe-long-size tx-id))
           (mem/limit-buffer b)))))
 
+(defn- encode-known-vt-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (encode-known-vt-key-to b nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^Date valid-time]
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> c/index-id-size
+                                                             valid-time (+ Long/BYTES))))]
+     (.putByte b 0 c/known-vts-index-id)
+     (when valid-time
+       (.putLong b c/index-id-size (bit-xor (.getTime valid-time) Long/MIN_VALUE) ByteOrder/BIG_ENDIAN))
+     (->> (+ c/index-id-size  (c/maybe-long-size valid-time))
+          (mem/limit-buffer b)))))
+
+(defn- decode-known-vt-key-from ^java.util.Date [^DirectBuffer k]
+  (Date. (bit-xor (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN) Long/MIN_VALUE)))
+
 (defn- decode-entity+vt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
   (assert (= (+ c/index-id-size c/id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (let [index-id (.getByte k 0)]
@@ -270,17 +285,19 @@
       (c/->EntityTx entity (c/reverse-time-ms->date valid-time) (c/reverse-time-ms->date transaction-time) tx-id nil))))
 
 (defn- etx->kvs [^EntityTx etx]
-  [[(encode-entity+vt+tt+tx-id-key-to nil
-                                      (c/->id-buffer (.eid etx))
-                                      (.vt etx)
-                                      (.tt etx)
-                                      (.tx-id etx))
-    (c/->id-buffer (.content-hash etx))]
-   [(encode-entity+z+tx-id-key-to nil
-                                  (c/->id-buffer (.eid etx))
-                                  (encode-entity-tx-z-number (.vt etx) (.tt etx))
-                                  (.tx-id etx))
-    (c/->id-buffer (.content-hash etx))]])
+  [(MapEntry/create (encode-entity+vt+tt+tx-id-key-to nil
+                                                      (c/->id-buffer (.eid etx))
+                                                      (.vt etx)
+                                                      (.tt etx)
+                                                      (.tx-id etx))
+                    (c/->id-buffer (.content-hash etx)))
+   (MapEntry/create (encode-entity+z+tx-id-key-to nil
+                                                  (c/->id-buffer (.eid etx))
+                                                  (encode-entity-tx-z-number (.vt etx) (.tt etx))
+                                                  (.tx-id etx))
+                    (c/->id-buffer (.content-hash etx)))
+   (MapEntry/create (encode-known-vt-key-to nil (.vt etx))
+                    mem/empty-buffer)])
 
 ;; Index Version
 
@@ -600,6 +617,16 @@
                                :asc entity-history-seq-ascending
                                :desc entity-history-seq-descending)]
       (entity-history-seq i eid opts)))
+
+  (known-valid-times [this min-valid-time]
+    (let [prefix (encode-known-vt-key-to nil)
+          i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
+      (some->> (encode-known-vt-key-to (.get seek-buffer-tl) min-valid-time)
+               (kv/seek i)
+               ((fn step [^DirectBuffer k]
+                  (when k
+                    (cons (decode-known-vt-key-from k)
+                          (step (kv/next i)))))))))
 
   (decode-value [this value-buffer]
     (assert (some? value-buffer))

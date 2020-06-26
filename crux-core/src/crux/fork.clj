@@ -88,6 +88,10 @@
                   [:desc true] #(compare [(.vt ^EntityTx %2) (.tx-id ^EntityTx %2)]
                                          [(.vt ^EntityTx %1) (.tx-id ^EntityTx %1)]))))
 
+  (known-valid-times [this min-valid-time]
+    (merge-seqs (db/known-valid-times mem-index-store min-valid-time)
+                (db/known-valid-times inner-index-store min-valid-time)))
+
   (decode-value [this value-buffer]
     (or (db/decode-value mem-index-store value-buffer)
         (db/decode-value inner-index-store value-buffer)))

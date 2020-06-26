@@ -1275,6 +1275,17 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
+(defn valid-time-range-query [node q {:keys [start end]}]
+  (with-open [index-store (db/open-index-store (:indexer node))]
+    (->> (for [vt (->> (db/known-valid-times index-store (:crux.db/valid-time start))
+                       (take-while #(pos? (compare (:crux.db/valid-time end) %))))
+               :let [result (api/q (if-let [transact-time (:crux.tx/tx-time end)]
+                                     (api/db node vt transact-time)
+                                     (api/db node vt)) q)]
+               :when (not-empty result)]
+           [vt result])
+         (into (sorted-map)))))
+
 (defrecord QueryDatasource [document-store indexer bus
                             ^Date valid-time ^Date transact-time
                             query-executor conform-cache query-cache

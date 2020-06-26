@@ -3076,6 +3076,67 @@
                                                        (or (and [(boolean ?field2)]))]
                                   :args []}))))
 
+(t/deftest test-valid-time-range-query
+  (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :last-name "Ivanov", :age 20} #inst "1980"]
+                              [:crux.tx/put {:crux.db/id :ivan :name "Ivan" :last-name "Ivanov", :age 25} #inst "1985"]
+                              [:crux.tx/put {:crux.db/id :ivan :name "Ivan" :last-name "Ivanov", :age 30} #inst "1990"]
+                              [:crux.tx/put {:crux.db/id :ivan :name "Ivan" :last-name "Ivanov", :age 35} #inst "1995"]
+                              [:crux.tx/put {:crux.db/id :petr :name "Petr" :last-name "Petrov", :age 20} #inst "1985"]
+                              [:crux.tx/put {:crux.db/id :petr :name "Petr" :last-name "Petrov", :age 25} #inst "1990"]
+                              [:crux.tx/put {:crux.db/id :petr :name "Petr" :last-name "Petrov", :age 30} #inst "1995"]])
+  (t/is (= #{[:ivan 20]}
+           (api/q (api/db *api* #inst "1980")
+                  '{:find [e age], :where [[e :age age]]})))
+  (t/is (= #{[:ivan 35]
+             [:petr 30]}
+           (api/q (api/db *api*) '{:find [e age], :where [[e :age age]]})))
+
+  (t/is (empty?
+         (q/valid-time-range-query *api*
+                                   '{:find [e age], :where [[e :age age]]}
+                                   {:start {:crux.db/valid-time #inst "1980"}
+                                    :end {:crux.db/valid-time #inst "1990"
+                                          :crux.tx/tx-time #inst "1990"}})))
+
+  (t/is (empty?
+         (q/valid-time-range-query *api*
+                                   '{:find [e age], :where [[e :age age]]}
+                                   {:start {:crux.db/valid-time #inst "1980"}
+                                    :end {:crux.db/valid-time #inst "1980"}})))
+
+  (t/is (= {#inst "1980" #{[:ivan 20]}
+            #inst "1985" #{[:ivan 25]
+                           [:petr 20]}}
+           (q/valid-time-range-query *api*
+                                     '{:find [e age], :where [[e :age age]]}
+                                     {:start {:crux.db/valid-time #inst "1980"}
+                                      :end {:crux.db/valid-time #inst "1990"}})))
+
+  (t/is (= {#inst "1980" #{[:ivan 20]}
+            #inst "1985" #{[:ivan 25]
+                           [:petr 20]}
+            #inst "1990" #{[:ivan 30]
+                           [:petr 25]}
+            #inst "1995" #{[:ivan 35]
+                           [:petr 30]}}
+           (q/valid-time-range-query *api*
+                                     '{:find [e age], :where [[e :age age]]}
+                                     {:start {:crux.db/valid-time #inst "1980"}
+                                      :end {:crux.db/valid-time #inst "2000"}})))
+
+  (t/is (= {#inst "1995" #{[:ivan 35]
+                           [:petr 30]}}
+           (q/valid-time-range-query *api*
+                                     '{:find [e age], :where [[e :age age]]}
+                                     {:start {:crux.db/valid-time #inst "1995"}
+                                      :end {:crux.db/valid-time #inst "2000"}})))
+
+  (t/is (empty?
+         (q/valid-time-range-query *api*
+                                   '{:find [e age], :where [[e :age age]]}
+                                   {:start {:crux.db/valid-time #inst "2000"}
+                                    :end {:crux.db/valid-time #inst "2000"}}))))
+
 ;; TODO: shows slowdown when scanning several attributes without any
 ;; filters.
 #_(t/deftest test-multiple-fields-sql-performance

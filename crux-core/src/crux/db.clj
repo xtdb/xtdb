@@ -35,6 +35,7 @@
   (entity-as-of-resolver [this eid valid-time transact-time])
   (entity-as-of ^crux.codec.EntityTx [this eid valid-time transact-time])
   (entity-history [this eid sort-order opts])
+  (known-valid-times [this min-valid-time])
   (decode-value [this value-buffer])
   (encode-value [this value])
   (open-nested-index-store ^java.io.Closeable [this]))
