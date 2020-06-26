@@ -4,12 +4,12 @@
   (:import (java.util UUID)))
 
 (defn- check-eid [eid op]
-  (when-not (and eid (c/valid-id? eid) (not (string? eid)))
+  (when-not (and (some? eid) (c/valid-id? eid))
     (throw (ex-info "invalid entity id" {:eid eid, :op op}))))
 
 (defn- check-doc [doc op]
   (when-not (and (map? doc)
-                 (every? keyword (keys doc)))
+                 (every? keyword? (keys doc)))
     (throw (ex-info "invalid doc" {:op op, :doc doc})))
 
   (check-eid (:crux.db/id doc) op))

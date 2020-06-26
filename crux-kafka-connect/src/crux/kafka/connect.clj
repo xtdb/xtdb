@@ -82,7 +82,7 @@
 
 (defn- coerce-eid [id]
   (cond
-    (and id (c/valid-id? id))
+    (and (some? id) (c/valid-id? id))
     (c/id-edn-reader id)
 
     (string? id)

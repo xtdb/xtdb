@@ -12,7 +12,7 @@
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
            java.nio.charset.StandardCharsets
-           [java.util Arrays Date Map UUID Set]
+           [java.util Arrays Collection Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 8)
+(def ^:const index-version 9)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -75,14 +75,15 @@
   (value->buffer ^org.agrona.MutableDirectBuffer [this ^MutableDirectBuffer to]))
 
 (def ^:private id-value-type-id 0)
-(def ^:private long-value-type-id 1)
-(def ^:private double-value-type-id 2)
-(def ^:private date-value-type-id 3)
-(def ^:private string-value-type-id 4)
-(def ^:private bytes-value-type-id 5)
-(def ^:private object-value-type-id 6)
-(def ^:private boolean-value-type-id 7)
-(def ^:private char-value-type-id 8)
+(def ^:private object-value-type-id 1)
+(def ^:private clob-value-type-id 2)
+(def ^:private nil-value-type-id 3)
+(def ^:private boolean-value-type-id 4)
+(def ^:private long-value-type-id 5)
+(def ^:private double-value-type-id 6)
+(def ^:private date-value-type-id 7)
+(def ^:private string-value-type-id 8)
+(def ^:private char-value-type-id 9)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -184,7 +185,7 @@
        (doto to
          (.putByte 0 double-value-type-id)
          (.putLong value-type-id-size l ByteOrder/BIG_ENDIAN))
-       (+ value-type-id-size Long/BYTES))))
+       (+ value-type-id-size Double/BYTES))))
 
   Date
   (value->buffer [this ^MutableDirectBuffer to]
@@ -202,8 +203,8 @@
   String
   (value->buffer [this ^MutableDirectBuffer to]
     (if (< max-string-index-length (count this))
-      (doto (id-function to (nippy/fast-freeze this))
-        (.putByte 0 (byte object-value-type-id)))
+      (doto (id->buffer this to)
+        (.putByte 0 clob-value-type-id))
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
@@ -218,45 +219,18 @@
               (.putByte to (inc idx) (byte (+ offset b)))
               (recur (inc idx))))))))
 
-  nil
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  Keyword
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  UUID
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  URI
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  URL
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  Map
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  DirectBuffer
-  (value->buffer [this to]
-    (id->buffer this to))
-
-  ByteBuffer
-  (value->buffer [this to]
-    (id->buffer this to))
-
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (if (satisfies? IdToBuffer this)
-      (id->buffer this to)
-      (doto (id-function to (binding [*sort-unordered-colls* true]
-                              (nippy/fast-freeze this)))
-        (.putByte 0 (byte object-value-type-id))))))
+    (doto (id-function to (binding [*sort-unordered-colls* true]
+                            (nippy/fast-freeze this)))
+      (.putByte 0 object-value-type-id)))
+
+  nil
+  (value->buffer [this ^MutableDirectBuffer to]
+    (mem/limit-buffer
+     (doto to
+       (.putByte 0 nil-value-type-id))
+     value-type-id-size)))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
   (value->buffer x (ExpandableDirectByteBuffer. 32)))
@@ -293,22 +267,19 @@
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (1 2 3 4 7 8) true
-      0 (= buffer nil-id-buffer)
+      (3 4 5 6 7 8 9) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
   (let [type-id (.getByte buffer 0)]
     (case type-id
-      1 (decode-long buffer) ;; long-value-type-id
-      2 (decode-double buffer) ;; double-value-type-id
-      3 (Date. (decode-long buffer)) ;; date-value-type-id
-      4 (decode-string buffer) ;; string-value-type-id
-      7 (decode-boolean buffer) ;; boolean-value-type-id
-      8 (decode-char buffer) ;; char-value-type-id
-      0 (if (mem/buffers=? buffer nil-id-buffer)  ;; id-value-type-id
-          nil
-          (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))
+      3 nil ;; nil-value-type-id
+      4 (decode-boolean buffer) ;; boolean-value-type-id
+      5 (decode-long buffer) ;; long-value-type-id
+      6 (decode-double buffer) ;; double-value-type-id
+      7 (Date. (decode-long buffer)) ;; date-value-type-id
+      8 (decode-string buffer) ;; string-value-type-id
+      9 (decode-char buffer) ;; char-value-type-id
       (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
 
 (def ^:private hex-id-pattern
@@ -360,33 +331,39 @@
 
   Keyword
   (id->buffer [this to]
-    (id-function to (.getBytes (subs (str this) 1))))
+    (id-function to (.getBytes (subs (str this) 1) StandardCharsets/UTF_8)))
 
   UUID
   (id->buffer [this to]
-    (id-function to (.getBytes (str this))))
+    (id-function to (.getBytes (str this) StandardCharsets/UTF_8)))
 
   URI
   (id->buffer [this to]
-    (id-function to (.getBytes (str (.normalize this)))))
+    (id-function to (.getBytes (str (.normalize this)) StandardCharsets/UTF_8)))
 
   URL
   (id->buffer [this to]
-    (id-function to (.getBytes (.toExternalForm this))))
+    (id-function to (.getBytes (.toExternalForm this) StandardCharsets/UTF_8)))
 
   String
   (id->buffer [this to]
-    (if (hex-id? this)
-      (let [^MutableDirectBuffer to (mem/limit-buffer to id-size)]
-        (.putByte to 0 id-value-type-id)
-        (mem/hex->buffer this (mem/slice-buffer to value-type-id-size hash/id-hash-size))
-        to)
-      (if-let [id (or (maybe-uuid-str this)
-                      (maybe-keyword-str this)
-                      (maybe-url-str this)
-                      (maybe-map-str this))]
-        (id->buffer id to)
-        (throw (IllegalArgumentException. (format "Not a %s hex, keyword, EDN map, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
+    (id-function to (nippy/fast-freeze this)))
+
+  Boolean
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Number
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Date
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
+
+  Character
+  (id->buffer [this to]
+    (id-function to (nippy/fast-freeze this)))
 
   Map
   (id->buffer [this to]
@@ -470,27 +447,27 @@
   (when id
     (Id. (mem/copy-to-unpooled-buffer (.buffer id)) 0)))
 
+(defn hex->id-buffer
+  ([hex] (hex->id-buffer hex (mem/allocate-buffer id-size)))
+  ([hex to]
+   (.putByte ^MutableDirectBuffer to 0 id-value-type-id)
+   (mem/hex->buffer hex (mem/slice-buffer to value-type-id-size hash/id-hash-size))
+   to))
+
 (deftype EDNId [hex original-id]
-  IdOrBuffer
-  (->id-buffer [this]
-    (->id-buffer (new-id hex)))
-
-  (new-id [this]
-    (new-id hex))
-
   IdToBuffer
   (id->buffer [this to]
-    (id->buffer (new-id hex) to))
+    (hex->id-buffer hex to))
 
   Object
   (toString [this]
     hex)
 
   (equals [this that]
-    (.equals (new-id hex) that))
+    (.equals (new-id this) (new-id that)))
 
   (hashCode [this]
-    (.hashCode (new-id hex)))
+    (.hashCode (new-id this)))
 
   IHashEq
   (hasheq [this]
@@ -498,10 +475,19 @@
 
   Comparable
   (compareTo [this that]
-    (.compareTo (new-id hex) that)))
+    (.compareTo (new-id this) (new-id that))))
 
 (defn id-edn-reader ^crux.codec.EDNId [id]
-  (->EDNId (str (new-id id)) id))
+  (->EDNId (if (string? id)
+             (if (hex-id? id)
+               id
+               (str (new-id (or (maybe-uuid-str id)
+                                (maybe-keyword-str id)
+                                (maybe-url-str id)
+                                (maybe-map-str id)
+                                (throw (IllegalArgumentException. "EDN reader doesn't support string IDs"))))))
+             (new-id id))
+           id))
 
 (defn read-edn-string-with-readers [s]
   (edn/read-string {:readers {'crux/id id-edn-reader}} s))
@@ -533,6 +519,10 @@
     (= id-size (.capacity (->id-buffer x)))
     (catch IllegalArgumentException _
       false)))
+
+(defn id-buffer? [^DirectBuffer buffer]
+  (and (= id-size (.capacity buffer))
+       (= id-value-type-id (.getByte buffer 0))))
 
 (nippy/extend-freeze
  Id

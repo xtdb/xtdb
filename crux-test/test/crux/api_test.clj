@@ -40,7 +40,7 @@
                                                      fix/with-kv-dir
                                                      fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
-      #_(select-keys [:local-standalone])
+      (select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])
       #_(select-keys [:local-standalone :h2 :sqlite :remote])))
 
@@ -95,7 +95,7 @@
     (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))))
 
 (t/deftest test-status
-  (t/is (= (merge {:crux.index/index-version 8}
+  (t/is (= (merge {:crux.index/index-version 9}
                   (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                     {:crux.zk/zk-active? true}))
            (select-keys (api/status *api*) [:crux.index/index-version :crux.zk/zk-active?])))
@@ -109,7 +109,7 @@
       (t/is (= submitted-tx (api/latest-completed-tx *api*))))))
 
 (t/deftest test-can-use-crux-ids
-  (let [id #crux/id :https://adam.com
+  (let [id #crux/id "https://adam.com"
         doc {:crux.db/id id, :name "Adam"}
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
     (.awaitTx *api* submitted-tx nil)

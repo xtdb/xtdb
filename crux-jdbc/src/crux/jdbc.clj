@@ -105,7 +105,7 @@
                                            (map str ids))
                                   {:builder-fn jdbcr/as-unqualified-lower-maps})]
            row)
-         (map (juxt (comp c/new-id :event_key) #(->v dbtype (:v %))))
+         (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(->v dbtype (:v %))))
          (into {}))))
 
 (defrecord JdbcTxLog [ds dbtype]

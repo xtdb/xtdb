@@ -53,14 +53,14 @@ which enables later deletion of documents.
 The following types of `:crux.db/id` are allowed:
 
 * Keyword (e.g. `{:crux.db/id :my-id}` or `{:crux.db/id :dbpedia.resource/Pablo-Picasso}`)
-* UUID (e.g. `{:crux.db/id #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"}` or `{:crux.db/id #crux/id "6f0232d0-f3f9-4020-a75f-17b067f41203"}`)
+* String (e.g. `{:crux.db/id "my-id"}`)
+* Integers/Longs (e.g. `{:crux.db/id 42}`)
+* UUID (e.g. `{:crux.db/id #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"}`)
 * URI (e.g. `{:crux.db/id #crux/id "mailto:crux@juxt.pro"}`)
 * URL (e.g. `{:crux.db/id #crux/id "https://github.com/juxt/crux"}`), including `http`, `https`, `ftp` and `file` protocols
-* Maps (e.g. `{:crux.db/id #crux/id {:this :id-field}}`) (Note: see https://github.com/juxt/crux/issues/362[issue #362]).
+* Maps (e.g. `{:crux.db/id {:this :id-field}}`) (Note: see https://github.com/juxt/crux/issues/362[issue #362]).
 
-The `#crux/id` reader literal will take any string and attempt to coerce it
-into a valid ID. Use of `#crux/id` with a valid ID type will also work
-(e.g. `{:crux.db/id #crux/id :my-id}`).
+The `#crux/id` reader literal will take URI/URL strings and attempt to coerce them into valid IDs.
 
 URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
 

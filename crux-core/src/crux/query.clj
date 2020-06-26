@@ -1140,8 +1140,7 @@
 
 (defn- build-full-results [{:keys [entity-resolver-fn index-store document-store] :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
-         (if-let [content-hash (and (c/valid-id? value)
-                                    (c/new-id (entity-resolver-fn (db/encode-value index-store value))))]
+         (if-let [content-hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
            (-> (db/fetch-docs document-store #{content-hash})
                (get content-hash))
            value))))
@@ -1260,8 +1259,8 @@
                     (->> find-var-bindings
                          (mapv #(bound-result-for-var index-store % join-keys)))))
 
-         true (dedupe)
          order-by (cio/external-sort (order-by-comparator find order-by))
+         true (dedupe)
          offset (drop offset)
          limit (take limit))))))
 

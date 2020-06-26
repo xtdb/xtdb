@@ -13,7 +13,7 @@
            java.time.Duration
            [java.util.function Supplier Consumer]))
 
-(s/def :crux.db/id (s/and (complement string?) c/valid-id?))
+(s/def :crux.db/id c/valid-id?)
 (s/def :crux.db/evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 
