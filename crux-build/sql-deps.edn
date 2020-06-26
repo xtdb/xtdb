@@ -5,9 +5,9 @@
         ch.qos.logback/logback-classic {:mvn/version "1.2.3"}
 
         ;; Crux
-        juxt/crux-core {:mvn/version "derived-from-git"}
-        juxt/crux-http-server {:mvn/version "derived-from-git"}
-        juxt/crux-rocksdb {:mvn/version "derived-from-git"}
-        juxt/crux-sql {:mvn/version "derived-from-git"}
-        juxt/crux-cli {:mvn/version "derived-from-git"}
+        juxt/crux-core {:mvn/version "crux-git-version-beta"}
+        juxt/crux-http-server {:mvn/version "crux-git-version-alpha"}
+        juxt/crux-rocksdb {:mvn/version "crux-git-version-beta"}
+        juxt/crux-sql {:mvn/version "crux-git-version-alpha"}
+        juxt/crux-cli {:mvn/version "crux-git-version-beta"}
         }}

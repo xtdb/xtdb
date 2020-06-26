@@ -3,3 +3,4 @@
 !build-uberjar.sh
 !pom.xml
 !crux.edn
+!crux-sql.edn
