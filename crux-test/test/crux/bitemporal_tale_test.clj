@@ -205,7 +205,7 @@
         :limit 10])
 
     (t/is (= #{["Mary"] ["Charles"]}
-             (crux/q (crux/db system #inst "1726-05-01") parametrized-query)))
+             (set (crux/q (crux/db system #inst "1726-05-01") parametrized-query))))
 
     (defn entity-update
       [entity-id new-attrs valid-time]

@@ -227,19 +227,20 @@
   (q [db query]
     "q[uery] a Crux db.
   query param is a datalog query in map, vector or string form.
-  Returns a set or vector of result tuples.")
+  This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
+  otherwise, it will return a vector of result tuples.")
 
-  (open-q ^java.io.Closeable [db query]
+  (open-q ^crux.api.ICursor [db query]
     "lazily q[uery] a Crux db.
   query param is a datalog query in map, vector or string form.
 
-  This function returns a Closeable sequence of result tuples - once you've consumed
+  This function returns a Cursor of result tuples - once you've consumed
   as much of the sequence as you need to, you'll need to `.close` the sequence.
   A common way to do this is using `with-open`:
 
   (with-open [res (crux/open-q db '{:find [...]
                                     :where [...]})]
-    (doseq [row res]
+    (doseq [row (iterator-seq res)]
       ...))
 
   Once the sequence is closed, attempting to iterate it is undefined.")

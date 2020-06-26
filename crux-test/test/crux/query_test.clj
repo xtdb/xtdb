@@ -1445,14 +1445,14 @@
                      :where [[_ :offer i]
                              [(test-pred i test-val)]]
                      :limit 1}
-        inputs '[[#{[2]} = 2]
-                 [#{[0]} < 10]
-                 [#{[0]} < 9223372036854775807]
-                 [#{} < -100]
-                 [#{[50]} >= 50]
-                 [#{[0]} <= 5]
-                 [#{[0]} > -100]
-                 [#{[0]} >= -100]]]
+        inputs '[[[[2]] = 2]
+                 [[[0]] < 10]
+                 [[[0]] < 9223372036854775807]
+                 [[] < -100]
+                 [[[50]] >= 50]
+                 [[[0]] <= 5]
+                 [[[0]] > -100]
+                 [[[0]] >= -100]]]
     (doseq [[expected p v :as input] inputs]
       (dotimes [_ 5]
         (let [q (w/postwalk
@@ -2984,19 +2984,19 @@
                             [(= e :foo)]]
                     :limit 1})))))
 
-(t/deftest test-queries-return-distinct-results-631
+(t/deftest test-query-result-cardinality-972
   (fix/transact! *api* [{:crux.db/id :ii :name "Ivan" :last-name "Ivanov", :age 20}
                         {:crux.db/id :pp :name "Petr" :last-name "Petrov", :age 20}
                         {:crux.db/id :ip :name "Ivan" :last-name "Petrov", :age 25}
                         {:crux.db/id :pi :name "Petr" :last-name "Ivanov", :age 30}])
 
   (let [db (api/db *api*)]
-    (t/testing "eager query with order-by returns set of results"
+    (t/testing "eager query without order-by returns set of results"
       (t/is (= #{[30] [25] [20]}
                (api/q db '{:find [a] :where [[_ :age a]]}))))
 
-    (t/testing "query with order-by returns distinct results"
-      (t/is (= [[30] [25] [20]]
+    (t/testing "eager query with order-by returns a vector of results"
+      (t/is (= [[30] [25] [20] [20]]
                (api/q db '{:find [a] :where [[e :age a]], :order-by [[a :desc]]}))))
 
     (t/testing "lazy query does not return distinct results"

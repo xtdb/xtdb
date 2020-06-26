@@ -1195,7 +1195,7 @@
                                (fn []
                                  (try
                                    (with-open [index-store (open-index-store db)]
-                                     (let [result-coll-fn (if (:order-by q) vec set)
+                                     (let [result-coll-fn (if (some q [:order-by :limit :offset]) vec set)
                                            result (result-coll-fn (query db index-store conformed-q))]
                                        (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                                        (log/debug :query-result-size (count result))
@@ -1260,7 +1260,6 @@
                          (mapv #(bound-result-for-var index-store % join-keys)))))
 
          order-by (cio/external-sort (order-by-comparator find order-by))
-         true (dedupe)
          offset (drop offset)
          limit (take limit))))))
 
