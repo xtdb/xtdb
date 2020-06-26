@@ -30,7 +30,7 @@
             [crux.api :as api])
   (:import [crux.api ICruxAPI ICruxDatasource NodeOutOfSyncException]
            [java.io Closeable IOException OutputStream]
-           [java.time Duration ZonedDateTime]
+           [java.time Duration ZonedDateTime ZoneId Instant]
            java.util.Date
            java.time.format.DateTimeFormatter
            [java.net URLDecoder URLEncoder]
@@ -57,7 +57,9 @@
           [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
           (when options [:meta {:title "options" :content (str options)}])
           [:link {:rel "stylesheet" :href "/css/all.css"}]
+          [:link {:rel "stylesheet" :href "/latofonts.css"}]
           [:link {:rel "stylesheet" :href "/css/table.css"}]
+          [:link {:rel "stylesheet" :href "/css/codemirror.css"}]
           [:link {:rel "stylesheet"
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
           [:title "Crux Console"]]
@@ -460,7 +462,7 @@
 
 (defn resolve-entity-map [linked-entities entity-map]
   (if-let [href (get linked-entities entity-map)]
-    [:a.entity-link
+    [:a
      {:href href}
      (str entity-map)]
     (cond
@@ -482,17 +484,28 @@
                            [:li (resolve-entity-map linked-entities v)])]
       :else (str entity-map))))
 
+(def ^DateTimeFormatter iso-format (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"))
+
 (defn vt-tt-entity-box
   [vt tt]
   [:div.entity-vt-tt
-    [:div.entity-vt-tt__title
-     "Valid Time"]
-    [:div.entity-vt-tt__value
-     (str (or vt (java.util.Date.)))]
-    [:div.entity-vt-tt__title
-     "Transaction Time"]
-    [:div.entity-vt-tt__value
-     (str (or tt "Not Specified"))]])
+   [:div.entity-vt-tt__title
+    "Valid Time"]
+   [:div.entity-vt-tt__value
+    (->> (or ^Date vt (java.util.Date.))
+         (.toInstant)
+         ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
+         (.format iso-format)
+         (str))]
+   [:div.entity-vt-tt__title
+    "Transaction Time"]
+   [:div.entity-vt-tt__value
+    (or (some-> ^Date tt
+                (.toInstant)
+                ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
+                (.format iso-format)
+                (str))
+        "Using Latest")]])
 
 (defn- entity->html [eid linked-entities entity-map vt tt]
   [:div.entity-map__container
@@ -594,7 +607,7 @@
         {:type "datetime-local"
          :name "valid-time"
          :step "0.01"
-         :value (.format default-date-formatter (ZonedDateTime/now))}]
+         :value (.format default-date-formatter (ZonedDateTime/now (ZoneId/of "Z")))}]
        [:b "Transaction Time"]
        [:input.input.input-time
         {:type "datetime-local"
@@ -664,7 +677,7 @@
             (for [[header cell-value] (map vector headers row)]
               [:td.table__cell.body__cell
                (if-let [href (get links cell-value)]
-                 [:a.entity-link {:href href} (str cell-value)]
+                 [:a {:href href} (str cell-value)]
                  (str cell-value))])])]
         [:tbody.table__body.table__no-data
          [:tr [:td.td__no-data

@@ -58,7 +58,7 @@
      (let [{:strs [query-results linked-entities]}
            (get-in db [:query :http])
            find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
-           table-loading? (get-in db [:query :right-pane :loading?])
+           table-loading? (get-in db [:query :result-pane :loading?])
            offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
            columns (map (fn [column]
@@ -67,79 +67,100 @@
                            :render-fn
                            (fn [_ v]
                              (if-let [link (get linked-entities v)]
-                               [:a.entity-link {:href link}
+                               [:a {:href link}
                                 (str v)]
                                v))
                            :render-only #{:filter :sort}})
                         find-clause)
-           rows (map #(zipmap find-clause %) query-results)]
+           rows (when query-results
+                  (map #(zipmap find-clause %) query-results))]
        {:data
         {:columns columns
          :rows rows
          :offset offset
-         :loading? table-loading?
+         :loading? (or (nil? table-loading?) table-loading?)
          :filters {:input (into #{} find-clause)}}}))))
 
 (rf/reg-sub
- ::query-right-pane-view
+ ::query-limit
  (fn [db _]
-   (if (empty? (get-in db [:current-route :query-params]))
-     :query-root
-     (or (get-in db [:query :right-pane :view]) :table))))
+   (js/parseInt (get-in db [:current-route :query-params :limit] 100))))
 
 (rf/reg-sub
- ::query-right-pane-loading?
+ ::query-offset
  (fn [db _]
-   (get-in db [:query :right-pane :loading?])))
+   (js/parseInt (get-in db [:current-route :query-params :offset] 0))))
 
 (rf/reg-sub
- ::entity-right-pane-loading?
+ ::query-result-pane-loading?
  (fn [db _]
-   (get-in db [:entity :right-pane :loading?])))
+   (get-in db [:query :result-pane :loading?])))
 
 (rf/reg-sub
- ::entity-right-pane-view
+ ::entity-result-pane-loading?
+ (fn [db _]
+   (get-in db [:entity :result-pane :loading?])))
+
+(rf/reg-sub
+ ::entity-pane-view
  (fn [db _]
    (if (nil? (get-in db [:current-route :query-params :eid]))
      :entity-root
      (or (get-in db [:entity :right-pane :view]) :document))))
 
 (rf/reg-sub
+ ::query-pane-view
+ (fn [db _]
+   (if (empty? (get-in db [:current-route :query-params]))
+     :query-root
+     :table)))
+
+(rf/reg-sub
  ::query-data-download-link
  (fn [db [_ link-type]]
-   (let [query-params (get-in db [:current-route :query-params])]
+   (let [query-params (-> (get-in db [:current-route :query-params])
+                          (dissoc :limit :offset))]
      (-> (common/route->url :query {} query-params)
          (string/replace #"query" (str "query." link-type))))))
 
 (rf/reg-sub
- ::entity-right-pane-document
+ ::entity-result-pane-document
  (fn [db _]
    (if-let [error (get-in db [:entity :error])]
      {:error error}
      (let [query-params (get-in db [:current-route :query-params])
          document (get-in db [:entity :http :document "entity"])]
      {:eid (:eid query-params)
-      :vt (or (:valid-time query-params) (str (t/now)))
-      :tt (or (:transaction-time query-params) "Not Specified")
+      :vt (common/iso-format-datetime (or (:valid-time query-params) (t/now)))
+      :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
       :document document
-      :document-no-eid (dissoc document :crux.db/id)
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
 
 (rf/reg-sub
- ::entity-right-pane-history-diffs?
+ ::entity-result-pane-history-diffs?
  (fn [db _]
-   (or (get-in db [:entity :right-pane :diffs?]) false)))
+   (or (get-in db [:entity :result-pane :diffs?]) false)))
 
 (rf/reg-sub
- ::entity-right-pane-document-error
+ ::entity-result-pane-document-error
  (fn [db _]
    (get-in db [:entity :error])))
 
+
+(defn- format-history-times [entity-history]
+  (map
+   (fn [history-element]
+     (-> history-element
+         (update :crux.tx/tx-time common/iso-format-datetime)
+         (update :crux.db/valid-time common/iso-format-datetime)))
+   entity-history))
+
 (rf/reg-sub
- ::entity-right-pane-history
+ ::entity-result-pane-history
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
-         history (get-in db [:entity :http :history])]
+         history (-> (get-in db [:entity :http :history])
+                     format-history-times)]
      {:eid eid
       :entity-history history})))
 
@@ -155,22 +176,63 @@
    (partition 2 1 entity-history)))
 
 (rf/reg-sub
- ::entity-right-pane-history-diffs
+ ::entity-result-pane-history-diffs
  (fn [db _]
    (let [eid (get-in db [:current-route :query-params :eid])
-         history (get-in db [:entity :http :history])
+         history (-> (get-in db [:entity :http :history])
+                     format-history-times)
          entity-history (history-docs->diffs history)]
      {:eid eid
       :up-to-date-doc (first history)
       :history-diffs entity-history})))
 
 (rf/reg-sub
- ::left-pane-view
+ ::form-pane-view
  (fn [db _]
-   (or (get-in db [:left-pane :view])
+   (or (get-in db [:form-pane :view])
        (get-in db [:current-route :data :name]))))
 
 (rf/reg-sub
- ::left-pane-visible?
+ ::form-pane-history
+ (fn [db [_ component]]
+   (get-in db [:form-pane :history component])))
+
+(rf/reg-sub
+ ::query-form-history
  (fn [db _]
-   (get-in db [:left-pane :visible?])))
+   (let [valid-time #(common/datetime->date-time
+                      (str (:valid-time % (t/now))))
+         transaction-time #(common/datetime->date-time
+                            (:transaction-time %))]
+     (reverse
+      (mapv
+       (fn [x]
+         {"q" (common/query-params->formatted-edn-string
+               (dissoc x :valid-time :transaction-time))
+          "vtd" (:date (valid-time x))
+          "vtt" (:time (valid-time x))
+          "ttd" (:date (transaction-time x))
+          "ttt" (:time (transaction-time x))})
+       (:query-history db))))))
+
+(rf/reg-sub
+ ::show-vt?
+ (fn [db [_ component]]
+   (let [url-has-vt? (contains? (get-in db [:current-route :query-params]) :valid-time)]
+     (get-in db [:form-pane :show-vt? component] url-has-vt?))))
+
+(rf/reg-sub
+ ::show-tt?
+ (fn [db [_ component]]
+   (let [url-has-tt? (contains? (get-in db [:current-route :query-params]) :transaction-time)]
+     (get-in db [:form-pane :show-tt? component] url-has-tt?))))
+
+(rf/reg-sub
+ ::entity-form-history
+ (fn [db _]
+   (:entity-history db)))
+
+(rf/reg-sub
+ ::form-pane-hidden?
+ (fn [db _]
+   (get-in db [:form-pane :hidden?] true)))

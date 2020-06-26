@@ -8,14 +8,20 @@
 (rf/reg-event-fx
  ::fetch-query-table
  (fn [{:keys [db]} _]
-   (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)]
+   (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
+         ;; Get back one more result than necessary - won't be rendered,
+         ;; but used to check if there are more results in the table
+         limit (+ 1 (js/parseInt (:limit query-params 100)))]
      (when (seq query-params)
-       {:dispatch-n [[:crux.ui.events/set-query-right-pane-loading true]
+       {:scroll-top nil
+        :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
                      [:crux.ui.events/query-table-error nil]]
         :http-xhrio {:method :get
                      :uri (common/route->url :query
                                              {}
-                                             (assoc query-params :link-entities? true))
+                                             (assoc query-params
+                                                    :link-entities? true
+                                                    :limit limit))
                      :response-format (ajax-edn/edn-response-format)
                      :on-success [::success-fetch-query-table]
                      :on-failure [::fail-fetch-query-table]}}))))
@@ -24,14 +30,15 @@
  ::success-fetch-query-table
  (fn [{:keys [db]} [_ result]]
    (prn "fetch query table success!")
-   {:dispatch [:crux.ui.events/set-query-right-pane-loading false]
+   {:dispatch-n [[:crux.ui.events/set-query-result-pane-loading false]
+                 [:crux.ui.events/toggle-form-pane true]]
     :db (assoc-in db [:query :http] result)}))
 
 (rf/reg-event-fx
  ::fail-fetch-query-table
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: get query table result: " result)
-   {:dispatch [:crux.ui.events/set-query-right-pane-loading false]
+   {:dispatch [:crux.ui.events/set-query-result-pane-loading false]
     :db (assoc-in db [:query :error]
                   (get-in result [:response :via 0 :message]))}))
 
@@ -39,8 +46,9 @@
  ::fetch-entity
  (fn [{:keys [db]} _]
    (let [query-params (assoc (get-in db [:current-route :query-params]) :link-entities? true)]
-     {:dispatch-n [[:crux.ui.events/entity-right-pane-document-error nil]
-                   [:crux.ui.events/set-entity-right-pane-loading true]]
+     {:scroll-top nil
+      :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
+                   [:crux.ui.events/set-entity-result-pane-loading true]]
       :http-xhrio {:method :get
                    :uri (common/route->url :entity nil query-params)
                    :response-format (ajax-edn/edn-response-format)
@@ -51,12 +59,13 @@
  ::success-fetch-entity
  (fn [{:keys [db]} [_ result]]
    (prn "fetch entity success!")
-   (let [right-pane-view (if (get-in db [:current-route :query-params :history]) :history :document)]
-     {:db (assoc-in db [:entity :http right-pane-view] result)
-      :dispatch [:crux.ui.events/set-entity-right-pane-loading false]})))
+   (let [result-pane-view (if (get-in db [:current-route :query-params :history]) :history :document)]
+     {:db (assoc-in db [:entity :http result-pane-view] result)
+      :dispatch-n [[:crux.ui.events/set-entity-result-pane-loading false]
+                   [:crux.ui.events/toggle-form-pane true]]})))
 
 (rf/reg-event-fx
  ::fail-fetch-entity
  (fn [{:keys [db]} [_ result]]
    {:db (assoc-in db [:entity :error] (str result))
-    :dispatch [:crux.ui.events/set-entity-right-pane-loading false]}))
+    :dispatch [:crux.ui.events/set-entity-result-pane-loading false]}))

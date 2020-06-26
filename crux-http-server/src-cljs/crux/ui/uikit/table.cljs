@@ -100,20 +100,16 @@
 (defn body-rows
   [data table-atom rows]
   (let [columns (utils/table-columns data @table-atom)]
-    (if (seq rows)
-      [:tbody.table__body
-       (for [row rows]
-         ^{:key row}
-         [:tr.table__row.body__row
-          (for [{:keys [column-key render-fn]} columns]
-            ^{:key (str row column-key)}
-            [:td.table__cell.body__cell
-             (if render-fn
-               (render-fn row (column-key row))
-               (column-key row))])])]
-      [:tbody.table__body.table__no-data
-       [:tr [:td.td__no-data
-             "Nothing to show"]]])))
+    [:tbody.table__body
+     (for [row rows]
+       ^{:key row}
+       [:tr.table__row.body__row
+        (for [{:keys [column-key render-fn]} columns]
+          ^{:key (str row column-key)}
+          [:td.table__cell.body__cell
+           (if render-fn
+             (render-fn row (column-key row))
+             (column-key row))])])]))
 
 (defn filter-all
   [table-atom]
@@ -190,34 +186,24 @@
    [:tfoot
     [:tr
      [:td.foot__pagination
-      [:div.select.pagination__select
-       [:select
-        {:value (utils/pagination-rows-per-page @table-atom)
-         :on-change #(utils/pagination-rows-per-page-on-change % table-atom)}
-        [:option {:value "10"} (str "10" " rows")]
-        [:option {:value "50"} (str "50" " rows")]
-        [:option {:value "100"} (str "100" " rows")]]]
-      [:div.pagination__info (utils/pagination-current-and-total-pages @table-atom
-                                                                       processed-rows)]
+      [:div.pagination__info (utils/pagination-current-and-total-pages processed-rows)]
       [:div.pagination__arrow-group
        [:div.pagination__arrow-nav
-        {:class (when (<= (utils/pagination-current-page @table-atom) 0)
+        {:class (when (<= @(rf/subscribe [::sub/query-offset]) 0)
                   "pagination__arrow-nav--disabled")
-         :on-click #(utils/pagination-dec-page table-atom)}
+         :on-click #(rf/dispatch [::events/goto-previous-query-page])}
         [:i.fas.fa-chevron-left]]
        [:div.pagination__arrow-nav
-        {:class (when (utils/pagination-rows-exhausted? @table-atom
-                                                        processed-rows)
+        {:class (when (utils/pagination-rows-exhausted? processed-rows)
                   "pagination__arrow-nav--disabled")
-         :on-click #(utils/pagination-inc-page table-atom
-                                               processed-rows)}
+         :on-click #(rf/dispatch [::events/goto-next-query-page])}
         [:i.fas.fa-chevron-right]]]]]]])
 
 (defn table
   [data]
   (let [table-atom (r/atom {:utils (dissoc data :columns :rows :filters)})]
     (fn [data]
-      (let [[processed-rows paginated-rows] (utils/process-rows data @table-atom)]
+      (let [processed-rows (utils/process-rows data @table-atom)]
         [:div.uikit-table
          [:div.table__top
           [:div.top__first-group
@@ -228,5 +214,5 @@
            [:div.table__main
             [:table.table
              [header-columns data table-atom]
-             [body-rows data table-atom paginated-rows]]])
+             [body-rows data table-atom (drop-last processed-rows)]]])
          [pagination table-atom processed-rows]]))))

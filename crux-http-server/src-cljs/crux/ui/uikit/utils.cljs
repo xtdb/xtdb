@@ -1,7 +1,9 @@
 (ns crux.ui.uikit.utils
   (:require
    [clojure.string :as s]
-   [reagent.core :as r]))
+   [reagent.core :as r]
+   [re-frame.core :as rf]
+   [crux.ui.subscriptions :as sub]))
 
 (def example-data
   {;; user provided data
@@ -79,15 +81,10 @@
           s/lower-case
           (s/replace #"\s+" " ")))
 
-(defn reset-pagination
-  [table]
-  (assoc-in table [:utils :pagination :current-page] 0))
-
 (defn column-sort
   [table-atom column-key]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (update-in [:utils :sort]
                          (fn [m]
                            (let [curr-column-key (ffirst m)]
@@ -117,7 +114,6 @@
   [evt table-atom column-key]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (assoc-in [:utils :filter-columns column-key]
                         (-> evt .-target .-value)))))
 
@@ -170,7 +166,6 @@
   [table-atom column-key value processed-value]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (update-in [:utils :filter-columns column-key]
                          (fn [selected-values]
                            (let [val&processed [value processed-value]]
@@ -197,7 +192,6 @@
   [table-atom]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (update :utils dissoc :filter-columns))))
 
 (defn filter-all-value
@@ -208,7 +202,6 @@
   [evt table-atom]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (assoc-in [:utils :filter-all]
                         (-> evt .-target .-value)))))
 
@@ -216,7 +209,6 @@
   [table-atom]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (update :utils dissoc :filter-all))))
 
 (defn block-filter-values
@@ -241,7 +233,6 @@
   [table-atom column-key]
   (swap! table-atom
          #(-> %
-              reset-pagination
               (update-in [:utils :filter-columns] dissoc column-key)
               (update-in [:utils :hidden column-key] not))))
 
@@ -259,68 +250,18 @@
         hidden (-> table :utils :hidden)]
     (remove #(get hidden (:column-key %)) columns)))
 
-(defn pagination-info
-  [data processed-rows]
-  (let [rows-count (count processed-rows)
-        offset (:offset data)
-        sum-rows-offset (+ rows-count offset)]
-    (if (zero? rows-count)
-      (str (inc offset) " - " (inc offset))
-      (str (inc offset) " - " sum-rows-offset))))
-
-(defn pagination-rows-per-page-on-change
-  [evt table-atom]
-  (swap! table-atom
-         #(-> %
-              (assoc-in [:utils :pagination :rows-per-page]
-                        (js/parseInt (-> evt .-target .-value)))
-              (assoc-in [:utils :pagination :current-page] 0))))
-
-(defn pagination-rows-per-page
-  [table]
-  (get-in table [:utils :pagination :rows-per-page] 10))
-
-(defn pagination-current-page
-  [table]
-  (get-in table [:utils :pagination :current-page] 0))
-
 (defn pagination-current-and-total-pages
-  [table processed-rows]
-  (let [offset (pagination-current-page table)
-        rows-per-page (pagination-rows-per-page table)
-        nth-rows-at-page (+ rows-per-page
-                            (* offset rows-per-page))
-        nth-rows (count processed-rows)]
-    (str (inc (* offset rows-per-page))
-         "-"
-         (if (> nth-rows-at-page nth-rows)
-           nth-rows
-           nth-rows-at-page)
-         " of "
-         nth-rows)))
+  [processed-rows]
+  (let [limit @(rf/subscribe [::sub/query-limit])
+        offset @(rf/subscribe [::sub/query-offset])
+        num-rows (min (count processed-rows) limit)
+        rows-at-page (+ offset num-rows)]
+    (str (inc offset) "-" rows-at-page)))
 
 (defn pagination-rows-exhausted?
-  [table processed-rows]
-  (let [current-page (pagination-current-page table)
-        rows-per-page (pagination-rows-per-page table)
-        tot-rows (count processed-rows)
-        left-rows (- tot-rows (* rows-per-page
-                                 current-page)
-                     rows-per-page)]
-    (or (zero? left-rows) (neg? left-rows))))
-
-(defn pagination-inc-page
-  [table-atom processed-rows]
-  (when-not (pagination-rows-exhausted? @table-atom
-                                        processed-rows)
-    (swap! table-atom update-in [:utils :pagination :current-page]
-           (fnil inc 0))))
-
-(defn pagination-dec-page
-  [table-atom]
-  (when (> (pagination-current-page @table-atom) 0)
-    (swap! table-atom update-in [:utils :pagination :current-page]
-           dec)))
+  [processed-rows]
+  (let [limit @(rf/subscribe [::sub/query-limit])]
+    (< (count processed-rows) (+ 1 limit))))
 
 (defn render-fn-allow?
   [data column-key operation]
@@ -433,14 +374,6 @@
      rows)
     rows))
 
-(defn resolve-pagination
-  [table rows]
-  (let [current-page (pagination-current-page table)
-        rows-per-page (pagination-rows-per-page table)]
-    [rows (when (seq rows)
-            (nth (partition-all rows-per-page rows)
-                 current-page))]))
-
 (defn process-rows
   [data table]
   (let [rows (:rows data)]
@@ -448,5 +381,4 @@
          (resolve-hidden-columns table)
          (resolve-sorting data table)
          (resolve-column-filtering data table)
-         (resolve-filter-all data table)
-         (resolve-pagination table))))
+         (resolve-filter-all data table))))
