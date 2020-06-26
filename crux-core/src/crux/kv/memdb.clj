@@ -102,19 +102,24 @@
     (when (and db-dir persist-on-close?)
       (persist-db db-dir db))))
 
+(defn ->mem-kv
+  ([] (->mem-kv {}))
+  ([{::kv/keys [db-dir persist-on-close?]}]
+   (map->MemKv {:db-dir db-dir
+                :persist-on-close? persist-on-close?
+                :db (atom (if (.isFile (io/file db-dir "memdb"))
+                            (restore-db db-dir)
+                            (sorted-map-by mem/buffer-comparator)))})))
+
 (def kv
   {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::persist-on-close?]
-                     :as options}]
+                     :as opts}]
                (when sync?
                  (log/warn "Using sync? on MemKv has no effect."
                            (if (and db-dir persist-on-close?)
                              "Will persist on close."
                              "Persistence is disabled.")))
-               (-> (map->MemKv {:db-dir db-dir
-                                :persist-on-close? persist-on-close?
-                                :db (atom (if (.isFile (io/file db-dir "memdb"))
-                                            (restore-db db-dir)
-                                            (sorted-map-by mem/buffer-comparator)))})))
+               (->mem-kv opts))
 
    :args (merge kv/options
                 {::persist-on-close? {:doc "Persist Mem Db on close"

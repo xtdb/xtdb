@@ -15,9 +15,11 @@
             [taoensso.nippy :as nippy]
             [crux.tx.event :as txe]
             [clojure.string :as string]
-            [crux.tx.conform :as txc])
+            [crux.tx.conform :as txc]
+            [crux.api :as crux])
   (:import [java.util Date]
-           [java.time Duration]))
+           [java.time Duration]
+           [crux.codec EntityTx]))
 
 (t/use-fixtures :each fix/with-standalone-topology fix/with-kv-dir fix/with-node fix/with-silent-test-check
   (fn [f]
@@ -134,7 +136,7 @@
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
             (with-open [index-store (db/open-index-store (:indexer *api*))]
-              (t/is (nil? (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
+              (t/is (nil? (.content-hash (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time))))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (:tx-id (db/entity-as-of index-store :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-time))))))))))
 
@@ -606,6 +608,19 @@
               (fix/submit+await-tx [[:crux.tx/fn :update-attribute-fn :ivan :age `dec]])
               (some-> (#'tx/reset-tx-fn-error) throw)
               (t/is (= v3-ivan (api/entity (api/db *api*) :ivan))))))
+
+        (t/testing "sees in-transaction version of entities (including itself)"
+          (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo 1}]])
+          (let [tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo 2}]
+                                         [:crux.tx/put {:crux.db/id :doubling-fn
+                                                        :crux.db/fn '(fn [ctx]
+                                                                       [[:crux.tx/put (-> (crux.api/entity (crux.api/db ctx) :foo)
+                                                                                          (update :foo * 2))]])}]
+                                         [:crux.tx/fn :doubling-fn]])]
+
+            (t/is (crux/tx-committed? *api* tx))
+            (t/is (= {:crux.db/id :foo, :foo 4}
+                     (crux/entity (crux/db *api*) :foo)))))
 
         (t/testing "function ops can return other function ops"
           (let [returns-fn {:crux.db/id :returns-fn

@@ -6,12 +6,17 @@
             [com.stuartsierra.dependency :as dep]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.fork :as fork]
+            [crux.kv.memdb :as mem-kv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.bus :as bus]
             [crux.api :as api]
+            [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [crux.kv-indexer :as kvi]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
@@ -1039,12 +1044,11 @@
                                                     logic-var+range-constraint)))))
     compiled-query))
 
-(defn- build-sub-query [index-store {:keys [query-engine] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [index-store {:keys [query-cache] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
         encode-value-fn (partial db/encode-value index-store)
-        {:keys [query-cache]} query-engine
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
@@ -1134,7 +1138,7 @@
   (let [{:keys [where args rules]} (s/conform ::query q)]
     (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
 
-(defn- build-full-results [{:keys [entity-resolver-fn index-store], {:keys [document-store]} :query-engine, :as db} bound-result-tuple]
+(defn- build-full-results [{:keys [entity-resolver-fn index-store document-store] :as db} bound-result-tuple]
   (vec (for [value bound-result-tuple]
          (if-let [content-hash (and (c/valid-id? value)
                                     (c/new-id (entity-resolver-fn (db/encode-value index-store value))))]
@@ -1142,10 +1146,10 @@
                (get content-hash))
            value))))
 
-(defn open-index-store ^java.io.Closeable [{:keys [query-engine index-store] :as db}]
+(defn open-index-store ^java.io.Closeable [{:keys [indexer index-store] :as db}]
   (if index-store
     (db/open-nested-index-store index-store)
-    (db/open-index-store (:indexer query-engine))))
+    (db/open-index-store indexer)))
 
 (defrecord ConformedQuery [q-normalized q-conformed])
 
@@ -1179,15 +1183,13 @@
     (fn [k]
       (lru/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
-(defn new-entity-resolver-fn [{:keys [valid-time transact-time query-engine index-store] :as db}]
-  (let [{:keys [options]} query-engine]
-    (cond-> #(db/entity-as-of-resolver index-store % valid-time transact-time)
-      (::entity-cache? options) (with-entity-resolver-cache options))))
+(defn new-entity-resolver-fn [{:keys [valid-time transact-time index-store options] :as db}]
+  (cond-> #(db/entity-as-of-resolver index-store % valid-time transact-time)
+    (::entity-cache? options) (with-entity-resolver-cache options)))
 
 (defn query
-  ([{:keys [valid-time transact-time query-engine] :as db} ^ConformedQuery conformed-q]
-   (let [{:keys [^ExecutorService query-executor indexer options]} query-engine
-         start-time (System/currentTimeMillis)
+  ([{:keys [valid-time transact-time ^ExecutorService query-executor indexer options] :as db} ^ConformedQuery conformed-q]
+   (let [start-time (System/currentTimeMillis)
          q (.q-normalized conformed-q)
          query-future (.submit query-executor
                                ^Callable
@@ -1220,10 +1222,8 @@
        (throw result)
        result)))
 
-  ([{:keys [valid-time transact-time query-engine] :as db} index-store ^ConformedQuery conformed-q]
-   (let [{:keys [indexer options]} query-engine
-         db (assoc db :index-store index-store)
-         q (.q-normalized conformed-q)
+  ([{:keys [valid-time transact-time indexer options] :as db} index-store ^ConformedQuery conformed-q]
+   (let [q (.q-normalized conformed-q)
          q-conformed (.q-conformed conformed-q)
          {:keys [find where args rules offset limit order-by full-results?]} q-conformed
          stats (db/read-index-meta indexer :crux.kv/stats)]
@@ -1232,6 +1232,7 @@
                                            (dissoc :args))))
      (validate-args args)
      (let [rule-name->rules (rule-name->rules rules)
+           db (assoc db :index-store index-store)
            db (assoc db :entity-resolver-fn (or (:entity-resolver-fn db)
                                                 (new-entity-resolver-fn db)))
            {:keys [n-ary-join
@@ -1268,18 +1269,19 @@
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
           (c/entity-tx->edn)))
 
-(defn entity [{{:keys [document-store]} :query-engine, :as db} index-store eid]
+(defn entity [{:keys [document-store] :as db} index-store eid]
   (when-let [content-hash (some-> (entity-tx db index-store eid)
                                   :crux.db/content-hash)]
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-(defrecord QueryDatasource [query-engine
-                            ^Date valid-time
-                            ^Date transact-time
+(defrecord QueryDatasource [document-store indexer bus
+                            ^Date valid-time ^Date transact-time
+                            query-executor conform-cache query-cache
                             index-store
-                            entity-resolver-fn]
+                            entity-resolver-fn
+                            options]
   Closeable
   (close [_]
     (when index-store
@@ -1296,8 +1298,7 @@
 
   (query [this query]
     ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
-    (let [{:keys [conform-cache bus]} query-engine
-          conformed-query (normalize-and-conform-query conform-cache query)
+    (let [conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
       (when bus
@@ -1313,7 +1314,6 @@
 
   (openQuery [this query]
     (let [index-store (open-index-store this)
-          {:keys [bus conform-cache]} query-engine
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))]
@@ -1341,7 +1341,7 @@
                          HistoryOptions$SortOrder/ASC :asc
                          HistoryOptions$SortOrder/DESC :desc)
             with-docs? (.withDocs opts)
-            index-store (db/open-index-store (:indexer query-engine))
+            index-store (db/open-index-store indexer)
 
             opts (cond-> {:with-corrections? (.withCorrections opts)
                           :with-docs? with-docs?
@@ -1368,11 +1368,37 @@
                                            :crux.tx/tx-id (.tx-id etx)
                                            :crux.db/valid-time (.vt etx)
                                            :crux.db/content-hash (.content-hash etx)}
-                                    with-docs? (assoc :crux.db/doc (-> (db/fetch-docs (:document-store query-engine) #{(.content-hash etx)})
+                                    with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
                                                                        (get (.content-hash etx))))))))))))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time))
+  (transactionTime [_] transact-time)
+
+  (withTx [this tx-ops]
+    (let [{:keys [::tx/tx-time] :as tx} (if-let [latest-completed-tx (db/latest-completed-tx indexer)]
+                                          {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
+                                           ::tx/tx-time (Date. (max (System/currentTimeMillis)
+                                                                    (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))}
+                                          {::tx/tx-time (Date.)
+                                           ::tx/tx-id 0})
+          conformed-tx-ops (map txc/conform-tx-op tx-ops)
+          docs (into {} (mapcat :docs) conformed-tx-ops)
+          document-store (doto (fork/->forked-document-store document-store)
+                           (db/submit-docs docs))
+          indexer (doto (fork/->forked-indexer indexer (kvi/->KvIndexer (mem-kv/->mem-kv))
+                                               valid-time transact-time)
+                    (db/index-docs docs))]
+
+      (tx/index-tx {:document-store document-store
+                    :indexer indexer}
+                   (assoc tx :crux.db/valid-time valid-time)
+                   (map txc/->tx-event conformed-tx-ops))
+
+      (map->QueryDatasource (merge this
+                                   {:valid-time valid-time
+                                    :transact-time tx-time
+                                    :document-store document-store
+                                    :indexer indexer})))))
 
 (defrecord QueryEngine [^ExecutorService query-executor document-store
                         indexer bus
@@ -1390,11 +1416,9 @@
           valid-time (or valid-time (cio/next-monotonic-date))
           tx-time (or tx-time latest-tx-time valid-time)]
 
-      (->QueryDatasource this
-                         valid-time
-                         tx-time
-                         nil
-                         nil)))
+      (map->QueryDatasource (merge this
+                                   {:valid-time valid-time
+                                    :transact-time tx-time}))))
 
   (open-db [this] (api/open-db this nil nil))
   (open-db [this valid-time] (api/open-db this valid-time nil))

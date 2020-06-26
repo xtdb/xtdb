@@ -93,4 +93,6 @@ public interface ICruxDatasource extends Closeable {
      * the specified time.
      */
     public Date transactionTime();
+
+    public ICruxDatasource withTx(List<List<?>> txOps);
 }
