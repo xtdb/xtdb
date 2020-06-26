@@ -383,14 +383,13 @@
   (= (get-in request [:muuntaja/response :format]) "text/html"))
 
 (defn- root-page []
-  [:div.root-contents
-   [:h1.root-title "Welcome to the Crux Console!"]
-   [:h2.root-video__title "Take a short video tour:"]
-   [:iframe.root-video {:src "https://www.youtube.com/embed/StXLmWvb5Xs"
-                        :allow "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"}]
-   [:a.root-get-started.button
-    {:href "/_crux/query"}
-    "Start exploring your Crux node"]])
+  [:div.root-page
+   [:div.root-background]
+   [:div.root-contents
+    [:h1.root-title "Welcome to the Crux Console!"]
+    [:h2.root-video__title "Take a short video tour:"]
+    [:iframe.root-video {:src "https://www.youtube.com/embed/StXLmWvb5Xs"
+                         :allow "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"}]
     [:a.root-get-started
      {:href "/_crux/query"}
      "Start exploring your Crux node"]]])
