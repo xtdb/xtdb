@@ -15,7 +15,7 @@
 
 (def bench-tests
   {:sorted-maps (fn [nodes _]
-                  (bench/with-nodes [node (select-keys nodes #{"embedded-kafka-rocksdb"})]
+                  (bench/with-nodes [node (select-keys bench/nodes #{"embedded-kafka-rocksdb" "standalone-lmdb"})]
                     (-> (bench/with-comparison-times
                           (sorted-maps/run-sorted-maps-microbench node))
                         (doto post-to-slack))))
