@@ -1336,7 +1336,7 @@
                            :name "Oleg"
                            :number n})))
 
-  (let [acceptable-slowdown-factor 1.5
+  (let [acceptable-slowdown-factor 2
         literal-ns-start (System/nanoTime)]
     (t/is (= #{[:oleg-9999]}
              (api/q (api/db *api*) '{:find [e]
