@@ -1249,12 +1249,14 @@
          (throw (IllegalArgumentException.
                  (str "Order by requires a var from :find. unreturned var: " var))))
 
-       (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)
-                      :let [bound-result-tuple (for [var-binding find-var-bindings]
-                                                 (bound-result-for-var index-store var-binding join-keys))]]
-                  (if full-results?
-                    (build-full-results db bound-result-tuple)
-                    (vec bound-result-tuple)))
+       (cond->> (if full-results?
+                  (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                    (->> find-var-bindings
+                         (mapv #(bound-result-for-var index-store % join-keys))
+                         (build-full-results db)))
+                  (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                    (->> find-var-bindings
+                         (mapv #(bound-result-for-var index-store % join-keys)))))
 
          order-by (cio/external-sort (order-by-comparator find order-by))
          true (dedupe)
