@@ -333,7 +333,7 @@
      (+ c/index-id-size c/id-size))))
 
 (defn meta-kv [k v]
-  [(encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))
+  [(encode-meta-key-to nil (c/->id-buffer k))
    (mem/->nippy-buffer v)])
 
 (defn store-meta [kv k v]
