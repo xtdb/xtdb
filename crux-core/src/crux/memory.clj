@@ -154,7 +154,7 @@
                 (alength (.array this))))
       (.array this)
       (doto (byte-array (.remaining this))
-        (->> (.get this)))))
+        (->> (.get (.duplicate this))))))
 
   (->off-heap
     ([this]
