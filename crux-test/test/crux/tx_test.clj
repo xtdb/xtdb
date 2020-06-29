@@ -799,13 +799,12 @@
   (let [!events (atom [])
         !latch (promise)
         bus (get-in (meta *api*) [::n/topology ::n/bus])]
-    (doseq [event-type #{::tx/indexing-docs ::tx/indexed-docs
-                         ::tx/indexing-tx ::tx/indexed-tx}]
-      (bus/listen bus {:crux/event-type event-type}
-                  (fn [evt]
-                    (swap! !events conj evt)
-                    (when (= ::tx/indexed-tx (:crux/event-type evt))
-                      (deliver !latch @!events)))))
+    (bus/listen bus {:crux/event-types #{::tx/indexing-docs ::tx/indexed-docs
+                                         ::tx/indexing-tx ::tx/indexed-tx}}
+                (fn [evt]
+                  (swap! !events conj evt)
+                  (when (= ::tx/indexed-tx (:crux/event-type evt))
+                    (deliver !latch @!events))))
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
