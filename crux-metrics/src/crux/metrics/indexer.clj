@@ -15,7 +15,7 @@
 (defn assign-tx-latency-gauge [registry {:crux.node/keys [bus]}]
   (let [!last-tx-lag (atom 0)]
     (bus/listen bus
-                {:crux/event-type :crux.tx/indexed-tx}
+                {:crux/event-types #{:crux.tx/indexed-tx}}
                 (fn [{::tx/keys [submitted-tx]}]
                   (reset! !last-tx-lag (- (System/currentTimeMillis)
                                           (.getTime ^Date (::tx/tx-time submitted-tx))))))
@@ -27,7 +27,7 @@
 (defn assign-doc-meter [registry {:crux.node/keys [bus]}]
   (let [meter (dropwizard/meter registry ["indexer" "indexed-docs"])]
     (bus/listen bus
-                {:crux/event-type :crux.tx/indexed-docs}
+                {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids]}]
                   (dropwizard/mark! meter (count doc-ids))))
 
@@ -36,7 +36,7 @@
 (defn assign-av-meter [registry {:crux.node/keys [bus]}]
   (let [meter (dropwizard/meter registry ["indexer" "indexed-avs"])]
     (bus/listen bus
-                {:crux/event-type :crux.tx/indexed-docs}
+                {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [av-count]}]
                   (dropwizard/mark! meter av-count)))
     meter))
@@ -44,7 +44,7 @@
 (defn assign-bytes-meter [registry {:crux.node/keys [bus]}]
   (let [meter (dropwizard/meter registry ["indexer" "indexed-bytes"])]
     (bus/listen bus
-                {:crux/event-types :crux.tx/indexed-docs}
+                {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [bytes-indexed]}]
                   (dropwizard/mark! meter bytes-indexed)))
 
@@ -54,12 +54,12 @@
   (let [timer (dropwizard/timer registry ["indexer" "indexed-txs"])
         !timer (atom nil)]
     (bus/listen bus
-                {:crux/event-type :crux.tx/indexing-tx}
+                {:crux/event-types #{:crux.tx/indexing-tx}}
                 (fn [_]
                   (reset! !timer (dropwizard/start timer))))
 
     (bus/listen bus
-                {:crux/event-type :crux.tx/indexed-tx}
+                {:crux/event-types #{:crux.tx/indexed-tx}}
                 (fn [_]
                   (let [[ctx _] (reset-vals! !timer nil)]
                     (dropwizard/stop ctx))))

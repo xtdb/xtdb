@@ -31,16 +31,24 @@
 
 (defrecord EventBus [!listeners]
   EventSource
-  (listen [this listen-ops f]
-    (let [{:crux/keys [event-type]} listen-ops
+  (listen [this listen-opts f]
+    (let [{:crux/keys [event-types]} listen-opts
           executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener"))
           listener {:executor executor
                     :f f
-                    :crux/event-type event-type}]
-      (swap! !listeners update event-type (fnil conj #{}) listener)
+                    :crux/event-types event-types}]
+      (swap! !listeners (fn [listeners]
+                          (reduce (fn [listeners event-type]
+                                    (-> listeners (update event-type (fnil conj #{}) listener)))
+                                  listeners
+                                  event-types)))
       (reify Closeable
         (close [_]
-          (swap! !listeners update event-type disj listener)
+          (swap! !listeners (fn [listeners]
+                              (reduce (fn [listeners event-type]
+                                        (-> listeners (update event-type disj listener)))
+                                      listeners
+                                      event-types)))
           (close-executor executor)))))
 
   EventSink

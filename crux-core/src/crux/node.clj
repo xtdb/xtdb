@@ -115,6 +115,7 @@
   (awaitTxTime [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
+      (bus/await bus {})
       (-> (tx/await-tx-time indexer tx-ingester tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
 
@@ -127,7 +128,7 @@
     (case event-type
       :crux/indexed-tx
       (bus/listen bus
-                  (assoc event-opts :crux/event-type ::tx/indexed-tx)
+                  (assoc event-opts :crux/event-types #{::tx/indexed-tx})
                   (fn [{:keys [::tx/submitted-tx ::txe/tx-events] :as ev}]
                     (.accept ^Consumer consumer
                              (merge {:crux/event-type :crux/indexed-tx}
