@@ -3203,3 +3203,23 @@
               (prn :projection-ns----- projection-ns)
               (t/is (< (double (/ projection-ns single-field-ns)) acceptable-slowdown-factor)
                     (str (/ single-field-ns 1000000.0) " " (/ projection-ns 1000000.0)))))))))
+
+(comment
+  ;; repro for https://github.com/juxt/crux/issues/443, don't have a solution yet though
+  ;; replacing x with 0..50 and y with 0..100 takes a long time.
+
+  (t/deftest multiple-joins-bug-443
+    (doseq [x (range 5)]
+      (api/submit-tx *api* (for [y (range 10)]
+                             [:crux.tx/put {:crux.db/id (keyword (str "id" (+ (* x 1000) y))), :x x, :y y}])))
+
+    (let [last-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :match, :x 4, :y 8}]])]
+      (api/await-tx *api* last-tx))
+
+    (t/is (= #{[:id4008 :match 4 8] [:match :id4008 4 8]}
+             (api/q (api/db *api*) '{:find [e1 e2 x y]
+                                     :where [[e1 :x x]
+                                             [e1 :y y]
+                                             [e2 :x x]
+                                             [e2 :y y]
+                                             [(!= e1 e2)]]})))))
