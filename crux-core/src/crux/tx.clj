@@ -465,31 +465,3 @@
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})
-
-(defn await-tx [indexer tx-ingester {::keys [tx-id] :as tx} timeout]
-  (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(if-let [err (db/ingester-error tx-ingester)]
-                           (throw (Exception. "Transaction ingester aborted" err))
-                           (let [latest-completed-tx (db/latest-completed-tx indexer)]
-                             (reset! seen-tx latest-completed-tx)
-                             (or (nil? latest-completed-tx)
-                                 (pos? (compare tx-id (::tx-id latest-completed-tx))))))
-                        timeout)
-      @seen-tx
-      (throw (TimeoutException.
-              (str "Timed out waiting for: " (cio/pr-edn-str tx)
-                   " index has: " (cio/pr-edn-str @seen-tx)))))))
-
-(defn await-tx-time [indexer tx-ingester tx-time timeout]
-  (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(if-let [err (db/ingester-error tx-ingester)]
-                           (throw (Exception. "Transaction ingester aborted" err))
-                           (let [latest-completed-tx (db/latest-completed-tx indexer)]
-                             (reset! seen-tx latest-completed-tx)
-                             (or (nil? latest-completed-tx)
-                                 (pos? (compare tx-time (::tx-time latest-completed-tx))))))
-                        timeout)
-      @seen-tx
-      (throw (TimeoutException.
-              (str "Timed out waiting for: " (cio/pr-edn-str tx-time)
-                   " index has: " (cio/pr-edn-str @seen-tx)))))))
