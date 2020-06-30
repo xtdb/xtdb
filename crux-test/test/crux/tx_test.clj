@@ -252,16 +252,22 @@
                              vals
                              (remove c/evicted-doc?)))))))))
 
+(defn index-tx [tx tx-events]
+  (let [{:keys [tx-ingester]} *api*
+        in-flight-tx (db/begin-tx tx-ingester tx)]
+    (db/index-tx-events in-flight-tx tx-events)
+    (db/commit in-flight-tx)))
+
 (t/deftest test-handles-legacy-evict-events
   (let [{put-tx-time ::tx/tx-time, put-tx-id ::tx/tx-id} (fix/submit+await-tx [[:crux.tx/put picasso #inst "2018-05-21"]])
 
         evict-tx-time #inst "2018-05-22"
         evict-tx-id (inc put-tx-id)
 
-        index-evict! #(tx/index-tx (:tx-consumer *api*)
-                                   {:crux.tx/tx-time evict-tx-time
-                                    :crux.tx/tx-id evict-tx-id}
-                                   [[:crux.tx/evict picasso-id #inst "2018-05-23"]])]
+        index-evict! (fn []
+                       (index-tx {:crux.tx/tx-time evict-tx-time
+                                  :crux.tx/tx-id evict-tx-id}
+                                 [[:crux.tx/evict picasso-id #inst "2018-05-23"]]))]
 
     ;; we have to index these manually because the new evict API won't allow docs
     ;; with the legacy valid-time range
@@ -298,10 +304,10 @@
     (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
                                      (c/new-id ivan2) ivan2})
 
-    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 1}
-                 [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
-    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t, :crux.tx/tx-id 2}
-                 [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
+    (index-tx {:crux.tx/tx-time t, :crux.tx/tx-id 1}
+              [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
+    (index-tx {:crux.tx/tx-time t, :crux.tx/tx-id 2}
+              [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [index-store (db/open-index-store (:indexer *api*))]
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
@@ -323,10 +329,10 @@
     (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
                                      (c/new-id ivan2) ivan2})
 
-    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t1, :crux.tx/tx-id 1}
-                 [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
-    (tx/index-tx (:tx-consumer *api*) {:crux.tx/tx-time t2, :crux.tx/tx-id 2}
-                 [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2)) t1]
+    (index-tx {:crux.tx/tx-time t1, :crux.tx/tx-id 1}
+              [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
+    (index-tx {:crux.tx/tx-time t2, :crux.tx/tx-id 2}
+              [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2)) t1]
                   [:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [index-store (db/open-index-store (:indexer *api*))]
@@ -808,11 +814,11 @@
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
 
-      (t/is (= [{:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
+      (t/is (= [{:crux/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
+                {:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
                 {:crux/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
                  :av-count 4}
-                {:crux/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
                 {:crux/event-type ::tx/indexed-tx,
                  ::tx/submitted-tx submitted-tx,
                  :committed? true
@@ -823,7 +829,7 @@
                                    #crux/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
                                    #crux/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
-                   (update 1 dissoc :bytes-indexed)))))))
+                   (update 2 dissoc :bytes-indexed)))))))
 
 (t/deftest test-wait-while
   (let [twice-no (let [!atom (atom 3)]
@@ -835,7 +841,7 @@
 (t/deftest await-fails-quickly-738
   (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "test error for await-fails-quickly-738" {})))]
     (let [!fut (future (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
-      (t/is (thrown-with-msg? Exception #"Transaction consumer aborted"
+      (t/is (thrown-with-msg? Exception #"Transaction ingester aborted"
                               (deref !fut 1000 ::timeout)))
       (future-cancel !fut))))
 

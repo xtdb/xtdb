@@ -35,7 +35,7 @@
    :crux.tx/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
-                  {:keys [^ExecutorService tx-submit-executor, event-log-kv-store]}]
+                  {:keys [^ExecutorService tx-submit-executor event-log-kv-store tx-ingester]}]
   (when (.isShutdown tx-submit-executor)
     (deliver !submitted-tx ::closed))
 
@@ -46,9 +46,14 @@
                                    (mem/->nippy-buffer tx-events)]
                                   (kvi/meta-kv ::latest-submitted-tx-id tx-id)])
 
-    (deliver !submitted-tx next-tx)))
+    (deliver !submitted-tx next-tx)
 
-(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor, event-log-kv-store]
+    (let [in-flight-tx (db/begin-tx tx-ingester next-tx)]
+      (if (db/index-tx-events in-flight-tx tx-events)
+        (db/commit in-flight-tx)
+        (db/abort in-flight-tx)))))
+
+(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor event-log-kv-store tx-ingester]
   db/TxLog
   (submit-tx [this tx-events]
     (when (.isShutdown tx-submit-executor)
@@ -102,9 +107,10 @@
     (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
         (log/warn "waited 5s for tx-submit-executor to exit, no dice."))))
 
-(defn- ->tx-log [{:keys [::event-log]} _]
+(defn- ->tx-log [{:keys [::event-log ::n/tx-ingester]} _]
   (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "crux-standalone-tx-log"))
-                     (:kv-store event-log)))
+                     (:kv-store event-log)
+                     tx-ingester))
 
 (defn- ->document-store [{{:keys [document-store]} ::event-log} _]
   document-store)
@@ -145,6 +151,6 @@
          {::event-log {:start-fn ->event-log
                        :args event-log-args}
           ::n/tx-log {:start-fn ->tx-log
-                      :deps [::n/kv-store ::n/document-store ::event-log]}
+                      :deps [::n/kv-store ::n/document-store ::event-log ::n/tx-ingester]}
           ::n/document-store {:start-fn ->document-store
                               :deps [::event-log]}}))

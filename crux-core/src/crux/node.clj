@@ -35,7 +35,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer tx-consumer bus query-engine
+(defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
                      options close-fn status-fn closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
@@ -115,13 +115,13 @@
   (awaitTxTime [this tx-time timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-consumer tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
+      (-> (tx/await-tx-time indexer tx-ingester tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
           :crux.tx/tx-time)))
 
   (awaitTx [this submitted-tx timeout]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (tx/await-tx indexer tx-consumer submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
+      (tx/await-tx indexer tx-ingester submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
 
   (listen [this {:crux/keys [event-type] :as event-opts} consumer]
     (case event-type
@@ -166,18 +166,18 @@
       (reset! closed? true))))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer tx-consumer document-store tx-log kv-store bus query-engine]} node-opts]
+  {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]} node-opts]
                (map->CruxNode {:options node-opts
                                :kv-store kv-store
                                :tx-log tx-log
                                :indexer indexer
-                               :tx-consumer tx-consumer
+                               :tx-ingester tx-ingester
                                :document-store document-store
                                :bus bus
                                :query-engine query-engine
                                :closed? (atom false)
                                :lock (StampedLock.)}))
-   :deps #{::indexer ::tx-consumer ::kv-store ::bus ::document-store ::tx-log ::query-engine}
+   :deps #{::indexer ::tx-ingester ::kv-store ::bus ::document-store ::tx-log ::query-engine}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}}})
@@ -185,7 +185,7 @@
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
    ::indexer 'crux.kv-indexer/kv-indexer
-   ::tx-consumer 'crux.tx/tx-consumer
+   ::tx-ingester 'crux.tx/tx-ingester
    ::bus 'crux.bus/bus
    ::query-engine 'crux.query/query-engine
    ::node 'crux.node/node-component})
