@@ -882,8 +882,8 @@
                      (let [[bound-args free-args] (split-at num-bound-args (:args clause))]
                        [[:or-join
                          (with-meta
-                           {:args {:bound-args (vec bound-args)
-                                   :free-args (vec free-args)}
+                           {:args {:bound-args (vec (filter logic-var? bound-args))
+                                   :free-args (vec (filter logic-var? free-args))}
                             :body (vec (for [expanded-rule expanded-rules]
                                          [:and expanded-rule]))}
                            {:rule-name rule-name})]]))))))
