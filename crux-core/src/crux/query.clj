@@ -74,6 +74,8 @@
                                                      :sym-b logic-var?)))))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
+(s/def ::rule-args (s/cat :bound-args (s/? ::args-list)
+                          :free-args (s/* logic-var?)))
 
 (s/def ::not (expression-spec 'not (s/+ ::term)))
 (s/def ::not-join (expression-spec 'not-join (s/cat :args ::args-list
@@ -83,7 +85,7 @@
 (s/def ::or-body (s/+ (s/or :term ::term
                             :and ::and)))
 (s/def ::or (expression-spec 'or ::or-body))
-(s/def ::or-join (expression-spec 'or-join (s/cat :args ::args-list
+(s/def ::or-join (expression-spec 'or-join (s/cat :args ::rule-args
                                                   :body ::or-body)))
 
 (s/def ::term (s/or :triple ::triple
@@ -103,8 +105,7 @@
 
 (s/def ::rule-head (s/and list?
                           (s/cat :name (s/and symbol? (complement built-ins))
-                                 :bound-args (s/? ::args-list)
-                                 :args (s/* logic-var?))))
+                                 :args ::rule-args)))
 (s/def ::rule-definition (s/and vector?
                                 (s/cat :head ::rule-head
                                        :body (s/+ ::term))))
@@ -242,7 +243,8 @@
                         (collect-vars (normalize-clauses not-clause)))
                       (apply merge-with set/union))
         or-join-vars (set (for [or-join-clause or-join-clauses
-                                arg (:args or-join-clause)]
+                                :let [{:keys [bound-args free-args]} (:args or-join-clause)]
+                                arg (concat bound-args free-args)]
                             arg))]
     {:e-vars (set (for [{:keys [e]} triple-clauses
                         :when (logic-var? e)]
@@ -448,17 +450,23 @@
                 or-branches (for [[type sub-clauses] (case or-type
                                                        :or clause
                                                        :or-join (:body clause))
-                                  :let [where (case type
+                                  :let [{:keys [bound-args free-args]} (:args clause)
+                                        where (case type
                                                 :term [sub-clauses]
                                                 :and sub-clauses)
                                         body-vars (->> (collect-vars (normalize-clauses where))
                                                        (vals)
                                                        (reduce into #{}))
                                         or-vars (if or-join?
-                                                  (set (:args clause))
+                                                  (set (concat bound-args free-args))
                                                   body-vars)
-                                        free-vars (set/difference or-vars known-vars)
-                                        bound-vars (set/difference or-vars free-vars)]]
+                                        [free-vars
+                                         bound-vars] (if (and or-join? (not (empty? bound-args)))
+                                                       (let [bound-vars (set/intersection known-vars (set bound-args))]
+                                                         [(set/difference (set (concat bound-args free-args)) bound-vars)
+                                                          bound-vars])
+                                                       [(set/difference or-vars known-vars)
+                                                        (set/intersection or-vars known-vars)])]]
                               (do (when or-join?
                                     (doseq [var or-vars
                                             :when (not (contains? body-vars var))]
@@ -824,22 +832,29 @@
              (when-not rules
                (throw (IllegalArgumentException.
                        (str "Unknown rule: " (cio/pr-edn-str sub-clause)))))
-             (let [rule-args+body (for [{:keys [head body]} rules]
-                                    [(vec (concat (:bound-args head)
-                                                  (:args head)))
-                                     body])
-                   [arity :as arities] (->> rule-args+body
+             (let [rule-args+num-bound-args+body (for [{:keys [head body]} rules
+                                                       :let [{:keys [bound-args free-args]} (:args head)]]
+                                                   [(vec (concat bound-args free-args))
+                                                    (count bound-args)
+                                                    body])
+                   [arity :as arities] (->> rule-args+num-bound-args+body
                                             (map (comp count first))
-                                            (distinct))]
+                                            (distinct))
+
+                   [num-bound-args :as num-bound-args-groups] (->> rule-args+num-bound-args+body
+                                                                   (map second)
+                                                                   (distinct))]
                (when-not (= 1 (count arities))
                  (throw (IllegalArgumentException. (str "Rule definitions require same arity: " (cio/pr-edn-str rules)))))
+               (when-not (= 1 (count num-bound-args-groups))
+                 (throw (IllegalArgumentException. (str "Rule definitions require same number of bound args: " (cio/pr-edn-str rules)))))
                (when-not (= arity (count (:args clause)))
                  (throw (IllegalArgumentException.
                          (str "Rule invocation has wrong arity, expected: " arity " " (cio/pr-edn-str sub-clause)))))
                ;; TODO: the caches and expansion here needs
                ;; revisiting.
-               (let [expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
-                                          :let [rule-arg->query-arg (zipmap rule-args (:args clause))
+               (let [expanded-rules (for [[branch-index [args _ body]] (map-indexed vector rule-args+num-bound-args+body)
+                                          :let [rule-arg->query-arg (zipmap args (:args clause))
                                                 body-vars (->> (collect-vars (normalize-clauses body))
                                                                (vals)
                                                                (reduce into #{}))
@@ -859,12 +874,14 @@
                  (if (= 1 (count expanded-rules))
                    (first expanded-rules)
                    (when (seq expanded-rules)
-                     [[:or-join
-                       (with-meta
-                         {:args (vec (filter logic-var? (:args clause)))
-                          :body (vec (for [expanded-rule expanded-rules]
-                                       [:and expanded-rule]))}
-                         {:rule-name rule-name})]])))))
+                     (let [[bound-args free-args] (split-at num-bound-args (:args clause))]
+                       [[:or-join
+                         (with-meta
+                           {:args {:bound-args (vec (filter logic-var? bound-args))
+                                   :free-args (vec (filter logic-var? free-args))}
+                            :body (vec (for [expanded-rule expanded-rules]
+                                         [:and expanded-rule]))}
+                           {:rule-name rule-name})]]))))))
            [sub-clause]))
        (reduce into [])))
 
