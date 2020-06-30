@@ -781,11 +781,6 @@
        (every? (fn [f]
                  (f index-store db idx-id->idx join-keys)))))
 
-(defn- potential-bgp-pair-vars [g vars]
-  (for [var vars
-        pair-var (dep/transitive-dependents g var)]
-    pair-var))
-
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps]
   (let [g (->> (keys var->joins)
                (reduce
@@ -794,8 +789,7 @@
                 triple-join-deps))
         g (reduce
            (fn [g {:keys [pred return] :as pred-clause}]
-             (let [pred-vars (filter logic-var? (:args pred))
-                   pred-vars (into pred-vars (potential-bgp-pair-vars triple-join-deps pred-vars))]
+             (let [pred-vars (filter logic-var? (:args pred))]
                (->> (for [pred-var pred-vars
                           :when return
                           return [return]]
@@ -808,14 +802,13 @@
            pred-clauses)
         g (reduce
            (fn [g [_ _ [{:keys [free-vars bound-vars]}]]]
-             (let [bound-vars (into bound-vars (potential-bgp-pair-vars triple-join-deps bound-vars))]
-               (->> (for [bound-var bound-vars
-                          free-var free-vars]
-                      [free-var bound-var])
-                    (reduce
-                     (fn [g [f b]]
-                       (dep/depend g f b))
-                     g))))
+             (->> (for [bound-var bound-vars
+                        free-var free-vars]
+                    [free-var bound-var])
+                  (reduce
+                   (fn [g [f b]]
+                     (dep/depend g f b))
+                   g)))
            g
            or-clause+idx-id+or-branches)
         join-order (dep/topo-sort g)]
