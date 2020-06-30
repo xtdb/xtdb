@@ -794,7 +794,7 @@
                 triple-join-deps))
         g (reduce
            (fn [g {:keys [pred return] :as pred-clause}]
-             (let [pred-vars (filter logic-var? (:args pred))                   ]
+             (let [pred-vars (filter logic-var? (:args pred))]
                (->> (for [pred-var pred-vars
                           :when return
                           return [return]]
