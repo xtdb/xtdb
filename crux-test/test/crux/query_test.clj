@@ -3074,6 +3074,45 @@
                                                        (or (and [(boolean ?field2)]))]
                                   :args []}))))
 
+(t/deftest test-bound-rule-vars-946
+  (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
+                         [:crux.tx/put {:crux.db/id id, :child child-id :name (str id "-" child-id)}]))
+
+  (let [parent-id 50
+        expected (set (for [[id child-id] (partition 2 1 (range (inc parent-id) 101))]
+                        [(str id "-" child-id)]))
+        expected-speedup-factor 5]
+    (let [free-vars-ns-start (System/nanoTime)
+          result (api/q (api/db *api*)
+                        {:find '[child-name]
+                         :where '[[parent :crux.db/id]
+                                  (child-of parent child)
+                                  [child :name child-name]]
+                         :rules '[[(child-of p c)
+                                   [p :child c]]
+                                  [(child-of p c)
+                                   [p :child c1]
+                                   (child-of c1 c)]]
+                         :args [{:parent parent-id}]})
+          free-vars-ns (- (System/nanoTime) free-vars-ns-start)]
+      (t/is (= expected result))
+      (let [bound-vars-ns-start (System/nanoTime)
+            result (api/q (api/db *api*)
+                          {:find '[child-name]
+                           :where '[[parent :crux.db/id]
+                                    (child-of parent child)
+                                    [child :name child-name]]
+                           :rules '[[(child-of [p] c)
+                                     [p :child c]]
+                                    [(child-of [p] c)
+                                     [p :child c1]
+                                     (child-of c1 c)]]
+                           :args [{:parent parent-id}]})
+            bound-vars-ns (- (System/nanoTime) bound-vars-ns-start)]
+        (t/is (= expected result))
+        (t/is (> (double (/ free-vars-ns bound-vars-ns)) expected-speedup-factor)
+              (pr-str free-vars-ns " " bound-vars-ns))))))
+
 (comment
   ;; repro for https://github.com/juxt/crux/issues/443, don't have a solution yet though
   ;; replacing x with 0..50 and y with 0..100 takes a long time.
