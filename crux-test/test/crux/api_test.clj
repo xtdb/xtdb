@@ -121,7 +121,7 @@
     (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
     (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
-    (t/testing "query"
+    (with-dbs [db (*api*)]
       (t/is (= #{[:ivan]} (api/q (api/db *api*)
                                  '{:find [e]
                                    :where [[e :name "Ivan"]]})))
@@ -129,31 +129,30 @@
                           '{:find [e]
                             :where [[e :name "Ivan"]]})))
 
-      (with-dbs [db (*api*)]
-        (t/testing "query string"
-          (t/is (= #{[:ivan]} (api/q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
+      (t/testing "query string"
+        (t/is (= #{[:ivan]} (api/q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
 
-        (t/testing "query vector"
-          (t/is (= #{[:ivan]} (api/q db '[:find e
-                                          :where [e :name "Ivan"]]))))
+      (t/testing "query vector"
+        (t/is (= #{[:ivan]} (api/q db '[:find e
+                                        :where [e :name "Ivan"]]))))
 
-        (t/testing "malformed query"
-          (t/is (thrown-with-msg? Exception
-                                  #"(status 400|Spec assertion failed)"
-                                  (api/q db '{:find [e]}))))
+      (t/testing "malformed query"
+        (t/is (thrown-with-msg? Exception
+                                #"(status 400|Spec assertion failed)"
+                                (api/q db '{:find [e]}))))
 
-        (t/testing "query with streaming result"
-          (with-open [res (api/open-q db '{:find [e]
-                                           :where [[e :name "Ivan"]]})]
-            (t/is (= '([:ivan])
-                     (iterator-seq res)))))
+      (t/testing "query with streaming result"
+        (with-open [res (api/open-q db '{:find [e]
+                                         :where [[e :name "Ivan"]]})]
+          (t/is (= '([:ivan])
+                   (iterator-seq res)))))
 
-        (t/testing "query returning full results"
-          (with-open [res (api/open-q db '{:find [e]
-                                           :where [[e :name "Ivan"]]
-                                           :full-results? true})]
-            (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
-                     (iterator-seq res)))))))))
+      (t/testing "query returning full results"
+        (with-open [res (api/open-q db '{:find [e]
+                                         :where [[e :name "Ivan"]]
+                                         :full-results? true})]
+          (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
+                   (iterator-seq res))))))))
 
 (t/deftest test-history
   (t/testing "transaction"

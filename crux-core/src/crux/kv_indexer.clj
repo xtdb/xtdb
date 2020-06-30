@@ -449,7 +449,8 @@
 (defn- advance-iterator-to-hash-cache-value [i value-buffer]
   (let [hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
         found-k (kv/seek i hash-cache-prefix-key)]
-    (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key))))
+    (and found-k
+         (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
 (defn- value-buffer->id-buffer [index-store ^DirectBuffer value-buffer]
   (c/->id-buffer (db/decode-value index-store value-buffer)))

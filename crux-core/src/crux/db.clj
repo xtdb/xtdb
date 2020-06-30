@@ -47,8 +47,14 @@
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
 
-(defprotocol TxConsumer
-  (consumer-error [this]))
+(defprotocol TxIngester
+  (begin-tx [tx-ingester tx])
+  (ingester-error [tx-ingester]))
+
+(defprotocol InFlightTx
+  (index-tx-events [in-flight-tx tx-events])
+  (commit [in-flight-tx])
+  (abort [in-flight-tx]))
 
 (defprotocol DocumentStore
   (submit-docs [this id-and-docs])
