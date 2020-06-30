@@ -94,8 +94,6 @@
               "Ivan"] (first (api/q (api/db *api*)
                                     '{:find [e first-name]
                                       :where [(or [e :name first-name])]
-                                      :rules [[(my-rule e first-name)
-                                               (or [e :name first-name])]]
                                       :full-results? true})))))
 
   (t/testing "Can retrieve full results in rule"
@@ -1144,9 +1142,9 @@
            (s/conform :crux.query/where '[[i :age age]
                                           (over-twenty-one? age)])))
 
-  (t/is (= [{:head '{:name over-twenty-one?, :args [age]},
+  (t/is (= [{:head '{:name over-twenty-one?, :args {:free-args [age]}},
              :body '[[:range [[:sym-val {:op >=, :sym age, :val 21}]]]]}
-            '{:head {:name over-twenty-one?, :args [age]},
+            '{:head {:name over-twenty-one?, :args {:free-args [age]}},
               :body [[:not [[:range [[:sym-val {:op <, :sym age, :val 21}]]]]]]}]
            (s/conform :crux.query/rules '[[(over-twenty-one? age)
                                            [(>= age 21)]]
