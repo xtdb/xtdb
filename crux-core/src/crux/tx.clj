@@ -35,6 +35,9 @@
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
 
+(s/def ::ingester-error #(instance? Exception %))
+(defmethod bus/event-spec ::ingester-error [_] (s/keys :req [::ingester-error]))
+
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
 
@@ -326,6 +329,7 @@
       (catch Throwable e
         (reset! !error e)
         (reset! !state :abort-only)
+        (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
         (throw e))))
 
   (commit [this]
@@ -465,31 +469,3 @@
    :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
                                  :doc "How long to sleep between polling for new transactions"
                                  :crux.config/type :crux.config/duration}}})
-
-(defn await-tx [indexer tx-ingester {::keys [tx-id] :as tx} timeout]
-  (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(if-let [err (db/ingester-error tx-ingester)]
-                           (throw (Exception. "Transaction ingester aborted" err))
-                           (let [latest-completed-tx (db/latest-completed-tx indexer)]
-                             (reset! seen-tx latest-completed-tx)
-                             (or (nil? latest-completed-tx)
-                                 (pos? (compare tx-id (::tx-id latest-completed-tx))))))
-                        timeout)
-      @seen-tx
-      (throw (TimeoutException.
-              (str "Timed out waiting for: " (cio/pr-edn-str tx)
-                   " index has: " (cio/pr-edn-str @seen-tx)))))))
-
-(defn await-tx-time [indexer tx-ingester tx-time timeout]
-  (let [seen-tx (atom nil)]
-    (if (cio/wait-while #(if-let [err (db/ingester-error tx-ingester)]
-                           (throw (Exception. "Transaction ingester aborted" err))
-                           (let [latest-completed-tx (db/latest-completed-tx indexer)]
-                             (reset! seen-tx latest-completed-tx)
-                             (or (nil? latest-completed-tx)
-                                 (pos? (compare tx-time (::tx-time latest-completed-tx))))))
-                        timeout)
-      @seen-tx
-      (throw (TimeoutException.
-              (str "Timed out waiting for: " (cio/pr-edn-str tx-time)
-                   " index has: " (cio/pr-edn-str @seen-tx)))))))

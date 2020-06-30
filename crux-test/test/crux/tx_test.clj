@@ -799,13 +799,12 @@
   (let [!events (atom [])
         !latch (promise)
         bus (get-in (meta *api*) [::n/topology ::n/bus])]
-    (doseq [event-type #{::tx/indexing-docs ::tx/indexed-docs
-                         ::tx/indexing-tx ::tx/indexed-tx}]
-      (bus/listen bus {:crux/event-type event-type}
-                  (fn [evt]
-                    (swap! !events conj evt)
-                    (when (= ::tx/indexed-tx (:crux/event-type evt))
-                      (deliver !latch @!events)))))
+    (bus/listen bus {:crux/event-types #{::tx/indexing-docs ::tx/indexed-docs
+                                         ::tx/indexing-tx ::tx/indexed-tx}}
+                (fn [evt]
+                  (swap! !events conj evt)
+                  (when (= ::tx/indexed-tx (:crux/event-type evt))
+                    (deliver !latch @!events))))
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
@@ -831,12 +830,6 @@
                (-> (vec @!events)
                    (update 2 dissoc :bytes-indexed)))))))
 
-(t/deftest test-wait-while
-  (let [twice-no (let [!atom (atom 3)]
-                   #(pos? (swap! !atom dec)))]
-    (t/is (false? (cio/wait-while twice-no (Duration/ofMillis 100))))
-    (t/is (true? (cio/wait-while twice-no (Duration/ofMillis 400))))
-    (t/is (true? (cio/wait-while twice-no nil)))))
 
 (t/deftest await-fails-quickly-738
   (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "test error for await-fails-quickly-738" {})))]

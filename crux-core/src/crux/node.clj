@@ -21,8 +21,9 @@
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            java.io.Closeable
            java.util.function.Consumer
-           [java.util.concurrent Executors]
-           java.util.concurrent.locks.StampedLock))
+           [java.util.concurrent Executors TimeoutException]
+           java.util.concurrent.locks.StampedLock
+           java.time.Duration))
 
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
@@ -34,6 +35,30 @@
 (defn- ensure-node-open [{:keys [closed?]}]
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
+
+(defn- await-tx [{:keys [bus] :as node} tx-k tx ^Duration timeout]
+  (let [tx-v (get tx tx-k)
+
+        {:keys [timeout? ingester-error node-closed? tx] :as res}
+        (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closed}
+                        :->result (letfn [(tx->result [tx]
+                                            (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
+                                              {:tx tx}))]
+                                    (fn
+                                      ([] (tx->result (api/latest-completed-tx node)))
+                                      ([{:keys [crux/event-type] :as ev}]
+                                       (case event-type
+                                         ::tx/indexed-tx (tx->result (::tx/submitted-tx ev))
+                                         ::tx/ingester-error {:ingester-error (::tx/ingester-error ev)}
+                                         ::node-closed {:node-closed? true}))))
+                        :timeout timeout
+                        :timeout-value {:timeout? true}})]
+    (cond
+      ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
+      timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str tx)
+                                              ", index has: " (pr-str (api/latest-completed-tx node)))))
+      node-closed? (throw (InterruptedException. "Node closed."))
+      tx tx)))
 
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
                      options close-fn status-fn closed? ^StampedLock lock]
@@ -113,21 +138,16 @@
           :crux.tx/tx-time)))
 
   (awaitTxTime [this tx-time timeout]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (-> (tx/await-tx-time indexer tx-ingester tx-time (or timeout (:crux.tx-log/await-tx-timeout options)))
-          :crux.tx/tx-time)))
+    (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
 
   (awaitTx [this submitted-tx timeout]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (tx/await-tx indexer tx-ingester submitted-tx (or timeout (:crux.tx-log/await-tx-timeout options)))))
+    (await-tx this ::tx/tx-id submitted-tx timeout))
 
   (listen [this {:crux/keys [event-type] :as event-opts} consumer]
     (case event-type
       :crux/indexed-tx
       (bus/listen bus
-                  (assoc event-opts :crux/event-type ::tx/indexed-tx)
+                  (assoc event-opts :crux/event-types #{::tx/indexed-tx})
                   (fn [{:keys [::tx/submitted-tx ::txe/tx-events] :as ev}]
                     (.accept ^Consumer consumer
                              (merge {:crux/event-type :crux/indexed-tx}
@@ -137,7 +157,9 @@
                                       {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
   (latestCompletedTx [this]
-    (db/latest-completed-tx indexer))
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (db/latest-completed-tx indexer)))
 
   (latestSubmittedTx [this]
     (db/latest-submitted-tx tx-log))
@@ -162,8 +184,10 @@
   Closeable
   (close [_]
     (cio/with-write-lock lock
-      (when (and (not @closed?) close-fn) (close-fn))
-      (reset! closed? true))))
+      (when (not @closed?)
+        (when close-fn (close-fn))
+        (bus/send bus {:crux/event-type ::node-closed})
+        (reset! closed? true)))))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]} node-opts]
