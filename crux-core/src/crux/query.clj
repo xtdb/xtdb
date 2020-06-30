@@ -466,7 +466,7 @@
                                                   (set (concat bound-args free-args))
                                                   body-vars)
                                         [free-vars
-                                         bound-vars] (if or-join?
+                                         bound-vars] (if (and or-join? (not (empty? bound-args)))
                                                        (let [bound-vars (set/intersection known-vars (set bound-args))]
                                                          [(set/difference (set (concat bound-args free-args)) bound-vars)
                                                           bound-vars])
