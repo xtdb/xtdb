@@ -9,12 +9,17 @@
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
             [clojure.java.io :as io]
-            crux.standalone)
+            crux.standalone
+            [crux.tx :as tx]
+            [crux.tx.event :as txe]
+            [crux.api :as api]
+            [crux.bus :as bus])
   (:import java.util.Date
            crux.api.Crux
            (java.util HashMap)
            (clojure.lang Keyword)
-           (java.time Duration)))
+           (java.time Duration)
+           (java.util.concurrent TimeoutException)))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
@@ -119,3 +124,62 @@
       (t/is (= #{[:ivan]} (.query (.db n)
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]}))))))
+
+(defmacro with-latest-tx [latest-tx & body]
+  `(with-redefs [api/latest-completed-tx (fn [node#]
+                                           ~latest-tx)]
+     ~@body))
+
+(t/deftest test-await-tx
+  (let [bus (bus/->bus)
+        await-tx (fn [tx timeout]
+                   (#'n/await-tx {:bus bus} ::tx/tx-id tx timeout))
+        tx1 {::tx/tx-id 1
+             ::tx/tx-time (Date.)}
+        tx-evt {:crux/event-type ::tx/indexed-tx
+                ::tx/submitted-tx tx1
+                ::txe/tx-events []
+                :committed? true}]
+
+    (t/testing "ready already"
+      (with-latest-tx tx1
+        (t/is (= tx1 (await-tx tx1 nil)))))
+
+    (t/testing "times out"
+      (with-latest-tx nil
+        (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 10))))))
+
+    (t/testing "eventually works"
+      (future
+        (Thread/sleep 100)
+        (bus/send bus tx-evt))
+
+      (with-latest-tx nil
+        (t/is (= tx1 (await-tx tx1 nil)))))
+
+    (t/testing "times out if it's not quite ready"
+      (let [!latch (promise)]
+        (future
+          (Thread/sleep 100)
+          (bus/send bus (assoc-in tx-evt [::tx/submitted-tx ::tx/tx-id] 0)))
+
+        (with-latest-tx nil
+          (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500)))))))
+
+    (t/testing "throws on ingester error"
+      (future
+        (Thread/sleep 100)
+        (bus/send bus {:crux/event-type ::tx/ingester-error
+                       ::tx/ingester-error (ex-info "Ingester error" {})}))
+
+      (with-latest-tx nil
+        (t/is (thrown-with-msg? Exception #"Transaction ingester aborted."
+                                (await-tx tx1 nil)))))
+
+    (t/testing "throws if node closed"
+      (future
+        (Thread/sleep 100)
+        (bus/send bus {:crux/event-type ::n/node-closed}))
+
+      (with-latest-tx nil
+        (t/is (thrown? InterruptedException (await-tx tx1 nil)))))))

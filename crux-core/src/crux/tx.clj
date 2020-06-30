@@ -35,6 +35,9 @@
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
 
+(s/def ::ingester-error #(instance? Exception %))
+(defmethod bus/event-spec ::ingester-error [_] (s/keys :req [::ingester-error]))
+
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
 
@@ -326,6 +329,7 @@
       (catch Throwable e
         (reset! !error e)
         (reset! !state :abort-only)
+        (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
         (throw e))))
 
   (commit [this]
