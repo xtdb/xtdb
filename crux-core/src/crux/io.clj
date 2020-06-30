@@ -119,19 +119,6 @@
     (catch Throwable t
       (log/error t "Could not close:" c))))
 
-(defn wait-while [p ^Duration timeout]
-  (let [timeout-at (some-> timeout .toMillis (+ (System/currentTimeMillis)))]
-    (loop []
-      (when (Thread/interrupted)
-        (throw (InterruptedException.)))
-
-      (if (p)
-        (do (Thread/sleep 100)
-            (if (and timeout-at (>= (System/currentTimeMillis) timeout-at))
-              false
-              (recur)))
-        true))))
-
 (defn load-properties [^Reader in]
   (->> (doto (Properties.)
          (.load in))

@@ -830,12 +830,6 @@
                (-> (vec @!events)
                    (update 2 dissoc :bytes-indexed)))))))
 
-(t/deftest test-wait-while
-  (let [twice-no (let [!atom (atom 3)]
-                   #(pos? (swap! !atom dec)))]
-    (t/is (false? (cio/wait-while twice-no (Duration/ofMillis 100))))
-    (t/is (true? (cio/wait-while twice-no (Duration/ofMillis 400))))
-    (t/is (true? (cio/wait-while twice-no nil)))))
 
 (t/deftest await-fails-quickly-738
   (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "test error for await-fails-quickly-738" {})))]

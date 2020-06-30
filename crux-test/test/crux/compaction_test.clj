@@ -25,11 +25,9 @@
   (let [opts {:crux.node/topology 'crux.jdbc/topology
               :crux.jdbc/dbtype "h2"
               :crux.jdbc/dbname *db-name*}
-        api (Crux/startNode opts)
-        tx (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
-    (api/await-tx api tx)
-    (f/transact! api [{:crux.db/id :foo}])
-    (.close api)
+        tx (with-open [api (Crux/startNode opts)]
+             (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])
+             (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]]))]
 
     (with-open [api2 (Crux/startNode opts)]
       (api/await-tx api2 tx nil)
