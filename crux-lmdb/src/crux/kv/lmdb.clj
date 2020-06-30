@@ -140,8 +140,6 @@
           (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
           (.getBytes v 0 (.mv_data dv) (.mv_size dv)))))))
 
-;; TODO: Figure out why LMDB crashes if we remove the sort here. The
-;; root cause is likely something else.
 (defn- tx-delete [mapsize-lock env dbi ks]
   (with-open [stack (MemoryStack/stackPush)
               tx (new-transaction mapsize-lock env 0)]
