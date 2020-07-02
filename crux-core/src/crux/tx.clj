@@ -318,7 +318,7 @@
                                     (db/unindex-eids evict-eids)
                                     (db/index-entity-txs tx etxs))
                                   true)))))
-                        nil
+                        true
                         tx-events)]
         (when-not res
           (reset! !state :abort-only))
