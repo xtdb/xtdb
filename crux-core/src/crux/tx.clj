@@ -308,8 +308,7 @@
                                                   tx
                                                   (-> forked-deps
                                                       (assoc :index-store index-store)))]
-                              (doto forked-document-store
-                                (db/submit-docs docs))
+                              (db/submit-docs forked-document-store docs)
 
                               (if (and pre-commit-fn (not (pre-commit-fn)))
                                 (reduced false)
