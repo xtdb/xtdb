@@ -290,6 +290,7 @@
                       :crux.db/content-hash (c/new-id doc)})))]
     (let [v1 (submit-ivan {:version 1} #inst "2019-02-01")
           v2 (submit-ivan {:version 2} #inst "2019-02-02")
+          _ (Thread/sleep 10) ; so that these two are at different tx-times, see below.
           v3 (submit-ivan {:version 3} #inst "2019-02-03")
           v2-corrected (submit-ivan {:version 2, :corrected? true} #inst "2019-02-02")]
 
