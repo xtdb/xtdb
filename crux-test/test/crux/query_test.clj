@@ -1623,7 +1623,7 @@
     ;; (see test further down)
     ;; because we only ask for the DB at the tx-time, currently, not the tx-id
     ;; see #421
-    (api/await-tx *api* third-day-submitted-tx)
+    (Thread/sleep 10)
 
     ;; Day 4, correction, adding missing trip on new arrival.
     (api/submit-tx *api* [[:crux.tx/put
