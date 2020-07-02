@@ -24,7 +24,9 @@
   (System/getenv "CRUX_MVN_GROUP"))
 
 (defn middleware [project]
-  (let [{:keys [prefix suffix]} (version-from-git)]
+  (let [git-version (version-from-git)
+        prefix (or (System/getenv "CRUX_GIT_VERSION_PREFIX") (:prefix git-version))
+        suffix (or (System/getenv "CRUX_GIT_VERSION_SUFFIX") (:suffix git-version))]
     (-> project
         (->> (postwalk (fn [x]
                          (case x
