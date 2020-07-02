@@ -285,7 +285,9 @@
   the specified time.")
 
   (with-tx [db tx-ops]
-    (.withTx db tx-ops)))
+    "Returns a new db value with the tx-ops speculatively applied.
+  The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
+  If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil."))
 
 (let [arglists '(^crux.api.ICursor
                  [db eid sort-order]

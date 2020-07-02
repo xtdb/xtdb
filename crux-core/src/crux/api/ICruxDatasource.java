@@ -97,5 +97,14 @@ public interface ICruxDatasource extends Closeable {
      */
     public Date transactionTime();
 
+    /**
+     * Returns a new db value with the txOps speculatively applied.
+     * The txOps will only be visible in the value returned from this method - they're not submitted to the cluster, nor are they visible to any other database value in your application.
+     *
+     * If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil.
+     *
+     * @param txOps the transaction operations to be applied.
+     * @return a new db value with the txOps speculatively applied.
+    */
     public ICruxDatasource withTx(List<List<?>> txOps);
 }
