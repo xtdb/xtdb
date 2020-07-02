@@ -33,7 +33,10 @@
       (t/is (= #{["Petr"]}
                (crux/q (crux/with-tx db [[:crux.tx/put {:crux.db/id :petr, :name "Petr"}]
                                          [:crux.tx/delete :ivan]])
-                       all-names-query))))))
+                       all-names-query))))
+
+    (t/testing "returns nil on failed match"
+      (t/is (nil? (crux/with-tx db [[:crux.tx/match :nope {:crux.db/id :nope}]]))))))
 
 (t/deftest test-history
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivna"}]])

@@ -1397,10 +1397,8 @@
 
       (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
-      ;; TODO what to do if the transaction doesn't commit?
-      (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
-
-      (api/db in-flight-tx valid-time))))
+      (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
+        (api/db in-flight-tx valid-time)))))
 
 (defrecord QueryEngine [^ExecutorService query-executor document-store
                         indexer bus
