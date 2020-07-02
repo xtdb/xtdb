@@ -411,38 +411,6 @@ block) will result in undefined behaviour.
 include::./src/docs/examples.clj[tags=streaming-query]
 ----
 
-== Speculative transactions
-
-You can submit speculative transactions to Crux, to see what the results of your queries would be if a new transaction were to be applied.
-This is particularly useful for forecasting/projections, but also
-
-You'll receive a new database value, against which you can make queries and entity requests as you would any normal database value.
-Only you will see the effect of these transactions - they're not submitted to the cluster, and they're not visible to any other database value in your application.
-
-We submit these transactions to a database value using `with-tx`:
-
-[source,clojure]
-----
-(let [real-tx (crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
-      _ (crux/await-tx node real-tx)
-      all-names '{:find [?name], :where [[?e :name ?name]]}
-      db (crux/db node)]
-
-  (crux/q db all-names) ; => #{["Ivan"]}
-
-  (let [speculative-db (crux/with-tx db
-                         [[:crux.tx/put {:crux.db/id :petr, :name "Petr"}]])]
-    (crux/q speculative-db all-names) ; => #{["Petr"] ["Ivan"]}
-    )
-
-  ;; we haven't impacted the original db value, nor the node
-  (crux/q db all-names) ; => #{["Ivan"]}
-  (crux/q (crux/db node) all-names) ; => #{["Ivan"]}
-  )
-----
-
-The entities submitted by the speculative `:crux.tx/put` take their valid time (if not explicitly specified) from the valid time of the `db` they were forked from.
-
 [#queries_history_api]
 == History API
 
