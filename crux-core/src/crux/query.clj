@@ -24,7 +24,7 @@
            crux.index.IndexStoreIndexState
            (java.io Closeable)
            (java.util Comparator Date List UUID)
-           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]))
+           [java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -1197,82 +1197,41 @@
                (get content-hash))
            value))))
 
-(defn query
-  ([{:keys [valid-time transact-time ^ExecutorService query-executor indexer options] :as db} ^ConformedQuery conformed-q]
-   (let [start-time (System/currentTimeMillis)
-         q (.q-normalized conformed-q)
-         query-future (.submit query-executor
-                               ^Callable
-                               (fn []
-                                 (try
-                                   (with-open [index-store (open-index-store db)]
-                                     (let [result-coll-fn (if (some q [:order-by :limit :offset]) vec set)
-                                           result (result-coll-fn (query db index-store conformed-q))]
-                                       (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-                                       (log/debug :query-result-size (count result))
-                                       result))
-                                   (catch ExceptionInfo e
-                                     e)
-                                   (catch IllegalArgumentException e
-                                     e)
-                                   (catch InterruptedException e
-                                     e)
-                                   (catch Throwable t
-                                     (log/error t "Exception caught while executing query.")
-                                     t))))
-         result (or (try
-                      (deref query-future (or (:timeout q) (::query-timeout options)) nil)
-                      (catch InterruptedException e
-                        (future-cancel query-future)
-                        (throw e)))
-                    (do (when-not (future-cancel query-future)
-                          (throw (IllegalStateException. "Could not cancel query.")))
-                        (throw (TimeoutException. "Query timed out."))))]
-     (if (instance? Throwable result)
-       (throw result)
-       result)))
+(defn- query [{:keys [valid-time transact-time indexer options index-store entity-resolver-fn] :as db}
+              ^ConformedQuery conformed-q]
+  (let [q (.q-normalized conformed-q)
+        q-conformed (.q-conformed conformed-q)
+        {:keys [find where args rules offset limit order-by full-results?]} q-conformed
+        stats (db/read-index-meta indexer :crux/attribute-stats)]
+    (log/debug :query (cio/pr-edn-str (-> q
+                                          (assoc :arg-keys (mapv (comp set keys) (:args q)))
+                                          (dissoc :args))))
+    (validate-args args)
+    (let [rule-name->rules (rule-name->rules rules)
+          {:keys [n-ary-join var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)
+          find-var-bindings (map var->bindings find)]
+      (doseq [var find
+              :when (not (contains? var->bindings var))]
+        (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
+      (doseq [{:keys [var]} order-by
+              :when (not (contains? var->bindings var))]
+        (throw (IllegalArgumentException. (str "Order by refers to unknown variable: " var))))
+      (doseq [{:keys [var]} order-by
+              :when (not (some #{var} find))]
+        (throw (IllegalArgumentException. (str "Order by requires a var from :find. unreturned var: " var))))
 
-  ([{:keys [valid-time transact-time indexer options] :as db} index-store ^ConformedQuery conformed-q]
-   (let [q (.q-normalized conformed-q)
-         q-conformed (.q-conformed conformed-q)
-         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-         stats (db/read-index-meta indexer :crux/attribute-stats)]
-     (log/debug :query (cio/pr-edn-str (-> q
-                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
-                                           (dissoc :args))))
-     (validate-args args)
-     (let [rule-name->rules (rule-name->rules rules)
-           db (assoc db :index-store index-store)
-           db (assoc db :entity-resolver-fn (or (:entity-resolver-fn db)
-                                                (new-entity-resolver-fn db)))
-           {:keys [n-ary-join
-                   var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)
-           find-var-bindings (map var->bindings find)]
-       (doseq [var find
-               :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException.
-                 (str "Find refers to unknown variable: " var))))
-       (doseq [{:keys [var]} order-by
-               :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException.
-                 (str "Order by refers to unknown variable: " var))))
-       (doseq [{:keys [var]} order-by
-               :when (not (some #{var} find))]
-         (throw (IllegalArgumentException.
-                 (str "Order by requires a var from :find. unreturned var: " var))))
+      (cond->> (if full-results?
+                 (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                   (->> find-var-bindings
+                        (mapv #(bound-result-for-var index-store % join-keys))
+                        (build-full-results db)))
+                 (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                   (->> find-var-bindings
+                        (mapv #(bound-result-for-var index-store % join-keys)))))
 
-       (cond->> (if full-results?
-                  (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                    (->> find-var-bindings
-                         (mapv #(bound-result-for-var index-store % join-keys))
-                         (build-full-results db)))
-                  (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                    (->> find-var-bindings
-                         (mapv #(bound-result-for-var index-store % join-keys)))))
-
-         order-by (cio/external-sort (order-by-comparator find order-by))
-         offset (drop offset)
-         limit (take limit))))))
+        order-by (cio/external-sort (order-by-comparator find order-by))
+        offset (drop offset)
+        limit (take limit)))))
 
 (defn- entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
@@ -1287,7 +1246,8 @@
 
 (defrecord QueryDatasource [document-store indexer bus tx-ingester
                             ^Date valid-time ^Date transact-time
-                            query-executor conform-cache query-cache
+                            ^ScheduledExecutorService interrupt-executor
+                            conform-cache query-cache
                             index-store
                             entity-resolver-fn
                             options]
@@ -1306,37 +1266,46 @@
       (entity-tx this index-store eid)))
 
   (query [this query]
-    ;; TODO in theory this should 'just' be a call to openQuery that eagerly eval's the results
-    (let [conformed-query (normalize-and-conform-query conform-cache query)
-          query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
-      (when bus
-        (bus/send bus {:crux/event-type ::submitted-query
-                       ::query safe-query
-                       ::query-id query-id}))
-      (let [ret (crux.query/query this conformed-query)]
-        (when bus
-          (bus/send bus {:crux/event-type ::completed-query
-                         ::query safe-query
-                         ::query-id query-id}))
-        ret)))
+    (with-open [res (.openQuery this query)]
+      (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)]
+        (result-coll-fn (iterator-seq res)))))
 
-  (openQuery [this query]
-    (let [index-store (open-index-store this)
+  (openQuery [db query]
+    (let [index-store (open-index-store db)
+          db (assoc db :index-store index-store)
+          entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
+          db (assoc db :entity-resolver-fn entity-resolver-fn)
+
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
+          safe-query (-> conformed-query .q-normalized (dissoc :args))
+
+          res (crux.query/query db conformed-query)
+
+          ^Future
+          interrupt-job (when-let [timeout-ms (get query :timeout (::query-timeout options))]
+                          (let [caller-thread (Thread/currentThread)]
+                            (.schedule interrupt-executor
+                                       ^Runnable
+                                       (fn []
+                                         (.interrupt caller-thread))
+                                       ^long timeout-ms
+                                       TimeUnit/MILLISECONDS)))]
+
       (when bus
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
+
       (cio/->cursor (fn []
-                      (.close index-store)
+                      (when interrupt-job
+                        (.cancel interrupt-job false))
+                      (cio/try-close index-store)
                       (when bus
                         (bus/send bus {:crux/event-type ::completed-query
                                        ::query safe-query
                                        ::query-id query-id})))
-                    (crux.query/query this index-store conformed-query))))
+                    res)))
 
   (entityHistory [this eid opts]
     (with-open [history (.openEntityHistory this eid opts)]
@@ -1401,7 +1370,7 @@
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
         (api/db in-flight-tx valid-time)))))
 
-(defrecord QueryEngine [^ExecutorService query-executor document-store
+(defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         indexer bus
                         query-cache conform-cache
                         options]
@@ -1438,27 +1407,24 @@
 
   Closeable
   (close [_]
-    (when query-executor
-      (doto query-executor
+    (when interrupt-executor
+      (doto interrupt-executor
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def query-engine
-  {:start-fn (fn [{:crux.node/keys [indexer bus document-store]} {::keys [query-pool-size query-cache-size conform-cache-size] :as args}]
-               (let [query-executor (Executors/newFixedThreadPool query-pool-size (cio/thread-factory "crux.query.query-pool-thread"))]
+  {:start-fn (fn [{:crux.node/keys [indexer bus document-store]} {::keys [query-cache-size conform-cache-size] :as args}]
+               (let [interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))]
                  (map->QueryEngine
                   {:indexer indexer
                    :conform-cache (lru/new-cache conform-cache-size)
                    :query-cache (lru/new-cache query-cache-size)
                    :document-store document-store
                    :bus bus
-                   :query-executor query-executor
+                   :interrupt-executor interrupt-executor
                    :options args})))
    :deps [:crux.node/indexer :crux.node/bus :crux.node/document-store]
-   :args {::query-pool-size {:doc "Query Pool Size"
-                             :default 32
-                             :crux.config/type :crux.config/nat-int}
-          ::query-cache-size {:doc "Compiled Query Cache Size"
+   :args {::query-cache-size {:doc "Compiled Query Cache Size"
                               :default 10240
                               :crux.config/type :crux.config/nat-int}
           ::conform-cache-size {:doc "Conformed Query Cache Size"
