@@ -30,8 +30,7 @@ other RDF features are available.
 == Using the HTTP API
 
 The HTTP interface is provided as a Ring middleware in a Clojure namespace,
-located at `crux/crux-http-server/src/crux/http_server.clj`. There is an example of using this
-middleware in a https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[full example HTTP server configuration].
+located at `crux/crux-http-server/src/crux/http_server.clj`.
 
 Whilst CORS may be easily configured for use while prototyping a Single Page
 Application that uses Crux directly from a web browser, it is currently NOT

@@ -257,7 +257,7 @@ include::./src/docs/examples.clj[tags=ek-close]
 JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
 internally and pass through the relevant configuration options that
 you can find
-https://github.com/seancorfield/next-jdbc/blob/master/doc/all-the-options.md[here].
+https://github.com/seancorfield/next-jdbc/blob/develop/doc/all-the-options.md[here].
 
 image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
 
