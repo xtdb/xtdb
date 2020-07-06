@@ -569,7 +569,8 @@
                  :title "/entity"
                  :options options})}
         (throw (IllegalArgumentException. "missing eid")))
-      (let [decoded-eid (-> eid URLDecoder/decode c/id-edn-reader)
+      (let [decoded-eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
+                                         (URLDecoder/decode eid))
             vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
             tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
             db (db-for-request crux-node {:valid-time vt
