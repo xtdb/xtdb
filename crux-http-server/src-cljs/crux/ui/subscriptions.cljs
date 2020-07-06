@@ -42,15 +42,6 @@
         "ttt" (:time transaction-time)}
        {"q" query-root-str}))))
 
-(def entity-root-str
-  (string/join "\n"
-               [";; To search for an entity:"
-                ";; Enter the name of the enitty to search for in the search box (for example, :bar)"
-                ";; Select a valid time and a transaction time (if needed)"
-                ";; Click submit entity to go to the entity's page"
-                ""
-                :bar]))
-
 (rf/reg-sub
  ::initial-values-entity
  (fn [db _]
@@ -59,13 +50,11 @@
                      (str (:valid-time query-params (t/now))))
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
-     (if (:eid query-params)
-       {"eid" (:eid query-params)
-        "vtd" (:date valid-time)
-        "vtt" (:time valid-time)
-        "ttd" (:date transaction-time)
-        "ttt" (:time transaction-time)}
-       {"eid" entity-root-str}))))
+     {"eid" (:eid query-params)
+      "vtd" (:date valid-time)
+      "vtt" (:time valid-time)
+      "ttd" (:date transaction-time)
+      "ttt" (:time transaction-time)})))
 
 ;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
@@ -120,18 +109,34 @@
    (get-in db [:entity :result-pane :loading?])))
 
 (rf/reg-sub
- ::entity-pane-view
+ ::eid-submitted?
  (fn [db _]
-   (if (nil? (get-in db [:current-route :query-params :eid]))
-     :entity-root
-     (or (get-in db [:entity :right-pane :view]) :document))))
+   (some? (get-in db [:current-route :query-params :eid]))))
 
 (rf/reg-sub
- ::query-pane-view
+ ::entity-pane-tab
  (fn [db _]
-   (if (empty? (get-in db [:current-route :query-params]))
-     :query-root
-     :table)))
+   (or (get-in db [:entity-pane :selected-tab])
+       (when (get-in db [:current-route :query-params :history])
+         :history)
+       :document)))
+
+(rf/reg-sub
+ ::console-tab
+ (fn [db _]
+   (or (get-in db [:console-pane :selected-tab])
+       (get-in db [:current-route :data :name])
+       :query)))
+
+(rf/reg-sub
+ ::query-form-tab
+ (fn [db _]
+   (get-in db [:query-form :selected-tab] :edit-query)))
+
+(rf/reg-sub
+ ::query-submitted?
+ (fn [db _]
+   (not-empty (get-in db [:current-route :query-params]))))
 
 (rf/reg-sub
  ::query-data-download-link
@@ -205,12 +210,6 @@
       :history-diffs entity-history})))
 
 (rf/reg-sub
- ::form-pane-view
- (fn [db _]
-   (or (get-in db [:form-pane :view])
-       (get-in db [:current-route :data :name]))))
-
-(rf/reg-sub
  ::form-pane-history
  (fn [db [_ component]]
    (get-in db [:form-pane :history component])))
@@ -244,6 +243,11 @@
  ::entity-form-history
  (fn [db _]
    (:entity-history db)))
+
+(rf/reg-sub
+ ::query-form-visible?
+ (fn [db _]
+   (get-in db [:query-form :visible?] true)))
 
 (rf/reg-sub
  ::form-pane-hidden?

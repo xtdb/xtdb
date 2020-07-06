@@ -30,6 +30,21 @@
        (assoc-in [:form-pane :view] view))))
 
 (rf/reg-event-db
+ ::toggle-query-form
+ (fn [db [_ visible?]]
+   (update-in db [:query-form :visible?] (if (some? visible?) (constantly visible?) not))))
+
+(rf/reg-event-db
+ ::query-form-tab-selected
+ (fn [db [_ tab]]
+   (assoc-in db [:query-form :selected-tab] tab)))
+
+(rf/reg-event-db
+ ::console-tab-selected
+ (fn [db [_ tab]]
+   (assoc-in db [:console-pane :selected-tab] tab)))
+
+(rf/reg-event-db
  ::toggle-form-pane
  (fn [db [_ & bool]]
    (update-in db [:form-pane :hidden?] #(if (seq bool) (first bool) (not %)))))
@@ -168,6 +183,15 @@
      {:db (assoc-in db [:entity :right-pane :view] :raw-edn)
       :dispatch [:navigate :entity nil query-params]})))
 
+(rf/reg-event-fx
+ ::entity-pane-tab-selected
+ (fn [{:keys [db]} [_ tab]]
+   {:db (assoc-in db [:entity-pane :selected-tab] tab)
+    :dispatch (case tab
+                :document [::set-entity-pane-document]
+                :history [::set-entity-pane-history]
+                :raw-edn [::set-entity-pane-raw-edn])}))
+
 (rf/reg-event-db
  ::set-entity-result-pane-loading
  (fn [db [_ bool]]
@@ -179,7 +203,7 @@
    (let [query-params (->>
                        {:valid-time (common/date-time->datetime vtd vtt)
                         :transaction-time (common/date-time->datetime ttd ttt)
-                        :eid (common/strip-commented-lines eid)}
+                        :eid eid}
                        (remove #(nil? (second %)))
                        (into {}))]
      {:db db

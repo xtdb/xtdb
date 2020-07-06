@@ -126,6 +126,10 @@ html, body {
     position: relative;
 }
 
+.monospace {
+    font-family: monospace;
+}
+
 .button-line {
     display:flex;
     align-items: start;
@@ -186,11 +190,6 @@ html, body {
     -moz-box-shadow: inset 0 1px 2px rgba(10,10,10,.1);
     box-shadow: inset 0 1px 2px rgba(10,10,10,.1);
     width: 100%;
-}
-
-#form-query, #form-entity {
-    margin-bottom: 0;
-    margin-top: 1rem;
 }
 
 .document-section .CodeMirror {
@@ -644,8 +643,17 @@ ul.entity-group__value li::before {
     overflow: hidden !important;
 }
 
+.expand-collapse {
+    border: 1px solid #bfbcbc;
+    padding: 1rem;
+}
+
 .expand-collapse__group {
     cursor: pointer;
+}
+
+.expand-collapse__content {
+    margin-top: 1rem;
 }
 
 .expand-collapse__txt {
@@ -653,7 +661,14 @@ ul.entity-group__value li::before {
     font-size: .8rem;
 }
 
-.form-pane__tab {
+.tab-bar {
+    margin-top: 0.7rem;
+    margin-bottom: 1.4rem;
+    border-bottom: 1px solid #bfbcbc;
+    display: flex;
+}
+
+.tab-bar__tab {
     cursor: pointer;
     font-size: .8rem;
     padding: 0.4rem;
@@ -661,21 +676,18 @@ ul.entity-group__value li::before {
     margin-bottom: -1px;
 }
 
-.form-pane__tab--selected {
+.tab-bar__tab--selected {
     font-weight: bold;
     border: 1px solid #bfbcbc;
     border-bottom: 1px solid white;
 }
 
-.form-pane__tabs {
-    margin-top: 0.7rem;
-    margin-bottom: 1.4rem;
-    border-bottom: 1px solid #bfbcbc;
-    display: flex;
+.entity-form__input-line {
+    margin-bottom: 0.5rem;
 }
 
-.form-pane__content {
-    margin-top: 1rem;
+.entity-form__input {
+    width: 30%;
 }
 
 .query-form-options {

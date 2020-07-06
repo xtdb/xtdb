@@ -72,17 +72,6 @@
         pprint/code-dispatch
         (pprint/pprint formatted)))))
 
-(defn strip-commented-lines [edn-string]
-  (->> edn-string
-       (string/split-lines)
-       (map (fn [string]
-              (->>
-               string
-               (take-while #(not (#{\# \;} %)))
-               (apply str))))
-       (filter not-empty)
-       (string/join "\n")))
-
 (defn edn->query-params
   [edn]
   (->> edn

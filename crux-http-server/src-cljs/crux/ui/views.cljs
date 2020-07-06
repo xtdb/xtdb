@@ -1,16 +1,17 @@
 (ns crux.ui.views
-  (:require
-   [clojure.string :as string]
-   [cljs.pprint :as pprint]
-   [cljs.reader :as reader]
-   [crux.ui.events :as events]
-   [crux.ui.codemirror :as cm]
-   [crux.ui.common :as common]
-   [crux.ui.subscriptions :as sub]
-   [crux.ui.uikit.table :as table]
-   [fork.core :as fork]
-   [reagent.core :as r]
-   [re-frame.core :as rf]))
+  (:require [clojure.string :as string]
+            [cljs.pprint :as pprint]
+            [cljs.reader :as reader]
+            [crux.ui.events :as events]
+            [crux.ui.codemirror :as cm]
+            [crux.ui.common :as common]
+            [crux.ui.subscriptions :as sub]
+            [crux.ui.uikit.table :as table]
+            [crux.ui.tab-bar :as tab]
+            [crux.ui.collapsible :refer [collapsible]]
+            [fork.core :as fork]
+            [reagent.core :as r]
+            [re-frame.core :as rf]))
 
 (defn vt-tt-display
   [component]
@@ -74,6 +75,16 @@
                  (get errors "tt"))
         [:p.input-error (get errors "tt")])]]))
 
+(defn vt-tt-entity-box
+  [vt tt]
+  [:div.entity-vt-tt
+   [:div.entity-vt-tt__title
+    "Valid Time"]
+   [:div.entity-vt-tt__value (str vt)]
+   [:div.entity-vt-tt__title
+    "Transaction Time"]
+   [:div.entity-vt-tt__value (str tt)]])
+
 (defn query-validation
   [values]
   (let [empty-string? #(empty? (string/trim (or (get values %) "")))
@@ -99,63 +110,122 @@
     (let [form-button (js/document.querySelector (str form-id " button"))]
       (.click form-button))))
 
+(defn edit-query [_props]
+  ;; we need to create a cm instance holder to modify the CodeMirror code
+  (let [cm-instance (atom nil)]
+    (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
+      [:<>
+       [:div.input-textarea
+        [cm/code-mirror (get values "q")
+         {:cm-instance cm-instance
+          :class "cm-textarea__query"
+          :on-change #(set-values {"q" %})
+          :on-blur #(set-touched "q")}]]
+       [:div.query-form-options
+        [vt-tt-display :query]]
+       (when (and (get touched "q")
+                  (get errors "q"))
+         [:p.input-error (get errors "q")])
+       [vt-tt-inputs props :query]])))
+
+(defn query-history
+  []
+  (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
+    [:div.form-pane__history-scrollable
+     (map-indexed
+      (fn [idx {:strs [q valid-time transaction-time] :as history-q}]
+        ^{:key (gensym)}
+        [:div.form-pane__history-scrollable-el
+         [:div.form-pane__history-delete
+          {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+          [:i.fas.fa-trash-alt]]
+         [:div.form-pane__history-scrollable-el-left
+          {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
+          (when valid-time
+            [:div
+             {:style {:margin-bottom "1rem"}}
+             [:span.form-pane__history-headings "Valid Time: "]
+             [:span.form-pane__history-txt valid-time]])
+          (when transaction-time
+            [:div
+             [:span.form-pane__history-headings "Transaction Time: "]
+             [:span.form-pane__history-txt transaction-time]])
+          [:div {:style {:margin-top "1rem"}}
+           [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+      query-history-list)]))
+
 (defn query-form
   []
-  ;; we need to create a cm instance holder to modify the CodeMirror code
-  (let [cm-instance (atom nil)
-        form-id "#form-query"
-        query-root? (= :query-root @(rf/subscribe [::sub/query-pane-view]))]
-    (r/create-class {:component-did-mount (fn []
-                                            (-> (js/document.querySelector form-id)
-                                                (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
-                     :component-will-unmount (fn []
-                                               (-> (js/document.querySelector form-id)
-                                                   (.removeEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
-                     :reagent-render
-                     (fn []
-                       [fork/form {:form-id (subs form-id 1)
-                                   :validation query-validation
-                                   :prevent-default? true
-                                   :clean-on-unmount? true
-                                   :initial-values @(rf/subscribe [::sub/initial-values-query])
-                                   :on-submit #(rf/dispatch [::events/go-to-query-view %])}
-                        (fn [{:keys [values
-                                     errors
-                                     touched
-                                     set-values
-                                     set-touched
-                                     form-id
-                                     handle-submit] :as props}]
-                          (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
-                                disabled? (or loading? (some some? (vals errors)))]
-                            [:<>
-                             [:form
-                              {:id form-id
-                               :on-submit handle-submit}
-                              [:div.input-textarea
-                               [cm/code-mirror (get values "q")
-                                {:cm-instance cm-instance
-                                 :class "cm-textarea__query"
-                                 :on-change #(set-values {"q" %})
-                                 :on-blur #(set-touched "q")}]]
-                              [:div.query-form-options
-                               [vt-tt-display :query]]
-                              (when (and (get touched "q")
-                                         (get errors "q"))
-                                [:p.input-error (get errors "q")])
-                              [vt-tt-inputs props :query]
-                              [:div.button-line
-                               [:button.button
-                                {:type "submit"
-                                 :class (when-not disabled? "form__button")
-                                 :disabled disabled?}
-                                "Submit Query"]
-                               [:p.button-hint "(Ctrl + Enter)"]]]]))])})))
+  (let [form-id "#form-query"]
+    (r/create-class
+     {:component-did-mount (fn []
+                             (-> (js/document.querySelector form-id)
+                                 (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+      :component-will-unmount (fn []
+                                (-> (js/document.querySelector form-id)
+                                    (.removeEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+      :reagent-render
+      (fn []
+        [fork/form {:form-id (subs form-id 1)
+                    :validation query-validation
+                    :prevent-default? true
+                    :clean-on-unmount? true
+                    :initial-values @(rf/subscribe [::sub/initial-values-query])
+                    :on-submit #(rf/dispatch [::events/go-to-query-view %])}
+         (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
+           (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
+                 disabled? (or loading? (some some? (vals errors)))]
+             [:form {:id form-id, :on-submit handle-submit}
+              [collapsible [::query-form ::query-editor] {:label "Query Editor"}
+               [tab/tab-bar {:tabs [{:k :edit-query, :label "Edit Query"}
+                                    {:k :recent-queries, :label "Recent Queries"}]
+                             :current-tab [::sub/query-form-tab]
+                             :on-tab-selected [::events/query-form-tab-selected]}]
+
+               (case @(rf/subscribe [::sub/query-form-tab])
+                 :edit-query [edit-query props]
+                 :recent-queries [query-history])]
+
+              [:p
+               [:button.button
+                {:type "submit"
+                 :class (when-not disabled? "form__button")
+                 :disabled disabled?}
+                "Run Query"]]]))])})))
+
+(defn query-table
+  []
+  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
+        loading? @(rf/subscribe [::sub/query-result-pane-loading?])]
+    [:<>
+     (cond
+       error [:div.error-box error]
+       (and
+        (:rows data)
+        (empty? (:rows data))) [:div.no-results "No results found!"]
+       :else [:<>
+              [table/table data]
+              [:div.query-table-downloads
+               "Download as:"
+               [:a.query-table-downloads__link
+                {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
+                "CSV"]
+               [:a.query-table-downloads__link
+                {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
+                "TSV"]]])]))
+
+(defn query-pane
+  []
+  [:<>
+   [query-form]
+
+   (when @(rf/subscribe [::sub/query-submitted?])
+     [query-table])])
 
 (defn entity-validation
   [values]
   (let [empty-string? #(empty? (string/trim (or (get values %) "")))
-        validation {"eid" (when (empty? (common/strip-commented-lines (get values "eid")))
+        validation {"eid" (when (empty-string? "eid")
                             "Entity id is empty")
                     "vt" (when (apply not= ((juxt #(% "vtd")
                                                   #(% "vtt")) empty-string?))
@@ -189,20 +259,24 @@
                       form-id
                       set-values
                       set-touched
+                      handle-change
+                      handle-blur
                       handle-submit] :as props}]
            (let [loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
                  disabled? (or loading? (some some? (vals errors)))]
              [:form
               {:id form-id
                :on-submit handle-submit}
-              [:div.input-textarea
-               [cm/code-mirror (get values "eid")
-                {:class "cm-textarea__entity"
-                 :on-change #(set-values {"eid" %})
-                 :on-blur #(set-touched "eid")}]
-               (when (and (get touched "eid")
-                          (get errors "eid"))
-                 [:p.input-error (get errors "eid")])]
+              [:div.entity-form__input-line
+               [:span {:style {:padding-right "1rem"}}
+                "Entity ID:"]
+               [:input.monospace.entity-form__input
+                {:type "text"
+                 :name "eid"
+                 :value (get values "eid")
+                 :placeholder ":foo"
+                 :on-change handle-change
+                 :on-blur handle-blur}]]
               [:div.query-form-options
                [vt-tt-display :entity]]
               [vt-tt-inputs props :entity]
@@ -211,65 +285,7 @@
                 {:type "submit"
                  :class (when-not disabled? "form__button")
                  :disabled disabled?}
-                "Submit Entity"]
-               [:p.button-hint "(Ctrl + Enter)"]]]))])})))
-
-(defn query-history
-  []
-  (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
-    [:div.form-pane__history-scrollable
-     (map-indexed
-      (fn [idx {:strs [q valid-time transaction-time] :as history-q}]
-        ^{:key (gensym)}
-        [:div.form-pane__history-scrollable-el
-         [:div.form-pane__history-delete
-          {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-          [:i.fas.fa-trash-alt]]
-         [:div.form-pane__history-scrollable-el-left
-          {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
-          (when valid-time
-            [:div
-             {:style {:margin-bottom "1rem"}}
-             [:span.form-pane__history-headings "Valid Time: "]
-             [:span.form-pane__history-txt valid-time]])
-          (when transaction-time
-            [:div
-             [:span.form-pane__history-headings "Transaction Time: "]
-             [:span.form-pane__history-txt transaction-time]])
-          [:div {:style {:margin-top "1rem"}}
-           [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
-      query-history-list)]))
-
-(defn query-table
-  []
-  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
-        loading? @(rf/subscribe [::sub/query-result-pane-loading?])]
-    [:<>
-     (cond
-       error [:div.error-box error]
-       (and
-        (:rows data)
-        (empty? (:rows data))) [:div.no-results "No results found!"]
-       :else [:<>
-              [table/table data]
-              [:div.query-table-downloads
-               "Download as:"
-               [:a.query-table-downloads__link
-                {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
-                "CSV"]
-               [:a.query-table-downloads__link
-                {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
-                "TSV"]]])]))
-
-(defn vt-tt-entity-box
-  [vt tt]
-  [:div.entity-vt-tt
-   [:div.entity-vt-tt__title
-    "Valid Time"]
-   [:div.entity-vt-tt__value (str vt)]
-   [:div.entity-vt-tt__title
-    "Transaction Time"]
-   [:div.entity-vt-tt__value (str tt)]])
+                "Fetch"]]]))])})))
 
 (defn entity-document
   []
@@ -368,77 +384,32 @@
          [:div.entity-raw-edn
           (with-out-str (pprint/pprint document))]))]))
 
-
 (defn entity-pane []
-  (let [pane-view @(rf/subscribe [::sub/entity-pane-view])]
-    (when-not (= pane-view :entity-root)
-      [:<>
-       [:div.pane-nav
-        [:div.pane-nav__tab
-         {:class (when (= pane-view :document) "pane-nav__tab--active")
-          :on-click #(rf/dispatch [::events/set-entity-pane-document])}
-         "Document"]
-        [:div.pane-nav__tab
-         {:class (when (= pane-view :history) "pane-nav__tab--active")
-          :on-click #(rf/dispatch [::events/set-entity-pane-history])}
-         "History"]
-        [:div.pane-nav__tab
-         {:class (if (= pane-view :raw-edn)
-                   "pane-nav__tab--active"
-                   "pane-nav__tab--hover")
-          :on-click #(rf/dispatch [::events/set-entity-pane-raw-edn])}
-         "Raw EDN"]]
-       [:section.document-section
-        (case pane-view
-          :document [entity-document]
-          :history [entity-history-document]
-          :raw-edn [entity-raw-edn]
-          nil)]])))
+  [:<>
+   [entity-form]
 
-(defn query-pane
-  []
-  (let [pane-view @(rf/subscribe [::sub/query-pane-view])]
-    (when-not (= pane-view :query-root)
-      [query-table])))
+   (when @(rf/subscribe [::sub/eid-submitted?])
+     [:<>
+      [tab/tab-bar {:tabs [{:k :document, :label "Document", :dispatch [::events/set-entity-pane-document]}
+                           {:k :history, :label "History", :dispatch [::events/set-entity-pane-history]}
+                           {:k :raw-edn, :label "Raw EDN", :dispatch [::events/set-entity-pane-raw-edn]}]
+                    :current-tab [::sub/entity-pane-tab]
+                    :on-tab-selected [::events/entity-pane-tab-selected]}]
 
-(defn form-pane
-  []
-  (let [form-pane-hidden? @(rf/subscribe [::sub/form-pane-hidden?])
-        form-pane-view @(rf/subscribe [::sub/form-pane-view])]
-    [:div.form-pane
-     [:div.form-pane__tabs
-      [:div.form-pane__tab
-       {:class (when (= :query form-pane-view)
-                 "form-pane__tab--selected")
-        :on-click #(rf/dispatch [::events/set-form-pane-view :query])}
-       "Query"]
-      [:div.form-pane__tab
-       {:class (when (= :entity form-pane-view)
-                 "form-pane__tab--selected")
-        :on-click #(rf/dispatch [::events/set-form-pane-view :entity])}
-       "Entity"]
-      [:div.form-pane__tab
-       {:class (when (= :query-history form-pane-view)
-                 "form-pane__tab--selected")
-        :on-click #(rf/dispatch [::events/set-form-pane-view :query-history])}
-       "Query History"]]
-     [:div.form-pane__content
-      [:div.expand-collapse__group
-       {:on-click #(rf/dispatch [::events/toggle-form-pane])}
-       [:span.expand-collapse__txt
-        [:span.form-pane__arrow
-         [common/arrow-svg (not form-pane-hidden?)] "Editor"]]
-       [:div
-        {:class (if form-pane-hidden? "collapse" "expand")}
-        [:div
-         {:class (if (= :query form-pane-view) "visible" "hidden")}
-         [query-form]]
-        [:div
-         {:class (if (= :entity form-pane-view) "visible" "hidden")}
-         [entity-form]]
-        [:div
-         {:class (if (= :query-history form-pane-view) "visible" "hidden")}
-         [query-history]]]]]]))
+      (case @(rf/subscribe [::sub/entity-pane-tab])
+        :document [entity-document]
+        :history [entity-history-document]
+        :raw-edn [entity-raw-edn])])])
+
+(defn console-pane []
+  [:<>
+   [tab/tab-bar {:tabs [{:k :query, :label "Query"}
+                        {:k :entity, :label "Entity"}]
+                 :current-tab [::sub/console-tab]
+                 :on-tab-selected [::events/console-tab-selected]}]
+   (case @(rf/subscribe [::sub/console-tab])
+     :query [query-pane]
+     :entity [entity-pane])])
 
 (defn status-map->html-elements [status-map]
   (into
@@ -478,16 +449,8 @@
 
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
-    [:<>
-     #_[:pre (with-out-str (pprint/pprint (dissoc @(rf/subscribe [:db]) :query)))]
-     [:div.container.page-pane
-      (cond
-        (= name :homepage) [root-page]
-        (= name :status) [status-page]
-        :else [:<>
-               (when name [form-pane])
-               [:div.result-pane
-                (case name
-                  :query [query-pane]
-                  :entity [entity-pane]
-                  [:div "no matching"])]])]]))
+    [:div.container.page-pane
+     (cond
+       (= name :homepage) [root-page]
+       (= name :status) [status-page]
+       :else [console-pane])]))
