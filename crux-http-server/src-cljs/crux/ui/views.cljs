@@ -406,40 +406,39 @@
   (let [form-pane-hidden? @(rf/subscribe [::sub/form-pane-hidden?])
         form-pane-view @(rf/subscribe [::sub/form-pane-view])]
     [:div.form-pane
-     [:div.expand-collapse__group
-      {:on-click #(rf/dispatch [::events/toggle-form-pane])}
-      [:span.expand-collapse__txt
-       [:span.form-pane__arrow
-        [common/arrow-svg (not form-pane-hidden?)] "Console"]]]
-
-     [:div
-      {:class (if form-pane-hidden? "collapse" "expand")}
-      [:div.form-pane__tabs
-       [:div.form-pane__tab
-        {:class (when (= :query form-pane-view)
-                  "form-pane__tab--selected")
-         :on-click #(rf/dispatch [::events/set-form-pane-view :query])}
-        "Query"]
-       [:div.form-pane__tab
-        {:class (when (= :entity form-pane-view)
-                  "form-pane__tab--selected")
-         :on-click #(rf/dispatch [::events/set-form-pane-view :entity])}
-        "Entity"]
-       [:div.form-pane__tab
-        {:class (when (= :query-history form-pane-view)
-                  "form-pane__tab--selected")
-         :on-click #(rf/dispatch [::events/set-form-pane-view :query-history])}
-        "Query History"]]
-      [:div.form-pane__content
+     [:div.form-pane__tabs
+      [:div.form-pane__tab
+       {:class (when (= :query form-pane-view)
+                 "form-pane__tab--selected")
+        :on-click #(rf/dispatch [::events/set-form-pane-view :query])}
+       "Query"]
+      [:div.form-pane__tab
+       {:class (when (= :entity form-pane-view)
+                 "form-pane__tab--selected")
+        :on-click #(rf/dispatch [::events/set-form-pane-view :entity])}
+       "Entity"]
+      [:div.form-pane__tab
+       {:class (when (= :query-history form-pane-view)
+                 "form-pane__tab--selected")
+        :on-click #(rf/dispatch [::events/set-form-pane-view :query-history])}
+       "Query History"]]
+     [:div.form-pane__content
+      [:div.expand-collapse__group
+       {:on-click #(rf/dispatch [::events/toggle-form-pane])}
+       [:span.expand-collapse__txt
+        [:span.form-pane__arrow
+         [common/arrow-svg (not form-pane-hidden?)] "Editor"]]
        [:div
-        {:class (if (= :query form-pane-view) "visible" "hidden")}
-        [query-form]]
-       [:div
-        {:class (if (= :entity form-pane-view) "visible" "hidden")}
-        [entity-form]]
-       [:div
-        {:class (if (= :query-history form-pane-view) "visible" "hidden")}
-        [query-history]]]]]))
+        {:class (if form-pane-hidden? "collapse" "expand")}
+        [:div
+         {:class (if (= :query form-pane-view) "visible" "hidden")}
+         [query-form]]
+        [:div
+         {:class (if (= :entity form-pane-view) "visible" "hidden")}
+         [entity-form]]
+        [:div
+         {:class (if (= :query-history form-pane-view) "visible" "hidden")}
+         [query-history]]]]]]))
 
 (defn status-map->html-elements [status-map]
   (into
