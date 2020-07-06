@@ -203,7 +203,7 @@
   [data]
   (let [table-atom (r/atom {:utils (dissoc data :columns :rows :filters)})]
     (fn [data]
-      (let [processed-rows (utils/process-rows data @table-atom)]
+      (let [{:keys [processed-rows row-count]} (utils/process-rows data @table-atom)]
         [:div.uikit-table
          [:div.table__top
           [:div.top__first-group
@@ -214,5 +214,5 @@
            [:div.table__main
             [:table.table
              [header-columns data table-atom]
-             [body-rows data table-atom (drop-last processed-rows)]]])
-         [pagination table-atom processed-rows]]))))
+             [body-rows data table-atom processed-rows]]])
+         [pagination table-atom row-count]]))))
