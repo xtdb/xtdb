@@ -39,10 +39,10 @@
  (fn [db [_ tab]]
    (assoc-in db [:query-form :selected-tab] tab)))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  ::console-tab-selected
- (fn [db [_ tab]]
-   (assoc-in db [:console-pane :selected-tab] tab)))
+ (fn [_ [_ tab]]
+   {:dispatch [:navigate tab {} {}]}))
 
 (rf/reg-event-db
  ::toggle-form-pane

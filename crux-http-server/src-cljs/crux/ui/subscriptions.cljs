@@ -124,9 +124,7 @@
 (rf/reg-sub
  ::console-tab
  (fn [db _]
-   (or (get-in db [:console-pane :selected-tab])
-       (get-in db [:current-route :data :name])
-       :query)))
+   (get-in db [:current-route :data :name] :query)))
 
 (rf/reg-sub
  ::query-form-tab
