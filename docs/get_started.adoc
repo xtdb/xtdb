@@ -3,32 +3,22 @@
 
 ===  Introduction
 
-This guide contains simple steps showing how to transact data and run a simple
-query. However, there are a few topics you might benefit from learning about
-before you get too far with attempting to use Crux:
+This guide contains simple steps showing how to transact data and run a simple query. However, there are a few topics you might benefit from learning about before you get too far with attempting to use Crux:
 
-- *EDN* – the extensible data notation format used throughout
-  the Crux APIs, see <<#tutorials-essential-edn,Essential
-EDN for Crux>>.
+- *EDN* – the extensible data notation format used throughout the Crux APIs, see <<#tutorials-essential-edn,Essential EDN for Crux>>.
 
-- The *Datalog* query language – Crux supports an EDN-flavoured version of
-  Datalog. The <<#queries,Queries>> section within this documentation
-provides a good overview. You can also find an interactive tutorial for
-EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].
+- The *Datalog* query language – Crux supports an EDN-flavoured version of Datalog. The <<#queries,Queries>> section within this documentation provides a good overview. You can also find an interactive tutorial for EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].
 
-- *Clojure* – whilst a complete Java API is provided, a basic understanding of
-  Clojure is recommended – Clojure is a succinct and pragmatic data-oriented
-language with strong support for immutability and parallelism.
-https://clojure.org/[See Clojure.org].
+- *Clojure* – whilst a complete Java and HTTP API is provided, a basic understanding of Clojure is recommended – Clojure is a succinct and pragmatic data-oriented language with strong support for immutability and parallelism. https://clojure.org/[See Clojure.org].
 
 [#get-started-setup]
 === Setting Up
 
-Follow the below steps to quickly set yourself up a Crux playground:
+Follow the below steps to quickly set yourself up a Crux playground...
 
 === Project Dependency
 
-First add Crux as a project dependency:
+First add the `crux-core` module as a project dependency:
 
 [source,clj]
 ----
@@ -44,7 +34,9 @@ include::./src/docs/examples.clj[tags=include-crux-api]
 include::./src/docs/examples.clj[tags=start-standalone-node]
 ----
 
-For the purposes of this Hello World, we are using the simplest configuration of Crux, where all of the pluggable components are in-memory. There is no Kafka or RocksDB to worry about.
+For the purposes of this "Hello World" we are using the simplest configuration of Crux, which only requires the crux-core module. All of the logs and indexes are held purely in-memory, so your data won't be persisted across restarts. This is useful when testing and experimenting as there is no additional complexity or stateful use of Kafka or RocksDB to think about.
+
+Once started, the node gives us access to an empty Crux database instance and API for running transactions and issuing queries. Depending on how you configure your topology, multiple nodes may share the same database, but in this case your node exclusively owns the database instance. If a Kafka or JDBC module topology was used instead then the same database instance would be available across multiple nodes to provide fault-tolerant durability, high-availabilty and horizontal scaling.
 
 === Transacting
 
@@ -55,6 +47,8 @@ include::./src/docs/examples.clj[tags=submit-tx]
 
 [#get-started-query]
 === Querying
+
+A query executes against a `db` context. This `db` context represents the database "as a value" at a fixed & consistent point-in-time against which other APIs can be used. The `db` context should be thought of as a lightweight reference - it is not a container for a resource or lock. The point-in-time is implicitly "now", unless otherwise specified, and there the context returned represents the latest view of the database following the most recently processed transaction. The main query API is eager but you may also consume the results lazily as the entire Crux query engine and index structure is lazy by design.
 
 [source,clj]
 ----
@@ -82,4 +76,4 @@ include::./src/docs/examples.clj[tags=should-get-entity]
 
 === Next Steps
 
-Now you know the basics of how to interact with Crux you may want to dive into our <<#tutorials, tutorials>> below. Otherwise, let's take a look at <<#configuration,setting up Crux>>.
+Now you know the basics of how to interact with Crux you may want to dive into our <<#tutorials, tutorials>> below. Otherwise, let's take a look at further options for <<#configuration,setting up Crux>>.

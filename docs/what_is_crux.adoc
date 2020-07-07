@@ -1,22 +1,22 @@
 [#what-is-crux]
 == What is Crux?
 
-=== Introduction
 Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
 database.
 
-[quote, Martin Kleppmann]
+[quote, 'https://www.confluent.io/blog/turning-the-database-inside-out-with-apache-samza/[Martin Kleppmann]']
 ____
 What do we have to gain from turning the database inside out? Simpler code,
 better scalability, better robustness, lower latency, and more flexibility for
 doing interesting things with data.
 ____
 
-It is a database turned inside out, using:
+Crux embodies this principle using a combination of:
 
-* Apache Kafka for the primary storage of transactions and documents
-as semi-immutable logs.
-* RocksDB or LMDB to host indexes for rich query support.
+* Apache Kafka for the primary (default) storage of transactions and documents
+as semi-immutable logs
+* RocksDB or LMDB to host indexes for rich query support
+* Clojure protocols for pluggablity (e.g. swap Kafka for SQLite)
 
 This decoupled design enables Crux to be maintained as a small and efficient
 core that can be scaled and evolved to support a large variety of use-cases.
@@ -31,14 +31,18 @@ image::crux-venn-1.svg?sanitize=true[Document database with graph queries,width=
 === Bitemporal
 
 Crux is a _bitemporal_ database that stores _transaction time_ and _valid time_
-histories. While a _[uni]temporal_ database enables "time travel" querying
-through the transactional sequence of database states from the moment of
-database creation to its current state, Crux also provides "time travel"
-querying for a discrete valid time axis without unnecessary design complexity
-or performance impact. This means a Crux user can populate the database with
-past and future information regardless of the order in which the information
-arrives, and make corrections to past recordings to build an ever-improving
-temporal model of a given domain.
+histories for all data:
+
+* Transaction time provides essential auditability and horizontal scaling
+* Valid time provides an optional ability to model temporal domain concepts and
+integrate upstream sources of temporal data
+
+Many databases can support various levels of "time travel" queries across
+transaction time (i.e. the transactional sequence of database states from the
+moment of database creation to its current state), however such capabilities are
+typically complex to use and have practical limitations. By contrast, Crux
+provides an always-on capability for point-in-time querying of past
+transactional states and across the valid time axis.
 
 Bitemporal modelling is broadly useful for event-based architectures and is a
 critical requirement for systems in any industry with strong auditing regulations,
@@ -51,9 +55,8 @@ did you know it?".
 [#what-is-crux-query]
 === Query
 
-Crux supports a Datalog query interface for reading data and traversing
-relationships across all documents. Queries are executed so that the results
-are lazily streamed from the underlying indexes.
+Crux supports a Datalog query interface for traversing graph relationships
+across your documents. Query results are lazily streamed from the underlying Key-Value indexes.
 
 Crux is ultimately a store of versioned EDN documents. The fields within these
 documents are automatically indexed as Entity-Attribute-Value triples to
@@ -68,20 +71,21 @@ Crux does not enforce any schema for the documents it stores. One reason for
 this is that data might come from many different places, and may not ultimately
 be owned by the service using Crux to query the data. This design enables
 schema-on-write and/or schema-on-read to be achieved outside of the core of
-Crux to meet the exact application requirements.
+Crux, to meet the exact application requirements.
 
 [#what-is-crux-distributed]
 === Distributed
 
 Nodes can come and go, with local indexes stored in a Key/Value store such as
-RocksDB, whilst reading and writing master data to central log topics (only
-Kafka is currently supported). Queries are not distributed and there is no
-sharding of documents across nodes.
+RocksDB, whilst reading and writing master data to central log topics (hosted by
+Kafka or a JDBC data store such as Postgres). Queries are not distributed and
+there is no sharding of data or indexes across nodes.
 
 Crux can also run in a non-distributed "standalone" mode, where the transaction
-and document logs exist only inside of a local Key/Value store such as RocksDB.
-This is appropriate for non-critical usage where availability and durability
-requirements do not justify the need for Kafka.
+and document logs exist only inside of a local Key/Value store such as RocksDB
+or SQLite. This is appropriate for non-critical usage where availability and
+durability requirements do not warrant additional infrastructure services like
+Kafka or Postgres.
 
 [#what-is-crux-eviction]
 === Eviction
@@ -90,5 +94,5 @@ Crux supports eviction of active and historical data to assist with technical
 compliance for information privacy regulations.
 
 The main transaction log contains only hashes and is immutable. All document
-content is stored in a dedicated document log that can be evicted by
-compaction.
+content is stored in a dedicated document store which supports eviction, such as
+a Kafka topic with compacted tombstones.
