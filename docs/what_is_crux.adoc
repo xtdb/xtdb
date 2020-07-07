@@ -56,8 +56,7 @@ did you know it?".
 === Query
 
 Crux supports a Datalog query interface for traversing graph relationships
-across your documents. Queries are executed so that the results are lazily
-streamed from the underlying indexes.
+across your documents. Query results are lazily streamed from the underlying Key-Value indexes.
 
 Crux is ultimately a store of versioned EDN documents. The fields within these
 documents are automatically indexed as Entity-Attribute-Value triples to

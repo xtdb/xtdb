@@ -34,9 +34,9 @@ include::./src/docs/examples.clj[tags=include-crux-api]
 include::./src/docs/examples.clj[tags=start-standalone-node]
 ----
 
-For the purposes of this "Hello World" we are using the simplest configuration of Crux, which only requires the crux-core module. All of the logs and indexes are held only in memory, so your data won't be persisted across restarts. This is useful when testing and experimenting as there is no additional complexity or stateful use of Kafka or RocksDB to think about.
+For the purposes of this "Hello World" we are using the simplest configuration of Crux, which only requires the crux-core module. All of the logs and indexes are held purely in-memory, so your data won't be persisted across restarts. This is useful when testing and experimenting as there is no additional complexity or stateful use of Kafka or RocksDB to think about.
 
-Once started, the node gives us access to an empty Crux database instance and API for running transactions and issuing queries. Depending on how you configure your topology, multiple nodes may share the same database, but in this case your node exclusive owns the database instance. If a Kafka or JDBC module topology was used instead then the same database instance would be available across multiple nodes to provide stronger durability, high-availabilty and horizontal scaling.
+Once started, the node gives us access to an empty Crux database instance and API for running transactions and issuing queries. Depending on how you configure your topology, multiple nodes may share the same database, but in this case your node exclusively owns the database instance. If a Kafka or JDBC module topology was used instead then the same database instance would be available across multiple nodes to provide fault-tolerant durability, high-availabilty and horizontal scaling.
 
 === Transacting
 
@@ -48,7 +48,7 @@ include::./src/docs/examples.clj[tags=submit-tx]
 [#get-started-query]
 === Querying
 
-A query executes against a `db` context. This `db` context represents the database "as a value" at a fixed & consistent point-in-time against which other APIs can be used. The `db` value should be thought of as a lightweight reference - it is not a container for a resource or lock. The point-in-time is implicitly "now", unless otherwise specified, and there the context returned represents the latest view of the database following the most recently processed transaction. The main query API is eager but you may also consume the results lazily as the entire Crux query engine and index structure is lazy by design.
+A query executes against a `db` context. This `db` context represents the database "as a value" at a fixed & consistent point-in-time against which other APIs can be used. The `db` context should be thought of as a lightweight reference - it is not a container for a resource or lock. The point-in-time is implicitly "now", unless otherwise specified, and there the context returned represents the latest view of the database following the most recently processed transaction. The main query API is eager but you may also consume the results lazily as the entire Crux query engine and index structure is lazy by design.
 
 [source,clj]
 ----
