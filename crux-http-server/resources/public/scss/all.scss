@@ -349,12 +349,10 @@ html, body {
 
 .crux-time {
     display: flex;
-    flex-wrap: wrap;
-    flex-direction: column;
-}
-
-.crux-time {
+    align-items: center;
+    margin-top: 1rem;
     margin-right: 1rem;
+    height: 2rem;
 }
 
 .query-suggestions {
@@ -377,7 +375,7 @@ html, body {
 }
 
 .input-time {
-    width: 25%;
+    width: 10rem;
     margin-right: 0.5rem;
 }
 
@@ -388,7 +386,7 @@ html, body {
 }
 
 .input-group-label {
-    width: 10%;
+    width: 7rem;
     margin-right: 1rem;
     margin-bottom: 0rem;
 }

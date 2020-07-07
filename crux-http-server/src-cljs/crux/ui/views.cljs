@@ -13,67 +13,61 @@
             [reagent.core :as r]
             [re-frame.core :as rf]))
 
-(defn vt-tt-display
-  [component]
-  (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
-        show-tt? @(rf/subscribe [::sub/show-tt? component])]
-    [:<>
-     [:div.expand-collapse__group
-      {:on-click #(rf/dispatch [::events/toggle-show-vt component show-vt?])}
-      [:span.expand-collapse__txt
-       [:span.form-pane__arrow
-        [common/arrow-svg show-vt?] "Valid Time"]]]
-     [:div.expand-collapse__group
-      {:on-click #(rf/dispatch [::events/toggle-show-tt component show-tt?])}
-      [:span.expand-collapse__txt
-       [:span.form-pane__arrow
-        [common/arrow-svg show-tt?] "Transaction Time"]]]]))
-
 (defn vt-tt-inputs
   [{:keys [values touched errors handle-change handle-blur]} component]
   (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
         show-tt? @(rf/subscribe [::sub/show-tt? component])]
-    [:div.crux-time
-     [:div.input-group
-      {:class (when-not show-vt? "hidden")}
+    [:<>
+     [:div.crux-time
+      [:input {:type :checkbox
+               :checked show-vt?
+               :on-change #(rf/dispatch [::events/toggle-show-vt component show-vt?])}]
       [:div.input-group-label.label
        [:label "Valid Time"]]
-      [:input.input.input-time
-       {:type "date"
-        :name "vtd"
-        :value (get values "vtd")
-        :on-change handle-change
-        :on-blur handle-blur}]
-      [:input.input.input-time
-       {:type "time"
-        :name "vtt"
-        :value (get values "vtt")
-        :on-change handle-change
-        :on-blur handle-blur}]
-      (when (and (or (get touched "vtd")
-                     (get touched "vtt"))
-                 (get errors "vt"))
-        [:p.input-error (get errors "vt")])]
-     [:div.input-group
-      {:class (when-not show-tt? "hidden")}
+
+      [:div
+       {:class (when-not show-vt? "hidden")}
+       [:input.input.input-time
+        {:type "date"
+         :name "vtd"
+         :value (get values "vtd")
+         :on-change handle-change
+         :on-blur handle-blur}]
+       [:input.input.input-time
+        {:type "time"
+         :name "vtt"
+         :value (get values "vtt")
+         :on-change handle-change
+         :on-blur handle-blur}]
+       (when (and (or (get touched "vtd")
+                      (get touched "vtt"))
+                  (get errors "vt"))
+         [:p.input-error (get errors "vt")])]]
+
+     [:div.crux-time
+      [:input {:type :checkbox
+               :checked show-tt?
+               :on-change #(rf/dispatch [::events/toggle-show-tt component show-tt?])}]
       [:div.input-group-label.label
        [:label "Transaction Time" ]]
-      [:input.input.input-time
-       {:type "date"
-        :name "ttd"
-        :value (get values "ttd")
-        :on-change handle-change
-        :on-blur handle-blur}]
-      [:input.input.input-time
-       {:type "time"
-        :name "ttt"
-        :value (get values "ttt")
-        :on-change handle-change
-        :on-blur handle-blur}]
-      (when (and (or (get touched "ttd")
-                     (get touched "ttt"))
-                 (get errors "tt"))
-        [:p.input-error (get errors "tt")])]]))
+      [:div
+       {:class (when-not show-tt? "hidden")}
+       [:input.input.input-time
+        {:type "date"
+         :name "ttd"
+         :value (get values "ttd")
+         :on-change handle-change
+         :on-blur handle-blur}]
+       [:input.input.input-time
+        {:type "time"
+         :name "ttt"
+         :value (get values "ttt")
+         :on-change handle-change
+         :on-blur handle-blur}]
+       (when (and (or (get touched "ttd")
+                      (get touched "ttt"))
+                  (get errors "tt"))
+         [:p.input-error (get errors "tt")])]]]))
 
 (defn vt-tt-entity-box
   [vt tt]
@@ -121,8 +115,6 @@
           :class "cm-textarea__query"
           :on-change #(set-values {"q" %})
           :on-blur #(set-touched "q")}]]
-       [:div.query-form-options
-        [vt-tt-display :query]]
        (when (and (get touched "q")
                   (get errors "q"))
          [:p.input-error (get errors "q")])
@@ -277,8 +269,6 @@
                  :placeholder ":foo"
                  :on-change handle-change
                  :on-blur handle-blur}]]
-              [:div.query-form-options
-               [vt-tt-display :entity]]
               [vt-tt-inputs props :entity]
               [:div.button-line
                [:button.button
