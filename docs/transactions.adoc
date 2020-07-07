@@ -88,9 +88,11 @@ document.
 Note that `valid time` is optional and defaults to transaction time,
 which is taken from the Kafka log.
 
-Crux currently writes into the past at a single point, so to overwrite
-several versions or a range in time, one is required to submit a
-transaction containing several operations.
+Crux `puts` into the past at a single point by default, so to overwrite several
+versions across a range in valid time, you can either submit a transaction
+containing several operations or supply a third argument to specify an `end
+valid time`. This period is inclusive-exclusive, such that the start of the
+validity period is included in the validity range, while the end is excluded.
 
 [#transactions-delete]
 === Delete
