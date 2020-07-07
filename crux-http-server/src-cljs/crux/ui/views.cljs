@@ -204,7 +204,6 @@
         (:rows data)
         (empty? (:rows data))) [:div.no-results "No results found!"]
        :else [:<>
-              [table/table data]
               [:div.query-table-downloads
                "Download as:"
                [:a.query-table-downloads__link
@@ -212,7 +211,8 @@
                 "CSV"]
                [:a.query-table-downloads__link
                 {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
-                "TSV"]]])]))
+                "TSV"]]
+              [table/table data]])]))
 
 (defn query-pane
   []
