@@ -67,9 +67,17 @@
             [:a {:href "/_crux/index"}
              [:img.crux-logo__img {:src "/crux-horizontal-bw.svg" }]]]
            [:div.header__links
-            [:a {:href "/_crux/query"} "Console"]
-            [:a {:href "/_crux/status"} "Status"]
-            [:a {:href "https://opencrux.com/docs" :target "_blank"} "Docs"]]]
+            [:a.header__link {:href "/_crux/query"} "Console"]
+            [:a.header__link {:href "/_crux/status"} "Status"]
+            [:a.header__link {:href "https://opencrux.com/docs" :target "_blank"} "Docs"]
+            [:div.header-dropdown
+             [:button.header-dropdown__button
+              "Help"
+              [:i.fa.fa-caret-down]]
+             [:div.header-dropdown__links
+              [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip"]
+              [:a {:href "https://clojurians.slack.com/messages/crux" :target "_blank"} "Clojurians Slack"]
+              [:a {:href "mailto:crux@juxt.pro" :target "_blank"} "Email"]]]]]
           [:div.console
            [:div#app
             [:div.container.page-pane body]]]

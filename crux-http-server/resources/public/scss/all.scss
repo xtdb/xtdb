@@ -12,6 +12,7 @@ html, body {
 .header {
     background: #1e1e1e;
     width: 100%;
+    height: 5rem;
     color: white;
     display: flex;
     align-items: center;
@@ -19,18 +20,71 @@ html, body {
 }
 
 .header__links {
+    display: flex;
+    height: 100%;
     font-size: 1rem;
-    margin-right: 2.5%;
 }
 
-.header__links a {
-    margin-left: 1rem;
+.header__link {
+    height: 100%;
+    margin: 0 0.7rem;
     color: #e1e0e0;
     text-decoration:none;
+    display: flex;
+    align-items: center;
 }
 
-.header__links a:hover {
+.header__link:hover {
     color: white;
+}
+
+.header-dropdown {
+    width: 100px;
+    height: 100%;
+    text-align: center;
+    z-index: 1;
+}
+
+.header-dropdown__button {
+    border: none;
+    outline: none;
+    font-size: 1rem;
+    font-family: 'LatoWeb';
+    color: #e1e0e0;
+    background-color: inherit;
+    height: 100%;
+}
+
+.header-dropdown__button i {
+    margin-left: 0.5rem;
+}
+
+.header-dropdown__links {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    width: inherit;
+}
+
+.header-dropdown__links a {
+    float: none;
+    color: black;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+    padding: 0.5rem;
+}
+
+.header-dropdown__links a:hover {
+    background-color: #c8c5c5;
+}
+
+.header-dropdown:hover {
+    background-color: #111;
+}
+
+.header-dropdown:hover .header-dropdown__links {
+    display: block;
 }
 
 .crux-logo {
