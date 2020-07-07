@@ -158,39 +158,16 @@
      {:dispatch [:navigate :query {} query-params]})))
 
 (rf/reg-event-fx
- ::set-entity-pane-document
- (fn [{:keys [db]} _]
-   (let [query-params (-> (get-in db [:current-route :query-params])
-                          (select-keys [:valid-time :transaction-time :eid]))]
-     {:db (assoc-in db [:entity :right-pane :view] :document)
-      :dispatch [:navigate :entity nil query-params]})))
-
-(rf/reg-event-fx
- ::set-entity-pane-history
- (fn [{:keys [db]} _]
-   (let [query-params (-> (get-in db [:current-route :query-params])
-                          (assoc :history true)
-                          (assoc :with-docs true)
-                          (assoc :sort-order "desc"))]
-     {:db (assoc-in db [:entity :right-pane :view] :history)
-      :dispatch [:navigate :entity nil query-params]})))
-
-(rf/reg-event-fx
- ::set-entity-pane-raw-edn
- (fn [{:keys [db]} _]
-   (let [query-params (-> (get-in db [:current-route :query-params])
-                          (select-keys [:valid-time :transaction-time :eid]))]
-     {:db (assoc-in db [:entity :right-pane :view] :raw-edn)
-      :dispatch [:navigate :entity nil query-params]})))
-
-(rf/reg-event-fx
  ::entity-pane-tab-selected
  (fn [{:keys [db]} [_ tab]]
-   {:db (assoc-in db [:entity-pane :selected-tab] tab)
-    :dispatch (case tab
-                :document [::set-entity-pane-document]
-                :history [::set-entity-pane-history]
-                :raw-edn [::set-entity-pane-raw-edn])}))
+   {:dispatch [:navigate :entity nil (case tab
+                                       :document (-> (get-in db [:current-route :query-params])
+                                                     (select-keys [:valid-time :transaction-time :eid]))
+                                       :history (-> (get-in db [:current-route :query-params])
+
+                                                    (assoc :history true)
+                                                    (assoc :with-docs true)
+                                                    (assoc :sort-order "desc")))]}))
 
 (rf/reg-event-db
  ::set-entity-result-pane-loading
@@ -213,11 +190,6 @@
  ::entity-result-pane-document-error
  (fn [db [_ error]]
    (assoc-in db [:entity :error] error)))
-
-(rf/reg-event-db
- ::set-entity-result-pane-history-diffs?
- (fn [db [_ bool]]
-   (assoc-in db [:entity :result-pane :diffs?] bool)))
 
 (rf/reg-event-db
  ::set-node-status-loading false

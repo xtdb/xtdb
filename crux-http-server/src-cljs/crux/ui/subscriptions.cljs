@@ -116,10 +116,9 @@
 (rf/reg-sub
  ::entity-pane-tab
  (fn [db _]
-   (or (get-in db [:entity-pane :selected-tab])
-       (when (get-in db [:current-route :query-params :history])
-         :history)
-       :document)))
+   (if (get-in db [:current-route :query-params :history])
+     :history
+     :document)))
 
 (rf/reg-sub
  ::console-tab
@@ -156,11 +155,6 @@
       :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
       :document document
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
-
-(rf/reg-sub
- ::entity-result-pane-history-diffs?
- (fn [db _]
-   (or (get-in db [:entity :result-pane :diffs?]) false)))
 
 (rf/reg-sub
  ::entity-result-pane-document-error

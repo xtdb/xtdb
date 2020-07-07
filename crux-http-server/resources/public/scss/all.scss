@@ -541,16 +541,12 @@ ul.entity-group__value li::before {
     align-items: flex-start;
 }
 
-.entity-raw-edn__container {
-    display: flex;
-    align-items: flex-start;
-}
-
 .entity-raw-edn {
     margin-right: 4rem;
     @extend .common-entity-box;
     font-family: monospace;
     font-size: 0.9rem;
+    flex: 1;
 }
 
 .entity-history__toggle-buttons {
@@ -606,7 +602,7 @@ ul.entity-group__value li::before {
 
 .entity-vt-tt {
     @extend .common-entity-box;
-    width: 25%;
+    width: 20rem;
     word-wrap: break-word;
 }
 

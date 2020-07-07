@@ -289,51 +289,65 @@
 
 (defn entity-document
   []
-  (let [{:keys [eid vt tt document linked-entities error]}
-        @(rf/subscribe [::sub/entity-result-pane-document])
-        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
-    [:div.entity-map__container
-     (if loading?
-       [:div.entity-map.entity-map--loading
-        [:i.fas.fa-spinner.entity-map__load-icon]]
-       (if error
-         [:div.error-box error]
-         [:<>
-          [::div.entity-map
-           [cm/code-snippet document linked-entities]]
-          [vt-tt-entity-box vt tt]]))]))
+  (let [!raw-edn? (r/atom false)]
+    (fn []
+      (let [{:keys [eid vt tt document linked-entities error]}
+            @(rf/subscribe [::sub/entity-result-pane-document])
+            loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
+        [:<>
+         [:div.history-diffs__options
+          [:div.history-checkbox__group
+           [:div.history-diffs__checkbox
+            [:input
+             {:checked @!raw-edn?
+              :on-change #(swap! !raw-edn? not)
+              :type "checkbox"}]]
+           [:span "Raw EDN"]]]
+         (if loading?
+           [:div.entity-map.entity-map--loading
+            [:i.fas.fa-spinner.entity-map__load-icon]]
+           (if error
+             [:div.error-box error]
+             [:div.entity-map__container
+              (if @!raw-edn?
+                [:div.entity-raw-edn
+                 (with-out-str (pprint/pprint document))]
+                [::div.entity-map
+                 [cm/code-snippet document linked-entities]])
+              [vt-tt-entity-box vt tt]]))]))))
 
 (defn- entity-history-document []
-  (let [diffs-tab? @(rf/subscribe [::sub/entity-result-pane-history-diffs?])
-        entity-error @(rf/subscribe [::sub/entity-result-pane-document-error])
-        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
-        {:keys [query-params path-params]} @(rf/subscribe [::sub/current-route])
-        asc-order? (= "asc" (:sort-order query-params))]
-    [:<>
-     [:div.history-diffs__options
-      [:div.select.history-sorting-group
-       [:select
-        {:name "diffs-order"
-         :value (:sort-order query-params)
-         :on-change #(rf/dispatch [:navigate :entity path-params
-                                   (assoc query-params :sort-order (if asc-order? "desc" "asc"))])}
-        [:option {:value "asc"} "Ascending"]
-        [:option {:value "desc"} "Descending"]]]
-      [:div.history-checkbox__group
-       [:div.history-diffs__checkbox
-        [:input
-         {:checked diffs-tab?
-          :on-change #(rf/dispatch [::events/set-entity-result-pane-history-diffs?
-                                    (if diffs-tab? false true)])
-          :type "checkbox"}]]
-       [:span "Diffs"]]]
-     [:div.entity-histories__container
-      (if loading?
-        [:div.entity-map.entity-map--loading
-         [:i.fas.fa-spinner.entity-map__load-icon]]
-        (cond
-          entity-error [:div.error-box entity-error]
-          (not diffs-tab?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-result-pane-history])]
+  (let [!diffs? (r/atom false)]
+    (fn []
+      (let [diffs? @!diffs?
+            entity-error @(rf/subscribe [::sub/entity-result-pane-document-error])
+            loading? @(rf/subscribe [::sub/entity-result-pane-loading?])
+            {:keys [query-params path-params]} @(rf/subscribe [::sub/current-route])
+            asc-order? (= "asc" (:sort-order query-params))]
+        [:<>
+         [:div.history-diffs__options
+          [:div.select.history-sorting-group
+           [:select
+            {:name "diffs-order"
+             :value (:sort-order query-params)
+             :on-change #(rf/dispatch [:navigate :entity path-params
+                                       (assoc query-params :sort-order (if asc-order? "desc" "asc"))])}
+            [:option {:value "asc"} "Ascending"]
+            [:option {:value "desc"} "Descending"]]]
+          [:div.history-checkbox__group
+           [:div.history-diffs__checkbox
+            [:input
+             {:checked diffs?
+              :on-change #(swap! !diffs? not)
+              :type "checkbox"}]]
+           [:span "Diffs"]]]
+         [:div.entity-histories__container
+          (if loading?
+            [:div.entity-map.entity-map--loading
+             [:i.fas.fa-spinner.entity-map__load-icon]]
+            (cond
+              entity-error [:div.error-box entity-error]
+              (not diffs?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-result-pane-history])]
                              [:div.entity-histories
                               (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
                                      :as history-elem} entity-history]
@@ -342,7 +356,7 @@
                                  [:div.entity-map
                                   [cm/code-snippet doc {}]]
                                  [vt-tt-entity-box valid-time tx-time]])])
-          diffs-tab? (let [{:keys [up-to-date-doc history-diffs]} @(rf/subscribe [::sub/entity-result-pane-history-diffs])]
+              diffs? (let [{:keys [up-to-date-doc history-diffs]} @(rf/subscribe [::sub/entity-result-pane-history-diffs])]
                        [:div.entity-histories
                         [:div.entity-history__container
                          [:div.entity-map
@@ -368,21 +382,7 @@
                                  "- Deletions:"]
                                 [cm/code-snippet deletions {}]])]]
                            [vt-tt-entity-box valid-time tx-time]])])
-          :else nil))]]))
-
-(defn entity-raw-edn
-  []
-  (let [{:keys [document error]}
-        @(rf/subscribe [::sub/entity-result-pane-document])
-        loading? @(rf/subscribe [::sub/entity-result-pane-loading?])]
-    [:div.entity-raw-edn__container
-     (if loading?
-       [:div.entity-map.entity-map--loading
-        [:i.fas.fa-spinner.entity-map__load-icon]]
-       (if error
-         [:div.error-box error]
-         [:div.entity-raw-edn
-          (with-out-str (pprint/pprint document))]))]))
+              :else nil))]]))))
 
 (defn entity-pane []
   [:<>
@@ -391,15 +391,13 @@
    (when @(rf/subscribe [::sub/eid-submitted?])
      [:<>
       [tab/tab-bar {:tabs [{:k :document, :label "Document", :dispatch [::events/set-entity-pane-document]}
-                           {:k :history, :label "History", :dispatch [::events/set-entity-pane-history]}
-                           {:k :raw-edn, :label "Raw EDN", :dispatch [::events/set-entity-pane-raw-edn]}]
+                           {:k :history, :label "History", :dispatch [::events/set-entity-pane-history]}]
                     :current-tab [::sub/entity-pane-tab]
                     :on-tab-selected [::events/entity-pane-tab-selected]}]
 
       (case @(rf/subscribe [::sub/entity-pane-tab])
         :document [entity-document]
-        :history [entity-history-document]
-        :raw-edn [entity-raw-edn])])])
+        :history [entity-history-document])])])
 
 (defn console-pane []
   [:<>
