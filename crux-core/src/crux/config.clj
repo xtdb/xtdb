@@ -4,6 +4,7 @@
             [clojure.edn :as edn]
             [clojure.string :as str])
   (:import java.util.Properties
+           (java.io File)
            (java.time Duration)
            (java.util.concurrent TimeUnit)))
 
@@ -12,6 +13,13 @@
          boolean?))
 
 (s/def ::string string?)
+
+(s/def ::file-path
+  (s/and (s/conformer (fn [fp]
+                        (cond
+                          (instance? File fp) (str fp)
+                          (string? fp) fp)))
+         string?))
 
 (s/def ::int
   (s/and (s/conformer (fn [x] (cond (int? x) x, (string? x) (Integer/parseInt x), :else x)))
