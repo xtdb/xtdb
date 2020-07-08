@@ -7,6 +7,8 @@
             [crux.memory :as mem])
   (:import java.io.Closeable
            java.nio.ByteBuffer
+           (java.nio.file Files Path)
+           java.nio.file.attribute.FileAttribute
            java.util.function.ToIntFunction
            (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
                         Options ReadOptions RocksDB RocksIterator
@@ -141,8 +143,9 @@
                             (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
                             (.setCreateIfMissing true))
                      db (try
-                          (RocksDB/open opts (.getAbsolutePath (doto (io/file db-dir)
-                                                                 (.mkdirs))))
+                          (RocksDB/open opts (-> (Files/createDirectories ^Path db-dir (make-array FileAttribute 0))
+                                                 (.toAbsolutePath)
+                                                 (str)))
                           (catch Throwable t
                             (.close opts)
                             (throw t)))

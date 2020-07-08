@@ -12,6 +12,8 @@
            java.util.concurrent.TimeUnit
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
+           (java.nio.file Files Path)
+           java.nio.file.attribute.FileAttribute
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]))
 
@@ -80,8 +82,9 @@
 
 (defn- env-open [^long env dir ^long flags]
   (success? (LMDB/mdb_env_open env
-                               (.getAbsolutePath (doto (io/file dir)
-                                                   (.mkdirs)))
+                               (-> (Files/createDirectories ^Path dir (make-array FileAttribute 0))
+                                   (.toAbsolutePath)
+                                   (str))
                                flags
                                0664)))
 

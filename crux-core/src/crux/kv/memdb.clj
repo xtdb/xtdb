@@ -6,6 +6,7 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang Box MapEntry]
+           java.nio.file.Path
            java.io.Closeable))
 
 (defn- persist-db [dir db]
@@ -104,12 +105,13 @@
 
 (defn ->mem-kv
   ([] (->mem-kv {}))
-  ([{::kv/keys [db-dir persist-on-close?]}]
-   (map->MemKv {:db-dir db-dir
-                :persist-on-close? persist-on-close?
-                :db (atom (if (.isFile (io/file db-dir "memdb"))
-                            (restore-db db-dir)
-                            (sorted-map-by mem/buffer-comparator)))})))
+  ([{::kv/keys [^Path db-dir persist-on-close?]}]
+   (let [db-dir (some-> db-dir (.toFile))]
+     (map->MemKv {:db-dir db-dir
+                  :persist-on-close? persist-on-close?
+                  :db (atom (if (.isFile (io/file db-dir "memdb"))
+                              (restore-db db-dir)
+                              (sorted-map-by mem/buffer-comparator)))}))))
 
 (def kv
   {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::persist-on-close?]

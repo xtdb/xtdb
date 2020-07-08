@@ -5,6 +5,7 @@
             [clojure.string :as str])
   (:import java.util.Properties
            (java.io File)
+           (java.nio.file Path Paths)
            (java.time Duration)
            (java.util.concurrent TimeUnit)))
 
@@ -14,12 +15,13 @@
 
 (s/def ::string string?)
 
-(s/def ::file-path
+(s/def ::path
   (s/and (s/conformer (fn [fp]
                         (cond
-                          (instance? File fp) (str fp)
-                          (string? fp) fp)))
-         string?))
+                          (instance? Path fp) fp
+                          (instance? File fp) (.toPath ^File fp)
+                          (string? fp) (Paths/get fp (make-array String 0)))))
+         #(instance? Path %)))
 
 (s/def ::int
   (s/and (s/conformer (fn [x] (cond (int? x) x, (string? x) (Integer/parseInt x), :else x)))

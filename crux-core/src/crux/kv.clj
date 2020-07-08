@@ -33,7 +33,7 @@
   {:crux.kv/db-dir
    {:doc "Directory to store K/V files"
     :required? false
-    :crux.config/type :crux.config/file-path}
+    :crux.config/type :crux.config/path}
    :crux.kv/sync?
    {:doc "Sync the KV store to disk after every write."
     :default false

@@ -2,12 +2,15 @@
   "Embedded Kafka for self-contained Crux deployments."
   (:require [clojure.java.io :as io]
             [crux.io :as cio]
+            [crux.config :as config]
             [clojure.spec.alpha :as s])
   (:import [kafka.server KafkaConfig KafkaServer]
            [org.apache.zookeeper.server ServerCnxnFactory ZooKeeperServer]
            [org.apache.kafka.common.utils Time]
            [scala Option]
            [scala.collection Seq]
+           java.nio.file.Path
+           java.io.File
            java.io.Closeable))
 
 ;; Based on:
@@ -44,13 +47,13 @@
   (some-> broker .awaitShutdown))
 
 (defn start-zookeeper
-  (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir]
+  (^org.apache.zookeeper.server.ServerCnxnFactory [^File data-dir]
    (start-zookeeper data-dir default-zookeeper-port))
-  (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir ^long port]
+  (^org.apache.zookeeper.server.ServerCnxnFactory [^File data-dir ^long port]
    (cio/delete-dir data-dir)
    (let [tick-time 2000
          max-connections 16
-         server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
+         server (ZooKeeperServer. data-dir data-dir tick-time)]
      (doto (ServerCnxnFactory/createFactory port max-connections)
        (.startup server)))))
 
@@ -71,9 +74,9 @@
     (stop-kafka-broker kafka)
     (stop-zookeeper zookeeper)))
 
-(s/def ::zookeeper-data-dir :crux.config/file-path)
+(s/def ::zookeeper-data-dir :crux.config/path)
 (s/def ::zookeeper-port :crux.io/port)
-(s/def ::kafka-log-dir :crux.config/file-path)
+(s/def ::kafka-log-dir :crux.config/path)
 (s/def ::kafka-port :crux.io/port)
 (s/def ::broker-config (s/map-of string? string?))
 
@@ -92,18 +95,18 @@
   implements java.io.Closeable, which allows ZooKeeper and Kafka to be
   stopped by calling close."
   ^java.io.Closeable
-  [{:crux.kafka.embedded/keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
-    :or {zookeeper-port default-zookeeper-port
-         kafka-port default-kafka-port}
-    :as options}]
-  (s/assert ::options options)
-  (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir) zookeeper-port)
-        kafka (try
-                (start-kafka-broker (merge broker-config
-                                           {"log.dir" (str (io/file kafka-log-dir))
-                                            "port" (str kafka-port)
-                                            "zookeeper.connect" (str *host* ":" zookeeper-port)}))
-                (catch Throwable t
-                  (stop-zookeeper zookeeper)
-                  (throw t)))]
-    (->EmbeddedKafka zookeeper kafka (assoc options :bootstrap-servers (str *host* ":" kafka-port)))))
+  [options]
+  (let [{:crux.kafka.embedded/keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
+         :or {zookeeper-port default-zookeeper-port
+              kafka-port default-kafka-port}
+         :as options} (s/conform ::options options)]
+    (let [zookeeper (start-zookeeper (.toFile ^Path zookeeper-data-dir) zookeeper-port)
+          kafka (try
+                  (start-kafka-broker (merge broker-config
+                                             {"log.dir" (str kafka-log-dir)
+                                              "port" (str kafka-port)
+                                              "zookeeper.connect" (str *host* ":" zookeeper-port)}))
+                  (catch Throwable t
+                    (stop-zookeeper zookeeper)
+                    (throw t)))]
+      (->EmbeddedKafka zookeeper kafka (assoc options :bootstrap-servers (str *host* ":" kafka-port))))))
