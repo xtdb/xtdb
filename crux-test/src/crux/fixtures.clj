@@ -46,7 +46,7 @@
 
 (defn with-kv-dir [f]
   (with-tmp-dir "kv-store" [db-dir]
-    (with-opts {:crux.kv/db-dir (str db-dir)}
+    (with-opts {:crux.kv/db-dir db-dir}
       f)))
 
 (defn with-node [f]
