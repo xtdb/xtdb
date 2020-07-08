@@ -243,8 +243,8 @@
 
     (with-open [index-store (db/open-index-store (:indexer *api*))]
       (let [picasso-history (db/entity-history index-store picasso-id :desc {})]
-        (t/testing "eviction keeps tx history"
-          (t/is (= 1 (count (map :content-hash picasso-history)))))
+        (t/testing "eviction removes tx history"
+          (t/is (empty? picasso-history)))
         (t/testing "eviction removes docs"
           (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash picasso-history))
                              vals

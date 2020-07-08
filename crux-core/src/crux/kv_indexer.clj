@@ -706,6 +706,7 @@
 
   (unindex-eids [this eids]
     (let [{:keys [tombstones ks]} (with-open [snapshot (kv/new-snapshot kv-store)
+                                              bitemp-i (kv/new-iterator snapshot)
                                               ecav-i (kv/new-iterator snapshot)
                                               av-i (kv/new-iterator snapshot)]
                                     (->> (for [eid eids
@@ -742,7 +743,12 @@
                                                        (not (c/can-decode-value-buffer? value-buffer))
                                                        (update :ks conj (encode-hash-cache-key-to nil value-buffer eid-buffer)))))
                                                  {:tombstones {}
-                                                  :ks #{}})))]
+                                                  :ks (into #{}
+                                                            (mapcat (fn [eid]
+                                                                      (let [eid-id-buffer (c/->id-buffer eid)]
+                                                                        (into (set (all-keys-in-prefix bitemp-i (encode-entity+vt+tt+tx-id-key-to nil eid-id-buffer)))
+                                                                              (set (all-keys-in-prefix bitemp-i (encode-entity+z+tx-id-key-to nil eid-id-buffer)))))))
+                                                            eids)})))]
 
       (kv/delete kv-store ks)
       {:tombstones tombstones}))
