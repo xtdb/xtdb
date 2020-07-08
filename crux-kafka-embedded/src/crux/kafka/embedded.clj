@@ -71,9 +71,9 @@
     (stop-kafka-broker kafka)
     (stop-zookeeper zookeeper)))
 
-(s/def ::zookeeper-data-dir string?)
+(s/def ::zookeeper-data-dir :crux.config/file-path)
 (s/def ::zookeeper-port :crux.io/port)
-(s/def ::kafka-log-dir string?)
+(s/def ::kafka-log-dir :crux.config/file-path)
 (s/def ::kafka-port :crux.io/port)
 (s/def ::broker-config (s/map-of string? string?))
 
