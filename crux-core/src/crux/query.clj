@@ -1267,8 +1267,21 @@
 
   (query [this query]
     (with-open [res (.openQuery this query)]
-      (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)]
-        (result-coll-fn (iterator-seq res)))))
+      (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)
+            ^Future
+            interrupt-job (when-let [timeout-ms (get query :timeout (::query-timeout options))]
+                            (let [caller-thread (Thread/currentThread)]
+                              (.schedule interrupt-executor
+                                         ^Runnable
+                                         (fn []
+                                           (.interrupt caller-thread))
+                                         ^long timeout-ms
+                                         TimeUnit/MILLISECONDS)))]
+        (try
+          (result-coll-fn (iterator-seq res))
+          (finally
+            (when interrupt-job
+              (.cancel interrupt-job false)))))))
 
   (openQuery [db query]
     (let [index-store (open-index-store db)
@@ -1278,34 +1291,20 @@
 
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))
-
-          res (crux.query/query db conformed-query)
-
-          ^Future
-          interrupt-job (when-let [timeout-ms (get query :timeout (::query-timeout options))]
-                          (let [caller-thread (Thread/currentThread)]
-                            (.schedule interrupt-executor
-                                       ^Runnable
-                                       (fn []
-                                         (.interrupt caller-thread))
-                                       ^long timeout-ms
-                                       TimeUnit/MILLISECONDS)))]
+          safe-query (-> conformed-query .q-normalized (dissoc :args))]
 
       (when bus
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
 
-      (cio/->cursor (fn []
-                      (when interrupt-job
-                        (.cancel interrupt-job false))
-                      (cio/try-close index-store)
-                      (when bus
-                        (bus/send bus {:crux/event-type ::completed-query
-                                       ::query safe-query
-                                       ::query-id query-id})))
-                    res)))
+      (->> (crux.query/query db conformed-query)
+           (cio/->cursor (fn []
+                           (cio/try-close index-store)
+                           (when bus
+                             (bus/send bus {:crux/event-type ::completed-query
+                                            ::query safe-query
+                                            ::query-id query-id})))))))
 
   (entityHistory [this eid opts]
     (with-open [history (.openEntityHistory this eid opts)]
