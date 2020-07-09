@@ -62,18 +62,25 @@
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
           [:title "Crux Console"]]
          [:body
+          [:nav.header
+           [:div.crux-logo
+            [:a {:href "/_crux/index"}
+             [:img.crux-logo__img {:src "/crux-horizontal-bw.svg" }]]]
+           [:div.header__links
+            [:a.header__link {:href "/_crux/query"} "Console"]
+            [:a.header__link {:href "/_crux/status"} "Status"]
+            [:a.header__link {:href "https://opencrux.com/docs" :target "_blank"} "Docs"]
+            [:div.header-dropdown
+             [:button.header-dropdown__button
+              "Help"
+              [:i.fa.fa-caret-down]]
+             [:div.header-dropdown__links
+              [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip"]
+              [:a {:href "https://clojurians.slack.com/messages/crux" :target "_blank"} "Clojurians Slack"]
+              [:a {:href "mailto:crux@juxt.pro" :target "_blank"} "Email"]]]]]
           [:div.console
-           [:div#app body]]
-          [:footer.footer
-           [:section.footer-section
-            [:img.footer__juxt-logo {:src "https://www.opencrux.com/images/juxt-logo-white.svg"}]
-            [:div.footer__juxt-info
-             [:p "Copyright © JUXT LTD 2012-2019"]
-             [:p [:strong "Headquarters:"]]
-             [:p "Technology House, 151 Silbury Blvd."]
-             [:p "Milton Keynes, MK9 1LH"]
-             [:p "United Kingdom"]
-             [:p "Company registration: 08457399"]]]]
+           [:div#app
+            [:div.container.page-pane body]]]
           [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]])))
 
 (defn- body->edn [request]
@@ -130,14 +137,6 @@
 ;; ---------------------------------------------------
 ;; Services
 
-(defn- status [^ICruxAPI crux-node]
-  (let [status-map (.status crux-node)]
-    (if (or (not (contains? status-map :crux.zk/zk-active?))
-            (:crux.zk/zk-active? status-map))
-      (success-response status-map)
-      (response 500
-                {"Content-Type" "application/edn"}
-                (cio/pr-edn-str status-map)))))
 
 (defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
@@ -335,9 +334,6 @@
     [#"^/$" [:get]]
     (redirect-response "/_crux/index")
 
-    [#"^/_crux/status" [:get]]
-    (status crux-node)
-
     [#"^/entity/.+$" [:get]]
     (entity crux-node request)
 
@@ -395,10 +391,16 @@
   (= (get-in request [:muuntaja/response :format]) "text/html"))
 
 (defn- root-page []
-  [:div.root-contents
-   [:p "Welcome to the Crux Console! Get started below:"]
-   [:p [:a {:href "/_crux/query"} "Performing a query"]]
-   [:p [:a {:href "/_crux/entity"} "Searching for an entity"]]])
+  [:div.root-page
+   [:div.root-background]
+   [:div.root-contents
+    [:h1.root-title "Welcome to the Crux Console!"]
+    [:h2.root-video__title "Take a short video tour:"]
+    [:iframe.root-video {:src "https://www.youtube.com/embed/StXLmWvb5Xs"
+                         :allow "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"}]
+    [:a.root-get-started
+     {:href "/_crux/query"}
+     "Start exploring your Crux node"]]])
 
 (defn- root-handler [^ICruxAPI crux-node options request]
   {:status 200
@@ -408,6 +410,34 @@
             {:body (root-page)
              :title "/_crux"
              :options options}))})
+
+(defn status-map->html-elements [status-map]
+  (into
+   [:div.node-info__content]
+   (map
+    (fn [[key value]]
+      (when value
+        [:p [:b (str key)] ": " (str value)]))
+    status-map)))
+
+(defn- status [^ICruxAPI crux-node options request]
+  (let [status-map (api/status crux-node)]
+    {:status (if (or (not (contains? status-map :crux.zk/zk-active?))
+                     (:crux.zk/zk-active? status-map))
+               200
+               500)
+     :body (if (html-request? request)
+             (raw-html
+              {:body [:div.node-info__container
+                      [:div.node-info
+                       [:h2.node-info__title "Node Status"]
+                       (status-map->html-elements status-map)]
+                      [:div.node-info
+                       [:h2.node-info__title "Node Options"]
+                       (status-map->html-elements options)]]
+               :title "/_status"
+               :options options})
+             status-map)}))
 
 (def ^DateTimeFormatter default-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
@@ -446,7 +476,7 @@
   (letfn [(recur-on-result [result links]
             (if (and (c/valid-id? result)
                      (api/entity db result))
-              (let [encoded-eid (URLEncoder/encode (str result) "UTF-8")
+              (let [encoded-eid (URLEncoder/encode (pr-str result) "UTF-8")
                     query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
                                          encoded-eid
                                          (.toInstant ^Date (api/valid-time db))
@@ -547,7 +577,8 @@
                  :title "/entity"
                  :options options})}
         (throw (IllegalArgumentException. "missing eid")))
-      (let [decoded-eid (-> eid URLDecoder/decode c/id-edn-reader)
+      (let [decoded-eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
+                                         (URLDecoder/decode eid))
             vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
             tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
             db (db-for-request crux-node {:valid-time vt
@@ -635,7 +666,7 @@
   (->> (apply concat results)
        (filter (every-pred c/valid-id? #(api/entity db %)))
        (map (fn [id]
-              (let [encoded-eid (URLEncoder/encode (str id) "UTF-8")
+              (let [encoded-eid (URLEncoder/encode (pr-str id) "UTF-8")
                     query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
                                          encoded-eid
                                          (.toInstant ^Date (api/valid-time db))
@@ -740,6 +771,9 @@
 
     [#"^/_crux/index.html$" [:get]]
     (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
+
+    [#"^/_crux/status" [:get]]
+    (status crux-node options request)
 
     [#"^/_crux/entity$" [:get]]
     (entity-state crux-node options request)

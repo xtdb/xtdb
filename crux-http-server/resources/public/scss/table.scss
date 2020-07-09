@@ -6,8 +6,9 @@ $dark: black;
 $spacing: 0.5rem;
 
 .uikit-table {
+    margin-top: 1rem;
     width: 100%;
-    border: 1px solid;
+    border: 1px solid #bfbcbc;
 
     .button:focus {
 	outline:0;
@@ -304,7 +305,6 @@ $spacing: 0.5rem;
 	overflow-x: auto;
 	position: relative;
 	background: white;
-	min-height: 500px;
 	max-height: 60vh;
     }
 

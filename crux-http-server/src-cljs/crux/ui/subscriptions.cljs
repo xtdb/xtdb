@@ -16,38 +16,45 @@
  (fn [db _]
    (:current-route db)))
 
+(def query-root-str
+  (string/join "\n"
+               [";; To perform a query"
+                ";; Enter the desired query into the query editor."
+                ";; Select a valid time and a transaction time (if needed)"
+                ";; Click submit query to perform the query and get the results in a table"
+                ""
+                '{:find [?entity], :where [[?entity :crux.db/id _]], :limit 100}]))
+
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params (t/now))))
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
-     (when (= :query handler)
+     (if (:find query-params)
        {"q" (common/query-params->formatted-edn-string
              (dissoc query-params :valid-time :transaction-time))
         "vtd" (:date valid-time)
         "vtt" (:time valid-time)
         "ttd" (:date transaction-time)
-        "ttt" (:time transaction-time)}))))
+        "ttt" (:time transaction-time)}
+       {"q" query-root-str}))))
 
 (rf/reg-sub
  ::initial-values-entity
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
-         handler (get-in db [:current-route :data :name])
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params (t/now))))
          transaction-time (common/datetime->date-time
                            (:transaction-time query-params))]
-     (when (= :entity handler)
-       {"eid" (:eid query-params)
-        "vtd" (:date valid-time)
-        "vtt" (:time valid-time)
-        "ttd" (:date transaction-time)
-        "ttt" (:time transaction-time)}))))
+     {"eid" (:eid query-params)
+      "vtd" (:date valid-time)
+      "vtt" (:time valid-time)
+      "ttd" (:date transaction-time)
+      "ttt" (:time transaction-time)})))
 
 ;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
@@ -102,18 +109,31 @@
    (get-in db [:entity :result-pane :loading?])))
 
 (rf/reg-sub
- ::entity-pane-view
+ ::eid-submitted?
  (fn [db _]
-   (if (nil? (get-in db [:current-route :query-params :eid]))
-     :entity-root
-     (or (get-in db [:entity :right-pane :view]) :document))))
+   (some? (get-in db [:current-route :query-params :eid]))))
 
 (rf/reg-sub
- ::query-pane-view
+ ::entity-pane-tab
  (fn [db _]
-   (if (empty? (get-in db [:current-route :query-params]))
-     :query-root
-     :table)))
+   (if (get-in db [:current-route :query-params :history])
+     :history
+     :document)))
+
+(rf/reg-sub
+ ::console-tab
+ (fn [db _]
+   (get-in db [:current-route :data :name] :query)))
+
+(rf/reg-sub
+ ::query-form-tab
+ (fn [db _]
+   (get-in db [:query-form :selected-tab] :edit-query)))
+
+(rf/reg-sub
+ ::query-submitted?
+ (fn [db _]
+   (not-empty (get-in db [:current-route :query-params]))))
 
 (rf/reg-sub
  ::query-data-download-link
@@ -135,11 +155,6 @@
       :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
       :document document
       :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
-
-(rf/reg-sub
- ::entity-result-pane-history-diffs?
- (fn [db _]
-   (or (get-in db [:entity :result-pane :diffs?]) false)))
 
 (rf/reg-sub
  ::entity-result-pane-document-error
@@ -187,12 +202,6 @@
       :history-diffs entity-history})))
 
 (rf/reg-sub
- ::form-pane-view
- (fn [db _]
-   (or (get-in db [:form-pane :view])
-       (get-in db [:current-route :data :name]))))
-
-(rf/reg-sub
  ::form-pane-history
  (fn [db [_ component]]
    (get-in db [:form-pane :history component])))
@@ -200,20 +209,15 @@
 (rf/reg-sub
  ::query-form-history
  (fn [db _]
-   (let [valid-time #(common/datetime->date-time
-                      (str (:valid-time % (t/now))))
-         transaction-time #(common/datetime->date-time
-                            (:transaction-time %))]
-     (reverse
-      (mapv
-       (fn [x]
-         {"q" (common/query-params->formatted-edn-string
-               (dissoc x :valid-time :transaction-time))
-          "vtd" (:date (valid-time x))
-          "vtt" (:time (valid-time x))
-          "ttd" (:date (transaction-time x))
-          "ttt" (:time (transaction-time x))})
-       (:query-history db))))))
+   ;; Get newest first
+   (reverse
+    (mapv
+     (fn [x]
+       {"q" (common/query-params->formatted-edn-string
+             (dissoc x :valid-time :transaction-time))
+        "valid-time" (:valid-time x)
+        "transaction-time" (:transaction-time x)})
+     (:query-history db)))))
 
 (rf/reg-sub
  ::show-vt?
@@ -233,6 +237,26 @@
    (:entity-history db)))
 
 (rf/reg-sub
+ ::query-form-visible?
+ (fn [db _]
+   (get-in db [:query-form :visible?] true)))
+
+(rf/reg-sub
  ::form-pane-hidden?
  (fn [db _]
-   (get-in db [:form-pane :hidden?] true)))
+   (get-in db [:form-pane :hidden?] false)))
+
+(rf/reg-sub
+ ::node-status-loading?
+ (fn [db _]
+   (get-in db [:status :loading?])))
+
+(rf/reg-sub
+ ::node-status
+ (fn [db _]
+   (get-in db [:status :http])))
+
+(rf/reg-sub
+ ::node-options
+ (fn [db _]
+   (doto (:options db) prn)))

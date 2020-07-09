@@ -9,18 +9,127 @@ html, body {
     box-sizing: border-box;
 }
 
-.nav {
+.header {
     background: #1e1e1e;
     width: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
+    height: 5rem;
     color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.header__links {
+    display: flex;
+    height: 100%;
+    font-size: 1rem;
+}
+
+.header__link {
+    height: 100%;
+    margin: 0 0.7rem;
+    color: #e1e0e0;
+    text-decoration:none;
+    display: flex;
+    align-items: center;
+}
+
+.header__link:hover {
+    color: white;
+}
+
+.header-dropdown {
+    width: 100px;
+    height: 100%;
     text-align: center;
+    z-index: 1;
+}
+
+.header-dropdown__button {
+    border: none;
+    outline: none;
+    font-size: 1rem;
+    font-family: 'LatoWeb';
+    color: #e1e0e0;
+    background-color: inherit;
+    height: 100%;
+}
+
+.header-dropdown__button i {
+    margin-left: 0.5rem;
+}
+
+.header-dropdown__links {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    width: inherit;
+}
+
+.header-dropdown__links a {
+    float: none;
+    color: black;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+    padding: 0.5rem;
+}
+
+.header-dropdown__links a:hover {
+    background-color: #c8c5c5;
+}
+
+.header-dropdown:hover {
+    background-color: #111;
+}
+
+.header-dropdown:hover .header-dropdown__links {
+    display: block;
 }
 
 .crux-logo {
+    margin-left: 2.5%;
+}
+
+.crux-logo__img {
     height:5rem;
+}
+
+.root-contents {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+}
+
+.root-title {
+    letter-spacing: 0.05em;
+}
+
+.root-video {
+    width: 560px;
+    height: 315px;
+}
+
+.root-background {
+    background: url('../gplay.png');
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    margin: -2rem;
+    margin-left: -2.5%;
+    opacity: 0.8;
+}
+
+.root-get-started {
+    text-decoration: none;
+    background: #4CAF50;
+    color: white;
+    padding: 0.8rem;
+    margin-top: 1rem;
+    letter-spacing: 0.05em;
+    font-weight: bold;
 }
 
 .console {
@@ -28,6 +137,18 @@ html, body {
     min-height: 60vh;
     margin: auto;
     margin-top: 2rem;
+}
+
+.node-info__title {
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.node-info__content {
+    padding: 1rem;
+    white-space: pre-wrap;
+    border: 1px solid;
+    width: max-content;
 }
 
 // override default table style for no js version
@@ -57,6 +178,10 @@ html, body {
     line-height: 1.5;
     padding: 0.375rem 0.625rem;
     position: relative;
+}
+
+.monospace {
+    font-family: monospace;
 }
 
 .button-line {
@@ -119,11 +244,6 @@ html, body {
     -moz-box-shadow: inset 0 1px 2px rgba(10,10,10,.1);
     box-shadow: inset 0 1px 2px rgba(10,10,10,.1);
     width: 100%;
-}
-
-#form-query, #form-entity {
-    margin-bottom: 0;
-    margin-top: 1rem;
 }
 
 .document-section .CodeMirror {
@@ -229,12 +349,10 @@ html, body {
 
 .crux-time {
     display: flex;
-    flex-wrap: wrap;
-    flex-direction: column;
-}
-
-.crux-time {
+    align-items: center;
+    margin-top: 1rem;
     margin-right: 1rem;
+    height: 2rem;
 }
 
 .query-suggestions {
@@ -257,17 +375,18 @@ html, body {
 }
 
 .input-time {
-    width: 25%;
+    width: 10rem;
     margin-right: 0.5rem;
 }
 
 .label {
     font-weight: bold;
+    font-size: 0.9rem;
     margin-bottom: 0.5rem;
 }
 
 .input-group-label {
-    width: 10%;
+    width: 7rem;
     margin-right: 1rem;
     margin-bottom: 0rem;
 }
@@ -305,7 +424,6 @@ html, body {
 }
 
 .page-pane {
-    margin-top: 120px;
     display: flex;
     flex-direction: column;
 }
@@ -421,16 +539,12 @@ ul.entity-group__value li::before {
     align-items: flex-start;
 }
 
-.entity-raw-edn__container {
-    display: flex;
-    align-items: flex-start;
-}
-
 .entity-raw-edn {
     margin-right: 4rem;
     @extend .common-entity-box;
     font-family: monospace;
     font-size: 0.9rem;
+    flex: 1;
 }
 
 .entity-history__toggle-buttons {
@@ -465,14 +579,12 @@ ul.entity-group__value li::before {
 .common-entity-box {
     padding: 1rem;
     white-space: pre-wrap;
-    border: 1px solid;
 }
 
 .entity-map {
     flex: 1;
     padding: 1rem;
     margin-right: 4rem;
-    border: 1px solid;
 }
 
 .entity-history {
@@ -486,7 +598,7 @@ ul.entity-group__value li::before {
 
 .entity-vt-tt {
     @extend .common-entity-box;
-    width: 25%;
+    width: 20rem;
     word-wrap: break-word;
 }
 
@@ -561,12 +673,6 @@ ul.entity-group__value li::before {
     margin-left: 0.5em;
 }
 
-.form-pane {
-    width: 100%;
-    padding: 1rem;
-    border: 1px solid;
-}
-
 .result-pane {
     margin-top: 2rem;
     width: 100%;
@@ -583,11 +689,16 @@ ul.entity-group__value li::before {
     overflow: hidden !important;
 }
 
+.expand-collapse {
+    border: 1px solid #bfbcbc;
+    padding: 1rem;
+}
+
 .expand-collapse__group {
     cursor: pointer;
 }
 
-.expand-collapse__group:not(:first-of-type) {
+.expand-collapse__content {
     margin-top: 1rem;
 }
 
@@ -596,45 +707,39 @@ ul.entity-group__value li::before {
     font-size: .8rem;
 }
 
-.form-pane__tab {
+.tab-bar {
+    margin-top: 0.7rem;
+    margin-bottom: 1.4rem;
+    border-bottom: 1px solid #bfbcbc;
+    display: flex;
+}
+
+.tab-bar__tab {
     cursor: pointer;
     font-size: .8rem;
+    padding: 0.4rem;
+    border-top: 1px solid transparent;
+    margin-bottom: -1px;
 }
 
-.form-pane__tab--selected {
+.tab-bar__tab--selected {
     font-weight: bold;
+    border: 1px solid #bfbcbc;
+    border-bottom: 1px solid white;
 }
 
-.form-pane__tab:not(:last-child) {
-    margin-right: 1rem;
+.entity-form__input-line {
+    margin-bottom: 0.5rem;
 }
 
-.form-pane__content {
-    margin-top: 1rem;
+.entity-form__input {
+    width: 30%;
 }
 
 .query-form-options {
     display:flex;
     margin-bottom: 0.75rem;
 }
-
-.vt-tt-icons {
-    font-size: 1.1rem;
-    margin-left:0.25rem;
-    cursor: pointer;
-    margin-right: 0.75rem;
-}
-
-.vt-tt-icon-text {
-    margin-left: 0.2rem;
-    font-family: 'LatoWeb';
-    font-weight: normal;
-}
-
-.vt-tt-icon-text--active {
-    font-weight: bold;
-}
-
 
 .form-pane__history {
     padding: .6rem;
@@ -707,23 +812,7 @@ ul.entity-group__value li::before {
     padding: 1rem;
     background: #333333;
     height: 300px;
-    display: flex;
     justify-content: space-between;
-}
-
-.footer-section {
-    display: flex;
-    flex-direction: column;
-}
-
-.footer__juxt-logo {
-    width: 4rem;
-    margin-bottom: 1rem;
-}
-
-.footer__juxt-info {
-    font-size: 0.6rem;
-    color: white;
 }
 
 @media screen and (max-width: 767px) {

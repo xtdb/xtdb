@@ -251,17 +251,16 @@
     (remove #(get hidden (:column-key %)) columns)))
 
 (defn pagination-current-and-total-pages
-  [processed-rows]
+  [row-count]
   (let [limit @(rf/subscribe [::sub/query-limit])
         offset @(rf/subscribe [::sub/query-offset])
-        num-rows (min (count processed-rows) limit)
-        rows-at-page (+ offset num-rows)]
+        rows-at-page (+ offset row-count)]
     (str (inc offset) "-" rows-at-page)))
 
 (defn pagination-rows-exhausted?
-  [processed-rows]
+  [row-count]
   (let [limit @(rf/subscribe [::sub/query-limit])]
-    (< (count processed-rows) (+ 1 limit))))
+    (< row-count (+ 1 limit))))
 
 (defn render-fn-allow?
   [data column-key operation]
@@ -376,9 +375,12 @@
 
 (defn process-rows
   [data table]
-  (let [rows (:rows data)]
-    (->> rows
-         (resolve-hidden-columns table)
-         (resolve-sorting data table)
-         (resolve-column-filtering data table)
-         (resolve-filter-all data table))))
+  (let [limit @(rf/subscribe [::sub/query-limit])
+        rows (:rows data)
+        processed-rows (->> rows
+                            (resolve-hidden-columns table)
+                            (resolve-sorting data table)
+                            (resolve-column-filtering data table)
+                            (resolve-filter-all data table))]
+    {:processed-rows (take limit processed-rows)
+     :row-count (count processed-rows)}))

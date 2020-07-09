@@ -10,6 +10,12 @@
      :controllers
      [{:start (fn [& params])
        :stop (fn [& params])}]}]
+   ["/_crux/status"
+    {:name :status
+     :link-text "Status"
+     :controllers
+     [{:start #(rf/dispatch [:crux.ui.http/fetch-node-status])
+       :stop (fn [& params])}]}]
    ["/_crux/query"
     {:name :query
      :link-text "Query"
