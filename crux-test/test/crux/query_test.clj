@@ -7,7 +7,8 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.index :as idx])
   (:import java.util.UUID))
 
 (t/use-fixtures :each fix/with-kv-dir fix/with-standalone-topology fix/with-node)
@@ -2933,7 +2934,17 @@
   (t/is (= #{[:ivan] [:petr]}
            (api/q (api/db *api*) '{:find [e]
                                    :where [[e :crux.db/id _]]
-                                   :timeout 100}))))
+                                   :timeout 100})))
+
+  (with-redefs [idx/layered-idx->seq (let [f idx/layered-idx->seq]
+                                       (fn [& args]
+                                         (lazy-seq
+                                          (Thread/sleep 500)
+                                          (apply f args))))]
+    (t/is (thrown? InterruptedException
+                   (api/q (api/db *api*) '{:find [e]
+                                           :where [[e :crux.db/id _]]
+                                           :timeout 100})))))
 
 (t/deftest test-nil-query-attribute-453
   (fix/transact! *api* [{:crux.db/id :id :this :that :these :those}])
