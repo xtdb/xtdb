@@ -9,9 +9,10 @@
             [crux.memory :as mem]
             [crux.node :as n]
             [crux.topology :as topo]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.tx.event :as txe])
   (:import java.io.Closeable
-           [java.util.concurrent ArrayBlockingQueue Executors ExecutorService ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy TimeUnit]
+           [java.util.concurrent LinkedBlockingQueue Executors ExecutorService RejectedExecutionHandler ThreadPoolExecutor ThreadPoolExecutor$DiscardPolicy ThreadFactory TimeUnit]
            java.nio.ByteOrder
            [org.agrona DirectBuffer MutableDirectBuffer]
            java.util.Date))
@@ -34,8 +35,16 @@
   {:crux.tx/tx-id (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN)
    :crux.tx/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
+(defn- ingest-tx [tx-ingester tx tx-events]
+  (let [in-flight-tx (db/begin-tx tx-ingester tx)]
+    (if (db/index-tx-events in-flight-tx tx-events)
+      (db/commit in-flight-tx)
+      (db/abort in-flight-tx))))
+
 (defn- submit-tx [{:keys [!submitted-tx tx-events]}
-                  {:keys [^ExecutorService tx-submit-executor event-log-kv-store tx-ingester]}]
+                  {:keys [^ExecutorService tx-submit-executor
+                          ^ExecutorService tx-ingest-executor
+                          event-log-kv-store tx-ingester]}]
   (when (.isShutdown tx-submit-executor)
     (deliver !submitted-tx ::closed))
 
@@ -48,12 +57,12 @@
 
     (deliver !submitted-tx next-tx)
 
-    (let [in-flight-tx (db/begin-tx tx-ingester next-tx)]
-      (if (db/index-tx-events in-flight-tx tx-events)
-        (db/commit in-flight-tx)
-        (db/abort in-flight-tx)))))
+    (.submit tx-ingest-executor
+             ^Runnable #(ingest-tx tx-ingester next-tx tx-events))))
 
-(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor event-log-kv-store tx-ingester]
+(defrecord StandaloneTxLog [^ExecutorService tx-submit-executor
+                            ^ExecutorService tx-ingest-executor
+                            event-log-kv-store tx-ingester]
   db/TxLog
   (submit-tx [this tx-events]
     (when (.isShutdown tx-submit-executor)
@@ -104,13 +113,46 @@
       (catch Exception e
         (log/warn e "Error shutting down tx-submit-executor")))
 
-    (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
-        (log/warn "waited 5s for tx-submit-executor to exit, no dice."))))
+    (try
+      (.shutdown tx-ingest-executor)
+      (catch Exception e
+        (log/warn e "Error shutting down tx-ingest-executor")))
 
-(defn- ->tx-log [{:keys [::event-log ::n/tx-ingester]} _]
-  (->StandaloneTxLog (Executors/newSingleThreadExecutor (cio/thread-factory "crux-standalone-tx-log"))
-                     (:kv-store event-log)
-                     tx-ingester))
+    (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
+        (log/warn "waited 5s for tx-submit-executor to exit, no dice."))
+
+    (or (.awaitTermination tx-ingest-executor 5 TimeUnit/SECONDS)
+        (log/warn "waited 5s for tx-ingest-executor to exit, no dice."))))
+
+(defn- bounded-solo-thread-pool [^long queue-size thread-factory]
+  (let [queue (LinkedBlockingQueue. queue-size)]
+    (ThreadPoolExecutor. 1 1
+                         0 TimeUnit/MILLISECONDS
+                         queue
+                         thread-factory
+                         (reify RejectedExecutionHandler
+                           (rejectedExecution [_ runnable executor]
+                             (.put queue runnable))))))
+
+(defn- ->tx-log [{:keys [::event-log ::n/tx-ingester ::n/indexer]} _]
+  (let [^ExecutorService
+        ingest-executor (bounded-solo-thread-pool 1024 (cio/thread-factory "crux-standalone-tx-ingest"))
+        tx-log (->StandaloneTxLog (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
+                                  ingest-executor
+                                  (:kv-store event-log)
+                                  tx-ingester)
+        latest-submitted-tx-id (::tx/tx-id (db/latest-submitted-tx tx-log))
+        latest-completed-tx-id (::tx/tx-id (db/latest-completed-tx indexer))]
+    (when (not= latest-submitted-tx-id latest-completed-tx-id)
+      (.submit ingest-executor
+               ^Runnable (fn []
+                           (with-open [txs (db/open-tx-log tx-log latest-completed-tx-id)]
+                             (doseq [tx (iterator-seq txs)
+                                     :while (<= (::tx/tx-id tx) latest-submitted-tx-id)]
+                               (ingest-tx tx-ingester
+                                          (select-keys tx [::tx/tx-id ::tx/tx-time])
+                                          (::txe/tx-events tx)))))))
+    tx-log))
 
 (defn- ->document-store [{{:keys [document-store]} ::event-log} _]
   document-store)
@@ -151,6 +193,6 @@
          {::event-log {:start-fn ->event-log
                        :args event-log-args}
           ::n/tx-log {:start-fn ->tx-log
-                      :deps [::n/kv-store ::n/document-store ::event-log ::n/tx-ingester]}
+                      :deps [::n/kv-store ::n/document-store ::n/indexer ::event-log ::n/tx-ingester]}
           ::n/document-store {:start-fn ->document-store
                               :deps [::event-log]}}))
