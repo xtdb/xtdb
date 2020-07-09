@@ -30,15 +30,15 @@
   {:node {:crux.node/topology ['crux.standalone/topology
                                'crux.kv.rocksdb/kv-store
                                'crux.http-server/module]
-          :crux.kv/db-dir (str (io/file dev-node-dir "db"))
+          :crux.kv/db-dir (io/file dev-node-dir "db")
           :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
-          :crux.standalone/event-log-dir (str (io/file dev-node-dir "event-log"))
+          :crux.standalone/event-log-dir (io/file dev-node-dir "event-log")
           :crux.kv/sync? true}})
 
 (defmethod i/init-key :embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
-  (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (str (io/file kafka-dir "zk-data"))
+  (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
                                  :zookeeper-port (cio/free-port)
-                                 :kafka-log-dir (str (io/file kafka-dir "kafka-log"))
+                                 :kafka-log-dir (io/file kafka-dir "kafka-log")
                                  :kafka-port kafka-port}))
 
 (defmethod i/halt-key! :embedded-kafka [_ ^Closeable embedded-kafka]
@@ -51,8 +51,8 @@
      :node {:crux.node/topology ['crux.kafka/topology
                                  'crux.kv.rocksdb/kv-store]
             :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)
-            :crux.kv/db-dir (str (io/file dev-node-dir "ek-db"))
-            :crux.standalone/event-log-dir (str (io/file dev-node-dir "ek-event-log"))
+            :crux.kv/db-dir (io/file dev-node-dir "ek-db")
+            :crux.standalone/event-log-dir (io/file dev-node-dir "ek-event-log")
             :crux.kv/sync? true}}))
 
 

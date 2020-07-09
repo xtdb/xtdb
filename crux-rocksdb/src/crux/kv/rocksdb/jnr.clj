@@ -10,6 +10,7 @@
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
+           java.nio.file.Path
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -276,6 +277,7 @@
                      _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
                      _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
                      errptr-out (make-array String 1)
+                     db-dir (.toFile ^Path db-dir)
                      db (try
                           (let [db (.rocksdb_open rocksdb
                                                   opts

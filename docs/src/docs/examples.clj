@@ -13,7 +13,7 @@
 ;; tag::start-standalone-node[]
 (defn start-standalone-node ^crux.api.ICruxAPI [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology]
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
+                    :crux.kv/db-dir (io/file storage-dir "db")}))
 
 (comment ; which can be used as
   (def node (start-standalone-node "crux-store")))
@@ -28,7 +28,7 @@
 ;; tag::start-standalone-http-node[]
 (defn start-standalone-http-node [port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))
+                    :crux.kv/db-dir (io/file storage-dir "db")
                     :crux.http-server/port port
                     ;; by default, the HTTP server is read-write - set this flag to make it read-only
                     :crux.http-server/read-only? false}))
@@ -36,8 +36,8 @@
 
 ;; tag::ek-example[]
 (defn start-embedded-kafka [kafka-port storage-dir]
-  (ek/start-embedded-kafka {:crux.kafka.embedded/zookeeper-data-dir (str (io/file storage-dir "zk-data"))
-                            :crux.kafka.embedded/kafka-log-dir (str (io/file storage-dir "kafka-log"))
+  (ek/start-embedded-kafka {:crux.kafka.embedded/zookeeper-data-dir (io/file storage-dir "zk-data")
+                            :crux.kafka.embedded/kafka-log-dir (io/file storage-dir "kafka-log")
                             :crux.kafka.embedded/kafka-port kafka-port}))
 ;; end::ek-example[]
 
@@ -51,7 +51,7 @@
 (defn start-cluster [kafka-port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
                     :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
+                    :crux.kv/db-dir (io/file storage-dir "db")}))
 ;; end::start-cluster-node[]
 
 ;; tag::start-standalone-with-rocks[]
@@ -65,7 +65,7 @@
 (defn start-lmdb-node [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology
                                           crux.kv.lmdb/kv-store]
-                    :crux.kv/db-dir (str (io/file storage-dir "db"))}))
+                    :crux.kv/db-dir (io/file storage-dir "db")}))
 ;; end::start-standalone-with-lmdb[]
 
 ;; tag::start-jdbc-node[]

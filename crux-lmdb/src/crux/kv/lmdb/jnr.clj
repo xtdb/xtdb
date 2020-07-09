@@ -7,6 +7,7 @@
             [crux.kv :as kv]
             [crux.memory :as mem])
   (:import java.io.Closeable
+           java.nio.file.Path
            java.util.concurrent.locks.StampedLock
            org.agrona.ExpandableDirectByteBuffer
            [org.lmdbjava CopyFlags Cursor Dbi DbiFlags DirectBufferProxy Env EnvFlags Env$MapFullException GetOp PutFlags Txn]))
@@ -131,7 +132,8 @@
 
 (def kv {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags ::env-mapsize]
                            :as options}]
-                     (let [env (.open (Env/create DirectBufferProxy/PROXY_DB)
+                     (let [db-dir (.toFile ^Path db-dir)
+                           env (.open (Env/create DirectBufferProxy/PROXY_DB)
                                       (io/file db-dir)
                                       (into-array EnvFlags (cond-> default-env-flags
                                                              (not sync?) (concat no-sync-env-flags))))
