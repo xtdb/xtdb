@@ -1,9 +1,11 @@
 (ns crux.metrics
   (:require [crux.metrics.indexer :as indexer-metrics]
             [crux.metrics.query :as query-metrics]
-            [crux.metrics.dropwizard :as dropwizard])
+            [crux.metrics.dropwizard :as dropwizard]
+            [crux.status :as status])
   (:import [java.time Duration]
-           [java.util.concurrent TimeUnit]))
+           [java.util.concurrent TimeUnit]
+           [com.codahale.metrics MetricRegistry Gauge]))
 
 (def registry-module {:start-fn (fn [deps {::keys [with-indexer-metrics?  with-query-metrics?]}]
                                   (cond-> (dropwizard/new-registry)
@@ -17,6 +19,15 @@
                                                     :default true
                                                     :crux.config/type :crux.config/boolean}}})
 
+(defrecord StatusReporter [^MetricRegistry registry]
+  status/Status
+  (status-map [this]
+    (into {}
+          (map
+           (fn [[^String name ^Gauge gauge]]
+             [(keyword name) (.getValue gauge)])
+           (.getGauges registry)))))
+
 (def all-metrics-loaded {:start-fn (fn [_ _])
                          :deps #{::registry}})
 
@@ -24,4 +35,7 @@
   {::registry registry-module
 
    ;; virtual component that metrics can hook into with `:before` to ensure they're included in reporters
-   ::all-metrics-loaded all-metrics-loaded})
+   ::all-metrics-loaded all-metrics-loaded
+   ::status-reporter {:start-fn (fn [{::keys [registry] :as opts} args]
+                                  (->StatusReporter registry))
+                      :deps #{::registry ::all-metrics-loaded}}})
