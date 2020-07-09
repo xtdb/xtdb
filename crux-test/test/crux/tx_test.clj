@@ -797,10 +797,9 @@
 
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
-        !latch (promise)
-        bus (get-in (meta *api*) [::n/topology ::n/bus])]
-    (bus/listen bus {:crux/event-types #{::tx/indexing-docs ::tx/indexed-docs
-                                         ::tx/indexing-tx ::tx/indexed-tx}}
+        !latch (promise)]
+    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-docs ::tx/indexed-docs
+                                                  ::tx/indexing-tx ::tx/indexed-tx}}
                 (fn [evt]
                   (swap! !events conj evt)
                   (when (= ::tx/indexed-tx (:crux/event-type evt))
