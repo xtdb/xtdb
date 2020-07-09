@@ -476,7 +476,7 @@
   (letfn [(recur-on-result [result links]
             (if (and (c/valid-id? result)
                      (api/entity db result))
-              (let [encoded-eid (URLEncoder/encode (str result) "UTF-8")
+              (let [encoded-eid (URLEncoder/encode (pr-str result) "UTF-8")
                     query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
                                          encoded-eid
                                          (.toInstant ^Date (api/valid-time db))
@@ -666,7 +666,7 @@
   (->> (apply concat results)
        (filter (every-pred c/valid-id? #(api/entity db %)))
        (map (fn [id]
-              (let [encoded-eid (URLEncoder/encode (str id) "UTF-8")
+              (let [encoded-eid (URLEncoder/encode (pr-str id) "UTF-8")
                     query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
                                          encoded-eid
                                          (.toInstant ^Date (api/valid-time db))
