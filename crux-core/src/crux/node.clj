@@ -20,7 +20,7 @@
             [crux.bus :as bus]
             [crux.tx.conform :as txc])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
-           java.io.Closeable
+           (java.io Closeable PrintWriter)
            java.util.function.Consumer
            [java.util.concurrent Executors]
            java.util.concurrent.locks.StampedLock))
@@ -165,6 +165,8 @@
     (cio/with-write-lock lock
       (when (and (not @closed?) close-fn) (close-fn))
       (reset! closed? true))))
+
+(defmethod print-method CruxNode [node ^PrintWriter w] (.write w "#<CruxNode>"))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-consumer document-store object-store tx-log kv-store bus query-engine]} node-opts]
