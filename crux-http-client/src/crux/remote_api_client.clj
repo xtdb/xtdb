@@ -77,7 +77,8 @@
                                                                {"Content-Type" "application/edn"})
                                                              (when ->jwt-token
                                                                {"Authorization" (str "Bearer " (->jwt-token))}))
-                                             :body (some-> body cio/pr-edn-str)}
+                                             :body (some-> body cio/pr-edn-str)
+                                             :accept :edn}
                                             http-opts))]
      (cond
        (= 404 status)
@@ -89,8 +90,7 @@
          (throw (IllegalArgumentException. cause (when data
                                                    (ex-info cause data)))))
 
-       (and (<= 200 status) (< status 400)
-            (= "application/edn" (:content-type headers)))
+       (and (<= 200 status) (< status 400))
        (if (string? body)
          (c/read-edn-string-with-readers body)
          body)
