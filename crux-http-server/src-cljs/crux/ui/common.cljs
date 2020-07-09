@@ -26,12 +26,19 @@
   [url]
   (reitit/match-by-path (navigation/router) url))
 
+(defn iso-format-datetime
+  [dt]
+  (when dt
+    (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt)))))
+
 (defn date-time->datetime
   "d: 2020-04-28
   t: 15:45:45.935"
   [d t]
-  (when (and (not-empty d) (not-empty t))
-    (str (t/date d) "T" (t/time t))))
+  (some->
+   (when (and (not-empty d) (not-empty t))
+     (str (t/date d) "T" (t/time t)))
+   (t/instant)))
 
 (defn datetime->date-time
   "dt: 2020-04-28T15:45:45.935"
@@ -39,11 +46,6 @@
   (when (not-empty dt)
     {:date (str (t/date dt))
      :time (str (t/time dt))}))
-
-(defn iso-format-datetime
-  [dt]
-  (when dt
-    (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt)))))
 
 (defn vectorize
   [ks m]
