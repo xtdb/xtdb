@@ -66,7 +66,7 @@
                               :bytes-indexed 0
                               :doc-count 0})]
     (bus/listen (:bus node)
-                {:crux/event-type :crux.tx/indexed-docs}
+                {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
                   (swap! !index-metrics (fn [index-metrics-map]
                                           (-> index-metrics-map
