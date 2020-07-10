@@ -5,7 +5,7 @@
             [crux.status :as status])
   (:import [java.time Duration]
            [java.util.concurrent TimeUnit]
-           [com.codahale.metrics MetricRegistry Gauge Meter Timer]))
+           [com.codahale.metrics MetricRegistry Gauge Meter Timer Snapshot]))
 
 (def registry-module {:start-fn (fn [deps {::keys [with-indexer-metrics?  with-query-metrics?]}]
                                   (cond-> (dropwizard/new-registry)
@@ -31,15 +31,23 @@
              (.getGauges registry))
             (mapcat
              (fn [[^String name ^Meter meter]]
-               {name {"/1-min-rate" (.getOneMinuteRate meter)
-                      "/5-min-rate" (.getFiveMinuteRate meter)
-                      "/15-min-rate" (.getFifteenMinuteRate meter)}})
+               {name {"1-min-rate" (.getOneMinuteRate meter)
+                      "5-min-rate" (.getFiveMinuteRate meter)
+                      "15-min-rate" (.getFifteenMinuteRate meter)}})
              (.getMeters registry))
             (mapcat
              (fn [[^String name ^Timer timer]]
-               {name {"/1-min-rate" (.getOneMinuteRate timer)
-                      "/5-min-rate" (.getFiveMinuteRate timer)
-                      "/15-min-rate" (.getFifteenMinuteRate timer)}})
+               (let [^Snapshot snapshot (.getSnapshot timer)]
+                 {name {"1-min-rate" (.getOneMinuteRate timer)
+                        "5-min-rate" (.getFiveMinuteRate timer)
+                        "15-min-rate" (.getFifteenMinuteRate timer)
+                        "minimum" (.getMin snapshot)
+                        "maximum" (.getMax snapshot)
+                        "mean" (.getMean snapshot)
+                        "std-dev" (.getStdDev snapshot)
+                        "75th-percentile" (.get75thPercentile snapshot)
+                        "99th-percentile" (.get99thPercentile snapshot)
+                        "99.9th percentile" (.get999thPercentile snapshot)}}))
              (.getTimers registry))))}))
 
 (def all-metrics-loaded {:start-fn (fn [_ _])
