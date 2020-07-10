@@ -11,6 +11,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.instant :as instant]
+            [clojure.walk :as walk]
             [crux.api :as api]
             [crux.codec :as c]
             [crux.io :as cio]
@@ -411,6 +412,12 @@
              :title "/_crux"
              :options options}))})
 
+(defn sort-map [map]
+  (->> map
+       (walk/postwalk
+        (fn [map] (cond->> map
+                  (map? map) (into (sorted-map)))))))
+
 (defn status-map->html-elements [status-map]
   (into
    [:dl.node-info__content]
@@ -427,7 +434,7 @@
                                   [:dd (with-out-str (pp/pprint value))]])
                                value))]
            :else [:dd (with-out-str (pp/pprint value))])]))
-    status-map)))
+    (sort-map status-map))))
 
 (defn- status [^ICruxAPI crux-node options request]
   (let [status-map (api/status crux-node)]

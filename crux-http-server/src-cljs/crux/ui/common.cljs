@@ -8,6 +8,7 @@
    [reitit.frontend.easy :as rfe]
    [tick.alpha.api :as t]
    [tick.format :as tf]
+   [clojure.walk :as walk]
    [tick.locale-en-us]))
 
 (defn route->url
@@ -98,3 +99,9 @@
     :width "24"}
    [:g {:fill "#111111"}
     [:path {:d "M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"}]]])
+
+(defn sort-map [map]
+  (->> map
+       (walk/postwalk
+        (fn [map] (cond->> map
+                  (map? map) (into (sorted-map)))))))

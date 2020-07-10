@@ -415,7 +415,7 @@
                                   [:dd (with-out-str (pprint/pprint value))]])
                                value))]
            :else [:dd (with-out-str (pprint/pprint value))])]))
-    status-map)))
+    (common/sort-map status-map))))
 
 (defn status-page
   []
