@@ -31,23 +31,23 @@
              (.getGauges registry))
             (mapcat
              (fn [[^String name ^Meter meter]]
-               {name {"1-min-rate" (.getOneMinuteRate meter)
-                      "5-min-rate" (.getFiveMinuteRate meter)
-                      "15-min-rate" (.getFifteenMinuteRate meter)}})
+               {name {"rate-1-min" (.getOneMinuteRate meter)
+                      "rate-5-min" (.getFiveMinuteRate meter)
+                      "rate-15-min" (.getFifteenMinuteRate meter)}})
              (.getMeters registry))
             (mapcat
              (fn [[^String name ^Timer timer]]
                (let [^Snapshot snapshot (.getSnapshot timer)]
-                 {name {"1-min-rate" (.getOneMinuteRate timer)
-                        "5-min-rate" (.getFiveMinuteRate timer)
-                        "15-min-rate" (.getFifteenMinuteRate timer)
+                 {name {"rate-1-min" (.getOneMinuteRate timer)
+                        "rate-5-min" (.getFiveMinuteRate timer)
+                        "rate-15-min" (.getFifteenMinuteRate timer)
                         "minimum" (.getMin snapshot)
                         "maximum" (.getMax snapshot)
                         "mean" (.getMean snapshot)
                         "std-dev" (.getStdDev snapshot)
-                        "75th-percentile" (.get75thPercentile snapshot)
-                        "99th-percentile" (.get99thPercentile snapshot)
-                        "99.9th percentile" (.get999thPercentile snapshot)}}))
+                        "percentile-75th" (.get75thPercentile snapshot)
+                        "percentile-99th" (.get99thPercentile snapshot)
+                        "percentile-99.9th" (.get999thPercentile snapshot)}}))
              (.getTimers registry))))}))
 
 (def all-metrics-loaded {:start-fn (fn [_ _])
