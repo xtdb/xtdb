@@ -21,38 +21,30 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 8)
+(def ^:const index-version 11)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
 
-;; index for object store
-(def ^:const content-hash->doc-index-id 0)
+;; if you absolutely have to shuffle index numbers around on a version bump, don't move these four.
+(def ^:const index-version-index-id 6)  ; to allow crux upgrades.
+                                        ; rebuild indexes from kafka on backward incompatible
+(def ^:const content-hash->doc-index-id 0) ; index for object store
+(def ^:const tx-events-index-id 8) ; used in standalone TxLog
+(def ^:const meta-key->value-index-id 4) ; for crux own needs
 
 (def ^:const ave-index-id 1)
 (def ^:const ecav-index-id 2)
 (def ^:const hash-cache-index-id 3)
 
-;; main bitemp index [reverse]
-(def ^:const entity+vt+tt+tx-id->content-hash-index-id 4)
+(def ^:const failed-tx-id-index-id 5)
+
+(def ^:const entity+vt+tt+tx-id->content-hash-index-id 7) ; main bitemp index [reverse]
 
 ;; second bitemp index [also reverse]
 ;; z combines vt and tt
 ;; used when a lookup by the first index fails
-(def ^:const entity+z+tx-id->content-hash-index-id 5)
-
-;; for crux own needs
-(def ^:const meta-key->value-index-id 6)
-
-(def ^:const failed-tx-id-index-id 7)
-
-;; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
-;; if you're going to shuffle index numbers around on a version bump, don't move this one.
-(def ^:const index-version-index-id 8)
-
-;; used in standalone TxLog
-(def ^:const tx-events-index-id 9)
-
+(def ^:const entity+z+tx-id->content-hash-index-id 9)
 
 ;; prefix indexes
 (def ^:const av-index-id 10)

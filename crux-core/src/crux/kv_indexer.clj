@@ -317,12 +317,6 @@
 
 ;; Index Version
 
-;; TODO keep til index version > 8
-(defn- encode-legacy-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer c/index-id-size))]
-    (.putByte b 0 6) ; index-version-index-id pre 1.9.0
-    (mem/limit-buffer b c/index-id-size)))
-
 (defn- encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer c/index-id-size))]
     (.putByte b 0 c/index-version-index-id)
@@ -339,8 +333,7 @@
 
 (defn- current-index-version [kv]
   (with-open [snapshot (kv/new-snapshot kv)]
-    (some->> (or (kv/get-value snapshot (encode-index-version-key-to (.get seek-buffer-tl)))
-                 (kv/get-value snapshot (encode-legacy-index-version-key-to (.get seek-buffer-tl))))
+    (some->> (kv/get-value snapshot (encode-index-version-key-to (.get seek-buffer-tl)))
              (decode-index-version-value-from))))
 
 (defn- check-and-store-index-version [kv]
