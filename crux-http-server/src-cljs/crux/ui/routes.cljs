@@ -14,7 +14,8 @@
     {:name :status
      :link-text "Status"
      :controllers
-     [{:start #(rf/dispatch [:crux.ui.http/fetch-node-status])
+     [{:identity #(gensym)
+       :start #(rf/dispatch [:crux.ui.http/fetch-node-status])
        :stop (fn [& params])}]}]
    ["/_crux/query"
     {:name :query

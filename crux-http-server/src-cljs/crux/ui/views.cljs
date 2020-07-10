@@ -401,11 +401,12 @@
 
 (defn status-map->html-elements [status-map]
   (into
-   [:div.node-info__content]
-   (map
+   [:dl.node-info__content]
+   (mapcat
     (fn [[key value]]
       (when value
-        [:p [:b (str key)] ": " (str value)]))
+        [[:dt [:b (str key)]]
+         [:dd (with-out-str (pprint/pprint value))]]))
     status-map)))
 
 (defn status-page
