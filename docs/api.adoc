@@ -5,7 +5,7 @@
 
 Please consult the Javadocs for the official Crux API.
 
-https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.06-1.9.1/index.html[API Javadocs]
+https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.07-1.9.2/index.html[API Javadocs]
 
 [#restapi]
 == REST

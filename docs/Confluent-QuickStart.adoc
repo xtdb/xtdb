@@ -3,7 +3,7 @@
 
 == Installing the connector
 
-Use `confluent-hub install juxt/kafka-connect-crux:20.06-1.9.1-beta` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+Use `confluent-hub install juxt/kafka-connect-crux:20.07-1.9.2-beta` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
 
 The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
@@ -13,10 +13,10 @@ To use our connector, you must first have a *Crux node* connected to Kafka. To d
 
 [source,clj]
 ----
-juxt/crux-core {:mvn/version "20.06-1.9.1-beta"}
-juxt/crux-kafka {:mvn/version "20.06-1.9.1-beta"}
-juxt/crux-http-server {:mvn/version "20.06-1.9.1-alpha"}
-juxt/crux-rocksdb {:mvn/version "20.06-1.9.1-beta"}
+juxt/crux-core {:mvn/version "20.07-1.9.2-beta"}
+juxt/crux-kafka {:mvn/version "20.07-1.9.2-beta"}
+juxt/crux-http-server {:mvn/version "20.07-1.9.2-alpha"}
+juxt/crux-rocksdb {:mvn/version "20.07-1.9.2-beta"}
 ----
 
 Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:

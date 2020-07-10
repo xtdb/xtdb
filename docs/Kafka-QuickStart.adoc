@@ -5,7 +5,7 @@
 
 Download the connector from Confluent hub, then unzip the downloaded folder:
 ----
-unzip juxt-kafka-connect-crux-20.06-1.9.1-beta.zip
+unzip juxt-kafka-connect-crux-20.07-1.9.2-beta.zip
 ----
 
 Navigate into the base of the Kafka folder, then run the following commands:
@@ -24,10 +24,10 @@ To use our connector, you must first have a *Crux node* connected to Kafka. To d
 
 [source,clj]
 ----
-juxt/crux-core {:mvn/version "20.06-1.9.1-beta"}
-juxt/crux-kafka {:mvn/version "20.06-1.9.1-beta"}
-juxt/crux-http-server {:mvn/version "20.06-1.9.1-alpha"}
-juxt/crux-rocksdb {:mvn/version "20.06-1.9.1-beta"}
+juxt/crux-core {:mvn/version "20.07-1.9.2-beta"}
+juxt/crux-kafka {:mvn/version "20.07-1.9.2-beta"}
+juxt/crux-http-server {:mvn/version "20.07-1.9.2-alpha"}
+juxt/crux-rocksdb {:mvn/version "20.07-1.9.2-beta"}
 ----
 
 Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
