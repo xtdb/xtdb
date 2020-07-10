@@ -18,7 +18,7 @@
    (let [result-meta (some-> (js/document.querySelector
                               (str "meta[title=" title "]"))
                              (.getAttribute "content"))
-         edn-content (reader/read-string result-meta)]
+         edn-content (reader/read-string {:readers {'object pr-str}} result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
        (js/console.warn "Metadata not found")))))
