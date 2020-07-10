@@ -11,6 +11,8 @@
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :test {:dependencies [[juxt/crux-test "crux-git-version" :scope "test"]
                                    [org.clojure/test.check "0.10.0"]
-                                   [juxt/crux-http-server "crux-git-version-alpha"]]}}
+                                   [juxt/crux-http-server "crux-git-version-alpha"]
+                                   [org.apache.httpcomponents/httpclient "4.5.9"]
+                                   [org.ow2.asm/asm "7.1"]]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

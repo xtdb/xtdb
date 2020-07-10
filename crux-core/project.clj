@@ -15,7 +15,10 @@
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :test {:dependencies [[juxt/crux-test "crux-git-version" :scope "test"]
-                                   [org.clojure/test.check "0.10.0"]]}}
+                                   ;; Dependency Resolution
+                                   [com.github.jnr/jnr-ffi "2.1.12"]
+                                   [org.clojure/test.check "0.10.0"]
+                                   [org.ow2.asm/asm "7.1"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
