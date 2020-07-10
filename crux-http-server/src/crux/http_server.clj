@@ -418,7 +418,15 @@
     (fn [[key value]]
       (when value
         [[:dt [:b (str key)]]
-         [:dd (with-out-str (pp/pprint value))]]))
+         (cond
+           (map? value) [:dd (into
+                              [:dl]
+                              (mapcat
+                               (fn [[key value]]
+                                 [[:dt [:b (str key)]]
+                                  [:dd (with-out-str (pp/pprint value))]])
+                               value))]
+           :else [:dd (with-out-str (pp/pprint value))])]))
     status-map)))
 
 (defn- status [^ICruxAPI crux-node options request]

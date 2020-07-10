@@ -406,7 +406,15 @@
     (fn [[key value]]
       (when value
         [[:dt [:b (str key)]]
-         [:dd (with-out-str (pprint/pprint value))]]))
+         (cond
+           (map? value) [:dd (into
+                              [:dl]
+                              (mapcat
+                               (fn [[key value]]
+                                 [[:dt [:b (str key)]]
+                                  [:dd (with-out-str (pprint/pprint value))]])
+                               value))]
+           :else [:dd (with-out-str (pprint/pprint value))])]))
     status-map)))
 
 (defn status-page

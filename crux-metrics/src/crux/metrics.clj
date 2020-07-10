@@ -31,15 +31,15 @@
              (.getGauges registry))
             (mapcat
              (fn [[^String name ^Meter meter]]
-               {(str name "/1-min-rate") (.getOneMinuteRate meter)
-                (str name "/5-min-rate") (.getFiveMinuteRate meter)
-                (str name "/15-min-rate") (.getFifteenMinuteRate meter)})
+               {name {"/1-min-rate" (.getOneMinuteRate meter)
+                      "/5-min-rate" (.getFiveMinuteRate meter)
+                      "/15-min-rate" (.getFifteenMinuteRate meter)}})
              (.getMeters registry))
             (mapcat
              (fn [[^String name ^Timer timer]]
-               {(str name "/1-min-rate") (.getOneMinuteRate timer)
-                (str name "/5-min-rate") (.getFiveMinuteRate timer)
-                (str name "/15-min-rate") (.getFifteenMinuteRate timer)})
+               {name {"/1-min-rate" (.getOneMinuteRate timer)
+                      "/5-min-rate" (.getFiveMinuteRate timer)
+                      "/15-min-rate" (.getFifteenMinuteRate timer)}})
              (.getTimers registry))))}))
 
 (def all-metrics-loaded {:start-fn (fn [_ _])
