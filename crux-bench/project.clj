@@ -56,7 +56,8 @@
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                  [cheshire "5.10.0"]
-                 [org.codehaus.janino/commons-compiler "3.0.11"]]
+                 [org.codehaus.janino/commons-compiler "3.0.11"]
+                 [org.reactivestreams/reactive-streams "1.0.3"]]
 
   :middleware [leiningen.project-version/middleware]
 

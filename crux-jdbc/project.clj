@@ -4,7 +4,7 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/tools.logging "0.5.0"]
+                 [org.clojure/tools.logging "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [seancorfield/next.jdbc "1.0.9"]
                  [org.clojure/java.data "0.1.4"]

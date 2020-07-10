@@ -14,7 +14,12 @@
                  [ring-cors "0.1.13"]
                  [metosin/muuntaja "0.6.6"]
                  [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [net.minidev/json-smart]]
-                 [net.minidev/json-smart "2.3"]]
+                 [net.minidev/json-smart "2.3"]
+                 ;; Dependency resolution
+                 [joda-time "2.9.9"]
+                 [clj-time "0.14.3"]
+                 [borkdude/edamame "0.0.7"]
+                 [expound "0.8.4"]]
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev
              {:dependencies [[org.clojure/clojurescript "1.10.339"]
