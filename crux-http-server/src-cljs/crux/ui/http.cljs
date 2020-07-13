@@ -70,15 +70,16 @@
 (rf/reg-event-fx
  ::fetch-entity
  (fn [{:keys [db]} _]
-   (let [query-params (assoc (get-in db [:current-route :query-params]) :link-entities? true)]
-     {:scroll-top nil
-      :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
-                   [:crux.ui.events/set-entity-result-pane-loading true]]
-      :http-xhrio {:method :get
-                   :uri (common/route->url :entity nil query-params)
-                   :response-format (ajax-edn/edn-response-format)
-                   :on-success [::success-fetch-entity]
-                   :on-failure [::fail-fetch-entity]}})))
+   (let [query-params (assoc (get-in db [:current-route :query-params]) :linked-entities true)]
+     (when (seq (dissoc query-params :linked-entities))
+       {:scroll-top nil
+        :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
+                     [:crux.ui.events/set-entity-result-pane-loading true]]
+        :http-xhrio {:method :get
+                     :uri (common/route->url :entity nil (assoc query-params :linked-entities true))
+                     :response-format (ajax-edn/edn-response-format)
+                     :on-success [::success-fetch-entity]
+                     :on-failure [::fail-fetch-entity]}}))))
 
 (rf/reg-event-fx
  ::success-fetch-entity
