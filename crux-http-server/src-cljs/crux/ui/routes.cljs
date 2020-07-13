@@ -6,28 +6,21 @@
   [""
    ["/_crux/index"
     {:name :homepage
-     :link-text "Home"
-     :controllers
-     [{:start (fn [& params])
-       :stop (fn [& params])}]}]
+     :link-text "Home"}]
    ["/_crux/status"
     {:name :status
      :link-text "Status"
      :controllers
-     [{:identity #(gensym)
-       :start #(rf/dispatch [:crux.ui.http/fetch-node-status])
-       :stop (fn [& params])}]}]
+     [{:start #(rf/dispatch [:crux.ui.http/fetch-node-status])}]}]
    ["/_crux/query"
     {:name :query
      :link-text "Query"
      :controllers
      [{:identity #(gensym)
-       :start #(rf/dispatch [:crux.ui.http/fetch-query-table])
-       :stop (fn [& params])}]}]
+       :start #(rf/dispatch [:crux.ui.http/fetch-query-table])}]}]
    ["/_crux/entity"
     {:name :entity
      :link-text "Entity"
      :controllers
      [{:identity #(gensym)
-       :start #(rf/dispatch [:crux.ui.http/fetch-entity])
-       :stop (fn [& params])}]}]])
+       :start #(rf/dispatch [:crux.ui.http/fetch-entity])}]}]])
