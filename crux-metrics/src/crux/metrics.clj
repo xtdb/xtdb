@@ -29,13 +29,13 @@
              (fn [[^String name ^Gauge gauge]]
                {name (.getValue gauge)})
              (.getGauges registry))
-            (mapcat
+            (map
              (fn [[^String name ^Meter meter]]
                {name {"rate-1-min" (.getOneMinuteRate meter)
                       "rate-5-min" (.getFiveMinuteRate meter)
                       "rate-15-min" (.getFifteenMinuteRate meter)}})
              (.getMeters registry))
-            (mapcat
+            (map
              (fn [[^String name ^Timer timer]]
                (let [^Snapshot snapshot (.getSnapshot timer)]
                  {name {"rate-1-min" (.getOneMinuteRate timer)
