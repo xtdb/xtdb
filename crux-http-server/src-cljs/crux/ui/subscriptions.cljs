@@ -259,4 +259,4 @@
 (rf/reg-sub
  ::node-options
  (fn [db _]
-   (doto (:options db) prn)))
+   (:options db)))

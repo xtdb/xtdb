@@ -61,7 +61,7 @@
       tx tx)))
 
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
-                     options close-fn status-fn closed? ^StampedLock lock]
+                     options close-fn !topology closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
   (db [this valid-time] (.db this valid-time nil))
@@ -81,10 +81,8 @@
   (status [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      ;; we don't have status-fn set when other components use node as a dependency within the topology
-      (if status-fn
-        (status-fn)
-        (into {} (mapcat status/status-map) [indexer kv-store document-store tx-log]))))
+      (merge crux-version
+             (into {} (mapcat status/status-map) (vals (dissoc @!topology ::node))))))
 
   (attributeStats [this]
     (cio/with-read-lock lock
@@ -202,7 +200,8 @@
                                :bus bus
                                :query-engine query-engine
                                :closed? (atom false)
-                               :lock (StampedLock.)}))
+                               :lock (StampedLock.)
+                               :!topology (atom nil)}))
    :deps #{::indexer ::tx-ingester ::kv-store ::bus ::document-store ::tx-log ::query-engine}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
@@ -217,10 +216,8 @@
    ::node 'crux.node/node-component})
 
 (defn start ^crux.api.ICruxAPI [options]
-  (let [[{::keys [node] :as components} close-fn] (topo/start-topology options)]
+  (let [[{:keys [::node] :as topology} close-fn] (topo/start-topology options)]
+    (reset! (get-in topology [::node :!topology]) topology)
     (-> node
-        (assoc :status-fn (fn []
-                            (merge crux-version
-                                   (into {} (mapcat status/status-map) (vals (dissoc components ::node)))))
-               :close-fn close-fn)
-        (vary-meta assoc ::topology components))))
+        (assoc :close-fn close-fn)
+        (vary-meta assoc ::topology topology))))
