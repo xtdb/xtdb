@@ -12,10 +12,9 @@
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
-                 [org.reactivestreams/reactive-streams "1.0.3"]
-                 [commons-codec "1.12"]
+                 [org.reactivestreams/reactive-streams "1.0.3"]]
 
-                 [juxt/crux-test "crux-git-version" :scope "test"]]
+  :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]
 

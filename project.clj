@@ -32,11 +32,11 @@
    [juxt/crux-kafka-embedded "crux-git-version-beta"]
    [juxt/crux-jdbc "crux-git-version-beta"]
    [juxt/crux-metrics "crux-git-version-alpha"]
-   [juxt/crux-http-server "crux-git-version-alpha" :exclusions [commons-codec]]
+   [juxt/crux-http-server "crux-git-version-alpha"]
    [juxt/crux-rdf "crux-git-version-alpha"]
    [juxt/crux-sql "crux-git-version-alpha"]
    [juxt/crux-test "crux-git-version"]
-   [juxt/crux-bench "crux-git-version" :exclusions [org.apache.commons/commons-lang3]]
+   [juxt/crux-bench "crux-git-version"]
    [juxt/crux-cli "crux-git-version-beta"]
 
    [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
@@ -49,13 +49,12 @@
    [com.fasterxml.jackson.core/jackson-core "2.10.2"]
    [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
    [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
-   [io.netty/netty-transport "4.1.45.Final"]
-   [io.netty/netty-codec-http "4.1.45.Final"]
-   [org.reactivestreams/reactive-streams "1.0.3"]
-   [cheshire "5.10.0"]
-
-   ;; SQL development:
-   [io.airlift.tpch/tpch "0.10"]
+   [io.netty/netty-transport "4.1.51.Final"]
+   [io.netty/netty-transport "4.1.51.Final"]
+   [io.netty/netty-codec-http "4.1.51.Final"]
+   [com.google.code.findbugs/jsr305 "3.0.2"]
+   [org.apache.commons/commons-lang3 "3.9"]
+   [org.javassist/javassist "3.22.0-GA"]
 
    ;; crux metrics dependencies
    ;; tag::MetricsJMXDeps[]
