@@ -642,8 +642,9 @@
                                  true)}))]})
        (apply merge-with into {})))
 
-(defn- bound-result-for-var [^VarBinding var-binding ^List join-keys]
-  (.get join-keys (.result-index var-binding)))
+(defn- bound-result-for-var [index-store ^VarBinding var-binding ^List join-keys]
+  (->> (.get join-keys (.result-index var-binding))
+       (db/decode-value index-store)))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
@@ -692,8 +693,7 @@
   (fn pred-constraint [index-store db idx-id->idx join-keys]
     (let [[pred-fn & args] (for [arg-binding arg-bindings]
                              (if (instance? VarBinding arg-binding)
-                               (->> (bound-result-for-var arg-binding join-keys)
-                                    (db/decode-value index-store))
+                               (bound-result-for-var index-store arg-binding join-keys)
                                arg-binding))]
       (let [pred-result (apply pred-fn args)]
         (if return
@@ -761,8 +761,7 @@
          (fn or-constraint [index-store db idx-id->idx join-keys]
            (let [args (when (seq bound-vars)
                         [(->> (for [var-binding bound-var-bindings]
-                                (->> (bound-result-for-var var-binding join-keys)
-                                     (db/decode-value index-store)))
+                                (bound-result-for-var index-store var-binding join-keys))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -795,8 +794,7 @@
                                               (if has-free-vars?
                                                 (vec (for [join-keys idx-seq]
                                                        (vec (for [var-binding free-vars-in-join-order-bindings]
-                                                              (->> (bound-result-for-var var-binding join-keys)
-                                                                   (db/decode-value index-store))))))
+                                                              (bound-result-for-var index-store var-binding join-keys)))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -825,8 +823,7 @@
              (let [db (assoc db :index-store index-store)
                    args (when (seq not-vars)
                           [(->> (for [var-binding not-var-bindings]
-                                  (->> (bound-result-for-var var-binding join-keys)
-                                       (db/decode-value index-store)))
+                                  (bound-result-for-var index-store var-binding join-keys))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
@@ -1202,13 +1199,11 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- build-full-results [{:keys [entity-resolver-fn index-store document-store] :as db} bound-result-tuple]
-  (vec (for [value bound-result-tuple]
-         (if-let [content-hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-           (-> (db/fetch-docs document-store #{content-hash})
-               (get content-hash))
-           value))))
-
+(defn- build-full-results [value {:keys [entity-resolver-fn index-store document-store] :as db}]
+  (if-let [content-hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
+    (-> (db/fetch-docs document-store #{content-hash})
+        (get content-hash))
+    value))
 
 (defn- project-child-fns [{:keys [children] :as project-spec}]
   (let [{special :special, props :prop, joins :join} (->> (:children project-spec)
@@ -1216,62 +1211,63 @@
         {forward-joins false, reverse-joins true}
         (group-by (comp #(string/starts-with? % "_") name :dispatch-key) joins)]
 
-    (into [(let [join-child-fns (into {} (map (juxt :dispatch-key project-child-fns)) forward-joins)]
-             (fn [bound-result {:keys [document-store index-store entity-resolver-fn] :as db}]
-               (let [prop-dispatch-keys (into #{} (map :dispatch-key) props)
-                     special-dispatch-keys (into #{} (map :dispatch-key) special)]
-                 (when-not (and (empty? prop-dispatch-keys)
-                                (empty? special-dispatch-keys)
-                                (empty? join-child-fns))
-                   (let [content-hash (entity-resolver-fn (c/->id-buffer (db/decode-value index-store bound-result)))
-                         doc (-> (db/fetch-docs document-store #{content-hash})
-                                 (get content-hash))]
-                     (into (if (contains? special-dispatch-keys '*)
-                             doc
-                             (select-keys doc prop-dispatch-keys))
-                           (map (fn [[dispatch-key child-fns]]
-                                  (let [v (get doc dispatch-key)]
-                                    (letfn [(project-value [v]
-                                              (into {}
-                                                    (mapcat (fn [f]
-                                                              (f (db/encode-value index-store v) db)))
-                                                    child-fns))]
-                                      (MapEntry/create dispatch-key (if (or (vector? v) (set? v))
-                                                                      (into (empty v) (map project-value) v)
-                                                                      (project-value v)))))))
-                           join-child-fns))))))]
+    (into [(let [join-child-fns (into {} (map (juxt :dispatch-key project-child-fns)) forward-joins)
+                 prop-dispatch-keys (into #{} (map :dispatch-key) props)
+                 special-dispatch-keys (into #{} (map :dispatch-key) special)]
+             (fn [value {:keys [document-store index-store entity-resolver-fn] :as db}]
+               (when-not (and (empty? prop-dispatch-keys)
+                              (empty? special-dispatch-keys)
+                              (empty? join-child-fns))
+                 (let [content-hash (entity-resolver-fn (c/->id-buffer value))
+                       doc (-> (db/fetch-docs document-store #{content-hash})
+                               (get content-hash))]
+                   (into (if (contains? special-dispatch-keys '*)
+                           doc
+                           (select-keys doc prop-dispatch-keys))
+                         (map (fn [[dispatch-key child-fns]]
+                                (let [v (get doc dispatch-key)]
+                                  (letfn [(project-value [v]
+                                            (into {}
+                                                  (mapcat (fn [f]
+                                                            (f v db)))
+                                                  child-fns))]
+                                    (MapEntry/create dispatch-key (if (or (vector? v) (set? v))
+                                                                    (into (empty v) (map project-value) v)
+                                                                    (project-value v)))))))
+                         join-child-fns)))))]
 
           (for [{:keys [dispatch-key] :as join} reverse-joins]
             (let [child-fns (project-child-fns join)
                   forward-key (keyword (namespace dispatch-key)
                                        (subs (name dispatch-key) 1))
                   one? (= :one (get-in join [:params :crux/cardinality]))]
-              (fn [bound-result {:keys [document-store index-store entity-resolver-fn] :as db}]
+              (fn [value {:keys [document-store index-store entity-resolver-fn] :as db}]
                 [(MapEntry/create dispatch-key
-                                  (cond->> (for [v (cond->> (db/ave index-store (c/->id-buffer forward-key) bound-result nil entity-resolver-fn)
+                                  (cond->> (for [v (cond->> (db/ave index-store (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
                                                      one? (take 1)
                                                      :always vec)]
                                              (into {}
                                                    (mapcat (fn [f]
-                                                             (f v db)))
+                                                             (f (db/decode-value index-store v) db)))
                                                    child-fns))
                                     one? first))]))))))
 
 (defn- compile-project-spec [project-spec]
   (let [root-fns (project-child-fns (eql/query->ast project-spec))]
-    (fn [bound-result db]
+    (fn [value db]
       (into {}
             (mapcat (fn [f]
-                      (f bound-result db)))
+                      (f value db)))
             root-fns))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings]}]
+(defn- compile-find [conformed-find {:keys [var->bindings full-results?]}]
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
                   :var-binding (var->bindings arg)
-                  :->result (fn [bound-result {:keys [index-store]}]
-                              (db/decode-value index-store bound-result))}
+                  :->result (fn [value db]
+                              (cond-> value
+                                full-results? (build-full-results db)))}
       :project {:logic-var (:logic-var arg)
                 :var-binding (var->bindings (:logic-var arg))
                 :->result (compile-project-spec (s/unform ::eql/query (:project-spec arg)))})))
@@ -1290,9 +1286,8 @@
           entity-resolver-fn (or (:entity-resolver-fn db)
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
-          {:keys [n-ary-join var->bindings]
-           :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
-          find (compile-find find built-query)
+          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
+          find (compile-find find (assoc built-query :full-results? full-results?))
           find-logic-vars (mapv :logic-var find)]
       (doseq [{:keys [logic-var var-binding]} find
               :when (nil? var-binding)]
@@ -1307,16 +1302,19 @@
         (throw (IllegalArgumentException.
                 (str "Order by requires a var from :find. unreturned var: " var))))
 
-      (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)
-                     :let [bound-result-tuple (for [{:keys [var-binding ->result]} find]
-                                                (->result (bound-result-for-var var-binding join-keys) db))]]
-                 (if full-results?
-                   (build-full-results db bound-result-tuple)
-                   (vec bound-result-tuple)))
+      (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                 (into []
+                       (map (fn [{:keys [var-binding]}]
+                              (bound-result-for-var index-store var-binding join-keys)))
+                       find))
 
         order-by (cio/external-sort (order-by-comparator find-logic-vars order-by))
         offset (drop offset)
-        limit (take limit)))))
+        limit (take limit)
+        :always (map (fn [row]
+                       (into [] (map (fn [value {:keys [->result]}]
+                                       (->result value db))
+                                     row find))))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
