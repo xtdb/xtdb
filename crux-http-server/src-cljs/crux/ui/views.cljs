@@ -437,12 +437,23 @@
    [:div.root-background]
    [:div.root-contents
     [:h1.root-title "Welcome to the Crux Console!"]
-    [:h2.root-video__title "Take a short video tour:"]
-    [:iframe.root-video {:src "https://www.youtube.com/embed/StXLmWvb5Xs"
-                         :allow "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"}]
-    [:a.root-get-started
-     {:href (common/route->url :query)}
-     "Start exploring your Crux node"]]])
+    [:h2.root-subtitle "Small Description Here"]
+    [:div.root-tiles
+     [:a.root-tile
+      {:href (common/route->url :query)}
+      [:i.fas.fa-search]
+      [:br]
+      "Query"]
+     [:a.root-tile
+      {:href (common/route->url :status)}
+      [:i.fas.fa-wrench]
+      [:br]
+      "Status"]
+     [:a.root-tile
+      {:href "https://opencrux.com/docs" :target "_blank"}
+      [:i.fas.fa-book]
+      [:br]
+      "Docs"]]]])
 
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]

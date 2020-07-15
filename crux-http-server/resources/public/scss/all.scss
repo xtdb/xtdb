@@ -107,11 +107,6 @@ html, body {
     letter-spacing: 0.05em;
 }
 
-.root-video {
-    width: 560px;
-    height: 315px;
-}
-
 .root-background {
     background: url('../gplay.png');
     height: 100%;
@@ -122,14 +117,28 @@ html, body {
     opacity: 0.8;
 }
 
-.root-get-started {
+.root-tiles {
+    display: flex;
+    justify-content: space-between;
+    width:60%;
+    height:10rem;
+}
+
+.root-tile {
     text-decoration: none;
-    background: #4CAF50;
-    color: white;
-    padding: 0.8rem;
-    margin-top: 1rem;
+    background: white;
+    border: 2px solid #a2a0ac;
     letter-spacing: 0.05em;
     font-weight: bold;
+    font-size: 2rem;
+    color: grey;
+    width: 30%;
+    padding-top: 2rem;
+}
+
+.root-tile:hover {
+    border: 2px solid #6151b3;
+    color: #6151b3;
 }
 
 .console {
