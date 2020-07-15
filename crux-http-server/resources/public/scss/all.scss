@@ -133,7 +133,7 @@ html, body {
     font-size: 2rem;
     color: grey;
     width: 30%;
-    padding-top: 2rem;
+    padding-top: 2.5rem;
 }
 
 .root-tile:hover {
@@ -197,6 +197,7 @@ html, body {
     display:flex;
     align-items: start;
     flex-direction: column;
+    margin-top: 0.5rem;
 }
 
 .button-hint {
@@ -384,7 +385,7 @@ html, body {
 }
 
 .input-time {
-    width: 10rem;
+    width: 14rem;
     margin-right: 0.5rem;
 }
 
