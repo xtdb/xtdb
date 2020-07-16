@@ -9,7 +9,10 @@
                  [ch.qos.logback/logback-classic "1.2.3" :exclusions [org.slf4j/slf4j-api]]
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-http-server "crux-git-version-alpha"]
-                 [juxt/crux-test "crux-git-version" :scope "test" :exclusions [commons-codec]]]
+                 [juxt/crux-test "crux-git-version" :scope "test"]
+
+                 ;; Dependency resolution
+                 [org.ow2.asm/asm "7.1" :scope "test"]]
 
   :middleware [leiningen.project-version/middleware]
   :aot [crux.main]

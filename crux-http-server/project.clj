@@ -14,11 +14,14 @@
                  [ring-cors "0.1.13"]
                  [metosin/muuntaja "0.6.6"]
                  [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [net.minidev/json-smart]]
-                 [net.minidev/json-smart "2.3"]]
+                 [net.minidev/json-smart "2.3"]
+
+                 ;; Dependency resolution
+                 [borkdude/edamame "0.0.7"]]
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev
              {:dependencies [[org.clojure/clojurescript "1.10.339"]
-                             ;[ch.qos.logback/logback-classic "1.2.3"]
+                             [ch.qos.logback/logback-classic "1.2.3"]
                              [cljsjs/codemirror "5.44.0-1"]
                              [com.bhauman/figwheel-main "0.2.4"]
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
@@ -26,7 +29,12 @@
                              [re-frame "0.12.0"]
                              [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
-                             [tick "0.4.23-alpha"]]}
+                             [tick "0.4.23-alpha"]
+
+                             ;; dependency resolution
+                             [clj-time "0.14.3"]
+                             [joda-time "2.9.9"]
+                             [expound "0.8.4"]]}
              :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
                                      :target "crux-http-server/cljs-target/public/css/"}}}
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]

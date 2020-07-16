@@ -4,10 +4,10 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/tools.logging "0.5.0"]
+                 [org.clojure/tools.logging "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [org.apache.kafka/kafka-clients "2.3.0"]
-                 [cheshire "5.9.0"]
+                 [cheshire "5.10.0"]
                  [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]

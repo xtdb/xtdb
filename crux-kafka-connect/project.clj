@@ -4,13 +4,11 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/tools.logging "0.5.0"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-http-client "crux-git-version-beta"]
+                 [org.clojure/tools.logging "1.0.0"]
                  [cheshire "5.9.0"]
-                 [com.taoensso/nippy "2.14.0" :exclusions [org.tukaani/xz]]
-                 ^:source-dep [org.tukaani/xz "1.6"]
-                 [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
+                 [com.taoensso/nippy "2.14.0"]
+                 [com.cognitect/transit-clj "1.0.324"]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
   :middleware [leiningen.project-version/middleware]
   :aliases {"package" ["do" ["inline-deps"] ["with-profile" "+plugin.mranderson/config" "uberjar"] ["archive"]]}
