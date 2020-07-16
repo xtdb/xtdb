@@ -1294,7 +1294,7 @@
     (fn [value db]
       (project-child value root-fns db))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings full-results?]}]
+(defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [projection-cache]}]
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
@@ -1307,7 +1307,10 @@
                                   value))}
       :project {:logic-var (:logic-var arg)
                 :var-binding (var->bindings (:logic-var arg))
-                :->result (compile-project-spec (s/unform ::eql/query (:project-spec arg)))})))
+                :->result (lru/compute-if-absent projection-cache (:project-spec arg)
+                                                 identity
+                                                 (fn [spec]
+                                                   (compile-project-spec (s/unform ::eql/query spec))))})))
 
 (defn query [{:keys [valid-time transact-time document-store indexer options index-store] :as db} ^ConformedQuery conformed-q]
   (let [q (.q-normalized conformed-q)
@@ -1324,7 +1327,7 @@
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
           {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
-          compiled-find (compile-find find (assoc built-query :full-results? full-results?))
+          compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
           find-logic-vars (mapv :logic-var compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
@@ -1375,11 +1378,10 @@
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc))))
-
 (defrecord QueryDatasource [document-store indexer bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             ^ScheduledExecutorService interrupt-executor
-                            conform-cache query-cache
+                            conform-cache query-cache projection-cache
                             index-store
                             entity-resolver-fn
                             options]
@@ -1503,7 +1505,7 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         indexer bus
-                        query-cache conform-cache
+                        query-cache conform-cache projection-cache
                         options]
   api/DBProvider
   (db [this] (api/db this nil nil))
@@ -1544,12 +1546,14 @@
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
 (def query-engine
-  {:start-fn (fn [{:crux.node/keys [indexer bus document-store]} {::keys [query-cache-size conform-cache-size] :as args}]
+  {:start-fn (fn [{:crux.node/keys [indexer bus document-store]}
+                  {::keys [query-cache-size conform-cache-size projection-cache-size] :as args}]
                (let [interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))]
                  (map->QueryEngine
                   {:indexer indexer
                    :conform-cache (lru/new-cache conform-cache-size)
                    :query-cache (lru/new-cache query-cache-size)
+                   :projection-cache (lru/new-cache projection-cache-size)
                    :document-store document-store
                    :bus bus
                    :interrupt-executor interrupt-executor
@@ -1561,6 +1565,9 @@
           ::conform-cache-size {:doc "Conformed Query Cache Size"
                                 :default 10240
                                 :crux.config/type :crux.config/nat-int}
+          ::projection-cache-size {:doc "Projection Cache Size"
+                                   :default 10240
+                                   :crux.config/type :crux.config/nat-int}
           ::entity-cache? {:doc "Enable Query Entity Cache"
                            :default true
                            :crux.config/type :crux.config/boolean}
