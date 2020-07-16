@@ -54,7 +54,12 @@
    [io.netty/netty-codec-http "4.1.51.Final"]
    [com.google.code.findbugs/jsr305 "3.0.2"]
    [org.apache.commons/commons-lang3 "3.9"]
+   [org.apache.commons/commons-text "1.7"]
    [org.javassist/javassist "3.22.0-GA"]
+   [commons-codec "1.12"]
+   [joda-time "2.9.9"]
+   [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
+   [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
 
    ;; crux metrics dependencies
    ;; tag::MetricsJMXDeps[]
