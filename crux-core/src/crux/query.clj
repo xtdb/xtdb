@@ -148,6 +148,7 @@
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
 (s/def ::timeout nat-int?)
+(s/def ::batch-size pos-int?)
 
 (defn normalize-query [q]
   (cond
@@ -167,7 +168,7 @@
 
 
 (s/def ::query (s/and (s/conformer #'normalize-query)
-                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by ::timeout ::full-results?])))
+                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by ::timeout ::full-results? ::batch-size])))
 
 
 (defrecord ConformedQuery [q-normalized q-conformed])
@@ -1199,11 +1200,46 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- build-full-results [value {:keys [entity-resolver-fn index-store document-store] :as db}]
-  (if-let [content-hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-    (-> (db/fetch-docs document-store #{content-hash})
-        (get content-hash))
-    value))
+(defn- replace-docs [v docs]
+  (if (not-empty (::hashes (meta v)))
+    (v docs)
+    v))
+
+(defn- lookup-docs [v {:keys [document-store]}]
+  (when-let [hashes (not-empty (::hashes (meta v)))]
+    (db/fetch-docs document-store hashes)))
+
+(defmacro ^:private let-docs [[binding hashes] & body]
+  `(-> (fn ~'let-docs [~binding]
+         ~@body)
+       (with-meta {::hashes ~hashes})))
+
+(defn- after-doc-lookup [f lookup]
+  (if-let [hashes (::hashes (meta lookup))]
+    (let-docs [docs hashes]
+      (let [res (replace-docs lookup docs)]
+        (if (::hashes (meta res))
+          (after-doc-lookup f res)
+          (f res))))
+    (f lookup)))
+
+(defn- raise-doc-lookup-out-of-coll
+  "turns a vector/set where each of the values could be doc lookups into a single doc lookup returning a vector/set"
+  [coll]
+  (if-let [hashes (not-empty (into #{} (mapcat (comp ::hashes meta)) coll))]
+    (let-docs [docs hashes]
+      (->> coll
+           (into (empty coll) (map #(replace-docs % docs)))
+           raise-doc-lookup-out-of-coll))
+    coll))
+
+(defn- project-child [v child-fns db]
+  (->> (mapv (fn [f]
+               (f v db))
+             child-fns)
+       (raise-doc-lookup-out-of-coll)
+       (after-doc-lookup (fn [res]
+                           (into {} (mapcat identity) res)))))
 
 (defn- project-child-fns [{:keys [children] :as project-spec}]
   (let [{special :special, props :prop, joins :join} (->> (:children project-spec)
@@ -1218,23 +1254,24 @@
                (when-not (and (empty? prop-dispatch-keys)
                               (empty? special-dispatch-keys)
                               (empty? join-child-fns))
-                 (let [content-hash (entity-resolver-fn (c/->id-buffer value))
-                       doc (-> (db/fetch-docs document-store #{content-hash})
-                               (get content-hash))]
-                   (into (if (contains? special-dispatch-keys '*)
-                           doc
-                           (select-keys doc prop-dispatch-keys))
-                         (map (fn [[dispatch-key child-fns]]
-                                (let [v (get doc dispatch-key)]
-                                  (letfn [(project-value [v]
-                                            (into {}
-                                                  (mapcat (fn [f]
-                                                            (f v db)))
-                                                  child-fns))]
-                                    (MapEntry/create dispatch-key (if (or (vector? v) (set? v))
-                                                                    (into (empty v) (map project-value) v)
-                                                                    (project-value v)))))))
-                         join-child-fns)))))]
+                 (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
+                   (let-docs [docs #{content-hash}]
+                     (let [doc (get docs content-hash)]
+                       (->> (mapv (fn [[dispatch-key child-fns]]
+                                    (let [v (get doc dispatch-key)]
+                                      (->> (if (or (vector? v) (set? v))
+                                             (->> (into [] (map #(project-child % child-fns db)) v)
+                                                  (raise-doc-lookup-out-of-coll))
+                                             (project-child v child-fns db))
+                                           (after-doc-lookup (fn [res]
+                                                               (MapEntry/create dispatch-key res))))))
+                                  join-child-fns)
+                            (raise-doc-lookup-out-of-coll)
+                            (after-doc-lookup (fn [res]
+                                                (into (if (contains? special-dispatch-keys '*)
+                                                        doc
+                                                        (select-keys doc prop-dispatch-keys))
+                                                      res))))))))))]
 
           (for [{:keys [dispatch-key] :as join} reverse-joins]
             (let [child-fns (project-child-fns join)
@@ -1242,32 +1279,32 @@
                                        (subs (name dispatch-key) 1))
                   one? (= :one (get-in join [:params :crux/cardinality]))]
               (fn [value {:keys [document-store index-store entity-resolver-fn] :as db}]
-                [(MapEntry/create dispatch-key
-                                  (cond->> (for [v (cond->> (db/ave index-store (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
-                                                     one? (take 1)
-                                                     :always vec)]
-                                             (into {}
-                                                   (mapcat (fn [f]
-                                                             (f (db/decode-value index-store v) db)))
-                                                   child-fns))
-                                    one? first))]))))))
+                (->> (vec (for [v (cond->> (db/ave index-store (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
+                                    one? (take 1)
+                                    :always vec)]
+                            (project-child (db/decode-value index-store v) child-fns db)))
+                     (raise-doc-lookup-out-of-coll)
+                     (after-doc-lookup (fn [res]
+                                         [(MapEntry/create dispatch-key
+                                                           (cond->> res
+                                                             one? first))])))))))))
 
 (defn- compile-project-spec [project-spec]
   (let [root-fns (project-child-fns (eql/query->ast project-spec))]
     (fn [value db]
-      (into {}
-            (mapcat (fn [f]
-                      (f value db)))
-            root-fns))))
+      (project-child value root-fns db))))
 
 (defn- compile-find [conformed-find {:keys [var->bindings full-results?]}]
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
                   :var-binding (var->bindings arg)
-                  :->result (fn [value db]
-                              (cond-> value
-                                full-results? (build-full-results db)))}
+                  :->result (fn [value {:keys [entity-resolver-fn]}]
+                              (or (when full-results?
+                                    (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
+                                      (let-docs [docs #{hash}]
+                                        (get docs hash))))
+                                  value))}
       :project {:logic-var (:logic-var arg)
                 :var-binding (var->bindings (:logic-var arg))
                 :->result (compile-project-spec (s/unform ::eql/query (:project-spec arg)))})))
@@ -1287,9 +1324,9 @@
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
           {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
-          find (compile-find find (assoc built-query :full-results? full-results?))
-          find-logic-vars (mapv :logic-var find)]
-      (doseq [{:keys [logic-var var-binding]} find
+          compiled-find (compile-find find (assoc built-query :full-results? full-results?))
+          find-logic-vars (mapv :logic-var compiled-find)]
+      (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (IllegalArgumentException.
                 (str "Find refers to unknown variable: " logic-var))))
@@ -1302,19 +1339,31 @@
         (throw (IllegalArgumentException.
                 (str "Order by requires a var from :find. unreturned var: " var))))
 
-      (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                 (into []
-                       (map (fn [{:keys [var-binding]}]
-                              (bound-result-for-var index-store var-binding join-keys)))
-                       find))
+      (lazy-seq
+       (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                  (into []
+                        (map (fn [{:keys [var-binding]}]
+                               (bound-result-for-var index-store var-binding join-keys)))
+                        compiled-find))
 
-        order-by (cio/external-sort (order-by-comparator find-logic-vars order-by))
-        offset (drop offset)
-        limit (take limit)
-        :always (map (fn [row]
-                       (into [] (map (fn [value {:keys [->result]}]
-                                       (->result value db))
-                                     row find))))))))
+         order-by (cio/external-sort (order-by-comparator find-logic-vars order-by))
+         offset (drop offset)
+         limit (take limit)
+         :always (map (fn [row]
+                        (mapv (fn [value {:keys [->result]}]
+                                (->result value db))
+                              row compiled-find)))
+         :always (partition-all (or (:batch-size q-conformed)
+                                    (::batch-size options)
+                                    100))
+         :always (map (fn [results]
+                        (->> results
+                             (mapv raise-doc-lookup-out-of-coll)
+                             raise-doc-lookup-out-of-coll)))
+         :always (mapcat (fn [lookup]
+                           (if (::hashes (meta lookup))
+                             (recur (replace-docs lookup (lookup-docs lookup db)))
+                             lookup))))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
@@ -1517,7 +1566,11 @@
                            :crux.config/type :crux.config/boolean}
           ::entity-cache-size {:doc "Query Entity Cache Size"
                                :default 10000
-                               :crux.config/type :crux.config/nat-int}
+                               :crux.config/type :crux.config/pos-int}
           ::query-timeout {:doc "Query Timeout ms"
                            :default 30000
-                           :crux.config/type :crux.config/nat-int}}})
+                           :crux.config/type :crux.config/pos-int}
+          ::batch-size {:doc "Batch size of results"
+                        :default 100
+                        :required? true
+                        :crux.config/type :crux.config/pos-int}}})
