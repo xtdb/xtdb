@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.system :as sys])
   (:import java.io.Closeable
            java.nio.file.Path
            java.util.concurrent.locks.StampedLock
@@ -123,28 +124,26 @@
     (cio/with-write-lock mapsize-lock
       (.close env))))
 
-(def kv {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags ::env-mapsize]
-                           :as options}]
-                     (let [db-dir (.toFile ^Path db-dir)
-                           env (.open (Env/create DirectBufferProxy/PROXY_DB)
-                                      (io/file db-dir)
-                                      (into-array EnvFlags (cond-> default-env-flags
-                                                             (not sync?) (concat no-sync-env-flags))))
-                           ^String db-name nil]
-                       (try
-                         (when env-mapsize
-                           (.setMapSize env env-mapsize))
-                         (-> (map->LMDBJNRKv {:db-dir db-dir
-                                              :env env
-                                              :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))
-                                              :mapsize-lock (StampedLock.)}))
-                         (catch Throwable t
-                           (.close env)
-                           (throw t)))))
-         :args (merge kv/options
-                      {::env-flags {:doc "LMDB Flags"
-                                    :crux.config/type [any? identity]}
-                       ::env-mapsize {:doc "LMDB Map size"
-                                      :crux.config/type :crux.config/nat-int}})})
-
-(def kv-store {:crux.node/kv-store kv})
+(defn ->kv-store {::sys/args (-> (merge (-> kv/args
+                                            (update :db-dir assoc :required? true, :default "data"))
+                                        {:env-flags {:doc "LMDB Flags"
+                                                     :spec ::sys/nat-int}
+                                         :env-mapsize {:doc "LMDB Map size"
+                                                       :spec ::sys/nat-int}}))}
+  [{:keys [db-dir sync? env-flags env-mapsize]}]
+  (let [db-dir (.toFile ^Path db-dir)
+        env (.open (Env/create DirectBufferProxy/PROXY_DB)
+                   (doto db-dir (.mkdirs))
+                   (into-array EnvFlags (cond-> default-env-flags
+                                          (not sync?) (concat no-sync-env-flags))))
+        ^String db-name nil]
+    (try
+      (when env-mapsize
+        (.setMapSize env env-mapsize))
+      (-> (map->LMDBJNRKv {:db-dir db-dir
+                           :env env
+                           :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))
+                           :mapsize-lock (StampedLock.)}))
+      (catch Throwable t
+        (.close env)
+        (throw t)))))

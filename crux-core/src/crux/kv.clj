@@ -1,7 +1,8 @@
 (ns ^:no-doc crux.kv
   "Protocols for KV backend implementations."
   (:require [crux.io :as cio]
-            [crux.status :as status])
+            [crux.status :as status]
+            [crux.system :as sys])
   (:refer-clojure :exclude [next])
   (:import java.io.Closeable))
 
@@ -27,15 +28,13 @@
   (kv-name [this]))
 ;; end::KvStore[]
 
-(def options
-  {:crux.kv/db-dir
-   {:doc "Directory to store K/V files"
-    :required? false
-    :crux.config/type :crux.config/path}
-   :crux.kv/sync?
-   {:doc "Sync the KV store to disk after every write."
-    :default false
-    :crux.config/type :crux.config/boolean}})
+(def args
+  {:db-dir {:doc "Directory to store K/V files"
+            :required? false
+            :spec ::sys/path}
+   :sync? {:doc "Sync the KV store to disk after every write."
+           :default false
+           :spec ::sys/boolean}})
 
 (extend-protocol status/Status
   crux.kv.KvStore

@@ -1,15 +1,13 @@
 (ns crux.http-server
   "HTTP API for Crux.
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [clojure.edn :as edn]
-            [clojure.instant :as instant]
+  (:require [clojure.instant :as instant]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [clojure.walk :as walk]
             [crux.api :as api]
             [crux.codec :as c]
             [crux.http-server.query :as query]
@@ -17,7 +15,7 @@
             [crux.http-server.status :as status]
             [crux.http-server.util :as util]
             [crux.io :as cio]
-            [crux.tx :as tx]
+            [crux.system :as sys]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [ring.adapter.jetty :as j]
@@ -32,9 +30,7 @@
            com.nimbusds.jwt.SignedJWT
            [crux.api ICruxAPI NodeOutOfSyncException]
            [java.io Closeable IOException]
-           [java.net URLDecoder URLEncoder]
-           [java.time Duration Instant ZonedDateTime ZoneId]
-           java.time.format.DateTimeFormatter
+           [java.time Duration]
            java.util.Date
            org.eclipse.jetty.server.Server))
 ;; ---------------------------------------------------
@@ -279,7 +275,7 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn- handler [request {:keys [crux-node ::read-only?]}]
+(defn- handler [request {:keys [crux-node read-only?]}]
   (condp check-path request
     [#"^/$" [:get]]
     (redirect-response "/_crux/query")
@@ -389,7 +385,7 @@
                      "RSA" (RSASSAVerifier. ^RSAKey jwk)
                      "EC"  (ECDSAVerifier. ^ECKey jwk))]
       (.verify jws verifier))
-    (catch Exception e
+    (catch Exception _
       false)))
 
 (defn wrap-jwt [handler jwks]
@@ -404,34 +400,30 @@
 
       (handler request))))
 
-(def module
-  {::server {:start-fn (fn [{:keys [crux.node/node]} {::keys [port read-only? ^String jwks] :as options}]
-                         (let [server (j/run-jetty
-                                       (-> (some-fn #(handler % {:crux-node node, ::read-only? read-only?})
-                                                    (->data-browser-handler {:node-options (dissoc options ::jwks)
-                                                                             :crux-node node})
-                                                    (fn [request]
-                                                      {:status 404
-                                                       :headers {"Content-Type" "text/plain"}
-                                                       :body "Could not find resource."}))
-                                           (p/wrap-params)
-                                           (wrap-resource "public")
-                                           (wrap-exception-handling)
-                                           (cond-> jwks (wrap-jwt (JWKSet/parse jwks))))
-                                       {:port port
-                                        :join? false})]
-                           (log/info "HTTP server started on port: " port)
-                           (->HTTPServer server {:node-options options})))
-             :deps #{:crux.node/node}
-
-             ;; I'm deliberately not porting across CORS here as I don't think we should be encouraging
-             ;; Crux servers to be exposed directly to browsers. Better pattern here for individual apps
-             ;; to expose the functionality they need to? (JH)
-             :args {::port {:crux.config/type :crux.config/nat-int
-                            :doc "Port to start the HTTP server on"
-                            :default default-server-port}
-                    ::read-only? {:crux.config/type :crux.config/boolean
-                                  :doc "Whether to start the Crux HTTP server in read-only mode"
-                                  :default false}
-                    ::jwks {:crux.config/type :crux.config/string
-                            :doc "JWKS string to validate against"}}}})
+(defn ->server {::sys/deps {:crux-node :crux/node}
+                ::sys/args {:port {:spec ::sys/nat-int
+                                   :doc "Port to start the HTTP server on"
+                                   :default default-server-port}
+                            :read-only? {:spec ::sys/boolean
+                                         :doc "Whether to start the Crux HTTP server in read-only mode"
+                                         :default false}
+                            :jwks {:spec ::sys/string
+                                   :doc "JWKS string to validate against"}
+                            :server-label {:spec ::sys/string}}}
+  [{:keys [crux-node port ^String jwks] :as options}]
+  (let [server (j/run-jetty
+                (-> (some-fn #(handler % (dissoc options :jwks))
+                             (->data-browser-handler {:crux-node crux-node
+                                                      :node-options (dissoc options :crux-node :jwks)})
+                             (fn [_request]
+                               {:status 404
+                                :headers {"Content-Type" "text/plain"}
+                                :body "Could not find resource."}))
+                    (p/wrap-params)
+                    (wrap-resource "public")
+                    (wrap-exception-handling)
+                    (cond-> jwks (wrap-jwt (JWKSet/parse jwks))))
+                {:port port
+                 :join? false})]
+    (log/info "HTTP server started on port: " port)
+    (->HTTPServer server options)))

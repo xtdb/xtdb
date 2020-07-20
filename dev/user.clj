@@ -5,8 +5,11 @@
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [clear go suspend resume halt reset reset-all]]
             [crux.io :as cio]
+            [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
-            [clojure.java.io :as io])
+            [crux.kv.rocksdb :as rocks]
+            [clojure.java.io :as io]
+            [crux.system :as sys])
   (:import (crux.api ICruxAPI)
            (java.io Closeable File)))
 
@@ -20,21 +23,16 @@
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
-(defmethod i/init-key :node [_ node-opts]
+(defmethod i/init-key :crux [_ node-opts]
   (crux/start-node node-opts))
 
-(defmethod i/halt-key! :node [_ ^ICruxAPI node]
+(defmethod i/halt-key! :crux [_ ^ICruxAPI node]
   (.close node))
 
 (def standalone-config
-  {:node {:crux.node/topology ['crux.standalone/topology
-                               'crux.kv.rocksdb/kv-store
-                               'crux.http-server/module]
-          :crux.kv/db-dir (io/file dev-node-dir "db")
-          :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
-          :crux.standalone/event-log-dir (io/file dev-node-dir "event-log")
-          :crux.kv/sync? true
-          :crux.http-server/label "Standalone Dev Node"}})
+  {:crux {:crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "indexes")}}
+          :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "documents")}}
+          :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "tx-log")}}}})
 
 (defmethod i/init-key :embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
@@ -49,16 +47,18 @@
   (let [kafka-port (cio/free-port)]
     {:embedded-kafka {:kafka-port kafka-port
                       :kafka-dir (io/file dev-node-dir "kafka")}
-     :node {:crux.node/topology ['crux.kafka/topology
-                                 'crux.kv.rocksdb/kv-store]
-            :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)
-            :crux.kv/db-dir (io/file dev-node-dir "ek-db")
-            :crux.standalone/event-log-dir (io/file dev-node-dir "ek-event-log")
-            :crux.kv/sync? true}}))
-
+     :crux {::k/kafka-config {:bootstrap-servers (str "localhost:" kafka-port)}
+            :crux/indexer {:kv-store {:crux/module `rocks/->kv-store
+                                      :db-dir (io/file dev-node-dir "ek-indexes")}}
+            :crux/document-store {:crux/module `k/->document-store,
+                                  :kafka-config ::k/kafka-config
+                                  :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                    :db-dir (io/file dev-node-dir "ek-documents")}}}
+            :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}
+            ::k/tx-consumer {:kafka-config ::k/kafka-config}}}))
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
 (ir/set-prep! (fn [] standalone-config))
 
 (defn crux-node []
-  (:node system))
+  (:crux system))

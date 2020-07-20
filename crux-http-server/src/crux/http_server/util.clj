@@ -56,7 +56,7 @@
               [:a {:href "/_crux/query"}
                [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
              [:span.mobile-hidden
-              [:b (when-let [label (get-in options [:node-options :crux.http-server/label])] label)]]
+              [:b (when-let [label (get-in options [:node-options :server-label])] label)]]
              [:div.header__links
               [:a.header__link {:href "https://opencrux.com/reference/get-started.html" :target "_blank"} "Documentation"]
               [:a.header__link {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip Chat"]

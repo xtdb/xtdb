@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.system :as sys])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            java.util.concurrent.locks.StampedLock
@@ -274,33 +275,29 @@
         (finally
           (.unlock mapsize-lock stamp))))))
 
-(def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::env-flags ::env-mapsize] :as options}]
-               (let [env-flags (or env-flags
-                                   (bit-or default-env-flags
-                                           (if sync?
-                                             0
-                                             no-sync-env-flags)))
-                     env (env-create)
-                     mapsize-lock (StampedLock.)]
-                 (try
-                   (env-open env db-dir env-flags)
-                   (when env-mapsize
-                     (env-set-mapsize env env-mapsize))
-                   (-> (map->LMDBKv {:db-dir db-dir
-                                     :env env
-                                     :env-flags env-flags
-                                     :dbi (dbi-open mapsize-lock env)
-                                     :mapsize-lock mapsize-lock}))
-                   (catch Throwable t
-                     (env-close env)
-                     (throw t)))))
-
-   :args (-> (merge kv/options
-                    {::env-flags {:doc "LMDB Flags"
-                                  :crux.config/type :crux.config/nat-int}
-                     ::env-mapsize {:doc "LMDB Map size"
-                                    :crux.config/type :crux.config/nat-int}})
-             (update ::kv/db-dir assoc :required? true, :default "data"))})
-
-(def kv-store {:crux.node/kv-store kv})
+(defn ->kv-store {::sys/args (-> (merge (-> kv/args
+                                            (update :db-dir assoc :required? true, :default "data"))
+                                        {:env-flags {:doc "LMDB Flags"
+                                                     :spec ::sys/nat-int}
+                                         :env-mapsize {:doc "LMDB Map size"
+                                                       :spec ::sys/nat-int}}))}
+  [{:keys [db-dir sync? env-flags env-mapsize]}]
+  (let [env-flags (or env-flags
+                      (bit-or default-env-flags
+                              (if sync?
+                                0
+                                no-sync-env-flags)))
+        env (env-create)
+        mapsize-lock (StampedLock.)]
+    (try
+      (env-open env db-dir env-flags)
+      (when env-mapsize
+        (env-set-mapsize env env-mapsize))
+      (-> (map->LMDBKv {:db-dir db-dir
+                        :env env
+                        :env-flags env-flags
+                        :dbi (dbi-open mapsize-lock env)
+                        :mapsize-lock mapsize-lock}))
+      (catch Throwable t
+        (env-close env)
+        (throw t)))))

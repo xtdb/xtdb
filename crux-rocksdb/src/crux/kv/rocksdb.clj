@@ -4,7 +4,8 @@
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.system :as sys])
   (:import java.io.Closeable
            java.nio.ByteBuffer
            (java.nio.file Files Path)
@@ -124,47 +125,47 @@
     (.close options)
     (.close write-options)))
 
-(def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync?
-                            ::disable-wal? ::metrics? ::db-options]
-                     :as options}]
-               (RocksDB/loadLibrary)
-               (let [stats (when metrics? (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
-                     opts (doto (or ^Options db-options (Options.))
-                            (cond-> metrics? (.setStatistics stats))
-                            (.setCompressionType CompressionType/LZ4_COMPRESSION)
-                            (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
-                            (.setCreateIfMissing true))
-                     db (try
-                          (RocksDB/open opts (-> (Files/createDirectories ^Path db-dir (make-array FileAttribute 0))
-                                                 (.toAbsolutePath)
-                                                 (str)))
-                          (catch Throwable t
-                            (.close opts)
-                            (throw t)))
-                     write-opts (doto (WriteOptions.)
-                                  (.setSync (boolean sync?))
-                                  (.setDisableWAL (boolean disable-wal?)))]
-                 (-> (map->RocksKv {:db-dir db-dir
-                                    :db db
-                                    :options opts
-                                    :stats stats
-                                    :write-options write-opts}))))
-
-   :args (-> (merge kv/options
-                    {::db-options {:doc "RocksDB Options"
-                                   :crux.config/type [#(instance? Options %) identity]}
-                     ::disable-wal? {:doc "Disable Write Ahead Log"
-                                     :crux.config/type :crux.config/boolean}
-                     ::metrics? {:doc "Enable RocksDB metrics"
-                                 :default false
-                                 :crux.config/type :crux.config/boolean}})
-             (update ::kv/db-dir assoc :required? true, :default "data"))})
-
-(def kv-store {:crux.node/kv-store kv})
-
-(def kv-store-with-metrics
+#_(def kv-store-with-metrics
   {:crux.node/kv-store (update-in kv [:args ::metrics? :default] not)
    :crux.metrics/registry 'crux.metrics/registry-module
    :crux.metrics/all-metrics-loaded 'crux.metrics/all-metrics-loaded
    ::metrics 'crux.kv.rocksdb.metrics/metrics-module})
+
+(defn ->kv-store {::sys/args {:db-dir {:doc "Directory to store K/V files"
+                                       :required? true
+                                       :spec ::sys/path}
+                              :sync? {:doc "Sync the KV store to disk after every write."
+                                      :default false
+                                      :spec ::sys/boolean}
+                              :db-options {:doc "RocksDB Options"
+                                           :spec #(instance? Options %)}
+                              :disable-wal? {:doc "Disable Write Ahead Log"
+                                             :default false
+                                             :spec ::sys/boolean}
+                              :metrics? {:doc "Enable RocksDB metrics"
+                                         :default false
+                                         :spec ::sys/boolean}}}
+  [{:keys [db-dir sync? disable-wal? metrics? db-options] :as options}]
+
+  (RocksDB/loadLibrary)
+  (let [stats (when metrics? (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
+        opts (doto (or ^Options db-options (Options.))
+               (cond-> metrics? (.setStatistics stats))
+               (.setCompressionType CompressionType/LZ4_COMPRESSION)
+               (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
+               (.setCreateIfMissing true))
+        db (try
+             (RocksDB/open opts (-> (Files/createDirectories ^Path db-dir (make-array FileAttribute 0))
+                                    (.toAbsolutePath)
+                                    (str)))
+             (catch Throwable t
+               (.close opts)
+               (throw t)))
+        write-opts (doto (WriteOptions.)
+                     (.setSync (boolean sync?))
+                     (.setDisableWAL (boolean disable-wal?)))]
+    (-> (map->RocksKv {:db-dir db-dir
+                       :db db
+                       :options opts
+                       :stats stats
+                       :write-options write-opts}))))

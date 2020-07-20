@@ -4,10 +4,11 @@
             [clojure.tools.logging :as log]
             [crux.kv :as kv]
             [crux.memory :as mem]
+            [crux.system :as sys]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang Box MapEntry]
-           java.nio.file.Path
-           java.io.Closeable))
+           java.io.Closeable
+           java.nio.file.Path))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
@@ -63,7 +64,7 @@
   Closeable
   (close [_]))
 
-(defrecord MemKv [db db-dir persist-on-close?]
+(defrecord MemKv [db db-dir]
   kv/KvStore
   (new-snapshot [_]
     (->MemKvSnapshot @db))
@@ -94,32 +95,21 @@
 
   Closeable
   (close [_]
-    (when (and db-dir persist-on-close?)
+    (when db-dir
       (persist-db db-dir db))))
 
-(defn ->mem-kv
-  ([] (->mem-kv {}))
-  ([{::kv/keys [^Path db-dir persist-on-close?]}]
+(defn ->kv-store {::sys/args {:db-dir {:required? false
+                                       :doc "Directory to (optionally) store K/V files"
+                                       :spec ::sys/path}
+                              :persist-on-close? {:required? true
+                                                  :default false
+                                                  :spec ::sys/boolean}}}
+  ([] (->kv-store {}))
+
+  ([{:keys [^Path db-dir persist-on-close?]}]
    (let [db-dir (some-> db-dir (.toFile))]
-     (map->MemKv {:db-dir db-dir
-                  :persist-on-close? persist-on-close?
+     (map->MemKv {:db-dir (when persist-on-close?
+                            db-dir)
                   :db (atom (if (.isFile (io/file db-dir "memdb"))
                               (restore-db db-dir)
                               (sorted-map-by mem/buffer-comparator)))}))))
-
-(def kv
-  {:start-fn (fn [_ {:keys [::kv/db-dir ::kv/sync? ::persist-on-close?]
-                     :as opts}]
-               (when sync?
-                 (log/warn "Using sync? on MemKv has no effect."
-                           (if (and db-dir persist-on-close?)
-                             "Will persist on close."
-                             "Persistence is disabled.")))
-               (->mem-kv opts))
-
-   :args (merge kv/options
-                {::persist-on-close? {:doc "Persist Mem Db on close"
-                                      :default false
-                                      :crux.config/type :crux.config/boolean}})})
-
-(def kv-store {:crux.node/kv-store kv})

@@ -9,8 +9,8 @@
 
 (t/use-fixtures :once every-api/with-embedded-kafka-cluster)
 (t/use-fixtures :each
-  (partial fix/with-opts {:crux.bus/sync? true
-                          :crux.node/slow-queries-min-threshold (Duration/ofNanos 1)})
+  (partial fix/with-opts {:crux/bus {:sync? true}
+                          :crux/node {:slow-queries-min-threshold (Duration/ofNanos 1)}})
   every-api/with-each-api-implementation)
 
 (t/deftest test-cleaning-recent-queries
@@ -26,26 +26,26 @@
     (t/testing "test recent-queries - check max count expiration"
       (t/is (= [1]
                (->> (clean-completed-queries queries
-                                             {::n/recent-queries-max-age (Duration/ofSeconds 8)
-                                              ::n/recent-queries-max-count 1})
+                                             {:recent-queries-max-age (Duration/ofSeconds 8)
+                                              :recent-queries-max-count 1})
                     (map ::query-id))))
 
       (t/is (= [1 2]
                (->> (clean-completed-queries queries
-                                             {::n/recent-queries-max-age (Duration/ofSeconds 8)
-                                              ::n/recent-queries-max-count 2})
+                                             {:recent-queries-max-age (Duration/ofSeconds 8)
+                                              :recent-queries-max-count 2})
                     (map ::query-id)))))
 
     (t/testing "test recent-queries - check time expiration"
       (t/is (= [1]
                (->> (clean-completed-queries queries
-                                             {::n/recent-queries-max-age (Duration/ofSeconds 4)
-                                              ::n/recent-queries-max-count 5})
+                                             {:recent-queries-max-age (Duration/ofSeconds 4)
+                                              :recent-queries-max-count 5})
                     (map ::query-id))))
       (t/is (= [1 2]
                (->> (clean-completed-queries queries
-                                             {::n/recent-queries-max-age (Duration/ofSeconds 8)
-                                              ::n/recent-queries-max-count 5})
+                                             {:recent-queries-max-age (Duration/ofSeconds 8)
+                                              :recent-queries-max-count 5})
                     (map ::query-id)))))))
 
 (t/deftest test-cleaning-slowest-queries
@@ -69,26 +69,26 @@
     (t/testing "test slowest-queries - check max count expiration & ordering"
       (t/is (= [1]
                (->> (clean-slowest-queries queries
-                                           {::n/slow-queries-max-age (Duration/ofSeconds 8)
-                                            ::n/slow-queries-max-count 1})
+                                           {:slow-queries-max-age (Duration/ofSeconds 8)
+                                            :slow-queries-max-count 1})
                     (map ::query-id))))
 
       (t/is (= [1 2]
                (->> (clean-slowest-queries queries
-                                           {::n/slow-queries-max-age (Duration/ofSeconds 8)
-                                            ::n/slow-queries-max-count 2})
+                                           {:slow-queries-max-age (Duration/ofSeconds 8)
+                                            :slow-queries-max-count 2})
                     (map ::query-id)))))
 
     (t/testing "test slowest-queries - check time expiration & ordering"
       (t/is (= [1]
                (->> (clean-slowest-queries queries
-                                           {::n/slow-queries-max-age (Duration/ofSeconds 4)
-                                            ::n/slow-queries-max-count 5})
+                                           {:slow-queries-max-age (Duration/ofSeconds 4)
+                                            :slow-queries-max-count 5})
                     (map ::query-id))))
       (t/is (= [1 2]
                (->> (clean-slowest-queries queries
-                                           {::n/slow-queries-max-age (Duration/ofSeconds 8)
-                                            ::n/slow-queries-max-count 5})
+                                           {:slow-queries-max-age (Duration/ofSeconds 8)
+                                            :slow-queries-max-count 5})
                     (map ::query-id)))))))
 
 (t/deftest test-recent-queries
@@ -130,8 +130,8 @@
     (t/testing "test slowest-queries - test `slow-query?` check")
     (let [start (Instant/now)
           query-info {:started-at (Date/from start) :finished-at (Date/from (.plusSeconds start 2))}]
-      (t/is (n/slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 1)}))
-      (t/is (not (n/slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 10)}))))))
+      (t/is (n/slow-query? query-info {:slow-queries-min-threshold (Duration/ofSeconds 1)}))
+      (t/is (not (n/slow-query? query-info {:slow-queries-min-threshold (Duration/ofSeconds 10)}))))))
 
 (t/deftest test-active-queries
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
