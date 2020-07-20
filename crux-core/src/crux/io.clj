@@ -113,9 +113,10 @@
     (.isDirectory f) (apply + (map folder-size (.listFiles f)))
     :else (.length f)))
 
-(defn try-close [^AutoCloseable c]
+(defn try-close [c]
   (try
-    (some-> c (.close))
+    (when (instance? AutoCloseable c)
+      (.close ^AutoCloseable c))
     (catch Throwable t
       (log/error t "Could not close:" c))))
 
