@@ -4,6 +4,8 @@
 
 (def routes
   [""
+   ["/attribute-stats"
+    {:name :attribute-stats}]
    ["/_crux/index"
     {:name :homepage
      :link-text "Home"}]
@@ -11,7 +13,9 @@
     {:name :status
      :link-text "Status"
      :controllers
-     [{:start #(rf/dispatch [:crux.ui.http/fetch-node-status])}]}]
+     [{:start #(do
+                 (rf/dispatch [:crux.ui.http/fetch-node-status])
+                 (rf/dispatch [:crux.ui.http/fetch-node-attribute-stats]))}]}]
    ["/_crux/query"
     {:name :query
      :link-text "Query"

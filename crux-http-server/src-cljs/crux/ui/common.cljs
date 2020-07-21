@@ -1,5 +1,7 @@
 (ns crux.ui.common
   (:require
+   [goog.string :as gstring]
+   [goog.string.format]
    [cljs.reader :as reader]
    [clojure.pprint :as pprint]
    [clojure.string :as string]
@@ -31,6 +33,11 @@
   [dt]
   (when dt
     (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt)))))
+
+(defn format-duration->seconds
+  [duration]
+  (when duration
+    (gstring/format "%d.%03d" (t/seconds duration) (- (t/millis duration) (* 1000 (t/seconds duration))))))
 
 (defn date-time->datetime
   "d: 2020-04-28

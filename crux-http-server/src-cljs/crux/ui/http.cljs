@@ -3,7 +3,8 @@
    [ajax.edn :as ajax-edn]
    [crux.ui.common :as common]
    [day8.re-frame.http-fx]
-   [re-frame.core :as rf]))
+   [re-frame.core :as rf]
+   [tick.alpha.api :as t]))
 
 (rf/reg-event-fx
  ::fetch-query-table
@@ -16,9 +17,12 @@
        (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
              ;; Get back one more result than necessary - won't be rendered,
              ;; but used to check if there are more results in the table
-             limit (+ 1 (js/parseInt (:limit query-params 100)))]
+             limit (+ 1 (js/parseInt (:limit query-params 100)))
+             now (t/now)]
          (when (seq query-params)
            {:scroll-top nil
+            :db (-> (assoc-in db [:request :start-time] now)
+                    (assoc-in [:request :end-time] now))
             :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
                          [:crux.ui.events/query-table-error nil]]
             :http-xhrio {:method :get
@@ -37,15 +41,16 @@
    (prn "fetch query table success!")
    {:dispatch-n [[:crux.ui.events/set-query-result-pane-loading false]
                  [:crux.ui.events/toggle-form-pane true]]
-    :db (assoc-in db [:query :http] result)}))
+    :db (->
+         (assoc-in db [:query :http] result)
+         (assoc-in [:request :end-time] (t/now)))}))
 
 (rf/reg-event-fx
  ::fail-fetch-query-table
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: get query table result: " result)
    {:dispatch [:crux.ui.events/set-query-result-pane-loading false]
-    :db (assoc-in db [:query :error]
-                  (get-in result [:response :via 0 :message]))}))
+    :db (assoc-in db [:query :error] (str result))}))
 
 (rf/reg-event-fx
  ::fetch-node-status
@@ -64,6 +69,31 @@
    (prn "fetch node status success!")
    {:dispatch [:crux.ui.events/set-node-status-loading false]
     :db (assoc-in db [:status :http] result)}))
+
+(rf/reg-event-fx
+ ::fail-fetch-node-status
+ (fn [{:keys [db]} [_ result]]
+   (prn "Failure: get node status: " result)
+   {:dispatch [:crux.ui.events/set-node-status-loading false]
+    :db (assoc-in db [:status :error] result)}))
+
+(rf/reg-event-fx
+ ::fetch-node-attribute-stats
+ (fn [{:keys [db]} _]
+   {:scroll-top nil
+    :dispatch [:crux.ui.events/set-node-attribute-stats-loading true]
+    :http-xhrio {:method :get
+                 :uri (common/route->url :attribute-stats)
+                 :response-format (ajax-edn/edn-response-format)
+                 :on-success [::success-fetch-node-attribute-stats]
+                 :on-failure [::fail-fetch-node-attribute-stats]}}))
+
+(rf/reg-event-fx
+ ::success-fetch-node-attribute-stats
+ (fn [{:keys [db]} [_ result]]
+   (prn "fetch node attribute-stats success!")
+   {:dispatch [:crux.ui.events/set-node-attribute-stats-loading false]
+    :db (assoc-in db [:attribute-stats :http] result)}))
 
 (rf/reg-event-fx
  ::fail-fetch-node-status

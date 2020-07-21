@@ -1,6 +1,7 @@
 html, body {
     margin: auto;
-    background-color: white;
+    background-color: #ddd;
+    background: url('../gplay.png');
     height: 100%;
     font-family: 'LatoWeb';
 }
@@ -27,7 +28,7 @@ html, body {
 
 .header__link {
     height: 100%;
-    margin: 0 0.7rem;
+    padding: 0 0.7rem;
     color: #e1e0e0;
     text-decoration:none;
     display: flex;
@@ -36,6 +37,7 @@ html, body {
 
 .header__link:hover {
     color: white;
+    background-color: #17527f;
 }
 
 .header-dropdown {
@@ -62,21 +64,23 @@ html, body {
 .header-dropdown__links {
     display: none;
     position: absolute;
-    background-color: #f9f9f9;
-    width: inherit;
+    background-color: #5e5e5e;
+    /*width: inherit;*/
+    width: 8.5rem;
+    right: 0px;
 }
 
 .header-dropdown__links a {
     float: none;
-    color: black;
+    color: white;
     text-decoration: none;
     display: block;
-    text-align: center;
+    text-align: right;
     padding: 0.5rem;
 }
 
 .header-dropdown__links a:hover {
-    background-color: #c8c5c5;
+    background-color: #17527f;
 }
 
 .header-dropdown:hover {
@@ -92,7 +96,8 @@ html, body {
 }
 
 .crux-logo__img {
-    height:5rem;
+    max-height: 3rem;
+    max-width: 20vw;
 }
 
 .root-contents {
@@ -101,15 +106,27 @@ html, body {
     align-items: center;
     text-align: center;
     position: relative;
+    padding: 2em;
 }
 
 .root-title {
     letter-spacing: 0.05em;
+    font-weight: 300;
+}
+
+.root-subtitle {
+    font-weight: 300;
+}
+
+.root-info {
+    font-weight: 300;
+}
+
+.root-info-summary {
+    text-align: left;
 }
 
 .root-background {
-    background: url('../gplay.png');
-    height: 100%;
     width: 100%;
     position: absolute;
     margin: -2rem;
@@ -118,34 +135,49 @@ html, body {
 }
 
 .root-tiles {
+    padding-top: 1rem;
     display: flex;
     justify-content: space-between;
-    width:60%;
-    height:10rem;
+    min-height:10rem;
+    flex-wrap: wrap;
+    flex-direction: row;
+    align-items: center;
+    width: 80%;
+    max-width: 50rem;
 }
 
 .root-tile {
+    align-self: center;
+    flex: 1;
+    margin:10px;
     text-decoration: none;
-    background: white;
-    border: 2px solid #a2a0ac;
+    background-color: #F9F9F9;
     letter-spacing: 0.05em;
+    font-size: 1.5rem;
     font-weight: bold;
-    font-size: 2rem;
-    color: grey;
+    color: #17527F;
     width: 30%;
+    min-height: 7rem;
+    min-width: 10rem;
     padding-top: 2.5rem;
+    border: 2px solid #E7E7E7;
 }
 
 .root-tile:hover {
-    border: 2px solid #6151b3;
-    color: #6151b3;
+    border: 2px solid #17527F;
+    background-color: #E6F4FF;
 }
 
+.root-tile > .fas {
+    margin-top: -0.5em;
+    padding-bottom: 0.5em;
+    color: #99BCE2;
+}
 .console {
-    max-width: 95%;
+    width: 100%;
     min-height: 60vh;
     margin: auto;
-    margin-top: 2rem;
+    margin-top: 1rem;
 }
 
 .node-info__title {
@@ -374,6 +406,10 @@ html, body {
     margin-right: 1rem;
 }
 
+.query-editor-datetime-input {
+    padding: 1rem; 
+}
+
 .input-group, .input-textarea {
     margin-bottom: 1rem;
 }
@@ -387,6 +423,7 @@ html, body {
 .input-time {
     width: 14rem;
     margin-right: 0.5rem;
+    margin-left: 1rem;
 }
 
 .label {
@@ -399,6 +436,7 @@ html, body {
     width: 7rem;
     margin-right: 1rem;
     margin-bottom: 0rem;
+    margin-left: 0.5rem;
 }
 
 .input-error {
@@ -436,6 +474,10 @@ html, body {
 .page-pane {
     display: flex;
     flex-direction: column;
+    background-color: white;
+    padding-left: 1em;
+    padding-right: 1em;
+    padding-bottom: 1em;
 }
 
 .entity-group {
@@ -718,7 +760,6 @@ ul.entity-group__value li::before {
 }
 
 .tab-bar {
-    margin-top: 0.7rem;
     margin-bottom: 1.4rem;
     border-bottom: 1px solid #bfbcbc;
     display: flex;

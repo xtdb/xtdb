@@ -67,19 +67,20 @@
           [:nav.header
            [:div.crux-logo
             [:a {:href "/_crux/index"}
-             [:img.crux-logo__img {:src "/crux-horizontal-bw.svg" }]]]
+             [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
+           [:span [:b (or (str "“" (:crux.http-server/label options) "”") "")]]
            [:div.header__links
-            [:a.header__link {:href "/_crux/query"} "Console"]
+            [:a.header__link {:href "/_crux/query"} "Query"]
             [:a.header__link {:href "/_crux/status"} "Status"]
-            [:a.header__link {:href "https://opencrux.com/docs" :target "_blank"} "Docs"]
             [:div.header-dropdown
              [:button.header-dropdown__button
               "Help"
               [:i.fa.fa-caret-down]]
              [:div.header-dropdown__links
-              [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip"]
-              [:a {:href "https://clojurians.slack.com/messages/crux" :target "_blank"} "Clojurians Slack"]
-              [:a {:href "mailto:crux@juxt.pro" :target "_blank"} "Email"]]]]]
+              [:a {:href "https://opencrux.com/docs" :target "_blank"} "Documentation"]
+              [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip Chat"]
+             ;; [:a {:href "https://clojurians.slack.com/messages/crux" :target "_blank"} "Clojurians Slack"]
+              [:a {:href "mailto:crux@juxt.pro" :target "_blank"} "Email Support"]]]]]
           [:div.console
            [:div#app
             [:div.container.page-pane body]]]
@@ -396,8 +397,15 @@
   [:div.root-page
    [:div.root-background]
    [:div.root-contents
-    [:h1.root-title "Welcome to the Crux Console!"]
-    [:h2.root-subtitle "Small Description Here"]
+    [:h1.root-title "Console Overview"]
+    ;;[:h2.root-subtitle "Crux Console"]
+    [:div.root-info-summary
+     [:div.root-info "✓ Crux node is active"]
+     [:div.root-info "✓ HTTP is enabled"]]
+    ;;[:div.root-info "✓ version"]
+   ;; [:h2.root-subtitle "There are N indexed documents"]
+   ;; [:h2.root-subtitle "There are have been T transactions"]
+   ;; [:h2.root-subtitle "This node is read-only over HTTP"]
     [:div.root-tiles
      [:a.root-tile
       {:href "/_crux/query"}
@@ -413,7 +421,8 @@
       {:href "https://opencrux.com/docs" :target "_blank"}
       [:i.fas.fa-book]
       [:br]
-      "Docs"]]]])
+      "Docs"]]
+    ]])
 
 (defn- root-handler [^ICruxAPI crux-node options request]
   {:status 200
@@ -429,6 +438,22 @@
        (walk/postwalk
         (fn [map] (cond->> map
                   (map? map) (into (sorted-map)))))))
+
+(defn attribute-stats->html-elements [stats-map]
+  [:dl.node-info__content
+   [:table.table
+    [:thead.table__head
+     [:th "Attribute"]
+     [:th "Latest Count (across all document versions)"]]
+    (into
+     [:tbody.table__body]
+     (map
+      (fn [[key value]]
+        (when value
+          [:tr.table__row.body__row
+           [:td.table__cell.body__cell (str key)]
+           [:td.table__cell.body__cell (with-out-str (pp/pprint value))]]))
+      (sort-by (juxt val key) #(compare %2 %1) stats-map)))]])
 
 (defn status-map->html-elements [status-map]
   (into
@@ -455,33 +480,39 @@
                200
                500)
      :body (if (html-request? request)
-             (raw-html
-              {:body [:div.node-info__container
-                      [:div.node-info
-                       [:h2.node-info__title "Node Status"]
-                       (status-map->html-elements status-map)]
-                      [:div.node-info
-                       [:h2.node-info__title "Node Options"]
-                       (status-map->html-elements options)]]
-               :title "/_status"
-               :options options})
+             (let [attribute-stats (api/attribute-stats crux-node)]
+               (raw-html
+                {:body [:div.node-info__container
+                        [:h1 "Status"]
+                        [:div.node-info
+                         [:h2.node-info__title "Overview"]
+                         (status-map->html-elements status-map)]
+                        [:div.node-info
+                         [:h2.node-info__title "Current Configuration"]
+                         (status-map->html-elements options)]
+                        [:div.node-info
+                         [:h2.node-info__title "Attribute Cardinalities"]
+                         (attribute-stats->html-elements attribute-stats)]]
+                 :title "/_status"
+                 :options options}))
              status-map)}))
 
 (def ^DateTimeFormatter default-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
 (defn- entity-root-html []
   [:div.entity-root
-   [:div.entity-root__title
-    "Getting Started"]
-   [:p "To look for a particular entity, simply use the entity search below:"]
+   [:h1.entity-root__title
+    "Browse Documents"]
+   [:p "Fetch a specific entity by ID and browse its document history"]
    [:div.entity-root__contents
     [:div.entity-editor__title
-     "Entity selector"]
+     "Entity ID"]
     [:div.entity-editor__contents
      [:form
       {:action "/_crux/entity"}
       [:textarea.textarea
        {:name "eid"
+        :placeholder "Enter an entity ID, found under the `:crux.db/id` key inside your documents"
         :rows 1}]
       [:div.entity-editor-datetime
        [:b "Valid Time"]
@@ -497,7 +528,7 @@
          :step "0.01"}]]
       [:button.button
        {:type "submit"}
-       "Submit Query"]]]]])
+       "Fetch Documents"]]]]])
 
 (defn link-all-entities
   [db path result]
@@ -647,33 +678,51 @@
 
                      :else entity-map)}))))))
 
+(def query-root-str
+  (clojure.string/join "\n"
+               [";; To perform a query:"
+                ";; 1) Enter a query into this query editor, such as the following example"
+                ";; 2) Optionally, select a \"valid time\" and/or \"transaction time\" to query against"
+                ";; 3) Submit the query and the tuple results will be displayed in a table below"
+                ""
+                "{"
+                " :find [?e]                ;; return a set of tuples each consisting of a unique ?e value"
+                " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
+                " :limit 100                ;; limit the initial page of results to keep things snappy"
+                "}"]))
+
 (defn- query-root-html []
   [:div.query-root
-   [:div.query-root__title
-    "Getting Started"]
+   [:h1.query-root__title
+    "Query"]
    [:div.query-root__contents
-    [:p "To perform a query, use the editor below:"]
+    [:p "Enter a "
+     [:a {:href "https://www.opencrux.com/docs#queries_basic_query" :target "_blank"} "Datalog"]
+     " query below to retrieve a set of facts from your database. Datalog queries must contain a `:find` key and a `:where` key."]
     [:div.query-editor__title
-     "Query editor"]
+      "Datalog query editor"]
     [:div.query-editor__contents
      [:form
       {:action "/_crux/query"}
       [:textarea.textarea
        {:name "q"
         :rows 10
-        :cols 40}]
+        :cols 40}
+       query-root-str]
       [:div.query-editor-datetime
-       [:b "Valid Time"]
-       [:input.input.input-time
-        {:type "datetime-local"
-         :name "valid-time"
-         :step "0.01"
-         :value (.format default-date-formatter (ZonedDateTime/now (ZoneId/of "Z")))}]
-       [:b "Transaction Time"]
-       [:input.input.input-time
-        {:type "datetime-local"
-         :name "transaction-time"
-         :step "0.01"}]]
+       [:div.query-editor-datetime-input
+        [:b "Valid Time"]
+        [:input.input.input-time
+         {:type "datetime-local"
+          :name "valid-time"
+          :step "0.01"
+          :value (.format default-date-formatter (ZonedDateTime/now (ZoneId/of "Z")))}]]
+       [:div.query-editor-datetime-input
+        [:b "Transaction Time"]
+        [:input.input.input-time
+         {:type "datetime-local"
+          :name "transaction-time"
+          :step "0.01"}]]]
       [:button.button
        {:type "submit"}
        "Submit Query"]]]]])

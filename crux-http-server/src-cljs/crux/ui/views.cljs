@@ -11,7 +11,8 @@
             [crux.ui.collapsible :refer [collapsible]]
             [fork.core :as fork]
             [reagent.core :as r]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [tick.alpha.api :as t]))
 
 (defn vt-tt-inputs
   [{:keys [values touched errors handle-change handle-blur]} component]
@@ -104,7 +105,7 @@
     (let [form-button (js/document.querySelector (str form-id " button"))]
       (.click form-button))))
 
-(defn edit-query [_props]
+(defn edit-query [_ props]
   ;; we need to create a cm instance holder to modify the CodeMirror code
   (let [cm-instance (atom nil)]
     (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
@@ -148,14 +149,15 @@
 
 (defn query-form
   []
-  (let [form-id "#form-query"]
+  (let [form-id "#form-query"
+        event-listener #(submit-form-on-keypress % form-id)]
     (r/create-class
      {:component-did-mount (fn []
-                             (-> (js/document.querySelector form-id)
-                                 (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+                             (-> js/window
+                                 (.addEventListener "keydown" event-listener)))
       :component-will-unmount (fn []
-                                (-> (js/document.querySelector form-id)
-                                    (.removeEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+                                (-> js/window
+                                    (.removeEventListener "keydown" event-listener)))
       :reagent-render
       (fn []
         [fork/form {:form-id (subs form-id 1)
@@ -168,7 +170,7 @@
            (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
                  disabled? (or loading? (some some? (vals errors)))]
              [:form {:id form-id, :on-submit handle-submit}
-              [collapsible [::query-form ::query-editor] {:label "Query Editor"}
+              [collapsible [::query-form ::query-editor] {:label "Datalog Query Editor" :default-open? true}
                [tab/tab-bar {:tabs [{:k :edit-query, :label "Edit Query"}
                                     {:k :recent-queries, :label "Recent Queries"}]
                              :current-tab [::sub/query-form-tab]
@@ -188,16 +190,26 @@
 (defn query-table
   []
   (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
-        loading? @(rf/subscribe [::sub/query-result-pane-loading?])]
+        limit @(rf/subscribe [::sub/query-limit])
+        loading? @(rf/subscribe [::sub/query-result-pane-loading?])
+        [start-time end-time] @(rf/subscribe [::sub/request-times])]
     [:<>
      (cond
        error [:div.error-box error]
+       loading? ""
        (and
         (:rows data)
         (empty? (:rows data))) [:div.no-results "No results found!"]
        :else [:<>
+              [:<>
+               (let [c (min limit (count (:rows data)))] [:div "Found " [:b c] " result tuple" (if (> c 1) "s" "") ""])
+               (if (= start-time end-time)
+                 ""
+                 [:div "Round-trip time: "
+                  [:b
+                   (common/format-duration->seconds (t/between start-time end-time))] " seconds"])]
               [:div.query-table-downloads
-               "Download as:"
+               "Download results as:"
                [:a.query-table-downloads__link
                 {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
                 "CSV"]
@@ -229,14 +241,15 @@
 
 (defn entity-form
   []
-  (let [form-id "#form-entity"]
+  (let [form-id "#form-entity"
+        event-listener #(submit-form-on-keypress % form-id)]
     (r/create-class
      {:component-did-mount (fn []
-                             (-> (js/document.querySelector form-id)
-                                 (.addEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+                             (-> js/window
+                                 (.addEventListener "keydown" event-listener)))
       :component-will-unmount (fn []
-                                (-> (js/document.querySelector form-id)
-                                    (.removeEventListener "keydown" #(submit-form-on-keypress % form-id) true)))
+                                (-> js/window
+                                    (.removeEventListener "keydown" event-listener)))
       :reagent-render
       (fn []
         [fork/form {:form-id (subs form-id 1)
@@ -261,12 +274,13 @@
                :on-submit handle-submit}
               [:div.entity-form__input-line
                [:span {:style {:padding-right "1rem"}}
-                "Entity ID:"]
+                "Entity "
+                [:b ":crux.db/id"]]
                [:input.monospace.entity-form__input
                 {:type "text"
                  :name "eid"
                  :value (get values "eid")
-                 :placeholder ":foo"
+                 :placeholder "e.g. :my-ns/example-id or #uuid \"...\""
                  :on-change handle-change
                  :on-blur handle-blur}]]
               [vt-tt-inputs props :entity]
@@ -391,8 +405,8 @@
 
 (defn console-pane []
   [:<>
-   [tab/tab-bar {:tabs [{:k :query, :label "Query"}
-                        {:k :entity, :label "Entity"}]
+   [tab/tab-bar {:tabs [{:k :query, :label "Datalog Query"}
+                        {:k :entity, :label "Browse Documents"}]
                  :current-tab [::sub/console-tab]
                  :on-tab-selected [::events/console-tab-selected]}]
    (case @(rf/subscribe [::sub/console-tab])
@@ -421,7 +435,9 @@
   []
   (let [status-map @(rf/subscribe [::sub/node-status])
         options-map @(rf/subscribe [::sub/node-options])
-        loading? @(rf/subscribe [::sub/node-status-loading?])]
+        attributes-map @(rf/subscribe [::sub/node-attribute-stats])
+        loading? (or @(rf/subscribe [::sub/node-status-loading?])
+                     @(rf/subscribe [::sub/node-attribute-stats-loading?]))]
     (when (and (some? loading?) (not loading?))
       [:div.node-info__container
        [:div.node-info
@@ -429,15 +445,22 @@
         [status-map->html-elements status-map]]
        [:div.node-info
         [:h2.node-info__title "Node Options"]
-        [status-map->html-elements options-map]]])))
+        [status-map->html-elements options-map]]
+       [:div.node-info
+        [:h2.node-info__title "Attribute Cardinalities"]
+        [status-map->html-elements attributes-map]]
+       ])))
 
 (defn root-page
   []
   [:div.root-page
    [:div.root-background]
    [:div.root-contents
-    [:h1.root-title "Welcome to the Crux Console!"]
-    [:h2.root-subtitle "Small Description Here"]
+    [:h1.root-title "Console Overview"]
+;;    [:h2.root-subtitle "Small Description Here"]
+    [:div.root-info-summary
+     [:div.root-info "✓ Crux node is active"]
+     [:div.root-info "✓ HTTP is enabled"]]
     [:div.root-tiles
      [:a.root-tile
       {:href (common/route->url :query)}

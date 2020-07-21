@@ -18,38 +18,44 @@
 
 (def query-root-str
   (string/join "\n"
-               [";; To perform a query"
-                ";; Enter the desired query into the query editor."
-                ";; Select a valid time and a transaction time (if needed)"
-                ";; Click submit query to perform the query and get the results in a table"
+               [";; To perform a query:"
+                ";; 1) Enter a query into this query editor, such as the following example"
+                ";; 2) Optionally, select a \"valid time\" and/or \"transaction time\" to query against"
+                ";; 3) Submit the query and the tuple results will be displayed in a table below"
                 ""
-                '{:find [?entity], :where [[?entity :crux.db/id _]], :limit 100}]))
+                "{"
+                " :find [?e]                ;; return a set of tuples each consisting of a unique ?e value"
+                " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
+                " :limit 100                ;; limit the initial page of results to keep things snappy"
+                "}"]))
 
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
-   (let [query-params (get-in db [:current-route :query-params])
+   (let [now (t/now)
+         query-params (get-in db [:current-route :query-params])
          valid-time (common/datetime->date-time
-                     (str (:valid-time query-params (t/now))))
+                     (str (:valid-time query-params now)))
          transaction-time (common/datetime->date-time
-                           (:transaction-time query-params))]
-     (if (:find query-params)
-       {"q" (common/query-params->formatted-edn-string
+                           (str (:transaction-time query-params) now))]
+     {"q" (if (:find query-params)
+            (common/query-params->formatted-edn-string
              (dissoc query-params :valid-time :transaction-time))
-        "vtd" (:date valid-time)
-        "vtt" (:time valid-time)
-        "ttd" (:date transaction-time)
-        "ttt" (:time transaction-time)}
-       {"q" query-root-str}))))
+            query-root-str)
+      "vtd" (:date valid-time)
+      "vtt" (:time valid-time)
+      "ttd" (:date transaction-time)
+      "ttt" (:time transaction-time)})))
 
 (rf/reg-sub
  ::initial-values-entity
  (fn [db _]
-   (let [query-params (get-in db [:current-route :query-params])
+   (let [now (t/now)
+         query-params (get-in db [:current-route :query-params])
          valid-time (common/datetime->date-time
-                     (str (:valid-time query-params (t/now))))
+                     (str (:valid-time query-params now)))
          transaction-time (common/datetime->date-time
-                           (:transaction-time query-params))]
+                           (str (:transaction-time query-params now)))]
      {"eid" (:eid query-params)
       "vtd" (:date valid-time)
       "vtt" (:time valid-time)
@@ -61,7 +67,9 @@
  ::query-data-table
  (fn [db _]
    (if-let [error (get-in db [:query :error])]
-     {:error error}
+     (doto
+         {:error error}
+       prn)
      (let [{:strs [query-results linked-entities]}
            (get-in db [:query :http])
            find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
@@ -87,6 +95,13 @@
          :offset offset
          :loading? (or (nil? table-loading?) table-loading?)
          :filters {:input (into #{} find-clause)}}}))))
+
+(rf/reg-sub
+ ::request-times
+ (fn [db _]
+   (let [now (t/now)]
+     [(get-in db [:request :start-time] now)
+      (get-in db [:request :end-time] now)])))
 
 (rf/reg-sub
  ::query-limit
@@ -254,6 +269,16 @@
  ::node-status
  (fn [db _]
    (get-in db [:status :http])))
+
+(rf/reg-sub
+ ::node-attribute-stats
+ (fn [db _]
+   (get-in db [:attribute-stats :http])))
+
+(rf/reg-sub
+ ::node-attribute-stats-loading?
+ (fn [db _]
+   (get-in db [:attribute-stats :loading?])))
 
 (rf/reg-sub
  ::node-options

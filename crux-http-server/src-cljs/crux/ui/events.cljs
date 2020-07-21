@@ -107,12 +107,15 @@
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
    (let [{:strs [q vtd vtt ttd ttt]} values
+         show-vt? (get-in db [:form-pane :show-vt? :query])
+         show-tt? (get-in db [:form-pane :show-tt? :query])
          query-params (->>
                        (->
                         (merge
                          (common/edn->query-params (reader/read-string q))
-                         {:valid-time (common/date-time->datetime vtd vtt)
-                          :transaction-time (common/date-time->datetime ttd ttt)})
+
+                         {:valid-time (when show-vt? (common/date-time->datetime vtd vtt))
+                          :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))})
                         (update :limit (fnil identity "100")))
                        (remove #(nil? (second %)))
                        (into {}))
@@ -177,9 +180,11 @@
 (rf/reg-event-fx
  ::go-to-entity-view
  (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values}]]
-   (let [query-params (->>
-                       {:valid-time (common/date-time->datetime vtd vtt)
-                        :transaction-time (common/date-time->datetime ttd ttt)
+   (let [show-vt? (get-in db [:form-pane :show-vt? :entity])
+         show-tt? (get-in db [:form-pane :show-tt? :entity])
+         query-params (->>
+                       {:valid-time (when show-vt? (common/date-time->datetime vtd vtt))
+                        :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))
                         :eid eid}
                        (remove #(nil? (second %)))
                        (into {}))]
@@ -195,3 +200,8 @@
  ::set-node-status-loading false
  (fn [db [_ bool]]
    (assoc-in db [:status :loading?] bool)))
+
+(rf/reg-event-db
+ ::set-node-attribute-stats-loading false
+ (fn [db [_ bool]]
+   (assoc-in db [:attribute-stats :loading?] bool)))

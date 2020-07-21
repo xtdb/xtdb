@@ -186,7 +186,7 @@ $spacing: 0.5rem;
     .top__filter-all {
 	position: relative;
 	max-width: 400px;
-	margin-bottom: 1rem;
+	margin-bottom: 0rem;
     }
 
     .top__actions {
@@ -198,8 +198,8 @@ $spacing: 0.5rem;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	min-height: 1.75rem;
-	margin-bottom: 1em;
+	min-height: 0rem;
+	margin-bottom: 0em;
     }
 
     .top__block-filters > *:not(:last-child) {
