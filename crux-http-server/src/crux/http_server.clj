@@ -43,7 +43,7 @@
 ;; Utils
 
 (defn- raw-html
-  [{:keys [body title options]}]
+  [{:keys [body title options results]}]
   (str (hiccup2/html
         [:html
          {:lang "en"}
@@ -55,6 +55,7 @@
             :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
           [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
           (when options [:meta {:title "options" :content (str options)}])
+          (when results [:meta {:title "results" :content (str results)}])
           [:link {:rel "stylesheet" :href "/css/all.css"}]
           [:link {:rel "stylesheet" :href "/latofonts.css"}]
           [:link {:rel "stylesheet" :href "/css/table.css"}]
@@ -621,13 +622,15 @@
                                     :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
                 entity-history (api/entity-history db decoded-eid sort-order history-opts)]
             {:status (if (not-empty entity-history) 200 404)
-             :body  (if html?
-                      (raw-html
-                       {:body (entity-history->html eid entity-history)
-                        :title "/entity?history=true"
-                        :options options})
-                      ;; Stringifying #crux/id values, caused issues with AJAX
-                      (map #(update % :crux.db/content-hash str) entity-history))})
+             :body (let [edn-results (map #(update % :crux.db/content-hash str) entity-history)]
+                     (if html?
+                       (raw-html
+                        {:body (entity-history->html eid entity-history)
+                         :title "/entity?history=true"
+                         :options options
+                         :results {:entity-results edn-results}})
+                       ;; Stringifying #crux/id values, caused issues with AJAX
+                       edn-results))})
           (let [entity-map (api/entity db decoded-eid)
                 linked-entities #(link-all-entities db  "/_crux/entity" entity-map)]
             {:status (if (some? entity-map) 200 404)
@@ -635,7 +638,9 @@
                      html? (raw-html
                             {:body (entity->html eid linked-entities entity-map vt tt)
                              :title "/entity"
-                             :options options})
+                             :options options
+                             :results {:entity-results {"linked-entities" (linked-entities)
+                                                        "entity" entity-map}}})
 
                      link-entities? {"linked-entities" (linked-entities)
                                      "entity" entity-map}
@@ -773,7 +778,10 @@
                            (raw-html
                             {:body (query->html links query results)
                              :title "/query"
-                             :options options}))
+                             :options options
+                             :results {:query-results
+                                       {"linked-entities" links
+                                        "query-results" results}}}))
                    csv? (with-out-str
                           (csv/write-csv *out* results))
                    tsv? (with-out-str
