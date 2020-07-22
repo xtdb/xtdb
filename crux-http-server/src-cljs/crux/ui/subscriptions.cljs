@@ -37,7 +37,7 @@
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params now)))
          transaction-time (common/datetime->date-time
-                           (str (:transaction-time query-params) now))]
+                           (str (:transaction-time query-params now)))]
      {"q" (if (:find query-params)
             (common/query-params->formatted-edn-string
              (dissoc query-params :valid-time :transaction-time))
@@ -67,9 +67,7 @@
  ::query-data-table
  (fn [db _]
    (if-let [error (get-in db [:query :error])]
-     (doto
-         {:error error}
-       prn)
+     {:error error}
      (let [{:strs [query-results linked-entities]}
            (get-in db [:query :http])
            find-clause (reader/read-string (get-in db [:current-route :query-params :find]))

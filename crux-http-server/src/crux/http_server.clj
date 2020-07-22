@@ -596,30 +596,33 @@
 
 (defn- entity->html [eid linked-entities entity-map vt tt]
   [:div.entity-map__container
-   (if entity-map
-     [:div.entity-map
-      [:div.entity-group
-       [:div.entity-group__key
-        ":crux.db/id"]
-       [:div.entity-group__value
-        (str (:crux.db/id entity-map))]]
-      [:hr.entity-group__separator]
-      (resolve-entity-map (linked-entities) (dissoc entity-map :crux.db/id))]
-     [:div.entity-map
-      [:strong (str eid)] " entity not found"])
+   [:div.entity-map
+    [:div.entity-group
+     [:div.entity-group__key
+      ":crux.db/id"]
+     [:div.entity-group__value
+      (str (:crux.db/id entity-map))]]
+    [:hr.entity-group__separator]
+    (resolve-entity-map (linked-entities) (dissoc entity-map :crux.db/id))]
    (vt-tt-entity-box vt tt)])
 
 (defn- entity-history->html [eid entity-history]
   [:div.entity-histories__container
    [:div.entity-histories
-    (if (not-empty entity-history)
-      (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
-        [:div.entity-history__container
-         [:div.entity-map
-          (resolve-entity-map {} doc)]
-         (vt-tt-entity-box valid-time tx-time)])
-      [:div.entity-histories
-       [:strong (str eid)] " entity not found"])]])
+    (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
+      [:div.entity-history__container
+       [:div.entity-map
+        (resolve-entity-map {} doc)]
+       (vt-tt-entity-box valid-time tx-time)])]])
+
+(defn- entity-error-response [html? error-message]
+  (if html?
+    (raw-html
+     {:title "/entity"
+      :body [:div.error-box error-message]
+      :results {:entity-results
+                {"error" error-message}}})
+    {:error error-message}))
 
 (defn- entity-state [^ICruxAPI crux-node options {{:strs [eid history sort-order
                                                           valid-time transaction-time
@@ -636,47 +639,57 @@
                  :title "/entity"
                  :options options})}
         (throw (IllegalArgumentException. "missing eid")))
-      (let [decoded-eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
-                                         (URLDecoder/decode eid))
-            vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
-            tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
-            db (db-for-request crux-node {:valid-time vt
-                                          :transact-time tt})]
-        (if history
-          (let [sort-order (or (some-> sort-order keyword)
-                               (throw (IllegalArgumentException. "missing sort-order query parameter")))
-                history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
-                              :with-docs? (or html? (some-> ^String with-docs Boolean/valueOf))
-                              :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
-                                      :crux.tx/tx-time (some-> start-transaction-time (instant/read-instant-date))}
-                              :end {:crux.db/valid-time (some-> end-valid-time (instant/read-instant-date))
-                                    :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
-                entity-history (api/entity-history db decoded-eid sort-order history-opts)]
-            {:status (if (not-empty entity-history) 200 404)
-             :body (let [edn-results (map #(update % :crux.db/content-hash str) entity-history)]
-                     (if html?
-                       (raw-html
-                        {:body (entity-history->html eid entity-history)
-                         :title "/entity?history=true"
-                         :options options
-                         :results {:entity-results edn-results}})
-                       ;; Stringifying #crux/id values, caused issues with AJAX
-                       edn-results))})
-          (let [entity-map (api/entity db decoded-eid)
-                linked-entities #(link-all-entities db  "/_crux/entity" entity-map)]
-            {:status (if (some? entity-map) 200 404)
-             :body (cond
-                     html? (raw-html
-                            {:body (entity->html eid linked-entities entity-map vt tt)
-                             :title "/entity"
+      (try
+        (let [decoded-eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
+                                           (URLDecoder/decode eid))
+              vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
+              tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
+              db (db-for-request crux-node {:valid-time vt
+                                            :transact-time tt})]
+          (if history
+            (let [sort-order (or (some-> sort-order keyword)
+                                 (throw (IllegalArgumentException. "missing sort-order query parameter")))
+                  history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
+                                :with-docs? (or html? (some-> ^String with-docs Boolean/valueOf))
+                                :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
+                                        :crux.tx/tx-time (some-> start-transaction-time (instant/read-instant-date))}
+                                :end {:crux.db/valid-time (some-> end-valid-time (instant/read-instant-date))
+                                      :crux.tx/tx-time (some-> end-transaction-time (instant/read-instant-date))}}
+                  entity-history (api/entity-history db decoded-eid sort-order history-opts)]
+              (if (not-empty entity-history)
+                {:status 200
+                 :body (let [edn-results (map #(update % :crux.db/content-hash str) entity-history)]
+                         (if html?
+                           (raw-html
+                            {:body (entity-history->html eid entity-history)
+                             :title "/entity?history=true"
                              :options options
-                             :results {:entity-results {"linked-entities" (linked-entities)
-                                                        "entity" entity-map}}})
+                             :results {:entity-results edn-results}})
+                           ;; Stringifying #crux/id values, caused issues with AJAX
+                           edn-results))}
+                {:status 404
+                 :body (entity-error-response html? (str eid " entity not found"))}))
+            (let [entity-map (api/entity db decoded-eid)
+                  linked-entities #(link-all-entities db  "/_crux/entity" entity-map)]
+              (if (some? entity-map)
+                {:status 200
+                 :body (cond
+                         html? (raw-html
+                                {:body (entity->html eid linked-entities entity-map vt tt)
+                                 :title "/entity"
+                                 :options options
+                                 :results {:entity-results {"linked-entities" (linked-entities)
+                                                            "entity" entity-map}}})
 
-                     link-entities? {"linked-entities" (linked-entities)
-                                     "entity" entity-map}
+                         link-entities? {"linked-entities" (linked-entities)
+                                         "entity" entity-map}
 
-                     :else entity-map)}))))))
+                         :else entity-map)}
+                {:status 404
+                 :body (entity-error-response html? (str eid " entity not found"))}))))
+        (catch Exception e
+          {:status 400
+           :body (entity-error-response html? (.getMessage e))})))))
 
 (def query-root-str
   (clojure.string/join "\n"
@@ -839,14 +852,15 @@
                                    "query-results" results}
                    :else results)})
         (catch Exception e
-          {:status 400
-           :body (if html?
-                   (raw-html
-                    {:title "/query"
-                     :body
-                     [:div.error-box (.getMessage e)]})
-                   (with-out-str
-                     (pp/pprint (Throwable->map e))))})))))
+          (let [error-message (.getMessage e)]
+            {:status 400
+             :body (if html?
+                     (raw-html
+                      {:title "/query"
+                       :body [:div.error-box error-message]
+                       :results {:query-results
+                                 {"error" error-message}}})
+                     {:error error-message})}))))))
 
 (defn- data-browser-handler [crux-node options request]
   (condp check-path request

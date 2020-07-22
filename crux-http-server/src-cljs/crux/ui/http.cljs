@@ -11,7 +11,9 @@
  (fn [{:keys [db]} _]
    (let [meta-results (get-in db [:meta-results :query-results])]
      (if meta-results
-       {:db (-> (assoc-in db [:query :http] meta-results)
+       {:db (-> (if-let [error (get meta-results "error")]
+                  (assoc-in db [:query :error] (str error))
+                  (assoc-in db [:query :http] meta-results))
                 (assoc :meta-results nil))
         :dispatch [:crux.ui.events/set-query-result-pane-loading false]}
        (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
@@ -50,7 +52,7 @@
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: get query table result: " result)
    {:dispatch [:crux.ui.events/set-query-result-pane-loading false]
-    :db (assoc-in db [:query :error] (str result))}))
+    :db (assoc-in db [:query :error] (get-in result [:response :error]))}))
 
 (rf/reg-event-fx
  ::fetch-node-status
@@ -108,19 +110,21 @@
    (let [meta-results (get-in db [:meta-results :entity-results])]
      (if meta-results
        (let [result-pane-view (if (get-in db [:current-route :query-params :history]) :history :document)]
-         {:db (-> (assoc-in db [:entity :http result-pane-view] meta-results)
+         {:db (-> (if-let [error (get meta-results "error")]
+                    (assoc-in db [:entity :error] (str error))
+                    (assoc-in db [:entity :http result-pane-view] meta-results))
                   (assoc :meta-results nil))
           :dispatch [:crux.ui.events/set-entity-result-pane-loading false]})
        (let [query-params (assoc (get-in db [:current-route :query-params]) :link-entities? true)]
          (when (seq (dissoc query-params :linked-entities))
-         {:scroll-top nil
-          :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
-                       [:crux.ui.events/set-entity-result-pane-loading true]]
-          :http-xhrio {:method :get
-                       :uri (common/route->url :entity nil query-params)
-                       :response-format (ajax-edn/edn-response-format)
-                       :on-success [::success-fetch-entity]
-                       :on-failure [::fail-fetch-entity]}}))))))
+           {:scroll-top nil
+            :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
+                         [:crux.ui.events/set-entity-result-pane-loading true]]
+            :http-xhrio {:method :get
+                         :uri (common/route->url :entity nil query-params)
+                         :response-format (ajax-edn/edn-response-format)
+                         :on-success [::success-fetch-entity]
+                         :on-failure [::fail-fetch-entity]}}))))))
 
 (rf/reg-event-fx
  ::success-fetch-entity
@@ -134,5 +138,6 @@
 (rf/reg-event-fx
  ::fail-fetch-entity
  (fn [{:keys [db]} [_ result]]
-   {:db (assoc-in db [:entity :error] (str result))
+   (prn "Failure: fetch entity " result)
+   {:db (assoc-in db [:entity :error] (get-in result [:response :error]))
     :dispatch [:crux.ui.events/set-entity-result-pane-loading false]}))
