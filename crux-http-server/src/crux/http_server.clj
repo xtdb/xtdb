@@ -68,7 +68,8 @@
            [:div.crux-logo
             [:a {:href "/_crux/index"}
              [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
-           [:span [:b (or (str "“" (:crux.http-server/label options) "”") "")]]
+           [:span [:b (when-let [label (:crux.http-server/label options)]
+                        (format "\"%s\"" label))]]
            [:div.header__links
             [:a.header__link {:href "/_crux/query"} "Query"]
             [:a.header__link {:href "/_crux/status"} "Status"]
