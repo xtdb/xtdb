@@ -255,7 +255,7 @@
   (let [limit @(rf/subscribe [::sub/query-limit])
         offset @(rf/subscribe [::sub/query-offset])
         rows-at-page (+ offset (min limit row-count))]
-    (str (if (> 0 row-count) (inc offset) "0") "-" rows-at-page)))
+    (str (if (pos? row-count) (inc offset) offset) "-" rows-at-page)))
 
 (defn pagination-rows-exhausted?
   [row-count]
