@@ -34,6 +34,10 @@
   (when dt
     (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt)))))
 
+(defn edn->pretty-string
+  [obj]
+  (with-out-str (pprint/pprint obj)))
+
 (defn format-duration->seconds
   [duration]
   (when duration

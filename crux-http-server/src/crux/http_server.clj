@@ -1,6 +1,5 @@
 (ns crux.http-server
   "HTTP API for Crux.
-
   The optional SPARQL handler requires juxt.crux/rdf."
   (:require [clojure.edn :as edn]
             [clojure.data.csv :as csv]
@@ -68,8 +67,9 @@
            [:div.crux-logo
             [:a {:href "/_crux/index"}
              [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
-           [:span [:b (when-let [label (:crux.http-server/label options)]
-                        (format "\"%s\"" label))]]
+           [:span.mobile-hidden
+            [:b (when-let [label (:crux.http-server/label options)]
+                  (format "\"%s\"" label))]]
            [:div.header__links
             [:a.header__link {:href "/_crux/query"} "Query"]
             [:a.header__link {:href "/_crux/status"} "Status"]

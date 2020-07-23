@@ -1,9 +1,23 @@
 html, body {
     margin: auto;
-    background-color: #ddd;
-    background: url('../gplay.png');
+    background-color: white;
     height: 100%;
     font-family: 'LatoWeb';
+    --mobile-hidden: block;
+    --crux-time-height: 2rem;
+    --input-time-width: 14rem;
+}
+
+@media only screen and (max-width: 600px) {
+    body {
+        --mobile-hidden: none;
+        --crux-time-height: 4rem;
+        --input-time-width: 10rem;
+    }
+}
+
+.mobile-hidden {
+    display: var(--mobile-hidden);
 }
 
 *, *:after, *:before {
@@ -179,17 +193,47 @@ html, body {
     margin: auto;
     margin-top: 1rem;
 }
+.node-info {
+    margin: 0 2em 2em 0;
+    box-shadow: 0 0 3px #00000054;
+    border-radius: 10px;
+    padding: 1em;
+    background: #1e1e1e;
+}
+
+.node-info__container {
+    display: flex;
+    flex-wrap: wrap;
+}
 
 .node-info__title {
+    color: white;
     font-weight: bold;
     font-size: 1.5rem;
 }
 
 .node-info__content {
-    padding: 1rem;
     white-space: pre-wrap;
-    border: 1px solid;
-    width: max-content;
+    padding: 10px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.node-info__content p {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+        "attributeName attributeValue";
+}
+
+.node-info__key {
+    font-weight: bold;
+    grid-area: attributeName;
+}
+
+.node-info__value {
+    grid-area: attributeValue;
 }
 
 // override default table style for no js version
@@ -394,7 +438,7 @@ html, body {
     align-items: center;
     margin-top: 1rem;
     margin-right: 1rem;
-    height: 2rem;
+    height: var(--crux-time-height);
 }
 
 .query-suggestions {
@@ -421,7 +465,7 @@ html, body {
 }
 
 .input-time {
-    width: 14rem;
+    width: var(--input-time-width);
     margin-right: 0.5rem;
     margin-left: 1rem;
 }
@@ -472,12 +516,7 @@ html, body {
 }
 
 .page-pane {
-    display: flex;
-    flex-direction: column;
-    background-color: white;
-    padding-left: 1em;
-    padding-right: 1em;
-    padding-bottom: 1em;
+    max-width: 1250px;
 }
 
 .entity-group {
@@ -589,6 +628,7 @@ ul.entity-group__value li::before {
 .entity-map__container {
     display: flex;
     align-items: flex-start;
+    flex-wrap: wrap;
 }
 
 .entity-raw-edn {
@@ -611,6 +651,7 @@ ul.entity-group__value li::before {
 .entity-histories__container {
     display: flex;
     align-items: flex-start;
+    flex-wrap: wrap;
     flex-direction: column;
 }
 

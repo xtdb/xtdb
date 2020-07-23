@@ -413,43 +413,32 @@
      :query [query-pane]
      :entity [entity-pane])])
 
-(defn status-map->html-elements [status-map]
-  (into
-   [:dl.node-info__content]
-   (mapcat
-    (fn [[key value]]
-      (when value
-        [[:dt [:b (str key)]]
-         (cond
-           (map? value) [:dd (into
-                              [:dl]
-                              (mapcat
-                               (fn [[key value]]
-                                 [[:dt [:b (str key)]]
-                                  [:dd (with-out-str (pprint/pprint value))]])
-                               value))]
-           :else [:dd (with-out-str (pprint/pprint value))])]))
-    (common/sort-map status-map))))
+(defn render-status-map
+  [status-map]
+  [:div.node-info__content
+   (for [[key value] (common/sort-map status-map)]
+     (when value
+       [:p
+        [:span.node-info__key (common/edn->pretty-string key)]
+        [:span.node-info__value (common/edn->pretty-string value)]]))])
 
 (defn status-page
   []
   (let [status-map @(rf/subscribe [::sub/node-status])
         options-map @(rf/subscribe [::sub/node-options])
-        attributes-map @(rf/subscribe [::sub/node-attribute-stats])
-        loading? (or @(rf/subscribe [::sub/node-status-loading?])
-                     @(rf/subscribe [::sub/node-attribute-stats-loading?]))]
-    (when (and (some? loading?) (not loading?))
-      [:div.node-info__container
-       [:div.node-info
-        [:h2.node-info__title "Node Status"]
-        [status-map->html-elements status-map]]
-       [:div.node-info
-        [:h2.node-info__title "Node Options"]
-        [status-map->html-elements options-map]]
-       [:div.node-info
-        [:h2.node-info__title "Attribute Cardinalities"]
-        [status-map->html-elements attributes-map]]
-       ])))
+        attributes-map @(rf/subscribe [::sub/node-attribute-stats])]
+    [:<>
+     [:h1 "Status"]
+     [:div.node-info__container
+      [:div.node-info
+       [:h2.node-info__title "Node Status"]
+       [render-status-map status-map]]
+      [:div.node-info
+       [:h2.node-info__title "Attribute Cardinalities"]
+       [render-status-map attributes-map]]
+      [:div.node-info
+       [:h2.node-info__title "Node Options"]
+       [render-status-map options-map]]]]))
 
 (defn root-page
   []

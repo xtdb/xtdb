@@ -98,9 +98,9 @@
     :db (assoc-in db [:attribute-stats :http] result)}))
 
 (rf/reg-event-fx
- ::fail-fetch-node-status
+ ::fail-fetch-node-attribute-stats
  (fn [{:keys [db]} [_ result]]
-   (prn "Failure: get node status: " result)
+   (prn "Failure: get node attribute status: " result)
    {:dispatch [:crux.ui.events/set-node-status-loading false]
     :db (assoc-in db [:status :error] result)}))
 
