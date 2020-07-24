@@ -18,6 +18,8 @@
                  [integrant "0.8.0"]
                  [integrant/repl "0.3.1"]
 
+                 [org.slf4j/slf4j-simple "1.7.26"]
+
                  ;; deps res
                  [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
                  [org.apache.httpcomponents/httpclient "4.5.9"]]

@@ -201,5 +201,5 @@
 
 (defn -main [& args]
   (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
-  (ir/set-prep! config)
+  (ir/set-prep! #'config)
   (ir/go))
