@@ -183,17 +183,18 @@
     (submit-docs id-and-docs this))
 
   (fetch-docs [this ids]
-    (loop [indexed {}]
-      (let [missing-ids (set/difference (set ids) (set (keys indexed)))
-            indexed (merge indexed (when (seq missing-ids)
-                                     (db/fetch-docs random-access-document-store missing-ids)))]
-        (if (= (count indexed) (count ids))
-          indexed
-          (do
-            (Thread/sleep 100)
-            (when-let [error @!indexing-error]
-              (throw (RuntimeException. "Doc indexing error" error)))
-            (recur indexed)))))))
+    (let [ids (set ids)]
+      (loop [indexed {}]
+        (let [missing-ids (set/difference ids (set (keys indexed)))
+              indexed (merge indexed (when (seq missing-ids)
+                                       (db/fetch-docs random-access-document-store missing-ids)))]
+          (if (= (count indexed) (count ids))
+            indexed
+            (do
+              (Thread/sleep 100)
+              (when-let [error @!indexing-error]
+                (throw (RuntimeException. "Doc indexing error" error)))
+              (recur indexed))))))))
 
 (defn- read-doc-offsets [indexer]
   (->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
