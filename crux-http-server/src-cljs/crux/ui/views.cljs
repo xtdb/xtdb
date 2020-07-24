@@ -191,12 +191,10 @@
   []
   (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
         limit @(rf/subscribe [::sub/query-limit])
-        loading? @(rf/subscribe [::sub/query-result-pane-loading?])
         [start-time end-time] @(rf/subscribe [::sub/request-times])]
     [:<>
      (cond
        error [:div.error-box error]
-       loading? ""
        (and
         (:rows data)
         (empty? (:rows data))) [:div.no-results "No results found!"]
@@ -422,23 +420,35 @@
         [:span.node-info__key (common/edn->pretty-string key)]
         [:span.node-info__value (common/edn->pretty-string value)]]))])
 
+(defn render-attribute-stats
+  [attributes-map]
+  [:div.node-info__content
+   [:table.table
+    [:thead.table__head
+     [:th "Attribute"]
+     [:th "Count (across all versions)"]]
+    (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
+      [:tr.table__row.body__row
+       [:td.table__cell.body__cell (common/edn->pretty-string key)]
+       [:td.table__cell.body__cell (common/edn->pretty-string value)]])]])
+
 (defn status-page
   []
   (let [status-map @(rf/subscribe [::sub/node-status])
         options-map @(rf/subscribe [::sub/node-options])
         attributes-map @(rf/subscribe [::sub/node-attribute-stats])]
-    [:<>
+    [:div.status
      [:h1 "Status"]
      [:div.node-info__container
       [:div.node-info
-       [:h2.node-info__title "Node Status"]
+       [:h2.node-info__title "Overview"]
        [render-status-map status-map]]
       [:div.node-info
-       [:h2.node-info__title "Attribute Cardinalities"]
-       [render-status-map attributes-map]]
-      [:div.node-info
-       [:h2.node-info__title "Node Options"]
-       [render-status-map options-map]]]]))
+       [:h2.node-info__title "Current Configuration"]
+       [render-status-map options-map]]]
+     [:div.node-attributes
+      [:h2.node-info__title "Attribute Cardinalities"]
+      [render-attribute-stats attributes-map]]]))
 
 (defn root-page
   []

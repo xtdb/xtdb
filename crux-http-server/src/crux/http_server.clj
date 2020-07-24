@@ -441,11 +441,11 @@
                   (map? map) (into (sorted-map)))))))
 
 (defn attribute-stats->html-elements [stats-map]
-  [:dl.node-info__content
+  [:div.node-info__content
    [:table.table
     [:thead.table__head
      [:th "Attribute"]
-     [:th "Latest Count (across all document versions)"]]
+     [:th "Count (across all versions)"]]
     (into
      [:tbody.table__body]
      (map
@@ -458,21 +458,12 @@
 
 (defn status-map->html-elements [status-map]
   (into
-   [:dl.node-info__content]
-   (mapcat
-    (fn [[key value]]
+   [:div.node-info__content
+    (for [[key value] (sort-map status-map)]
       (when value
-        [[:dt [:b (str key)]]
-         (cond
-           (map? value) [:dd (into
-                              [:dl]
-                              (mapcat
-                               (fn [[key value]]
-                                 [[:dt [:b (str key)]]
-                                  [:dd (with-out-str (pp/pprint value))]])
-                               value))]
-           :else [:dd (with-out-str (pp/pprint value))])]))
-    (sort-map status-map))))
+        [:p
+         [:span.node-info__key (with-out-str (pp/pprint key))]
+         [:span.node-info__value (with-out-str (pp/pprint value))]]))]))
 
 (defn- status [^ICruxAPI crux-node options request]
   (let [status-map (api/status crux-node)]
@@ -483,17 +474,19 @@
      :body (if (html-request? request)
              (let [attribute-stats (api/attribute-stats crux-node)]
                (raw-html
-                {:body [:div.node-info__container
-                        [:h1 "Status"]
-                        [:div.node-info
-                         [:h2.node-info__title "Overview"]
-                         (status-map->html-elements status-map)]
-                        [:div.node-info
-                         [:h2.node-info__title "Current Configuration"]
-                         (status-map->html-elements options)]
-                        [:div.node-info
-                         [:h2.node-info__title "Attribute Cardinalities"]
-                         (attribute-stats->html-elements attribute-stats)]]
+                {:body
+                 [:div.status
+                  [:h1 "Status"]
+                  [:div.node-info__container
+                   [:div.node-info
+                    [:h2.node-info__title "Overview"]
+                    (status-map->html-elements status-map)]
+                   [:div.node-info
+                    [:h2.node-info__title "Current Configuration"]
+                    (status-map->html-elements options)]]
+                  [:div.node-info
+                   [:h2.node-info__title "Attribute Cardinalities"]
+                   (attribute-stats->html-elements attribute-stats)]]
                  :title "/_status"
                  :options options}))
              status-map)}))

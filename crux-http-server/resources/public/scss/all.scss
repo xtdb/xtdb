@@ -3,6 +3,7 @@ html, body {
     background-color: white;
     height: 100%;
     font-family: 'LatoWeb';
+    background: url('../gplay.png');
     --mobile-hidden: block;
     --crux-time-height: 2rem;
     --input-time-width: 14rem;
@@ -195,19 +196,15 @@ html, body {
 }
 .node-info {
     margin: 0 2em 2em 0;
-    box-shadow: 0 0 3px #00000054;
-    border-radius: 10px;
     padding: 1em;
-    background: #1e1e1e;
 }
 
 .node-info__container {
     display: flex;
-    flex-wrap: wrap;
 }
 
 .node-info__title {
-    color: white;
+    color: black;
     font-weight: bold;
     font-size: 1.5rem;
 }
@@ -216,8 +213,6 @@ html, body {
     white-space: pre-wrap;
     padding: 10px;
     background-color: white;
-    border-radius: 10px;
-    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 .node-info__content p {
@@ -451,7 +446,7 @@ html, body {
 }
 
 .query-editor-datetime-input {
-    padding: 1rem; 
+    padding: 1rem;
 }
 
 .input-group, .input-textarea {
@@ -516,6 +511,11 @@ html, body {
 }
 
 .page-pane {
+    background-color: white;
+    padding-top: 1em;
+    padding-left: 1em;
+    padding-right: 1em;
+    padding-bottom: 1em;
     max-width: 1250px;
 }
 
