@@ -35,20 +35,20 @@
 (defn- init-id-hash []
   (if (and (= "SHA1" id-hash-algorithm)
            byte-utils-sha1-enabled?)
-    (do (log/info "Using ByteUtils/sha1 for ID hashing.")
+    (do (log/debug "Using ByteUtils/sha1 for ID hashing.")
         (fn byte-utils-id-hash-buffer [to from]
           (ByteUtils/sha1 to from)))
     (if-let [openssl-id-hash-buffer (and openssl-enabled?
                                          (jnr-available?)
                                          (some-> 'crux.hash.jnr/openssl-id-hash-buffer requiring-resolve var-get))]
-      (do (log/info "Using libcrypto (OpenSSL) for ID hashing.")
+      (do (log/debug "Using libcrypto (OpenSSL) for ID hashing.")
           openssl-id-hash-buffer)
       (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
                                           (jnr-available?)
                                           (some-> 'crux.hash.jnr/gcrypt-id-hash-buffer requiring-resolve var-get))]
-        (do (log/info "Using libgcrypt for ID hashing.")
+        (do (log/debug "Using libgcrypt for ID hashing.")
             gcrypt-id-hash-buffer)
-        (do (log/info "Using java.security.MessageDigest for ID hashing.")
+        (do (log/debug "Using java.security.MessageDigest for ID hashing.")
             message-digest-id-hash-buffer)))))
 
 (declare id-hash)

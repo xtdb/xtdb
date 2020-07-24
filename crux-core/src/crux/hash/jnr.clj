@@ -63,8 +63,7 @@
                                       (Pointer/wrap gcrypt-rt (.addressOffset buffer))
                                       (mem/capacity buffer))
                 (mem/limit-buffer to hash/id-hash-size)))))))
-    (catch UnsatisfiedLinkError t
-      (log/info (.getMessage t)))))
+    (catch UnsatisfiedLinkError t)))
 
 (def gcrypt-id-hash-buffer (init-gcrypt))
 
@@ -116,7 +115,6 @@
                   (assert (pos? (.EVP_DigestUpdate openssl ctx (Pointer/wrap openssl-rt (.addressOffset buffer)) (mem/capacity buffer))))
                   (assert (pos? (.EVP_DigestFinal_ex openssl ctx (Pointer/wrap openssl-rt (.addressOffset to)) nil)))
                   to)))))))
-    (catch UnsatisfiedLinkError t
-      (log/info (.getMessage t)))))
+    (catch UnsatisfiedLinkError t)))
 
 (def openssl-id-hash-buffer (init-openssl))
