@@ -141,29 +141,37 @@
   (^org.agrona.MutableDirectBuffer [b entity content-hash attr]
    (encode-ecav-key-to b entity content-hash attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer attr ^DirectBuffer v]
-   (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
-           (mem/buffer->hex attr))
    (assert (or (zero? (.capacity content-hash)) (= c/id-size (.capacity content-hash)))
            (mem/buffer->hex content-hash))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr) (.capacity v))))]
-     (-> (doto b
-           (.putByte 0 c/ecav-index-id)
-           (.putBytes c/index-id-size entity 0 (.capacity entity))
-           (.putBytes (+ c/index-id-size (.capacity entity)) content-hash 0 (.capacity content-hash))
-           (.putBytes (+ c/index-id-size (.capacity entity) (.capacity content-hash)) attr 0 (.capacity attr))
-           (.putBytes (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr)) v 0 (.capacity v)))
-         (mem/limit-buffer (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr) (.capacity v)))))))
+   (let [len (+ c/index-id-size Short/BYTES (.capacity entity) (.capacity content-hash)
+                (if (pos? (.capacity attr))
+                  (+ Short/BYTES (.capacity attr) (.capacity v))
+                  0))
+         ^MutableDirectBuffer b (or b (mem/allocate-buffer len))]
+     (assert (>= (.capacity b) len) (mem/buffer->hex b))
+     (doto b
+       (.putByte 0 c/ecav-index-id)
+       (.putShort c/index-id-size (short (.capacity entity)))
+       (.putBytes (+ c/index-id-size Short/BYTES) entity 0 (.capacity entity))
+       (.putBytes (+ c/index-id-size Short/BYTES (.capacity entity)) content-hash 0 (.capacity content-hash)))
+     (when (pos? (.capacity attr))
+       (doto b
+         (.putShort (+ c/index-id-size Short/BYTES (.capacity entity) (.capacity content-hash)) (short (.capacity attr)))
+         (.putBytes (+ c/index-id-size Short/BYTES (.capacity entity) (.capacity content-hash) Short/BYTES)
+                    attr 0 (.capacity attr))
+         (.putBytes (+ c/index-id-size Short/BYTES (.capacity entity) (.capacity content-hash) Short/BYTES (.capacity attr))
+                    v 0 (.capacity v))))
+     (mem/limit-buffer b len))))
 
-(defn- decode-ecav-key-from ^crux.kv_indexer.Quad [^DirectBuffer k ^long eid-size]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size eid-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/ecav-index-id index-id))
-      (let [entity (mem/slice-buffer k c/index-id-size eid-size)
-            content-hash (Id. (mem/slice-buffer k (+ c/index-id-size eid-size) c/id-size) 0)
-            attr (Id. (mem/slice-buffer k (+ c/index-id-size eid-size c/id-size) c/id-size) 0)
-            value (key-suffix k (+ c/index-id-size eid-size c/id-size c/id-size))]
-        (->Quad attr entity content-hash value)))))
+(defn- decode-ecav-key-from ^crux.kv_indexer.Quad [^DirectBuffer k]
+  (assert (= c/ecav-index-id (.getByte k 0)))
+  (let [eid-size (.getShort k c/index-id-size)
+        entity (mem/slice-buffer k (+ c/index-id-size Short/BYTES) eid-size)
+        content-hash (mem/slice-buffer k (+ c/index-id-size Short/BYTES eid-size) c/id-size)
+        attr-size (.getShort k (+ c/index-id-size Short/BYTES eid-size c/id-size))
+        attr (mem/slice-buffer k (+ c/index-id-size Short/BYTES eid-size c/id-size Short/BYTES) attr-size)
+        value (key-suffix k (+ c/index-id-size Short/BYTES eid-size c/id-size Short/BYTES attr-size))]
+    (->Quad attr entity content-hash value)))
 
 (defn- encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b value]
@@ -494,7 +502,7 @@
                                  (let [version-k (encode-ecav-key-to (.get seek-buffer-tl)
                                                                      eid-value-buffer
                                                                      content-hash-buffer
-                                                                     (c/->id-buffer a)
+                                                                     attr-buffer
                                                                      value-buffer)]
                                    (when (kv/get-value snapshot version-k)
                                      eid-value-buffer)))]
@@ -520,7 +528,7 @@
                         (lazy-seq (step (kv/next i)))))))))))
 
   (aev [this a e min-v entity-resolver-fn]
-    (let [attr-buffer (c/->id-buffer a)
+    (let [attr-buffer (c/->value-buffer a)
           eid-value-buffer (buffer-or-value-buffer e)
           eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
@@ -626,7 +634,7 @@
            (cond-> [(MapEntry/create (encode-av-key-to nil attr-buffer value-buffer) mem/empty-buffer)
                     (MapEntry/create (encode-ave-key-to nil attr-buffer value-buffer eid-value-buffer) mem/empty-buffer)
                     (MapEntry/create (encode-ae-key-to nil attr-buffer eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash (c/->id-buffer a) value-buffer) mem/empty-buffer)]
+                    (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash attr-buffer value-buffer) mem/empty-buffer)]
              (not (c/can-decode-value-buffer? value-buffer))
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
@@ -645,7 +653,7 @@
 (defrecord KvIndexer [kv-store]
   db/Indexer
   (index-docs [this docs]
-    (let [crux-db-id (c/->id-buffer :crux.db/id)
+    (let [crux-db-id (c/->value-buffer :crux.db/id)
           docs (with-open [snapshot (kv/new-snapshot kv-store)]
                  (->> docs
                       (into {} (remove (fn [[k doc]]
@@ -674,8 +682,8 @@
                                            [eid eid-value-buffer ecav-key])
 
                                          (reduce (fn [acc [eid ^DirectBuffer eid-value-buffer ecav-key]]
-                                                   (let [quad ^Quad (decode-ecav-key-from ecav-key (.capacity eid-value-buffer))
-                                                         attr-buffer (c/->value-buffer (.attr quad))
+                                                   (let [quad ^Quad (decode-ecav-key-from ecav-key)
+                                                         attr-buffer (.attr quad)
                                                          value-buffer (.value quad)
                                                          shared-av? (> (->> (all-keys-in-prefix av-i (encode-ave-key-to nil
                                                                                                                         attr-buffer
@@ -684,8 +692,8 @@
                                                                             count)
                                                                        1)]
                                                      (cond-> acc
-                                                       true (update :tombstones assoc (.content-hash quad) {:crux.db/id eid
-                                                                                                            :crux.db/evicted? true})
+                                                       true (assoc-in [:tombstones (c/new-id (.content-hash quad))]
+                                                                      {:crux.db/id eid, :crux.db/evicted? true})
                                                        true (update :ks conj
                                                                     (encode-ae-key-to nil
                                                                                       attr-buffer
@@ -708,7 +716,6 @@
                                                                         (into (set (all-keys-in-prefix bitemp-i (encode-entity+vt+tt+tx-id-key-to nil eid-id-buffer)))
                                                                               (set (all-keys-in-prefix bitemp-i (encode-entity+z+tx-id-key-to nil eid-id-buffer)))))))
                                                             eids)})))]
-
       (kv/delete kv-store ks)
       {:tombstones tombstones}))
 
