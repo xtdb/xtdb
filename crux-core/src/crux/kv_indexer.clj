@@ -100,31 +100,27 @@
    (encode-av-key-to b attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer
    [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v]
-   (assert (= c/id-size (.capacity attr)) (mem/buffer->hex attr))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size (.capacity v))))]
-     (mem/limit-buffer
-      (doto b
-        (.putByte 0 c/av-index-id)
-        (.putBytes c/index-id-size attr 0 c/id-size)
-        (.putBytes (+ c/index-id-size c/id-size) v 0 (.capacity v)))
-      (+ c/index-id-size c/id-size (.capacity v))))))
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity attr) (.capacity v))))]
+     (-> (doto b
+           (.putByte 0 c/av-index-id)
+           (.putBytes c/index-id-size attr 0 (.capacity attr))
+           (.putBytes (+ c/index-id-size (.capacity attr)) v 0 (.capacity v)))
+         (mem/limit-buffer (+ c/index-id-size (.capacity attr) (.capacity v)))))))
 
 (defn- encode-ave-key-to
-  (^org.agrona.MutableDirectBuffer[b attr]
+  (^org.agrona.MutableDirectBuffer [b attr]
    (encode-ave-key-to b attr mem/empty-buffer mem/empty-buffer))
-  (^org.agrona.MutableDirectBuffer[b attr v]
+  (^org.agrona.MutableDirectBuffer [b attr v]
    (encode-ave-key-to b attr v mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer
    [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity]
-   (assert (= c/id-size (.capacity attr)) (mem/buffer->hex attr))
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size (.capacity v) (.capacity entity))))]
-     (mem/limit-buffer
-      (doto b
-        (.putByte 0 c/ave-index-id)
-        (.putBytes c/index-id-size attr 0 c/id-size)
-        (.putBytes (+ c/index-id-size c/id-size) v 0 (.capacity v))
-        (.putBytes (+ c/index-id-size c/id-size (.capacity v)) entity 0 (.capacity entity)))
-      (+ c/index-id-size c/id-size (.capacity v) (.capacity entity))))))
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity attr) (.capacity v) (.capacity entity))))]
+     (-> (doto b
+           (.putByte 0 c/ave-index-id)
+           (.putBytes c/index-id-size attr 0 (.capacity attr))
+           (.putBytes (+ c/index-id-size (.capacity attr)) v 0 (.capacity v))
+           (.putBytes (+ c/index-id-size (.capacity attr) (.capacity v)) entity 0 (.capacity entity)))
+         (mem/limit-buffer (+ c/index-id-size (.capacity attr) (.capacity v) (.capacity entity)))))))
 
 (defn- encode-ae-key-to
   (^org.agrona.MutableDirectBuffer [b]
@@ -132,8 +128,6 @@
   (^org.agrona.MutableDirectBuffer [b attr]
    (encode-ae-key-to b attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [b ^DirectBuffer attr ^DirectBuffer entity]
-   (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
-           (mem/buffer->hex attr))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity attr) (.capacity entity))))]
      (-> (doto b
            (.putByte 0 c/ae-index-id)
@@ -470,7 +464,7 @@
 
   db/IndexStore
   (av [this a min-v entity-resolver-fn]
-    (let [attr-buffer (c/->id-buffer a)
+    (let [attr-buffer (c/->value-buffer a)
           prefix (encode-av-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
       (some->> (encode-av-key-to (.get seek-buffer-tl)
@@ -483,7 +477,7 @@
                           (lazy-seq (step (kv/next i))))))))))
 
   (ave [this a v min-e entity-resolver-fn]
-    (let [attr-buffer (c/->id-buffer a)
+    (let [attr-buffer (c/->value-buffer a)
           value-buffer (buffer-or-value-buffer v)
           prefix (encode-ave-key-to nil attr-buffer value-buffer)
           i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
@@ -500,7 +494,7 @@
                                  (let [version-k (encode-ecav-key-to (.get seek-buffer-tl)
                                                                      eid-value-buffer
                                                                      content-hash-buffer
-                                                                     attr-buffer
+                                                                     (c/->id-buffer a)
                                                                      value-buffer)]
                                    (when (kv/get-value snapshot version-k)
                                      eid-value-buffer)))]
@@ -510,7 +504,7 @@
                         (lazy-seq (step (kv/next i)))))))))))
 
   (ae [this a min-e entity-resolver-fn]
-    (let [attr-buffer (c/->id-buffer a)
+    (let [attr-buffer (c/->value-buffer a)
           prefix (encode-ae-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
       (some->> (encode-ae-key-to (.get seek-buffer-tl)
@@ -532,12 +526,11 @@
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
         (let [prefix (encode-ecav-key-to nil eid-value-buffer content-hash-buffer attr-buffer)
               i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
-          (some->> (encode-ecav-key-to
-                    (.get seek-buffer-tl)
-                    eid-value-buffer
-                    content-hash-buffer
-                    attr-buffer
-                    (buffer-or-value-buffer min-v))
+          (some->> (encode-ecav-key-to (.get seek-buffer-tl)
+                                       eid-value-buffer
+                                       content-hash-buffer
+                                       attr-buffer
+                                       (buffer-or-value-buffer min-v))
                    (kv/seek i)
                    ((fn step [^DirectBuffer k]
                       (when k
@@ -620,20 +613,20 @@
 
 (defn- ->content-idx-kvs [docs]
   (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
-                       (into {} (map (juxt identity c/->id-buffer))))]
+                       (into {} (map (juxt identity c/->value-buffer))))]
     (->> (for [[content-hash doc] docs
                :let [id (:crux.db/id doc)
                      eid-value-buffer (c/->value-buffer id)
                      content-hash (c/->id-buffer content-hash)]
                [a v] doc
-               :let [a (get attr-bufs a)]
+               :let [attr-buffer (get attr-bufs a)]
                v (c/vectorize-value v)
                :let [value-buffer (c/->value-buffer v)]
                :when (pos? (.capacity value-buffer))]
-           (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) mem/empty-buffer)]
+           (cond-> [(MapEntry/create (encode-av-key-to nil attr-buffer value-buffer) mem/empty-buffer)
+                    (MapEntry/create (encode-ave-key-to nil attr-buffer value-buffer eid-value-buffer) mem/empty-buffer)
+                    (MapEntry/create (encode-ae-key-to nil attr-buffer eid-value-buffer) mem/empty-buffer)
+                    (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash (c/->id-buffer a) value-buffer) mem/empty-buffer)]
              (not (c/can-decode-value-buffer? value-buffer))
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
@@ -682,7 +675,7 @@
 
                                          (reduce (fn [acc [eid ^DirectBuffer eid-value-buffer ecav-key]]
                                                    (let [quad ^Quad (decode-ecav-key-from ecav-key (.capacity eid-value-buffer))
-                                                         attr-buffer (c/->id-buffer (.attr quad))
+                                                         attr-buffer (c/->value-buffer (.attr quad))
                                                          value-buffer (.value quad)
                                                          shared-av? (> (->> (all-keys-in-prefix av-i (encode-ave-key-to nil
                                                                                                                         attr-buffer

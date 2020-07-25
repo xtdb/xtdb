@@ -1279,7 +1279,7 @@
                                        (subs (name dispatch-key) 1))
                   one? (= :one (get-in join [:params :crux/cardinality]))]
               (fn [value {:keys [document-store index-store entity-resolver-fn] :as db}]
-                (->> (vec (for [v (cond->> (db/ave index-store (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
+                (->> (vec (for [v (cond->> (db/ave index-store forward-key (c/->value-buffer value) nil entity-resolver-fn)
                                     one? (take 1)
                                     :always vec)]
                             (project-child (db/decode-value index-store v) child-fns db)))
