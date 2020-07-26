@@ -85,9 +85,9 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,a
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Property|Description|Default Value
-|`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.rocksdb/kv*
-|`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/eventlog-1"`|
-|`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *false*
+|`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/event-log-1"`| n/a 
+|`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.memdb/kv*
+|`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *true*
 |===
 [#standalone-dependency]
 *Project Dependency*
@@ -107,12 +107,14 @@ include::./src/docs/examples.clj[tags=include-crux-api]
 include::./src/docs/examples.clj[tags=start-standalone-node]
 ----
 
-You can later stop the node if you wish:
+You can later stop the node if you wish, however your data will not be persisted:
 
 [source,clj]
 ----
 include::./src/docs/examples.clj[tags=close-node]
 ----
+
+Please note that when configuring a standalone node with persisted indexes (via `:crux.kv/db-dir`), you should always have the event-log persisted as well (via `:crux.standalone/event-log-dir`). Crux does not currently enforce this constraint or disallow otherwise invalid topology combinations.
 
 [#config-rocksdb]
 == RocksDB
