@@ -124,26 +124,29 @@
 (defn query-history
   [set-values]
   (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
-    [:div.form-pane__history-scrollable
-     (map-indexed
-      (fn [idx {:strs [q] :as history-q}]
-        ^{:key (gensym)}
-        [:div.form-pane__history-scrollable-el
-         [:div.form-pane__history-delete
-          {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-          [:i.fas.fa-trash-alt]]
-         [:div.form-pane__history-scrollable-el-left
-          [:div.form-pane__history-buttons
-           [:div.form-pane__history-button
-            {:on-click #(do (set-values {"q" q})
-                            (rf/dispatch [::events/query-form-tab-selected :edit-query]))}
-            "Edit"]
-           [:div.form-pane__history-button
-            {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
-            "Run"]]
-          [:div
-           [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
-      query-history-list)]))
+    (if (not-empty query-history-list)
+      [:div.form-pane__history-scrollable
+       (map-indexed
+        (fn [idx {:strs [q] :as history-q}]
+          ^{:key (gensym)}
+          [:div.form-pane__history-scrollable-el
+           [:div.form-pane__history-delete
+            {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+            [:i.fas.fa-trash-alt]]
+           [:div.form-pane__history-scrollable-el-left
+            [:div.form-pane__history-buttons
+             [:div.form-pane__history-button
+              {:on-click #(do (set-values {"q" q})
+                              (rf/dispatch [::events/query-form-tab-selected :edit-query]))}
+              "Edit"]
+             [:div.form-pane__history-button
+              {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
+              "Run"]]
+            [:div
+             [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+        query-history-list)]
+      [:div.form-pane__history-empty
+       [:b "No recent queries found."]])))
 
 (defn query-form
   []
