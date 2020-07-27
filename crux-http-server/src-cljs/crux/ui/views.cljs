@@ -189,9 +189,7 @@
 
 (defn query-table
   []
-  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
-        limit @(rf/subscribe [::sub/query-limit])
-        [start-time end-time] @(rf/subscribe [::sub/request-times])]
+  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])]
     [:<>
      (cond
        error [:div.error-box error]
@@ -200,20 +198,24 @@
         (empty? (:rows data))) [:div.no-results "No results found!"]
        :else [:<>
               [:<>
-               (let [c (min limit (count (:rows data)))] [:div "Found " [:b c] " result tuple" (if (> c 1) "s" "") ""])
-               (if (= start-time end-time)
-                 ""
-                 [:div "Round-trip time: "
-                  [:b
-                   (common/format-duration->seconds (t/between start-time end-time))] " seconds"])]
-              [:div.query-table-downloads
-               "Download results as:"
-               [:a.query-table-downloads__link
-                {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
-                "CSV"]
-               [:a.query-table-downloads__link
-                {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
-                "TSV"]]
+               [:div.query-table-topbar
+                (let [limit @(rf/subscribe [::sub/query-limit])
+                      [start-time end-time] @(rf/subscribe [::sub/request-times])
+                      row-count (count (:rows data))
+                      count-string (if (> row-count limit) (str limit "+") (str row-count))]
+                  [:div.query-result-info
+                   "Found " [:b count-string] " result" (when (> row-count 1) "s")
+                   (when (not= start-time end-time)
+                     [:<>
+                      " in " [:b (common/format-duration->seconds (t/between start-time end-time))] " seconds"])])
+                [:div.query-table-downloads
+                 "Download results as:"
+                 [:a.query-table-downloads__link
+                  {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
+                  "CSV"]
+                 [:a.query-table-downloads__link
+                  {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
+                  "TSV"]]]]
               [table/table data]])]))
 
 (defn query-pane

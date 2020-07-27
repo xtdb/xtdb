@@ -746,8 +746,9 @@ ul.entity-group__value li::before {
     @extend .rotating;
 }
 
-.query-table-downloads {
-    text-align: right;
+.query-table-topbar {
+    display: flex;
+    justify-content: space-between;
     margin-top: 1.0rem;
 }
 
