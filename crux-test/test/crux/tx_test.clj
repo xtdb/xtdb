@@ -651,6 +651,17 @@
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= v5-ivan (api/entity (api/db *api*) :ivan)))))
 
+        (t/testing "function ops can return other function ops that also the forked ctx"
+          (let [returns-fn {:crux.db/id :returns-fn
+                            :crux.db/fn '(fn [ctx]
+                                           [[:crux.tx/put {:crux.db/id :ivan :name "modified ivan"}]
+                                            [:crux.tx/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
+            (fix/submit+await-tx [[:crux.tx/put returns-fn]])
+            (fix/submit+await-tx [[:crux.tx/fn :returns-fn]])
+            (some-> (#'tx/reset-tx-fn-error) throw)
+            (t/is (= {:crux.db/id :ivan :name "MODIFIED IVAN"}
+                     (api/entity (api/db *api*) :ivan)))))
+
         (t/testing "can access current transaction on tx-fn context"
           (fix/submit+await-tx
            [[:crux.tx/put
