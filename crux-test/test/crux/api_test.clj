@@ -412,7 +412,7 @@
         (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
                            (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
-          (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put :ivan (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
+          (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
                    (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
                        (get arg-doc-id)
                        (dissoc :crux.db/id))))))
@@ -441,12 +441,12 @@
                               (get sub-arg-doc-id))]
 
           (t/is (= {:crux.db/id (:crux.db/id arg-doc)
-                    :crux.db.fn/tx-events [[:crux.tx/put :bob (c/new-id {:crux.db/id :bob, :name "Bob"})]
-                                           [:crux.tx/fn :put-ivan sub-arg-doc-id]]}
+                    :crux.db.fn/tx-events [[:crux.tx/put (c/new-id :bob) (c/new-id {:crux.db/id :bob, :name "Bob"})]
+                                           [:crux.tx/fn (c/new-id :put-ivan) sub-arg-doc-id]]}
                    arg-doc))
 
           (t/is (= {:crux.db/id (:crux.db/id sub-arg-doc)
-                    :crux.db.fn/tx-events [[:crux.tx/put :ivan (c/new-id {:crux.db/id :ivan :name "Ivan2"})]]}
+                    :crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan2"})]]}
                    sub-arg-doc))))
 
       (t/testing "copes with args doc having been replaced"

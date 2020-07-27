@@ -540,6 +540,31 @@
                                              [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
                  log))))))
 
+(t/deftest migrates-unhashed-tx-log-eids
+  (let [doc {:crux.db/id :foo}
+        doc-id (c/new-id doc)]
+    (db/submit-docs (:document-store *api*) {doc-id doc})
+    (doto @(db/submit-tx (:tx-log *api*) [[:crux.tx/match :foo (c/new-id c/nil-id-buffer)]
+                                          [:crux.tx/put :foo doc-id]])
+      (->> (api/await-tx *api*)))
+
+    (t/is (= {:crux.db/id :foo}
+             (api/entity (api/db *api*) :foo)))
+
+    (with-open [log-iterator (api/open-tx-log *api* nil nil)]
+      (let [evts (::txe/tx-events (first (iterator-seq log-iterator)))]
+        ;; have to check not= too because Id's `equals` conforms its input to Id
+        (t/is (not= [:crux.tx/match :foo (c/new-id c/nil-id-buffer)]
+                    (first evts)))
+        (t/is (not= [:crux.tx/put :foo doc-id]
+                    (second evts)))
+        (t/is (= [[:crux.tx/match (c/new-id :foo) (c/new-id c/nil-id-buffer)]
+                  [:crux.tx/put (c/new-id :foo) doc-id]]
+                 evts))))
+
+    (fix/submit+await-tx [[:crux.tx/delete :foo]])
+    (t/is (nil? (api/entity (api/db *api*) :foo)))))
+
 (t/deftest test-can-apply-transaction-fn
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}

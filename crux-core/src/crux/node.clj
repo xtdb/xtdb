@@ -117,14 +117,19 @@
 
         (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
               tx-log-iterator (db/open-tx-log tx-log after-tx-id)
-              tx-log (-> (iterator-seq tx-log-iterator)
-                         (->> (remove #(db/tx-failed? indexer (:crux.tx/tx-id %)))
-                              (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id)))
-                         (cond->> with-ops? (map (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events]
-                                                       :as tx-log-entry}]
-                                                   (-> tx-log-entry
-                                                       (dissoc :crux.tx.event/tx-events)
-                                                       (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events)))))))]
+              tx-log (->> (iterator-seq tx-log-iterator)
+                          (remove #(db/tx-failed? indexer (:crux.tx/tx-id %)))
+                          (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
+                          (map (if with-ops?
+                                 (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
+                                   (-> tx-log-entry
+                                       (dissoc :crux.tx.event/tx-events)
+                                       (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
+                                 (fn [tx-log-entry]
+                                   (-> tx-log-entry
+                                       (update :crux.tx.event/tx-events
+                                               (fn [evts]
+                                                 (->> evts (mapv #(update % 1 c/new-id))))))))))]
 
           (cio/->cursor (fn []
                           (.close tx-log-iterator))

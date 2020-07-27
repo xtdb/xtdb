@@ -108,28 +108,28 @@
 (defmulti ->tx-event :op :default ::default)
 
 (defmethod ->tx-event :crux.tx/put [{:keys [op eid doc-id start-valid-time end-valid-time]}]
-  (cond-> [op eid doc-id]
+  (cond-> [op (c/new-id eid) doc-id]
     start-valid-time (conj start-valid-time)
     end-valid-time (conj end-valid-time)))
 
 (defmethod ->tx-event :crux.tx/delete [{:keys [op eid start-valid-time end-valid-time]}]
-  (cond-> [op eid]
+  (cond-> [op (c/new-id eid)]
     start-valid-time (conj start-valid-time)
     end-valid-time (conj end-valid-time)))
 
 (defmethod ->tx-event :crux.tx/match [{:keys [op eid doc-id at-valid-time]}]
-  (cond-> [op eid doc-id]
+  (cond-> [op (c/new-id eid) doc-id]
     at-valid-time (conj at-valid-time)))
 
 (defmethod ->tx-event :crux.tx/cas [{:keys [op eid old-doc-id new-doc-id at-valid-time]}]
-  (cond-> [op eid old-doc-id new-doc-id]
+  (cond-> [op (c/new-id eid) old-doc-id new-doc-id]
     at-valid-time (conj at-valid-time)))
 
 (defmethod ->tx-event :crux.tx/evict [{:keys [op eid]}]
   [op eid])
 
 (defmethod ->tx-event :crux.tx/fn [{:keys [op fn-eid arg-doc-id]}]
-  (cond-> [op fn-eid]
+  (cond-> [op (c/new-id fn-eid)]
     arg-doc-id (conj arg-doc-id)))
 
 (defmethod ->tx-event ::default [tx-op]
