@@ -60,13 +60,13 @@
                                (parse-body accept-type))))]
       (t/is (= #{[:ivan] [:peter]} (get-query "application/edn")))
       (t/is (= #{["ivan"] ["peter"]} (get-query "application/json")))
-      (t/is (= #{[":ivan"] [":peter"]} (get-query "text/csv")))
-      (t/is (= #{[":ivan"] [":peter"]} (get-query "text/tsv"))))
+      (t/is (= #{[":ivan"] [":peter"] ["e"]} (get-query "text/csv")))
+      (t/is (= #{[":ivan"] [":peter"] ["e"]} (get-query "text/tsv"))))
 
     ;; Test file-type based negotiation
-    (t/is (= #{[":ivan"] [":peter"]}
+    (t/is (= #{[":ivan"] [":peter"] ["e"]}
              (set (-> (get-result-from-path "/_crux/query.csv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
                       (parse-body "text/csv")))))
-    (t/is (= #{[":ivan"] [":peter"]}
+    (t/is (= #{[":ivan"] [":peter"] ["e"]}
              (set (-> (get-result-from-path "/_crux/query.tsv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
                       (parse-body "text/tsv")))))))

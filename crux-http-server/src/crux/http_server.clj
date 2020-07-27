@@ -840,13 +840,16 @@
                              :results {:query-results
                                        {"linked-entities" links
                                         "query-results" results}}}))
-                   csv? (with-out-str
-                          (csv/write-csv *out* results))
-                   tsv? (with-out-str
-                          (csv/write-csv *out* results :separator \tab))
+                   (or csv? tsv?) (let [csv-results (into [(:find query)] results)]
+                                    (with-out-str
+                                      (csv/write-csv *out* csv-results :seperator (if csv? \, \tab))))
                    link-entities? {"linked-entities" (link-top-level-entities db  "/_crux/entity" results)
                                    "query-results" results}
-                   :else results)})
+                   :else results)
+           :headers (when (or csv? tsv?) {"Content-Disposition"
+                                          (format "attachment; filename=%s-query.%s"
+                                                  (.format default-date-formatter (ZonedDateTime/now (ZoneId/of "Z")))
+                                                  (if csv? "csv" "tsv"))})})
         (catch Exception e
           (let [error-message (.getMessage e)]
             {:status 400
