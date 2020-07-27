@@ -122,28 +122,26 @@
        [vt-tt-inputs props :query]])))
 
 (defn query-history
-  []
+  [set-values]
   (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
     [:div.form-pane__history-scrollable
      (map-indexed
-      (fn [idx {:strs [q valid-time transaction-time] :as history-q}]
+      (fn [idx {:strs [q] :as history-q}]
         ^{:key (gensym)}
         [:div.form-pane__history-scrollable-el
          [:div.form-pane__history-delete
           {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
           [:i.fas.fa-trash-alt]]
          [:div.form-pane__history-scrollable-el-left
-          {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
-          (when valid-time
-            [:div
-             {:style {:margin-bottom "1rem"}}
-             [:span.form-pane__history-headings "Valid Time: "]
-             [:span.form-pane__history-txt valid-time]])
-          (when transaction-time
-            [:div
-             [:span.form-pane__history-headings "Transaction Time: "]
-             [:span.form-pane__history-txt transaction-time]])
-          [:div {:style {:margin-top "1rem"}}
+          [:div.form-pane__history-buttons
+           [:div.form-pane__history-button
+            {:on-click #(do (set-values {"q" q})
+                            (rf/dispatch [::events/query-form-tab-selected :edit-query]))}
+            "Edit"]
+           [:div.form-pane__history-button
+            {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
+            "Run"]]
+          [:div
            [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
       query-history-list)]))
 
@@ -178,7 +176,7 @@
 
                (case @(rf/subscribe [::sub/query-form-tab])
                  :edit-query [edit-query props]
-                 :recent-queries [query-history])]
+                 :recent-queries [query-history set-values])]
 
               [:p
                [:button.button

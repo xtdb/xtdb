@@ -117,8 +117,7 @@
                          :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))})
                        (remove #(nil? (second %)))
                        (into {}))
-         history-elem (-> (update query-params :valid-time common/iso-format-datetime)
-                          (update :transaction-time common/iso-format-datetime))
+         history-elem (dissoc query-params :valid-time :transaction-time)
          current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
          updated-history (conj (into [] (remove #(= history-elem %) current-storage)) history-elem)]
      {:db (assoc db :query-history updated-history)
@@ -148,12 +147,9 @@
 (rf/reg-event-fx
  ::go-to-historical-query
  (fn [{:keys [db]} [_ history-q]]
-   (let [{:strs [q valid-time transaction-time]} history-q
+   (let [{:strs [q]} history-q
          query-params (->>
-                       (merge
-                        (common/edn->query-params (reader/read-string q))
-                        {:valid-time (some-> valid-time)
-                         :transaction-time (some-> transaction-time)})
+                       (common/edn->query-params (reader/read-string q))
                        (remove #(nil? (second %)))
                        (into {}))]
      {:dispatch [:navigate :query {} query-params]})))
