@@ -300,6 +300,7 @@
 
                                    (do
                                      (doto forked-indexer
+                                       (db/index-docs docs)
                                        (db/unindex-eids evict-eids)
                                        (db/index-entity-txs tx etxs))
                                      {:new-tx-events tx-events}))))]
