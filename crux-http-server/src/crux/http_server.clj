@@ -823,7 +823,7 @@
         (let [query (cond-> (or (some-> q (edn/read-string))
                                 (build-query query-params))
                       (or html? csv? tsv?) (dissoc :full-results?)
-                      html? ((fn [q] (when (:limit q) (update q :limit inc)))))
+                      html? (update :limit #(if % (inc %) 101)))
               vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
               tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
               db (db-for-request crux-node {:valid-time vt
@@ -831,8 +831,7 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [html-results (cond-> results
-                                                (:limit query) drop-last)
+                   html? (let [html-results (drop-last results)
                                links (link-top-level-entities db  "/_crux/entity" html-results)]
                            (raw-html
                             {:body (query->html links query html-results)

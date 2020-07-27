@@ -110,13 +110,11 @@
          show-vt? (get-in db [:form-pane :show-vt? :query])
          show-tt? (get-in db [:form-pane :show-tt? :query])
          query-params (->>
-                       (->
-                        (merge
-                         (common/edn->query-params (reader/read-string q))
+                       (merge
+                        (common/edn->query-params (reader/read-string q))
 
-                         {:valid-time (when show-vt? (common/date-time->datetime vtd vtt))
-                          :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))})
-                        (update :limit (fnil identity "100")))
+                        {:valid-time (when show-vt? (common/date-time->datetime vtd vtt))
+                         :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))})
                        (remove #(nil? (second %)))
                        (into {}))
          history-elem (-> (update query-params :valid-time common/iso-format-datetime)

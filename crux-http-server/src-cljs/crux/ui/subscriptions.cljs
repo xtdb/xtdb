@@ -151,8 +151,7 @@
 (rf/reg-sub
  ::query-data-download-link
  (fn [db [_ link-type]]
-   (let [query-params (-> (get-in db [:current-route :query-params])
-                          (dissoc :limit :offset))]
+   (let [query-params (get-in db [:current-route :query-params])]
      (-> (common/route->url :query {} query-params)
          (string/replace #"query" (str "query." link-type))))))
 
