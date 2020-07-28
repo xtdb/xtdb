@@ -85,7 +85,7 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,a
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Property|Description|Default Value
-|`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/event-log-1"`| n/a 
+|`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/event-log-1"`| n/a
 |`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.memdb/kv*
 |`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *true*
 |===
@@ -114,8 +114,6 @@ You can later stop the node if you wish, however your data will not be persisted
 include::./src/docs/examples.clj[tags=close-node]
 ----
 
-Please note that when configuring a standalone node with persisted indexes (via `:crux.kv/db-dir`), you should always have the event-log persisted as well (via `:crux.standalone/event-log-dir`). Crux does not currently enforce this constraint or disallow otherwise invalid topology combinations.
-
 [#config-rocksdb]
 == RocksDB
 
@@ -137,6 +135,10 @@ include::./deps.edn[tags=RocksDeps]
 ----
 include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
 ----
+
+Please note that when configuring a standalone node with persisted indexes (via `:crux.kv/db-dir`), you should always have the tx-log and document-store persisted as well (via `:crux.standalone/event-log-dir`).
+Crux does not currently enforce this constraint or disallow otherwise invalid topology combinations.
+
 
 You can create a node with custom RocksDB options by passing extra keywords in the topology. These are:
 
