@@ -32,12 +32,14 @@
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
-   (let [now (t/now)
-         query-params (get-in db [:current-route :query-params])
+   (let [query-params (get-in db [:current-route :query-params])
          valid-time (common/datetime->date-time
-                     (str (:valid-time query-params now)))
+                     (str (:valid-time query-params (t/now))))
+         latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                (:crux.tx/tx-time)
+                                (t/instant))
          transaction-time (common/datetime->date-time
-                           (str (:transaction-time query-params now)))]
+                           (str (:transaction-time query-params latest-tx-time)))]
      {"q" (if (:find query-params)
             (common/query-params->formatted-edn-string
              (dissoc query-params :valid-time :transaction-time))
@@ -54,8 +56,11 @@
          query-params (get-in db [:current-route :query-params])
          valid-time (common/datetime->date-time
                      (str (:valid-time query-params now)))
+         latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                (:crux.tx/tx-time)
+                                (t/instant))
          transaction-time (common/datetime->date-time
-                           (str (:transaction-time query-params now)))]
+                           (str (:transaction-time query-params latest-tx-time)))]
      {"eid" (:eid query-params)
       "vtd" (:date valid-time)
       "vtt" (:time valid-time)
@@ -280,4 +285,4 @@
 (rf/reg-sub
  ::node-options
  (fn [db _]
-   (:options db)))
+   (:node-options (:options db))))

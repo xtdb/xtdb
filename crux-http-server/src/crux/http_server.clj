@@ -861,30 +861,32 @@
                                  {"error" error-message}}})
                      {:error error-message})}))))))
 
-(defn- data-browser-handler [crux-node options request]
-  (condp check-path request
-    [#"^/_crux/index$" [:get]]
-    (root-handler crux-node options request)
+(defn- data-browser-handler [crux-node node-options request]
+  (let [options {:node-options node-options
+                 :latest-completed-tx (api/latest-completed-tx crux-node)}]
+    (condp check-path request
+      [#"^/_crux/index$" [:get]]
+      (root-handler crux-node options request)
 
-    [#"^/_crux/index.html$" [:get]]
-    (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
+      [#"^/_crux/index.html$" [:get]]
+      (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
 
-    [#"^/_crux/status" [:get]]
-    (status crux-node options request)
+      [#"^/_crux/status" [:get]]
+      (status crux-node options request)
 
-    [#"^/_crux/entity$" [:get]]
-    (entity-state crux-node options request)
+      [#"^/_crux/entity$" [:get]]
+      (entity-state crux-node options request)
 
-    [#"^/_crux/query$" [:get]]
-    (data-browser-query crux-node options request)
+      [#"^/_crux/query$" [:get]]
+      (data-browser-query crux-node options request)
 
-    [#"^/_crux/query.csv$" [:get]]
-    (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/csv"))
+      [#"^/_crux/query.csv$" [:get]]
+      (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/csv"))
 
-    [#"^/_crux/query.tsv$" [:get]]
-    (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/tsv"))
+      [#"^/_crux/query.tsv$" [:get]]
+      (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/tsv"))
 
-    nil))
+      nil)))
 
 (def ^:const default-server-port 3000)
 
