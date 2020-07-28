@@ -168,65 +168,49 @@
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
         args-content-hash (c/new-id args-doc)
 
-        res (cond
-              tx-events {:tx-events tx-events}
+        {:keys [tx-events docs failed?]}
+        (cond
+          tx-events {:tx-events tx-events}
 
-              failed? (do
-                        (log/warn "Transaction function failed when originally evaluated:"
-                                  fn-id args-doc-id
-                                  (pr-str (select-keys args-doc [:crux.db.fn/exception
-                                                                 :crux.db.fn/message
-                                                                 :crux.db.fn/ex-data])))
-                        {:failed? true})
+          failed? (do
+                    (log/warn "Transaction function failed when originally evaluated:"
+                              fn-id args-doc-id
+                              (pr-str (select-keys args-doc [:crux.db.fn/exception
+                                                             :crux.db.fn/message
+                                                             :crux.db.fn/ex-data])))
+                    {:failed? true})
 
-              :else (try
-                      (let [ctx (->TxFnContext query-engine tx)
-                            db (api/db query-engine tx-time)
-                            res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
-                        (if (false? res)
-                          {:failed? true}
+          :else (try
+                  (let [ctx (->TxFnContext query-engine tx)
+                        db (api/db query-engine tx-time)
+                        res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
+                    (if (false? res)
+                      {:failed? true}
 
-                          (let [conformed-tx-ops (mapv txc/conform-tx-op res)
-                                tx-events (mapv txc/->tx-event conformed-tx-ops)]
-                            {:tx-events tx-events
-                             :docs (into {args-content-hash {:crux.db/id args-doc-id
-                                                             :crux.db.fn/tx-events tx-events}}
-                                         (mapcat :docs)
-                                         conformed-tx-ops)})))
+                      (let [conformed-tx-ops (mapv txc/conform-tx-op res)
+                            tx-events (mapv txc/->tx-event conformed-tx-ops)]
+                        {:tx-events tx-events
+                         :docs (into {args-content-hash {:crux.db/id args-doc-id
+                                                         :crux.db.fn/tx-events tx-events}}
+                                     (mapcat :docs)
+                                     conformed-tx-ops)})))
 
-                      (catch Throwable t
-                        (reset! !last-tx-fn-error t)
-                        (log/warn t "Transaction function failure:" fn-id args-doc-id)
+                  (catch Throwable t
+                    (reset! !last-tx-fn-error t)
+                    (log/warn t "Transaction function failure:" fn-id args-doc-id)
 
-                        {:failed? true
-                         :fn-error t
-                         :docs {args-content-hash {:crux.db.fn/failed? true
-                                                   :crux.db.fn/exception (symbol (.getName (class t)))
-                                                   :crux.db.fn/message (ex-message t)
-                                                   :crux.db.fn/ex-data (ex-data t)}}})))
-
-        {:keys [tx-events docs failed?]} res]
-
+                    {:failed? true
+                     :fn-error t
+                     :docs {args-content-hash {:crux.db.fn/failed? true
+                                               :crux.db.fn/exception (symbol (.getName (class t)))
+                                               :crux.db.fn/message (ex-message t)
+                                               :crux.db.fn/ex-data (ex-data t)}}})))]
     (if failed?
       {:pre-commit-fn (constantly false)
        :docs docs}
 
-      (let [op-results (vec (for [[op & args :as tx-event] tx-events]
-                              (index-tx-event (case op
-                                                :crux.tx/fn (let [[fn-eid args-doc-id] args]
-                                                              (cond-> [op fn-eid]
-                                                                args-doc-id (conj (get docs args-doc-id))))
-                                                tx-event)
-                                              tx
-                                              tx-ingester)))]
-        {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} op-results
-                                             :when pre-commit-fn]
-                                         (pre-commit-fn)))
-         :etxs (mapcat :etxs op-results)
-
-         :docs (into docs (mapcat :docs op-results))
-
-         :evict-eids (into #{} (mapcat :evict-eids) op-results)}))))
+      {:tx-events tx-events
+       :docs docs})))
 
 (defmethod index-tx-event :default [[op & _] tx tx-ingester]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
@@ -296,34 +280,36 @@
 
     (try
       (index-docs this (txc/tx-events->docs forked-document-store tx-events))
-
       (let [forked-deps {:indexer forked-indexer
                          :document-store forked-document-store
                          :query-engine (assoc query-engine :indexer forked-indexer)}
-            res (reduce (fn [_ tx-event]
-                          (with-open [index-store (db/open-index-store forked-indexer)]
-                            (let [{:keys [pre-commit-fn evict-eids etxs docs]}
-                                  (index-tx-event (-> tx-event
-                                                      (with-tx-fn-args this))
-                                                  tx
-                                                  (-> forked-deps
-                                                      (assoc :index-store index-store)))]
-                              (db/submit-docs forked-document-store docs)
+            abort? (loop [[tx-event & more-tx-events] tx-events]
+                     (when tx-event
+                       (let [{:keys [new-tx-events abort?]}
+                             (with-open [index-store (db/open-index-store forked-indexer)]
+                               (let [{:keys [pre-commit-fn tx-events evict-eids etxs docs]}
+                                     (index-tx-event (-> tx-event
+                                                         (with-tx-fn-args forked-deps))
+                                                     tx
+                                                     (-> forked-deps
+                                                         (assoc :index-store index-store)))]
+                                 (db/submit-docs forked-document-store docs)
 
-                              (if (and pre-commit-fn (not (pre-commit-fn)))
-                                (reduced false)
+                                 (if (and pre-commit-fn (not (pre-commit-fn)))
+                                   {:abort? true}
 
-                                (do
-                                  (doto forked-indexer
-                                    (db/unindex-eids evict-eids)
-                                    (db/index-entity-txs tx etxs))
-                                  true)))))
-                        true
-                        tx-events)]
-        (when-not res
+                                   (do
+                                     (doto forked-indexer
+                                       (db/index-docs docs)
+                                       (db/unindex-eids evict-eids)
+                                       (db/index-entity-txs tx etxs))
+                                     {:new-tx-events tx-events}))))]
+                         (or abort?
+                             (recur (concat new-tx-events more-tx-events))))))]
+        (when abort?
           (reset! !state :abort-only))
 
-        res)
+        (not abort?))
 
       (catch Throwable e
         (reset! !error e)
