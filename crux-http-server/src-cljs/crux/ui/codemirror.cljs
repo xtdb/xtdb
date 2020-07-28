@@ -7,6 +7,9 @@
             cljsjs.codemirror.addon.hint.show-hint
             cljsjs.codemirror.addon.hint.anyword-hint
             cljsjs.codemirror.addon.display.autorefresh
+            [crux.ui.common :as common]
+            [crux.ui.subscriptions :as sub]
+            [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.dom :as rd]
             [goog.object :as gobj]
@@ -160,11 +163,13 @@
   [_ _]
   (let [state (r/atom nil)]
     (fn [m links]
-      (let [generate-snippet
+      (let [valid-time @(rf/subscribe [::sub/valid-time])
+            transaction-time @(rf/subscribe [::sub/transaction-time])
+            generate-snippet
             (fn generate-snippet [parent-keys m]
               (let [level (inc (count parent-keys))]
                 (cond
-                  (get links m) [:a {:href (str (get links m))}
+                  (get links m) [:a {:href (common/entity-link (get links m) valid-time transaction-time)}
                                  (with-out-str
                                    (pprint/with-pprint-dispatch
                                      pprint/code-dispatch

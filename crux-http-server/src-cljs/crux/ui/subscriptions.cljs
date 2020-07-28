@@ -46,6 +46,19 @@
       "transaction-time" (js/moment transaction-time)})))
 
 (rf/reg-sub
+ ::valid-time
+ (fn [db _]
+   (get-in db [:current-route :query-params :valid-time] (t/now))))
+
+(rf/reg-sub
+ ::transaction-time
+ (fn [db _]
+   (let [latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                (:crux.tx/tx-time)
+                                (t/instant))]
+     (get-in db [:current-route :query-params :transaction-time] latest-tx-time))))
+
+(rf/reg-sub
  ::initial-values-entity
  (fn [db _]
    (let [query-params (get-in db [:current-route :query-params])
@@ -70,12 +83,17 @@
            table-loading? (get-in db [:query :result-pane :loading?])
            offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
+           valid-time (get-in db [:current-route :query-params :valid-time] (t/now))
+           latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                  (:crux.tx/tx-time)
+                                  (t/instant))
+           transaction-time (get-in db [:current-route :query-params :transaction-time] latest-tx-time)
            columns (map (fn [column]
                           {:column-key column
                            :column-name (str column)
                            :render-fn
                            (fn [_ v]
-                             (if-let [link (get linked-entities v)]
+                             (if-let [link (some-> (get linked-entities v) (common/entity-link valid-time transaction-time))]
                                [:a {:href link}
                                 (str v)]
                                v))
