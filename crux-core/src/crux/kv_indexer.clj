@@ -691,7 +691,7 @@
                                                                             count)
                                                                        1)]
                                                      (cond-> acc
-                                                       true (update :tombstones assoc (.content-hash quad) {:crux.db/id eid
+                                                       true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
                                                                                                             :crux.db/evicted? true})
                                                        true (update :ks conj
                                                                     (encode-ae-key-to nil
