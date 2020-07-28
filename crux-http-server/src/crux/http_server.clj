@@ -484,11 +484,13 @@
                    [:div.node-info
                     [:h2.node-info__title "Current Configuration"]
                     (status-map->html-elements options)]]
-                  [:div.node-info
+                  [:div.node-attributes
                    [:h2.node-info__title "Attribute Cardinalities"]
                    (attribute-stats->html-elements attribute-stats)]]
                  :title "/_status"
-                 :options options}))
+                 :options options
+                 :results {:status-results {:status-map status-map
+                                            :attribute-stats attribute-stats}}}))
              status-map)}))
 
 (def ^DateTimeFormatter default-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
