@@ -33,7 +33,8 @@
           :crux.kv/db-dir (io/file dev-node-dir "db")
           :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv
           :crux.standalone/event-log-dir (io/file dev-node-dir "event-log")
-          :crux.kv/sync? true}})
+          :crux.kv/sync? true
+          :crux.http-server/label "Standalone Dev Node"}})
 
 (defmethod i/init-key :embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")

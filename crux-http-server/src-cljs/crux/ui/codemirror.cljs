@@ -21,7 +21,7 @@
   (-> (reduce (fn [s c] (str s (escape-re c) ".*")) "" input)
       (js/RegExp "i")))
 
-(def crux-builtin-keywords
+(def ^{:private true :const true} crux-builtin-keywords
  [:find :where :args :rules :offset :limit :order-by
   :timeout :full-results? :crux.db/id])
 

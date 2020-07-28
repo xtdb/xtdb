@@ -13,8 +13,9 @@
     (rf/clear-subscription-cache!)
     (navigation/init-routes!)
     (rf/dispatch [::events/inject-metadata "options" :options])
+    (rf/dispatch [::events/inject-metadata "results" :meta-results])
     (rf/dispatch [::events/inject-local-storage])
-    (r/render [views/view] section)))
+    (.setTimeout js/window #(r/render [views/view] section) 0))) ;; not ideal
 
 (defn ^:export init
   []

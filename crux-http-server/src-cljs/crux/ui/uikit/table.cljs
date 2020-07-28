@@ -210,7 +210,7 @@
            [filter-all table-atom]]
           [active-filters data table-atom]]
          (if (:loading? data)
-           [loading-table {:rows 7 :cols 4}]
+           [loading-table {:rows 7 :cols 4}] ;; using previous row count reduces page jumping
            [:div.table__main
             [:table.table
              [header-columns data table-atom]
