@@ -62,7 +62,9 @@
   [data table-atom]
   (let [columns (utils/table-columns data @table-atom)]
     [:thead.table__head
-     (into [:tr]
+     (into [:tr
+            [:th.row-number.head__cell
+             [:span "#"]]]
            (map
             (fn [{:keys [column-key column-name]}]
               ^{:key column-key}
@@ -99,13 +101,16 @@
     [:tbody.table__body
      (for [[index row] (map-indexed vector rows)]
        ^{:key (str row index)}
-       [:tr.table__row.body__row
-        (for [{:keys [column-key render-fn]} columns]
-          ^{:key (str row column-key)}
-          [:td.table__cell.body__cell
-           (if render-fn
-             (render-fn row (column-key row))
-             (column-key row))])])]))
+
+       [:<>
+        [:tr.table__row.body__row
+         [:td.row-number (+ 1 index)]
+         (for [{:keys [column-key render-fn]} columns]
+           ^{:key (str row column-key)}
+           [:td.table__cell.body__cell
+            (if render-fn
+              (render-fn row (column-key row))
+              (column-key row))])]])]))
 
 (defn actions
   [data table-atom]
