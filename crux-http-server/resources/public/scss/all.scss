@@ -813,6 +813,7 @@ ul.entity-group__value li::before {
 }
 
 .tab-bar {
+    padding-left: 0.4rem;
     margin-bottom: 1.4rem;
     border-bottom: 1px solid #bfbcbc;
     display: flex;
@@ -821,7 +822,7 @@ ul.entity-group__value li::before {
 .tab-bar__tab {
     cursor: pointer;
     font-size: .8rem;
-    padding: 0.4rem;
+    padding: 0.4rem 0.6rem;
     border-top: 1px solid transparent;
     margin-bottom: -1px;
 }
