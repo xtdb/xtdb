@@ -1,7 +1,7 @@
 = Speculative transactions
 
 You can submit speculative transactions to Crux, to see what the results of your queries would be if a new transaction were to be applied.
-This is particularly useful for forecasting/projections, but also
+This is particularly useful for forecasting/projections, without affecting other users of the database.
 
 You'll receive a new database value, against which you can make queries and entity requests as you would any normal database value.
 Only you will see the effect of these transactions - they're not submitted to the cluster, and they're not visible to any other database value in your application.
