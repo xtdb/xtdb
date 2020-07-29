@@ -14,7 +14,7 @@
     (fix/transact! *api* (take 10 (tf/tpch-table->docs t))))
   (f))
 
-(t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node cf/with-calcite-connection tf/with-tpch-schema with-tpch-dataset)
+(t/use-fixtures :each cf/with-calcite-module fix/with-node cf/with-calcite-connection tf/with-tpch-schema with-tpch-dataset)
 
 (defn query [^String s]
   (cf/query (.replace s "tpch." "")))

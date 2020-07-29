@@ -22,7 +22,7 @@
                          :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
   (f))
 
-(t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node with-each-connection-type with-sql-schema)
+(t/use-fixtures :each cf/with-calcite-module fix/with-node with-each-connection-type with-sql-schema)
 
 (defn- inst->iso-str [^java.util.Date t]
   (.format (ZonedDateTime/ofInstant (.toInstant t) (ZoneId/of "UTC")) DateTimeFormatter/ISO_INSTANT))

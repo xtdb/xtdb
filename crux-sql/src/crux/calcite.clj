@@ -7,7 +7,7 @@
             [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
             [crux.calcite.types]
-            crux.db)
+            [crux.system :as sys])
   (:import clojure.lang.Symbol
            crux.calcite.CruxTable
            [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
@@ -467,9 +467,16 @@
   ([node] (jdbc-connection node false))
   ([node scan-only?]
    (assert node)
-   (DriverManager/getConnection "jdbc:crux:" (-> node meta :crux.node/topology ::server :node-uuid (model-properties scan-only?)))))
+   (DriverManager/getConnection "jdbc:crux:" (-> node :!system deref ::server :node-uuid (model-properties scan-only?)))))
 
-(defn start-server [{:keys [:crux.node/node]} {:keys [::port ::scan-only?]}]
+(defn ->server {::sys/args {:port {:doc "JDBC Server Port"
+                                   :default 1501
+                                   :spec ::sys/nat-int}
+                            :scan-only? {:doc "Crux Table Scan Only"
+                                         :default false
+                                         :spec ::sys/boolean}}
+                ::sys/deps {:node :crux/node}}
+  [{:keys [node port scan-only?]}]
   (let [node-uuid (str (UUID/randomUUID))]
     (.put !crux-nodes node-uuid node)
     (let [server (.build (doto (HttpServer$Builder.)
@@ -478,12 +485,3 @@
                            (.withPort port)))]
       (.start server)
       (CalciteAvaticaServer. server node-uuid))))
-
-(def module {::server {:start-fn start-server
-                       :args {::port {:doc "JDBC Server Port"
-                                      :default 1501
-                                      :crux.config/type :crux.config/nat-int}
-                              ::scan-only? {:doc "Crux Table Scan Only"
-                                            :default false
-                                            :crux.config/type :crux.config/boolean}}
-                       :deps #{:crux.node/node}}})
