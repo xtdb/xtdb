@@ -4,7 +4,7 @@
             [clojure.java.io :as io]))
 
 (t/deftest bitemporal-tale-test
-  (with-open [system (crux/start-node {:crux.node/topology 'crux.standalone/topology})]
+  (with-open [system (crux/start-node {})]
     (t/is system)
 
     (crux/await-tx system (crux/submit-tx

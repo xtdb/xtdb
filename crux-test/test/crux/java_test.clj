@@ -4,7 +4,7 @@
             [crux.fixtures :as fix :refer [*api*]])
   (:import [java.util ArrayList List HashMap]))
 
-(t/use-fixtures :each fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (t/deftest test-java-types
   (t/testing "Can use Java List/Map types when using submit-tx"

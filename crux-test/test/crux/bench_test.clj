@@ -101,25 +101,21 @@
      :lmdb fkv/with-lmdb
      :mem fkv/with-memdb)
    (fn []
-     (fix/with-kv-dir
+     (fix/with-node
        (fn []
-         (fix/with-standalone-topology
-           (fn []
-             (fix/with-node
-               (fn []
-                 (when verbose (print ":insert... ") (flush))
-                 (when preload
-                   (insert-docs ts preload))
-                 (let [insert-time (duration (insert-data n batch-size ts))
-                       queries-to-bench (if (= query :all)
-                                          (keys queries)
-                                          (flatten [query]))]
-                   (when verbose (println insert-time))
-                   (merge {:insert insert-time}
-                          (zipmap
-                           queries-to-bench
-                           (map (partial do-benchmark ts samples speed verbose)
-                                queries-to-bench)))))))))))))
+         (when verbose (print ":insert... ") (flush))
+         (when preload
+           (insert-docs ts preload))
+         (let [insert-time (duration (insert-data n batch-size ts))
+               queries-to-bench (if (= query :all)
+                                  (keys queries)
+                                  (flatten [query]))]
+           (when verbose (println insert-time))
+           (merge {:insert insert-time}
+                  (zipmap
+                   queries-to-bench
+                   (map (partial do-benchmark ts samples speed verbose)
+                        queries-to-bench)))))))))
 (comment
   (bench)
 

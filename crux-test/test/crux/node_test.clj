@@ -9,7 +9,6 @@
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
             [clojure.java.io :as io]
-            crux.standalone
             [crux.tx :as tx]
             [crux.tx.event :as txe]
             [crux.api :as api]

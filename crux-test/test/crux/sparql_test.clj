@@ -6,7 +6,7 @@
             [crux.sparql :as sparql]
             [crux.rdf :as rdf]))
 
-(t/use-fixtures :each fix/with-standalone-topology fix/with-kv-dir fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 ;; https://jena.apache.org/tutorials/sparql.html
 (t/deftest test-can-transact-and-query-using-sparql

@@ -12,7 +12,6 @@
   (:import (java.io InputStream)))
 
 (t/use-fixtures :each
-  fix/with-standalone-topology
   fh/with-http-server
   fix/with-node)
 

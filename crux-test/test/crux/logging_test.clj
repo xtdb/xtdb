@@ -20,7 +20,7 @@
       (t/is (every? (complement #(re-find (re-pattern (str secret)) %))
                     @!log-messages)))))
 
-(t/use-fixtures :once fix/with-kv-dir fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :once fix/with-node)
 (t/use-fixtures :each asserting-no-logged-secrets)
 
 (t/deftest test-submit-putting-doc

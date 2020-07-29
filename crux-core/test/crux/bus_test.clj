@@ -1,7 +1,6 @@
 (ns crux.bus-test
   (:require [crux.bus :as bus]
             [clojure.test :as t]
-            [crux.topology :as topo]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [crux.api :as crux])
@@ -10,7 +9,7 @@
 
 (t/deftest test-bus
   (let [!events (atom [])]
-    (with-open [bus ^Closeable (topo/start-component bus/bus {} {})]
+    (with-open [bus ^Closeable (bus/->bus)]
       (bus/send bus {:crux/event-type :foo, :value 1})
 
       (with-open [_ (bus/listen bus {:crux/event-types #{:foo :baz}} #(swap! !events conj %))]

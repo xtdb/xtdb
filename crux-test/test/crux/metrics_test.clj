@@ -7,7 +7,7 @@
             [crux.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
 
-(t/use-fixtures :each fix/with-kv-dir fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (t/deftest test-indexer-metrics
   (let [{:crux.node/keys [node bus indexer]} (:crux.node/topology (meta *api*))

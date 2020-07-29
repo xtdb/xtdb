@@ -40,10 +40,8 @@
 
 (defn with-api* [{:keys [jwks ->jwt-token]} f]
   (let [server-port (cio/free-port)]
-    (with-open [node (api/start-node {:crux.node/topology ['crux.standalone/topology
-                                                           'crux.http-server/module]
-                                      :crux.http-server/jwks jwks
-                                      :crux.http-server/port server-port})
+    (with-open [node (api/start-node {:crux.http-server/server {:port server-port
+                                                                :jwks jwks}})
                 client (api/new-api-client (str "http://localhost:" server-port) {:->jwt-token ->jwt-token})]
 
       (binding [*api* client]

@@ -3,7 +3,6 @@
             [crux.api :as crux]
             [crux.io :as cio]
             [crux.node :as n]
-            [crux.standalone :as standalone]
             [crux.tx :as tx]
             [clojure.test :as t])
   (:import crux.api.ICruxAPI
@@ -28,22 +27,16 @@
                             ~@body)))
 
 (def ^:dynamic ^ICruxAPI *api*)
-(def ^:dynamic *opts* nil)
+(def ^:dynamic *opts* {})
 
 (defn with-opts [opts f]
   (binding [*opts* (merge *opts* opts)]
     (f)))
 
-(defn with-standalone-topology [f]
-  (with-opts {::n/topology '[crux.standalone/topology]}
-    f))
-
-(defn with-standalone-doc-store [f]
-  (with-opts (-> *opts*
-                 (update ::n/topology conj (-> standalone/topology
-                                               (select-keys [::n/document-store
-                                                             ::standalone/event-log]))))
-    f))
+(defn update-opts [f & args]
+  (fn [nxt]
+    (binding [*opts* (apply f *opts* args)]
+      (nxt))))
 
 (defn with-kv-dir [f]
   (with-tmp-dir "kv-store" [db-dir]

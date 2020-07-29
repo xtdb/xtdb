@@ -6,7 +6,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as f]
-            [crux.fixtures.kv-only :as fkv :refer [*kv*]]
+            [crux.fixtures.kv :as fkv]
             [crux.kv-indexer :as kvi]
             [crux.tx :as tx])
   (:import crux.codec.EntityTx
@@ -14,13 +14,12 @@
 
 (def ^:dynamic *indexer*)
 
-(t/use-fixtures :each fkv/with-each-kv-store-implementation f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store* f/with-silent-test-check)
 
 (defmacro with-fresh-indexer [& body]
-  `(fkv/with-kv-store
-     (fn []
-       (binding [*indexer* (kvi/->KvIndexer *kv*)]
-         ~@body))))
+  `(fkv/with-kv-store [kv-store#]
+     (binding [*indexer* (kvi/->KvIndexer kv-store#)]
+       ~@body)))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own
 ;; transactions direct into the KV store so it can generate random
