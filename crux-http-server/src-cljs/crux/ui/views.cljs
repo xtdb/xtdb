@@ -12,10 +12,13 @@
             [fork.core :as fork]
             [reagent.core :as r]
             [re-frame.core :as rf]
-            [tick.alpha.api :as t]))
+            [tick.alpha.api :as t]
+            [cljsjs.react-datetime]))
+
+(def datetime (r/adapt-react-class js/Datetime))
 
 (defn vt-tt-inputs
-  [{:keys [values touched errors handle-change handle-blur]} component]
+  [{:keys [values touched errors handle-change handle-blur set-values]} component]
   (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
         show-tt? @(rf/subscribe [::sub/show-tt? component])]
     [:<>
@@ -25,25 +28,18 @@
                :on-change #(rf/dispatch [::events/toggle-show-vt component show-vt?])}]
       [:div.input-group-label.label
        [:label "Valid Time"]]
-
-      [:div
+      [:div.date-time-input
        {:class (when-not show-vt? "hidden")}
-       [:input.input.input-time
-        {:type "date"
-         :name "vtd"
-         :value (get values "vtd")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       [:input.input.input-time
-        {:type "time"
-         :name "vtt"
-         :value (get values "vtt")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       (when (and (or (get touched "vtd")
-                      (get touched "vtt"))
-                  (get errors "vt"))
-         [:p.input-error (get errors "vt")])]]
+       [datetime
+        {:name "valid-time"
+         :dateFormat "YYYY-MM-DD"
+         :timeFormat "HH:mm"
+         :value (get values "valid-time")
+         :input true
+         :on-change #(set-values {"valid-time" %})}]
+       (when (and (get touched "valid-time")
+                  (get errors "valid-time"))
+         [:p.input-error (get errors "valid-time")])]]
 
      [:div.crux-time
       [:input {:type :checkbox
@@ -51,24 +47,18 @@
                :on-change #(rf/dispatch [::events/toggle-show-tt component show-tt?])}]
       [:div.input-group-label.label
        [:label "Transaction Time" ]]
-      [:div
+      [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
-       [:input.input.input-time
-        {:type "date"
-         :name "ttd"
-         :value (get values "ttd")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       [:input.input.input-time
-        {:type "time"
-         :name "ttt"
-         :value (get values "ttt")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       (when (and (or (get touched "ttd")
-                      (get touched "ttt"))
-                  (get errors "tt"))
-         [:p.input-error (get errors "tt")])]]]))
+       [datetime
+        {:name "transaction-time"
+         :dateFormat "YYYY-MM-DD"
+         :timeFormat "HH:mm"
+         :value (get values "transaction-time")
+         :input true
+         :on-change #(set-values {"transaction-time" %})}]
+       (when (and (get touched "transaction-time")
+                  (get errors "transaction-time"))
+         [:p.input-error (get errors "transaction-time")])]]]))
 
 (defn vt-tt-entity-box
   [vt tt]
@@ -82,8 +72,7 @@
 
 (defn query-validation
   [values]
-  (let [empty-string? #(empty? (string/trim (or (get values %) "")))
-        invalid-query? (try
+  (let [invalid-query? (try
                          (let [query-edn (reader/read-string (get values "q"))]
                            (cond
                              (nil? query-edn)  "Query box is empty"
@@ -91,13 +80,15 @@
                              (not (contains? query-edn :where)) "Query doesn't contain a 'where' clause"))
                          (catch js/Error e
                            (str "Error reading query - " (.-message e))))
+        invalid-time? (fn [key-name] (try
+                                       (let [result (js/moment (get values key-name))]
+                                         (when (string/includes? (str result) "Invalid")
+                                           (str result)))
+                                       (catch js/Error e
+                                         (str "Error reading time - " (.-message e)))))
         validation {"q" invalid-query?
-                    "vt" (when (apply not= ((juxt #(% "vtd")
-                                                  #(% "vtt")) empty-string?))
-                           "Fill out both inputs or none")
-                    "tt" (when (apply not= ((juxt #(% "ttd")
-                                                  #(% "ttt")) empty-string?))
-                           "Fill out both inputs or none")}]
+                    "valid-time" (invalid-time? "valid-time")
+                    "transaction-time" (invalid-time? "transaction-time")}]
     (when (some some? (vals validation)) validation)))
 
 (defn- submit-form-on-keypress [evt form-id]
@@ -230,14 +221,16 @@
 (defn entity-validation
   [values]
   (let [empty-string? #(empty? (string/trim (or (get values %) "")))
+        invalid-time? (fn [key-name] (try
+                                       (let [result (js/moment (get values key-name))]
+                                         (when (string/includes? (str result) "Invalid")
+                                           (str result)))
+                                       (catch js/Error e
+                                         (str "Error reading time - " (.-message e)))))
         validation {"eid" (when (empty-string? "eid")
                             "Entity id is empty")
-                    "vt" (when (apply not= ((juxt #(% "vtd")
-                                                  #(% "vtt")) empty-string?))
-                           "Fill out both inputs or none")
-                    "tt" (when (apply not= ((juxt #(% "ttd")
-                                                  #(% "ttt")) empty-string?))
-                           "Fill out both inputs or none")}]
+                    "valid-time" (invalid-time? "valid-time")
+                    "transaction-time" (invalid-time? "transaction-time")}]
     (when (some some? (vals validation)) validation)))
 
 (defn entity-form

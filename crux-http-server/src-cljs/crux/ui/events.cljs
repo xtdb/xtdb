@@ -106,15 +106,14 @@
 (rf/reg-event-fx
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [q vtd vtt ttd ttt]} values
+   (let [{:strs [q valid-time transaction-time]} values
          show-vt? (get-in db [:form-pane :show-vt? :query])
          show-tt? (get-in db [:form-pane :show-tt? :query])
          query-params (->>
                        (merge
                         (common/edn->query-params (reader/read-string q))
-
-                        {:valid-time (when show-vt? (common/date-time->datetime vtd vtt))
-                         :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))})
+                        {:valid-time (when show-vt? (t/instant (.toDate (js/moment valid-time))))
+                         :transaction-time (when show-tt? (t/instant (.toDate (js/moment transaction-time))))})
                        (remove #(nil? (second %)))
                        (into {}))
          history-elem (dissoc query-params :valid-time :transaction-time)
@@ -173,12 +172,12 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [eid vtd vtt ttd ttt]} :values}]]
+ (fn [{:keys [db]} [_ {{:strs [eid valid-time transaction-time]} :values}]]
    (let [show-vt? (get-in db [:form-pane :show-vt? :entity])
          show-tt? (get-in db [:form-pane :show-tt? :entity])
          query-params (->>
-                       {:valid-time (when show-vt? (common/date-time->datetime vtd vtt))
-                        :transaction-time (when show-tt? (common/date-time->datetime ttd ttt))
+                       {:valid-time (when show-vt? (t/instant (.toDate (js/moment valid-time))))
+                        :transaction-time (when show-tt? (t/instant (.toDate (js/moment transaction-time))))
                         :eid eid}
                        (remove #(nil? (second %)))
                        (into {}))]

@@ -845,6 +845,10 @@ ul.entity-group__value li::before {
     margin-bottom: 0.75rem;
 }
 
+.date-time-input {
+    display: flex;
+}
+
 .form-pane__history {
     padding: .6rem;
     background: #f1f1f1;
