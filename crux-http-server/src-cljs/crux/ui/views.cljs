@@ -88,8 +88,10 @@
                                        (catch js/Error e
                                          (str "Error reading time - " (.-message e)))))
         validation {"q" invalid-query?
-                    "valid-time" (invalid-time? "valid-time")
-                    "transaction-time" (invalid-time? "transaction-time")}]
+                    "valid-time" (when @(rf/subscribe [::sub/show-vt? :query])
+                                   (invalid-time? "valid-time"))
+                    "transaction-time" (when @(rf/subscribe [::sub/show-tt? :query])
+                                         (invalid-time? "transaction-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn- submit-form-on-keypress [evt form-id]
@@ -232,8 +234,10 @@
                                          (str "Error reading time - " (.-message e)))))
         validation {"eid" (when (empty-string? "eid")
                             "Entity id is empty")
-                    "valid-time" (invalid-time? "valid-time")
-                    "transaction-time" (invalid-time? "transaction-time")}]
+                    "valid-time" (when @(rf/subscribe [::sub/show-vt? :entity])
+                                   (invalid-time? "valid-time"))
+                    "transaction-time" (when @(rf/subscribe [::sub/show-tt? :entity])
+                                         (invalid-time? "transaction-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn entity-form

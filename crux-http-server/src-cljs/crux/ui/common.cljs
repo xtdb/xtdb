@@ -31,8 +31,11 @@
 
 (defn iso-format-datetime
   [dt]
-  (when dt
-    (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt)))))
+  (try
+    (when dt
+      (t/format (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") (t/zoned-date-time (t/inst dt))))
+    (catch js/Error e
+      nil)))
 
 (defn edn->pretty-string
   [obj]
