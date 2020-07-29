@@ -415,6 +415,7 @@
   [:div.node-info__content
    (for [[key value] (common/sort-map status-map)]
      (when value
+       ^{:key key}
        [:p
         [:span.node-info__key (common/edn->pretty-string key)]
         [:span.node-info__value (common/edn->pretty-string value)]]))])
@@ -430,6 +431,7 @@
     [:tbody.table__body
      [:<>
       (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
+        ^{:key key}
         [:tr.table__row.body__row
          [:td.table__cell.body__cell
           [:a

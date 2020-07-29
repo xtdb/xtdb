@@ -97,8 +97,8 @@
   [data table-atom rows]
   (let [columns (utils/table-columns data @table-atom)]
     [:tbody.table__body
-     (for [row rows]
-       ^{:key row}
+     (for [[index row] (map-indexed vector rows)]
+       ^{:key (str row index)}
        [:tr.table__row.body__row
         (for [{:keys [column-key render-fn]} columns]
           ^{:key (str row column-key)}
