@@ -428,12 +428,15 @@
   [:div.node-info__content
    [:table.table
     [:thead.table__head
-     [:th "Attribute"]
-     [:th "Count (across all versions)"]]
-    (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
-      [:tr.table__row.body__row
-       [:td.table__cell.body__cell (common/edn->pretty-string key)]
-       [:td.table__cell.body__cell (common/edn->pretty-string value)]])]])
+     [:tr
+      [:th "Attribute"]
+      [:th "Count (across all versions)"]]]
+    [:tbody.table__body
+     [:<>
+      (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
+        [:tr.table__row.body__row
+         [:td.table__cell.body__cell (common/edn->pretty-string key)]
+         [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 
 (defn status-page
   []

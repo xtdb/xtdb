@@ -444,15 +444,16 @@
   [:div.node-info__content
    [:table.table
     [:thead.table__head
-     [:th "Attribute"]
-     [:th "Count (across all versions)"]]
+     [:tr
+      [:th "Attribute"]
+      [:th "Count (across all versions)"]]]
     (into
      [:tbody.table__body]
      (map
       (fn [[key value]]
         (when value
           [:tr.table__row.body__row
-           [:td.table__cell.body__cell (str key)]
+           [:td.table__cell.body__cell (with-out-str (pp/pprint key))]
            [:td.table__cell.body__cell (with-out-str (pp/pprint value))]]))
       (sort-by (juxt val key) #(compare %2 %1) stats-map)))]])
 
@@ -483,7 +484,7 @@
                     (status-map->html-elements status-map)]
                    [:div.node-info
                     [:h2.node-info__title "Current Configuration"]
-                    (status-map->html-elements options)]]
+                    (status-map->html-elements (:node-options options))]]
                   [:div.node-attributes
                    [:h2.node-info__title "Attribute Cardinalities"]
                    (attribute-stats->html-elements attribute-stats)]]
