@@ -1,5 +1,6 @@
 (ns crux.ui.views
   (:require [clojure.string :as string]
+            [goog.string :refer [format]]
             [cljs.pprint :as pprint]
             [cljs.reader :as reader]
             [crux.ui.events :as events]
@@ -430,7 +431,11 @@
      [:<>
       (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
         [:tr.table__row.body__row
-         [:td.table__cell.body__cell (common/edn->pretty-string key)]
+         [:td.table__cell.body__cell
+          [:a
+           {:href (common/route->url :query nil {:find (format "[%s]" (name key))
+                                                 :where (format "[e %s %s]" key (name key))})}
+           (common/edn->pretty-string key)]]
          [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 
 (defn status-page

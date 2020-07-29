@@ -450,13 +450,14 @@
       [:th "Count (across all versions)"]]]
     (into
      [:tbody.table__body]
-     (map
-      (fn [[key value]]
-        (when value
-          [:tr.table__row.body__row
-           [:td.table__cell.body__cell (with-out-str (pp/pprint key))]
-           [:td.table__cell.body__cell (with-out-str (pp/pprint value))]]))
-      (sort-by (juxt val key) #(compare %2 %1) stats-map)))]])
+     (for [[key value] (sort-by (juxt val key) #(compare %2 %1) stats-map)]
+       (when value
+         [:tr.table__row.body__row
+          [:td.table__cell.body__cell
+           [:a
+            {:href (format "/_crux/query?find=%s&where=%s" (format "[%s]" (name key)) (format "[e %s %s]" key (name key)))}
+            (with-out-str (pp/pprint key))]]
+          [:td.table__cell.body__cell (with-out-str (pp/pprint value))]])))]])
 
 (defn status-map->html-elements [status-map]
   (into
