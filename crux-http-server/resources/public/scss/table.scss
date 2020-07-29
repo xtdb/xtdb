@@ -300,12 +300,9 @@ $spacing: 0.5rem;
     }
 
     .table__main {
-	height: 100%;
-	overflow: auto;
-	overflow-x: auto;
 	position: relative;
 	background: white;
-	max-height: 60vh;
+	overflow-x: auto;
     }
 
     .table__main--loading {
