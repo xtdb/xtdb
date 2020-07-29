@@ -795,6 +795,25 @@
                                        :where [[parent :crux.db/id _]
                                                [child :joins parent]]}))))))
 
+(t/deftest incomparable-colls-1001
+  (t/testing "can store and retrieve incomparable colls (#1001)"
+    (let [foo {:crux.db/id :foo
+               :foo {:bar #{7 "hello"}}}]
+      (fix/submit+await-tx [[:crux.tx/put foo]])
+
+      (t/is (= #{[foo]}
+               (api/q (api/db *api*) '{:find [(eql/project ?e [*])]
+                                       :where [[?e :foo {:bar #{"hello" 7}}]]}))))
+
+    (let [foo {:crux.db/id :foo
+               :foo {{:foo 1} :foo1
+                     {:foo 2} :foo2}}]
+      (fix/submit+await-tx [[:crux.tx/put foo]])
+
+      (t/is (= #{[foo]}
+               (api/q (api/db *api*) '{:find [(eql/project ?e [*])]
+                                       :where [[?e :foo {{:foo 2} :foo2, {:foo 1} :foo1}]]}))))))
+
 (t/deftest overlapping-valid-time-ranges-434
   (let [_ (fix/submit+await-tx
            [[:crux.tx/put {:crux.db/id :foo, :v 10} #inst "2020-01-10"]

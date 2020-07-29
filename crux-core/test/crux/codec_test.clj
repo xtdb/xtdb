@@ -88,3 +88,35 @@
                          (> (count v) @#'c/max-string-index-length)
                          (= @#'c/clob-value-type-id
                             (.getByte (c/value-buffer-type-id buffer) 0)))))))
+
+(t/deftest test-unordered-coll-hashing-1001
+  (let [foo-a {{:foo 1} :foo1
+               {:foo 2} :foo2}
+        foo-b {{:foo 2} :foo2
+               {:foo 1} :foo1}]
+    (t/is (not= (seq foo-a) (seq foo-b))) ; ordering is different
+    (t/is (thrown? ClassCastException (sort foo-a))) ; can't just sort it
+    (t/is (= #crux/id "e64adaca39f92830a8e2d167aa3daabd721d40d4"
+             (c/new-id {:crux.db/id :foo
+                        :foo foo-a})
+             (c/new-id {:crux.db/id :foo
+                        :foo foo-b}))))
+
+  (let [foo #{#{:foo} #{:bar}}]
+    (t/is (thrown? ClassCastException (sort foo)))
+    (t/is (= #crux/id "d5fb933a181a2aa89859369c51abcef7f363b31b"
+             (c/new-id {:crux.db/id :foo
+                        :foo foo}))))
+
+  (let [foo #{42 "hello"}]
+    (t/is (thrown? ClassCastException (sort foo)))
+    (t/is (= #crux/id "33581f4655dc841081f310f50d8bc5e0fa602377"
+             (c/new-id {:crux.db/id :foo
+                        :foo foo}))))
+
+  (t/testing "original coll hashing unaffected"
+    (t/is (= #crux/id "e4b35746db4bd2cf3b024133eafd95f66c3638ed"
+             (c/new-id {:crux.db/id :foo
+                        :foo {:a 1, :b 2}})
+             (c/new-id {:crux.db/id :foo
+                        :foo {:b 2, :a 1}})))))

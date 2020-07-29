@@ -82,52 +82,69 @@
 (def nil-id-buffer
   (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
 
-(def ^:dynamic ^:private *sort-unordered-colls* false)
-
-(defn- sorted-kv-seq [kvs]
-  (let [kvs (sort-by key kvs)]
-    (reify
-      clojure.lang.Counted
-      (count [_]
-        (count kvs))
-
-      clojure.lang.IKVReduce
-      (kvreduce [_ f init]
-        (loop [[[k v] & more-kvs :as kvs] kvs
-               res init]
-          (if (or (empty? kvs) (reduced? res))
-            res
-            (recur more-kvs (f res k v))))))))
-
-(extend-protocol nippy/IFreezable1
-  Set
-  (-freeze-without-meta! [this out]
-    (if *sort-unordered-colls*
-      (#'nippy/write-counted-coll out @#'nippy/id-sorted-set (sort this))
-      (#'nippy/write-set out this)))
-
-  APersistentSet
-  (-freeze-without-meta! [this out]
-    (if *sort-unordered-colls*
-      (#'nippy/write-counted-coll out @#'nippy/id-sorted-set (sort this))
-      (#'nippy/write-set out this)))
-
-  Map
-  (-freeze-without-meta! [this out]
-    (if *sort-unordered-colls*
-      (#'nippy/write-kvs out @#'nippy/id-sorted-map (sorted-kv-seq this))
-      (#'nippy/write-map out this)))
-
-  APersistentMap
-  (-freeze-without-meta! [this out]
-    (if *sort-unordered-colls*
-      (#'nippy/write-kvs out @#'nippy/id-sorted-map (sorted-kv-seq this))
-      (#'nippy/write-map out this))))
-
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
   (hash/id-hash (mem/slice-buffer to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
   (mem/limit-buffer to id-size))
+
+(def ^:dynamic ^:private *sort-unordered-colls* false)
+
+(defn- freeze-set [out coll]
+  (if *sort-unordered-colls*
+    (#'nippy/write-counted-coll out @#'nippy/id-sorted-set
+                                (try
+                                  (sort coll)
+                                  (catch ClassCastException e
+                                    (->> coll
+                                         (sort-by (fn [el]
+                                                    (doto (mem/allocate-buffer id-size)
+                                                      (id-function (nippy/fast-freeze el))))
+                                                  mem/buffer-comparator)))))
+    (#'nippy/write-set out coll)))
+
+(defn- ->kv-reduce [kvs]
+  (reify
+    clojure.lang.Counted
+    (count [_]
+      (count kvs))
+
+    clojure.lang.IKVReduce
+    (kvreduce [_ f init]
+      (loop [[[k v] & more-kvs :as kvs] kvs
+             res init]
+        (if (or (empty? kvs) (reduced? res))
+          res
+          (recur more-kvs (f res k v)))))))
+
+(defn- freeze-map [out m]
+  (if *sort-unordered-colls*
+    (let [kvs (try
+                (sort-by key m)
+                (catch ClassCastException e
+                  (->> m
+                       (sort-by (fn [[k _]]
+                                  (doto (mem/allocate-buffer id-size)
+                                    (id-function (nippy/fast-freeze k))))
+                                mem/buffer-comparator))))]
+      (#'nippy/write-kvs out @#'nippy/id-sorted-map (->kv-reduce kvs)))
+    (#'nippy/write-map out m)))
+
+(extend-protocol nippy/IFreezable1
+  Set
+  (-freeze-without-meta! [this out]
+    (freeze-set out this))
+
+  APersistentSet
+  (-freeze-without-meta! [this out]
+    (freeze-set out this))
+
+  Map
+  (-freeze-without-meta! [this out]
+    (freeze-map out this))
+
+  APersistentMap
+  (-freeze-without-meta! [this out]
+    (freeze-map out this)))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
