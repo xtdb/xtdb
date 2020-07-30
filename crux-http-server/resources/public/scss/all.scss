@@ -231,6 +231,10 @@ html, body {
     grid-area: attributeValue;
 }
 
+.node-attributes {
+    padding: 1em;
+}
+
 // override default table style for no js version
 .no-js-pagination__arrow-nav {
     color: #bdbdbd;
