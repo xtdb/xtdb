@@ -78,14 +78,3 @@
                       :crux.kafka/tx-topic *tx-topic*
                       :crux.kafka/doc-topic *doc-topic*
                       :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*} f))))
-
-(def ^:dynamic ^ICruxAsyncIngestAPI *ingest-client*)
-
-(defn with-ingest-client [f]
-  (assert (bound? #'*kafka-bootstrap-servers*))
-  (let [test-id (UUID/randomUUID)]
-    (with-open [ingest-client (api/new-ingest-client {:crux.kafka/tx-topic *tx-topic*
-                                                      :crux.kafka/doc-topic *doc-topic*
-                                                      :crux.kafka/bootstrap-servers *kafka-bootstrap-servers*})]
-      (binding [*ingest-client* ingest-client]
-        (f)))))

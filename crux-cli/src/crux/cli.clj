@@ -6,7 +6,8 @@
             [crux.node :as n]
             [crux.config :as cc]
             [crux.io :as cio]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.api :as crux])
   (:import (java.io Closeable File)))
 
 (def default-options
@@ -89,5 +90,5 @@
       :else (let [{:keys [version revision]} n/crux-version]
               (log/infof "Crux version: %s revision: %s" version revision)
               (log/info "options:" (options->table node-opts))
-              (with-open [node (n/start node-opts)]
+              (with-open [node (crux/start-node node-opts)]
                 @(shutdown-hook-promise))))))

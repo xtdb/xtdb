@@ -351,7 +351,7 @@
     (.submitTxAsync this (conform-tx-ops tx-ops))))
 
 (defn start-node
-  "NOTE: requires any dependendies on the classpath that the Crux modules may need.
+  "NOTE: requires any dependencies on the classpath that the Crux modules may need.
 
   options {:crux.node/topology 'crux.standalone/topology}
 

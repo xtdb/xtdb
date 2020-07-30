@@ -15,28 +15,6 @@
 (t/use-fixtures :once kf/with-embedded-kafka-cluster)
 (t/use-fixtures :each kf/with-cluster-node-opts fix/with-kv-dir)
 
-(t/deftest test-ingest-client
-  (fix/with-node
-    (fn []
-      (kf/with-ingest-client
-        (fn []
-          (let [submitted-tx @(api/submit-tx-async *ingest-client* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-            (api/await-tx *api* submitted-tx nil)
-            (t/is (true? (api/tx-committed? *api* submitted-tx)))
-            (t/is (= #{[:ivan]} (api/q (api/db *api*)
-                                       '{:find [e]
-                                         :where [[e :name "Ivan"]]})))
-
-            (with-open [tx-log-iterator (api/open-tx-log *ingest-client* nil false)]
-              (let [result (iterator-seq tx-log-iterator)]
-                (t/is (not (realized? result)))
-                (t/is (= [(assoc submitted-tx
-                            :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
-                         result))
-                (t/is (realized? result))))
-
-            (t/is (thrown? IllegalArgumentException (api/open-tx-log *ingest-client* nil true)))))))))
-
 (defn compact-doc-messages [docs]
   (->> docs
        (reverse)

@@ -271,7 +271,7 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{:keys [bus local-document-store indexer !error doc-topic-opts kafka-config group-id poll-wait-duration]}]
+(defn- index-doc-log [{:keys [local-document-store indexer !error doc-topic-opts kafka-config group-id poll-wait-duration]}]
   (let [doc-topic (:topic-name doc-topic-opts)
         tp-offsets (read-doc-offsets indexer)]
     (try
@@ -301,7 +301,6 @@
 (defn ->document-store {::sys/deps {:kafka-config `->kafka-config
                                     :doc-topic-opts {:crux/module `->topic-opts, :topic-name "crux-docs", :num-partitions 1}
                                     :local-document-store 'crux.kv-document-store/->document-store
-                                    :bus :crux/bus
                                     :indexer :crux/indexer}
                         ::sys/args {:group-id {:doc "Kafka client group.id"
                                                :required? false
@@ -310,7 +309,7 @@
                                                          :required? true
                                                          :doc "How long to wait when polling Kafka"
                                                          :default (Duration/ofSeconds 1)}} }
-  [{:keys [indexer bus local-document-store kafka-config doc-topic-opts] :as opts}]
+  [{:keys [indexer local-document-store kafka-config doc-topic-opts] :as opts}]
   (with-open [admin-client (->admin-client {:kafka-config kafka-config})]
     (ensure-topic-exists admin-client doc-topic-opts))
 
@@ -318,8 +317,26 @@
                             :doc-topic (:topic-name doc-topic-opts)
                             :indexer indexer
                             :local-document-store local-document-store
-                            :bus bus
                             :!indexing-error (atom nil)
                             :indexing-thread (doto (Thread. #(index-doc-log opts))
                                                (.setName "crux-doc-consumer")
                                                (.start))}))
+
+(defrecord IngestOnlyDocumentStore [^KafkaProducer producer doc-topic]
+  db/DocumentStore
+  (submit-docs [this id-and-docs]
+    (submit-docs id-and-docs this))
+
+  (fetch-docs [this ids]
+    (throw (UnsupportedOperationException. "Can't fetch docs from ingest-only Kafka document store"))))
+
+(defn ->ingest-only-document-store {::sys/deps {:kafka-config `->kafka-config
+                                                :doc-topic-opts {:crux/module `->topic-opts
+                                                                 :topic-name "crux-docs"
+                                                                 :num-partitions 1}}}
+  [{:keys [kafka-config doc-topic-opts]}]
+  (with-open [admin-client (->admin-client {:kafka-config kafka-config})]
+    (ensure-topic-exists admin-client doc-topic-opts))
+
+  (->IngestOnlyDocumentStore (->producer {:kafka-config kafka-config})
+                             (:topic-name doc-topic-opts)))

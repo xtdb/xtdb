@@ -55,8 +55,9 @@
 
     (deliver !submitted-tx next-tx)
 
-    (.submit tx-ingest-executor
-             ^Runnable #(ingest-tx tx-ingester next-tx tx-events))))
+    (when (and tx-ingest-executor tx-ingester)
+      (.submit tx-ingest-executor
+               ^Runnable #(ingest-tx tx-ingester next-tx tx-events)))))
 
 (defrecord KvTxLog [^ExecutorService tx-submit-executor
                     ^ExecutorService tx-ingest-executor
@@ -109,16 +110,18 @@
       (catch Exception e
         (log/warn e "Error shutting down tx-submit-executor")))
 
-    (try
-      (.shutdown tx-ingest-executor)
-      (catch Exception e
-        (log/warn e "Error shutting down tx-ingest-executor")))
+    (when tx-ingest-executor
+      (try
+        (.shutdown tx-ingest-executor)
+        (catch Exception e
+          (log/warn e "Error shutting down tx-ingest-executor"))))
 
     (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
         (log/warn "waited 5s for tx-submit-executor to exit, no dice."))
 
-    (or (.awaitTermination tx-ingest-executor 5 TimeUnit/SECONDS)
-        (log/warn "waited 5s for tx-ingest-executor to exit, no dice."))))
+    (when tx-ingest-executor
+      (or (.awaitTermination tx-ingest-executor 5 TimeUnit/SECONDS)
+          (log/warn "waited 5s for tx-ingest-executor to exit, no dice.")))))
 
 (defn- bounded-solo-thread-pool [^long queue-size thread-factory]
   (let [queue (LinkedBlockingQueue. queue-size)]
@@ -129,6 +132,11 @@
                          (reify RejectedExecutionHandler
                            (rejectedExecution [_ runnable executor]
                              (.put queue runnable))))))
+
+(defn ->ingest-only-tx-log {::sys/deps {:kv-store 'crux.kv.memdb/->kv-store}}
+  [{:keys [kv-store]}]
+  (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
+                 :kv-store kv-store}))
 
 (defn ->tx-log {::sys/deps {:kv-store 'crux.kv.memdb/->kv-store
                             :tx-ingester :crux/tx-ingester

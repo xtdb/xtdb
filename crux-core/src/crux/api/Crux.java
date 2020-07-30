@@ -76,10 +76,10 @@ public class Crux {
     }
 
     /**
-     * Starts an ingest client for transacting into Kafka without
+     * Starts an ingest client for transacting into Crux without
      * running a full local node with index.
      *
-     * For valid options, see crux.kafka/default-options. Options are
+     * TODO For valid options, see crux.kafka/default-options. Options are
      * specified as keywords using their long format name, like
      * :crux.kafka/bootstrap-servers etc.
      *
@@ -92,6 +92,6 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
-        return (ICruxAsyncIngestAPI) resolve("crux.kafka-ingest-client/new-ingest-client").invoke(options);
+        return (ICruxAsyncIngestAPI) resolve("crux.ingest-client/open-ingest-client").invoke(options);
     }
 }
