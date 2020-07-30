@@ -18,8 +18,24 @@
 
 (def datetime (r/adapt-react-class js/Datetime))
 
+(defn datetime-input [{:keys [values set-values]} key-name]
+  [datetime
+   {:name key-name
+    :dateFormat "YYYY-MM-DD"
+    :timeFormat "HH:mm"
+    :value (get values key-name)
+    :input true
+    :on-change (fn [new-value]
+                 (try
+                   (let [prev-value (get values key-name)]
+                     (set-values {key-name (if (.isSame prev-value new-value "day")
+                                             new-value
+                                             (.startOf new-value "day"))}))
+                   (catch js/Error e
+                     (set-values {key-name new-value}))))}])
+
 (defn vt-tt-inputs
-  [{:keys [values touched errors handle-change handle-blur set-values]} component]
+  [{:keys [values touched errors handle-change handle-blur set-values] :as props} component]
   (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
         show-tt? @(rf/subscribe [::sub/show-tt? component])]
     [:<>
@@ -31,13 +47,7 @@
        [:label "Valid Time"]]
       [:div.date-time-input
        {:class (when-not show-vt? "hidden")}
-       [datetime
-        {:name "valid-time"
-         :dateFormat "YYYY-MM-DD"
-         :timeFormat "HH:mm"
-         :value (get values "valid-time")
-         :input true
-         :on-change #(set-values {"valid-time" %})}]
+       [datetime-input props "valid-time"]
        (when (and (get touched "valid-time")
                   (get errors "valid-time"))
          [:p.input-error (get errors "valid-time")])]]
@@ -50,13 +60,7 @@
        [:label "Transaction Time" ]]
       [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
-       [datetime
-        {:name "transaction-time"
-         :dateFormat "YYYY-MM-DD"
-         :timeFormat "HH:mm"
-         :value (get values "transaction-time")
-         :input true
-         :on-change #(set-values {"transaction-time" %})}]
+       [datetime-input props "transaction-time"]
        (when (and (get touched "transaction-time")
                   (get errors "transaction-time"))
          [:p.input-error (get errors "transaction-time")])]]]))
