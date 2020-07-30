@@ -7,31 +7,38 @@
             [crux.config :as cc]
             [crux.io :as cio]
             [clojure.java.io :as io]
-            [crux.api :as crux])
+            [crux.api :as crux]
+            [cheshire.core :as json])
   (:import (java.io Closeable File)))
-
-(def default-options
-  {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-   :crux.kv/db-dir "db-dir"})
 
 (defn- if-it-exists [^File f]
   (when (.exists f)
     f))
 
+(defn- file-extension [^File f]
+  (second (re-find #"\.(.+?)$" (.getName f))))
+
 (def cli-options
-  [["-e" "--edn-file EDN_FILE" "EDN file to load Crux options from"
+  [["-f" "--file CONFIG_FILE" "Config file to load Crux options from - EDN, JSON"
     :parse-fn io/file
-    :validate [if-it-exists "EDN file doesn't exist"]]
+    :validate [if-it-exists "Config file doesn't exist"
+               #(contains? #{"edn" "json"} (file-extension %)) "Config file must be .edn or .json"]]
 
-   ["-p" "--properties-file PROPERTIES_FILE" "Properties file to load Crux options from"
-    :parse-fn io/file
-    :validate [if-it-exists "Properties file doesn't exist"]]
+   ["-e" "--edn EDN" "Options as EDN."
+    :default nil
+    :parse-fn edn/read-string]
 
-   ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
+   ["-j" "--json JSON" "Options as JSON."
     :default nil
     :parse-fn edn/read-string]
 
    ["-h" "--help"]])
+
+(defn load-edn [f]
+  (edn/read-string (slurp f)))
+
+(defn load-json [f]
+  (json/decode (slurp f)))
 
 (defn parse-args [args]
   (let [{:keys [options errors summary] :as parsed-opts} (cli/parse-opts args cli-options)]
@@ -40,22 +47,18 @@
 
       (:help options) {::help summary}
 
-      :else (let [{:keys [edn-file properties-file extra-edn-options]} options]
-              {::node-opts (merge default-options
+      :else (let [{:keys [file edn json]} options]
+              {::node-opts [(or (when file
+                                  (case (file-extension file)
+                                    "edn" (load-edn file)
+                                    "json" (load-json file)))
+                                (some-> (io/file "crux.edn") if-it-exists (load-edn))
+                                (some-> (io/file "crux.json") if-it-exists (load-json))
+                                (some-> (io/resource "crux.edn") (load-edn))
+                                (some-> (io/resource "crux.json") (load-json)))
 
-                                  (or (some-> edn-file (cc/load-edn))
-                                      (some-> properties-file (cc/load-properties))
-                                      (some-> (io/file "crux.edn") if-it-exists (cc/load-edn))
-                                      (some-> (io/file "crux.properties") if-it-exists (cc/load-properties))
-                                      (some-> (io/resource "crux.edn") (cc/load-edn))
-                                      (some-> (io/resource "crux.properties") (cc/load-properties)))
-
-                                  extra-edn-options)}))))
-
-(defn- options->table [options]
-  (with-out-str
-    (pp/print-table (for [[k v] options]
-                      {:key k :value v}))))
+                            json
+                            edn]}))))
 
 (defn- shutdown-hook-promise []
   ;; NOTE: This isn't registered until the node manages to start up
@@ -89,6 +92,6 @@
 
       :else (let [{:keys [version revision]} n/crux-version]
               (log/infof "Crux version: %s revision: %s" version revision)
-              (log/info "options:" (options->table node-opts))
-              (with-open [node (crux/start-node node-opts)]
+              (with-open [node (n/start node-opts)]
+                (log/info "Node started")
                 @(shutdown-hook-promise))))))

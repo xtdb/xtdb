@@ -8,7 +8,7 @@
                  [org.clojure/tools.cli "0.4.2"]
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-http-server "crux-git-version-alpha"]
+                 [cheshire "5.10.0"]
 
                  ;; Dependency resolution
                  [org.slf4j/slf4j-api "1.7.29"]]
@@ -18,7 +18,8 @@
   :main crux.main
   :uberjar-name "crux-standalone.jar"
   :pedantic? :warn
-  :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]
+  :profiles {:cli-e2e-test {:dependencies [[juxt/crux-http-server "crux-git-version-alpha"]]}
+             :test {:dependencies [[juxt/crux-test "crux-git-version"]
 
                                    ;; Dependency resolution
                                    [org.ow2.asm/asm "7.1"]
