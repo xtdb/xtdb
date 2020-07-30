@@ -157,13 +157,9 @@ jobs:
           at: ~/
       - crux/deploy-tar
       - crux/deploy-artifacts:
-          crux-edn: "crux.edn"
-          deps-edn: "deps.edn"
-          artifact-name: "crux-standalone"
-      # - crux/deploy-artifacts:
-      #    crux-edn: "crux-sql.edn"
-      #    deps-edn: "sql-deps.edn"
-      #    artifact-name: "crux-standalone-sql"
+          crux-edn: "crux-in-memory.edn"
+          deps-edn: "deps-in-memory.edn"
+          artifact-name: "crux-in-memory"
 
   create-javadocs:
     docker:

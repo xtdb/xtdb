@@ -7,7 +7,5 @@
         ;; Crux
         juxt/crux-core {:mvn/version "crux-git-version-beta"}
         juxt/crux-http-server {:mvn/version "crux-git-version-alpha"}
-        juxt/crux-rocksdb {:mvn/version "crux-git-version-beta"}
-        juxt/crux-sql {:mvn/version "crux-git-version-alpha"}
         juxt/crux-cli {:mvn/version "crux-git-version-beta"}
-        }}
+        juxt/crux-sql {:mvn/version "crux-git-version-alpha"}}}
