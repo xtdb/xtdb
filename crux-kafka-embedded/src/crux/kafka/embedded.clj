@@ -3,7 +3,8 @@
   (:require [clojure.java.io :as io]
             [crux.io :as cio]
             [crux.config :as config]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [crux.system :as sys])
   (:import [kafka.server KafkaConfig KafkaServer]
            [org.apache.zookeeper.server ServerCnxnFactory ZooKeeperServer]
            [org.apache.kafka.common.utils Time]
@@ -74,9 +75,9 @@
     (stop-kafka-broker kafka)
     (stop-zookeeper zookeeper)))
 
-(s/def ::zookeeper-data-dir :crux.config/path)
+(s/def ::zookeeper-data-dir ::sys/path)
 (s/def ::zookeeper-port :crux.io/port)
-(s/def ::kafka-log-dir :crux.config/path)
+(s/def ::kafka-log-dir ::sys/path)
 (s/def ::kafka-port :crux.io/port)
 (s/def ::broker-config (s/map-of string? string?))
 
@@ -96,7 +97,7 @@
   stopped by calling close."
   ^java.io.Closeable
   [options]
-  (let [{:crux.kafka.embedded/keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
+  (let [{::keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
          :or {zookeeper-port default-zookeeper-port
               kafka-port default-kafka-port}
          :as options} (s/conform ::options options)]

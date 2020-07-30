@@ -15,12 +15,11 @@
                                  fh/with-http-client])
        :h2 (t/join-fixtures [fj/with-h2-opts fix/with-node])
        :sqlite (t/join-fixtures [fj/with-sqlite-opts fix/with-node])
-       :local-kafka (-> (t/join-fixtures [fk/with-cluster-node-opts fix/with-kv-dir fix/with-node])
+       :local-kafka (-> (t/join-fixtures [fk/with-cluster-tx-log-opts
+                                          fk/with-cluster-doc-store-opts
+                                          fix/with-node])
                         (with-meta {::embedded-kafka? true}))
-       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts
-                                                     fix/with-standalone-doc-store
-                                                     fix/with-kv-dir
-                                                     fix/with-node])
+       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-tx-log-opts fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
       #_(select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])

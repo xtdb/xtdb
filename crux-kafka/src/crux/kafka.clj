@@ -112,13 +112,13 @@
 
 (defn- consumer-seqs [^KafkaConsumer consumer ^Duration poll-duration]
   (lazy-seq
-    (log/debug "polling")
+    (log/trace "polling")
     (when-let [records (seq (try
                               (.poll consumer poll-duration)
                               (catch InterruptException e
                                 (Thread/interrupted)
                                 (throw (.getCause e)))))]
-      (log/debugf "got %d records" (count records))
+      (log/tracef "got %d records" (count records))
       (cons records (consumer-seqs consumer poll-duration)))))
 
 ;;;; TxLog
