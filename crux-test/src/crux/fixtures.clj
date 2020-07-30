@@ -4,6 +4,7 @@
             [crux.io :as cio]
             [crux.node :as n]
             [crux.tx :as tx]
+            [crux.system :as sys]
             [clojure.test :as t])
   (:import crux.api.ICruxAPI
            (java.util ArrayList List UUID)
@@ -27,16 +28,13 @@
                             ~@body)))
 
 (def ^:dynamic ^ICruxAPI *api*)
-(def ^:dynamic *opts* {})
+(def ^:dynamic *opts* [])
 
-(defn with-opts [opts f]
-  (binding [*opts* (merge *opts* opts)]
-    (f)))
-
-(defn update-opts [f & args]
-  (fn [nxt]
-    (binding [*opts* (apply f *opts* args)]
-      (nxt))))
+(defn with-opts
+  ([opts] (fn [f] (with-opts opts f)))
+  ([opts f]
+   (binding [*opts* (conj *opts* opts)]
+     (f))))
 
 (defn with-kv-dir [f]
   (with-tmp-dir "kv-store" [db-dir]
@@ -44,7 +42,7 @@
       f)))
 
 (defn with-node [f]
-  (with-open [node (crux/start-node *opts*)]
+  (with-open [node (n/start *opts*)]
     (binding [*api* node]
       (f))))
 

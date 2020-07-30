@@ -14,7 +14,11 @@
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
                  [edn-query-language/eql "1.0.0"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[juxt/crux-test "crux-git-version" :scope "test"]]}}
+             :test {:dependencies [[juxt/crux-test "crux-git-version"]
+
+                                   ;; dependency conflict
+                                   [org.tukaani/xz "1.8"]
+                                   [org.ow2.asm/asm "5.0.4"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

@@ -2,13 +2,14 @@
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc]
             [clojure.spec.alpha :as s]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.system :as sys])
   (:import [oracle.sql TIMESTAMP BLOB]))
 
 (defn- schema-exists? [ds]
   (pos? (val (first (jdbc/execute-one! ds ["SELECT COUNT(*) FROM user_tables where table_name = 'TX_EVENTS'"])))))
 
-(defmethod j/setup-schema! :oracle [_ ds]
+(defn- setup-schema! [ds]
   (when-not (schema-exists? ds)
     (jdbc/execute! ds ["create table tx_events (
   event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
@@ -23,9 +24,10 @@
 (defmethod j/->v :oracle [_ ^BLOB v]
   (-> v .getBinaryStream .readAllBytes nippy/thaw))
 
-(defmethod j/prep-for-tests! :oracle [_ ds]
-  (when (schema-exists? ds)
-    (jdbc/execute! ds ["DROP TABLE tx_events"])))
-
-(defmethod j/->pool-options :oracle [_ {:keys [username user] :as options}]
-  (assoc options :username (or username user)))
+(defn ->data-source {::sys/deps {:open-data-source `j/->open-data-source}
+                     ::sys/args {:username {:spec ::sys/string}
+                                 :user {:spec ::sys/string}}}
+  [{:keys [open-data-source username user]}]
+  (doto (open-data-source {:dbtype "oracle"
+                           :username (or username user)})
+    (setup-schema!)))

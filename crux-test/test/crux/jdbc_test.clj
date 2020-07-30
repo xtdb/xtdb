@@ -6,39 +6,35 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.lubm :as fl]
-            [crux.fixtures.postgres :as fp]
             [crux.api :as api]
             [crux.jdbc :as j]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as jdbcr]))
 
 (defn- with-each-jdbc-node [f]
-  (fix/with-tmp-dir "jdbc" [jdbc-dir]
-    (t/testing "H2 Database"
-      (fj/with-jdbc-node "h2" f {:crux.jdbc/dbname (str (io/file jdbc-dir "h2"))}))
-    (t/testing "SQLite Database"
-      (fj/with-jdbc-node "sqlite" f {:crux.jdbc/dbname (str (io/file jdbc-dir "sqlite"))})))
+  (t/testing "H2 Database"
+    (fj/with-h2-opts f))
+  (t/testing "SQLite Database"
+    (fj/with-sqlite-opts f))
   (t/testing "Postgresql Database"
-    (fp/with-embedded-postgres f))
+    (fj/with-embedded-postgres f))
 
   ;; Optional:
-  (when (.exists (clojure.java.io/file ".testing-mysql.edn"))
-    (t/testing "MYSQL Database"
-      (fj/with-jdbc-node "mysql" f
-        (read-string (slurp ".testing-mysql.edn")))))
-  (when (.exists (clojure.java.io/file ".testing-oracle.edn"))
-    (t/testing "Oracle Database"
-      (fj/with-jdbc-node "oracle" f
-        (read-string (slurp ".testing-oracle.edn")))))
+  #_(t/testing "MySQL Database"
+      ;; docker run --name crux-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -p 3306:3306 -d mysql:8.0.21
+      (fj/with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"} f))
+
+  #_(when (.exists (clojure.java.io/file ".testing-oracle.edn"))
+      (t/testing "Oracle Database"
+        (fj/with-jdbc-node "oracle" f
+          (read-string (slurp ".testing-oracle.edn")))))
 
   #_(t/testing "MSSQL Database"
-    ;; docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
-    ;; Then create the DB (use mssql-cli).
-    (fj/with-jdbc-node "mssql" f {:crux.jdbc/dbname "cruxtest"
-                                  :crux.jdbc/user "sa"
-                                  :crux.jdbc/password "yourStrong(!)Password"})))
+      ;; docker run --name crux-mssql -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+      ;; Then create the DB (use mssql-cli).
+      (fj/with-mssql-opts {:dbname "cruxtest", :user "sa", :password "yourStrong(!)Password"} f)))
 
-(t/use-fixtures :each with-each-jdbc-node fix/with-kv-dir fix/with-node)
+(t/use-fixtures :each with-each-jdbc-node fix/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}

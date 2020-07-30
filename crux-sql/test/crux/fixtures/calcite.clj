@@ -23,10 +23,10 @@
       (f))))
 
 (def with-calcite-module
-  (fix/update-opts assoc ::cal/server {:port 1503}))
+  (fix/with-opts {::cal/server {:port 1503}}))
 
 (def with-scan-only
-  (fix/update-opts assoc-in [::cal/server ::cal/scan-only?] true))
+  (fix/with-opts {::cal/server {::cal/scan-only? true}}))
 
 (defn query [q]
   (with-open [stmt (.createStatement *conn*)

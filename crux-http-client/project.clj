@@ -13,9 +13,17 @@
              :test {:dependencies [[juxt/crux-test "crux-git-version"]
                                    [org.clojure/test.check "0.10.0"]
                                    [juxt/crux-http-server "crux-git-version-alpha"]
+
+                                   ;; dependency conflicts
                                    [org.apache.httpcomponents/httpclient "4.5.12"]
                                    [org.apache.httpcomponents/httpcore "4.4.13"]
                                    [org.ow2.asm/asm "7.1"]
-                                   [com.fasterxml.jackson.core/jackson-core "2.10.2"] ]}}
+                                   [com.fasterxml.jackson.core/jackson-core "2.10.2"]
+                                   [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
+                                   [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
+                                   [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
+                                   [javax.servlet/javax.servlet-api "4.0.1"]]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

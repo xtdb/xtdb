@@ -14,7 +14,8 @@
             [clojure.string :as str]
             [crux.io :as cio]
             [crux.codec :as c]
-            [crux.api :as api])
+            [crux.api :as api]
+            [crux.system :as sys])
   (:import com.zaxxer.hikari.HikariDataSource
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
@@ -28,12 +29,6 @@
     #{"postgresql" "pgsql"} :psql
     #{"oracle"} :oracle))
 
-(defmulti setup-schema! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
-
-(defmulti prep-for-tests! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
-
-(defmethod prep-for-tests! :default [_ ds] (jdbc/execute! ds ["DROP TABLE IF EXISTS tx_events"]))
-
 (defmulti ->date (fn [dbtype d] (dbtype->crux-jdbc-dialect dbtype)))
 
 (defmethod ->date :default [_ t]
@@ -44,9 +39,9 @@
 
 (defmethod ->v :default [_ v] (nippy/thaw v))
 
-(defmulti ->pool-options (fn [dbtype options] (dbtype->crux-jdbc-dialect dbtype)))
-
-(defmethod ->pool-options :default [_ options] options)
+(defn ->open-data-source [opts]
+  (fn [db-spec]
+    (jdbcc/->pool HikariDataSource (merge opts db-spec))))
 
 (deftype Tx [^Date time ^long id])
 
@@ -110,6 +105,14 @@
          (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(->v dbtype (:v %))))
          (into {}))))
 
+(defn ->document-store {::sys/deps {:data-source nil}
+                        ::sys/args {:dbtype {:required? true
+                                             :spec ::sys/string}
+                                    :doc-cache-size ds/doc-cache-size-opt}}
+  [{:keys [data-source dbtype doc-cache-size]}]
+  (->> (->JdbcDocumentStore data-source dbtype)
+       (ds/->CachedDocumentStore (lru/new-cache doc-cache-size))))
+
 (defrecord JdbcTxLog [ds dbtype]
   db/TxLog
   (submit-tx [this tx-events]
@@ -136,44 +139,16 @@
                               :max_offset)]
       {:crux.tx/tx-id max-offset})))
 
-(defn conform-next-jdbc-properties [m]
-  (into {} (->> m
-                (filter (fn [[k]] (= "crux.jdbc" (namespace k))))
-                (map (fn [[k v]] [(keyword (name k)) v])))))
+(defn ->tx-log {::sys/deps {:data-source nil}
+                ::sys/args {:dbtype {:required? true
+                                     :spec ::sys/string}}}
+  [{:keys [data-source dbtype]}]
+  (->JdbcTxLog data-source dbtype))
 
-(def ^:private require-lock 'lock)
-
-(defn- start-jdbc-ds [_ options]
-  (let [{:keys [dbtype] :as options} (conform-next-jdbc-properties options)]
-    (locking require-lock
-      (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype))))))
-    (let [ds (jdbcc/->pool HikariDataSource (->pool-options dbtype options))]
-      (setup-schema! dbtype ds)
-      ds)))
-
-(def topology
-  (merge n/base-topology
-         {::ds {:start-fn start-jdbc-ds
-                :args {::dbtype {:doc "Database type"
-                                 :required? true
-                                 :crux.config/type :crux.config/string}
-                       ::dbname {:doc "Database name"
-                                 :required? true
-                                 :crux.config/type :crux.config/string}}}
-
-          ::n/tx-log {:start-fn (fn [{::keys [ds]} {::keys [dbtype]}]
-                                  (->JdbcTxLog ds dbtype))
-                      :deps [::ds]}
-
-          ::n/document-store {:start-fn (fn [{::keys [ds]} {:crux.document-store/keys [doc-cache-size] ::keys [dbtype]}]
-                                          (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
-                                                                    (->JdbcDocumentStore ds dbtype)))
-                              :args {:crux.document-store/doc-cache-size ds/doc-cache-size-opt}
-                              :deps [::ds]}
-
-          ::tx-consumer (merge (-> tx/polling-tx-consumer
-                                   (update :deps conj ::n/tx-log))
-                               {:start-fn (fn [{::n/keys [tx-log] :as deps} args]
-                                            (tx/->polling-tx-consumer deps args
-                                                                      (fn [after-tx-id]
-                                                                        (db/open-tx-log tx-log after-tx-id))))})}))
+(defn ->tx-consumer {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
+                                       {:tx-log :crux/tx-log})
+                     ::sys/args (::sys/args (meta #'tx/->polling-tx-consumer))}
+  [{:keys [tx-log] :as opts}]
+  (tx/->polling-tx-consumer opts
+                            (fn [after-tx-id]
+                              (db/open-tx-log tx-log after-tx-id))))
