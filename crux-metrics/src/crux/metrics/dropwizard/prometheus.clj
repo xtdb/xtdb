@@ -1,53 +1,43 @@
 (ns crux.metrics.dropwizard.prometheus
   (:require [crux.metrics :as metrics]
-            [crux.metrics.dropwizard :as dropwizard]
-            [iapetos.core :as prometheus]
+            [crux.system :as sys]
             [iapetos.collector.jvm :as jvm]
+            [iapetos.core :as prometheus]
             [iapetos.standalone :as server])
-  (:import [org.dhatim.dropwizard.prometheus PrometheusReporter Pushgateway]
-           [java.util.concurrent TimeUnit]
-           [java.time Duration]
-           [java.io Closeable]
-           [com.codahale.metrics MetricRegistry]
-           [io.prometheus.client.dropwizard DropwizardExports]))
+  (:import com.codahale.metrics.MetricRegistry
+           io.prometheus.client.dropwizard.DropwizardExports
+           java.time.Duration
+           java.util.concurrent.TimeUnit
+           [org.dhatim.dropwizard.prometheus PrometheusReporter Pushgateway]))
 
-(defn start-reporter [registry {::keys [prefix metric-filter push-gateway report-frequency]}]
+(defn ->reporter {::sys/deps {:registry ::metrics/registry
+                              :metrics ::metrics/metrics}
+                  ::sys/args {:report-frequency {:doc "Frequency of reporting metrics"
+                                                 :default (Duration/ofSeconds 1)
+                                                 :spec ::sys/duration}
+                              :prefix {:doc "Prefix all metrics with this string"
+                                       :required? false
+                                       :spec ::sys/string}
+                              :push-gateway {:doc "Address of the prometheus server"
+                                             :required? true
+                                             :spec ::sys/string}}}
+  [{:keys [registry prefix metric-filter push-gateway report-frequency]}]
   (-> (PrometheusReporter/forRegistry registry)
       (cond-> prefix (.prefixedWith prefix)
               metric-filter (.filter metric-filter))
       (.build (Pushgateway. push-gateway))
       (doto (.start (.toMillis ^Duration report-frequency) (TimeUnit/MILLISECONDS)))))
 
-(defn start-http-exporter [^MetricRegistry registry {::keys [port jvm-metrics?]}]
+(defn ->http-exporter {::sys/deps {:registry ::metrics/registry
+                                   :metrics ::metrics/metrics}
+                       ::sys/args {:port {:doc "Port for prometheus exporter server"
+                                          :default 8080
+                                          :spec ::sys/int}
+                                   :jvm-metrics? {:doc "Dictates if jvm metrics are exported"
+                                                  :default false
+                                                  :spec ::sys/boolean}}}
+  [{:keys [^MetricRegistry registry port jvm-metrics?]}]
   (-> (prometheus/collector-registry)
       (prometheus/register (DropwizardExports. registry))
       (cond-> jvm-metrics? (jvm/initialize))
       (server/metrics-server {:port port})))
-
-(def reporter
-  (merge metrics/registry
-         {::reporter {:start-fn (fn [{:crux.metrics/keys [registry]}
-                                     args]
-                                  (start-reporter registry args))
-                      :deps #{:crux.metrics/registry :crux.metrics/all-metrics-loaded}
-                      :args {::report-frequency {:doc "Frequency of reporting metrics"
-                                                 :default (Duration/ofSeconds 1)
-                                                 :crux.config/type :crux.config/duration}
-                             ::prefix {:doc "Prefix all metrics with this string"
-                                       :required? false
-                                       :crux.config/type :crux.config/string}
-                             ::push-gateway {:doc "Address of the prometheus server"
-                                             :required? true
-                                             :crux.config/type :crux.config/string}}}}))
-
-(def http-exporter
-  (merge metrics/registry
-         {::http-exporter {:start-fn (fn [{:crux.metrics/keys [registry]} args]
-                                       (start-http-exporter registry args))
-                           :deps #{:crux.metrics/registry :crux.metrics/all-metrics-loaded}
-                           :args {::port {:doc "Port for prometheus exporter server"
-                                          :default 8080
-                                          :crux.config/type :crux.config/int}
-                                  ::jvm-metrics? {:doc "Dictates if jvm metrics are exported"
-                                                  :default false
-                                                  :crux.config/type :crux.config/boolean}}}}))

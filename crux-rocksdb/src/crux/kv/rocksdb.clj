@@ -5,7 +5,8 @@
             [crux.kv :as kv]
             [crux.kv.rocksdb.loader]
             [crux.memory :as mem]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.io :as cio])
   (:import java.io.Closeable
            java.nio.ByteBuffer
            (java.nio.file Files Path)
@@ -80,36 +81,36 @@
 (def ^:private default-block-cache-size (* 128 1024 1024))
 (def ^:private default-block-size (* 16 1024))
 
-(defrecord RocksKv [db-dir]
+(defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, db-dir]
   kv/KvStore
-  (new-snapshot [{:keys [^RocksDB db]}]
+  (new-snapshot [_]
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
                          (doto (ReadOptions.)
                            (.setSnapshot snapshot))
                          snapshot)))
 
-  (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
+  (store [_ kvs]
     (with-open [wb (WriteBatch.)]
       (doseq [[k v] kvs]
         (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v)))
       (.write db write-options wb)))
 
-  (delete [{:keys [^RocksDB db ^WriteOptions write-options]} ks]
+  (delete [_ ks]
     (with-open [wb (WriteBatch.)]
       (doseq [k ks]
         (.remove wb (mem/direct-byte-buffer k)))
       (.write db write-options wb)))
 
-  (compact [{:keys [^RocksDB db]}]
+  (compact [_]
     (.compactRange db))
 
-  (fsync [{:keys [^RocksDB db]}]
+  (fsync [_]
     (with-open [flush-options (doto (FlushOptions.)
                                 (.setWaitForFlush true))]
       (.flush db flush-options)))
 
-  (count-keys [{:keys [^RocksDB db]}]
+  (count-keys [_]
     (-> (.getProperty db "rocksdb.estimate-num-keys")
         (Long/parseLong)))
 
@@ -120,18 +121,14 @@
     (.getName (class this)))
 
   Closeable
-  (close [{:keys [^RocksDB db ^Options options ^WriteOptions write-options]}]
-    (.close db)
-    (.close options)
-    (.close write-options)))
+  (close [_]
+    (cio/try-close db)
+    (cio/try-close options)
+    (cio/try-close write-options)
+    (cio/try-close metrics)))
 
-#_(def kv-store-with-metrics
-  {:crux.node/kv-store (update-in kv [:args ::metrics? :default] not)
-   :crux.metrics/registry 'crux.metrics/registry-module
-   :crux.metrics/all-metrics-loaded 'crux.metrics/all-metrics-loaded
-   ::metrics 'crux.kv.rocksdb.metrics/metrics-module})
-
-(defn ->kv-store {::sys/args {:db-dir {:doc "Directory to store K/V files"
+(defn ->kv-store {::sys/deps {:metrics (fn [_])}
+                  ::sys/args {:db-dir {:doc "Directory to store K/V files"
                                        :required? true
                                        :spec ::sys/path}
                               :sync? {:doc "Sync the KV store to disk after every write."
@@ -141,19 +138,17 @@
                                            :spec #(instance? Options %)}
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
-                                             :spec ::sys/boolean}
-                              :metrics? {:doc "Enable RocksDB metrics"
-                                         :default false
-                                         :spec ::sys/boolean}}}
-  [{:keys [db-dir sync? disable-wal? metrics? db-options] :as options}]
+                                             :spec ::sys/boolean}}}
+  [{:keys [db-dir sync? disable-wal? metrics db-options] :as options}]
 
   (RocksDB/loadLibrary)
-  (let [stats (when metrics? (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
+  (let [stats (when metrics (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
         opts (doto (or ^Options db-options (Options.))
-               (cond-> metrics? (.setStatistics stats))
+               (cond-> metrics (.setStatistics stats))
                (.setCompressionType CompressionType/LZ4_COMPRESSION)
                (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
                (.setCreateIfMissing true))
+
         db (try
              (RocksDB/open opts (-> (Files/createDirectories ^Path db-dir (make-array FileAttribute 0))
                                     (.toAbsolutePath)
@@ -161,11 +156,11 @@
              (catch Throwable t
                (.close opts)
                (throw t)))
-        write-opts (doto (WriteOptions.)
-                     (.setSync (boolean sync?))
-                     (.setDisableWAL (boolean disable-wal?)))]
-    (-> (map->RocksKv {:db-dir db-dir
-                       :db db
-                       :options opts
-                       :stats stats
-                       :write-options write-opts}))))
+        metrics (when metrics (metrics db stats))]
+    (map->RocksKv {:db-dir db-dir
+                   :options opts
+                   :db db
+                   :metrics metrics
+                   :write-options (doto (WriteOptions.)
+                                    (.setSync (boolean sync?))
+                                    (.setDisableWAL (boolean disable-wal?)))})))

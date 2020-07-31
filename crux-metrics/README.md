@@ -12,6 +12,7 @@ Full docs [here](https://opencrux.com/reference/monitoring.html)
 
 [Dropwizard metrics](https://metrics.dropwizard.io/4.1.2/) are used to store and display metrics.
 
+<!-- TODO JH topo -->
 rocksdb metrics can be also included by using the module `'crux.kv.rocksdb/kv-store-with-metrics`
 
 The following 5 components can be used to display these.

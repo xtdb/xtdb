@@ -1,34 +1,30 @@
 (ns crux.metrics.dropwizard.jmx
-  (:require [crux.metrics :as metrics])
-  (:import (java.io Closeable)
-           (java.util.concurrent TimeUnit)
-           (java.time Duration)
-           (com.codahale.metrics MetricRegistry)
-           (com.codahale.metrics.jmx JmxReporter)))
+  (:require [crux.metrics :as metrics]
+            [crux.system :as sys])
+  (:import com.codahale.metrics.jmx.JmxReporter
+           com.codahale.metrics.MetricRegistry
+           java.util.concurrent.TimeUnit))
 
-(defn start-reporter ^com.codahale.metrics.jmx.JmxReporter
-  [^MetricRegistry reg {::keys [domain rate-unit duration-unit]}]
+(defn ->reporter {::sys/args {:domain {:doc "Add custom domain"
+                                       :required? false
+                                       :default "crux"
+                                       :spec ::sys/string}
+                              :rate-unit {:doc "Set rate unit"
+                                          :required? false
+                                          :default TimeUnit/SECONDS
+                                          :spec ::sys/time-unit}
+                              :duration-unit {:doc "Set duration unit"
+                                              :required? false
+                                              :default TimeUnit/MILLISECONDS
+                                              :spec ::sys/time-unit}}
+                  ::sys/deps {:registry ::metrics/registry
+                              :metrics ::metrics/metrics}}
+  ^com.codahale.metrics.jmx.JmxReporter
+  [{:keys [^MetricRegistry registry domain rate-unit duration-unit]}]
 
-  (-> (JmxReporter/forRegistry reg)
+  (-> (JmxReporter/forRegistry registry)
       (cond-> domain (.inDomain domain)
               rate-unit (.convertRatesTo rate-unit)
               duration-unit (.convertDurationsTo duration-unit))
       .build
       (doto (.start))))
-
-(def reporter
-  (merge metrics/registry
-         {::reporter {:start-fn (fn [{:crux.metrics/keys [registry]} args]
-                                  (start-reporter registry args))
-                      :deps #{:crux.metrics/registry :crux.metrics/all-metrics-loaded}
-                      :args {::domain {:doc "Add custom domain"
-                                       :required? false
-                                       :crux.config/type :crux.config/string}
-                             ::rate-unit {:doc "Set rate unit"
-                                          :required? false
-                                          :default TimeUnit/SECONDS
-                                          :crux.config/type :crux.config/time-unit}
-                             ::duration-unit {:doc "Set duration unit"
-                                              :required? false
-                                              :default TimeUnit/MILLISECONDS
-                                              :crux.config/type :crux.config/time-unit}}}}))

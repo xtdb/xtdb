@@ -1,14 +1,28 @@
 (ns crux.metrics.dropwizard.console
   (:require [crux.metrics :as metrics]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [crux.system :as sys])
   (:import (com.codahale.metrics MetricRegistry ConsoleReporter ScheduledReporter)
            (java.util Locale)
            (java.util.concurrent TimeUnit)
            (java.time Duration)
            (java.io Closeable)))
 
-(defn start-reporter ^com.codahale.metrics.ConsoleReporter
-  [^MetricRegistry reg {::keys [stream metric-filter locale clock report-frequency rate-unit duration-unit]}]
+(defn ->reporter {::sys/deps {:registry ::metrics/registry
+                              :metrics ::metrics/metrics}
+                  ::sys/args {:report-frequency {:doc "Frequency of reporting metrics"
+                                                 :default (Duration/ofSeconds 1)
+                                                 :spec ::sys/duration}
+                              :rate-unit {:doc "Set rate unit"
+                                          :required? false
+                                          :default TimeUnit/SECONDS
+                                          :spec ::sys/time-unit}
+                              :duration-unit {:doc "Set duration unit"
+                                              :required? false
+                                              :default TimeUnit/MILLISECONDS
+                                              :spec ::sys/time-unit}}}
+  ^com.codahale.metrics.ConsoleReporter
+  [{:keys [^MetricRegistry reg stream metric-filter locale clock report-frequency rate-unit duration-unit]}]
 
   (-> (ConsoleReporter/forRegistry reg)
       (cond-> stream (.outputTo stream)
@@ -19,21 +33,3 @@
               metric-filter (.filter metric-filter))
       (.build)
       (doto (.start (.toMillis ^Duration report-frequency) TimeUnit/MILLISECONDS))))
-
-
-(def reporter
-  (merge metrics/registry
-         {::reporter {:start-fn (fn [{:crux.metrics/keys [registry] :as opts} args]
-                                  (start-reporter registry args))
-                      :deps #{:crux.metrics/registry :crux.metrics/all-metrics-loaded}
-                      :args {::report-frequency {:doc "Frequency of reporting metrics"
-                                                 :default (Duration/ofSeconds 1)
-                                                 :crux.config/type :crux.config/duration}
-                             ::rate-unit {:doc "Set rate unit"
-                                          :required? false
-                                          :default TimeUnit/SECONDS
-                                          :crux.config/type :crux.config/time-unit}
-                             ::duration-unit {:doc "Set duration unit"
-                                              :required? false
-                                              :default TimeUnit/MILLISECONDS
-                                              :crux.config/type :crux.config/time-unit}}}}))
