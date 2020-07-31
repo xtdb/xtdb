@@ -153,4 +153,12 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return         Map containing attribute freqencies.
      */
     public Map<Keyword, Long> attributeStats();
+
+
+    /**
+     * Returns a list of currently running/recently finished queries.
+     *
+     * @return List containing maps with query information.
+     */
+    public List<Map <Keyword, ?>> currentQueries();
 }

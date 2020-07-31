@@ -1431,7 +1431,6 @@
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-
       (->> (crux.query/query db conformed-query)
            (cio/->cursor (fn []
                            (cio/try-close index-store)

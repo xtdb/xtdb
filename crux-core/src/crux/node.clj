@@ -23,7 +23,7 @@
            java.util.function.Consumer
            [java.util.concurrent Executors TimeoutException]
            java.util.concurrent.locks.StampedLock
-           java.time.Duration))
+           (java.time Duration Instant)))
 
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
@@ -60,8 +60,16 @@
       node-closed? (throw (InterruptedException. "Node closed."))
       tx tx)))
 
+(defn query-expired? [{:keys [finished-at] :as query} ^Duration max-age]
+  (when finished-at
+    (let [time-since-query ^Duration (Duration/between finished-at (Instant/now))]
+      (neg? (.compareTo max-age time-since-query)))))
+
+(defn clean-expired-queries [queries ^Duration max-age]
+  (into {} (remove (fn [[_ query]] (query-expired? query max-age)) queries)))
+
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
-                     options close-fn !topology closed? ^StampedLock lock]
+                     !running-queries options close-fn !topology closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
   (db [this valid-time] (.db this valid-time nil))
@@ -167,6 +175,12 @@
   (latestSubmittedTx [this]
     (db/latest-submitted-tx tx-log))
 
+  (currentQueries [this]
+    (swap! !running-queries clean-expired-queries (::running-queries-max-age options))
+    (map
+     (fn [[query-id query-details]] (assoc query-details :query-id query-id))
+     @!running-queries))
+
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
     (cio/with-read-lock lock
@@ -195,22 +209,49 @@
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]} node-opts]
-               (map->CruxNode {:options node-opts
-                               :kv-store kv-store
-                               :tx-log tx-log
-                               :indexer indexer
-                               :tx-ingester tx-ingester
-                               :document-store document-store
-                               :bus bus
-                               :query-engine query-engine
-                               :closed? (atom false)
-                               :lock (StampedLock.)
-                               :!topology (atom nil)}))
+  {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]} {::keys [running-queries-max-age] :as node-opts}]
+               (let [!running-queries (atom {})]
+                 (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
+                             (fn [{::q/keys [query-id query]}]
+                               (swap! !running-queries (fn [queries]
+                                                         (-> queries
+                                                             (assoc query-id {:started-at (Instant/now)
+                                                                              :finished-at nil
+                                                                              :time-taken nil
+                                                                              :status :in-progress
+                                                                              :query query})
+                                                             (clean-expired-queries running-queries-max-age))))))
+                 (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
+                             (fn [{::q/keys [query-id]}]
+                               (swap! !running-queries (fn [queries]
+                                                         (-> queries
+                                                             (update query-id (fn [query]
+                                                                                (let [start-time (:started-at query)
+                                                                                      end-time (Instant/now)]
+                                                                                  (assoc query
+                                                                                         :finished-at end-time
+                                                                                         :time-taken (Duration/between start-time end-time)
+                                                                                         :status :completed))))
+                                                             (clean-expired-queries running-queries-max-age))))))
+                 (map->CruxNode {:options node-opts
+                                 :kv-store kv-store
+                                 :tx-log tx-log
+                                 :indexer indexer
+                                 :tx-ingester tx-ingester
+                                 :document-store document-store
+                                 :bus bus
+                                 :query-engine query-engine
+                                 :!running-queries !running-queries
+                                 :closed? (atom false)
+                                 :lock (StampedLock.)
+                                 :!topology (atom nil)})))
    :deps #{::indexer ::tx-ingester ::kv-store ::bus ::document-store ::tx-log ::query-engine}
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
-                                         :crux.config/type :crux.config/duration}}})
+                                         :crux.config/type :crux.config/duration}
+          ::running-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
+                                     :default (Duration/ofMinutes 5)
+                                     :crux.config/type :crux.config/duration}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv

@@ -123,7 +123,10 @@
     "Returns the latest transaction to have been submitted to this cluster")
 
   (attribute-stats [node]
-    "Returns frequencies map for indexed attributes"))
+    "Returns frequencies map for indexed attributes")
+
+  (current-queries [node]
+    "Returns a list of currently running/recently finished queries"))
 
 (defprotocol PCruxIngestClient
   "Provides API access to Crux ingestion."
@@ -200,7 +203,8 @@
   (latest-completed-tx [node] (.latestCompletedTx node))
   (latest-submitted-tx [node] (.latestSubmittedTx node))
 
-  (attribute-stats [this] (.attributeStats this)))
+  (attribute-stats [this] (.attributeStats this))
+  (current-queries [this] (.currentQueries this)))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
