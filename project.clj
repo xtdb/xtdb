@@ -85,7 +85,9 @@
    [io.prometheus/simpleclient_dropwizard "0.8.1"]
    [io.prometheus/simpleclient_hotspot "0.8.1"]
    [clj-commons/iapetos "0.1.9"]
-   ]
+
+   ;; crux-test test dep
+   [criterium "0.4.5"]]
 
   :source-paths ["dev"]
 

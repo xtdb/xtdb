@@ -1,6 +1,9 @@
 (ns crux.bench
   (:require [crux.io :as cio]
             [crux.kafka.embedded :as ek]
+            [crux.kv.rocksdb :as rocks]
+            [crux.kv.lmdb :as lmdb]
+            [crux.jdbc :as jdbc]
             [crux.api :as api]
             [clojure.data.json :as json]
             [clojure.tools.logging :as log]
@@ -9,7 +12,8 @@
             [clj-http.client :as client]
             [crux.fixtures :as f]
             [crux.bus :as bus]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [crux.kafka :as k])
   (:import (java.util.concurrent Executors ExecutorService)
            (java.util UUID Date List)
            (java.time Duration Instant)
@@ -206,86 +210,99 @@
 (def nodes
   {"standalone-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.standalone/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter
-                            crux.kv.rocksdb/kv-store]
-      :crux.kv/db-dir (str (io/file data-dir "kv/standalone-rocksdb"))
-      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/standalone-rocksdb"))
-      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
+     {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :crux.metrics.dropwizard.cloudwatch/reporter {}})
 
    "standalone-rocksdb-with-metrics"
    (fn [data-dir]
-     {:crux.node/topology '[crux.standalone/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter
-                            crux.kv.rocksdb/kv-store-with-metrics]
-      :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb-with-metrics"))
-      :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/rocksdb-with-metrics"))
-      :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})
+     {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store
+                                :db-dir (io/file data-dir "indexes")
+                                :metrics `crux.kv.rocksdb.metrics/->metrics}}
+      :crux.metrics.dropwizard.cloudwatch/reporter {}})
 
    "h2-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.jdbc/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter]
-      :crux.kv/db-dir (str (io/file data-dir "kv"))
-      :crux.jdbc/dbtype "h2"
-      :crux.jdbc/dbname (str (io/file data-dir "h2"))})
+     {::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "h2")}
+      :crux/tx-log {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "h2"}
+      :crux/document-store {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "h2"}
+      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      ::jdbc/tx-consumer {}
+      :crux.metrics.dropwizard.cloudwatch/reporter {}})
 
    "sqlite-rocksdb"
    (fn [data-dir]
-     {:crux.node/topology '[crux.jdbc/topology
-                            crux.metrics.dropwizard.cloudwatch/reporter]
-      :crux.kv/db-dir (str (io/file data-dir "kv"))
-      :crux.jdbc/dbtype "sqlite"
-      :crux.jdbc/dbname (str (io/file data-dir "sqlite"))})
+     {::data-source {:crux/module `crux.jdbc.sqlite/->data-source, :db-file (io/file data-dir "sqlite")}
+      :crux/tx-log {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "sqlite"}
+      :crux/document-store {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "sqlite"}
+      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      ::jdbc/tx-consumer {}
+      :crux.metrics.dropwizard.cloudwatch/reporter {}})
 
    "kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
-       {:crux.node/topology '[crux.kafka/topology
-                              crux.metrics.dropwizard.cloudwatch/reporter
-                              crux.kv.rocksdb/kv-store]
-        :crux.kafka/bootstrap-servers "localhost:9092"
-        :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
-        :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
-        :crux.kv/db-dir (str (io/file data-dir "kv/kafka-rocksdb"))}))
+       {::k/kafka-config {:bootstrap-servers "localhost:9092"}
+        ::k/tx-consumer {:kafka-config ::k/kafka-config}
+        :crux/tx-log {:crux/module `k/->tx-log
+                      :kafka-config ::k/kafka-config
+                      :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
+        :crux/document-store {:crux/module `k/->document-store,
+                              :kafka-config ::k/kafka-config
+                              :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
+                              :local-document-store {:kv-store {:crux/module `rocks/->kv-store
+                                                                :db-dir (io/file data-dir "doc-store")}}}
+        :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexer")}}
+        :crux.metrics.dropwizard.cloudwatch/reporter {}}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
-       {:crux.node/topology '[crux.kafka/topology
-                              crux.metrics.dropwizard.cloudwatch/reporter
-                              crux.kv.rocksdb/kv-store]
-        :crux.kafka/bootstrap-servers "localhost:9091"
-        :crux.kafka/doc-topic (str "kafka-rocksdb-doc-" uuid)
-        :crux.kafka/tx-topic (str "kafka-rocksdb-tx-" uuid)
-        :crux.kv/db-dir (str (io/file data-dir "kv/embedded-kafka-rocksdb"))}))
+       {::k/kafka-config {:bootstrap-servers "localhost:9091"}
+        ::k/tx-consumer {:kafka-config ::k/kafka-config}
+        :crux/tx-log {:crux/module `k/->tx-log
+                      :kafka-config ::k/kafka-config
+                      :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
+        :crux/document-store {:crux/module `k/->document-store
+                              :kafka-config ::k/kafka-config
+                              :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
+                              :local-document-store {:kv-store {:crux/module `rocks/->kv-store
+                                                                :db-dir (io/file data-dir "doc-store")}}}
+        :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexer")}}
+        :crux.metrics.dropwizard.cloudwatch/reporter {}}))
+
    "standalone-lmdb"
    (fn [data-dir]
-       {:crux.node/topology '[crux.standalone/topology
-                              crux.metrics.dropwizard.cloudwatch/reporter
-                              crux.kv.lmdb/kv-store]
-        :crux.kv/db-dir (str (io/file data-dir "kv/lmdb"))
-        :crux.standalone/event-log-kv-store 'crux.kv.lmdb/kv
-        :crux.standalone/event-log-dir (str (io/file data-dir "eventlog/lmdb"))
-        :crux.kv.lmdb/env-mapsize 4096})
+     {:crux/tx-log {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :crux/document-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :crux/indexer {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :crux.metrics.dropwizard.cloudwatch/reporter {}})
 
    "kafka-lmdb"
    (fn [data-dir]
-       (let [uuid (UUID/randomUUID)]
-         {:crux.node/topology '[crux.kafka/topology
-                                crux.metrics.dropwizard.cloudwatch/reporter
-                                crux.kv.lmdb/kv-store]
-          :crux.kafka/bootstrap-servers "localhost:9092"
-          :crux.kafka/doc-topic (str "kafka-lmdb-doc-" uuid)
-          :crux.kafka/tx-topic (str "kafka-lmdb-tx-" uuid)
-          :crux.kv/db-dir (str (io/file data-dir "kv/rocksdb"))}))})
+     (let [uuid (UUID/randomUUID)]
+       {::k/kafka-config {:bootstrap-servers "localhost:9092"}
+        ::k/tx-consumer {:kafka-config ::k/kafka-config}
+        :crux/tx-log {:crux/module `k/->tx-log
+                      :kafka-config ::k/kafka-config
+                      :tx-topic-opts {:topic-name (str "kafka-lmdb-tx-" uuid)}}
+        :crux/document-store {:crux/module `k/->document-store
+                              :kafka-config ::k/kafka-config
+                              :doc-topic-opts {:topic-name (str "kafka-lmdb-doc-" uuid)}
+                              :local-document-store {:kv-store {:crux/module `lmdb/->kv-store
+                                                                :db-dir (io/file data-dir "doc-store")}}}
+        :crux/indexer {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexer")}}
+        :crux.metrics.dropwizard.cloudwatch/reporter {}}))})
 
 (defn with-embedded-kafka* [f]
   (f/with-tmp-dir "embedded-kafka" [data-dir]
     (with-open [emb (ek/start-embedded-kafka
-                     {:crux.kafka.embedded/zookeeper-data-dir (str (io/file data-dir "zookeeper"))
-                      :crux.kafka.embedded/kafka-log-dir (str (io/file data-dir "kafka-log"))
-                      :crux.kafka.embedded/kafka-port 9091})]
+                     #::ek{:zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                           :kafka-log-dir (str (io/file data-dir "kafka-log"))
+                           :kafka-port 9091})]
       (f))))
 
 (defmacro with-embedded-kafka [& body]
