@@ -65,18 +65,11 @@
     (let [time-since-query ^Duration (Duration/between finished-at (Instant/now))]
       (neg? (.compareTo max-age time-since-query)))))
 
-(defn clean-expired-queries [queries ^Duration max-age]
-  (into {} (remove (fn [[_ query]] (query-expired? query max-age)) queries)))
-
-(defn limit-finished-queries [queries max-queries]
-  (let [finished-at (comp :finished-at val)
-        in-progress-keys (->> (remove finished-at queries)
-                              keys)
-        finished-keys (->> (filter finished-at queries)
-                           (sort-by finished-at #(compare %2 %1))
-                           (take max-queries)
-                           keys)]
-    (select-keys queries (concat in-progress-keys finished-keys))))
+(defn clean-expired-queries [queries ^Duration max-age max-queries]
+  (->>
+   (remove (fn [query] (query-expired? query max-age)) queries)
+   (sort-by :finished-at #(compare %2 %1))
+   (take max-queries)))
 
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
                      !running-queries options close-fn !topology closed? ^StampedLock lock]
@@ -186,13 +179,10 @@
     (db/latest-submitted-tx tx-log))
 
   (currentQueries [this]
-    (swap! !running-queries (fn [queries]
-                              (-> queries
-                                  (clean-expired-queries (::running-queries-max-age options))
-                                  (limit-finished-queries (::running-queries-max-count options)))))
-    (map
-     (fn [[query-id query-details]] (assoc query-details :query-id query-id))
-     @!running-queries))
+    (let [running-queries (swap! !running-queries update :completed clean-expired-queries
+                                 (::finished-queries-max-age options)
+                                 (::finished-queries-max-count options))]
+      (concat (vals (:in-progress running-queries)) (:completed running-queries))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
@@ -223,32 +213,29 @@
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]}
-                  {::keys [running-queries-max-age running-queries-max-count] :as node-opts}]
-               (let [!running-queries (atom {})]
+                  {::keys [finished-queries-max-age finished-queries-max-count] :as node-opts}]
+               (let [!running-queries (atom {:in-progress {} :completed '()})]
                  (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
                              (fn [{::q/keys [query-id query]}]
                                (swap! !running-queries (fn [queries]
                                                          (-> queries
-                                                             (assoc query-id {:started-at (Instant/now)
-                                                                              :finished-at nil
-                                                                              :time-taken nil
-                                                                              :status :in-progress
-                                                                              :query query})
-                                                             (clean-expired-queries running-queries-max-age)
-                                                             (limit-finished-queries running-queries-max-count))))))
+                                                             (assoc-in [:in-progress query-id] {:query-id query-id
+                                                                                                :started-at (Instant/now)
+                                                                                                :query query})
+                                                             (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count))))))
                  (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
                              (fn [{::q/keys [query-id]}]
                                (swap! !running-queries (fn [queries]
-                                                         (-> queries
-                                                             (update query-id (fn [query]
-                                                                                (let [start-time (:started-at query)
-                                                                                      end-time (Instant/now)]
-                                                                                  (assoc query
-                                                                                         :finished-at end-time
-                                                                                         :time-taken (Duration/between start-time end-time)
-                                                                                         :status :completed))))
-                                                             (clean-expired-queries running-queries-max-age)
-                                                             (limit-finished-queries running-queries-max-count))))))
+                                                         (let [query (get-in queries [:in-progress query-id])]
+                                                           (-> queries
+                                                               (update :in-progress dissoc query-id)
+                                                               (update :completed conj (let [start-time (:started-at query)
+                                                                                             end-time (Instant/now)]
+                                                                                         (assoc query
+                                                                                                :finished-at end-time
+                                                                                                :time-taken (Duration/between start-time end-time)
+                                                                                                :status :completed)))
+                                                               (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count)))))))
                  (map->CruxNode {:options node-opts
                                  :kv-store kv-store
                                  :tx-log tx-log
@@ -265,12 +252,12 @@
    :args {:crux.tx-log/await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                          :default nil
                                          :crux.config/type :crux.config/duration}
-          ::running-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
-                                     :default (Duration/ofMinutes 5)
-                                     :crux.config/type :crux.config/duration}
-          ::running-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
-                                       :default 20
-                                       :crux.config/type :crux.config/nat-int}}})
+          ::finished-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
+                                      :default (Duration/ofMinutes 5)
+                                      :crux.config/type :crux.config/duration}
+          ::finished-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
+                                        :default 20
+                                        :crux.config/type :crux.config/nat-int}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
