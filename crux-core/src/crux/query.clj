@@ -1431,7 +1431,16 @@
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (->> (crux.query/query db conformed-query)
+      (->> (try
+             (crux.query/query db conformed-query)
+             (catch Exception e
+               (when bus
+                 (bus/send bus {:crux/event-type ::failed-query
+                                ::query safe-query
+                                ::query-id query-id
+                                ::error {:type (type e)
+                                         :message (.getMessage e)}}))
+               (throw e)))
            (cio/->cursor (fn []
                            (cio/try-close index-store)
                            (when bus

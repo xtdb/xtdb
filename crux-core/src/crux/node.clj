@@ -223,6 +223,20 @@
                                                                                                 :started-at (Instant/now)
                                                                                                 :query query})
                                                              (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count))))))
+                 (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
+                             (fn [{::q/keys [query-id error]}]
+                               (swap! !running-queries (fn [queries]
+                                                         (let [query (get-in queries [:in-progress query-id])]
+                                                           (-> queries
+                                                               (update :in-progress dissoc query-id)
+                                                               (update :completed conj (let [start-time (:started-at query)
+                                                                                             end-time (Instant/now)]
+                                                                                         (assoc query
+                                                                                                :finished-at end-time
+                                                                                                :time-taken (Duration/between start-time end-time)
+                                                                                                :status :failed
+                                                                                                :error error)))
+                                                               (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count)))))))
                  (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
                              (fn [{::q/keys [query-id]}]
                                (swap! !running-queries (fn [queries]
