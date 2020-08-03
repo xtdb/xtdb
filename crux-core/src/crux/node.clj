@@ -68,6 +68,16 @@
 (defn clean-expired-queries [queries ^Duration max-age]
   (into {} (remove (fn [[_ query]] (query-expired? query max-age)) queries)))
 
+(defn limit-finished-queries [queries max-queries]
+  (let [finished-at (comp :finished-at val)
+        in-progress-keys (->> (remove finished-at queries)
+                              keys)
+        finished-keys (->> (filter finished-at queries)
+                           (sort-by finished-at #(compare %2 %1))
+                           (take max-queries)
+                           keys)]
+    (select-keys queries (concat in-progress-keys finished-keys))))
+
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
                      !running-queries options close-fn !topology closed? ^StampedLock lock]
   ICruxAPI
@@ -176,7 +186,10 @@
     (db/latest-submitted-tx tx-log))
 
   (currentQueries [this]
-    (swap! !running-queries clean-expired-queries (::running-queries-max-age options))
+    (swap! !running-queries (fn [queries]
+                              (-> queries
+                                  (clean-expired-queries (::running-queries-max-age options))
+                                  (limit-finished-queries (::running-queries-max-count options)))))
     (map
      (fn [[query-id query-details]] (assoc query-details :query-id query-id))
      @!running-queries))
@@ -209,7 +222,8 @@
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
 
 (def ^:private node-component
-  {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]} {::keys [running-queries-max-age] :as node-opts}]
+  {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine]}
+                  {::keys [running-queries-max-age running-queries-max-count] :as node-opts}]
                (let [!running-queries (atom {})]
                  (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
                              (fn [{::q/keys [query-id query]}]
@@ -220,7 +234,8 @@
                                                                               :time-taken nil
                                                                               :status :in-progress
                                                                               :query query})
-                                                             (clean-expired-queries running-queries-max-age))))))
+                                                             (clean-expired-queries running-queries-max-age)
+                                                             (limit-finished-queries running-queries-max-count))))))
                  (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
                              (fn [{::q/keys [query-id]}]
                                (swap! !running-queries (fn [queries]
@@ -232,7 +247,8 @@
                                                                                          :finished-at end-time
                                                                                          :time-taken (Duration/between start-time end-time)
                                                                                          :status :completed))))
-                                                             (clean-expired-queries running-queries-max-age))))))
+                                                             (clean-expired-queries running-queries-max-age)
+                                                             (limit-finished-queries running-queries-max-count))))))
                  (map->CruxNode {:options node-opts
                                  :kv-store kv-store
                                  :tx-log tx-log
@@ -251,7 +267,10 @@
                                          :crux.config/type :crux.config/duration}
           ::running-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
                                      :default (Duration/ofMinutes 5)
-                                     :crux.config/type :crux.config/duration}}})
+                                     :crux.config/type :crux.config/duration}
+          ::running-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
+                                       :default 20
+                                       :crux.config/type :crux.config/nat-int}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
