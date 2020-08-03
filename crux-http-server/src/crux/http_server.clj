@@ -58,6 +58,7 @@
           [:link {:rel "stylesheet" :href "/css/all.css"}]
           [:link {:rel "stylesheet" :href "/latofonts.css"}]
           [:link {:rel "stylesheet" :href "/css/table.css"}]
+          [:link {:rel "stylesheet" :href "/css/react-datetime.css"}]
           [:link {:rel "stylesheet" :href "/css/codemirror.css"}]
           [:link {:rel "stylesheet"
                   :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
@@ -444,17 +445,19 @@
   [:div.node-info__content
    [:table.table
     [:thead.table__head
-     [:th "Attribute"]
-     [:th "Count (across all versions)"]]
+     [:tr
+      [:th "Attribute"]
+      [:th "Count (across all versions)"]]]
     (into
      [:tbody.table__body]
-     (map
-      (fn [[key value]]
-        (when value
-          [:tr.table__row.body__row
-           [:td.table__cell.body__cell (str key)]
-           [:td.table__cell.body__cell (with-out-str (pp/pprint value))]]))
-      (sort-by (juxt val key) #(compare %2 %1) stats-map)))]])
+     (for [[key value] (sort-by (juxt val key) #(compare %2 %1) stats-map)]
+       (when value
+         [:tr.table__row.body__row
+          [:td.table__cell.body__cell
+           [:a
+            {:href (format "/_crux/query?find=%s&where=%s" (format "[%s]" (name key)) (format "[e %s %s]" key (name key)))}
+            (with-out-str (pp/pprint key))]]
+          [:td.table__cell.body__cell (with-out-str (pp/pprint value))]])))]])
 
 (defn status-map->html-elements [status-map]
   (into
@@ -483,12 +486,14 @@
                     (status-map->html-elements status-map)]
                    [:div.node-info
                     [:h2.node-info__title "Current Configuration"]
-                    (status-map->html-elements options)]]
-                  [:div.node-info
+                    (status-map->html-elements (:node-options options))]]
+                  [:div.node-attributes
                    [:h2.node-info__title "Attribute Cardinalities"]
                    (attribute-stats->html-elements attribute-stats)]]
                  :title "/_status"
-                 :options options}))
+                 :options options
+                 :results {:status-results {:status-map status-map
+                                            :attribute-stats attribute-stats}}}))
              status-map)}))
 
 (def ^DateTimeFormatter default-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
@@ -823,7 +828,7 @@
         (let [query (cond-> (or (some-> q (edn/read-string))
                                 (build-query query-params))
                       (or html? csv? tsv?) (dissoc :full-results?)
-                      html? ((fn [q] (when (:limit q) (update q :limit inc)))))
+                      html? (update :limit #(if % (inc %) 101)))
               vt (when-not (str/blank? valid-time) (instant/read-instant-date valid-time))
               tt (when-not (str/blank? transaction-time) (instant/read-instant-date transaction-time))
               db (db-for-request crux-node {:valid-time vt
@@ -831,8 +836,7 @@
               results (api/q db query)]
           {:status 200
            :body (cond
-                   html? (let [html-results (cond-> results
-                                                (:limit query) drop-last)
+                   html? (let [html-results (drop-last results)
                                links (link-top-level-entities db  "/_crux/entity" html-results)]
                            (raw-html
                             {:body (query->html links query html-results)
@@ -841,13 +845,16 @@
                              :results {:query-results
                                        {"linked-entities" links
                                         "query-results" results}}}))
-                   csv? (with-out-str
-                          (csv/write-csv *out* results))
-                   tsv? (with-out-str
-                          (csv/write-csv *out* results :separator \tab))
+                   (or csv? tsv?) (let [csv-results (into [(:find query)] results)]
+                                    (with-out-str
+                                      (csv/write-csv *out* csv-results :seperator (if csv? \, \tab))))
                    link-entities? {"linked-entities" (link-top-level-entities db  "/_crux/entity" results)
                                    "query-results" results}
-                   :else results)})
+                   :else results)
+           :headers (when (or csv? tsv?) {"Content-Disposition"
+                                          (format "attachment; filename=%s-query.%s"
+                                                  (.format default-date-formatter (ZonedDateTime/now (ZoneId/of "Z")))
+                                                  (if csv? "csv" "tsv"))})})
         (catch Exception e
           (let [error-message (.getMessage e)]
             {:status 400
@@ -859,30 +866,32 @@
                                  {"error" error-message}}})
                      {:error error-message})}))))))
 
-(defn- data-browser-handler [crux-node options request]
-  (condp check-path request
-    [#"^/_crux/index$" [:get]]
-    (root-handler crux-node options request)
+(defn- data-browser-handler [crux-node node-options request]
+  (let [options {:node-options node-options
+                 :latest-completed-tx (api/latest-completed-tx crux-node)}]
+    (condp check-path request
+      [#"^/_crux/index$" [:get]]
+      (root-handler crux-node options request)
 
-    [#"^/_crux/index.html$" [:get]]
-    (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
+      [#"^/_crux/index.html$" [:get]]
+      (root-handler crux-node options (assoc-in request [:muuntaja/response :format] "text/html"))
 
-    [#"^/_crux/status" [:get]]
-    (status crux-node options request)
+      [#"^/_crux/status" [:get]]
+      (status crux-node options request)
 
-    [#"^/_crux/entity$" [:get]]
-    (entity-state crux-node options request)
+      [#"^/_crux/entity$" [:get]]
+      (entity-state crux-node options request)
 
-    [#"^/_crux/query$" [:get]]
-    (data-browser-query crux-node options request)
+      [#"^/_crux/query$" [:get]]
+      (data-browser-query crux-node options request)
 
-    [#"^/_crux/query.csv$" [:get]]
-    (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/csv"))
+      [#"^/_crux/query.csv$" [:get]]
+      (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/csv"))
 
-    [#"^/_crux/query.tsv$" [:get]]
-    (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/tsv"))
+      [#"^/_crux/query.tsv$" [:get]]
+      (data-browser-query crux-node options (assoc-in request [:muuntaja/response :format] "text/tsv"))
 
-    nil))
+      nil)))
 
 (def ^:const default-server-port 3000)
 

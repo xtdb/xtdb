@@ -30,6 +30,7 @@
                              [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
                              [tick "0.4.23-alpha"]
+                             [cljsjs/react-datetime "2.16.2-0"]
 
                              ;; dependency resolution
                              [clj-time "0.14.3"]

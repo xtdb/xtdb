@@ -62,17 +62,15 @@
   [data table-atom]
   (let [columns (utils/table-columns data @table-atom)]
     [:thead.table__head
-     (into [:tr]
+     (into [:tr
+            [:th.row-number.head__cell
+             [:span "#"]]]
            (map
             (fn [{:keys [column-key column-name]}]
               ^{:key column-key}
               [:th.table__cell.head__cell
                [:div.head__column-title
-                {:on-click #(utils/column-sort table-atom column-key)}
-                [:span column-name]
-                [:i.fas.column-title__sort-icon
-                 ;; sort table by column inc or dec order
-                 {:class (utils/column-sort-icon @table-atom column-key)}]]
+                [:span column-name]]
                (case (utils/column-filter-type data column-key)
                  :input [column-filter-input table-atom column-key]
                  :select [column-filter-select data table-atom column-key]
@@ -101,28 +99,18 @@
   [data table-atom rows]
   (let [columns (utils/table-columns data @table-atom)]
     [:tbody.table__body
-     (for [row rows]
-       ^{:key row}
-       [:tr.table__row.body__row
-        (for [{:keys [column-key render-fn]} columns]
-          ^{:key (str row column-key)}
-          [:td.table__cell.body__cell
-           (if render-fn
-             (render-fn row (column-key row))
-             (column-key row))])])]))
+     (for [[index row] (map-indexed vector rows)]
+       ^{:key (str row index)}
 
-(defn filter-all
-  [table-atom]
-  [:div.top__filter-all
-   [:input.input.input--side-icons.input__no-borders
-    {:value (utils/filter-all-value @table-atom)
-     :on-change #(utils/filter-all-on-change % table-atom)}]
-   [:span.input__icon.input__left-icon
-    [:i.fas.fa-search]]
-   (when (not-empty (utils/filter-all-value @table-atom))
-     [:span.input__icon.input__right-icon.input__icon--clickable
-      {:on-click #(utils/filter-all-reset table-atom)}
-      [:i.fas.fa-times]])])
+       [:<>
+        [:tr.table__row.body__row
+         [:td.row-number (+ 1 index)]
+         (for [{:keys [column-key render-fn]} columns]
+           ^{:key (str row column-key)}
+           [:td.table__cell.body__cell
+            (if render-fn
+              (render-fn row (column-key row))
+              (column-key row))])]])]))
 
 (defn actions
   [data table-atom]
@@ -205,10 +193,6 @@
     (fn [data]
       (let [{:keys [processed-rows row-count]} (utils/process-rows data @table-atom)]
         [:div.uikit-table
-         [:div.table__top
-          [:div.top__first-group
-           [filter-all table-atom]]
-          [active-filters data table-atom]]
          (if (:loading? data)
            [loading-table {:rows 7 :cols 4}] ;; using previous row count reduces page jumping
            [:div.table__main

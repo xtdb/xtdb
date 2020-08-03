@@ -81,31 +81,6 @@
           s/lower-case
           (s/replace #"\s+" " ")))
 
-(defn column-sort
-  [table-atom column-key]
-  (swap! table-atom
-         #(-> %
-              (update-in [:utils :sort]
-                         (fn [m]
-                           (let [curr-column-key (ffirst m)]
-                             (if (= curr-column-key column-key)
-                               (update m column-key (fn [order]
-                                                      (if (= :asc order)
-                                                        :desc :asc)))
-                               {column-key :asc})))))))
-
-(defn column-sort-icon
-  [table column-key]
-  (let [sort (get-in table [:utils :sort])]
-    (case (get sort column-key)
-      :asc "fa-caret-down"
-      :desc "fa-caret-up"
-      "fa-caret-down")))
-
-(defn column-sort-value
-  [table]
-  (-> table :utils :sort))
-
 (defn column-filter-value
   [table column-key]
   (-> table :utils :filter-columns column-key))
@@ -194,23 +169,6 @@
          #(-> %
               (update :utils dissoc :filter-columns))))
 
-(defn filter-all-value
-  [table]
-  (get-in table [:utils :filter-all] ""))
-
-(defn filter-all-on-change
-  [evt table-atom]
-  (swap! table-atom
-         #(-> %
-              (assoc-in [:utils :filter-all]
-                        (-> evt .-target .-value)))))
-
-(defn filter-all-reset
-  [table-atom]
-  (swap! table-atom
-         #(-> %
-              (update :utils dissoc :filter-all))))
-
 (defn block-filter-values
   "Collect only the active column filters for UI"
   [table]
@@ -291,26 +249,6 @@
     :else
     (compare (str x) (str y))))
 
-(defn resolve-sorting
-  [data table rows]
-  (if-let [m (column-sort-value table)]
-    (let [column-key (ffirst m)
-          order (get m column-key)
-          allow-sort? (render-fn-allow? data column-key :sort)
-          processed-val (fn [row]
-                          (process-cell-value data row column-key
-                                              (column-key row)
-                                              allow-sort?))]
-      (sort
-       (fn [row1 row2]
-         (let [val1 (processed-val row1)
-               val2 (processed-val row2)]
-
-           (if (= :desc order)
-             (compare-vals val2 val1)
-             (compare-vals val1 val2))))
-       rows))
-    rows))
 
 (defn column-filters
   [table]
@@ -344,26 +282,6 @@
      rows)
     rows))
 
-(defn resolve-filter-all
-  [data table rows]
-  (if-let [filter-value (process-string
-                         (filter-all-value table))]
-    (let [column-keys (map #(:column-key %) (data :columns))]
-      (filter
-       (fn [row]
-         (some
-          (fn [[column-key cell-value]]
-            (let [allow-filter? (render-fn-allow? data column-key :filter)
-                  processed-val (str (process-cell-value data row column-key
-                                                         cell-value
-                                                         allow-filter?))]
-              (s/includes?
-               (s/lower-case processed-val)
-               filter-value)))
-          (select-keys row column-keys)))
-       rows))
-    rows))
-
 (defn resolve-hidden-columns
   [table rows]
   (if-let [columns-to-hide (hidden-columns table)]
@@ -379,8 +297,6 @@
         rows (:rows data)
         processed-rows (->> rows
                             (resolve-hidden-columns table)
-                            (resolve-sorting data table)
-                            (resolve-column-filtering data table)
-                            (resolve-filter-all data table))]
+                            (resolve-column-filtering data table))]
     {:processed-rows (take limit processed-rows)
      :row-count (count processed-rows)}))

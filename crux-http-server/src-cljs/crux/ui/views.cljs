@@ -1,5 +1,6 @@
 (ns crux.ui.views
   (:require [clojure.string :as string]
+            [goog.string :refer [format]]
             [cljs.pprint :as pprint]
             [cljs.reader :as reader]
             [crux.ui.events :as events]
@@ -12,10 +13,29 @@
             [fork.core :as fork]
             [reagent.core :as r]
             [re-frame.core :as rf]
-            [tick.alpha.api :as t]))
+            [tick.alpha.api :as t]
+            [cljsjs.react-datetime]))
+
+(def datetime (r/adapt-react-class js/Datetime))
+
+(defn datetime-input [{:keys [values set-values]} key-name]
+  [datetime
+   {:name key-name
+    :dateFormat "YYYY-MM-DD"
+    :timeFormat "HH:mm"
+    :value (get values key-name)
+    :input true
+    :on-change (fn [new-value]
+                 (try
+                   (let [prev-value (get values key-name)]
+                     (set-values {key-name (if (.isSame prev-value new-value "day")
+                                             new-value
+                                             (.startOf new-value "day"))}))
+                   (catch js/Error e
+                     (set-values {key-name new-value}))))}])
 
 (defn vt-tt-inputs
-  [{:keys [values touched errors handle-change handle-blur]} component]
+  [{:keys [values touched errors handle-change handle-blur set-values] :as props} component]
   (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
         show-tt? @(rf/subscribe [::sub/show-tt? component])]
     [:<>
@@ -25,25 +45,12 @@
                :on-change #(rf/dispatch [::events/toggle-show-vt component show-vt?])}]
       [:div.input-group-label.label
        [:label "Valid Time"]]
-
-      [:div
+      [:div.date-time-input
        {:class (when-not show-vt? "hidden")}
-       [:input.input.input-time
-        {:type "date"
-         :name "vtd"
-         :value (get values "vtd")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       [:input.input.input-time
-        {:type "time"
-         :name "vtt"
-         :value (get values "vtt")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       (when (and (or (get touched "vtd")
-                      (get touched "vtt"))
-                  (get errors "vt"))
-         [:p.input-error (get errors "vt")])]]
+       [datetime-input props "valid-time"]
+       (when (and (get touched "valid-time")
+                  (get errors "valid-time"))
+         [:p.input-error (get errors "valid-time")])]]
 
      [:div.crux-time
       [:input {:type :checkbox
@@ -51,24 +58,12 @@
                :on-change #(rf/dispatch [::events/toggle-show-tt component show-tt?])}]
       [:div.input-group-label.label
        [:label "Transaction Time" ]]
-      [:div
+      [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
-       [:input.input.input-time
-        {:type "date"
-         :name "ttd"
-         :value (get values "ttd")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       [:input.input.input-time
-        {:type "time"
-         :name "ttt"
-         :value (get values "ttt")
-         :on-change handle-change
-         :on-blur handle-blur}]
-       (when (and (or (get touched "ttd")
-                      (get touched "ttt"))
-                  (get errors "tt"))
-         [:p.input-error (get errors "tt")])]]]))
+       [datetime-input props "transaction-time"]
+       (when (and (get touched "transaction-time")
+                  (get errors "transaction-time"))
+         [:p.input-error (get errors "transaction-time")])]]]))
 
 (defn vt-tt-entity-box
   [vt tt]
@@ -82,8 +77,7 @@
 
 (defn query-validation
   [values]
-  (let [empty-string? #(empty? (string/trim (or (get values %) "")))
-        invalid-query? (try
+  (let [invalid-query? (try
                          (let [query-edn (reader/read-string (get values "q"))]
                            (cond
                              (nil? query-edn)  "Query box is empty"
@@ -91,13 +85,17 @@
                              (not (contains? query-edn :where)) "Query doesn't contain a 'where' clause"))
                          (catch js/Error e
                            (str "Error reading query - " (.-message e))))
+        invalid-time? (fn [key-name] (try
+                                       (let [result (js/moment (get values key-name))]
+                                         (when (string/includes? (str result) "Invalid")
+                                           (str result)))
+                                       (catch js/Error e
+                                         (str "Error reading time - " (.-message e)))))
         validation {"q" invalid-query?
-                    "vt" (when (apply not= ((juxt #(% "vtd")
-                                                  #(% "vtt")) empty-string?))
-                           "Fill out both inputs or none")
-                    "tt" (when (apply not= ((juxt #(% "ttd")
-                                                  #(% "ttt")) empty-string?))
-                           "Fill out both inputs or none")}]
+                    "valid-time" (when @(rf/subscribe [::sub/show-vt? :query])
+                                   (invalid-time? "valid-time"))
+                    "transaction-time" (when @(rf/subscribe [::sub/show-tt? :query])
+                                         (invalid-time? "transaction-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn- submit-form-on-keypress [evt form-id]
@@ -122,30 +120,34 @@
        [vt-tt-inputs props :query]])))
 
 (defn query-history
-  []
+  [set-values]
   (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
-    [:div.form-pane__history-scrollable
-     (map-indexed
-      (fn [idx {:strs [q valid-time transaction-time] :as history-q}]
-        ^{:key (gensym)}
-        [:div.form-pane__history-scrollable-el
-         [:div.form-pane__history-delete
-          {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-          [:i.fas.fa-trash-alt]]
-         [:div.form-pane__history-scrollable-el-left
-          {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
-          (when valid-time
-            [:div
-             {:style {:margin-bottom "1rem"}}
-             [:span.form-pane__history-headings "Valid Time: "]
-             [:span.form-pane__history-txt valid-time]])
-          (when transaction-time
-            [:div
-             [:span.form-pane__history-headings "Transaction Time: "]
-             [:span.form-pane__history-txt transaction-time]])
-          [:div {:style {:margin-top "1rem"}}
-           [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
-      query-history-list)]))
+    [:<>
+     [:div.form-pane__history-info
+      "Query history is stored within temporary storage in your browser"]
+     (if (not-empty query-history-list)
+       [:div.form-pane__history-scrollable
+        (map-indexed
+         (fn [idx {:strs [q] :as history-q}]
+           ^{:key (gensym)}
+           [:div.form-pane__history-scrollable-el
+            [:div.form-pane__history-delete
+             {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
+             [:i.fas.fa-trash-alt]]
+            [:div.form-pane__history-scrollable-el-left
+             [:div.form-pane__history-buttons
+              [:div.form-pane__history-button
+               {:on-click #(do (set-values {"q" q})
+                               (rf/dispatch [::events/query-form-tab-selected :edit-query]))}
+               "Edit"]
+              [:div.form-pane__history-button
+               {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
+               "Run"]]
+             [:div
+              [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+         query-history-list)]
+       [:div.form-pane__history-empty
+        [:b "No recent queries found."]])]))
 
 (defn query-form
   []
@@ -165,7 +167,9 @@
                     :prevent-default? true
                     :clean-on-unmount? true
                     :initial-values @(rf/subscribe [::sub/initial-values-query])
-                    :on-submit #(rf/dispatch [::events/go-to-query-view %])}
+                    :on-submit #(do
+                                  (rf/dispatch [:crux.ui.collapsible/toggle [::query-form ::query-editor] false])
+                                  (rf/dispatch [::events/go-to-query-view %]))}
          (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
            (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
                  disabled? (or loading? (some some? (vals errors)))]
@@ -178,7 +182,7 @@
 
                (case @(rf/subscribe [::sub/query-form-tab])
                  :edit-query [edit-query props]
-                 :recent-queries [query-history])]
+                 :recent-queries [query-history set-values])]
 
               [:p
                [:button.button
@@ -189,9 +193,7 @@
 
 (defn query-table
   []
-  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])
-        limit @(rf/subscribe [::sub/query-limit])
-        [start-time end-time] @(rf/subscribe [::sub/request-times])]
+  (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])]
     [:<>
      (cond
        error [:div.error-box error]
@@ -200,20 +202,24 @@
         (empty? (:rows data))) [:div.no-results "No results found!"]
        :else [:<>
               [:<>
-               (let [c (min limit (count (:rows data)))] [:div "Found " [:b c] " result tuple" (if (> c 1) "s" "") ""])
-               (if (= start-time end-time)
-                 ""
-                 [:div "Round-trip time: "
-                  [:b
-                   (common/format-duration->seconds (t/between start-time end-time))] " seconds"])]
-              [:div.query-table-downloads
-               "Download results as:"
-               [:a.query-table-downloads__link
-                {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
-                "CSV"]
-               [:a.query-table-downloads__link
-                {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
-                "TSV"]]
+               [:div.query-table-topbar
+                (let [limit @(rf/subscribe [::sub/query-limit])
+                      [start-time end-time] @(rf/subscribe [::sub/request-times])
+                      row-count (count (:rows data))
+                      count-string (if (> row-count limit) (str limit "+") (str row-count))]
+                  [:div.query-result-info
+                   "Found " [:b count-string] " result" (when (> row-count 1) "s")
+                   (when (not= start-time end-time)
+                     [:<>
+                      " in " [:b (common/format-duration->seconds (t/between start-time end-time))] " seconds"])])
+                [:div.query-table-downloads
+                 "Download results as:"
+                 [:a.query-table-downloads__link
+                  {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
+                  "CSV"]
+                 [:a.query-table-downloads__link
+                  {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
+                  "TSV"]]]]
               [table/table data]])]))
 
 (defn query-pane
@@ -227,14 +233,18 @@
 (defn entity-validation
   [values]
   (let [empty-string? #(empty? (string/trim (or (get values %) "")))
+        invalid-time? (fn [key-name] (try
+                                       (let [result (js/moment (get values key-name))]
+                                         (when (string/includes? (str result) "Invalid")
+                                           (str result)))
+                                       (catch js/Error e
+                                         (str "Error reading time - " (.-message e)))))
         validation {"eid" (when (empty-string? "eid")
                             "Entity id is empty")
-                    "vt" (when (apply not= ((juxt #(% "vtd")
-                                                  #(% "vtt")) empty-string?))
-                           "Fill out both inputs or none")
-                    "tt" (when (apply not= ((juxt #(% "ttd")
-                                                  #(% "ttt")) empty-string?))
-                           "Fill out both inputs or none")}]
+                    "valid-time" (when @(rf/subscribe [::sub/show-vt? :entity])
+                                   (invalid-time? "valid-time"))
+                    "transaction-time" (when @(rf/subscribe [::sub/show-tt? :entity])
+                                         (invalid-time? "transaction-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn entity-form
@@ -416,6 +426,7 @@
   [:div.node-info__content
    (for [[key value] (common/sort-map status-map)]
      (when value
+       ^{:key key}
        [:p
         [:span.node-info__key (common/edn->pretty-string key)]
         [:span.node-info__value (common/edn->pretty-string value)]]))])
@@ -425,12 +436,20 @@
   [:div.node-info__content
    [:table.table
     [:thead.table__head
-     [:th "Attribute"]
-     [:th "Count (across all versions)"]]
-    (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
-      [:tr.table__row.body__row
-       [:td.table__cell.body__cell (common/edn->pretty-string key)]
-       [:td.table__cell.body__cell (common/edn->pretty-string value)]])]])
+     [:tr
+      [:th "Attribute"]
+      [:th "Count (across all versions)"]]]
+    [:tbody.table__body
+     [:<>
+      (for [[key value] (sort-by (juxt val key) #(compare %2 %1) attributes-map)]
+        ^{:key key}
+        [:tr.table__row.body__row
+         [:td.table__cell.body__cell
+          [:a
+           {:href (common/route->url :query nil {:find (format "[%s]" (name key))
+                                                 :where (format "[e %s %s]" key (name key))})}
+           (common/edn->pretty-string key)]]
+         [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 
 (defn status-page
   []

@@ -300,12 +300,9 @@ $spacing: 0.5rem;
     }
 
     .table__main {
-	height: 100%;
-	overflow: auto;
-	overflow-x: auto;
 	position: relative;
 	background: white;
-	max-height: 60vh;
+	overflow-x: auto;
     }
 
     .table__main--loading {
@@ -469,6 +466,12 @@ $spacing: 0.5rem;
 
     .body__row:hover {
 	background: #f1f1f1;
+    }
+
+    .row-number {
+	color:#aaa3a3;
+	text-align:center;
+	width:2rem;
     }
 
     .table__cell {

@@ -231,6 +231,10 @@ html, body {
     grid-area: attributeValue;
 }
 
+.node-attributes {
+    padding: 1em;
+}
+
 // override default table style for no js version
 .no-js-pagination__arrow-nav {
     color: #bdbdbd;
@@ -334,12 +338,7 @@ html, body {
 .CodeMirror-readOnly {
     .CodeMirror {
 	box-shadow: none;
-	cursor: pointer;
 	background: none;
-    }
-
-    .CodeMirror-lines {
-	cursor: pointer;
     }
 
     .textarea {
@@ -349,6 +348,12 @@ html, body {
     .CodeMirror-cursor {
 	display: none !important
     }
+}
+
+.form-pane__history-empty {
+    font-size: .9rem;
+    padding-left: .2rem;
+    padding-bottom: .2rem;
 }
 
 .form-pane__history-scrollable {
@@ -365,14 +370,24 @@ html, body {
 }
 
 .form-pane__history-scrollable-el-left {
-    padding: 1rem 0 1rem 1rem;
+    padding: 0 0 .5rem 1rem;
     flex: 1;
     border-bottom: 1px solid #dbdbdb;
 }
 
-.form-pane__history-scrollable-el-left:hover {
-    background: #f1f1f1;
+.form-pane__history-buttons {
+    display:flex;
+    justify-content: flex-end;
+}
+
+.form-pane__history-button {
+    background: #e3e1e1;
     cursor: pointer;
+    font-size: .8rem;
+    padding: .3rem .5rem;
+    margin-left: .2rem;
+    font-weight: bold;
+    z-index: 4;
 }
 
 .form-pane__history-headings {
@@ -746,8 +761,9 @@ ul.entity-group__value li::before {
     @extend .rotating;
 }
 
-.query-table-downloads {
-    text-align: right;
+.query-table-topbar {
+    display: flex;
+    justify-content: space-between;
     margin-top: 1.0rem;
 }
 
@@ -801,6 +817,7 @@ ul.entity-group__value li::before {
 }
 
 .tab-bar {
+    padding-left: 0.4rem;
     margin-bottom: 1.4rem;
     border-bottom: 1px solid #bfbcbc;
     display: flex;
@@ -809,7 +826,7 @@ ul.entity-group__value li::before {
 .tab-bar__tab {
     cursor: pointer;
     font-size: .8rem;
-    padding: 0.4rem;
+    padding: 0.4rem 0.6rem;
     border-top: 1px solid transparent;
     margin-bottom: -1px;
 }
@@ -833,11 +850,22 @@ ul.entity-group__value li::before {
     margin-bottom: 0.75rem;
 }
 
+.date-time-input {
+    display: flex;
+}
+
 .form-pane__history {
     padding: .6rem;
     background: #f1f1f1;
     width: max-content;
     margin-left:auto;
+}
+
+.form-pane__history-info {
+    font-size: 0.9rem;
+    background: #e3e1e1;
+    padding: .6rem;
+    margin-bottom: .6rem;
 }
 
 .form__button {

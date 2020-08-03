@@ -32,35 +32,31 @@
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
-   (let [now (t/now)
-         query-params (get-in db [:current-route :query-params])
-         valid-time (common/datetime->date-time
-                     (str (:valid-time query-params now)))
-         transaction-time (common/datetime->date-time
-                           (str (:transaction-time query-params now)))]
+   (let [query-params (get-in db [:current-route :query-params])
+         valid-time (str (:valid-time query-params (t/now)))
+         latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                (:crux.tx/tx-time)
+                                (t/instant))
+         transaction-time (str (:transaction-time query-params latest-tx-time))]
      {"q" (if (:find query-params)
             (common/query-params->formatted-edn-string
              (dissoc query-params :valid-time :transaction-time))
             query-root-str)
-      "vtd" (:date valid-time)
-      "vtt" (:time valid-time)
-      "ttd" (:date transaction-time)
-      "ttt" (:time transaction-time)})))
+      "valid-time" (js/moment valid-time)
+      "transaction-time" (js/moment transaction-time)})))
 
 (rf/reg-sub
  ::initial-values-entity
  (fn [db _]
-   (let [now (t/now)
-         query-params (get-in db [:current-route :query-params])
-         valid-time (common/datetime->date-time
-                     (str (:valid-time query-params now)))
-         transaction-time (common/datetime->date-time
-                           (str (:transaction-time query-params now)))]
+   (let [query-params (get-in db [:current-route :query-params])
+         valid-time (str (:valid-time query-params (t/now)))
+         latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                (:crux.tx/tx-time)
+                                (t/instant))
+         transaction-time (str (:transaction-time query-params latest-tx-time))]
      {"eid" (:eid query-params)
-      "vtd" (:date valid-time)
-      "vtt" (:time valid-time)
-      "ttd" (:date transaction-time)
-      "ttt" (:time transaction-time)})))
+      "valid-time" (js/moment valid-time)
+      "transaction-time" (js/moment transaction-time)})))
 
 ;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
@@ -151,8 +147,7 @@
 (rf/reg-sub
  ::query-data-download-link
  (fn [db [_ link-type]]
-   (let [query-params (-> (get-in db [:current-route :query-params])
-                          (dissoc :limit :offset))]
+   (let [query-params (get-in db [:current-route :query-params])]
      (-> (common/route->url :query {} query-params)
          (string/replace #"query" (str "query." link-type))))))
 
@@ -281,4 +276,4 @@
 (rf/reg-sub
  ::node-options
  (fn [db _]
-   (:options db)))
+   (:node-options (:options db))))
