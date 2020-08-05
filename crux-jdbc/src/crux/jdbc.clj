@@ -103,7 +103,7 @@
     (->> (for [id-batch (partition-all 100 ids)
                row (jdbc/execute! ds (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s) AND COMPACTED = 0"
                                                     (->> (repeat (count id-batch) "?") (str/join ", ")))]
-                                           (map str id-batch))
+                                           (map (comp str c/new-id) id-batch))
                                   {:builder-fn jdbcr/as-unqualified-lower-maps})]
            row)
          (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(->v dbtype (:v %))))

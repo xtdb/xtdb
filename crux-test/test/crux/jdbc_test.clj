@@ -108,3 +108,24 @@
                                               ["SELECT count(EVENT_KEY) AS num_docs FROM tx_events WHERE TOPIC = 'docs'"]
                                               {:builder-fn jdbcr/as-unqualified-lower-maps}))))))
   (t/is true))
+
+(t/deftest test-project-star-bug-1016
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put
+                                       :crux.db/fn '(fn [ctx doc]
+                                                      [[:crux.tx/put doc]])}]])
+  (fix/submit+await-tx [[:crux.tx/fn :put {:crux.db/id :foo, :foo :bar}]])
+
+  (let [db (api/db *api*)]
+
+    (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
+             (api/q db
+                    '{:find [(eql/project ?e [*])]
+                      :where [[?e :crux.db/id :foo]]})))
+
+    (t/is (= {:crux.db/id :foo, :foo :bar}
+             (api/entity db :foo)))
+
+    (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
+             (api/q db
+                    '{:find [(eql/project ?e [*])]
+                      :where [[?e :crux.db/id :foo]]})))))

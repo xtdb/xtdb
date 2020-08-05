@@ -1256,7 +1256,7 @@
                               (empty? join-child-fns))
                  (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
                    (let-docs [docs #{content-hash}]
-                     (let [doc (get docs content-hash)]
+                     (let [doc (get docs (c/new-id content-hash))]
                        (->> (mapv (fn [[dispatch-key child-fns]]
                                     (let [v (get doc dispatch-key)]
                                       (->> (if (or (vector? v) (set? v))
@@ -1303,7 +1303,7 @@
                               (or (when full-results?
                                     (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
                                       (let-docs [docs #{hash}]
-                                        (get docs hash))))
+                                        (get docs (c/new-id hash)))))
                                   value))}
       :project {:logic-var (:logic-var arg)
                 :var-binding (var->bindings (:logic-var arg))
