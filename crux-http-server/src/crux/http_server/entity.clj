@@ -3,6 +3,7 @@
             [clojure.edn :as edn]
             [clojure.instant :as instant]
             [clojure.string :as string]
+            [clojure.set :as set]
             [crux.api :as api]
             [crux.codec :as c]
             [muuntaja.core :as m]
@@ -51,8 +52,8 @@
             (if (and (c/valid-id? result) (api/entity db result))
               (conj links result)
               (cond
-                (map? result) (apply merge (map #(recur-on-result % links) (vals result)))
-                (sequential? result) (apply merge (map #(recur-on-result % links) result))
+                (map? result) (apply set/union (map #(recur-on-result % links) (vals result)))
+                (sequential? result) (apply set/union (map #(recur-on-result % links) result))
                 :else links)))]
     (recur-on-result result #{})))
 

@@ -32,7 +32,7 @@
   ;; Insert data
   (let [{:keys [crux.tx/tx-id crux.tx/tx-time] :as tx} (-> (http/post (str *api-url* "/tx-log")
                                                                       {:content-type :edn
-                                                                       :body (pr-str '[[:crux.tx/put {:crux.db/id :ivan, :linking :peter}]
+                                                                       :body (pr-str '[[:crux.tx/put {:crux.db/id :ivan, :linking :peter, :link2 :petr}]
                                                                                        [:crux.tx/put {:crux.db/id :peter, :name "Peter"}]])})
                                                            (parse-body "application/edn"))]
     (http/get (str *api-url* "/await-tx?tx-id=" tx-id))
@@ -52,7 +52,7 @@
                                                     (parse-body accept-type)
                                                     (get "linked-entities")))]
       (t/is (:ivan (get-linked-entities "application/edn")))
-      (t/is (get (get-linked-entities "application/json") "ivan")))
+      (t/is (some #(= "ivan" %) (get-linked-entities "application/json"))))
 
     ;; Testing getting query results
     (let [get-query (fn [accept-type]

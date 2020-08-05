@@ -220,14 +220,14 @@
     no-query? {:status 400, :body "No query provided."}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}))
 
-(defmethod transform-query-resp "text/csv" [{:keys [results] :as res} req]
+(defmethod transform-query-resp "text/csv" [{:keys [results query] :as res} req]
   (or (handle-error res)
-      (-> {:status 200, :body results}
+      (-> {:status 200, :body (conj results (:find query))}
           (with-download-header res "csv"))))
 
-(defmethod transform-query-resp "text/tsv" [{:keys [results] :as res} req]
+(defmethod transform-query-resp "text/tsv" [{:keys [results query] :as res} req]
   (or (handle-error res)
-      (-> {:status 200, :body results}
+      (-> {:status 200, :body (conj results (:find query))}
           (with-download-header res "tsv"))))
 
 (defmethod transform-query-resp "text/html" [{:keys [error] :as res} _]
