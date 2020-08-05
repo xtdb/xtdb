@@ -1,0 +1,15 @@
+site:
+  title: Crux Docs
+  start_page: crux-docs::index.adoc
+content:
+  sources:
+  - url: ../
+    branches: test-release-branch-1.5
+    start_path: docs/crux-docs/
+  - url: ../
+    branches: test-release-branch-1.5, test-release-branch-1.4
+    start_path: docs/crux-docs-versioned/
+ui:
+  bundle:
+    url: ./crux-site/ui-bundle.zip
+    snapshot: true

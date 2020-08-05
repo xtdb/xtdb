@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  DocsS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 'opencrux-docs'
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: 'index.html'
+      Tags:
+        - Key: juxt:team
+          Value: crux-core
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocsS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action: 's3:GetObject'
+            Principal: '*'
+            Resource: !Sub '${DocsS3Bucket.Arn}/*'
+
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - DocsS3Bucket
+    Properties:
+      DistributionConfig:
+        Origins:
+        - DomainName:
+            Fn::GetAtt: ['DocsS3Bucket', 'DomainName']
+          Id: myS3Origin
+          CustomOriginConfig:
+            HTTPPort: 80
+            HTTPSPort: 443
+            OriginKeepaliveTimeout: 5
+            OriginProtocolPolicy: 'https-only'
+            OriginReadTimeout: 30
+            OriginSSLProtocols:
+              - TLSv1
+              - TLSv1.1
+              - TLSv1.2
+        Aliases:
+          - docs.crux.cloud
+        Enabled: 'true'
+        Comment: CloudFront distribution for the opencrux docs.
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          MinTTL: 0
+          AllowedMethods:
+          - GET
+          - HEAD
+          TargetOriginId: myS3Origin
+          ForwardedValues:
+            QueryString: 'false'
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https
+        PriceClass: PriceClass_200
+        ViewerCertificate:
+          SslSupportMethod: sni-only
+          # Had to create certificate in us-east-1 for use with cloudfront
+          AcmCertificateArn: arn:aws:acm:us-east-1:955308952094:certificate/9fe58441-228c-4ea6-85ef-3c659f23ba47
+      Tags:
+        - Key: juxt:team
+          Value: crux-core
+
+  WebsiteDNSName:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: 'crux.cloud.'
+      Name: 'docs.crux.cloud'
+      Type: 'A'
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt [SiteDistribution, DomainName]
