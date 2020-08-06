@@ -108,3 +108,16 @@
         (t/is (= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
         (t/is (nil? (api/entity (api/db *api*) :to-be-evicted)))
         (t/is (= after-evict-doc (api/entity (api/db *api*) :after-evict)))))))
+
+(t/deftest test-consumer-seeks-after-restart
+  (fix/with-opts {:crux.node/kv-store 'crux.kv.rocksdb/kv}
+    (fn []
+      (fix/with-node
+        (fn []
+          (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])))
+      (fix/with-node
+        (fn []
+          (doto (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :bar}]])
+            (as-> tx (api/await-tx *api* tx (Duration/ofSeconds 5))))
+          (t/is (api/entity (api/db *api*) :foo))
+          (t/is (api/entity (api/db *api*) :bar)))))))

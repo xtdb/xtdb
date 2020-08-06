@@ -325,7 +325,7 @@
                           (fn [after-tx-id]
                             (let [expected-position (or (some-> after-tx-id inc) 0)]
                               (when-not (= (.position consumer tp) expected-position)
-                                (seek-consumer {tp expected-position})))
+                                (seek-consumer consumer {tp expected-position})))
 
                             (cio/->cursor (fn [])
                                           (->> (consumer-seqs consumer poll-wait-duration)
