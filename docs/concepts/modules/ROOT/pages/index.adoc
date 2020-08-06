@@ -1,0 +1,3 @@
+= Concepts Home
+
+This is the concepts home page, check out xref:example.adoc[the other file]
