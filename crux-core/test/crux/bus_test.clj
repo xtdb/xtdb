@@ -33,7 +33,7 @@
 (defmethod bus/event-spec ::baz [_] (s/keys))
 
 (t/deftest test-await
-  (let [bus (bus/->bus)]
+  (let [bus (bus/->bus {})]
     (t/testing "ready already"
       (t/is (= ::ready (bus/await bus {:crux/event-types #{::foo}
                                        :->result (fn [] ::ready)}))))

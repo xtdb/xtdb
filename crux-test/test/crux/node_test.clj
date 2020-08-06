@@ -131,7 +131,7 @@
      ~@body))
 
 (t/deftest test-await-tx
-  (let [bus (bus/->bus)
+  (let [bus (bus/->bus {})
         await-tx (fn [tx timeout]
                    (#'n/await-tx {:bus bus} ::tx/tx-id tx timeout))
         tx1 {::tx/tx-id 1
