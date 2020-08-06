@@ -1,14 +1,25 @@
 site:
   title: Crux Docs
-  start_page: crux-docs::index.adoc
+  start_page: home::index.adoc
 content:
   sources:
   - url: ../
-    branches: test-release-branch-1.5
-    start_path: docs/crux-docs/
+    start_path: docs/home
+    branches: HEAD
   - url: ../
-    branches: test-release-branch-1.5, test-release-branch-1.4
-    start_path: docs/crux-docs-versioned/
+    start_path: docs/concepts
+    branches: HEAD
+  - url: ../
+    start_path: docs/tutorials
+    branches: HEAD
+  - url: ../
+    start_path: docs/reference
+    branches: HEAD
+  # - url: https://github.com/juxt/crux
+  #   start_path: docs/reference
+  #   branches:
+  #     - test-release-branch-1.5
+  #     - test-release-branch-1.4
 ui:
   bundle:
     url: ./crux-site/ui-bundle.zip
