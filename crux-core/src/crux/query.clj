@@ -1438,7 +1438,7 @@
                  (bus/send bus {:crux/event-type ::failed-query
                                 ::query safe-query
                                 ::query-id query-id
-                                ::error {:type (type e)
+                                ::error {:type (pr-str (type e))
                                          :message (.getMessage e)}}))
                (throw e)))
            (cio/->cursor (fn []

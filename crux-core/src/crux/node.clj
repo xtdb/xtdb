@@ -21,6 +21,7 @@
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
            (java.io Closeable Writer)
            java.util.function.Consumer
+           java.util.Date
            [java.util.concurrent Executors TimeoutException]
            java.util.concurrent.locks.StampedLock
            (java.time Duration Instant)))
@@ -62,7 +63,7 @@
 
 (defn query-expired? [{:keys [finished-at] :as query} ^Duration max-age]
   (when finished-at
-    (let [time-since-query ^Duration (Duration/between finished-at (Instant/now))]
+    (let [time-since-query ^Duration (Duration/between (.toInstant ^Date finished-at) (Instant/now))]
       (neg? (.compareTo max-age time-since-query)))))
 
 (defn clean-expired-queries [queries ^Duration max-age max-queries]
@@ -220,7 +221,7 @@
                                (swap! !running-queries (fn [queries]
                                                          (-> queries
                                                              (assoc-in [:in-progress query-id] {:query-id query-id
-                                                                                                :started-at (Instant/now)
+                                                                                                :started-at (Date.)
                                                                                                 :query query})
                                                              (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count))))))
                  (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
@@ -230,10 +231,9 @@
                                                            (-> queries
                                                                (update :in-progress dissoc query-id)
                                                                (update :completed conj (let [start-time (:started-at query)
-                                                                                             end-time (Instant/now)]
+                                                                                             end-time (Date.)]
                                                                                          (assoc query
                                                                                                 :finished-at end-time
-                                                                                                :time-taken (Duration/between start-time end-time)
                                                                                                 :status :failed
                                                                                                 :error error)))
                                                                (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count)))))))
@@ -244,10 +244,9 @@
                                                            (-> queries
                                                                (update :in-progress dissoc query-id)
                                                                (update :completed conj (let [start-time (:started-at query)
-                                                                                             end-time (Instant/now)]
+                                                                                             end-time (Date.)]
                                                                                          (assoc query
                                                                                                 :finished-at end-time
-                                                                                                :time-taken (Duration/between start-time end-time)
                                                                                                 :status :completed)))
                                                                (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count)))))))
                  (map->CruxNode {:options node-opts
