@@ -2,9 +2,7 @@ package crux.api.alpha;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
-import crux.api.ICruxAPI;
-import crux.api.HistoryOptions;
-import crux.api.ICursor;
+import crux.api.*;
 import crux.api.HistoryOptions.SortOrder;
 
 import java.io.IOException;
@@ -15,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -30,6 +29,16 @@ public class CruxNode implements AutoCloseable {
 
     CruxNode(ICruxAPI node) {
         this.node = node;
+    }
+
+    @SuppressWarnings("unused")
+    public static CruxNode startNode() {
+        return new CruxNode(Crux.startNode());
+    }
+
+    @SuppressWarnings("unused")
+    public static CruxNode startNode(Consumer<NodeConfigurator> f) {
+        return new CruxNode(Crux.startNode(f));
     }
 
     /**
@@ -57,7 +66,7 @@ public class CruxNode implements AutoCloseable {
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unused")
     public TxResult submitTx(TransactionOperation... ops) {
         return submitTx(Arrays.asList(ops));
     }
@@ -98,6 +107,7 @@ public class CruxNode implements AutoCloseable {
      * @param timeout Max time to wait, can be null for the default
      * @return Date representing the latest index time when this node has caught up as of this call
      */
+    @SuppressWarnings("unused")
     public Date sync(Duration timeout) {
         return node.sync(timeout);
     }

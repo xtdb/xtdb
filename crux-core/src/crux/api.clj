@@ -9,7 +9,7 @@
                      ICruxAsyncIngestAPI ICruxDatasource ICursor
                      HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
            java.io.Closeable
-           java.util.Date
+           (java.util Date Map)
            java.time.Duration
            [java.util.function Supplier Consumer]))
 
@@ -366,7 +366,7 @@
   throws IndexVersionOutOfSyncException if the index needs rebuilding.
   throws NonMonotonicTimeException if the clock has moved backwards since
     last run. Only applicable when using the event log."
-  ^ICruxAPI [options]
+  ^ICruxAPI [^Map options]
   (Crux/startNode options))
 
 (defn- ->RemoteClientOptions [{:keys [->jwt-token] :as opts}]
@@ -393,7 +393,7 @@
    (Crux/newApiClient url (->RemoteClientOptions opts))))
 
 (defn new-ingest-client
-  "Starts an ingest client for transacting into Kafka without running a
+  "Starts an ingest client for transacting into Crux without running a
   full local node with index.
 
   For valid options, see crux.kafka/default-options. Options are

@@ -9,6 +9,7 @@
   (:import (java.io Closeable File Writer)
            (java.nio.file Path Paths)
            (java.time Duration)
+           (java.util Map List)
            (java.util.concurrent TimeUnit)
            (crux.api ICruxAPI)))
 
@@ -84,7 +85,7 @@
               :refs {:dep [k]}
               :ref [k]}}))
 
-(defn opts-reducer [k-path]
+(defn- opts-reducer [k-path]
   (fn f [opts el]
     (let [module (or (:crux/module el) (get el "crux/module"))]
       (cond
@@ -96,8 +97,9 @@
         (string? el) (reduced (prepare-dep (->Ref (keyword el)) k-path opts))
         (satisfies? Dep el) (reduced (prepare-dep el k-path opts))
         (fn? el) (reduced (prepare-dep (->Module el (::before (meta el)) (::deps (meta el)) (::args (meta el))) k-path opts))
-        (map? el) (spread-opts opts el)
-        (nil? el) opts))))
+        (instance? Map el) (spread-opts opts el)
+        (nil? el) opts
+        :else (throw (IllegalArgumentException. (format "Unexpected config option %s" (pr-str el))))))))
 
 (defn prep-system
   ([opts] (prep-system opts nil))

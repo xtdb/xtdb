@@ -12,10 +12,11 @@
             [crux.tx :as tx]
             [crux.tx.event :as txe]
             [crux.api :as api]
-            [crux.bus :as bus])
+            [crux.bus :as bus]
+            [crux.kv :as kv])
   (:import java.util.Date
            crux.api.Crux
-           (java.util HashMap)
+           (java.util HashMap ArrayList)
            (clojure.lang Keyword)
            (java.time Duration)
            (java.util.concurrent TimeoutException)))
@@ -51,24 +52,34 @@
                             :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
       (t/is n))))
 
-;; TODO JH topo
-;; (t/deftest test-properties-file-to-node
-;;   (f/with-tmp-dir "data" [data-dir]
-;;     (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-;;                              :crux.db/db-dir (str (io/file data-dir "db"))))]
-;;       (t/is (instance? crux.standalone.StandaloneTxLog (-> n :tx-log)))
-;;       (t/is (= (Duration/ofSeconds 20) (-> n :options :crux.tx-log/await-tx-timeout))))))
-
-;; (t/deftest topology-resolution-from-java
-;;   (f/with-tmp-dir "data" [data-dir]
-;;     (let [mem-db-node-options
-;;           (doto (HashMap.)
-;;             (.put :crux.node/topology 'crux.standalone/topology)
-;;             (.put :crux.node/kv-store 'crux.kv.memdb/kv)
-;;             (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
-;;           memdb-node (Crux/startNode mem-db-node-options)]
-;;       (t/is memdb-node)
-;;       (t/is (not (.close memdb-node))))))
+(t/deftest start-node-from-java
+  (f/with-tmp-dir "data" [data-dir]
+    (with-open [node (Crux/startNode
+                      (doto (HashMap.)
+                        (.put :crux/tx-log
+                              (doto (HashMap.)
+                                (.put "kv-store"
+                                      (doto (HashMap.)
+                                        (.put "crux/module" "crux.kv.rocksdb/->kv-store")
+                                        (.put "db-dir" (io/file data-dir "txs"))))))
+                        (.put :crux/document-store
+                              (doto (HashMap.)
+                                (.put "kv-store"
+                                      (doto (HashMap.)
+                                        (.put "crux/module" "crux.kv.rocksdb/->kv-store")
+                                        (.put "db-dir" (io/file data-dir "docs"))))))
+                        (.put :crux/indexer
+                              (doto (HashMap.)
+                                (.put "kv-store"
+                                      (doto (HashMap.)
+                                        (.put "crux/module" "crux.kv.rocksdb/->kv-store")
+                                        (.put "db-dir" (io/file data-dir "indexes"))))))))]
+      (t/is (= "crux.kv.rocksdb.RocksKv"
+               (kv/kv-name (get-in node [:tx-log :kv-store]))
+               (kv/kv-name (get-in node [:document-store :document-store :kv]))
+               (kv/kv-name (get-in node [:indexer :kv-store]))))
+      (t/is (= (.toPath (io/file data-dir "txs"))
+               (get-in node [:tx-log :kv-store :db-dir]))))))
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
