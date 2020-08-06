@@ -1,64 +1,24 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
-            [crux.codec :as c]
-            [crux.fixtures :refer [*api*] :as fix]
-            [crux.fixtures.kafka :as fk]
-            crux.jdbc
-            [crux.fixtures.jdbc :as fj]
-            [crux.fixtures.http-server :as fh]
-            [crux.rdf :as rdf]
             [crux.api :as api]
+            [crux.codec :as c]
             [crux.db :as db]
-            [crux.query :as q]
+            [crux.fixtures :as fix :refer [*api*]]
+            [crux.fixtures.every-api :as every-api :refer [*node-type* *http-server-api*]]
+            [crux.fixtures.http-server :as fh]
+            [crux.fixtures.kafka :as fk]
+            [crux.rdf :as rdf]
             [crux.tx :as tx]
-            [crux.tx.event :as txe]
-            [crux.fixtures :as f]
-            [clojure.java.io :as io])
+            [crux.tx.event :as txe])
   (:import crux.api.NodeOutOfSyncException
-           java.util.Date
            java.time.Duration
-           org.eclipse.rdf4j.repository.sparql.SPARQLRepository
+           java.util.Date
+           org.eclipse.rdf4j.query.Binding
            org.eclipse.rdf4j.repository.RepositoryConnection
-           org.eclipse.rdf4j.query.Binding))
+           org.eclipse.rdf4j.repository.sparql.SPARQLRepository))
 
-(def ^:dynamic *http-server-api* nil)
-
-(def api-implementations
-  (-> {:local-standalone (t/join-fixtures [fix/with-standalone-topology fix/with-kv-dir fix/with-node])
-       :remote (t/join-fixtures [fix/with-standalone-topology
-                                 fix/with-kv-dir
-                                 fh/with-http-server
-                                 fix/with-node
-                                 (fn [f] (binding [*http-server-api* *api*] (f)))
-                                 fh/with-http-client])
-       :h2 (t/join-fixtures [#(fj/with-jdbc-node :h2 %) fix/with-kv-dir fix/with-node])
-       :sqlite (t/join-fixtures [#(fj/with-jdbc-node :sqlite %) fix/with-kv-dir fix/with-node])
-       :local-kafka (-> (t/join-fixtures [fk/with-cluster-node-opts fix/with-kv-dir fix/with-node])
-                        (with-meta {::embedded-kafka? true}))
-       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts
-                                                     fix/with-standalone-doc-store
-                                                     fix/with-kv-dir
-                                                     fix/with-node])
-                                   (with-meta {::embedded-kafka? true}))}
-      #_(select-keys [:local-standalone])
-      #_(select-keys [:local-standalone :remote])
-      #_(select-keys [:local-standalone :h2 :sqlite :remote])))
-
-(def ^:dynamic *node-type*)
-
-(defn- with-each-api-implementation [f]
-  (doseq [[node-type run-tests] api-implementations]
-    (binding [*node-type* node-type]
-      (t/testing (str node-type)
-        (run-tests f)))))
-
-(t/use-fixtures :once
-  (fn [f]
-    (if (some (comp ::embedded-kafka? meta) (vals api-implementations))
-      (fk/with-embedded-kafka-cluster f)
-      (f))))
-
-(t/use-fixtures :each with-each-api-implementation)
+(t/use-fixtures :once every-api/with-embedded-kafka-cluster)
+(t/use-fixtures :each every-api/with-each-api-implementation)
 
 (defmacro with-dbs [[db db-args] & body]
   `(do
