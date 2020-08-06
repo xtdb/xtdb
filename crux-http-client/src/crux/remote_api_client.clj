@@ -269,6 +269,11 @@
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
+  (currentQueries [_]
+    (api-request-sync (str url "/current-queries")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
+
   Closeable
   (close [_]))
 
