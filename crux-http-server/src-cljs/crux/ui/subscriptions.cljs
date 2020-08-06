@@ -26,7 +26,6 @@
                 "{"
                 " :find [?e]                ;; return a set of tuples each consisting of a unique ?e value"
                 " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
-                " :limit 100                ;; limit the initial page of results to keep things snappy"
                 "}"]))
 
 (rf/reg-sub
