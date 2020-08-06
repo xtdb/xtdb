@@ -61,16 +61,16 @@
       node-closed? (throw (InterruptedException. "Node closed."))
       tx tx)))
 
-(defn query-expired? [{:keys [finished-at] :as query} ^Duration max-age]
+(defn- query-expired? [{:keys [finished-at] :as query} ^Duration finished-queries-max-age]
   (when finished-at
     (let [time-since-query ^Duration (Duration/between (.toInstant ^Date finished-at) (Instant/now))]
-      (neg? (.compareTo max-age time-since-query)))))
+      (neg? (.compareTo finished-queries-max-age time-since-query)))))
 
-(defn clean-expired-queries [queries ^Duration max-age max-queries]
-  (->>
-   (remove (fn [query] (query-expired? query max-age)) queries)
-   (sort-by :finished-at #(compare %2 %1))
-   (take max-queries)))
+(defn- clean-expired-queries [queries {::keys [^Duration finished-queries-max-age finished-queries-max-count]}]
+  (->> queries
+       (remove (fn [query] (query-expired? query finished-queries-max-age)))
+       (sort-by :finished-at #(compare %2 %1))
+       (take finished-queries-max-count)))
 
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
                      !running-queries options close-fn !topology closed? ^StampedLock lock]
@@ -180,9 +180,7 @@
     (db/latest-submitted-tx tx-log))
 
   (currentQueries [this]
-    (let [running-queries (swap! !running-queries update :completed clean-expired-queries
-                                 (::finished-queries-max-age options)
-                                 (::finished-queries-max-count options))]
+    (let [running-queries (swap! !running-queries update :completed clean-expired-queries options)]
       (concat (vals (:in-progress running-queries)) (:completed running-queries))))
 
   ICruxAsyncIngestAPI
@@ -223,7 +221,7 @@
                                                              (assoc-in [:in-progress query-id] {:query-id query-id
                                                                                                 :started-at (Date.)
                                                                                                 :query query})
-                                                             (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count))))))
+                                                             (update :completed clean-expired-queries node-opts))))))
                  (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
                              (fn [{::q/keys [query-id error]}]
                                (swap! !running-queries (fn [queries]
@@ -236,7 +234,7 @@
                                                                                                 :finished-at end-time
                                                                                                 :status :failed
                                                                                                 :error error)))
-                                                               (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count)))))))
+                                                               (update :completed clean-expired-queries node-opts)))))))
                  (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
                              (fn [{::q/keys [query-id]}]
                                (swap! !running-queries (fn [queries]
@@ -248,7 +246,7 @@
                                                                                          (assoc query
                                                                                                 :finished-at end-time
                                                                                                 :status :completed)))
-                                                               (update :completed clean-expired-queries finished-queries-max-age finished-queries-max-count)))))))
+                                                               (update :completed clean-expired-queries node-opts)))))))
                  (map->CruxNode {:options node-opts
                                  :kv-store kv-store
                                  :tx-log tx-log

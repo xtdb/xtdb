@@ -2,19 +2,54 @@
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.fixtures.every-api :as every-api])
-  (:import java.time.Duration))
+            [crux.fixtures.every-api :as every-api]
+            [crux.node :as n])
+  (:import java.time.Duration
+           java.util.Date))
 
 (t/use-fixtures :once every-api/with-embedded-kafka-cluster)
-(t/use-fixtures :each (partial fix/with-opts {:crux.bus/sync? true
-                                              :crux.node/finished-queries-max-age (Duration/ofSeconds 1)
-                                              :crux.node/finished-queries-max-count 1})
-  every-api/with-each-api-implementation)
+(t/use-fixtures :each (partial fix/with-opts {:crux.bus/sync? true}) every-api/with-each-api-implementation)
+
+(t/deftest test-cleaning-current-queries
+  (let [clean-expired-queries @#'n/clean-expired-queries
+        queries [{:finished-at (Date.)
+                  ::query-id 1}
+                 {:finished-at (Date/from (.minus (.toInstant (Date.))
+                                                  (Duration/ofSeconds 5)))
+                  ::query-id 2}
+                 {:finished-at (Date/from (.minus (.toInstant (Date.))
+                                                  (Duration/ofSeconds 10)))
+                  ::query-id 3}]]
+    (t/testing "test current-query - check max count expiration"
+      (t/is (= [1]
+               (->> (clean-expired-queries queries
+                                           {::n/finished-queries-max-age (Duration/ofSeconds 8)
+                                            ::n/finished-queries-max-count 1})
+                    (map ::query-id))))
+
+      (t/is (= [1 2]
+               (->> (clean-expired-queries queries
+                                           {::n/finished-queries-max-age (Duration/ofSeconds 8)
+                                            ::n/finished-queries-max-count 2})
+                    (map ::query-id)))))
+
+    (t/testing "test current-query - check time expiration"
+      (t/is (= [1]
+               (->> (clean-expired-queries queries
+                                           {::n/finished-queries-max-age (Duration/ofSeconds 4)
+                                            ::n/finished-queries-max-count 5})
+                    (map ::query-id))))
+      (t/is (= [1 2]
+               (->> (clean-expired-queries queries
+                                           {::n/finished-queries-max-age (Duration/ofSeconds 8)
+                                            ::n/finished-queries-max-count 5})
+                    (map ::query-id)))))))
 
 (t/deftest test-current-queries
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
+
   (let [db (api/db *api*)]
-    (api/q (api/db *api*)
+    (api/q db
            '{:find [e]
              :where [[e :name "Ivan"]]})
 
@@ -43,21 +78,4 @@
         (doall (iterator-seq res))
 
         (t/testing "test current-query - streaming query (result realized)"
-          (= :complete (:status (first (api/current-queries *api*)))))))
-
-    (api/q (api/db *api*)
-           '{:find [e]
-             :where [[e :name "Ivan"]]})
-    (api/q (api/db *api*)
-           '{:find [e]
-             :where [[e :name "Iva"]]})
-    (t/testing "test current-query - check max count expiration"
-      (t/is (= '{:find [e]
-                 :where [[e :name "Iva"]]}
-               (:query (first (api/current-queries *api*))))))
-    (t/is (api/q (api/db *api*)
-                 '{:find [e]
-                   :where [[e :name "Ivan"]]}))
-    (Thread/sleep 1000)
-    (t/testing "test current-query - check time expiration"
-      (t/is (empty? (api/current-queries *api*))))))
+          (= :complete (:status (first (api/current-queries *api*)))))))))
