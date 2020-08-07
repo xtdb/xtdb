@@ -131,7 +131,7 @@
 
   (query [this q]
     (with-open [res (.openQuery this q)]
-      (if (:order-by q)
+      (if (some q [:order-by :limit :offset])
         (vec (iterator-seq res))
         (set (iterator-seq res)))))
 
