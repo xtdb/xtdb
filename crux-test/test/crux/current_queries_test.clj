@@ -46,7 +46,9 @@
                     (map ::query-id)))))))
 
 (t/deftest test-recent-queries
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
+                        [:crux.tx/put {:crux.db/id :petr :name "Petr"}]])
+
   (let [db (api/db *api*)]
     (api/q db
            '{:find [e]
@@ -66,14 +68,17 @@
         (t/is (= :failed (:status malformed-query)))))))
 
 (t/deftest test-active-queries
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
+                        [:crux.tx/put {:crux.db/id :petr :name "Petr"}]])
+
   (let [db (api/db *api*)]
     (t/testing "test active-queries - streaming query"
-      (with-open [res (api/open-q db '{:find [e]
-                                       :where [[e :name "Ivan"]]})]
-
+      (with-open [res (api/open-q db '{:find [e], :where [[e :name "Ivan"]]})]
         (t/testing "test active-queries - streaming query (not realized)"
           (let [streaming-query (first (api/active-queries *api*))]
-            (t/is (= '{:find [e] :where [[e :name "Ivan"]]} (:query streaming-query))))))
+            (when-not (= :remote every-api/*node-type*)
+              ;; can't reliably get active-queries on remote for short queries
+              (t/is (= '{:find [e] :where [[e :name "Ivan"]]} (:query streaming-query)))))))
 
       (t/testing "test active-queries & recent-queries - streaming query (result realized)"
         (t/is (empty? (api/active-queries *api*)))
