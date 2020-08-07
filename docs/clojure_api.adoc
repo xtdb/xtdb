@@ -180,6 +180,21 @@ toc::[]
     "Returns frequencies of indexed attributes")
 ----
 
+=== active-queries
+
+[source,clojure]
+----
+  (active-queries [node]
+    "Returns a list of currently running queries")
+----
+
+=== recent-queries
+
+[source,clojure]
+----
+  (recent-queries [node]
+    "Returns a list of recently completed/failed queries")
+----
 
 [#clojure-api-icruxdatasource]
 == ICruxDatasource

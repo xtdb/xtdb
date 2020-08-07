@@ -1,4 +1,4 @@
-(ns crux.query-state
+(ns ^:no-doc crux.query-state
   (:import (crux.api QueryState QueryState$QueryStatus QueryState$QueryError)))
 
 (defn <-QueryState [^QueryState query-state]
