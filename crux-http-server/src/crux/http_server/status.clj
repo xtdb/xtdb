@@ -63,6 +63,8 @@
 
 (defn ->status-muuntaja [opts]
   (m/create (-> m/default-options
+                (update :formats select-keys ["application/edn" "application/transit+json"])
+                (assoc :default-format "application/edn")
                 (m/install {:name "text/html"
                             :encoder [->status-html-encoder opts]
                             :return :bytes}))))

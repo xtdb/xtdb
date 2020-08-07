@@ -3,37 +3,41 @@
             [clojure.test :as t]
             [crux.api :as crux]
             [clj-http.client :as http]
-            [clojure.data.json :as json]
+            [cognitect.transit :as transit]
             [clojure.data.csv :as csv]
-            [crux.fixtures.http-server :as fh :refer [*api-url*]]))
+            [crux.fixtures.http-server :as fh :refer [*api-url*]]
+            [clojure.java.io :as io])
+  (:import (java.io InputStream)))
 
 (t/use-fixtures :each
   fix/with-standalone-topology
   fh/with-http-server
   fix/with-node)
 
-(defn- parse-body [response content-type]
-  (let [body-str (:body response)]
-    (case content-type
-      "application/edn" (read-string body-str)
-      "application/json" (json/read-str body-str)
-      "text/csv" (csv/read-csv body-str)
-      "text/tsv" (csv/read-csv body-str :separator \tab))))
+(defn- parse-body [{:keys [^InputStream body]} content-type]
+  (case content-type
+    "application/transit+json" (transit/read (transit/reader body :json))
+    "application/edn" (read-string (slurp body))
+    "text/csv" (with-open [rdr (io/reader body)]
+                 (doall (csv/read-csv rdr)))
+    "text/tsv" (with-open [rdr (io/reader body)]
+                 (doall (csv/read-csv rdr :separator \tab)))))
 
 (defn- get-result-from-path
   ([path]
    (get-result-from-path path "application/edn"))
   ([path accept-type]
-   (http/get
-    (str *api-url* path)
-    {:accept accept-type})))
+   (http/get (str *api-url* path)
+             {:accept accept-type
+              :as :stream})))
 
 (t/deftest test-ui-routes
   ;; Insert data
   (let [{:keys [crux.tx/tx-id crux.tx/tx-time] :as tx} (-> (http/post (str *api-url* "/tx-log")
                                                                       {:content-type :edn
                                                                        :body (pr-str '[[:crux.tx/put {:crux.db/id :ivan, :linking :peter, :link2 :petr}]
-                                                                                       [:crux.tx/put {:crux.db/id :peter, :name "Peter"}]])})
+                                                                                       [:crux.tx/put {:crux.db/id :peter, :name "Peter"}]])
+                                                                       :as :stream})
                                                            (parse-body "application/edn"))]
     (http/get (str *api-url* "/await-tx?tx-id=" tx-id))
 
@@ -44,22 +48,27 @@
     ;; Test getting the entity with different types
     (let [get-entity (fn [accept-type] (-> (get-result-from-path "/_crux/entity?eid=:peter" accept-type)
                                            (parse-body accept-type)))]
-      (t/is (= {:crux.db/id :peter, :name "Peter"} (get-entity "application/edn")))
-      (t/is (= {"crux.db/id" "peter", "name" "Peter"} (get-entity "application/json"))))
+      (t/is (= {:crux.db/id :peter, :name "Peter"}
+               (get-entity "application/edn")))
+      (t/is (= {:crux.db/id :peter, :name "Peter"}
+               (get-entity "application/transit+json"))))
 
     ;; Test getting linked entities
-    (let [get-linked-entities (fn [accept-type] (-> (get-result-from-path "/_crux/entity?eid=:ivan&link-entities?=true" accept-type)
-                                                    (parse-body accept-type)
-                                                    (get "linked-entities")))]
-      (t/is (:ivan (get-linked-entities "application/edn")))
-      (t/is (some #(= "ivan" %) (get-linked-entities "application/json"))))
+    (let [get-linked-entities (fn [accept-type]
+                                (-> (get-result-from-path "/_crux/entity?eid=:ivan&link-entities?=true" accept-type)
+                                    (parse-body accept-type)
+                                    (get :entity-links)))]
+      (t/is (= #{:ivan :peter}
+               (get-linked-entities "application/edn")))
+      (t/is (= #{:ivan :peter}
+               (get-linked-entities "application/transit+json"))))
 
     ;; Testing getting query results
     (let [get-query (fn [accept-type]
                       (set (-> (get-result-from-path "/_crux/query?find=[e]&where=[e+%3Acrux.db%2Fid+_]" accept-type)
                                (parse-body accept-type))))]
       (t/is (= #{[:ivan] [:peter]} (get-query "application/edn")))
-      (t/is (= #{["ivan"] ["peter"]} (get-query "application/json")))
+      (t/is (= #{[:ivan] [:peter]} (get-query "application/transit+json")))
       (t/is (= #{[":ivan"] [":peter"] ["e"]} (get-query "text/csv")))
       (t/is (= #{[":ivan"] [":peter"] ["e"]} (get-query "text/tsv"))))
 

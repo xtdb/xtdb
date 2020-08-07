@@ -380,6 +380,8 @@
 
 (defn- ->root-muuntaja [opts]
   (m/create (-> m/default-options
+                (dissoc :formats)
+                (assoc :default-format "text/html")
                 (m/install {:name "text/html"
                             :encoder [->root-html-encoder opts]
                             :return :bytes}))))

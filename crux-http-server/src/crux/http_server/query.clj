@@ -1,5 +1,6 @@
 (ns crux.http-server.query
   (:require [crux.http-server.util :as util]
+            [cognitect.transit :as transit]
             [clojure.data.csv :as csv]
             [clojure.edn :as edn]
             [clojure.instant :as instant]
@@ -8,8 +9,10 @@
             [crux.api :as api]
             [crux.codec :as c]
             [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc])
-  (:import java.io.OutputStream
+            [muuntaja.format.core :as mfc]
+            [crux.io :as cio]
+            [crux.db :as db])
+  (:import (java.io OutputStream Writer)
            [java.time Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date))
@@ -132,52 +135,92 @@
               :transaction-time (api/transaction-time db)}
              (if link-entities?
                (let [results (api/q db query)]
-                 {:results results
+                 {:results (cio/->cursor (fn []) results)
                   :entity-links (entity-links db results)})
-               {:results (iterator-seq (api/open-q db query))})))
+               {:results (api/open-q db query)})))
     (catch Exception e
       {:error e})))
 
-;; TODO close cursors
-;; TODO wrap-format other endpoints
-
 (defn- ->*sv-encoder [{:keys [sep]}]
   (reify mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ results charset]
+    (encode-to-output-stream [_ {:keys [results query error]} charset]
       (fn [^OutputStream output-stream]
         (with-open [w (io/writer output-stream)]
-          (csv/write-csv w results :separator sep))))))
+          (try
+            (if error
+              (.write w ^String error)
+              (csv/write-csv w (cons (:find query) (iterator-seq results)) :separator sep))
+            (finally
+              (cio/try-close results))))))))
 
-(defn ->query-html-encoder [opts]
+(defn ->html-encoder [opts]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [no-query? error entity-links results] :as res} charset]
-      (let [^String resp (cond
-                           no-query? (util/raw-html {:body (query-root-html)
-                                                     :title "/query"
-                                                     :options opts})
-                           error (let [error-message (.getMessage ^Exception error)]
-                                   (util/raw-html {:title "/query"
-                                                   :body [:div.error-box error-message]
+      (try
+        (let [^String resp (cond
+                             no-query? (util/raw-html {:body (query-root-html)
+                                                       :title "/query"
+                                                       :options opts})
+                             error (let [error-message (.getMessage ^Exception error)]
+                                     (util/raw-html {:title "/query"
+                                                     :body [:div.error-box error-message]
+                                                     :results {:query-results
+                                                               {"error" error-message}}}))
+                             :else (util/raw-html {:body (query->html (update res :results drop-last))
+                                                   :title "/query"
+                                                   :options opts
                                                    :results {:query-results
-                                                             {"error" error-message}}}))
-                           :else (util/raw-html {:body (query->html (update res :results drop-last))
-                                                 :title "/query"
-                                                 :options opts
-                                                 :results {:query-results
-                                                           {"linked-entities" entity-links
-                                                            "query-results" results}}}))]
-        (.getBytes resp ^String charset)))))
+                                                             {"linked-entities" entity-links
+                                                              "query-results" (iterator-seq results)}}}))]
+          (.getBytes resp ^String charset))
+        (finally
+          (cio/try-close results))))))
+
+(defn ->edn-encoder [_]
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [entity-links results]} _]
+      (fn [^OutputStream output-stream]
+        (with-open [w (io/writer output-stream)]
+          (try
+            (print-dup (if entity-links
+                         {:entity-links entity-links
+                          :query-results (iterator-seq results)}
+                         (iterator-seq results))
+                       w)
+            (finally
+              (cio/try-close results))))))))
+
+(defn- ->tj-encoder [_]
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [entity-links results]} _]
+      (fn [^OutputStream output-stream]
+        (try
+          (transit/write (transit/writer output-stream :json)
+                         (if entity-links
+                           {:entity-links entity-links
+                            :query-results (iterator-seq results)}
+                           (iterator-seq results)))
+          (finally
+            (cio/try-close results)))))))
 
 (defn ->query-muuntaja [opts]
   (m/create (-> m/default-options
-                (assoc :return :output-stream)
+                (dissoc :formats)
+                (assoc :return :output-stream
+                       :default-format "application/edn")
                 (m/install {:name "text/csv"
                             :encoder [->*sv-encoder {:sep \,}]})
                 (m/install {:name "text/tsv"
                             :encoder [->*sv-encoder {:sep \tab}]})
                 (m/install {:name "text/html"
-                            :encoder [->query-html-encoder opts]
-                            :return :bytes}))))
+                            :encoder [->html-encoder opts]
+                            :return :bytes})
+                (m/install {:name "application/edn"
+                            :encoder [->edn-encoder]})
+                (m/install {:name "application/transit+json"
+                            :encoder [->tj-encoder]}))))
 
 (defmulti transform-query-req
   (fn [query req]
@@ -221,12 +264,13 @@
 
 (defmethod transform-query-resp "text/csv" [{:keys [results query] :as res} req]
   (or (handle-error res)
-      (-> {:status 200, :body (conj results (:find query))}
+      (-> {:status 200, :body res}
           (with-download-header res "csv"))))
 
 (defmethod transform-query-resp "text/tsv" [{:keys [results query] :as res} req]
   (or (handle-error res)
-      (-> {:status 200, :body (conj results (:find query))}
+      ;; TODO what if query is a string?
+      (-> {:status 200, :body res}
           (with-download-header res "tsv"))))
 
 (defmethod transform-query-resp "text/html" [{:keys [error] :as res} _]
@@ -235,10 +279,7 @@
 
 (defmethod transform-query-resp :default [{:keys [entity-links results] :as res} _]
   (or (handle-error res)
-      (if entity-links
-        {:status 200, :body {"linked-entities" entity-links
-                             "query-results" results}}
-        {:status 200, :body results})))
+      {:status 200, :body res}))
 
 (defn data-browser-query [req {:keys [query-muuntaja] :as options}]
   (let [req (cond->> req

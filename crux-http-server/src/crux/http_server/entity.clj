@@ -104,16 +104,16 @@
                 (str))
         "Using Latest")]])
 
-(defn- entity->html [{:keys [eid linked-entities results valid-time transaction-time] :as res}]
+(defn- entity->html [{:keys [eid linked-entities entity valid-time transaction-time] :as res}]
   [:div.entity-map__container
    [:div.entity-map
     [:div.entity-group
      [:div.entity-group__key
       ":crux.db/id"]
      [:div.entity-group__value
-      (str (:crux.db/id results))]]
+      (str (:crux.db/id entity))]]
     [:hr.entity-group__separator]
-    (resolve-entity-map linked-entities (dissoc results :crux.db/id))]
+    (resolve-entity-map linked-entities (dissoc entity :crux.db/id))]
    (vt-tt-entity-box valid-time transaction-time)])
 
 (defn- entity-history->html [{:keys [eid entity-history]}]
@@ -127,7 +127,7 @@
 
 (defn ->entity-html-encoder [opts]
   (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [eid no-entity? not-found? error results entity-history entity-links] :as res} charset]
+    (encode-to-bytes [_ {:keys [eid no-entity? not-found? error entity entity-history entity-links] :as res} charset]
       (let [^String resp (cond
                            no-entity? (util/raw-html {:body (entity-root-html)
                                                       :title "/entity"
@@ -150,11 +150,13 @@
                                                  :title "/entity"
                                                  :options opts
                                                  :results {:entity-results {"linked-entities" entity-links
-                                                                            "entity" results}}}))]
+                                                                            "entity" entity}}}))]
         (.getBytes resp ^String charset)))))
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
+                (update :formats select-keys ["application/edn" "application/transit+json"])
+                (assoc :default-format "application/edn")
                 (m/install {:name "text/html"
                             :encoder [->entity-html-encoder opts]
                             :return :bytes}))))
@@ -181,15 +183,15 @@
                                (URLDecoder/decode eid))
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
-          results (api/entity db eid)]
+          entity (api/entity db eid)]
       (merge {:eid eid
               :valid-time (api/valid-time db)
               :transaction-time (api/transaction-time db)}
              (cond
-               (empty? results) {:not-found? true}
-               link-entities? {:results results
-                               :entity-links (entity-links db results)}
-               :else {:results results})))
+               (empty? entity) {:not-found? true}
+               link-entities? {:entity entity
+                               :entity-links (entity-links db entity)}
+               :else {:entity entity})))
     (catch Exception e
       {:error e})))
 
@@ -209,16 +211,16 @@
              :else 200)
    :body res})
 
-(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? results entity-history entity-links] :as res} _]
+(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history entity-links] :as res} _]
   (cond
     no-entity? {:status 400, :body "Missing eid"}
     not-found? {:status 404, :body (str eid " entity not found")}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
     entity-history {:status 200, :body entity-history}
     :else (if entity-links
-            {:status 200, :body {"linked-entities" entity-links
-                                 "entity" results}}
-            {:status 200, :body results})))
+            {:status 200, :body {:entity-links entity-links
+                                 :entity entity}}
+            {:status 200, :body entity})))
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)
