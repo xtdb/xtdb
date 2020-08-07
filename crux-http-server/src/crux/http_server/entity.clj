@@ -1,5 +1,7 @@
 (ns crux.http-server.entity
   (:require [crux.http-server.util :as util]
+            [crux.http-server.entity-ref :as entity-ref]
+            [cognitect.transit :as transit]
             [clojure.edn :as edn]
             [clojure.instant :as instant]
             [clojure.string :as string]
@@ -7,13 +9,15 @@
             [crux.api :as api]
             [crux.codec :as c]
             [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc])
+            [muuntaja.format.core :as mfc]
+            [crux.api :as crux])
   (:import [crux.api ICruxAPI NodeOutOfSyncException]
            java.net.URLDecoder
            [java.time Duration Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
-           java.util.Date))
-
+           java.io.ByteArrayOutputStream
+           java.util.Date
+           crux.http_server.entity_ref.EntityRef))
 
 (defn- entity-root-html []
   [:div.entity-root
@@ -48,20 +52,18 @@
 
 (defn entity-links
   [db result]
-  (letfn [(recur-on-result [result links]
-            (if (and (c/valid-id? result) (api/entity db result))
-              (conj links result)
+  (letfn [(recur-on-result [result & key]
+            (if (and (c/valid-id? result) (api/entity db result) (not= (first key) :crux.db/id))
+              (entity-ref/->EntityRef result)
               (cond
-                (map? result) (apply set/union (map #(recur-on-result % links) (vals result)))
-                (sequential? result) (apply set/union (map #(recur-on-result % links) result))
-                :else links)))]
-    (recur-on-result result #{})))
+                (map? result) (map (fn [[k v]] [k (recur-on-result v k)]) result)
+                (sequential? result) (map recur-on-result result)
+                :else result)))]
+    (into {} (recur-on-result result))))
 
-(defn resolve-entity-map [{:keys [entity-links] :as res} entity-map]
-  (if-let [href (some-> (get entity-links entity-map) (util/entity-link res))]
-    [:a
-     {:href href}
-     (str entity-map)]
+(defn resolve-entity-map [res entity-map]
+  (if (instance? EntityRef entity-map)
+    [:a {:href (entity-ref/EntityRef->url entity-map res)} (str (:eid entity-map))]
     (cond
       (map? entity-map) (for [[k v] entity-map]
                           ^{:key (str (gensym))}
@@ -127,7 +129,7 @@
 
 (defn ->entity-html-encoder [opts]
   (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [eid no-entity? not-found? error entity entity-history entity-links] :as res} charset]
+    (encode-to-bytes [_ {:keys [eid no-entity? not-found? error entity entity-history] :as res} charset]
       (let [^String resp (cond
                            no-entity? (util/raw-html {:body (entity-root-html)
                                                       :title "/entity"
@@ -135,11 +137,13 @@
                            not-found? (let [not-found-message (str eid " entity not found")]
                                         (util/raw-html {:title "/entity"
                                                         :body [:div.error-box not-found-message]
+                                                        :options opts
                                                         :results {:entity-results
                                                                   {"error" not-found-message}}}))
                            error (let [error-message (.getMessage ^Exception error)]
                                    (util/raw-html {:title "/entity"
                                                    :body [:div.error-box error-message]
+                                                   :options opts
                                                    :results {:entity-results
                                                              {"error" error-message}}}))
                            entity-history (util/raw-html {:body (entity-history->html res)
@@ -149,9 +153,23 @@
                            :else (util/raw-html {:body (entity->html res)
                                                  :title "/entity"
                                                  :options opts
-                                                 :results {:entity-results {"linked-entities" entity-links
-                                                                            "entity" entity}}}))]
+                                                 :results {:entity-results entity}}))]
         (.getBytes resp ^String charset)))))
+
+(defn ->edn-encoder [_]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ entity charset]
+      (.getBytes (pr-str entity) charset))))
+
+(defn- ->tj-encoder [_]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ entity _]
+      (let [baos (ByteArrayOutputStream.)
+            writer (transit/writer baos :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
+        (transit/write writer entity)
+        (.toByteArray baos)))))
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
@@ -159,7 +177,9 @@
                 (assoc :default-format "application/edn")
                 (m/install {:name "text/html"
                             :encoder [->entity-html-encoder opts]
-                            :return :bytes}))))
+                            :return :bytes})
+                (m/install {:name "application/transit+json"
+                            :encoder [->tj-encoder]}))))
 
 (defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts]}]
   (try
@@ -189,8 +209,7 @@
               :transaction-time (api/transaction-time db)}
              (cond
                (empty? entity) {:not-found? true}
-               link-entities? {:entity entity
-                               :entity-links (entity-links db entity)}
+               link-entities? {:entity (entity-links db entity)}
                :else {:entity entity})))
     (catch Exception e
       {:error e})))
@@ -211,16 +230,13 @@
              :else 200)
    :body res})
 
-(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history entity-links] :as res} _]
+(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history] :as res} _]
   (cond
     no-entity? {:status 400, :body "Missing eid"}
     not-found? {:status 404, :body (str eid " entity not found")}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
     entity-history {:status 200, :body entity-history}
-    :else (if entity-links
-            {:status 200, :body {:entity-links entity-links
-                                 :entity entity}}
-            {:status 200, :body entity})))
+    :else {:status 200, :body entity}))
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)

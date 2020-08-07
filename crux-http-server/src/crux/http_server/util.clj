@@ -1,6 +1,7 @@
 (ns crux.http-server.util
   (:require [crux.io :as cio]
             [crux.api :as api]
+            [cognitect.transit :as transit]
             [hiccup2.core :as hiccup2])
   (:import [crux.api ICruxAPI ICruxDatasource]
            java.time.format.DateTimeFormatter

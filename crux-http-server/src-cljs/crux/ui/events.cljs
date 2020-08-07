@@ -6,7 +6,8 @@
    [crux.ui.common :as common]
    [crux.ui.http]
    [re-frame.core :as rf]
-   [tick.alpha.api :as t]))
+   [tick.alpha.api :as t]
+   [crux.http-server.entity-ref :as entity-ref]))
 
 (rf/reg-fx
  :scroll-top
@@ -18,7 +19,8 @@
    (let [result-meta (some-> (js/document.querySelector
                               (str "meta[title=" title "]"))
                              (.getAttribute "content"))
-         edn-content (reader/read-string {:readers {'object pr-str}} result-meta)]
+         edn-content (reader/read-string {:readers {'object pr-str
+                                                    'crux.http/entity-ref entity-ref/->EntityRef}} result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
        (js/console.warn "Metadata not found")))))

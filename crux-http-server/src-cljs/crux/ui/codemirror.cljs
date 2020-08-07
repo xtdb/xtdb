@@ -14,7 +14,8 @@
             [reagent.dom :as rd]
             [goog.object :as gobj]
             [goog.string :as gstring]
-            [cljs.pprint :as pprint]))
+            [cljs.pprint :as pprint]
+            [crux.http-server.entity-ref :as entity-ref :refer [EntityRef]]))
 
 (defn escape-re [input]
   (let [re (js/RegExp. "([.*+?^=!:${}()|[\\]\\/\\\\])" "g")]
@@ -163,17 +164,17 @@
   [_ _]
   (let [state (r/atom nil)]
     (fn [m links]
-      (let [valid-time @(rf/subscribe [::sub/valid-time])
-            transaction-time @(rf/subscribe [::sub/transaction-time])
+      (let [time-info {:valid-time @(rf/subscribe [::sub/valid-time])
+                       :transaction-time  @(rf/subscribe [::sub/transaction-time])}
             generate-snippet
             (fn generate-snippet [parent-keys m]
               (let [level (inc (count parent-keys))]
                 (cond
-                  (get links m) [:a {:href (common/entity-link (get links m) valid-time transaction-time)}
-                                 (with-out-str
-                                   (pprint/with-pprint-dispatch
-                                     pprint/code-dispatch
-                                     (pprint/pprint m)))]
+                  (instance? EntityRef m) [:a {:href (entity-ref/EntityRef->url m time-info)}
+                                           (with-out-str
+                                             (pprint/with-pprint-dispatch
+                                               pprint/code-dispatch
+                                               (pprint/pprint (:eid m))))]
                   (map? m) [:<>
                             [unfolding-icon state m parent-keys]
                             (when (get @state parent-keys)

@@ -1,5 +1,6 @@
 (ns crux.http-server.query
   (:require [crux.http-server.util :as util]
+            [crux.http-server.entity-ref :as entity-ref]
             [cognitect.transit :as transit]
             [clojure.data.csv :as csv]
             [clojure.edn :as edn]
@@ -15,7 +16,8 @@
   (:import (java.io OutputStream Writer)
            [java.time Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
-           java.util.Date))
+           java.util.Date
+           crux.http_server.entity_ref.EntityRef))
 
 (def query-root-str
   (string/join "\n"
@@ -81,10 +83,19 @@
       full-results (assoc :full-results? true)
       link-entities? (assoc :link-entities? true))))
 
-(defn entity-links
-  [db results]
-  (->> (apply concat results)
-       (into #{} (filter (every-pred c/valid-id? #(api/entity db %))))))
+(defn with-entity-refs
+  [results db]
+  (let [entity-links (->> (apply concat results)
+                          (into #{} (filter c/valid-id?))
+                          (into #{} (filter #(api/entity db %))))]
+    (->> results
+         (map (fn [tuple]
+                (->> tuple
+                     (mapv (fn [el]
+                             (cond-> el
+                               (get entity-links el) (entity-ref/->EntityRef))))))))))
+
+
 
 (defn resolve-prev-next-offset
   [query-params prev-offset next-offset]
@@ -101,7 +112,7 @@
     {:prev-url prev-url
      :next-url next-url}))
 
-(defn query->html [{:keys [entity-links results query] :as res}]
+(defn query->html [{:keys [results query] :as res}]
   (let [headers (:find query)]
     [:body
      [:div.uikit-table
@@ -118,8 +129,8 @@
              [:tr.table__row.body__row
               (for [[header cell-value] (map vector headers row)]
                 [:td.table__cell.body__cell
-                 (if-let [href (some-> (get entity-links cell-value) (util/entity-link res))]
-                   [:a {:href href} (str cell-value)]
+                 (if (instance? EntityRef cell-value)
+                   [:a {:href (entity-ref/EntityRef->url cell-value res)} (str (:eid cell-value))]
                    (str cell-value))])])]
           [:tbody.table__body.table__no-data
            [:tr [:td.td__no-data
@@ -130,14 +141,13 @@
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})]
-      (merge {:query query
-              :valid-time (api/valid-time db)
-              :transaction-time (api/transaction-time db)}
-             (if link-entities?
-               (let [results (api/q db query)]
-                 {:results (cio/->cursor (fn []) results)
-                  :entity-links (entity-links db results)})
-               {:results (api/open-q db query)})))
+      {:query query
+       :valid-time (api/valid-time db)
+       :transaction-time (api/transaction-time db)
+       :results (if link-entities?
+                  (let [results (api/q db query)]
+                    (cio/->cursor (fn []) (with-entity-refs results db)))
+                  (api/open-q db query))})
     (catch Exception e
       {:error e})))
 
@@ -155,7 +165,7 @@
 
 (defn ->html-encoder [opts]
   (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [no-query? error entity-links results] :as res} charset]
+    (encode-to-bytes [_ {:keys [no-query? error results] :as res} charset]
       (try
         (let [^String resp (cond
                              no-query? (util/raw-html {:body (query-root-html)
@@ -164,14 +174,14 @@
                              error (let [error-message (.getMessage ^Exception error)]
                                      (util/raw-html {:title "/query"
                                                      :body [:div.error-box error-message]
+                                                     :options opts
                                                      :results {:query-results
                                                                {"error" error-message}}}))
-                             :else (util/raw-html {:body (query->html (update res :results drop-last))
-                                                   :title "/query"
-                                                   :options opts
-                                                   :results {:query-results
-                                                             {"linked-entities" entity-links
-                                                              "query-results" (iterator-seq results)}}}))]
+                             :else (let [results (iterator-seq results)]
+                                     (util/raw-html {:body (query->html (assoc res :results (drop-last results)))
+                                                     :title "/query"
+                                                     :options opts
+                                                     :results {:query-results results}})))]
           (.getBytes resp ^String charset))
         (finally
           (cio/try-close results))))))
@@ -179,29 +189,22 @@
 (defn ->edn-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [entity-links results]} _]
+    (encode-to-output-stream [_ {:keys [results]} _]
       (fn [^OutputStream output-stream]
         (with-open [w (io/writer output-stream)]
           (try
-            (print-dup (if entity-links
-                         {:entity-links entity-links
-                          :query-results (iterator-seq results)}
-                         (iterator-seq results))
-                       w)
+            (print-dup (iterator-seq results) w)
             (finally
               (cio/try-close results))))))))
 
 (defn- ->tj-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [entity-links results]} _]
+    (encode-to-output-stream [_ {:keys [results]} _]
       (fn [^OutputStream output-stream]
         (try
-          (transit/write (transit/writer output-stream :json)
-                         (if entity-links
-                           {:entity-links entity-links
-                            :query-results (iterator-seq results)}
-                           (iterator-seq results)))
+          (let [results (iterator-seq results)]
+            (transit/write (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}}) results))
           (finally
             (cio/try-close results)))))))
 
@@ -234,11 +237,13 @@
 
 (defmethod transform-query-req "text/csv" [query req]
   (-> query
-      (dissoc :full-results)))
+      (dissoc :full-results)
+      (dissoc :link-entities?)))
 
 (defmethod transform-query-req "text/tsv" [query req]
   (-> query
-      (dissoc :full-results)))
+      (dissoc :full-results)
+      (dissoc :link-entities?)))
 
 (defmethod transform-query-req :default [query _] query)
 
@@ -277,7 +282,7 @@
   {:status (if error 400 200)
    :body res})
 
-(defmethod transform-query-resp :default [{:keys [entity-links results] :as res} _]
+(defmethod transform-query-resp :default [{:keys [results] :as res} _]
   (or (handle-error res)
       {:status 200, :body res}))
 
