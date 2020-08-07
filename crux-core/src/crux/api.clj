@@ -125,8 +125,11 @@
   (attribute-stats [node]
     "Returns frequencies map for indexed attributes")
 
-  (current-queries [node]
-    "Returns a list of currently running/recently finished queries"))
+  (active-queries [node]
+    "Returns a list of currently running queries")
+
+  (recent-queries [node]
+    "Returns a list of recently completed/failed queries"))
 
 (defprotocol PCruxIngestClient
   "Provides API access to Crux ingestion."
@@ -204,7 +207,8 @@
   (latest-submitted-tx [node] (.latestSubmittedTx node))
 
   (attribute-stats [this] (.attributeStats this))
-  (current-queries [this] (.currentQueries this)))
+  (active-queries [this] (.activeQueries this))
+  (recent-queries [this] (.recentQueries this)))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI

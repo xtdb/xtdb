@@ -269,8 +269,13 @@
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-  (currentQueries [_]
-    (api-request-sync (str url "/current-queries")
+  (activeQueries [_]
+    (api-request-sync (str url "/active-queries")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
+
+  (recentQueries [_]
+    (api-request-sync (str url "/recent-queries")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 

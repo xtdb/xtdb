@@ -156,9 +156,16 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
 
 
     /**
-     * Returns a list of currently running/recently finished queries.
+     * Returns a list of currently running queries.
      *
      * @return List containing maps with query information.
      */
-    public List<Map <Keyword, ?>> currentQueries();
+    public List<Map <Keyword, ?>> activeQueries();
+
+    /**
+     * Returns a list of recently completed/failed queries
+     *
+     * @return List containing maps with query information.
+     */
+    public List<Map <Keyword, ?>> recentQueries();
 }
