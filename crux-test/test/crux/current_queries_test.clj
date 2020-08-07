@@ -82,4 +82,4 @@
 
       (t/testing "test active-queries & recent-queries - streaming query (result realized)"
         (t/is (empty? (api/active-queries *api*)))
-        (= :complete (:status (first (api/recent-queries *api*))))))))
+        (t/is (= :completed (:status (first (api/recent-queries *api*)))))))))

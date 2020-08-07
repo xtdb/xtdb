@@ -3,11 +3,11 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
+            [crux.query-state :as qs]
             [clojure.tools.logging :as log])
-  (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ICursor
-            HistoryOptions HistoryOptions$SortOrder
-            RemoteClientOptions]
+  (:import (crux.api Crux ICruxAPI ICruxIngestAPI
+                     ICruxAsyncIngestAPI ICruxDatasource ICursor
+                     HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
            java.io.Closeable
            java.util.Date
            java.time.Duration
@@ -207,8 +207,12 @@
   (latest-submitted-tx [node] (.latestSubmittedTx node))
 
   (attribute-stats [this] (.attributeStats this))
-  (active-queries [this] (.activeQueries this))
-  (recent-queries [this] (.recentQueries this)))
+
+  (active-queries [this]
+    (map qs/<-QueryState (.activeQueries this)))
+
+  (recent-queries [this]
+    (map qs/<-QueryState (.recentQueries this))))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
