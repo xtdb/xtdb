@@ -46,8 +46,6 @@ otherwise restrict the execution of queries.
 |===
 |uri|method|description
 |<<#rest-home,`/`>>|GET|returns various details about the state of the database
-|<<#rest-document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
-|<<#rest-documents, `/documents`>>|POST|returns a map of document ids and respective documents for a given set of content hashes submitted in the request body
 |<<#rest-entity, `/entity/[:key]`>>|GET|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
 |<<#rest-entity-tx, `/entity-tx/[:key]`>>|GET|Returns the transaction that most recently set a key
 |<<#rest-entity, `/entity-history/[:key]`>>|GET|Returns the history of the given entity and optional valid-time/transaction-time co-ordinates
@@ -87,39 +85,6 @@ curl -X GET $nodeURL/
 ----
 
 NOTE: `estimate-num-keys` is an (over)estimate of the number of transactions in the log (each of which is a key in RocksDB). RocksDB https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ[does not provide] an exact key count.
-
-[#rest-document]
-=== GET/POST `/document/[content-hash]`
-
-Returns the document stored under that hash, if it exists.
-
-[source,bash]
-----
-curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
-----
-[source,clojure]
-----
-{:crux.db/id :foobar, :name "FooBar"}
-----
-NOTE: Hashes for older versions of a document can be obtained with `/entity-history`, under the `:crux.db/content-hash` keys.
-
-[#rest-documents]
-=== GET/POST `/documents`
-
-Returns a map from the documents ids to the documents for ids set.
-Possible to get map keys as #crux/id literals if preserve-crux-ids param
-is set to "true"
-
-[source,bash]
-----
-curl -X POST $nodeURL/documents \
-     -H "Content-Type: application/edn" \
-     -d '#{"7af0444315845ab3efdfbdfa516e68952c1486f2"}'
-----
-[source,clj]
-----
-{"7af0444315845ab3efdfbdfa516e68952c1486f2" {:crux.db/id :foobar, :name "FooBar"}}
-----
 
 [#rest-entity]
 === GET `/entity/[:key]`
