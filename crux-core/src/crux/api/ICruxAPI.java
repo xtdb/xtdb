@@ -1,11 +1,8 @@
 package crux.api;
 
 import java.io.Closeable;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.time.Duration;
-import java.util.Set;
 import java.util.function.Consumer;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
@@ -154,18 +151,17 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public Map<Keyword, Long> attributeStats();
 
-
     /**
      * Returns a list of currently running queries.
      *
      * @return List containing maps with query information.
      */
-    public List<Map <Keyword, ?>> activeQueries();
+    public List<QueryState> activeQueries();
 
     /**
      * Returns a list of recently completed/failed queries
      *
      * @return List containing maps with query information.
      */
-    public List<Map <Keyword, ?>> recentQueries();
+    public List<QueryState> recentQueries();
 }

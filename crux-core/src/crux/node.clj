@@ -13,12 +13,14 @@
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.status :as status]
+            [crux.query-state :as qs]
             [crux.topology :as topo]
             [crux.tx :as tx]
             [crux.tx.event :as txe]
             [crux.bus :as bus]
             [crux.tx.conform :as txc])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor]
+  (:import (crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor
+                     QueryState QueryState$QueryStatus QueryState$QueryError)
            (java.io Closeable Writer)
            java.util.function.Consumer
            java.util.Date
@@ -180,11 +182,11 @@
     (db/latest-submitted-tx tx-log))
 
   (activeQueries [this]
-    (vals (:in-progress @!running-queries)))
+    (map qs/->QueryState (vals (:in-progress @!running-queries))))
 
   (recentQueries [this]
     (let [running-queries (swap! !running-queries update :completed clean-expired-queries options)]
-      (:completed running-queries)))
+      (map qs/->QueryState (:completed running-queries))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
@@ -220,7 +222,8 @@
                              (fn [{::q/keys [query-id query]}]
                                (swap! !running-queries assoc-in [:in-progress query-id] {:query-id query-id
                                                                                          :started-at (Date.)
-                                                                                         :query query})))
+                                                                                         :query query
+                                                                                         :status :in-progress})))
                  (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
                              (fn [{::q/keys [query-id error]}]
                                (swap! !running-queries (fn [queries]

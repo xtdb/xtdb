@@ -325,10 +325,10 @@
   (success-response (.latestSubmittedTx crux-node)))
 
 (defn active-queries [^ICruxAPI crux-node]
-  (success-response (.activeQueries crux-node)))
+  (success-response (api/active-queries crux-node)))
 
 (defn recent-queries [^ICruxAPI crux-node]
-  (success-response (.recentQueries crux-node)))
+  (success-response (api/recent-queries crux-node)))
 
 (def ^:private sparql-available?
   (try ; you can change it back to require when clojure.core fixes it to be thread-safe
