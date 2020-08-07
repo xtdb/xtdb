@@ -40,7 +40,13 @@
    [juxt/crux-cli "crux-git-version-beta"]
 
    [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
+
    [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
+   [com.h2database/h2 "1.4.199"]
+   [com.opentable.components/otj-pg-embedded "0.13.1"]
+   [org.xerial/sqlite-jdbc "3.28.0"]
+   [mysql/mysql-connector-java "8.0.17"]
+   [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8"]
 
    [integrant "0.8.0"]
    [integrant/repl "0.3.1"]
@@ -55,11 +61,14 @@
    [com.google.code.findbugs/jsr305 "3.0.2"]
    [org.apache.commons/commons-lang3 "3.9"]
    [org.apache.commons/commons-text "1.7"]
+   [org.apache.commons/commons-compress "1.19"]
    [org.javassist/javassist "3.22.0-GA"]
    [commons-codec "1.12"]
    [joda-time "2.9.9"]
    [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
    [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]
+   [org.tukaani/xz "1.8"]
+   [com.github.spotbugs/spotbugs-annotations "3.1.9"]
 
    ;; crux metrics dependencies
    ;; tag::MetricsJMXDeps[]
