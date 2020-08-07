@@ -3,11 +3,11 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
+            [crux.query-state :as qs]
             [clojure.tools.logging :as log])
-  (:import [crux.api Crux ICruxAPI ICruxIngestAPI
-            ICruxAsyncIngestAPI ICruxDatasource ICursor
-            HistoryOptions HistoryOptions$SortOrder
-            RemoteClientOptions]
+  (:import (crux.api Crux ICruxAPI ICruxIngestAPI
+                     ICruxAsyncIngestAPI ICruxDatasource ICursor
+                     HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
            java.io.Closeable
            java.util.Date
            java.time.Duration
@@ -123,7 +123,13 @@
     "Returns the latest transaction to have been submitted to this cluster")
 
   (attribute-stats [node]
-    "Returns frequencies map for indexed attributes"))
+    "Returns frequencies map for indexed attributes")
+
+  (active-queries [node]
+    "Returns a list of currently running queries")
+
+  (recent-queries [node]
+    "Returns a list of recently completed/failed queries"))
 
 (defprotocol PCruxIngestClient
   "Provides API access to Crux ingestion."
@@ -200,7 +206,13 @@
   (latest-completed-tx [node] (.latestCompletedTx node))
   (latest-submitted-tx [node] (.latestSubmittedTx node))
 
-  (attribute-stats [this] (.attributeStats this)))
+  (attribute-stats [this] (.attributeStats this))
+
+  (active-queries [this]
+    (map qs/<-QueryState (.activeQueries this)))
+
+  (recent-queries [this]
+    (map qs/<-QueryState (.recentQueries this))))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI

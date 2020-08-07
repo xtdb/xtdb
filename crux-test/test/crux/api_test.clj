@@ -85,6 +85,7 @@
       (t/is (= #{[:ivan]} (api/q (api/db *api*)
                                  '{:find [e]
                                    :where [[e :name "Ivan"]]})))
+
       (t/is (= #{} (api/q (api/db *api* #inst "1999")
                           '{:find [e]
                             :where [[e :name "Ivan"]]})))

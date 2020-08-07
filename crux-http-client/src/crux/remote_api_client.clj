@@ -4,6 +4,7 @@
             [crux.io :as cio]
             [crux.db :as db]
             [crux.codec :as c]
+            [crux.query-state :as qs]
             [crux.query :as q]
             [clojure.string :as string])
   (:import (java.io Closeable InputStreamReader IOException PushbackReader)
@@ -268,6 +269,18 @@
     (api-request-sync (str url "/latest-submitted-tx")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
+
+  (activeQueries [_]
+    (->> (api-request-sync (str url "/active-queries")
+                           {:http-opts {:method :get}
+                            :->jwt-token ->jwt-token})
+         (map qs/->QueryState)))
+
+  (recentQueries [_]
+    (->> (api-request-sync (str url "/recent-queries")
+                           {:http-opts {:method :get}
+                            :->jwt-token ->jwt-token})
+         (map qs/->QueryState)))
 
   Closeable
   (close [_]))

@@ -324,6 +324,12 @@
 (defn latest-submitted-tx [^ICruxAPI crux-node]
   (success-response (.latestSubmittedTx crux-node)))
 
+(defn active-queries [^ICruxAPI crux-node]
+  (success-response (api/active-queries crux-node)))
+
+(defn recent-queries [^ICruxAPI crux-node]
+  (success-response (api/recent-queries crux-node)))
+
 (def ^:private sparql-available?
   (try ; you can change it back to require when clojure.core fixes it to be thread-safe
     (requiring-resolve 'crux.sparql.protocol/sparql-query)
@@ -386,6 +392,12 @@
 
     [#"^/latest-submitted-tx" [:get]]
     (latest-submitted-tx crux-node)
+
+    [#"^/active-queries" [:get]]
+    (active-queries crux-node)
+
+    [#"^/recent-queries" [:get]]
+    (recent-queries crux-node)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)

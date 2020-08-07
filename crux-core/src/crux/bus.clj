@@ -41,7 +41,7 @@
     (catch Exception e
       (log/error e "error closing listener"))))
 
-(defrecord EventBus [!listeners ^ExecutorService await-solo-pool]
+(defrecord EventBus [!listeners ^ExecutorService await-solo-pool sync?]
   EventSource
   (await [this {:keys [crux/event-types ->result ^Duration timeout timeout-value]}]
     (if-let [res (->result) ]
@@ -94,9 +94,12 @@
   EventSink
   (send [_ {:crux/keys [event-type] :as event}]
     (s/assert ::event event)
-
     (doseq [{:keys [^ExecutorService executor f] :as listener} (get @!listeners event-type)]
-      (.submit executor ^Runnable #(f event))))
+      (if sync?
+        (try
+          (f event)
+          (catch Exception e))
+        (.submit executor ^Runnable #(f event)))))
 
   Closeable
   (close [_]
@@ -105,10 +108,14 @@
     (doseq [{:keys [executor]} (->> @!listeners (mapcat val))]
       (close-executor executor))))
 
-(defn ->bus []
+(defn ->bus [{::keys [sync?] :as opts}]
   (->EventBus (atom {})
-              (Executors/newSingleThreadExecutor (cio/thread-factory "crux-bus-await-thread"))))
+              (Executors/newSingleThreadExecutor (cio/thread-factory "crux-bus-await-thread"))
+              sync?))
 
 (def bus
   {:start-fn (fn [deps args]
-               (->bus))})
+               (->bus args))
+   :args {::sync? {:doc "Synchronous sends on bus?"
+                   :default false
+                   :crux.config/type :crux.config/boolean}}})
