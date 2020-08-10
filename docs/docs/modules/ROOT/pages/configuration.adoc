@@ -1,6 +1,9 @@
-[#configuration]
 = Configuration
-[#config-nodes]
+:toc: macro
+
+toc::[]
+
+[#nodes]
 == Nodes
 
 To start a Crux node, use the
@@ -15,9 +18,9 @@ can have, grouped into *topologies*.
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Topology
-|<<#config-standalone, Standalone>>|Uses local event log|`:crux.standalone/topology`
-|<<#config-kafka, Kafka>>|Uses Kafka|`:crux.kafka/topology`
-|<<#config-jdbc, JDBC>>|Uses JDBC event log|`:crux.jdbc/topology`
+|<<#standalone, Standalone>>|Uses local event log|`:crux.standalone/topology`
+|<<#kafka, Kafka>>|Uses Kafka|`:crux.kafka/topology`
+|<<#jdbc, JDBC>>|Uses JDBC event log|`:crux.jdbc/topology`
 |===
 
 Use a Kafka node when horizontal scalability is required or when
@@ -40,7 +43,7 @@ Crux nodes implement the `ICruxAPI` interface and are the
 starting point for making use of Crux. Nodes also implement
 `java.io.Closeable` and can therefore be lifecycle managed.
 
-[#config-properties]
+[#properties]
 == Properties
 
 The following properties are within the topology used as a base
@@ -71,13 +74,12 @@ defined within `crux.kv`:
 |===
 
 
-[#config-standalone]
+[#standalone]
 == Standalone Node
 
 Using a Crux standalone node is the best way to get started. Once
 you've started a standalone Crux instance as described below, you can
-then follow the <<#get_started,getting started
-example>>.
+then follow the xref:get_started.adoc[getting started example].
 
 image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
 
@@ -94,7 +96,7 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,a
 
 [source,clj]
 ----
-include::./deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=CruxDep]
 ----
 [#standalone-start]
 *Getting started*
@@ -102,19 +104,19 @@ include::./deps.edn[tags=CruxDep]
 The following code creates a default `crux.standalone` node which runs completely within memory (with both the event-log store and db store using `crux.kv.memdb/kv`):
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=include-crux-api]
+include::example$examples.clj[tags=include-crux-api]
 
-include::./src/docs/examples.clj[tags=start-standalone-node]
+include::example$examples.clj[tags=start-standalone-node]
 ----
 
 You can later stop the node if you wish, however your data will not be persisted:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=close-node]
+include::example$examples.clj[tags=close-node]
 ----
 
-[#config-rocksdb]
+[#rocksdb]
 == RocksDB
 
 RocksDB is often used as Crux's primary store (in place of the in-memory kv store in the example above).
@@ -125,7 +127,7 @@ In order to use RocksDB within Crux, however, you must first add RocksDB as a pr
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=RocksDeps]
+include::example$deps.edn[tags=RocksDeps]
 ----
 
 [#rocks-start]
@@ -133,7 +135,7 @@ include::./deps.edn[tags=RocksDeps]
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-standalone-with-rocks]
+include::example$examples.clj[tags=start-standalone-with-rocks]
 ----
 
 Please note that when configuring a standalone node with persisted indexes (via `:crux.kv/db-dir`), you should always have the tx-log and document-store persisted as well (via `:crux.standalone/event-log-dir`).
@@ -148,6 +150,7 @@ You can create a node with custom RocksDB options by passing extra keywords in t
 To include rocksdb metrics in monitoring `crux.kv.rocksdb/kv-store-with-metrics` should be
 included in the topology map instead of the above.
 
+[#lmdb]
 == LMDB
 
 An alternative to RocksDB, LMDB provides faster queries in exchange for a slower ingest rate.
@@ -157,7 +160,7 @@ An alternative to RocksDB, LMDB provides faster queries in exchange for a slower
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=LMDBDeps]
+include::example$deps.edn[tags=LMDBDeps]
 ----
 
 [#lmdb-start]
@@ -165,10 +168,10 @@ include::./deps.edn[tags=LMDBDeps]
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-standalone-with-lmdb]
+include::example$examples.clj[tags=start-standalone-with-lmdb]
 ----
 
-[#config-kafka]
+[#kafka]
 == Kafka Nodes
 
 When using Crux at scale it is recommended to use multiple Crux nodes connected
@@ -197,8 +200,8 @@ Kafka nodes have the following properties:
 
 [source,clj]
 ----
-include::./deps.edn[tags=CruxDep]
-include::./deps.edn[tags=KafkaClientsDeps]
+include::example$deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=KafkaClientsDeps]
 ----
 
 [#kafka-start]
@@ -209,7 +212,7 @@ Use the API to start a Kafka node, configuring it with the
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-cluster-node]
+include::example$examples.clj[tags=start-cluster-node]
 ----
 
 NOTE: If you don't specify `kv-store` then by default the
@@ -220,7 +223,7 @@ You can later stop the node if you wish:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=close-node]
+include::example$examples.clj[tags=close-node]
 ----
 
 [#kafka-embed]
@@ -234,8 +237,8 @@ running Kafka available to connect to (such as during development).
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=CruxDep]
-include::./deps.edn[tags=KafkaEmbeddedDeps]
+include::example$deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=KafkaEmbeddedDeps]
 ----
 
 [#embedded-kafka-start]
@@ -243,19 +246,19 @@ include::./deps.edn[tags=KafkaEmbeddedDeps]
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=require-ek]
+include::example$examples.clj[tags=require-ek]
 
-include::./src/docs/examples.clj[tags=ek-example]
+include::example$examples.clj[tags=ek-example]
 ----
 
 You can later stop the Embedded Kafka if you wish:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=ek-close]
+include::example$examples.clj[tags=ek-close]
 ----
 
-[#config-jdbc]
+[#jdbc]
 == JDBC Nodes
 
 JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
@@ -292,8 +295,8 @@ Depending on the type of JDBC database used, you may also need some of the follo
 
 [source,clj]
 ----
-include::./deps.edn[tags=CruxDep]
-include::./deps.edn[tags=JDBCDeps]
+include::example$deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=JDBCDeps]
 ----
 
 [#jdbc-start]
@@ -304,10 +307,10 @@ parameters:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-jdbc-node]
+include::example$examples.clj[tags=start-jdbc-node]
 ----
 
-[#config-http]
+[#http]
 == HTTP
 
 Crux can be used programmatically as a library, but Crux also ships
@@ -326,16 +329,16 @@ expose a HTTP port that will accept REST requests:
 |crux.http-server|`port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
-Visit the guide on using the <<#rest,REST api>> for examples
-of how to interact with Crux over HTTP.
-[#config-start-http-server]
+Visit the guide on using the xref:api#rest[REST api] for examples of how to interact with Crux over HTTP.
+
+[#start-http-server]
 === Starting a HTTP Server
-[#config-http-server-dependency]
+[#http-server-dependency]
 *Project Dependency*
 
 [source,clj]
 ----
-include::./deps.edn[tags=HTTPDeps]
+include::example$deps.edn[tags=HTTPDeps]
 ----
 
 You can start up a *HTTP server* on a node by including
@@ -343,17 +346,17 @@ You can start up a *HTTP server* on a node by including
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-standalone-http-node]
+include::example$examples.clj[tags=start-standalone-http-node]
 ----
 
-[#config-start-remote-client]
+[#start-remote-client]
 === Using a Remote API Client
-[#config-remote-client-dependency]
+[#remote-client-dependency]
 *Project Dependency*
 
 [source,clj]
 ----
-include::./deps.edn[tags=HTTPClientDeps]
+include::example$deps.edn[tags=HTTPClientDeps]
 ----
 
 To connect to a pre-existing remote node, you need a URL to the node and the above on your classpath. We can then call `crux.api/new-api-client`, passing the URL. If the node was started on `localhost:3000`, you can connect to it by doing the following:
@@ -361,18 +364,19 @@ To connect to a pre-existing remote node, you need a URL to the node and the abo
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=start-http-client]
+include::example$examples.clj[tags=start-http-client]
 ----
 
 NOTE: The remote client requires valid and transaction time to be specified for all calls to `crux/db`.
 
-[#config-docker]
+[#docker]
 == Docker
 
 If you wish to use Crux with Docker (no JVM/JDK/Clojure install required!) we have the following:
 
 * https://hub.docker.com/r/juxt/crux-standalone[*Crux HTTP Node*]: An image of a standalone Crux node (using a in memory `kv-store` by default) & HTTP server, useful if you wish to a *freestanding Crux node* accessible over HTTP, only having to use Docker.
 
+[#artifacts]
 == Artifacts
 
 Alongside the various images available on https://hub.docker.com/u/juxt[*Dockerhub*], there are a number of artifacts available for getting started quickly with Crux. These can be found on the latest https://github.com/juxt/crux/releases[release] of Crux. Currently, these consist of a number of common configuration *uberjars* and a custom artifact builder.
@@ -385,7 +389,7 @@ To create your own custom artifacts for crux, do the following:
 ** For Maven, it's the same, but dependencies go in pom.xml
 * Additionally, you can build a Docker image using the `build-docker.sh` script in the **docker** directory.
 
-[#config-backup]
+[#backup]
 == Backup and Restore
 
 Crux provides utility APIs for local backup and restore when you are
@@ -402,7 +406,7 @@ durability. The standalone mode's backup and restore operations can
 instead be used for creating operational snapshots of a node's indexes
 for scaling purposes.
 
-[#config-metrics]
+[#metrics]
 == Monitoring
 
 Crux can display metrics through a variety of interfaces. Internally, it uses
@@ -410,14 +414,14 @@ https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register
 all the metrics and then passes the registry around to reporters to display the
 data in a suitable application.
 
-[#config-metrics-dependency]
+[#metrics-dependency]
 *Project Dependency*
 
 In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
 
 [source,clj]
 ----
-include::./deps.edn[tags=MetricsDeps]
+include::example$deps.edn[tags=MetricsDeps]
 ----
 
 The various types of metric reporters bring in their own sets of dependencies,
@@ -463,7 +467,7 @@ Crux currently supports the following outputs:
 * https://prometheus.io/docs/introduction/overview/[Prometheus] (reporter & http exporter)
 * https://docs.aws.amazon.com/cloudwatch/index.html[AWS Cloudwatch metrics]
 
-[#config-metrics-console]
+[#metrics-console]
 === Console
 
 This component logs metrics to `sysout` at regular intervals.
@@ -485,7 +489,7 @@ This component logs metrics to `sysout` at regular intervals.
 |`:crux.metrics.dropwizard.console/duration-unit`|`time-unit`| Unit which durations are displayed
 |===
 
-[#config-metrics-csv]
+[#metrics-csv]
 === CSV
 
 This component logs metrics to a csv file at regular intervals. Only filename
@@ -510,19 +514,19 @@ is required.
 |`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
 |===
 
-[#config-metrics-jmx]
+[#metrics-jmx]
 === JMX
 
 Provides JMX mbeans output.
 
-[#config-metrics-jmx-dependencies]
+[#metrics-jmx-dependencies]
 *Additional Dependencies*
 
 You will need to add the following dependencies, alongside `crux-metrics`, in your project:
 
 [source,clj]
 ----
-include::../project.clj[tags=MetricsJMXDeps]
+include::example$deps.edn[tags=MetricsJMXDeps]
 ----
 
 *Getting Started*
@@ -545,7 +549,7 @@ include::../project.clj[tags=MetricsJMXDeps]
 |===
 
 
-[#config-metrics-prometheus]
+[#metrics-prometheus]
 === Prometheus
 
 [#config-metrics-prometheus-dependencies]
@@ -555,10 +559,10 @@ You will need to add the following dependencies, alongside `crux-metrics`, in yo
 
 [source,clj]
 ----
-include::../project.clj[tags=MetricsPrometheusDeps]
+include::example$deps.edn[tags=MetricsPrometheusDeps]
 ----
 
-[#config-metrics-prometheus-exporter]
+[#metrics-prometheus-exporter]
 ==== HTTP-Exporter
 
 The prometheus http exporter starts a standalone server hosting prometheus
@@ -583,7 +587,7 @@ with an argument, and jvm metrics can be included in the dump.
 |`:crux.metrics.dropwizard.prometheus/jvm-metrics?`|`boolean`| If `true` jvm metrics are included in the metrics dump
 |===
 
-[#config-metrics-prometheus-reporter]
+[#metrics-prometheus-reporter]
 ==== Reporter
 
 This component pushes prometheus metrics to a specified `pushgateway` at
@@ -609,7 +613,7 @@ regular durations (by default 1 second).
 |`:crux.metrics.dropwizard.prometheus/prefix`|`string`| Prefix all metric titles with this string
 |===
 
-[#config-metrics-cloudwatch]
+[#metrics-cloudwatch]
 === AWS Cloudwatch metrics
 
 Pushes metrics to Cloudwatch. This is indented to be used with a crux node
@@ -618,14 +622,14 @@ credentials through system variables.
 Crux uses this in its aws benchmarking system which can be found
 https://github.com/juxt/crux/tree/master/crux-bench[here].
 
-[#config-metrics-cloudwatch-dependencies]
+[#metrics-cloudwatch-dependencies]
 *Additional Dependencies*
 
 You will need to add the following dependencies, alongside `crux-metrics`, in your project:
 
 [source,clj]
 ----
-include::../project.clj[tags=MetricsCloudwatchDeps]
+include::example$deps.edn[tags=MetricsCloudwatchDeps]
 ----
 
 *Getting Started*
@@ -650,7 +654,7 @@ include::../project.clj[tags=MetricsCloudwatchDeps]
 |`:crux.metrics.dropwizard.prometheus/ignore-rules`|`string-list`| A list of strings to ignore specific metrics, in gitignore format. e.g. `["crux.tx" "!crux.tx.ingest"]` would ignore crux.tx.*, except crux.tx.ingest
 |===
 
-[#config-metrics-cloudwatch-tips]
+[#metrics-cloudwatch-tips]
 ==== Tips for running
 
 To upload metrics to Cloudwatch locally the desired region needs to be

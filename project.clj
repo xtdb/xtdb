@@ -71,22 +71,19 @@
    [com.github.spotbugs/spotbugs-annotations "3.1.9"]
 
    ;; crux metrics dependencies
-   ;; tag::MetricsJMXDeps[]
+   ;; JMX Deps
    [io.dropwizard.metrics/metrics-jmx "4.1.2"]
-   ;; end::MetricsJMXDeps[]
 
-   ;; tag::MetricsCloudwatchDeps[]
+   ;; Cloudwatch Deps
    [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
    [software.amazon.awssdk/cloudwatch "2.10.61"]
-   ;; end::MetricsCloudwatchDeps[]
 
-   ;; tag::MetricsPrometheusDeps[]
+   ;; Prometheus Deps
    [org.dhatim/dropwizard-prometheus "2.2.0"]
    [io.prometheus/simpleclient_pushgateway "0.8.1"]
    [io.prometheus/simpleclient_dropwizard "0.8.1"]
    [io.prometheus/simpleclient_hotspot "0.8.1"]
    [clj-commons/iapetos "0.1.9"]
-   ;; end::MetricsPrometheusDeps[]
    ]
 
   :source-paths ["dev"]

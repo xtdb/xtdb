@@ -1,9 +1,8 @@
-[#faqs]
 = FAQs
 
 [qanda]
 
-[#faq-bitemporality]
+[#bitemporality]
 == Do I need to think about bitemporality to make use of Crux?
 
 Not at all. Many users don't have an immediate use for business-level time
@@ -16,7 +15,7 @@ Therefore, it is sensible to use valid time in case you have these operational
 needs in the future. Valid time is recorded by default whenever you submit
 transactions.
 
-[#faq-comparisons]
+[#comparisons]
 == Comparisons
 
 How does Datalog compare to SQL::
@@ -180,7 +179,7 @@ horizontal scaling). Unlike Datomic, Crux is document-centric and uses a
 bitemporal information model to enable business-level use of time-travel
 queries.
 
-[#faq-technical]
+[#technical]
 == Technical
 
 Is Crux eventually consistent? Strongly consistent? Or something else?::
@@ -254,7 +253,7 @@ doesn’t strictly matter for the data where it’s used. NTP can mitigate
 this, potentially to an acceptable degree, but it cannot fully guarantee
 ordering between nodes.
 
-[#faq-features]
+[#features]
 == Feature Support
 
 Does Crux support RDF/SPARQL?::

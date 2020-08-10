@@ -1,4 +1,7 @@
 = API
+:toc: macro
+
+toc::[]
 
 [#javadocs]
 == Javadocs

@@ -1,11 +1,10 @@
-[#contributing]
 == Thanks
 
 Crux would not exist without the community of vibrant open source projects on
 which it depends, and we hope that the Crux community will serve to extend and
 reflect our gratitude.
 
-[#contributing-github-info]
+[#github-info]
 == GitHub
 
 We currently use GitHub Issues to work on near-term changes to the Crux
@@ -14,12 +13,12 @@ if you are looking for ideas to help push Crux forward.
 
 PRs with fixes and improvements to these docs are very welcome.
 
-[#contributing-commits]
+[#commits]
 == Commits
 
 Please strive to follow the best-practices for commit messages which are outlined https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html[here].
 
-[#contributing-cla]
+[#cla]
 == CLA
 
 A Contributor License Agreement (CLA) is necessary for us to ensure that we can

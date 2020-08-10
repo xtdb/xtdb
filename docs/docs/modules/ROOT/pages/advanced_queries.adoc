@@ -1,4 +1,3 @@
-[#advanced_queries]
 = Queries (Advanced)
 
 == Racket Datalog

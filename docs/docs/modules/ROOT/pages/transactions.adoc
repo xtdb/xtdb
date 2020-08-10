@@ -1,7 +1,9 @@
-[#transactions]
 = Transactions
+:toc: macro
 
-[#transactions-overview]
+toc::[]
+
+[#overview]
 == Overview
 
 There are four transaction (write) operations:
@@ -47,7 +49,7 @@ the event log. The document itself is submitted to the `doc-topic`,
 using its content hash as key. In Kafka, the `doc-topic` is compacted,
 which enables later deletion of documents.
 
-[#transactions-valid-ids]
+[#valid-ids]
 == Valid IDs
 
 The following types of `:crux.db/id` are allowed:
@@ -64,10 +66,10 @@ The `#crux/id` reader literal will take URI/URL strings and attempt to coerce th
 
 URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
 
-[#transactions-operations]
+[#operations]
 == Operations
 
-[#transactions-put]
+[#put]
 === Put
 
 Put's a document into Crux. If a document already exists with the
@@ -94,7 +96,7 @@ containing several operations or supply a third argument to specify an `end
 valid time`. This period is inclusive-exclusive, such that the start of the
 validity period is included in the validity range, while the end is excluded.
 
-[#transactions-delete]
+[#delete]
 === Delete
 
 Deletes a document at a given `valid time`.
@@ -106,7 +108,7 @@ Historical versions of the document will still be available.
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
 
-[#transactions-match]
+[#match]
 === Match
 
 Match operations check the current state of an entity - if the entity doesn't match the provided doc, the transaction will not continue.
@@ -125,7 +127,7 @@ You can also pass `nil` to check that the entity doesn't exist prior to your tra
 <3> (optional) `valid time`
 
 
-[#transactions-evict]
+[#evict]
 === Evict
 
 Evicts a document from Crux. Historical versions of the document will no longer be available.
@@ -135,6 +137,7 @@ Evicts a document from Crux. Historical versions of the document will no longer 
 [:crux.tx/evict :dbpedia.resource/Pablo-Picasso]
 ----
 
+[#transaction-functions]
 == Transaction functions
 
 Transaction functions are user-supplied functions that run on the individual Crux nodes when a transaction is being ingested.
@@ -169,6 +172,7 @@ You can then invoke these transaction functions by submitting a `:crux.tx/fn` op
 ;; => {:crux.db/id :ivan, :age 41}
 ----
 
+[#events]
 == Events
 
 You can subscribe to Crux events using the `(crux.api/listen node event-opts f)` function.
@@ -200,6 +204,7 @@ event received!
 
 You can `.close` the return value from `(crux.api/listen ...)` to detach the listener, should you need to.
 
+[#speculative-transactions]
 == Speculative transactions
 
 You can submit speculative transactions to Crux, to see what the results of your queries would be if a new transaction were to be applied.
