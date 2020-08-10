@@ -56,7 +56,7 @@
               [:a {:href "/_crux/index"}
                [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
              [:span.mobile-hidden
-              [:b (when-let [label (:crux.http-server/label options)]
+              [:b (when-let [label (get-in options [:node-options :crux.http-server/label])]
                     (format "\"%s\"" label))]]
              [:div.header__links
               [:a.header__link {:href "/_crux/query"} "Query"]
