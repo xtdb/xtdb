@@ -175,7 +175,7 @@
             (.shutDown repo)))))))
 
 (t/deftest test-statistics
-  (let [^ExecutorService stats-executor (get-in *api* [:tx-ingester :stats-executor])]
+  (let [^ExecutorService stats-executor (get-in (or *http-server-api* *api*) [:tx-ingester :stats-executor])]
     (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
       (api/await-tx *api* submitted-tx))
 
