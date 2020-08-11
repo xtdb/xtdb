@@ -23,7 +23,7 @@
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
-           (java.io Closeable)
+           (java.io Closeable Writer)
            (java.util Comparator Date List UUID)
            [java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit]))
 
@@ -1378,6 +1378,7 @@
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc))))
+
 (defrecord QueryDatasource [document-store indexer bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             ^ScheduledExecutorService interrupt-executor
@@ -1510,6 +1511,9 @@
 
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
         (api/db in-flight-tx valid-time)))))
+
+(defmethod print-method QueryDatasource [{:keys [valid-time transact-time]} ^Writer w]
+  (.write w (format "#<CruxDB %s>" (pr-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         indexer bus
