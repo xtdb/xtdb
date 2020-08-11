@@ -7,7 +7,10 @@
             [crux.kv :as kv]
             [crux.rocksdb.loader]
             [crux.memory :as mem]
-            [crux.system :as sys])
+            [crux.checkpoint :as cp]
+            [crux.system :as sys]
+            [crux.kv.index-store :as kvi]
+            [crux.codec :as c])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -186,9 +189,9 @@
 
 (def ^:private rocksdb_lz4_compression 4)
 
-(defrecord RocksJNRKv [db-dir]
+(defrecord RocksJNRKv [^Pointer db, ^Pointer options, ^Pointer write-options, db-dir, cp-job]
   kv/KvStore
-  (new-snapshot [{:keys [^Pointer db]}]
+  (new-snapshot [_]
     (let [snapshot (.rocksdb_create_snapshot rocksdb db)
           read-options (.rocksdb_readoptions_create rocksdb)]
       (.rocksdb_readoptions_set_pin_data rocksdb read-options 1)
@@ -198,7 +201,7 @@
                             snapshot
                             (Memory/allocateTemporary rt NativeType/ULONG))))
 
-  (store [{:keys [^Pointer db ^Pointer write-options]} kvs]
+  (store [_ kvs]
     (let [wb (.rocksdb_writebatch_create rocksdb)
           errptr-out (make-array String 1)
           kb (ExpandableDirectByteBuffer.)
@@ -213,7 +216,7 @@
           (.rocksdb_writeoptions_destroy rocksdb wb)
           (check-error errptr-out)))))
 
-  (delete [{:keys [^Pointer db ^Pointer write-options]} ks]
+  (delete [_ ks]
     (let [wb (.rocksdb_writebatch_create rocksdb)
           errptr-out (make-array String 1)
           kb (ExpandableDirectByteBuffer.)]
@@ -226,7 +229,7 @@
           (.rocksdb_writeoptions_destroy rocksdb wb)
           (check-error errptr-out)))))
 
-  (fsync [{:keys [^Pointer db]}]
+  (fsync [_]
     (let [errptr-out (make-array String 1)
           flush-options (.rocksdb_flushoptions_create rocksdb)]
       (try
@@ -238,7 +241,7 @@
 
   (compact [_])
 
-  (count-keys [{:keys [^Pointer db]}]
+  (count-keys [_]
     (-> (.rocksdb_property_value rocksdb db "rocksdb.estimate-num-keys")
         (Long/parseLong)))
 
@@ -248,25 +251,50 @@
   (kv-name [this]
     (.getName (class this)))
 
+  cp/CheckpointSource
+  (save-checkpoint [kv-store dir]
+    (cio/delete-dir dir)
+    (let [tx (kvi/latest-completed-tx kv-store)
+          errptr-out (make-array String 1)
+          checkpoint (try
+                       (.rocksdb_checkpoint_object_create rocksdb db errptr-out)
+                       (finally
+                         (check-error errptr-out)))]
+      (try
+        (.rocksdb_checkpoint_create rocksdb checkpoint (str dir) 0 errptr-out)
+        {:tx tx}
+        (finally
+          (.rocksdb_checkpoint_object_destroy rocksdb checkpoint)
+          (check-error errptr-out)))))
+
   Closeable
-  (close [{:keys [^Pointer db ^Pointer options ^Pointer write-options]}]
+  (close [_]
     (.rocksdb_close rocksdb db)
     (.rocksdb_options_destroy rocksdb options)
-    (.rocksdb_writeoptions_destroy rocksdb write-options)))
+    (.rocksdb_writeoptions_destroy rocksdb write-options)
+    (cio/try-close cp-job)))
 
-(defn ->kv-store {::sys/args (merge (-> kv/args
+(def ^:private cp-format
+  {:index-version c/index-version
+   ::version "6"})
+
+(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}
+                  ::sys/args (merge (-> kv/args
                                         (update :db-dir assoc :required? true, :default "data"))
                                     {:db-options {:doc "RocksDB Options"
                                                   :spec ::sys/string}
                                      :disable-wal? {:doc "Disable Write Ahead Log"
                                                     :spec ::sys/boolean}})}
-  [{:keys [db-dir sync? db-options disable-wal?]}]
+  [{:keys [^Path db-dir sync? db-options disable-wal? checkpointer]}]
   (init-rocksdb-jnr!)
-  (let [opts (.rocksdb_options_create rocksdb)
+  (let [db-dir (.toFile db-dir)
+        _ (some-> checkpointer (cp/try-restore db-dir cp-format))
+
+        opts (.rocksdb_options_create rocksdb)
         _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
         _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
         errptr-out (make-array String 1)
-        db-dir (.toFile ^Path db-dir)
+
         db (try
              (let [db (.rocksdb_open rocksdb
                                      opts
@@ -278,14 +306,16 @@
              (catch Throwable t
                (.rocksdb_options_destroy rocksdb opts)
                (throw t)))
-        write-options (.rocksdb_writeoptions_create rocksdb)]
 
-    (when sync?
-      (.rocksdb_writeoptions_set_sync rocksdb write-options 1))
-    (when disable-wal?
-      (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1))
+        write-options (.rocksdb_writeoptions_create rocksdb)
+        _ (when sync?
+            (.rocksdb_writeoptions_set_sync rocksdb write-options 1))
+        _ (when disable-wal?
+            (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1))
 
-    (-> (map->RocksJNRKv {:db-dir db-dir
-                          :db db
-                          :options opts
-                          :write-options write-options}))))
+        kv-store (map->RocksJNRKv {:db-dir db-dir
+                                   :db db
+                                   :options opts
+                                   :write-options write-options})]
+    (cond-> kv-store
+      checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format})))))

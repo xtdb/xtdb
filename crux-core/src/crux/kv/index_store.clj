@@ -8,7 +8,9 @@
             [crux.status :as status]
             [crux.morton :as morton]
             [crux.system :as sys]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
+            [clojure.java.io :as io])
   (:import (crux.codec Id EntityTx)
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
@@ -344,13 +346,18 @@
 (defn store-meta [kv k v]
   (kv/store kv [(meta-kv k v)]))
 
+(defn- read-meta-snapshot
+  ([snapshot k] (read-meta-snapshot snapshot k nil))
+  ([snapshot k not-found]
+   (if-let [v (kv/get-value snapshot (encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k)))]
+     (mem/<-nippy-buffer v)
+     not-found)))
+
 (defn read-meta
   ([kv k] (read-meta kv k nil))
   ([kv k not-found]
    (with-open [snapshot (kv/new-snapshot kv)]
-     (if-let [v (kv/get-value snapshot (encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k)))]
-       (mem/<-nippy-buffer v)
-       not-found))))
+     (read-meta-snapshot snapshot k not-found))))
 
 ;;;; Failed tx-id
 
@@ -697,6 +704,10 @@
                      cav-cache
                      (AtomicBoolean.)))
 
+(defn latest-completed-tx [kv-store]
+  ;; TODO at next version bump, let's make the kw here unrelated to the (old) namespace name
+  (read-meta kv-store :crux.kv-indexer/latest-completed-tx))
+
 (defrecord KvIndexStore [kv-store value-cache cav-cache]
   db/IndexStore
   (index-docs [this docs]
@@ -789,7 +800,7 @@
     (read-meta kv-store k not-found))
 
   (latest-completed-tx [this]
-    (db/read-index-meta this :crux.kv-indexer/latest-completed-tx))
+    (latest-completed-tx kv-store))
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
