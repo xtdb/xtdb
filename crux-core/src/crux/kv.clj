@@ -3,8 +3,7 @@
   (:require [crux.io :as cio]
             [crux.status :as status])
   (:refer-clojure :exclude [next])
-  (:import java.io.Closeable
-           clojure.lang.IRecord))
+  (:import java.io.Closeable))
 
 (defprotocol KvIterator
   (seek [this k])
@@ -23,7 +22,6 @@
   (delete [this ks])
   (fsync [this])
   (compact [this])
-  (backup [this dir])
   (count-keys [this])
   (db-dir [this])
   (kv-name [this]))

@@ -107,13 +107,6 @@
 
   (compact [_])
 
-  (backup [_ dir]
-    (let [file (io/file dir)]
-      (when (.exists file)
-        (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
-      (.mkdirs file)
-      (.copy env file (make-array CopyFlags 0))) )
-
   (count-keys [_]
     (cio/with-read-lock mapsize-lock
       (with-open [tx (.txnRead env)]

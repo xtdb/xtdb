@@ -95,23 +95,6 @@
     (t/testing "deleting non existing key is noop"
       (kv/delete *kv* [(long->bytes 1)]))))
 
-(t/deftest test-backup-and-restore-db
-  (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
-    (try
-      (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
-      (cio/delete-dir backup-dir)
-      (kv/backup *kv* backup-dir)
-      (with-open [restored-kv (fkv/start-kv-store {:crux.kv/db-dir (str backup-dir)})]
-        (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
-
-        (t/testing "backup and original are different"
-          (kv/store *kv* [[(long->bytes 1) (.getBytes "Original")]])
-          (kv/store restored-kv [[(long->bytes 1) (.getBytes "Backup")]])
-          (t/is (= "Original" (String. ^bytes (value *kv* (long->bytes 1)))))
-          (t/is (= "Backup" (String. ^bytes (value restored-kv (long->bytes 1)))))))
-      (finally
-        (cio/delete-dir backup-dir)))))
-
 (t/deftest test-compact []
   (t/testing "store, retrieve and delete value"
     (kv/store *kv* [[(.getBytes "key-with-a-long-prefix-1") (.getBytes "Crux")]])

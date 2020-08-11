@@ -253,9 +253,6 @@
   (fsync [this]
     (success? (LMDB/mdb_env_sync env true)))
 
-  (backup [_ dir]
-    (env-copy env dir))
-
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
                 tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]

@@ -59,7 +59,7 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,450,220,ali
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Property|Description|Default Value
-|`:crux.standalone/event-log-dir`| Directory used to store the event-log and used for backup/restore, i.e. `"data/event-log-1"`| n/a
+|`:crux.standalone/event-log-dir`| Directory used to store the event-log i.e. `"data/event-log-1"`| n/a
 |`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.memdb/kv*
 |`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *true*
 |===

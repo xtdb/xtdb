@@ -1,4 +1,0 @@
-{:deps
- {juxt/crux-core {:mvn/version "19.07-1.3.0-alpha"}
-  juxt/crux-rocksdb {:mvn/version "19.07-1.3.0-alpha"}}
- :paths ["cli/"]}

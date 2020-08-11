@@ -4,7 +4,6 @@
             [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
             [crux.api :as api]
-            [crux.backup :as backup]
             [crux.codec :as c]
             [crux.config :as cc]
             [crux.db :as db]
@@ -210,15 +209,6 @@
       (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
         (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
-
-  backup/INodeBackup
-  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
-
-      (when (satisfies? backup/INodeBackup tx-log)
-        (backup/write-checkpoint tx-log opts))))
 
   Closeable
   (close [_]

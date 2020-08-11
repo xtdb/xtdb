@@ -237,21 +237,6 @@
 
   (compact [_])
 
-  (backup [{:keys [^Pointer db]} dir]
-    (let [dir (io/file dir)]
-      (when (.exists dir)
-        (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath dir)))))
-      (let [errptr-out (make-array String 1)
-            checkpoint (try
-                         (.rocksdb_checkpoint_object_create rocksdb db errptr-out)
-                         (finally
-                           (check-error errptr-out)))]
-        (try
-          (.rocksdb_checkpoint_create rocksdb checkpoint (str dir) 0 errptr-out)
-          (finally
-            (.rocksdb_checkpoint_object_destroy rocksdb checkpoint)
-            (check-error errptr-out))))))
-
   (count-keys [{:keys [^Pointer db]}]
     (-> (.rocksdb_property_value rocksdb db "rocksdb.estimate-num-keys")
         (Long/parseLong)))

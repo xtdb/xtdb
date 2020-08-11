@@ -83,12 +83,6 @@
   (fsync [_]
     (log/debug "Using fsync on MemKv has no effect."))
 
-  (backup [_ dir]
-    (let [file (io/file dir)]
-      (when (.exists file)
-        (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
-      (persist-db dir db)))
-
   (count-keys [_]
     (count @db))
 
