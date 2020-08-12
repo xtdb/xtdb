@@ -59,7 +59,7 @@ Our first query runs on a database that contains the following 3 documents
 which get broken apart and indexed as "entities":
 [source,clj]
 ----
-include::example$examples.clj[tags=query-input]
+include::example$src/docs/examples.clj[tags=query-input]
 ----
 
 Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as
@@ -72,7 +72,7 @@ once:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=basic-query]
+include::example$src/docs/examples.clj[tags=basic-query]
 ----
 
 Let's try to work out what these 3 clauses do...
@@ -106,7 +106,7 @@ Passing the query into `crux.api/q` (see how to xref:get_started#query[submit a 
 
 [source,clj]
 ----
-include::example$examples.clj[tags=basic-query-r]
+include::example$src/docs/examples.clj[tags=basic-query-r]
 ----
 
 [#arguments]
@@ -116,14 +116,14 @@ For the next set of queries we will again use the same set of documents for our 
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-input]
+include::example$src/docs/examples.clj[tags=query-input]
 ----
 
 === Query: "Match on entity ID and value"
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments1]
+include::example$src/docs/examples.clj[tags=query-with-arguments1]
 ----
 
 Our first query supplies two arguments to the query via a map within the `:args` vector. The effect of this is to make sure that regardless of whether other `:name` values in the database also equal `"Ivan"`, that only the entity with an ID matching our specific `:ivan` ID is considered within the query. Use of arguments means we can avoid hard-coding values directly into the query clauses.
@@ -131,14 +131,14 @@ Our first query supplies two arguments to the query via a map within the `:args`
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments1-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments1-r]
 ----
 
 === Query: "Match entities with given values"
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments2]
+include::example$src/docs/examples.clj[tags=query-with-arguments2]
 ----
 
 This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parameterise the input to a query such that we do not have to rerun a single query multiple times (which would be significantly less efficient!).
@@ -146,14 +146,14 @@ This next query shows how multiple argument values can be mapped to a single fie
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments2-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments2-r]
 ----
 
 === Query: "Match entities with given value tuples"
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments3]
+include::example$src/docs/examples.clj[tags=query-with-arguments3]
 ----
 
 Here we see how we can extend the parameterisation to match using multiple fields at once.
@@ -161,19 +161,19 @@ Here we see how we can extend the parameterisation to match using multiple field
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments3-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments3-r]
 ----
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments4-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments4-r]
 ----
 
 === Query: "Use range constraints with arguments"
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments5]
+include::example$src/docs/examples.clj[tags=query-with-arguments5]
 ----
 
 Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database.
@@ -181,7 +181,7 @@ Finally we can see how we can return an argument that passes all of the predicat
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments5-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
 ----
 
 [#predicates]
@@ -191,20 +191,20 @@ Something else we can do with arguments is apply *predicates* to them directly w
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-arguments4]
+include::example$src/docs/examples.clj[tags=query-with-arguments4]
 ----
 
 In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I"). Any *fully qualified* Clojure function that returns a boolean can be used in place of `re-find`, for example:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-pred-1]
+include::example$src/docs/examples.clj[tags=query-with-pred-1]
 ----
 
 Result:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-with-pred-1-r]
+include::example$src/docs/examples.clj[tags=query-with-pred-1-r]
 ----
 
 [#valid-time-travel]
@@ -218,33 +218,33 @@ First, we transact a very old document into the database with the ID `:malcolm` 
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-d1]
+include::example$src/docs/examples.clj[tags=query-at-t-d1]
 ----
 
 Next we transact a slightly more recent (though still very old!) revision of that same document where the `:name` has been corrected to `"Malcolma"`, again using a historical timestamp extracted from the legacy system.
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-d2]
+include::example$src/docs/examples.clj[tags=query-at-t-d2]
 ----
 
 We are then able to query at different points in the valid time axis to check for the validity of the correction. We define a query `q`:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-q1]
+include::example$src/docs/examples.clj[tags=query-at-t-q1]
 ----
 
 Firstly we can verify that `"Malcolma"` was unknown at `#inst "1986-10-23"`.
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-q1-q]
+include::example$src/docs/examples.clj[tags=query-at-t-q1-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-q1-r]
+include::example$src/docs/examples.clj[tags=query-at-t-q1-r]
 ----
 
 We can then verify that `"Malcolma"` is the currently known `:name` for the entity
@@ -254,13 +254,13 @@ of the document that affect the current valid time version.
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-q2-q]
+include::example$src/docs/examples.clj[tags=query-at-t-q2-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-at-t-q2-r]
+include::example$src/docs/examples.clj[tags=query-at-t-q2-r]
 ----
 
 
@@ -272,19 +272,19 @@ include::example$examples.clj[tags=query-at-t-q2-r]
 Given the following documents in the database
 [source,clj]
 ----
-include::example$examples.clj[tags=join-d]
+include::example$src/docs/examples.clj[tags=join-d]
 ----
 
 We can run a query to return a set of tuples that satisfy the join on the attribute `:name`
 [source,clj]
 ----
-include::example$examples.clj[tags=join-q]
+include::example$src/docs/examples.clj[tags=join-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=join-r]
+include::example$src/docs/examples.clj[tags=join-r]
 ----
 
 Note that every person joins once, plus 2 more matches.
@@ -294,19 +294,19 @@ Note that every person joins once, plus 2 more matches.
 Given the following documents in the database
 [source,clj]
 ----
-include::example$examples.clj[tags=join2-d]
+include::example$src/docs/examples.clj[tags=join2-d]
 ----
 
 We can run a query to return a set of entities that `:follows` the set of entities with the `:name` value of `"Ivan"`
 [source,clj]
 ----
-include::example$examples.clj[tags=join2-q]
+include::example$src/docs/examples.clj[tags=join2-q]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$examples.clj[tags=join2-r]
+include::example$src/docs/examples.clj[tags=join2-r]
 ----
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
@@ -486,7 +486,7 @@ block) will result in undefined behaviour.
 
 [source,clj,indent=0]
 ----
-include::example$examples.clj[tags=streaming-query]
+include::example$src/docs/examples.clj[tags=streaming-query]
 ----
 
 [#history-api]
@@ -497,7 +497,7 @@ include::example$examples.clj[tags=streaming-query]
 Crux allows you to retrieve all versions of a document:
 [source,clj]
 ----
-include::example$examples.clj[tags=history-full]
+include::example$src/docs/examples.clj[tags=history-full]
 ----
 
 [#history-document-history-range]
@@ -512,7 +512,7 @@ Retrievable document versions can be bounded by four time coordinates:
 All coordinates are inclusive. All coordinates can be null.
 [source,clj]
 ----
-include::example$examples.clj[tags=history-range]
+include::example$src/docs/examples.clj[tags=history-range]
 ----
 
 [#clojure-tips]

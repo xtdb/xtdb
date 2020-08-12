@@ -104,16 +104,16 @@ include::example$deps.edn[tags=CruxDep]
 The following code creates a default `crux.standalone` node which runs completely within memory (with both the event-log store and db store using `crux.kv.memdb/kv`):
 [source,clj]
 ----
-include::example$examples.clj[tags=include-crux-api]
+include::example$src/docs/examples.clj[tags=include-crux-api]
 
-include::example$examples.clj[tags=start-standalone-node]
+include::example$src/docs/examples.clj[tags=start-standalone-node]
 ----
 
 You can later stop the node if you wish, however your data will not be persisted:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=close-node]
+include::example$src/docs/examples.clj[tags=close-node]
 ----
 
 [#rocksdb]
@@ -135,7 +135,7 @@ include::example$deps.edn[tags=RocksDeps]
 
 [source,clj]
 ----
-include::example$examples.clj[tags=start-standalone-with-rocks]
+include::example$src/docs/examples.clj[tags=start-standalone-with-rocks]
 ----
 
 Please note that when configuring a standalone node with persisted indexes (via `:crux.kv/db-dir`), you should always have the tx-log and document-store persisted as well (via `:crux.standalone/event-log-dir`).
@@ -168,7 +168,7 @@ include::example$deps.edn[tags=LMDBDeps]
 
 [source,clj]
 ----
-include::example$examples.clj[tags=start-standalone-with-lmdb]
+include::example$src/docs/examples.clj[tags=start-standalone-with-lmdb]
 ----
 
 [#kafka]
@@ -212,7 +212,7 @@ Use the API to start a Kafka node, configuring it with the
 
 [source,clj]
 ----
-include::example$examples.clj[tags=start-cluster-node]
+include::example$src/docs/examples.clj[tags=start-cluster-node]
 ----
 
 NOTE: If you don't specify `kv-store` then by default the
@@ -223,7 +223,7 @@ You can later stop the node if you wish:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=close-node]
+include::example$src/docs/examples.clj[tags=close-node]
 ----
 
 [#kafka-embed]
@@ -246,16 +246,16 @@ include::example$deps.edn[tags=KafkaEmbeddedDeps]
 
 [source,clj]
 ----
-include::example$examples.clj[tags=require-ek]
+include::example$src/docs/examples.clj[tags=require-ek]
 
-include::example$examples.clj[tags=ek-example]
+include::example$src/docs/examples.clj[tags=ek-example]
 ----
 
 You can later stop the Embedded Kafka if you wish:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=ek-close]
+include::example$src/docs/examples.clj[tags=ek-close]
 ----
 
 [#jdbc]
@@ -307,7 +307,7 @@ parameters:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=start-jdbc-node]
+include::example$src/docs/examples.clj[tags=start-jdbc-node]
 ----
 
 [#http]
@@ -346,7 +346,7 @@ You can start up a *HTTP server* on a node by including
 
 [source,clj]
 ----
-include::example$examples.clj[tags=start-standalone-http-node]
+include::example$src/docs/examples.clj[tags=start-standalone-http-node]
 ----
 
 [#start-remote-client]
@@ -364,7 +364,7 @@ To connect to a pre-existing remote node, you need a URL to the node and the abo
 
 [source,clj]
 ----
-include::example$examples.clj[tags=start-http-client]
+include::example$src/docs/examples.clj[tags=start-http-client]
 ----
 
 NOTE: The remote client requires valid and transaction time to be specified for all calls to `crux/db`.

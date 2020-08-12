@@ -32,9 +32,9 @@ include::example$deps.edn[tags=CruxDep]
 
 [source,clj]
 ----
-include::example$examples.clj[tags=include-crux-api]
+include::example$src/docs/examples.clj[tags=include-crux-api]
 
-include::example$examples.clj[tags=start-standalone-node]
+include::example$src/docs/examples.clj[tags=start-standalone-node]
 ----
 
 For the purposes of this "Hello World" we are using the simplest configuration of Crux, which only requires the crux-core module. All of the logs and indexes are held purely in-memory, so your data won't be persisted across restarts. This is useful when testing and experimenting as there is no additional complexity or stateful use of Kafka or RocksDB to think about.
@@ -45,7 +45,7 @@ Once started, the node gives us access to an empty Crux database instance and AP
 
 [source,clj]
 ----
-include::example$examples.clj[tags=submit-tx]
+include::example$src/docs/examples.clj[tags=submit-tx]
 ----
 
 [#query]
@@ -55,26 +55,26 @@ A query executes against a `db` context. This `db` context represents the databa
 
 [source,clj]
 ----
-include::example$examples.clj[tags=query]
+include::example$src/docs/examples.clj[tags=query]
 ----
 
 You should get:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=should-get]
+include::example$src/docs/examples.clj[tags=should-get]
 ----
 
 An entity query would be:
 [source,clj]
 ----
-include::example$examples.clj[tags=query-entity]
+include::example$src/docs/examples.clj[tags=query-entity]
 ----
 You should get:
 
 [source,clj]
 ----
-include::example$examples.clj[tags=should-get-entity]
+include::example$src/docs/examples.clj[tags=should-get-entity]
 ----
 
 [#next-steps]
