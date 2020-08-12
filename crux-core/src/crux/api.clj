@@ -129,7 +129,10 @@
     "Returns a list of currently running queries")
 
   (recent-queries [node]
-    "Returns a list of recently completed/failed queries"))
+    "Returns a list of recently completed/failed queries")
+
+  (slowest-queries [node]
+    "Returns a list of slowest completed/failed queries ran on the node"))
 
 (defprotocol PCruxIngestClient
   "Provides API access to Crux ingestion."
@@ -212,7 +215,10 @@
     (map qs/<-QueryState (.activeQueries this)))
 
   (recent-queries [this]
-    (map qs/<-QueryState (.recentQueries this))))
+    (map qs/<-QueryState (.recentQueries this)))
+
+  (slowest-queries [this]
+    (map qs/<-QueryState (.slowestQueries this))))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI

@@ -63,19 +63,29 @@
       node-closed? (throw (InterruptedException. "Node closed."))
       tx tx)))
 
-(defn- query-expired? [{:keys [finished-at] :as query} ^Duration recent-queries-max-age]
+(defn- query-expired? [{:keys [finished-at] :as query} ^Duration max-age]
   (when finished-at
     (let [time-since-query ^Duration (Duration/between (.toInstant ^Date finished-at) (Instant/now))]
-      (neg? (.compareTo recent-queries-max-age time-since-query)))))
+      (neg? (.compareTo max-age time-since-query)))))
 
-(defn- clean-expired-queries [recent-queries {::keys [^Duration recent-queries-max-age recent-queries-max-count]}]
-  (->> recent-queries
-       (remove (fn [query] (query-expired? query recent-queries-max-age)))
+(defn- slow-query? [{:keys [started-at finished-at] :as query} {::keys [^Duration slow-queries-min-threshold]}]
+  (let [time-taken (Duration/between (.toInstant ^Date started-at) (.toInstant ^Date finished-at))]
+    (neg? (.compareTo slow-queries-min-threshold time-taken))))
+
+(defn clean-expired-queries [queries ^Duration max-age max-count]
+  (->> queries
+       (remove (fn [query] (query-expired? query max-age)))
        (sort-by :finished-at #(compare %2 %1))
-       (take recent-queries-max-count)))
+       (take max-count)))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
-                     !running-queries options close-fn !topology closed? ^StampedLock lock]
+(defn- clean-running-queries [queries {::keys [recent-queries-max-age recent-queries-max-count
+                                               slow-queries-max-age slow-queries-max-count]}]
+  (-> queries
+      (update :completed clean-expired-queries recent-queries-max-age recent-queries-max-count)
+      (update :slowest clean-expired-queries slow-queries-max-age slow-queries-max-count)))
+
+(defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine !running-queries
+                     options close-fn !topology closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
   (db [this valid-time] (.db this valid-time nil))
@@ -185,8 +195,12 @@
     (map qs/->QueryState (vals (:in-progress @!running-queries))))
 
   (recentQueries [this]
-    (let [running-queries (swap! !running-queries update :completed clean-expired-queries options)]
+    (let [running-queries (swap! !running-queries clean-running-queries options)]
       (map qs/->QueryState (:completed running-queries))))
+
+  (slowestQueries [this]
+    (let [running-queries (swap! !running-queries clean-running-queries options)]
+      (map qs/->QueryState (:slowest running-queries))))
 
   ICruxAsyncIngestAPI
   (submitTxAsync [this tx-ops]
@@ -225,28 +239,30 @@
   (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
               (fn [{::q/keys [query-id error]}]
                 (swap! !running-queries (fn [queries]
-                                          (let [query (get-in queries [:in-progress query-id])]
+                                          (let [query (get-in queries [:in-progress query-id])
+                                                failed-query (assoc query
+                                                                    :finished-at (Date.)
+                                                                    :status :failed
+                                                                    :error error)]
                                             (-> queries
                                                 (update :in-progress dissoc query-id)
-                                                (update :completed conj (let [start-time (:started-at query)
-                                                                              end-time (Date.)]
-                                                                          (assoc query
-                                                                                 :finished-at end-time
-                                                                                 :status :failed
-                                                                                 :error error)))
-                                                (update :completed clean-expired-queries node-opts)))))))
+                                                (update :completed conj failed-query)
+                                                (cond->
+                                                  (slow-query? failed-query node-opts) (update :slowest conj failed-query))
+                                                (clean-running-queries node-opts)))))))
   (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
               (fn [{::q/keys [query-id]}]
                 (swap! !running-queries (fn [queries]
-                                          (let [query (get-in queries [:in-progress query-id])]
+                                          (let [query (get-in queries [:in-progress query-id])
+                                                completed-query (assoc query
+                                                                       :finished-at (Date.)
+                                                                       :status :completed)]
                                             (-> queries
                                                 (update :in-progress dissoc query-id)
-                                                (update :completed conj (let [start-time (:started-at query)
-                                                                              end-time (Date.)]
-                                                                          (assoc query
-                                                                                 :finished-at end-time
-                                                                                 :status :completed)))
-                                                (update :completed clean-expired-queries node-opts))))))))
+                                                (update :completed conj completed-query)
+                                                (cond->
+                                                  (slow-query? completed-query node-opts) (update :slowest conj completed-query))
+                                                (clean-running-queries node-opts))))))))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine] :as deps} node-opts]
@@ -258,7 +274,7 @@
                                :document-store document-store
                                :bus bus
                                :query-engine query-engine
-                               :!running-queries (doto (atom {:in-progress {} :completed '()})
+                               :!running-queries (doto (atom {:in-progress {} :completed '() :slowest '()})
                                                    (attach-current-query-listeners deps node-opts))
                                :closed? (atom false)
                                :lock (StampedLock.)
@@ -272,7 +288,16 @@
                                     :crux.config/type :crux.config/duration}
           ::recent-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
                                       :default 20
-                                      :crux.config/type :crux.config/nat-int}}})
+                                      :crux.config/type :crux.config/nat-int}
+          ::slow-queries-max-age {:doc "How long to retain queries on the slow query queue"
+                                  :default (Duration/ofHours 24)
+                                  :crux.config/type :crux.config/duration}
+          ::slow-queries-max-count {:doc "Max number of finished queries to retain on the slow query queue"
+                                    :default 100
+                                    :crux.config/type :crux.config/nat-int}
+          ::slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
+                                        :default (Duration/ofMinutes 1)
+                                        :crux.config/type :crux.config/duration}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
