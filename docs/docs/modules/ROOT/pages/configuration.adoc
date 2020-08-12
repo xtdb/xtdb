@@ -7,7 +7,7 @@ toc::[]
 == Nodes
 
 To start a Crux node, use the
-https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
+https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.08-1.10.1/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/crux-core/src/crux/api.clj[`crux.api`].
 
 Within Clojure, we call `start-node` from within `crux.api`, passing it a set of

@@ -51,8 +51,8 @@ critical requirement for systems in any industry with strong auditing regulation
 where you need to be able to answer the question "what did you know and when
 did you know it?".
 
-xref:bitemporality.adoc[Read more about Bitemporality in Crux] or specifically the
-xref:bitemporality#uses[known uses] for these capabilities.
+xref:bitemp.adoc[Read more about Bitemporality in Crux] or specifically the
+xref:bitemp.adoc#uses[known uses] for these capabilities.
 
 [#query]
 == Query
