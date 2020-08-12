@@ -123,11 +123,10 @@
     (t/testing "test slowest-queries - post query (min threshold - 1 nanosecond)"
       (t/is (= :completed (:status (first (api/slowest-queries *api*))))))
 
-    (let [slow-query? @#'n/slow-query?
-          start (Instant/now)
+    (let [start (Instant/now)
           query-info {:started-at (Date/from start) :finished-at (Date/from (.plusSeconds start 2))}]
-      (t/is (slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 1)}))
-      (t/is (not (slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 10)}))))))
+      (t/is (n/slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 1)}))
+      (t/is (not (n/slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 10)}))))))
 
 (t/deftest test-active-queries
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]

@@ -10,7 +10,8 @@
 (defn- ns->ms [time-ns]
   (/ time-ns 1e6))
 
-(def registry-module {:start-fn (fn [deps {::keys [with-indexer-metrics?  with-query-metrics?]}]
+(def registry-module {:start-fn (fn [deps {::keys [with-indexer-metrics? with-query-metrics? slow-query-callback-fn] :as node-opts}]
+                                  (query-metrics/add-slow-query-listeners deps node-opts)
                                   (cond-> (dropwizard/new-registry)
                                     with-indexer-metrics? (doto (indexer-metrics/assign-listeners deps))
                                     with-query-metrics? (doto (query-metrics/assign-listeners deps))))
@@ -20,7 +21,10 @@
                                                       :crux.config/type :crux.config/boolean}
                              ::with-query-metrics? {:doc "Include metrics on queries"
                                                     :default true
-                                                    :crux.config/type :crux.config/boolean}}})
+                                                    :crux.config/type :crux.config/boolean}
+                             ::slow-query-callback-fn {:doc "Callback function to pass slow queries to"
+                                                       :default nil
+                                                       :crux.config/type :crux.config/fn}}})
 
 (defrecord StatusReporter [^MetricRegistry registry]
   status/Status

@@ -68,7 +68,7 @@
     (let [time-since-query ^Duration (Duration/between (.toInstant ^Date finished-at) (Instant/now))]
       (neg? (.compareTo max-age time-since-query)))))
 
-(defn- slow-query? [{:keys [started-at finished-at] :as query} {::keys [^Duration slow-queries-min-threshold]}]
+(defn slow-query? [{:keys [started-at finished-at] :as query} {::keys [^Duration slow-queries-min-threshold]}]
   (let [time-taken (Duration/between (.toInstant ^Date started-at) (.toInstant ^Date finished-at))]
     (neg? (.compareTo slow-queries-min-threshold time-taken))))
 
