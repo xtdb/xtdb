@@ -1,9 +1,19 @@
-[#confluent-quickstart]
-= Confluent Platform Quickstart
+= Kafka Quickstart
 
 == Installing the connector
 
-Use `confluent-hub install juxt/kafka-connect-crux:20.08-1.10.1-beta` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+Download the connector from Confluent hub, then unzip the downloaded folder:
+----
+unzip juxt-kafka-connect-crux-20.08-1.10.1-beta.zip
+----
+
+Navigate into the base of the Kafka folder, then run the following commands:
+
+----
+cp $CONNECTOR_PATH/lib/*-standalone.jar $KAFKA_HOME/libs
+cp $CONNECTOR_PATH/etc/*.properties $KAFKA_HOME/config
+----
+
 
 The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
@@ -35,13 +45,13 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 
 == Sink Connector
 
-Run the following command within the base of the Confluent folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
+Run the following command within the base of the Kafka folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
 
 ----
-./bin/connect-standalone etc/kafka/connect-standalone.properties share/confluent-hub-components/juxt-kafka-connect-crux/etc/local-crux-sink.properties etc/kafka/connect-file-source.properties
+./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-sink.properties config/connect-file-source.properties
 ----
 
-Run the following within your Confluent directory, to add a line of JSON to _'test.txt'_:
+Run the following within your Kafka directory, to add a line of JSON to _'test.txt'_:
 
 ----
 echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
@@ -58,10 +68,10 @@ Now, verify that this was transacted within your REPL:
 
 == Source Connector
 
-Run the following command within the base of the Confluent folder, to create a worker connects to the 'connect-test' topic, ready to *receive* messages from the _node_. This also makes use of 'connect-file-sink', outputting transactions to your _node_ within _'test.sink.txt'_:
+Run the following command within the base of the Kafka folder, to create a worker connects to the 'connect-test' topic, ready to *receive* messages from the _node_. This also makes use of 'connect-file-sink', outputting transactions to your _node_ within _'test.sink.txt'_:
 
 ----
-./bin/connect-standalone etc/kafka/connect-standalone.properties share/confluent-hub-components/juxt-kafka-connect-crux/etc/local-crux-source.properties etc/kafka/connect-file-sink.properties
+./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-source.properties config/connect-file-sink.properties
 ----
 
 

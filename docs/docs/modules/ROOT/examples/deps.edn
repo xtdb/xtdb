@@ -35,4 +35,21 @@
   ;; tag::MetricsDeps[]
   juxt/crux-metrics {:mvn/version "20.08-1.10.1-alpha"}
   ;; end::MetricsDeps[]
+
+  ;; tag::MetricsJMXDeps[]
+  io.dropwizard.metrics/metrics-jmx {:mvn/version "4.1.2"}
+  ;; end::MetricsJMXDeps[]
+
+  ;; tag::MetricsCloudwatchDeps[]
+  io.github.azagniotov/dropwizard-metrics-cloudwatch {:mvn/version "2.0.3"}
+  software.amazon.awssdk/cloudwatch {:mvn/version "2.10.61"}
+  ;; end::MetricsCloudwatchDeps[]
+
+   ;; tag::MetricsPrometheusDeps[]
+  org.dhatim/dropwizard-prometheus {:mvn/version "2.2.0"}
+  io.prometheus/simpleclient_pushgateway {:mvn/version "0.8.1"}
+  io.prometheus/simpleclient_dropwizard {:mvn/version "0.8.1"}
+  io.prometheus/simpleclient_hotspot {:mvn/version "0.8.1"}
+  clj-commons/iapetos "0.1.9"
+  ;; end::MetricsPrometheusDeps[]
   }}

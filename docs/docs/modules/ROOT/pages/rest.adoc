@@ -26,7 +26,7 @@ Protocol queries under `/sparql/`, rewriting the query into the Crux
 Datalog dialect. Only a small subset of SPARQL is supported and no
 other RDF features are available.
 
-[#rest-http-api]
+[#http-api]
 == Using the HTTP API
 
 The HTTP interface is provided as a Ring middleware in a Clojure namespace,
@@ -38,7 +38,7 @@ recommended to expose Crux directly to any untrusted endpoints (including web
 browsers) in production since the default query API does not sandbox or
 otherwise restrict the execution of queries.
 
-[#rest-index]
+[#index]
 == Index
 
 .API
@@ -55,7 +55,7 @@ otherwise restrict the execution of queries.
 |<<#rest-tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
 |===
 
-[#rest-home]
+[#home]
 === GET `/`
 
 Returns various details about the state of the database. Can be used as a health check.
@@ -86,12 +86,12 @@ curl -X GET $nodeURL/
 
 NOTE: `estimate-num-keys` is an (over)estimate of the number of transactions in the log (each of which is a key in RocksDB). RocksDB https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ[does not provide] an exact key count.
 
-[#rest-entity]
+[#entity]
 === GET `/entity/[:key]`
 
 Takes a key and, optionally, a `:valid-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
 
-See <<#bitemporality, Bitemporality>> for more information.
+See xref:bitemporality.adoc[Bitemporality] for more information.
 
 [source,bash]
 ----
@@ -117,12 +117,12 @@ curl -X GET \
 nil
 ----
 
-[#rest-entity-tx]
+[#entity-tx]
 === GET `/entity-tx`
 
 Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` transaction that most recently set that key at those times.
 
-See <<#bitemporality, Bitemporality>> for more information.
+See xref:bitemporality.adoc[Bitemporality] for more information.
 
 [source,bash]
 ----
@@ -139,7 +139,7 @@ curl -X GET \
  :crux.tx/tx-time #inst "2019-01-08T16:34:47.738-00:00"}
 ----
 
-[#rest-entity-history]
+[#entity-history]
 === GET `/entity-history/[:key]`
 
 Returns the history for the given entity
@@ -167,7 +167,7 @@ Also accepts the following as optional query parameters:
  {...}]
 ----
 
-[#rest-query]
+[#query]
 === POST `/query`
 
 Takes a Datalog query and returns its results.
@@ -195,7 +195,7 @@ curl -X POST \
      $nodeURL/query
 ----
 
-[#rest-sync]
+[#sync]
 === GET `/sync`
 
 Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in milliseconds. Returns the transaction time of the most recent transaction.
@@ -210,7 +210,7 @@ curl -X GET $nodeURL/sync?timeout=500
 #inst "2019-01-08T11:06:41.869-00:00"
 ----
 
-[#rest-tx-log]
+[#tx-log]
 === GET `/tx-log`
 
 Returns a list of all transactions, from oldest to newest transaction time.
@@ -232,7 +232,7 @@ curl -X GET $nodeURL/tx-log
   ...})
 ----
 
-[#rest-tx-log-post]
+[#tx-log-post]
 === POST `/tx-log`
 
 Takes a vector of transactions (any combination of `:put`, `:delete`, `:match`, and `:evict`) and executes them in order. This is the only "write" endpoint.

@@ -1,12 +1,9 @@
 = (ns crux.api)
-:toc: macro
 
 `crux.api` exposes a union of methods from `ICruxAPI` and `ICruxDatasource`,
 with few lifecycle members added.
 
-toc::[]
-
-[#clojure-api-icruxapi]
+[#icruxapi]
 == ICruxAPI
 
 === db
@@ -196,7 +193,7 @@ toc::[]
     "Returns a list of recently completed/failed queries")
 ----
 
-[#clojure-api-icruxdatasource]
+[#icruxdatasource]
 == ICruxDatasource
 Represents the database as of a specific valid and transaction time.
 

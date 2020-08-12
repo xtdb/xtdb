@@ -1,3 +1,7 @@
 = Advanced
+:toc: macro
 
+toc::[]
+
+[#advanced-queries]
 include::advanced_queries.adoc[leveloffset=+1]

@@ -1,7 +1,9 @@
-[#bitemporality]
 = Bitemporality
+:toc: macro
 
-[#bitemp-overview]
+toc::[]
+
+[#overview]
 == Overview
 
 Crux is optimised for efficient and globally consistent point-in-time queries
@@ -19,7 +21,7 @@ specific `valid-time`, defaulting to the `transaction time` (i.e. `now`), and
 each document remains valid until explicitly updated with a new version via
 `put` or deleted via `delete`.
 
-[#bitemp-why]
+[#why]
 == Why?
 
 The rationale for bitemporality is also explained in this
@@ -64,7 +66,7 @@ NOTE: In Crux, when `transaction-time` isn't specified, it is set to
 _now_. When writing data, in case there isn’t any specific valid-time
 available, valid-time and transaction-time take the same value.
 
-[#bitemp-valid]
+[#valid]
 == Valid Time
 
 In situations where your database is not the ultimate owner of the data—where
@@ -96,7 +98,7 @@ past, one needs bitemporality to ensure evolving but consistent views
 of the data.
 ****
 
-[#bitemp-transaction]
+[#transaction]
 == Transaction Time
 
 For audit reasons, we might wish to know with certainty the value of a
@@ -113,7 +115,7 @@ for audit reasons, would you want to consider using both
 transaction-time and valid-time.
 ****
 
-[#bitemp-domain]
+[#domain]
 == Domain Time
 
 Valid time is valuable for tracking a consistent view of the entire state of
@@ -132,7 +134,7 @@ encourages you to build additional layers of functionality to do
 so. See https://github.com/crux-labs/crux-decorators[decorators] for
 examples.
 
-[#bitemp-uses]
+[#uses]
 == Known Uses
 
 Recording bitemporal information with your data is essential when dealing with
@@ -189,10 +191,10 @@ and any subsequent laws that may be relevant and applied retrospectively
 - Criminal Investigations – efficiently organise analysis and evidence whilst
   enabling a simple retracing of investigative efforts
 
-[#bitemp-examples]
+[#examples]
 == Example Queries
 
-[#bitemp-crime]
+[#crime]
 === Crime Investigations
 
 This example is based on an academic paper.
@@ -228,7 +230,7 @@ Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the
 initial documents are ingested using the Day 0 valid time:
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp0]
+include::example$src/docs/examples.clj[tags=bitemp0]
 ----
 
 The first document shows that `Person 2` was recorded entering via `:SFO` and
@@ -244,7 +246,7 @@ documents available to ingest.
 A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp2]
+include::example$src/docs/examples.clj[tags=bitemp2]
 ----
 
 ==== Day 3
@@ -253,7 +255,7 @@ Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is
 represented as an update to the existing document using the Day 3 valid time:
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp3]
+include::example$src/docs/examples.clj[tags=bitemp3]
 ----
 
 ==== Day 4
@@ -265,21 +267,21 @@ First we receive an event showing that `Person 1` entered `:NY` on Day 0 which
 must ingest using the Day 0 valid time `#inst "2018-12-31"`:
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp4]
+include::example$src/docs/examples.clj[tags=bitemp4]
 ----
 
 We then receive an event showing that `Person 1` departed from `:NY` on Day 3,
 so again we ingest this document using the corresponding Day 3 valid time:
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp4b]
+include::example$src/docs/examples.clj[tags=bitemp4b]
 ----
 
 Finally, we receive two events relating to Day 4, which can be ingested using
 the current valid time:
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp4c]
+include::example$src/docs/examples.clj[tags=bitemp4c]
 ----
 
 ==== Day 5
@@ -288,7 +290,7 @@ On Day 5 there is an event showing that `Person 2`, having arrived on Day 0
 (which we already knew), departed from `:SFO` on Day 5.
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp5]
+include::example$src/docs/examples.clj[tags=bitemp5]
 ----
 
 ==== Day 6
@@ -304,7 +306,7 @@ error. The second document shows that `Person 3` has only just departed on Day
 7, which is how the previous error was noticed.
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp7]
+include::example$src/docs/examples.clj[tags=bitemp7]
 ----
 
 ==== Day 8
@@ -314,7 +316,7 @@ Two documents have been received relating to new arrivals on Day 8. Note that
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp8]
+include::example$src/docs/examples.clj[tags=bitemp8]
 ----
 
 ==== Day 9
@@ -322,7 +324,7 @@ include::./src/docs/examples.clj[tags=bitemp8]
 On Day 9 we learn that `Person 3` also departed on Day 8.
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp9]
+include::example$src/docs/examples.clj[tags=bitemp9]
 ----
 
 ==== Day 10
@@ -331,7 +333,7 @@ A single document arrives showing that `Person 5` entered at `:LA` earlier that
 day.
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp10]
+include::example$src/docs/examples.clj[tags=bitemp10]
 ----
 
 ==== Day 11
@@ -340,7 +342,7 @@ Similarly to the previous day, a single document arrives showing that `Person
 7` entered at `:NY` earlier that day.
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp11]
+include::example$src/docs/examples.clj[tags=bitemp11]
 ----
 
 ==== Day 12
@@ -348,7 +350,7 @@ include::./src/docs/examples.clj[tags=bitemp11]
 Finally, on Day 12 we learn that `Person 6` entered at `:NY` that same day.
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitemp12]
+include::example$src/docs/examples.clj[tags=bitemp12]
 ----
 
 ==== Question Time
@@ -364,7 +366,7 @@ We are able to easily express this as a query in Crux:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitempq]
+include::example$src/docs/examples.clj[tags=bitempq]
 ----
 
 The answer given by Crux is a simple set of the three relevant people along
@@ -373,10 +375,10 @@ known to have yet departed at this point:
 
 [source,clj]
 ----
-include::./src/docs/examples.clj[tags=bitempr]
+include::example$src/docs/examples.clj[tags=bitempr]
 ----
 
-[#bitemp-related]
+[#related]
 == Related Concepts
 
 === Retroactive Data Structures
@@ -412,7 +414,7 @@ persistent and fully retroactive data structure".
 * https://courses.csail.mit.edu/6.851/fall17/lectures/L02.html[Advanced Data Structures]
 * https://erikdemaine.org/papers/Retroactive_TALG/paper.pdf[Retroactive Data Structures]
 
-[#bitemp-references]
+[#references]
 == References
 
 * https://juxt.pro/blog/posts/value-of-bitemporality.html[Value of Bitemporality]

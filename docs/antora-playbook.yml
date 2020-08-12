@@ -3,18 +3,21 @@ site:
   start_page: home::index.adoc
 content:
   sources:
-  - url: ../
-    start_path: docs/home
-    branches: HEAD
-  - url: ../
-    start_path: docs/concepts
-    branches: HEAD
-  - url: ../
-    start_path: docs/tutorials
-    branches: HEAD
-  - url: ../
-    start_path: docs/reference
-    branches: HEAD
+    - url: ../
+      start_path: docs/home
+      branches: HEAD
+    - url: ../
+      start_path: docs/docs
+      branches: HEAD
+  #  - url: ../
+  #    start_path: docs/concepts
+  #    branches: HEAD
+  #  - url: ../
+  #    start_path: docs/tutorials
+  #    branches: HEAD
+  #  - url: ../
+  #    start_path: docs/reference
+  #    branches: HEAD
   # - url: https://github.com/juxt/crux
   #   start_path: docs/reference
   #   branches:
