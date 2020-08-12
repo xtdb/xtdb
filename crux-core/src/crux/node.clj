@@ -72,17 +72,18 @@
   (let [time-taken (Duration/between (.toInstant ^Date started-at) (.toInstant ^Date finished-at))]
     (neg? (.compareTo slow-queries-min-threshold time-taken))))
 
-(defn clean-expired-queries [queries ^Duration max-age max-count]
+(defn- clean-completed-queries [queries {::keys [recent-queries-max-age recent-queries-max-count]}]
   (->> queries
-       (remove (fn [query] (query-expired? query max-age)))
+       (remove (fn [query] (query-expired? query recent-queries-max-age)))
        (sort-by :finished-at #(compare %2 %1))
-       (take max-count)))
+       (take recent-queries-max-count)))
 
-(defn- clean-running-queries [queries {::keys [recent-queries-max-age recent-queries-max-count
-                                               slow-queries-max-age slow-queries-max-count]}]
-  (-> queries
-      (update :completed clean-expired-queries recent-queries-max-age recent-queries-max-count)
-      (update :slowest clean-expired-queries slow-queries-max-age slow-queries-max-count)))
+(defn- clean-slowest-queries [queries {::keys [slow-queries-max-age slow-queries-max-count]}]
+  (->> queries
+       (remove (fn [query] (query-expired? query slow-queries-max-age)))
+       (sort-by (fn [{:keys [^Date started-at ^Date finished-at]}]
+                  (- (.getTime started-at) (.getTime finished-at))))
+       (take slow-queries-max-count)))
 
 (defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine !running-queries
                      options close-fn !topology closed? ^StampedLock lock]
@@ -195,11 +196,11 @@
     (map qs/->QueryState (vals (:in-progress @!running-queries))))
 
   (recentQueries [this]
-    (let [running-queries (swap! !running-queries clean-running-queries options)]
+    (let [running-queries (swap! !running-queries update :completed clean-completed-queries options)]
       (map qs/->QueryState (:completed running-queries))))
 
   (slowestQueries [this]
-    (let [running-queries (swap! !running-queries clean-running-queries options)]
+    (let [running-queries (swap! !running-queries update :slowest clean-slowest-queries options)]
       (map qs/->QueryState (:slowest running-queries))))
 
   ICruxAsyncIngestAPI
@@ -247,9 +248,10 @@
                                             (-> queries
                                                 (update :in-progress dissoc query-id)
                                                 (update :completed conj failed-query)
+                                                (update :completed clean-completed-queries node-opts)
                                                 (cond->
                                                   (slow-query? failed-query node-opts) (update :slowest conj failed-query))
-                                                (clean-running-queries node-opts)))))))
+                                                (update :slowest clean-slowest-queries node-opts)))))))
   (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
               (fn [{::q/keys [query-id]}]
                 (swap! !running-queries (fn [queries]
@@ -260,9 +262,10 @@
                                             (-> queries
                                                 (update :in-progress dissoc query-id)
                                                 (update :completed conj completed-query)
+                                                (update :completed clean-completed-queries node-opts)
                                                 (cond->
                                                   (slow-query? completed-query node-opts) (update :slowest conj completed-query))
-                                                (clean-running-queries node-opts))))))))
+                                                (update :slowest clean-slowest-queries node-opts))))))))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine] :as deps} node-opts]

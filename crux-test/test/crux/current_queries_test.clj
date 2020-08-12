@@ -14,81 +14,80 @@
   every-api/with-each-api-implementation)
 
 (t/deftest test-cleaning-recent-queries
-  (let [clean-running-queries @#'n/clean-running-queries]
-    (t/testing "test clean-running-queries cleans up completed queries"
-      (let [queries {:completed [{:finished-at (Date.)
-                                  ::query-id 1}
-                                 {:finished-at (Date/from (.minus (.toInstant (Date.))
-                                                                  (Duration/ofSeconds 5)))
-                                  ::query-id 2}
-                                 {:finished-at (Date/from (.minus (.toInstant (Date.))
-                                                                  (Duration/ofSeconds 10)))
-                                  ::query-id 3}]}]
-        (t/testing "test recent-queries - check max count expiration"
-          (t/is (= [1]
-                   (->> (clean-running-queries queries
-                                               {::n/recent-queries-max-age (Duration/ofSeconds 8)
-                                                ::n/recent-queries-max-count 1})
-                        :completed
-                        (map ::query-id))))
+  (let [clean-completed-queries @#'n/clean-completed-queries
+        queries [{:finished-at (Date.)
+                  ::query-id 1}
+                 {:finished-at (Date/from (.minus (.toInstant (Date.))
+                                                  (Duration/ofSeconds 5)))
+                  ::query-id 2}
+                 {:finished-at (Date/from (.minus (.toInstant (Date.))
+                                                  (Duration/ofSeconds 10)))
+                  ::query-id 3}]]
+    (t/testing "test recent-queries - check max count expiration"
+      (t/is (= [1]
+               (->> (clean-completed-queries queries
+                                             {::n/recent-queries-max-age (Duration/ofSeconds 8)
+                                              ::n/recent-queries-max-count 1})
+                    (map ::query-id))))
 
-          (t/is (= [1 2]
-                   (->> (clean-running-queries queries
-                                               {::n/recent-queries-max-age (Duration/ofSeconds 8)
-                                                ::n/recent-queries-max-count 2})
-                        :completed
-                        (map ::query-id)))))
+      (t/is (= [1 2]
+               (->> (clean-completed-queries queries
+                                             {::n/recent-queries-max-age (Duration/ofSeconds 8)
+                                              ::n/recent-queries-max-count 2})
+                    (map ::query-id)))))
 
-        (t/testing "test recent-queries - check time expiration"
-          (t/is (= [1]
-                   (->> (clean-running-queries queries
-                                               {::n/recent-queries-max-age (Duration/ofSeconds 4)
-                                                ::n/recent-queries-max-count 5})
-                        :completed
-                        (map ::query-id))))
-          (t/is (= [1 2]
-                   (->> (clean-running-queries queries
-                                               {::n/recent-queries-max-age (Duration/ofSeconds 8)
-                                                ::n/recent-queries-max-count 5})
-                        :completed
-                        (map ::query-id)))))))
-    (t/testing "test clean-running-queries cleans up slowest queries"
-      (let [queries {:slowest [{:finished-at (Date.)
-                                ::query-id 1}
-                               {:finished-at (Date/from (.minus (.toInstant (Date.))
-                                                                (Duration/ofSeconds 5)))
-                                ::query-id 2}
-                               {:finished-at (Date/from (.minus (.toInstant (Date.))
-                                                                (Duration/ofSeconds 10)))
-                                ::query-id 3}]}]
-        (t/testing "test slowest-queries - check max count expiration"
-          (t/is (= [1]
-                   (->> (clean-running-queries queries
-                                               {::n/slow-queries-max-age (Duration/ofSeconds 8)
-                                                ::n/slow-queries-max-count 1})
-                        :slowest
-                        (map ::query-id))))
+    (t/testing "test recent-queries - check time expiration"
+      (t/is (= [1]
+               (->> (clean-completed-queries queries
+                                             {::n/recent-queries-max-age (Duration/ofSeconds 4)
+                                              ::n/recent-queries-max-count 5})
+                    (map ::query-id))))
+      (t/is (= [1 2]
+               (->> (clean-completed-queries queries
+                                             {::n/recent-queries-max-age (Duration/ofSeconds 8)
+                                              ::n/recent-queries-max-count 5})
+                    (map ::query-id))))))
+  (let [clean-slowest-queries @#'n/clean-slowest-queries
+        started-at (Date.)
+        queries [{:started-at (Date/from (.minus (.toInstant started-at)
+                                                 (Duration/ofSeconds 10)))
+                  :finished-at (Date/from (.minus (.toInstant started-at)
+                                                  (Duration/ofSeconds 9)))
+                  ::query-id 3}
+                 {:started-at (Date/from (.minus (.toInstant started-at)
+                                                 (Duration/ofSeconds 10)))
+                  :finished-at (Date/from (.minus (.toInstant started-at)
+                                                  (Duration/ofSeconds 5)))
+                  ::query-id 2}
+                 {:started-at (Date/from (.minus (.toInstant started-at)
+                                                 (Duration/ofSeconds 10)))
+                  :finished-at (Date/from (.minus (.toInstant started-at)
+                                                  (Duration/ofSeconds 1)))
+                  ::query-id 1}]]
+    (t/testing "test slowest-queries - check max count expiration & ordering"
+      (t/is (= [1]
+               (->> (clean-slowest-queries queries
+                                           {::n/slow-queries-max-age (Duration/ofSeconds 8)
+                                            ::n/slow-queries-max-count 1})
+                    (map ::query-id))))
 
-          (t/is (= [1 2]
-                   (->> (clean-running-queries queries
-                                               {::n/slow-queries-max-age (Duration/ofSeconds 8)
-                                                ::n/slow-queries-max-count 2})
-                        :slowest
-                        (map ::query-id)))))
+      (t/is (= [1 2]
+               (->> (clean-slowest-queries queries
+                                           {::n/slow-queries-max-age (Duration/ofSeconds 8)
+                                            ::n/slow-queries-max-count 2})
+                    (map ::query-id)))))
 
-        (t/testing "test slowest-queries - check time expiration"
-          (t/is (= [1]
-                   (->> (clean-running-queries queries
-                                               {::n/slow-queries-max-age (Duration/ofSeconds 4)
-                                                ::n/slow-queries-max-count 5})
-                        :slowest
-                        (map ::query-id))))
-          (t/is (= [1 2]
-                   (->> (clean-running-queries queries
-                                               {::n/slow-queries-max-age (Duration/ofSeconds 8)
-                                                ::n/slow-queries-max-count 5})
-                        :slowest
-                        (map ::query-id)))))))))
+    (t/testing "test slowest-queries - check time expiration & ordering"
+      (t/is (= [1]
+               (->> (clean-slowest-queries queries
+                                           {::n/slow-queries-max-age (Duration/ofSeconds 4)
+                                            ::n/slow-queries-max-count 5})
+                    (map ::query-id))))
+      (t/is (= [1 2]
+               (->> (clean-slowest-queries queries
+                                           {::n/slow-queries-max-age (Duration/ofSeconds 8)
+                                            ::n/slow-queries-max-count 5})
+                    (map ::query-id)))))))
 
 (t/deftest test-recent-queries
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
