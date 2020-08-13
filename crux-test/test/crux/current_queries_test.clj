@@ -112,16 +112,20 @@
         (t/is (= :failed (:status malformed-query)))))))
 
 (t/deftest test-slowest-queries
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
-                        [:crux.tx/put {:crux.db/id :petr :name "Petr"}]])
+  (fix/submit+await-tx (mapv
+                        (fn [n] [:crux.tx/put
+                                 {:crux.db/id (keyword (str "ivan" n))
+                                  :name (str "ivan" n)}])
+                        (range 100)))
   (let [db (api/db *api*)]
     (api/q db
-           '{:find [e]
-             :where [[e :name "Ivan"]]})
+           '{:find [e n]
+             :where [[e :name n]]})
 
     (t/testing "test slowest-queries - post query (min threshold - 1 nanosecond)"
       (t/is (= :completed (:status (first (api/slowest-queries *api*))))))
 
+    (t/testing "test slowest-queries - test `slow-query?` check")
     (let [start (Instant/now)
           query-info {:started-at (Date/from start) :finished-at (Date/from (.plusSeconds start 2))}]
       (t/is (n/slow-query? query-info {::n/slow-queries-min-threshold (Duration/ofSeconds 1)}))
