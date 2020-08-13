@@ -13,6 +13,7 @@
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]
                  [metosin/muuntaja "0.6.6"]
+                 [com.cognitect/transit-clj "1.0.324"]
                  [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [net.minidev/json-smart]]
                  [net.minidev/json-smart "2.3"]
 

@@ -5,7 +5,8 @@
    [crux.ui.common :as common]
    [re-frame.core :as rf]
    [tick.alpha.api :as t]
-   [clojure.data :as data]))
+   [clojure.data :as data]
+   [crux.http-server.entity-ref :as entity-ref :refer [EntityRef]]))
 
 (rf/reg-sub
  :db
@@ -26,7 +27,6 @@
                 "{"
                 " :find [?e]                ;; return a set of tuples each consisting of a unique ?e value"
                 " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
-                " :limit 100                ;; limit the initial page of results to keep things snappy"
                 "}"]))
 
 (rf/reg-sub
@@ -44,6 +44,19 @@
             query-root-str)
       "valid-time" (js/moment valid-time)
       "transaction-time" (js/moment transaction-time)})))
+
+(rf/reg-sub
+ ::valid-time
+ (fn [db _]
+   (get-in db [:current-route :query-params :valid-time] (t/now))))
+
+(rf/reg-sub
+ ::transaction-time
+ (fn [db _]
+   (let [latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                (:crux.tx/tx-time)
+                                (t/instant))]
+     (get-in db [:current-route :query-params :transaction-time] latest-tx-time))))
 
 (rf/reg-sub
  ::initial-values-entity
@@ -64,21 +77,24 @@
  (fn [db _]
    (if-let [error (get-in db [:query :error])]
      {:error error}
-     (let [{:strs [query-results linked-entities]}
-           (get-in db [:query :http])
+     (let [query-results (get-in db [:query :http])
            find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
            table-loading? (get-in db [:query :result-pane :loading?])
            offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
                        (js/parseInt))
+           latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
+                                  (:crux.tx/tx-time)
+                                  (t/instant))
+           time-info {:valid-time (get-in db [:current-route :query-params :valid-time] (t/now))
+                      :transaction-time (get-in db [:current-route :query-params :transaction-time] latest-tx-time)}
            columns (map (fn [column]
                           {:column-key column
                            :column-name (str column)
                            :render-fn
                            (fn [_ v]
-                             (if-let [link (get linked-entities v)]
-                               [:a {:href link}
-                                (str v)]
-                               v))
+                             (if (instance? EntityRef v)
+                               [:a {:href (entity-ref/EntityRef->url v time-info)} (str (:eid v))]
+                               (str v)))
                            :render-only #{:filter :sort}})
                         find-clause)
            rows (when query-results
@@ -160,8 +176,7 @@
        {:eid (:eid query-params)
         :vt (common/iso-format-datetime (or (:valid-time query-params) (t/now)))
         :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
-        :document (get-in db [:entity :http :document "entity"])
-        :linked-entities (get-in db [:entity :http :document "linked-entities"])}))))
+        :document (get-in db [:entity :http :document])}))))
 
 (rf/reg-sub
  ::entity-result-pane-document-error

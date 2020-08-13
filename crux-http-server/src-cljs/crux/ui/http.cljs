@@ -1,10 +1,20 @@
 (ns crux.ui.http
   (:require
    [ajax.edn :as ajax-edn]
+   [ajax.protocols :refer [-body]]
+   [cljs.reader :as edn]
+   [ajax.interceptors :refer [map->ResponseFormat]]
    [crux.ui.common :as common]
    [day8.re-frame.http-fx]
    [re-frame.core :as rf]
-   [tick.alpha.api :as t]))
+   [tick.alpha.api :as t]
+   [crux.http-server.entity-ref :as entity-ref]))
+
+(def edn-response-with-readers
+  (map->ResponseFormat {:read (fn [xhrio]
+                                (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef}} (-body xhrio)))
+                        :description "EDN"
+                        :content-type ["application/edn"]}))
 
 (rf/reg-event-fx
  ::fetch-query-table
@@ -33,7 +43,7 @@
                                                  (assoc query-params
                                                         :link-entities? true
                                                         :limit limit))
-                         :response-format (ajax-edn/edn-response-format)
+                         :response-format edn-response-with-readers
                          :on-success [::success-fetch-query-table]
                          :on-failure [::fail-fetch-query-table]}}))))))
 
@@ -128,7 +138,7 @@
                          [:crux.ui.events/set-entity-result-pane-loading true]]
             :http-xhrio {:method :get
                          :uri (common/route->url :entity nil query-params)
-                         :response-format (ajax-edn/edn-response-format)
+                         :response-format edn-response-with-readers
                          :on-success [::success-fetch-entity]
                          :on-failure [::fail-fetch-entity]}}))))))
 
