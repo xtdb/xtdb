@@ -232,8 +232,8 @@
 
 (defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history] :as res} _]
   (cond
-    no-entity? {:status 400, :body "Missing eid"}
-    not-found? {:status 404, :body (str eid " entity not found")}
+    no-entity? {:status 400, :body {:error "Missing eid"}}
+    not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
     entity-history {:status 200, :body entity-history}
     :else {:status 200, :body entity}))
