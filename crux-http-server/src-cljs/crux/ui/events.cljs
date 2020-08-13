@@ -43,8 +43,13 @@
 
 (rf/reg-event-fx
  ::console-tab-selected
- (fn [_ [_ tab]]
-   {:dispatch [:navigate tab {} {}]}))
+ (fn [{:keys [db]} [_ tab]]
+   (let [current-tab (get-in db [:current-route :data :name] :query)
+         current-params (get-in db [:current-route :query-params])]
+     (when (not= tab current-tab)
+       {:db (-> (assoc-in db [:previous-params current-tab] current-params)
+                (assoc :load-from-state? true))
+        :dispatch [:navigate tab {} (get-in db [:previous-params tab])]}))))
 
 (rf/reg-event-db
  ::toggle-form-pane

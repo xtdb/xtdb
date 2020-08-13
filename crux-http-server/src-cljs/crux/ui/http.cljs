@@ -20,32 +20,34 @@
  ::fetch-query-table
  (fn [{:keys [db]} _]
    (let [meta-results (get-in db [:meta-results :query-results])]
-     (if meta-results
-       {:db (-> (if-let [error (get meta-results "error")]
-                  (assoc-in db [:query :error] (str error))
-                  (assoc-in db [:query :http] meta-results))
-                (assoc :meta-results nil))
-        :dispatch [:crux.ui.events/set-query-result-pane-loading false]}
-       (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
-             ;; Get back one more result than necessary - won't be rendered,
-             ;; but used to check if there are more results in the table
-             limit (+ 1 (js/parseInt (:limit query-params 100)))
-             now (t/now)]
-         (when (seq query-params)
-           {:scroll-top nil
-            :db (-> (assoc-in db [:request :start-time] now)
-                    (assoc-in [:request :end-time] now))
-            :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
-                         [:crux.ui.events/query-table-error nil]]
-            :http-xhrio {:method :get
-                         :uri (common/route->url :query
-                                                 {}
-                                                 (assoc query-params
-                                                        :link-entities? true
-                                                        :limit limit))
-                         :response-format edn-response-with-readers
-                         :on-success [::success-fetch-query-table]
-                         :on-failure [::fail-fetch-query-table]}}))))))
+     (cond
+       meta-results {:db (-> (if-let [error (get meta-results "error")]
+                               (assoc-in db [:query :error] (str error))
+                               (assoc-in db [:query :http] meta-results))
+                             (assoc :meta-results nil))
+                     :dispatch [:crux.ui.events/set-query-result-pane-loading false]}
+       (:load-from-state? db) {:db (dissoc db :load-from-state?)
+                               :dispatch [:crux.ui.events/set-query-result-pane-loading false]}
+       :else (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
+                   ;; Get back one more result than necessary - won't be rendered,
+                   ;; but used to check if there are more results in the table
+                   limit (+ 1 (js/parseInt (:limit query-params 100)))
+                   now (t/now)]
+               (when (seq query-params)
+                 {:scroll-top nil
+                  :db (-> (assoc-in db [:request :start-time] now)
+                          (assoc-in [:request :end-time] now))
+                  :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
+                               [:crux.ui.events/query-table-error nil]]
+                  :http-xhrio {:method :get
+                               :uri (common/route->url :query
+                                                       {}
+                                                       (assoc query-params
+                                                              :link-entities? true
+                                                              :limit limit))
+                               :response-format edn-response-with-readers
+                               :on-success [::success-fetch-query-table]
+                               :on-failure [::fail-fetch-query-table]}}))))))
 
 (rf/reg-event-fx
  ::success-fetch-query-table
@@ -123,24 +125,26 @@
 (rf/reg-event-fx
  ::fetch-entity
  (fn [{:keys [db]} _]
-   (let [meta-results (get-in db [:meta-results :entity-results])]
-     (if meta-results
-       (let [result-pane-view (if (get-in db [:current-route :query-params :history]) :history :document)]
-         {:db (-> (if-let [error (get meta-results "error")]
-                    (assoc-in db [:entity :error] (str error))
-                    (assoc-in db [:entity :http result-pane-view] meta-results))
-                  (assoc :meta-results nil))
-          :dispatch [:crux.ui.events/set-entity-result-pane-loading false]})
-       (let [query-params (assoc (get-in db [:current-route :query-params]) :link-entities? true)]
-         (when (seq (dissoc query-params :linked-entities))
-           {:scroll-top nil
-            :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
-                         [:crux.ui.events/set-entity-result-pane-loading true]]
-            :http-xhrio {:method :get
-                         :uri (common/route->url :entity nil query-params)
-                         :response-format edn-response-with-readers
-                         :on-success [::success-fetch-entity]
-                         :on-failure [::fail-fetch-entity]}}))))))
+   (let [meta-results (get-in db [:meta-results :entity-results])
+         query-params (get-in db [:current-route :query-params])]
+     (cond
+       meta-results (let [result-pane-view (if (:history query-params) :history :document)]
+                      {:db (-> (if-let [error (get meta-results "error")]
+                                 (assoc-in db [:entity :error] (str error))
+                                 (assoc-in db [:entity :http result-pane-view] meta-results))
+                               (assoc :meta-results nil))
+                       :dispatch [:crux.ui.events/set-entity-result-pane-loading false]})
+       (:load-from-state? db) {:db (dissoc db :load-from-state?)
+                               :dispatch [:crux.ui.events/set-entity-result-pane-loading false]}
+       :else (when (seq query-params)
+               {:scroll-top nil
+                :dispatch-n [[:crux.ui.events/entity-result-pane-document-error nil]
+                             [:crux.ui.events/set-entity-result-pane-loading true]]
+                :http-xhrio {:method :get
+                             :uri (common/route->url :entity nil (assoc query-params :link-entities? true))
+                             :response-format edn-response-with-readers
+                             :on-success [::success-fetch-entity]
+                             :on-failure [::fail-fetch-entity]}})))))
 
 (rf/reg-event-fx
  ::success-fetch-entity

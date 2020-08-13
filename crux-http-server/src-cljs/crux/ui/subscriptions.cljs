@@ -232,14 +232,11 @@
  ::query-form-history
  (fn [db _]
    ;; Get newest first
-   (reverse
-    (mapv
-     (fn [x]
-       {"q" (common/query-params->formatted-edn-string
-             (dissoc x :valid-time :transaction-time))
-        "valid-time" (:valid-time x)
-        "transaction-time" (:transaction-time x)})
-     (:query-history db)))))
+   (mapv
+    (fn [x]
+      {"q" (common/query-params->formatted-edn-string
+            (dissoc x :valid-time :transaction-time))})
+    (:query-history db))))
 
 (rf/reg-sub
  ::show-vt?
