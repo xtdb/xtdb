@@ -198,9 +198,7 @@
     [:<>
      (cond
        error [:div.error-box error]
-       (and
-        (:rows data)
-        (empty? (:rows data))) [:div.no-results "No results found!"]
+       (empty? (:rows data)) [:div.no-results "No results found!"]
        :else [:<>
               [:<>
                [:div.query-table-topbar
