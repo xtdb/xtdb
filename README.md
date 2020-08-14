@@ -1,4 +1,4 @@
-<img alt="Crux" role="img" aria-label="Crux" src="./docs/docs/modules/ROOT/images/crux-logo-banner.svg">
+<img alt="Crux" role="img" aria-label="Crux" src="./docs/reference/modules/ROOT/images/crux-logo-banner.svg">
 
 [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
 
@@ -42,7 +42,7 @@ information privacy regulations.
 >
 > — Martin Kleppmann
 
-<img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/docs/modules/ROOT/images/crux-node-1.svg" width="1000px">
+<img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/main/modules/ROOT/images/crux-node-1.svg" width="1000px">
 
 This design makes it feasible and desirable to embed Crux nodes directly in
 your application processes, which reduces deployment complexity and eliminates
@@ -52,7 +52,7 @@ round-trip overheads when running complex application queries.
 
 ## Data Model
 
-<img alt="Document database with graph queries" role="img" aria-label="Crux Venn" src="./docs/docs/modules/ROOT/images/crux-venn-1.svg" width="500px">
+<img alt="Document database with graph queries" role="img" aria-label="Crux Venn" src="./docs/main/modules/ROOT/images/crux-venn-1.svg" width="500px">
 
 Crux is fundamentally a store of versioned EDN documents. The only requirement
 is that you specify a valid `:crux.db/id` key which links the documents to
