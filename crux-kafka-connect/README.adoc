@@ -1,6 +1,6 @@
 = crux-kafka-connect
 
-*Documentation/QuickStart Guides* can be found https://www.opencrux.com/docs/kafka-connect-crux.html[here].
+*Documentation/QuickStart Guides* can be found https://www.opencrux.com/reference/kafka-connect-crux.html[here].
 
 === Alpha
 
