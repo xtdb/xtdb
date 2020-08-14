@@ -1,5 +1,0 @@
-name: docs
-title: Docs
-version: master
-nav:
-  - modules/ROOT/nav.adoc

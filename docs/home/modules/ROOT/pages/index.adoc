@@ -1,4 +1,0 @@
-= Crux Home
-:page-layout: homepage
-
-This is the Crux

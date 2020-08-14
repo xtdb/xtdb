@@ -1,4 +1,0 @@
-= Crux Documentation
-:toc: left
-:toclevels: 2
-:leveloffset: +1

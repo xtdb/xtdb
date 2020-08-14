@@ -1,3 +1,5 @@
 name: tutorials
 title: Tutorials
 version: master
+nav:
+  - modules/ROOT/nav.adoc

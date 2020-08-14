@@ -1,5 +1,0 @@
-= Home
-
-include::what_is_crux.adoc[]
-
-image::crux-logo_1.png[]
