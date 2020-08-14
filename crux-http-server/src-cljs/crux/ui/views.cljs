@@ -168,9 +168,7 @@
                     :prevent-default? true
                     :clean-on-unmount? true
                     :initial-values @(rf/subscribe [::sub/initial-values-query])
-                    :on-submit #(do
-                                  (rf/dispatch [:crux.ui.collapsible/toggle [::query-form ::query-editor] false])
-                                  (rf/dispatch [::events/go-to-query-view %]))}
+                    :on-submit #(rf/dispatch [::events/go-to-query-view %])}
          (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
            (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
                  disabled? (or loading? (some some? (vals errors)))]
