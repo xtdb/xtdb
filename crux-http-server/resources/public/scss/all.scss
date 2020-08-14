@@ -337,8 +337,13 @@ html, body {
 
 .CodeMirror-readOnly {
     .CodeMirror {
+	cursor: pointer;
 	box-shadow: none;
 	background: none;
+    }
+
+    .CodeMirror-lines {
+	cursor: pointer;
     }
 
     .textarea {
@@ -370,24 +375,13 @@ html, body {
 }
 
 .form-pane__history-scrollable-el-left {
-    padding: 0 0 .5rem 1rem;
+    padding: 1rem 0 1rem 1rem;
     flex: 1;
     border-bottom: 1px solid #dbdbdb;
 }
 
-.form-pane__history-buttons {
-    display:flex;
-    justify-content: flex-end;
-}
-
-.form-pane__history-button {
-    background: #e3e1e1;
-    cursor: pointer;
-    font-size: .8rem;
-    padding: .3rem .5rem;
-    margin-left: .2rem;
-    font-weight: bold;
-    z-index: 4;
+.form-pane__history-scrollable-el-left:hover {
+    background: #f1f1f1;
 }
 
 .form-pane__history-headings {
@@ -859,13 +853,6 @@ ul.entity-group__value li::before {
     background: #f1f1f1;
     width: max-content;
     margin-left:auto;
-}
-
-.form-pane__history-info {
-    font-size: 0.9rem;
-    background: #e3e1e1;
-    padding: .6rem;
-    margin-bottom: .6rem;
 }
 
 .form__button {
