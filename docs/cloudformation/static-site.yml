@@ -45,7 +45,7 @@ Resources:
               - TLSv1.1
               - TLSv1.2
         Aliases:
-          - docs.crux.cloud
+          - opencrux.com
         Enabled: 'true'
         Comment: CloudFront distribution for the opencrux docs.
         DefaultRootObject: index.html
@@ -64,7 +64,7 @@ Resources:
         ViewerCertificate:
           SslSupportMethod: sni-only
           # Had to create certificate in us-east-1 for use with cloudfront
-          AcmCertificateArn: arn:aws:acm:us-east-1:955308952094:certificate/9fe58441-228c-4ea6-85ef-3c659f23ba47
+          AcmCertificateArn: arn:aws:acm:us-east-1:955308952094:certificate/9b9e9f26-ddae-4485-b4bf-b1c35319ce8b
       Tags:
         - Key: juxt:team
           Value: crux-core
@@ -72,8 +72,8 @@ Resources:
   WebsiteDNSName:
     Type: AWS::Route53::RecordSet
     Properties:
-      HostedZoneName: 'crux.cloud.'
-      Name: 'docs.crux.cloud'
+      HostedZoneName: 'opencrux.com.'
+      Name: 'opencrux.com'
       Type: 'A'
       AliasTarget:
         HostedZoneId: Z2FDTNDATAQYW2
