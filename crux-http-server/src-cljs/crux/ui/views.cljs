@@ -197,15 +197,15 @@
                       row-count (count (:rows data))
                       count-string (if (> row-count limit) (str limit "+") (str row-count))]
                   [:div.query-result-info
-                   "Found " [:b count-string] " result" (when (> row-count 1) "s")
+                   [:b count-string] " result" (when (> row-count 1) "s")
                    (when (not= start-time end-time)
                      [:<>
                       " in " [:b (common/format-duration->seconds (t/between start-time end-time))] " seconds"])])
                 [:div.query-table-downloads
-                 "Download results as:"
                  [:a.query-table-downloads__link
                   {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
                   "CSV"]
+                 "|"
                  [:a.query-table-downloads__link
                   {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
                   "TSV"]]]]
