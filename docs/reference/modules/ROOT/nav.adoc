@@ -1,5 +1,5 @@
 .Reference
-* xref:get_started.adoc[Get Started]
+* xref:get-started.adoc[Get Started]
 * xref:configuration.adoc[Configuration]
 * xref:transactions.adoc[Transactions]
 * xref:queries.adoc[Queries]
