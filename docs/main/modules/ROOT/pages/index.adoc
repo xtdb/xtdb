@@ -1,0 +1,2 @@
+= Crux
+:page-layout: homepage

@@ -1,16 +1,16 @@
 site:
-  title: Crux Docs
-  start_page: home::index.adoc
+  title: Crux
+  start_page: main::index.adoc
 content:
   sources:
     - url: ../
-      start_path: docs/home
+      start_path: docs/main
       branches: HEAD
     - url: ../
       start_path: docs/tutorials
       branches: HEAD
     - url: ../
-      start_path: docs/docs
+      start_path: docs/reference
       branches: HEAD
   #  - url: ../
   #    start_path: docs/concepts

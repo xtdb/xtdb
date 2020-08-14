@@ -1,4 +1,4 @@
-= Queries (Advanced)
+= References
 
 == Racket Datalog
 
