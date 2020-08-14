@@ -194,25 +194,11 @@ html, body {
     margin: auto;
     margin-top: 1rem;
 }
-.node-info {
-    margin: 0 2em 2em 0;
-    padding: 1em;
-}
-
-.node-info__container {
-    display: flex;
-}
-
-.node-info__title {
-    color: black;
-    font-weight: bold;
-    font-size: 1.5rem;
-}
 
 .node-info__content {
     white-space: pre-wrap;
-    padding: 10px;
     background-color: white;
+    padding: 0 1rem;
 }
 
 .node-info__content p {

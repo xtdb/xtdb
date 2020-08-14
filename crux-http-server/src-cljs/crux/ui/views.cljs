@@ -400,15 +400,6 @@
         :document [entity-document]
         :history [entity-history-document])])])
 
-(defn console-pane []
-  [:<>
-   [tab/tab-bar {:tabs [{:k :query, :label "Datalog Query"}
-                        {:k :entity, :label "Browse Documents"}]
-                 :current-tab [::sub/console-tab]
-                 :on-tab-selected [::events/console-tab-selected]}]
-   (case @(rf/subscribe [::sub/console-tab])
-     :query [query-pane]
-     :entity [entity-pane])])
 
 (defn render-status-map
   [status-map]
@@ -440,23 +431,34 @@
            (common/edn->pretty-string key)]]
          [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 
-(defn status-page
+(defn status-pane
   []
   (let [status-map @(rf/subscribe [::sub/node-status])
         options-map @(rf/subscribe [::sub/node-options])
         attributes-map @(rf/subscribe [::sub/node-attribute-stats])]
-    [:div.status
-     [:h1 "Status"]
-     [:div.node-info__container
-      [:div.node-info
-       [:h2.node-info__title "Overview"]
-       [render-status-map status-map]]
-      [:div.node-info
-       [:h2.node-info__title "Current Configuration"]
-       [render-status-map options-map]]]
-     [:div.node-attributes
-      [:h2.node-info__title "Attribute Cardinalities"]
-      [render-attribute-stats attributes-map]]]))
+    [:<>
+     [tab/tab-bar {:tabs [{:k :overview, :label "Overview"}
+                          {:k :configuration, :label "Current Configuration"}
+                          {:k :attributes, :label "Attribute Cardinalities"}]
+                   :current-tab [::sub/status-tab]
+                   :on-tab-selected [::events/status-tab-selected]}]
+
+     (case @(rf/subscribe [::sub/status-tab])
+       :overview [render-status-map status-map]
+       :configuration [render-status-map options-map]
+       :attributes [render-attribute-stats attributes-map])]))
+
+(defn console-pane []
+  [:<>
+   [tab/tab-bar {:tabs [{:k :query, :label "Datalog Query"}
+                        {:k :entity, :label "Browse Documents"}
+                        {:k :status, :label "Node Status"}]
+                 :current-tab [::sub/console-tab]
+                 :on-tab-selected [::events/console-tab-selected]}]
+   (case @(rf/subscribe [::sub/console-tab])
+     :query [query-pane]
+     :entity [entity-pane]
+     :status [status-pane])])
 
 (defn root-page
   []
@@ -490,5 +492,4 @@
     [:div.container.page-pane
      (cond
        (= name :homepage) [root-page]
-       (= name :status) [status-page]
        :else [console-pane])]))

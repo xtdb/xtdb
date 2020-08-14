@@ -52,6 +52,11 @@
         :dispatch [:navigate tab {} (get-in db [:previous-params tab])]}))))
 
 (rf/reg-event-db
+ ::status-tab-selected
+ (fn [db [_ tab]]
+   (assoc-in db [:status :selected-tab] tab)))
+
+(rf/reg-event-db
  ::toggle-form-pane
  (fn [db [_ & bool]]
    (update-in db [:form-pane :hidden?] #(if (seq bool) (first bool) (not %)))))

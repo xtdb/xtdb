@@ -156,6 +156,11 @@
    (get-in db [:query-form :selected-tab] :edit-query)))
 
 (rf/reg-sub
+ ::status-tab
+ (fn [db _]
+   (get-in db [:status :selected-tab] :overview)))
+
+(rf/reg-sub
  ::query-submitted?
  (fn [db _]
    (not-empty (get-in db [:current-route :query-params]))))
