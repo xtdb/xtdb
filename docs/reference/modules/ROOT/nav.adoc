@@ -6,8 +6,8 @@
 * Core API
 ** xref:clojure-api.adoc[Clojure]
 ** https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.08-1.10.1/index.html[Java,window=_blank]
-** xref:rest.adoc[HTTP]
 * Feature Modules
+** xref:http.adoc[HTTP]
 ** xref:kafka-connect.adoc[Kafka - Connect]
 ** xref:embedded-kafka.adoc[Kafka - Embedded]
 ** xref:sql.adoc[SQL]
