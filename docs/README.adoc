@@ -13,4 +13,10 @@ To build the website we are using [Antora](https://docs.antora.org/antora/2.3/) 
 
 * Build the UI bundle with `./crux-site/bin/build-bundle.sh`
 * Build the site with `./bin/build.sh`
-* Deploy with `./bin/deploy.sh`
+
+== Deploying
+
+Deploy with `./bin/deploy.sh`.
+
+* By default this will deploy to `https://opencrux.com/_<whoami>/`
+* Run `./bin/deploy.sh /` to deploy to the live site
