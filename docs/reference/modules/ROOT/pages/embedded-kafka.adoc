@@ -1,0 +1,30 @@
+= Embedded Kafka
+
+Crux is ready to work with an embedded Kafka for when you don't have an independently
+running Kafka available to connect to (such as during development).
+
+[#embedded-kafka-dependency]
+== Project Dependencies
+
+[source,clojure,subs="normal"]
+----
+include::example$deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=KafkaEmbeddedDeps]
+----
+
+[#embedded-kafka-start]
+== Getting started
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=require-ek]
+
+include::example$src/docs/examples.clj[tags=ek-example]
+----
+
+You can later stop the Embedded Kafka if you wish:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=ek-close]
+----

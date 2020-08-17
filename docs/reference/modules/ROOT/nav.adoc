@@ -9,4 +9,5 @@
 ** xref:rest.adoc[HTTP]
 * Feature Modules
 ** xref:kafka-connect.adoc[Kafka - Connect]
+** xref:embedded-kafka.adoc[Kafka - Embedded]
 ** xref:sql.adoc[SQL]
