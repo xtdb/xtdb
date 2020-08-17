@@ -2,23 +2,18 @@
   (:require [clojure.java.io :as io]))
 
 ;; tag::include-crux-api[]
-(require '[crux.api :as crux]
-         '[clojure.java.io :as io])
+(require '[crux.api :as crux])
 ;; end::include-crux-api[]
 
 ;; tag::require-ek[]
 (require '[crux.kafka.embedded :as ek])
 ;; end::require-ek[]
 
-;; tag::start-standalone-node[]
-(defn start-standalone-node ^crux.api.ICruxAPI [storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology]
-                    :crux.standalone/event-log-dir (io/file storage-dir "event-log")
-                    :crux.kv/db-dir (io/file storage-dir "indexes")}))
-
-(comment ; which can be used as
-  (def node (start-standalone-node "crux-store")))
-;; end::start-standalone-node[]
+(comment
+  ;; tag::start-in-memory-node[]
+  (crux/start-node {})
+  ;; end::start-in-memory-node[]
+  )
 
 (defn close-node [^java.io.Closeable node]
 ;; tag::close-node[]

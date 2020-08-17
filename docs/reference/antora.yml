@@ -2,6 +2,6 @@ name: reference
 title: Reference
 version: master
 display_version: Latest
-start_page: ROOT:get-started.adoc
+start_page: ROOT:installation.adoc
 nav:
   - modules/ROOT/nav.adoc
