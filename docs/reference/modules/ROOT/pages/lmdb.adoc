@@ -1,0 +1,19 @@
+= LMDB
+
+LMDB is a drop-in module for Crux's primary kv-store.
+
+LMDB tends to provide faster queries than RocksDB in exchange for a slower ingest rate.
+
+== Project Dependency
+
+[source,clojure,subs="normal"]
+----
+include::example$deps.edn[tags=LMDBDeps]
+----
+
+== Starting a node using LMDB
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=start-standalone-with-lmdb]
+----

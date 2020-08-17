@@ -12,3 +12,6 @@
 ** xref:kafka-connect.adoc[Kafka - Connect]
 ** xref:embedded-kafka.adoc[Kafka - Embedded]
 ** xref:sql.adoc[SQL]
+* Persistence Modules
+** xref:lmdb.adoc[LMDB]
+** xref:rocksdb.adoc[RocksDB]
