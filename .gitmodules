@@ -1,3 +1,4 @@
 [submodule "docs/crux-site"]
 	path = docs/crux-site
 	url = git@github.com:juxt/crux-site.git
+	branch = master
