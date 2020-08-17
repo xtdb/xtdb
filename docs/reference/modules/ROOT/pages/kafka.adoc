@@ -1,0 +1,51 @@
+= Kafka Nodes
+
+When using Crux at scale it is recommended to use multiple Crux nodes connected via a Kafka cluster.
+Kafka can be used for both the Crux transaction log and the document store.
+
+image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
+
+Kafka nodes have the following properties:
+
+.Kafka node configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Property|Description|Default value
+|`:crux.kafka/bootstrap-servers`|URL for connecting to Kafka|*localhost:9092*
+|`:crux.kafka/tx-topic`|Name of Kafka transaction log topic|*crux-transaction-log*
+|`:crux.kafka/doc-topic`|Name of Kafka documents topic|*crux-docs*
+|`:crux.kafka/create-topics`|Option to automatically create Kafka topics if they do not already exist|*true*
+|`:crux.kafka/doc-partitions`|Number of partitions for the document topic|*1*
+|`:crux.kafka/replication-factor`|Number of times to replicate data on Kafka|*1*
+|`:crux.kafka/kafka-properties-file`|File to supply Kafka connection properties to the underlying Kafka API|
+|`:crux.kafka/kafka-properties-map`|Map to supply Kafka connection properties to the underlying Kafka API|
+|===
+
+[#kafka-dependency]
+== Project Dependencies
+
+[source,clj]
+----
+include::example$deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=KafkaClientsDeps]
+----
+
+[#kafka-start]
+== Getting started
+
+Use the API to start a Kafka node, configuring it with the `bootstrap-servers` property in order to connect to Kafka:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=start-cluster-node]
+----
+
+NOTE: If you don't specify `kv-store` then by default the Kafka node will use RocksDB.
+You will need to <<#rocksdep,add RocksDB>> to your list of project dependencies.
+
+You can later stop the node if you wish:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=close-node]
+----

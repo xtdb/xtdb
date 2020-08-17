@@ -6,63 +6,37 @@ toc::[]
 [#nodes]
 == Nodes
 
-To start a Crux node, use the
-https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.08-1.10.1/index.html[Java API] or the Clojure
-https://github.com/juxt/crux/blob/master/crux-core/src/crux/api.clj[`crux.api`].
+To start a Crux node, use the https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.08-1.10.1/index.html[Java API] or the Clojure https://github.com/juxt/crux/blob/master/crux-core/src/crux/api.clj[`crux.api`].
 
-Within Clojure, we call `start-node` from within `crux.api`, passing it a set of
-options for the node. There are a number of different configuration options a Crux node
-can have, grouped into *topologies*.
+Within Clojure, we call `start-node` from within `crux.api`, passing it a set of options for the node.
+There are a number of different configuration options a Crux node can have, grouped into *topologies*.
 
-.Crux Topologies
+=== Crux Topologies
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Topology
-|<<#standalone, Standalone>>|Uses local event log|`:crux.standalone/topology`
-|<<#kafka, Kafka>>|Uses Kafka|`:crux.kafka/topology`
-|<<#jdbc, JDBC>>|Uses JDBC event log|`:crux.jdbc/topology`
+|xref:#standalone[Standalone]|Uses local event log|`:crux.standalone/topology`
+|xref:kafka.adoc[Kafka]|Uses Kafka|`:crux.kafka/topology`
+|xref:jdbc.adoc[JDBC]|Uses JDBC event log|`:crux.jdbc/topology`
 |===
 
-Use a Kafka node when horizontal scalability is required or when
-you want the guarantees that Kafka offers in terms of resiliency,
-availability and retention of data.
+Use a Kafka node when horizontal scalability is required or when you want the guarantees that Kafka offers in terms of resiliency, availability and retention of data.
 
-Multiple Kafka nodes participate in a cluster with Kafka as the primary
-store and as the central means of coordination.
+Multiple Crux nodes participate in a cluster with Kafka as the primary store and as the central means of coordination.
 
-The JDBC node is useful when you don't want the overhead of maintaining a
-Kafka cluster. Read more about the motivations of this setup
-https://juxt.pro/blog/posts/crux-jdbc.html[here].
+The JDBC node is useful when you don't want the overhead of maintaining a Kafka cluster.
+Read more about the motivations of this setup https://juxt.pro/blog/posts/crux-jdbc.html[here].
 
-The Standalone node is a single Crux instance which has everything
-it needs locally. This is good for experimenting with Crux and
-for small to medium sized deployments, where running a single instance
-is permissible.
+The Standalone node is a single Crux instance which has everything it needs locally.
+This is good for experimenting with Crux and for small to medium sized deployments, where running a single instance is permissible.
 
-Crux nodes implement the `ICruxAPI` interface and are the
-starting point for making use of Crux. Nodes also implement
-`java.io.Closeable` and can therefore be lifecycle managed.
+Crux nodes implement the `ICruxAPI` interface and are the starting point for making use of Crux.
+Nodes also implement `java.io.Closeable` and can therefore be lifecycle managed.
 
 [#properties]
 == Properties
 
-The following properties are within the topology used as a base
-for the other topologies, `crux.node`:
-
-.`crux.node` configuration
-[#table-conversion%header,cols="d,d"]
-|===
-|Property|Default Value
-|`:crux.node/object-store`|*`'crux.object-store/kv-object-store`*
-|===
-
-CAUTION: From version `20.01-1.7.0-alpha-SNAPSHOT` the `kv-store` should be
-specified by including an extra module in the node's topology vector. For
-example a `rocksdb` backend looks like `{:crux.node/topology
-'[crux.standalone/topology crux.kv.rocksdb/kv-store]}`
-
-The following set of options are used by KV backend implementations,
-defined within `crux.kv`:
+The following set of options are used by KV backend implementations, defined within `crux.kv`:
 
 .`crux.kv` options
 [#table-conversion%header,cols="d,d,d"]
@@ -70,16 +44,14 @@ defined within `crux.kv`:
 |Property|Description|Default Value
 |`:crux.kv/db-dir` | Directory to store K/V files | *data*
 |`:crux.kv/sync?`| Sync the KV store to disk after every write?| *false*
-|`:crux.kv/check-and-store-index-version` | Check and store index version upon start? | *true*
 |===
 
 
 [#standalone]
 == Standalone Node
 
-Using a Crux standalone node is the best way to get started. Once
-you've started a standalone Crux instance as described below, you can
-then follow the xref:get_started.adoc[getting started example].
+Using a Crux standalone node is the best way to get started.
+Once you've started a standalone Crux instance as described below, you can then follow the xref:get-started.adoc[getting started example].
 
 image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
 
@@ -91,83 +63,11 @@ image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,a
 |`:crux.standalone/event-log-kv-store` | Key/Value store to use for standalone event-log persistence | *'crux.kv.memdb/kv*
 |`:crux.standalone/event-log-sync?` | Sync the event-log backend KV store to disk after every write? | *true*
 |===
+
 [#standalone-dependency]
-*Project Dependency*
+=== Project Dependency
 
 [source,clj]
 ----
 include::example$deps.edn[tags=CruxDep]
-----
-[#standalone-start]
-*Getting started*
-
-The following code creates a default `crux.standalone` node which runs completely within memory (with both the event-log store and db store using `crux.kv.memdb/kv`):
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=include-crux-api]
-
-include::example$src/docs/examples.clj[tags=start-standalone-node]
-----
-
-You can later stop the node if you wish, however your data will not be persisted:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=close-node]
-----
-
-
-[#kafka]
-== Kafka Nodes
-
-When using Crux at scale it is recommended to use multiple Crux nodes connected
-via a Kafka cluster.
-
-image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
-
-Kafka nodes have the following properties:
-
-.Kafka node configuration
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Property|Description|Default value
-|`:crux.kafka/bootstrap-servers`|URL for connecting to Kafka|*localhost:9092*
-|`:crux.kafka/tx-topic`|Name of Kafka transaction log topic|*crux-transaction-log*
-|`:crux.kafka/doc-topic`|Name of Kafka documents topic|*crux-docs*
-|`:crux.kafka/create-topics`|Option to automatically create Kafka topics if they do not already exist|*true*
-|`:crux.kafka/doc-partitions`|Number of partitions for the document topic|*1*
-|`:crux.kafka/replication-factor`|Number of times to replicate data on Kafka|*1*
-|`:crux.kafka/kafka-properties-file`|File to supply Kafka connection properties to the underlying Kafka API|
-|`:crux.kafka/kafka-properties-map`|Map to supply Kafka connection properties to the underlying Kafka API|
-|===
-
-[#kafka-dependency]
-*Project Dependencies*
-
-[source,clj]
-----
-include::example$deps.edn[tags=CruxDep]
-include::example$deps.edn[tags=KafkaClientsDeps]
-----
-
-[#kafka-start]
-*Getting started*
-
-Use the API to start a Kafka node, configuring it with the
-`bootstrap-servers` property in order to connect to Kafka:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=start-cluster-node]
-----
-
-NOTE: If you don't specify `kv-store` then by default the
-Kafka node will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
-your list of project dependencies.
-
-You can later stop the node if you wish:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=close-node]
 ----
