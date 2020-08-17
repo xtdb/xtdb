@@ -2,7 +2,7 @@
 set -x
 set -e
 
-PREFIX=${1:-"/_$(whoami)"}
+PREFIX=${1:-"/_${OPENCRUX_PREFIX:-$(whoami)}"}
 echo Deploying to https://opencrux.com$PREFIX
 
 cd $(dirname "$0")/..
