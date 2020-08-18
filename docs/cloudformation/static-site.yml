@@ -31,14 +31,12 @@ Resources:
     Properties:
       DistributionConfig:
         Origins:
-        - DomainName:
-            Fn::GetAtt: ['DocsS3Bucket', 'DomainName']
+        - DomainName: 'opencrux-docs.s3-website-eu-west-1.amazonaws.com'
           Id: myS3Origin
           CustomOriginConfig:
             HTTPPort: 80
-            HTTPSPort: 443
             OriginKeepaliveTimeout: 5
-            OriginProtocolPolicy: 'https-only'
+            OriginProtocolPolicy: 'http-only'
             OriginReadTimeout: 30
             OriginSSLProtocols:
               - TLSv1
