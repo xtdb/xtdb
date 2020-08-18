@@ -18,6 +18,7 @@
            [java.time Duration Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
            java.io.ByteArrayOutputStream
+           java.io.OutputStream
            java.util.Date
            crux.http_server.entity_ref.EntityRef))
 
@@ -161,7 +162,7 @@
 (defn ->edn-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [entity entity-history] _}]
+    (encode-to-output-stream [_ {:keys [entity entity-history]} _]
       (fn [^OutputStream output-stream]
         (with-open [w (io/writer output-stream)]
           (if entity-history
@@ -169,15 +170,20 @@
               (print-dup (iterator-seq entity-history))
               (finally
                 (cio/try-close entity-history)))
-            (print-dup entity w))))))))
+            (print-dup entity w)))))))
 
 (defn- ->tj-encoder [_]
   (reify
     mfc/EncodeToBytes
-    (encode-to-bytes [_ entity _]
+    (encode-to-bytes [_ {:keys [entity entity-history]} _]
       (let [baos (ByteArrayOutputStream.)
             writer (transit/writer baos :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
-        (transit/write writer entity)
+        (if entity-history
+          (try
+            (transit/write writer (iterator-seq entity-history))
+            (finally
+              (cio/try-close entity-history)))
+          (transit/write writer entity))
         (.toByteArray baos)))))
 
 (defn ->entity-muuntaja [opts]
