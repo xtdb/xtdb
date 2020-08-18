@@ -1,4 +1,4 @@
-= Kafka Connect Crux
+= Kafka Connect
 :toc: macro
 
 toc::[]

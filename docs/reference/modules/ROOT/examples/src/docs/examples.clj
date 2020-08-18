@@ -29,9 +29,9 @@
 ;; tag::start-standalone-http-node[]
 (defn start-standalone-http-node [port storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
+                    :crux.http-server/port port
                     :crux.standalone/event-log-dir (io/file storage-dir "event-log")
                     :crux.kv/db-dir (io/file storage-dir "indexes")
-                    :crux.http-server/port port
                     ;; by default, the HTTP server is read-write - set this flag to make it read-only
                     :crux.http-server/read-only? false}))
 ;; end::start-standalone-http-node[]

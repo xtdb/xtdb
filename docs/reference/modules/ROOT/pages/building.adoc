@@ -1,0 +1,20 @@
+= Building Crux artifacts
+
+Alongside the various images available on https://hub.docker.com/u/juxt[*Dockerhub*], there are a number of artifacts available for getting started quickly with Crux.
+
+These can be found on the latest https://github.com/juxt/crux/releases[release] of Crux.
+Currently, these consist of a number of common configuration *uberjars* and a custom artifact builder.
+
+To create your own custom artifacts for Crux:
+
+* Download and extract the `crux-builder.tar.gz` from the latest release
+* You can build an uberjar using either Clojure's `deps.edn` or Maven (whichever you're more comfortable with)
+** For Clojure, you can add further Crux dependencies in the `deps.edn` file, set the node config in crux.edn, and run `build-uberjar.sh`
+** For Maven, it's the same, but dependencies go in `pom.xml`
+* Additionally, you can build a Docker image using the `build-docker.sh` script in the **docker** directory.
+
+== Docker
+
+If you wish to use Crux with Docker (no JVM/JDK/Clojure install required!) we have the following:
+
+* https://hub.docker.com/r/juxt/crux-standalone[*Crux HTTP Node*]: An image of a standalone Crux node (using a in memory `kv-store` by default) & HTTP server, useful if you wish to a *freestanding Crux node* accessible over HTTP, only having to use Docker.

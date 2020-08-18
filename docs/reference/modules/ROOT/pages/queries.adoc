@@ -90,7 +90,7 @@ be returned, which in this case is simply `:smith` (the keyword database ID for
 the document relating to our protagonist "Smith Smith"). Results are returned
 as an edn set, which means duplicate results will not appear.
 
-Passing the query into `crux.api/q` (see how to xref:get_started#query[submit a query] in 'Get Started'), you get an edn result set containing the value `:smith`
+Passing the query into `crux.api/q` (see how to xref:get-started#query[submit a query] in 'Get Started'), you get an edn result set containing the value `:smith`
 
 [source,clj]
 ----

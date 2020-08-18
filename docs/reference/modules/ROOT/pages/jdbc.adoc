@@ -1,0 +1,48 @@
+= JDBC Nodes
+
+Crux nodes can use JDBC databases to store their transaction logs and document stores.
+
+image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
+
+JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`] internally and pass through the relevant configuration options that you can find https://github.com/seancorfield/next-jdbc/blob/develop/doc/all-the-options.md[here].
+
+
+Below is the minimal configuration you will need:
+
+.Minimal JDBC Configuration
+[#table-conversion%header,cols="d,d"]
+|===
+|Property|Description
+|`:crux.jdbc/dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
+|`:crux.jdbc/dbname`|Database Name
+|===
+
+Depending on the type of JDBC database used, you may also need some of the following properties:
+
+.Other JDBC Properties
+[#table-conversion%header,cols="d,d"]
+|===
+|Property|Description
+|`:crux.jdbc/host`|Database Host
+|`:crux.jdbc/user`|Database Username
+|`:crux.jdbc/password`|Database Password
+|===
+
+[#jdbc-dependency]
+== Project Dependencies
+
+[source,clojure]
+----
+include::example$deps.edn[tags=CruxDep]
+include::example$deps.edn[tags=JDBCDeps]
+----
+
+[#jdbc-start]
+== Getting started
+
+Use the API to start a JDBC node, configuring it with the required parameters:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=start-jdbc-node]
+----
