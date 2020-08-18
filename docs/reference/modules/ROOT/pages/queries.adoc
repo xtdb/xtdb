@@ -7,34 +7,22 @@ toc::[]
 [#intro]
 == Introduction
 
-Crux is a document database that provides you with a comprehensive means of
-traversing and querying across all of your documents and data without any need
-to define a schema ahead of time. This is possible because Crux is "schemaless"
-and automatically indexes the top-level fields in all of your documents to
-support efficient ad-hoc joins and retrievals. With these capabilities you can
-quickly build queries that match directly against the relations in your data
-without worrying too much about the shape of your documents or how that shape
-might change in future.
+Crux is a document database that provides you with a comprehensive means of traversing and querying across all of your documents and data without any need to define a schema ahead of time.
+This is possible because Crux is "schemaless" and automatically indexes the top-level fields in all of your documents to support efficient ad-hoc joins and retrievals.
+With these capabilities you can quickly build queries that match directly against the relations in your data without worrying too much about the shape of your documents or how that shape might change in future.
 
-Crux is also a graph database. The central characteristic of a graph database
-is that it can support arbitrary-depth graph queries (recursive traversals)
-very efficiently by default, without any need for schema-level optimisations.
-Crux gives you the ability to construct graph queries via a Datalog query
-language and uses graph-friendly indexes to provide a powerful set of querying
-capabilities. Additionally, when Crux's indexes are deployed directly alongside
-your application you are able to easily blend Datalog and code together to
-construct highly complex graph algorithms.
+Crux is also a graph database.
+The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations.
+Crux gives you the ability to construct graph queries via a Datalog query language and uses graph-friendly indexes to provide a powerful set of querying capabilities.
+Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
 
-This page walks through many of the more interesting queries that run as part
-of Crux's default test suite. See `test/crux/query_test.clj` for the full suite
-of query tests and how each test listed below runs in the wider context.
+This page walks through many of the more interesting queries that run as part of Crux's default test suite.
+See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
 
-Extensible Data Notation (edn) is used as the data format for the public Crux
-APIs. To gain an understanding of edn see xref:tutorials::essential-edn[Essential EDN for Crux].Crux>>.
+Extensible Data Notation (edn) is used as the data format for the public Crux APIs.
+To gain an understanding of edn see xref:tutorials::essential-edn[Essential EDN for Crux].
 
-Note that all Crux Datalog queries run using a point-in-time view of the
-database which means the query capabilities and patterns presented in this
-section are not aware of valid times or transaction times.
+Note that all Crux Datalog queries run using a point-in-time view of the database which means the query capabilities and patterns presented in this section are not aware of valid times or transaction times.
 
 [#basic-query]
 == Basic Query

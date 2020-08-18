@@ -250,3 +250,6 @@
 
 (defn ->cursor [close-fn ^Iterable sq]
   (->Cursor close-fn (.iterator (lazy-seq sq))))
+
+(defn fmap-cursor ^Cursor [f {:keys [close-fn lazy-seq-iterator]}]
+  (->Cursor close-fn (.iterator (lazy-seq (f (iterator-seq lazy-seq-iterator))))))

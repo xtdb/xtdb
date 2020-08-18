@@ -16,8 +16,13 @@ To build the website we are using [Antora](https://docs.antora.org/antora/2.3/) 
 
 == Deploying
 
-Deploy with `./bin/deploy.sh`.
+Deploy a publicly-accessible preview
 
+* Run `./bin/deploy.sh`
 * By default this will deploy to `https://opencrux.com/_<whoami>/`
 * Set `OPENCRUX_PREFIX` to default to something other than `whoami`
-* Run `./bin/deploy.sh /` to deploy to the live site
+
+Deploy to the live site
+
+* Run `./bin/deploy.sh /`
+* Note that `/` implies the use of top-level domain routes
