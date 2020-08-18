@@ -1,5 +1,5 @@
 = Get Started
-:page-aliases: index.adoc
+:page-aliases: index.adoc, docs::index.adoc
 :toc: macro
 
 toc::[]
