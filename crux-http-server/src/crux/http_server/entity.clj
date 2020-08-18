@@ -10,7 +10,9 @@
             [crux.codec :as c]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
-            [crux.api :as crux])
+            [crux.api :as crux]
+            [crux.io :as cio]
+            [clojure.java.io :as io])
   (:import [crux.api ICruxAPI NodeOutOfSyncException]
            java.net.URLDecoder
            [java.time Duration Instant ZonedDateTime ZoneId]
@@ -158,9 +160,16 @@
 
 (defn ->edn-encoder [_]
   (reify
-    mfc/EncodeToBytes
-    (encode-to-bytes [_ entity charset]
-      (.getBytes (pr-str entity) charset))))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [entity entity-history] _}]
+      (fn [^OutputStream output-stream]
+        (with-open [w (io/writer output-stream)]
+          (if entity-history
+            (try
+              (print-dup (iterator-seq entity-history))
+              (finally
+                (cio/try-close entity-history)))
+            (print-dup entity w))))))))
 
 (defn- ->tj-encoder [_]
   (reify
@@ -173,27 +182,31 @@
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
-                (update :formats select-keys ["application/edn" "application/transit+json"])
-                (assoc :default-format "application/edn")
+                (dissoc :formats)
+                (assoc :default-format "application/edn"
+                       :return :output-stream)
                 (m/install {:name "text/html"
                             :encoder [->entity-html-encoder opts]
                             :return :bytes})
                 (m/install {:name "application/transit+json"
-                            :encoder [->tj-encoder]}))))
+                            :encoder [->tj-encoder]})
+                (m/install {:name "application/edn"
+                            :encoder [->edn-encoder]}))))
 
-(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts]}]
+(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit]}]
   (try
     (let [eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
                                (URLDecoder/decode eid))
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
-          entity-history (api/entity-history db eid sort-order history-opts)]
-      (if (empty? entity-history)
+          entity-history (api/open-entity-history db eid sort-order history-opts)]
+      (if-not (.hasNext entity-history)
         {:not-found? true}
         {:eid eid
          :valid-time (api/valid-time db)
          :transaction-time (api/transaction-time db)
-         :entity-history (map #(update % :crux.db/content-hash str) entity-history)}))
+         :entity-history (cond->> (map #(update % :crux.db/content-hash str) entity-history)
+                           limit (take limit))}))
     (catch Exception e
       {:error e})))
 
@@ -240,7 +253,7 @@
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)
-        {:strs [eid history sort-order
+        {:strs [eid history sort-order limit
                 valid-time transaction-time
                 start-valid-time start-transaction-time
                 end-valid-time end-transaction-time
@@ -254,6 +267,7 @@
             (if history
               (search-entity-history (assoc entity-options
                                             :sort-order (some-> sort-order keyword)
+                                            :limit (some-> ^String limit Long/parseLong)
                                             :history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
                                                            :with-docs? (some-> ^String with-docs Boolean/valueOf)
                                                            :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
