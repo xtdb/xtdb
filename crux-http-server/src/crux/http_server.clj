@@ -365,7 +365,7 @@
       [:br]
       "Status"]
      [:a.root-tile
-      {:href "https://opencrux.com/docs" :target "_blank"}
+      {:href "https://opencrux.com/reference" :target "_blank"}
       [:i.fas.fa-book]
       [:br]
       "Docs"]]]])

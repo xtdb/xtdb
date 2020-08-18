@@ -37,7 +37,7 @@
     "Query"]
    [:div.query-root__contents
     [:p "Enter a "
-     [:a {:href "https://opencrux.com/docs#queries_basic_query" :target "_blank"} "Datalog"]
+     [:a {:href "https://opencrux.com/reference/queries.html#basic-query" :target "_blank"} "Datalog"]
      " query below to retrieve a set of facts from your database. Datalog queries must contain a `:find` key and a `:where` key."]
     [:div.query-editor__title
       "Datalog query editor"]

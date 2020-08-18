@@ -6,7 +6,7 @@ development.
 
 See cards https://github.com/juxt/crux/issues?q=is%3Aissue+is%3Aopen+label%3Aprod-monitoring-384
 
-Full docs [here](https://opencrux.com/reference/configuration.html#metrics)
+Full docs [here](https://opencrux.com/reference/monitoring.html)
 
 ## Dropwizard metrics
 
