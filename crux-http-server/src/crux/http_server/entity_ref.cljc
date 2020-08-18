@@ -27,11 +27,6 @@
       (print-method (:eid ref) w)))
 
 #? (:clj
-    (defmethod print-dup EntityRef [ref ^Writer w]
-      (.write w "#crux.http/entity-ref ")
-      (print-dup (:eid ref) w)))
-
-#? (:clj
     (def ref-write-handler
       (transit/write-handler "crux.http/entity-ref" #(:eid %))))
 

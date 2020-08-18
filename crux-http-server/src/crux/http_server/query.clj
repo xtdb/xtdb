@@ -196,7 +196,7 @@
           (try
             (if error
               (.write w ^String (pr-str res))
-              (print-dup (iterator-seq results) w))
+              (print-method (iterator-seq results) w))
             (finally
               (cio/try-close results))))))))
 
