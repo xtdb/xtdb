@@ -205,8 +205,10 @@
         {:eid eid
          :valid-time (api/valid-time db)
          :transaction-time (api/transaction-time db)
-         :entity-history (cond->> (map #(update % :crux.db/content-hash str) entity-history)
-                           limit (take limit))}))
+         :entity-history (cio/fmap-cursor (fn [entity-history]
+                                            (cond->> (map #(update % :crux.db/content-hash str) entity-history)
+                                              limit (take limit)))
+                                          entity-history)}))
     (catch Exception e
       {:error e})))
 
