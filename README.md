@@ -71,8 +71,7 @@ connected to the same transaction log, by specifying `transaction-time` and/or
 
 ## Documentation
 
-Please visit our [official
-documentation](https://juxt.pro/crux/docs/index.html) to get started with Crux.
+Please visit our [official documentation](https://opencrux.com) to get started with Crux.
 
 ## Community & Contact
 
