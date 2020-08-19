@@ -1,6 +1,7 @@
 site:
   title: Crux
   start_page: main::index.adoc
+  url: https://opencrux.com
 content:
   sources:
     - url: ../
