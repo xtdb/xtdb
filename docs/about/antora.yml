@@ -1,0 +1,5 @@
+name: about
+title: Crux
+version: master
+nav:
+  - nav.adoc

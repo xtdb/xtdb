@@ -1,4 +1,4 @@
-== A Bitemporal Tale
+= A Bitemporal Tale
 
 For an interactive no-install browser-based tutorial see the
 https://nextjournal.com/crux/a-bitemporal-tale[Nextjournal edition of the

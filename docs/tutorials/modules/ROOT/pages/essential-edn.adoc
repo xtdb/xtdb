@@ -1,6 +1,6 @@
-== Essential EDN
+= Essential EDN
 
-=== *edn* (Extensible Data Notation)
+== *edn* (Extensible Data Notation)
 
 [source,clj]
 ----
