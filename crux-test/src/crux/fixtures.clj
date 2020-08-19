@@ -1,16 +1,13 @@
 (ns ^:no-doc crux.fixtures
-  (:require [clojure.test.check.clojure-test :as tcct]
+  (:require [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tcct]
             [crux.api :as crux]
-            [crux.io :as cio]
-            [crux.node :as n]
-            [crux.tx :as tx]
-            [crux.system :as sys]
-            [clojure.test :as t])
+            [crux.io :as cio])
   (:import crux.api.ICruxAPI
-           (java.util ArrayList List UUID)
-           (java.io File)
-           (java.nio.file Files FileVisitResult SimpleFileVisitor)
-           java.nio.file.attribute.FileAttribute))
+           java.io.File
+           java.nio.file.attribute.FileAttribute
+           java.nio.file.Files
+           [java.util ArrayList List UUID]))
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
@@ -42,7 +39,7 @@
       f)))
 
 (defn with-node [f]
-  (with-open [node (n/start *opts*)]
+  (with-open [node (crux/start-node *opts*)]
     (binding [*api* node]
       (f))))
 

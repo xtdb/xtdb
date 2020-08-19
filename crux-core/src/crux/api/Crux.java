@@ -1,6 +1,7 @@
 package crux.api;
 
 import java.io.File;
+import java.net.URL;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -21,20 +22,8 @@ public class Crux {
 
     private Crux() { }
 
-    /**
-     * Starts a Crux node using the provided configuration.
-     * <p>
-     * When you're done, close the node with {@link java.io.Closeable#close}
-     *
-     * @param options node configuration options.
-     * @return the started node.
-     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
-     */
-    @SuppressWarnings("unused")
-    public static ICruxAPI startNode(Map<Keyword, ?> options) throws IndexVersionOutOfSyncException {
-        return (ICruxAPI) resolve("crux.node/start").invoke(options);
+    private static ICruxAPI startNode(Object config) {
+        return (ICruxAPI) resolve("crux.api/start-node").invoke(config);
     }
 
     /**
@@ -43,11 +32,55 @@ public class Crux {
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
      * @return the started node
-     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
     @SuppressWarnings("unused")
     public static ICruxAPI startNode() {
         return startNode(c -> {});
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param options a Map of Crux configuration
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    public static ICruxAPI startNode(Map<?, ?> options) throws IndexVersionOutOfSyncException {
+        return startNode((Object) options);
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param file a JSON or EDN file containing Crux configuration
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    @SuppressWarnings("unused")
+    public static ICruxAPI startNode(File file) throws IndexVersionOutOfSyncException {
+        return startNode((Object) file);
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param url a URL of a JSON or EDN file containing Crux configuration
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    @SuppressWarnings("unused")
+    public static ICruxAPI startNode(URL url) throws IndexVersionOutOfSyncException {
+        return startNode((Object) url);
     }
 
     /**
@@ -67,10 +100,11 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
+    @SuppressWarnings("unused")
     public static ICruxAPI startNode(Consumer<NodeConfigurator> f) throws IndexVersionOutOfSyncException {
         NodeConfigurator c = new NodeConfigurator();
         f.accept(c);
-        return (ICruxAPI) resolve("crux.node/start").invoke(c.modules);
+        return startNode(c.modules);
     }
 
     /**

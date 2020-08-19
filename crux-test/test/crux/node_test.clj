@@ -24,7 +24,7 @@
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
     (try
-      (let [n (n/start {})]
+      (let [n (api/start-node {})]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -35,40 +35,40 @@
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Missing module.+:dialect"
-                          (n/start {:crux/document-store {:crux/module `j/->document-store}}))))
+                          (api/start-node {:crux/document-store {:crux/module `j/->document-store}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
-                            ::j/tx-consumer {}
-                            :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
-                            ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest")}})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
+                                   ::j/tx-consumer {}
+                                   :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
+                                   ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest")}})]
       (t/is n))))
 
 (t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
-                            :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
-                            :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
+                                   :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
+                                   :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
       (t/is n))))
 
 (t/deftest start-node-from-java
   (f/with-tmp-dir "data" [data-dir]
     (with-open [node (Crux/startNode
                       (doto (HashMap.)
-                        (.put :crux/tx-log
+                        (.put "crux/tx-log"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
                                         (.put "crux/module" "crux.kv.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "txs"))))))
-                        (.put :crux/document-store
+                        (.put "crux/document-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
                                         (.put "crux/module" "crux.kv.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "docs"))))))
-                        (.put :crux/indexer
+                        (.put "crux/indexer"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
@@ -83,11 +83,11 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
-                            ::j/tx-consumer {}
-                            :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
-                            :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv1")}}
-                            ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest1")}})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
+                                   ::j/tx-consumer {}
+                                   :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
+                                   :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv1")}}
+                                   ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest1")}})]
       (t/is n)
 
       (let [valid-time (Date.)
@@ -101,11 +101,11 @@
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))
 
-      (with-open [n2 (n/start {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
-                               ::j/tx-consumer {}
-                               :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
-                               :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
-                               ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest2")}})]
+      (with-open [n2 (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
+                                      ::j/tx-consumer {}
+                                      :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
+                                      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+                                      ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest2")}})]
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]

@@ -4,12 +4,13 @@
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.query-state :as qs]
+            [crux.system :as sys]
             [clojure.tools.logging :as log])
   (:import (crux.api Crux ICruxAPI ICruxIngestAPI
-                     ICruxAsyncIngestAPI ICruxDatasource ICursor
+                     ICruxAsyncIngestAPI ICruxDatasource
                      HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
-           java.io.Closeable
-           (java.util Date Map)
+           java.lang.AutoCloseable
+           (java.util Date)
            java.time.Duration
            [java.util.function Supplier Consumer]))
 
@@ -366,8 +367,19 @@
   throws IndexVersionOutOfSyncException if the index needs rebuilding.
   throws NonMonotonicTimeException if the clock has moved backwards since
     last run. Only applicable when using the event log."
-  ^ICruxAPI [^Map options]
-  (Crux/startNode options))
+  ^crux.api.ICruxAPI [options]
+  (let [system (-> (sys/prep-system (into [{:crux/node 'crux.node/->node
+                                            :crux/indexer 'crux.kv-indexer/->kv-indexer
+                                            :crux/bus 'crux.bus/->bus
+                                            :crux/tx-ingester 'crux.tx/->tx-ingester
+                                            :crux/document-store 'crux.kv-document-store/->document-store
+                                            :crux/tx-log 'crux.kv-tx-log/->tx-log
+                                            :crux/query-engine 'crux.query/->query-engine}]
+                                          (cond-> options (not (vector? options)) vector)))
+                   (sys/start-system))]
+    (reset! (get-in system [:crux/node :!system]) system)
+    (-> (:crux/node system)
+        (assoc :close-fn #(.close ^AutoCloseable system)))))
 
 (defn- ->RemoteClientOptions [{:keys [->jwt-token] :as opts}]
   (RemoteClientOptions. (when ->jwt-token

@@ -9,13 +9,17 @@ public class NodeConfigurator {
 
     NodeConfigurator() { }
 
-    public void with(String module, Consumer<ModuleConfigurator> f) {
+    @SuppressWarnings("unused")
+    public NodeConfigurator with(String module, Consumer<ModuleConfigurator> f) {
         ModuleConfigurator c = new ModuleConfigurator();
         f.accept(c);
         modules.put(module, c.opts);
+        return this;
     }
 
-    public void with(String module) {
+    @SuppressWarnings("unused")
+    public NodeConfigurator with(String module) {
         with(module, c -> {});
+        return this;
     }
 }
