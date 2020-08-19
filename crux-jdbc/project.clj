@@ -8,7 +8,7 @@
                  [juxt/crux-core "crux-git-version-beta"]
                  [seancorfield/next.jdbc "1.1.582"]
                  [com.zaxxer/HikariCP "3.4.5"]
-                 [com.taoensso/nippy "2.14.0"]
+                 [com.taoensso/nippy "2.15.1"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]]
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

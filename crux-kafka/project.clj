@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [org.apache.kafka/kafka-clients "2.3.0"]
+                 [org.apache.kafka/kafka-clients "2.3.0" :exclusions [org.lz4/lz4-java]]
                  [cheshire "5.10.0"]
                  [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}

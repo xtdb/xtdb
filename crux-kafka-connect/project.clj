@@ -7,7 +7,7 @@
                  [juxt/crux-core "crux-git-version-beta"]
                  [org.clojure/tools.logging "1.0.0"]
                  [cheshire "5.9.0"]
-                 [com.taoensso/nippy "2.14.0"]
+                 [com.taoensso/nippy "2.15.1"]
                  [com.cognitect/transit-clj "1.0.324"]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
   :middleware [leiningen.project-version/middleware]
