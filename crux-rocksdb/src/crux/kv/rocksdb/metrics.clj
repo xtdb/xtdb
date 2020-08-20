@@ -23,20 +23,25 @@
                         (.toMillis sample-window)))
 
 (defn ->metrics {::sys/deps {:registry ::m/registry}
-                 ::sys/args {:sample-window {:doc "Sample window of statistics collector in milliseconds"
+                 ::sys/args {:instance-name {:doc "unique name for this instance of RocksDB, used in metrics domains"
+                                             :default "rocksdb"
+                                             :spec ::sys/string
+                                             :required? true}
+                             :sample-window {:doc "Sample window of statistics collector"
                                              :default (Duration/ofSeconds 3)
+                                             :required? true
                                              :spec ::sys/duration}}}
-  [{:keys [registry sample-window]}]
+  [{:keys [registry instance-name sample-window]}]
   (fn [^RocksDB db, ^Statistics stats]
     (let [meters (->> (seq (TickerType/values))
                       (into {} (map (fn [^TickerType ticker-type]
-                                      [ticker-type (dw/meter registry ["rocksdb" (ticker-type-name ticker-type)])]))))
+                                      [ticker-type (dw/meter registry [instance-name (ticker-type-name ticker-type)])]))))
           collector (doto (->collector stats
                                        (fn [{:keys [ticker-type ticker-count]}]
                                          (some-> (get meters ticker-type) (dw/mark! ticker-count)))
                                        sample-window)
                       .start)]
-      (dw/gauge registry ["rocksdb" "num-snapshots"]
+      (dw/gauge registry [instance-name "num-snapshots"]
                 #(.getLongProperty db "rocksdb.num-snapshots"))
       (reify Closeable
         (close [_]

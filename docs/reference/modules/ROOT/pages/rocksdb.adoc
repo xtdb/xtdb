@@ -1,33 +1,93 @@
 = RocksDB
 
-RocksDB is often used as Crux's primary kv-store.
+https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+
+== Project Dependency
 
 In order to use RocksDB within Crux, you must first add RocksDB as a project dependency:
 
-[#rocksdep]
-== Project Dependency
-
-[source,clojure,subs="normal"]
+.deps.edn
+[source,clojure]
 ----
-include::example$deps.edn[tags=RocksDeps]
+juxt/crux-rocksdb {:mvn/version "20.09-1.11.0-beta"}
 ----
 
-[#rocks-start]
-== Starting a node using RocksDB
-
-[source,clj]
+.pom.xml
+[source,xml]
 ----
-include::example$src/docs/examples.clj[tags=start-standalone-with-rocks]
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-rocksdb</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
 ----
 
-Please note that when configuring a standalone node with persisted indexes (via `:crux.kv/db-dir`), you should always have the tx-log and document-store persisted as well (via `:crux.standalone/event-log-dir`).
-Crux does not currently enforce this constraint or disallow otherwise invalid topology combinations.
+== Using RocksDB
+
+Replace the implementation of the desired component with `+crux.kv.rocksdb/->kv-store+`
+
+.JSON
+[source,json]
+----
+{
+  "crux/indexer": {
+    "kv-store": {
+      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "db-dir": "/tmp/rocksdb"
+    }
+  },
+
+  "crux/document-store": { ... },
+  "crux/tx-log": { ... }
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux/indexer {:kv-store {:crux/module 'crux.kv.rocksdb/->kv-store
+                           :db-dir (io/file "/tmp/rocksdb")}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+
+== Dependencies
+
+* `metrics` (function, default no-op): enable xref:#monitoring[RocksDB metrics].
+
+== Parameters
+
+* `db-dir` (required, string/`File`/`Path`): path to RocksDB data directory
+* `sync?` (boolean, default false): sync to disk after every write
+* `disable-wal?` (boolean): disables the write-ahead log
+* `db-options` (RocksDB https://javadoc.io/static/org.rocksdb/rocksdbjni/6.8.1/org/rocksdb/Options.html[`Options`] object): extra options to pass directly to RocksDB.
 
 
-You can create a node with custom RocksDB options by passing extra keywords in the topology.
-These are:
+[#monitoring]
+== Monitoring RocksDB
 
-* `:crux.kv.rocksdb/disable-wal?`, which takes a boolean (if true, disables the *write ahead log*)
-* `:crux.kv.rocksdb/db-options`, which takes a RocksDB 'Options' object (see more https://javadoc.io/doc/org.rocksdb/rocksdbjni/6.2.2/org/rocksdb/Options.html[here], from the *RocksDB javadocs*)
+To include RocksDB metrics in monitoring, override the `metrics` dependency:
 
-To include RocksDB metrics in monitoring `crux.kv.rocksdb/kv-store-with-metrics` should be included in the topology map instead of the above.
+.JSON
+[source,json]
+----
+{
+  "crux/indexer": {
+    "kv-store": {
+      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "metrics": {
+        "crux/module": "crux.kv.rocksdb.metrics/->metrics"
+      }
+      ...
+    }
+  },
+
+  "crux/document-store": { ... },
+  "crux/tx-log": { ... }
+}
+----
+
+=== Parameters
+
+* `instance-name` (string, default `"rocksdb"`): unique name for this instance of RocksDB, used in metrics domains
+* `sample-window` (duration, default 3s): sample window of statistics collector
