@@ -14,8 +14,8 @@
                  [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
                  [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]]
 
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[juxt/crux-test "crux-git-version"]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
+                                  [juxt/crux-test "crux-git-version"]
 
                                    ;; dependency conflict resolution:
                                    [com.google.guava/guava "26.0-jre"]
