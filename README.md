@@ -237,7 +237,7 @@ Retrieve the current version of the document:
 
 The recommended way of running the full test suite is `lein build`.
 
-The test suite relies on the `timeout` command line utility, this comes as a default on Linux but isn't preinstalled on MacOS. You can get it with `brew install coreutils && echo 'alias timeout=gtimeout' >> ~/.bashrc'
+The test suite relies on the `timeout` command line utility, this comes as a default on Linux but isn't preinstalled on MacOS. You can get it with `brew install coreutils && echo 'alias timeout=gtimeout' >> ~/.bashrc'`
 
 ## Copyright & License
 The MIT License (MIT)
