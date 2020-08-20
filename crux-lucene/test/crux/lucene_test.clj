@@ -36,8 +36,10 @@
     (with-open [dr (DirectoryReader/open d)]
       (let [isearcher (IndexSearcher. dr)
             qp (QueryParser. "FooField" analyzer)
-            q (.parse qp "bar")]
-        (t/is (= 1 (count (.-scoreDocs (.search isearcher q 10)))))))))
+            q (.parse qp "bar")
+            score-docs (.-scoreDocs (.search isearcher q 10))]
+        (t/is (= 1 (count (.-scoreDocs (.search isearcher q 10)))))
+        (t/is (= "bar" (.get (.doc isearcher (.-doc ^ScoreDoc (first score-docs))) "FooField")))))))
 
 ;; See https://github.com/juxt/crux-rnd/blob/master/src/crux/datalog/lucene.clj
 ;; https://www.toptal.com/database/full-text-search-of-dialogues-with-apache-lucene
