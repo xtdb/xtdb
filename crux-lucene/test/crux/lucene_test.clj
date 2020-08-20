@@ -14,7 +14,7 @@
   (with-tmp-dir "lucene" [db-dir]
     (fix/with-opts (-> fix/*opts*
                        (update ::n/topology conj crux.lucene/module)
-                       (assoc :crux.lucene/db-dir "lucene"))
+                       (assoc :crux.lucene/db-dir db-dir))
       f)))
 
 (t/use-fixtures :each fix/with-standalone-topology with-lucene-module fix/with-kv-dir fix/with-node)
