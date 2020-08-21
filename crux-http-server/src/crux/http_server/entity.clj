@@ -178,7 +178,6 @@
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [entity entity-history]} _]
       (fn [^OutputStream output-stream]
-        (println entity-history entity)
         (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
           (if entity-history
             (try
@@ -209,13 +208,11 @@
           entity-history (api/open-entity-history db eid sort-order history-opts)]
       (if-not (.hasNext entity-history)
         {:not-found? true}
-        {; :eid eid
-         ; :valid-time (api/valid-time db)
-         ; :transaction-time (api/transaction-time db)
-         :entity-history (cio/fmap-cursor (fn [entity-history]
-                                            (cond->> (map #(update % :crux.db/content-hash str) entity-history)
-                                              limit (take limit)))
-                                          entity-history)}))
+        {:entity-history
+         (cio/fmap-cursor (fn [entity-history]
+                            (cond->> (map #(update % :crux.db/content-hash str) entity-history)
+                              limit (take limit)))
+           entity-history)}))
     (catch Exception e
       {:error e})))
 
@@ -260,8 +257,8 @@
     no-entity? {:status 400, :body {:error "Missing eid"}}
     not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
-    entity-history {:status 200, :body res})
-  :else {:status 200, :body {:entity entity}})
+    entity-history {:status 200, :body {:entity-history entity-history}}
+    :else {:status 200, :body {:entity entity}}))
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)
