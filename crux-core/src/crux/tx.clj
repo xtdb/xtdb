@@ -163,14 +163,15 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [query-engine index-store], :as tx-ingester}]
+                                       {:keys [query-engine document-store index-store], :as tx-ingester}]
   (let [fn-id (c/new-id k)
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
         args-content-hash (c/new-id args-doc)
 
         {:keys [tx-events docs failed?]}
         (cond
-          tx-events {:tx-events tx-events}
+          tx-events {:tx-events tx-events
+                     :docs (txc/tx-events->docs document-store tx-events)}
 
           failed? (do
                     (log/warn "Transaction function failed when originally evaluated:"
