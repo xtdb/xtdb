@@ -206,13 +206,13 @@
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
           entity-history (api/open-entity-history db eid sort-order history-opts)]
+      (println entity-history)
       (if-not (.hasNext entity-history)
         {:not-found? true}
-        {:entity-history
-         (cio/fmap-cursor (fn [entity-history]
-                            (cond->> (map #(update % :crux.db/content-hash str) entity-history)
-                              limit (take limit)))
-           entity-history)}))
+        {:entity-history (cio/fmap-cursor (fn [entity-history]
+                                            (cond->> (map #(update % :crux.db/content-hash str) entity-history)
+                                              limit (take limit)))
+                           entity-history)}))
     (catch Exception e
       {:error e})))
 
