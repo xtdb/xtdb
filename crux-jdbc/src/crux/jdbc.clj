@@ -130,7 +130,7 @@
                                  :crux.tx.event/tx-events (->v dbtype (:v y))}))))))
 
   (latest-submitted-tx [this]
-    (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]
+    (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
       {:crux.tx/tx-id max-offset})))
