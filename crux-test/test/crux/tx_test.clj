@@ -929,3 +929,31 @@
   (t/is (= #{[:bar]}
            (api/q (api/db *api*) '{:find [?e]
                                    :where [[?e :count 1]]}))))
+
+(t/deftest test-tx-fn-doc-race-1049
+  (let [put-fn {:crux.db/id :put-fn
+                :crux.db/fn '(fn [ctx doc]
+                               [[:crux.tx/put doc]])}
+        foo-doc {:crux.db/id :foo}
+        !arg-doc-resps (atom [{:crux.db.fn/args [foo-doc]}
+                              {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :foo) (c/new-id foo-doc)]]}])
+        ->mocked-doc-store (fn [_deps _args]
+                             (reify db/DocumentStore
+                               (submit-docs [_ docs])
+                               (fetch-docs [_ ids]
+                                 (->> ids
+                                      (into {} (map (juxt identity
+                                                          (some-fn {(c/new-id put-fn) put-fn
+                                                                    (c/new-id foo-doc) foo-doc}
+                                                                   (fn [id]
+                                                                     (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
+                                                                       (merge doc {:crux.db/id id})))))))))))]
+    (with-open [node (api/start-node {:crux.node/topology
+                                      ['crux.standalone/topology
+                                       {:crux.node/document-store {:start-fn ->mocked-doc-store}}]})]
+      (api/submit-tx node [[:crux.tx/put put-fn]])
+      (api/submit-tx node [[:crux.tx/fn :put-fn foo-doc]])
+      (api/sync node)
+      (t/is (= #{[:put-fn] [:foo]}
+               (api/q (api/db node) '{:find [?e]
+                                      :where [[?e :crux.db/id]]}))))))
