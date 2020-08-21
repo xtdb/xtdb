@@ -167,30 +167,31 @@
         (with-open [w (io/writer output-stream)]
           (if entity-history
             (try
-              (print-dup (iterator-seq entity-history))
+              (print-dup (iterator-seq entity-history) w)
               (finally
                 (cio/try-close entity-history)))
-            (print-dup entity w)))))))
+            (binding [*out* w]
+              (pr entity))))))))
 
 (defn- ->tj-encoder [_]
   (reify
-    mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [entity entity-history]} _]
-      (let [baos (ByteArrayOutputStream.)
-            writer (transit/writer baos :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
-        (if entity-history
-          (try
-            (transit/write writer (iterator-seq entity-history))
-            (finally
-              (cio/try-close entity-history)))
-          (transit/write writer entity))
-        (.toByteArray baos)))))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [entity entity-history]} _]
+      (fn [^OutputStream output-stream]
+        (println entity-history entity)
+        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
+          (if entity-history
+            (try
+              (transit/write w (iterator-seq entity-history))
+              (finally
+                (cio/try-close entity-history)))
+            (transit/write w entity)))))))
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
                 (dissoc :formats)
-                (assoc :default-format "application/edn"
-                       :return :output-stream)
+                (assoc :return :output-stream
+                       :default-format "application/edn")
                 (m/install {:name "text/html"
                             :encoder [->entity-html-encoder opts]
                             :return :bytes})
@@ -208,9 +209,9 @@
           entity-history (api/open-entity-history db eid sort-order history-opts)]
       (if-not (.hasNext entity-history)
         {:not-found? true}
-        {:eid eid
-         :valid-time (api/valid-time db)
-         :transaction-time (api/transaction-time db)
+        {; :eid eid
+         ; :valid-time (api/valid-time db)
+         ; :transaction-time (api/transaction-time db)
          :entity-history (cio/fmap-cursor (fn [entity-history]
                                             (cond->> (map #(update % :crux.db/content-hash str) entity-history)
                                               limit (take limit)))
@@ -225,13 +226,10 @@
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
           entity (api/entity db eid)]
-      (merge {:eid eid
-              :valid-time (api/valid-time db)
-              :transaction-time (api/transaction-time db)}
-             (cond
-               (empty? entity) {:not-found? true}
-               link-entities? {:entity (entity-links db entity)}
-               :else {:entity entity})))
+      (cond
+        (empty? entity) {:not-found? true}
+        link-entities? {:entity (entity-links db entity)}
+        :else {:entity entity}))
     (catch Exception e
       {:error e})))
 
@@ -239,6 +237,12 @@
   (if (= "text/html" (get-in req [:muuntaja/response :format]))
     (assoc query-params "with-docs" "true" "link-entities?" "true")
     query-params))
+
+(defn entity-history-headers [{:keys [crux-node valid-time transaction-time]}]
+  (let [db (util/db-for-request crux-node {:valid-time valid-time
+                                           :transact-time transaction-time})]
+    {"X-Valid-Time" (api/valid-time db)
+     "X-Transaction-Time" (api/transaction-time db)}))
 
 (defmulti transform-query-resp
   (fn [resp req]
@@ -251,13 +255,13 @@
              :else 200)
    :body res})
 
-(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history] :as res} _]
+(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history headers] :as res} req]
   (cond
     no-entity? {:status 400, :body {:error "Missing eid"}}
     not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
-    entity-history {:status 200, :body entity-history}
-    :else {:status 200, :body entity}))
+    entity-history {:status 200, :body res})
+  :else {:status 200, :body {:entity entity}})
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)
