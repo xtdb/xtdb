@@ -55,6 +55,8 @@
                    t
                    any?))))
 
+(s/def ::fn fn?)
+
 (s/def ::doc string?)
 (s/def ::default any?)
 (s/def ::required? boolean?)

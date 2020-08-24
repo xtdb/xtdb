@@ -10,7 +10,7 @@
 (defn- ns->ms [time-ns]
   (/ time-ns 1e6))
 
-(def registry-module {:start-fn (fn [deps {::keys [with-indexer-metrics?  with-query-metrics?]}]
+(def registry-module {:start-fn (fn [deps {::keys [with-indexer-metrics? with-query-metrics?]}]
                                   (cond-> (dropwizard/new-registry)
                                     with-indexer-metrics? (doto (indexer-metrics/assign-listeners deps))
                                     with-query-metrics? (doto (query-metrics/assign-listeners deps))))

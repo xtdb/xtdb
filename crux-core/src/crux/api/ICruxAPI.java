@@ -164,4 +164,11 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return List containing maps with query information.
      */
     public List<QueryState> recentQueries();
+
+    /**
+     * Returns a list of slowest completed/failed queries ran on the node
+     *
+     * @return List containing maps with query information.
+     */
+    public List<QueryState> slowestQueries();
 }

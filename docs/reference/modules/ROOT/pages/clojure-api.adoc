@@ -193,6 +193,14 @@ with few lifecycle members added.
     "Returns a list of recently completed/failed queries")
 ----
 
+=== slowest-queries
+
+[source,clojure]
+----
+  (slowest-queries [node]
+    "Returns a list of slowest completed/failed queries ran on the node")
+----
+
 [#icruxdatasource]
 == ICruxDatasource
 Represents the database as of a specific valid and transaction time.

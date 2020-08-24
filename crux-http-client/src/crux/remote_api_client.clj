@@ -282,6 +282,12 @@
                             :->jwt-token ->jwt-token})
          (map qs/->QueryState)))
 
+  (slowestQueries [_]
+    (->> (api-request-sync (str url "/slowest-queries")
+                           {:http-opts {:method :get}
+                            :->jwt-token ->jwt-token})
+         (map qs/->QueryState)))
+
   Closeable
   (close [_]))
 
