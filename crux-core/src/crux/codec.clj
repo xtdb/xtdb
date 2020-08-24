@@ -362,6 +362,22 @@
   (id->buffer [this to]
     (id-function to (nippy/fast-freeze this)))
 
+  Byte
+  (id->buffer [this to]
+    (id->buffer (long this) to))
+
+  Short
+  (id->buffer [this to]
+    (id->buffer (long this) to))
+
+  Integer
+  (id->buffer [this to]
+    (id->buffer (long this) to))
+
+  Float
+  (id->buffer [this to]
+    (id->buffer (double this) to))
+
   Number
   (id->buffer [this to]
     (id-function to (nippy/fast-freeze this)))

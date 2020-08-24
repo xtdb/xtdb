@@ -957,3 +957,36 @@
       (t/is (= #{[:put-fn] [:foo]}
                (api/q (api/db node) '{:find [?e]
                                       :where [[?e :crux.db/id]]}))))))
+
+(t/deftest test-documents-with-int-short-byte-float-eids-1043
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id (int 10), :name "foo"}]
+                        [:crux.tx/put {:crux.db/id (short 12), :name "bar"}]
+                        [:crux.tx/put {:crux.db/id (byte 16), :name "baz"}]
+                        [:crux.tx/put {:crux.db/id (float 1.1), :name "quux"}]])
+
+  (let [db (crux/db *api*)]
+    (t/is (= #{["foo"] ["bar"] ["baz"] ["quux"]}
+             (crux/q (crux/db *api*)
+                     '{:find [?name]
+                       :where [[?e :name ?name]]})))
+
+    (t/is (= {:crux.db/id (long 10), :name "foo"}
+             (crux/entity db (int 10))))
+
+    (t/is (= {:crux.db/id (long 10), :name "foo"}
+             (crux/entity db (long 10))))
+
+    (t/is (= #{[10 "foo"]}
+             (crux/q (crux/db *api*)
+                     {:find '[?e ?name]
+                      :where '[[?e :name ?name]]
+                      :args [{:?e (int 10)}]}))))
+
+  (t/testing "10 as int and long are the same key"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id 10, :name "foo2"}]])
+
+    (t/is (= #{[10 "foo2"]}
+             (crux/q (crux/db *api*)
+                     {:find '[?e ?name]
+                      :where '[[?e :name ?name]]
+                      :args [{:?e (int 10)}]})))))
