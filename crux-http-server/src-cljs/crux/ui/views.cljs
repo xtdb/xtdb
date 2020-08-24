@@ -188,7 +188,7 @@
     [:<>
      (cond
        error [:div.error-box error]
-       (empty? (:rows data)) [:div.no-results "No results found!"]
+       (and (empty? (:rows data)) (not (:loading? data))) [:div.no-results "No results found!"]
        :else [:<>
               [:<>
                [:div.query-table-topbar
@@ -215,7 +215,6 @@
   []
   [:<>
    [query-form]
-
    (when @(rf/subscribe [::sub/query-submitted?])
      [query-table])])
 
