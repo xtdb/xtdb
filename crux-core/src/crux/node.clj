@@ -230,41 +230,51 @@
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
 
-(defn- add-and-clean-finished-queries [queries {:keys [query-id] :as query} {::keys [slow-queries-callback-fn] :as node-opts}]
-  (let [slow-query? (slow-query? query node-opts)]
-    (when (and slow-query? slow-queries-callback-fn)
-      (slow-queries-callback-fn query))
-    (-> queries
-        (update :in-progress dissoc query-id)
-        (update :completed conj query)
-        (update :completed clean-completed-queries node-opts)
-        (cond-> slow-query? (update :slowest conj query))
-        (update :slowest clean-slowest-queries node-opts))))
+(defn- swap-finished-query! [!running-queries {:keys [query-id] :as query} {::keys [bus]} node-opts]
+  (loop []
+    (let [queries @!running-queries
+          query (merge (get-in queries [:in-progress query-id])
+                       query)
+          slow-query? (slow-query? query node-opts)]
+      (if-not (compare-and-set! !running-queries
+                                queries
+                                (-> queries
+                                    (update :in-progress dissoc query-id)
+                                    (update :completed conj query)
+                                    (update :completed clean-completed-queries node-opts)
+                                    (cond-> slow-query? (-> (update :slowest conj query)
+                                                            (update :slowest clean-slowest-queries node-opts)))))
+        (recur)
+        (when slow-query?
+          (bus/send bus {:crux/event-type :slow-query
+                         :query query}))))))
 
-(defn attach-current-query-listeners [!running-queries {::keys [bus]} node-opts]
+(defn attach-current-query-listeners [!running-queries {::keys [bus] :as deps} node-opts]
   (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
               (fn [{::q/keys [query-id query]}]
                 (swap! !running-queries assoc-in [:in-progress query-id] {:query-id query-id
                                                                           :started-at (Date.)
                                                                           :query query
                                                                           :status :in-progress})))
+
   (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
               (fn [{::q/keys [query-id error]}]
-                (swap! !running-queries (fn [queries]
-                                          (let [query (get-in queries [:in-progress query-id])
-                                                failed-query (assoc query
-                                                                    :finished-at (Date.)
-                                                                    :status :failed
-                                                                    :error error)]
-                                            (add-and-clean-finished-queries queries failed-query node-opts))))))
+                (swap-finished-query! !running-queries
+                                      {:query-id query-id
+                                       :finished-at (Date.)
+                                       :status :failed
+                                       :error error}
+                                      deps
+                                      node-opts)))
+
   (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
               (fn [{::q/keys [query-id]}]
-                (swap! !running-queries (fn [queries]
-                                          (let [query (get-in queries [:in-progress query-id])
-                                                completed-query (assoc query
-                                                                       :finished-at (Date.)
-                                                                       :status :completed)]
-                                            (add-and-clean-finished-queries queries completed-query node-opts)))))))
+                (swap-finished-query! !running-queries
+                                      {:query-id query-id
+                                       :finished-at (Date.)
+                                       :status :completed}
+                                      deps
+                                      node-opts))))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine] :as deps} node-opts]
@@ -299,10 +309,7 @@
                                     :crux.config/type :crux.config/nat-int}
           ::slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
                                         :default (Duration/ofMinutes 1)
-                                        :crux.config/type :crux.config/duration}
-          ::slow-queries-callback-fn {:doc "Callback function to pass slow queries to"
-                                      :default nil
-                                      :crux.config/type :crux.config/fn}}})
+                                        :crux.config/type :crux.config/duration}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
