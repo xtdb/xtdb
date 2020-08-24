@@ -21,7 +21,8 @@
 
 (def query-root-str
   (string/join "\n"
-               [";; To perform a query:"
+               [";; Welcome to the Crux Console!"
+                ";; To perform a query:"
                 ";; 1) Enter a query into this query editor, such as the following example"
                 ";; 2) Optionally, select a \"valid time\" and/or \"transaction time\" to query against"
                 ";; 3) Submit the query and the tuple results will be displayed in a table below"
