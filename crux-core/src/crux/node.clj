@@ -244,13 +244,15 @@
                                                 failed-query (assoc query
                                                                     :finished-at (Date.)
                                                                     :status :failed
-                                                                    :error error)]
+                                                                    :error error)
+                                                slow-query? (slow-query? failed-query node-opts)]
+                                            (when (and slow-query? slow-query-callback-fn)
+                                              (slow-query-callback-fn failed-query))
                                             (-> queries
                                                 (update :in-progress dissoc query-id)
                                                 (update :completed conj failed-query)
                                                 (update :completed clean-completed-queries node-opts)
-                                                (cond->
-                                                  (slow-query? failed-query node-opts) (update :slowest conj failed-query))
+                                                (cond-> slow-query? (update :slowest conj failed-query))
                                                 (update :slowest clean-slowest-queries node-opts)))))))
   (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
               (fn [{::q/keys [query-id]}]
@@ -258,13 +260,15 @@
                                           (let [query (get-in queries [:in-progress query-id])
                                                 completed-query (assoc query
                                                                        :finished-at (Date.)
-                                                                       :status :completed)]
+                                                                       :status :completed)
+                                                slow-query? (slow-query? completed-query node-opts)]
+                                            (when (and slow-query? slow-query-callback-fn)
+                                              (slow-query-callback-fn completed-query))
                                             (-> queries
                                                 (update :in-progress dissoc query-id)
                                                 (update :completed conj completed-query)
                                                 (update :completed clean-completed-queries node-opts)
-                                                (cond->
-                                                  (slow-query? completed-query node-opts) (update :slowest conj completed-query))
+                                                (cond-> slow-query? (update :slowest conj completed-query))
                                                 (update :slowest clean-slowest-queries node-opts))))))))
 
 (def ^:private node-component
@@ -300,7 +304,10 @@
                                     :crux.config/type :crux.config/nat-int}
           ::slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
                                         :default (Duration/ofMinutes 1)
-                                        :crux.config/type :crux.config/duration}}})
+                                        :crux.config/type :crux.config/duration}
+          ::slow-query-callback-fn {:doc "Callback function to pass slow queries to"
+                                    :default nil
+                                    :crux.config/type :crux.config/fn}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
