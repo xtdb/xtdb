@@ -31,7 +31,8 @@
   ([path accept-type]
    (http/get (str *api-url* path)
              {:accept accept-type
-              :as :stream})))
+              :as :stream
+              :redirect-strategy :none})))
 
 (t/deftest test-ui-routes
   ;; Insert data
@@ -44,8 +45,8 @@
     (http/get (str *api-url* "/await-tx?tx-id=" tx-id))
 
     ;; Test redirect on "/" endpoint.
-    (t/is (= "/_crux/index.html" (-> (get-result-from-path "/")
-                                     (get-in [:headers "Content-Location"]))))
+    (t/is (= "/_crux/query" (-> (get-result-from-path "/")
+                                (get-in [:headers "Location"]))))
 
     ;; Test getting the entity with different types
     (let [get-entity (fn [accept-type] (-> (get-result-from-path "/_crux/entity?eid=:peter" accept-type)

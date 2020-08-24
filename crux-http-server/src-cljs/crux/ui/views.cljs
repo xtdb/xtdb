@@ -459,36 +459,7 @@
      :entity [entity-pane]
      :status [status-pane])])
 
-(defn root-page
-  []
-  [:div.root-page
-   [:div.root-background]
-   [:div.root-contents
-    [:h1.root-title "Console Overview"]
-;;    [:h2.root-subtitle "Small Description Here"]
-    [:div.root-info-summary
-     [:div.root-info "✓ Crux node is active"]
-     [:div.root-info "✓ HTTP is enabled"]]
-    [:div.root-tiles
-     [:a.root-tile
-      {:href (common/route->url :query)}
-      [:i.fas.fa-search]
-      [:br]
-      "Query"]
-     [:a.root-tile
-      {:href (common/route->url :status)}
-      [:i.fas.fa-wrench]
-      [:br]
-      "Status"]
-     [:a.root-tile
-      {:href "https://opencrux.com/reference" :target "_blank"}
-      [:i.fas.fa-book]
-      [:br]
-      "Docs"]]]])
-
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:div.container.page-pane
-     (cond
-       (= name :homepage) [root-page]
-       :else [console-pane])]))
+     [console-pane]]))
