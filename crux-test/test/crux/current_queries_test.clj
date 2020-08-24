@@ -46,7 +46,9 @@
                (->> (clean-completed-queries queries
                                              {::n/recent-queries-max-age (Duration/ofSeconds 8)
                                               ::n/recent-queries-max-count 5})
-                    (map ::query-id))))))
+                    (map ::query-id)))))))
+
+(t/deftest test-cleaning-slowest-queries
   (let [clean-slowest-queries @#'n/clean-slowest-queries
         started-at (Date.)
         queries [{:started-at (Date/from (.minus (.toInstant started-at)
