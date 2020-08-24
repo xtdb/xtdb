@@ -85,26 +85,24 @@
       {::tx/tx-id tx-id}))
 
   (open-tx-log [this after-tx-id]
-    (let [batch-fn (fn [after-tx-id]
-                     (with-open [snapshot (kv/new-snapshot event-log-kv-store)
-                                 iterator (kv/new-iterator snapshot)]
-                       (letfn [(tx-log [k]
-                                 (lazy-seq
-                                  (when (some-> k (tx-event-key?))
-                                    (cons (assoc (decode-tx-event-key-from k)
-                                                 :crux.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
-                                          (tx-log (kv/next iterator))))))]
-
-                         (when-let [k (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
-                           (->> (tx-log (if after-tx-id (kv/next iterator) k))
-                                (take 100)
-                                (vec))))))]
-      (cio/->cursor
-       (fn [])
-       (lazy-seq
-        (when-let [batch (seq (batch-fn after-tx-id))]
-          (concat batch (when-let [next-after-tx-id (:crux.tx/id (last batch))]
-                          (batch-fn next-after-tx-id))))))))
+    (let [batch-size 100]
+      (letfn [(tx-log [after-tx-id]
+                (lazy-seq
+                 (let [txs (with-open [snapshot (kv/new-snapshot event-log-kv-store)
+                                       iterator (kv/new-iterator snapshot)]
+                             (letfn [(tx-log [k]
+                                       (lazy-seq
+                                        (when (some-> k (tx-event-key?))
+                                          (cons (assoc (decode-tx-event-key-from k)
+                                                       :crux.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
+                                                (tx-log (kv/next iterator))))))]
+                               (->> (tx-log (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)})))
+                                    (take batch-size)
+                                    vec)))]
+                   (concat txs
+                           (when (= batch-size (count txs))
+                             (tx-log (::tx/tx-id (last txs))))))))]
+        (cio/->cursor (fn []) (tx-log after-tx-id)))))
 
   Closeable
   (close [_]
