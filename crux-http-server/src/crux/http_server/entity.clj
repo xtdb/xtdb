@@ -199,20 +199,25 @@
                 (m/install {:name "application/edn"
                             :encoder [->edn-encoder]}))))
 
-(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit]}]
+(defn entity-history-cursor [entity-history {:keys [limit valid-time transaction-time]}]
+  (cio/fmap-cursor (fn [entity-history]
+                     (cond->> (map #(update % :crux.db/content-hash str) entity-history)
+                       valid-time (drop-while #(< (:crux.db/valid-time %) valid-time))
+                       transaction-time (drop-while #(< (:crux.tx/tx-time %) transaction-time))
+                       limit (take limit)))
+    entity-history))
+
+(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit] :as ks}]
   (try
     (let [eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
                                (URLDecoder/decode eid))
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
           entity-history (api/open-entity-history db eid sort-order history-opts)]
-      (println entity-history)
       (if-not (.hasNext entity-history)
         {:not-found? true}
-        {:entity-history (cio/fmap-cursor (fn [entity-history]
-                                            (cond->> (map #(update % :crux.db/content-hash str) entity-history)
-                                              limit (take limit)))
-                           entity-history)}))
+        (-> {:entity-history (entity-history-cursor entity-history ks)}
+          (cond-> limit (assoc :entity-history-next (first (seq (drop limit entity-history))))))))
     (catch Exception e
       {:error e})))
 
@@ -235,12 +240,6 @@
     (assoc query-params "with-docs" "true" "link-entities?" "true")
     query-params))
 
-(defn entity-history-headers [{:keys [crux-node valid-time transaction-time]}]
-  (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                           :transact-time transaction-time})]
-    {"X-Valid-Time" (api/valid-time db)
-     "X-Transaction-Time" (api/transaction-time db)}))
-
 (defmulti transform-query-resp
   (fn [resp req]
     (get-in req [:muuntaja/response :format])))
@@ -253,6 +252,7 @@
    :body res})
 
 (defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history headers] :as res} req]
+  (clojure.pprint/pprint res)
   (cond
     no-entity? {:status 400, :body {:error "Missing eid"}}
     not-found? {:status 404, :body {:error (str eid " entity not found")}}

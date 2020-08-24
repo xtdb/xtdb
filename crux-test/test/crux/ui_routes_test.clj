@@ -93,15 +93,14 @@
   (letfn [(submit-ivan [valid-time version]
             (-> (http/post (str *api-url* "/tx-log")
                            {:content-type :edn
-                            :body (pr-str [[:crux.tx/put {:crux.db/id :ivan, :crux.db/valid-time valid-time, :name "Ivan" :version version}]])
+                            :body (pr-str [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :version version} valid-time]])
                             :as :stream})
               (parse-body "application/edn")))
 
           (create-ivan-history [n]
-            (let [valid-times [#inst "2020-08-19" #inst "2020-08-20" #inst "2020-08-21"]]
-              (doseq [i (range 1 (inc n))]
-                (let [{:keys [crux.tx/tx-id]} (submit-ivan (rand-nth valid-times) i)]
-                  (http/get (str *api-url* "/await-tx?tx-id=" tx-id))))))]
+            (doseq [i (range 1 (inc n))]
+              (submit-ivan (java.util.Date.) i))
+            (http/get (str *api-url* "/await-tx?tx-id=" (dec n))))]
 
       (create-ivan-history 20)
 
