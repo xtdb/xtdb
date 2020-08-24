@@ -230,10 +230,10 @@
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
 
-(defn- add-and-clean-finished-queries [queries {:keys [query-id] :as query} {::keys [slow-query-callback-fn] :as node-opts}]
+(defn- add-and-clean-finished-queries [queries {:keys [query-id] :as query} {::keys [slow-queries-callback-fn] :as node-opts}]
   (let [slow-query? (slow-query? query node-opts)]
-    (when (and slow-query? slow-query-callback-fn)
-      (slow-query-callback-fn query))
+    (when (and slow-query? slow-queries-callback-fn)
+      (slow-queries-callback-fn query))
     (-> queries
         (update :in-progress dissoc query-id)
         (update :completed conj query)
@@ -300,9 +300,9 @@
           ::slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
                                         :default (Duration/ofMinutes 1)
                                         :crux.config/type :crux.config/duration}
-          ::slow-query-callback-fn {:doc "Callback function to pass slow queries to"
-                                    :default nil
-                                    :crux.config/type :crux.config/fn}}})
+          ::slow-queries-callback-fn {:doc "Callback function to pass slow queries to"
+                                      :default nil
+                                      :crux.config/type :crux.config/fn}}})
 
 (def base-topology
   {::kv-store 'crux.kv.memdb/kv
