@@ -3,6 +3,7 @@
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-rocksdb "crux-git-version-beta"]
                  [juxt/crux-http-server "crux-git-version-alpha"]
+                 [juxt/crux-metrics "crux-git-version-alpha"]
                  [integrant "0.8.0"]
                  [integrant/repl "0.3.1"]]
 

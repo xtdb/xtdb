@@ -35,7 +35,8 @@
 (defn config []
   {:console-demo/crux-node {:crux.node/topology ['crux.standalone/topology
                                                  'crux.kv.rocksdb/kv-store
-                                                 'crux.http-server/module]
+                                                 'crux.http-server/module
+                                                 'crux.metrics/registry]
                             :crux.http-server/read-only? true
                             :crux.http-server/label "Console Demo"}})
 
