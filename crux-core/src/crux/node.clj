@@ -230,6 +230,17 @@
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
 
+(defn- add-and-clean-finished-queries [queries {:keys [query-id] :as query} {::keys [slow-query-callback-fn] :as node-opts}]
+  (let [slow-query? (slow-query? query node-opts)]
+    (when (and slow-query? slow-query-callback-fn)
+      (slow-query-callback-fn query))
+    (-> queries
+        (update :in-progress dissoc query-id)
+        (update :completed conj query)
+        (update :completed clean-completed-queries node-opts)
+        (cond-> slow-query? (update :slowest conj query))
+        (update :slowest clean-slowest-queries node-opts))))
+
 (defn attach-current-query-listeners [!running-queries {::keys [bus]} node-opts]
   (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
               (fn [{::q/keys [query-id query]}]
@@ -244,32 +255,16 @@
                                                 failed-query (assoc query
                                                                     :finished-at (Date.)
                                                                     :status :failed
-                                                                    :error error)
-                                                slow-query? (slow-query? failed-query node-opts)]
-                                            (when (and slow-query? slow-query-callback-fn)
-                                              (slow-query-callback-fn failed-query))
-                                            (-> queries
-                                                (update :in-progress dissoc query-id)
-                                                (update :completed conj failed-query)
-                                                (update :completed clean-completed-queries node-opts)
-                                                (cond-> slow-query? (update :slowest conj failed-query))
-                                                (update :slowest clean-slowest-queries node-opts)))))))
+                                                                    :error error)]
+                                            (add-and-clean-finished-queries queries failed-query node-opts))))))
   (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
               (fn [{::q/keys [query-id]}]
                 (swap! !running-queries (fn [queries]
                                           (let [query (get-in queries [:in-progress query-id])
                                                 completed-query (assoc query
                                                                        :finished-at (Date.)
-                                                                       :status :completed)
-                                                slow-query? (slow-query? completed-query node-opts)]
-                                            (when (and slow-query? slow-query-callback-fn)
-                                              (slow-query-callback-fn completed-query))
-                                            (-> queries
-                                                (update :in-progress dissoc query-id)
-                                                (update :completed conj completed-query)
-                                                (update :completed clean-completed-queries node-opts)
-                                                (cond-> slow-query? (update :slowest conj completed-query))
-                                                (update :slowest clean-slowest-queries node-opts))))))))
+                                                                       :status :completed)]
+                                            (add-and-clean-finished-queries queries completed-query node-opts)))))))
 
 (def ^:private node-component
   {:start-fn (fn [{::keys [indexer tx-ingester document-store tx-log kv-store bus query-engine] :as deps} node-opts]
