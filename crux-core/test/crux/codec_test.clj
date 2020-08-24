@@ -5,7 +5,9 @@
             [crux.fixtures :as fix]
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
-            [clojure.test.check.properties :as prop])
+            [clojure.test.check.properties :as prop]
+            [crux.api :as crux]
+            [taoensso.nippy :as nippy])
   (:import crux.codec.Id
            java.util.Date
            java.net.URL))
@@ -120,3 +122,19 @@
                         :foo {:a 1, :b 2}})
              (c/new-id {:crux.db/id :foo
                         :foo {:b 2, :a 1}})))))
+
+(t/deftest test-java-type-serialisation-1044
+  (with-open [node (crux/start-node {:crux.node/topology 'crux.standalone/topology})]
+    (let [doc {:crux.db/id :foo
+               :date (java.util.Date.)
+               :uri (java.net.URI. "https://google.com")
+               :url (java.net.URL. "https://google.com")
+               :uuid (java.util.UUID/randomUUID)}]
+
+      (t/is (thrown-with-msg? IllegalArgumentException
+                              #"Unfreezable type"
+                              (fix/submit+await-tx node [[:crux.tx/put doc]])))
+
+      (with-redefs [nippy/*serializable-whitelist* (conj nippy/*serializable-whitelist* "java.net.URL")]
+        (fix/submit+await-tx node [[:crux.tx/put doc]])
+        (t/is (= doc (crux/entity (crux/db node) :foo)))))))
