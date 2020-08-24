@@ -5,7 +5,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [org.clojure/tools.logging "1.0.0"]
+                 [org.clojure/tools.logging "1.1.0"]
                  [cheshire "5.9.0"]
                  [com.taoensso/nippy "2.15.1"]
                  [com.cognitect/transit-clj "1.0.324"]]

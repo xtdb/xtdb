@@ -22,7 +22,7 @@
 
                  ;; deps res
                  [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
-                 [org.apache.httpcomponents/httpclient "4.5.9"]]
+                 [org.apache.httpcomponents/httpclient "4.5.12"]]
 
   :middleware [leiningen.project-version/middleware]
   :jvm-opts ["-Xms3g" "-Xmx3g"]

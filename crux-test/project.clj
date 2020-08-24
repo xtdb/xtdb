@@ -30,8 +30,6 @@
                                    [juxt/crux-rdf "crux-git-version-alpha"]
 
                                    ;; JDBC
-                                   [com.zaxxer/HikariCP "3.3.1"]
-
                                    [com.h2database/h2 "1.4.199"]
                                    [com.opentable.components/otj-pg-embedded "0.13.1"]
                                    [org.xerial/sqlite-jdbc "3.28.0"]
@@ -61,7 +59,9 @@
                                    [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                                    [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                                    [org.tukaani/xz "1.8"]
-                                   [com.github.spotbugs/spotbugs-annotations "3.1.9"]]}}
+                                   [com.github.spotbugs/spotbugs-annotations "3.1.9"]
+                                   [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
+                                   [org.eclipse.jetty/jetty-http "9.4.22.v20191022"]]}}
 
   :aliases {"test" ["with-profile" "+test" "run" "-m" "circleci.test/dir" :project/test-paths]
             "tests" ["with-profile" "+test" "run" "-m" "circleci.test"]
