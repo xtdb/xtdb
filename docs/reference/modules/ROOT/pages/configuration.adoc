@@ -53,7 +53,7 @@ The following set of options are used by KV backend implementations, defined wit
 Using a Crux standalone node is the best way to get started.
 Once you've started a standalone Crux instance as described below, you can then follow the xref:get-started.adoc[getting started example].
 
-image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,width=70%,align="center"]
+image::local-standalone-mode.svg?sanitize=true[Local Standalone Mode,450,220,align="center"]
 
 .Standalone configuration
 [#table-conversion%header,cols="d,d,d"]

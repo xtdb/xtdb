@@ -3,7 +3,7 @@
 
 Crux offers a REST API layer in the `crux-http-server` module that allows you to send transactions and run queries over HTTP.
 
-image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,width=70%,align="centre"]
+image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,450,145,align="centre"]
 
 toc::[]
 

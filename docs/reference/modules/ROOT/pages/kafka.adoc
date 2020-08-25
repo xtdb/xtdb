@@ -3,7 +3,7 @@
 When using Crux at scale it is recommended to use multiple Crux nodes connected via a Kafka cluster.
 Kafka can be used for both the Crux transaction log and the document store.
 
-image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,width=70%,align="center"]
+image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,450,150,align="center"]
 
 Kafka nodes have the following properties:
 

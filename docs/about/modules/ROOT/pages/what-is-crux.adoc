@@ -24,7 +24,7 @@ image::crux-node-1.svg?sanitize=true[Crux Kafka Node Diagram,970,443]
 
 Crux is an open source document database with bitemporal graph queries.
 
-image::crux-venn-1.svg?sanitize=true[Document database with graph queries,width=450,align="center"]
+image::crux-venn-1.svg?sanitize=true[Document database with graph queries,450,320,align="center"]
 
 [#bitemporal]
 == Bitemporal
