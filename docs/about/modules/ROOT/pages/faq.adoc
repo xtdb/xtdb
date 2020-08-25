@@ -36,9 +36,8 @@ language, as explained in
 http://vvvvalvalval.github.io/posts/2018-01-06-so-yeah-about-clojures-syntax.html[this
 blog post].
 +
-We plan to provide limited SQL/JDBC support for Crux in the future, potentially
-using https://calcite.apache.org/docs/index.html[Apache Calcite].
-
+We offer a module providing some limited SQL support using https://calcite.apache.org/docs/index.html[Apache Calcite] - read more about it
+xref:reference::sql.adoc[**here**].
 
 How does Crux compare to Datomic (On-Prem)?::
 
@@ -130,13 +129,15 @@ standby transactors. Centralised execution of transaction functions is
 effectively an optimisation that is useful for managing contention whilst
 minimising external complexity, and the trade-off is that the use of
 transaction functions will ultimately impact the serialised transaction
-throughput of the entire system. Crux does not currently provide a standard
-means of creating transaction functions but it is an area we are keen to see
-explored. If transaction functions and other kinds of validations of
-constraints are needed then it is recommended to use a gatekeeper pattern which
-involves electing a primary Crux node (e.g. using ZooKeeper) to execute
-transactions against, thereby creating a similar effect to Datomic's transactor
-component
+throughput of the entire system. Within Crux, transaction functions are installed
+via put operations and all invocation arguments are stored separately in the document store.
+Once invoked as an operation, a transaction function has access to a context against which you
+can run a query, and this is how you can update a counter based on its current value. The result of invoking a transaction function is a list of one or more operations which are spliced into the transaction to replace the calling operation. Nodes which are subsequently indexing the transaction log will
+not have to repeat this processing of the transaction function operations because the argument documents
+(to which the transaction log refers under-the-hood) are idempotently mutated and replaced with the
+resulting native operations. In other words, each transaction function invocation replaces itself with its
+result in the upstream document store, and this maintains consistency whilst not precluding later eviction
+operations on the data generated within the results.
 
 Other differences compared to Crux:
 
@@ -266,15 +267,8 @@ the core team.
 
 Does Crux provide transaction functions?::
 
-  Not directly, currently. You may use a "gatekeeper" pattern to
-enforce the desired level of transaction function consistency
-required.
+  Yes - read more about transaction functions in Crux xref:reference::transactions#transaction-functions[**here**].
 
-  As the log is ingested in the same order at all nodes, purely
-functional transformations of the tx-ops are possible. Enabling
-experimental support for transaction functions, which are subject to
-change and undocumented, can be done via the environment variable
-feature flag `CRUX_ENABLE_TX_FNS`.
 
 Does Crux support the full Datomic/DataScript dialect of Datalog?::
 
@@ -311,15 +305,8 @@ cross shard queries. Sharding is mainly useful to increase throughput.
 
 Does Crux support pull expressions?::
 
-  No. As each Crux node is its own document store, the
-documents are local to the query node and can easily be accessed
-directly via the lower level read operations. We aim to make this more
-convenient soon.
-+
-We are also considering support for remote document stores via the
-`crux.db.ObjectStore` interface, mainly to support larger data sets, but
-there would still be a local cache. The indexes would stay local as this
-is key to efficient queries.
+  Yes - Crux supports a 'projection' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries. This support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library. See more xref:reference::queries#eql-projection[**here**].
+
 
 Do you have any benchmarks?::
 
