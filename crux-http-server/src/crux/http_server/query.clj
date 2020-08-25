@@ -190,22 +190,25 @@
 (defn ->edn-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [results]} _]
+    (encode-to-output-stream [_ {:keys [results error] :as res} _]
       (fn [^OutputStream output-stream]
         (with-open [w (io/writer output-stream)]
           (try
-            (print-dup (iterator-seq results) w)
+            (if error
+              (.write w ^String (pr-str res))
+              (print-dup (iterator-seq results) w))
             (finally
               (cio/try-close results))))))))
 
 (defn- ->tj-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [results]} _]
+    (encode-to-output-stream [_ {:keys [results error] :as res} _]
       (fn [^OutputStream output-stream]
         (try
-          (let [results (iterator-seq results)]
-            (transit/write (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}}) results))
+          (if error
+            (transit/write (transit/writer output-stream :json) res)
+            (transit/write (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}}) (iterator-seq results)))
           (finally
             (cio/try-close results)))))))
 
