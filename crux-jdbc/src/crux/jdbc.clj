@@ -89,15 +89,16 @@
 (defrecord JdbcDocumentStore [ds dbtype]
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (doseq [[id doc] id-and-docs
-            :let [id (str id)]]
-      (if (c/evicted-doc? doc)
-        (do
-          (insert-event! ds id doc "docs")
-          (evict-doc! ds id doc))
-        (if-not (doc-exists? ds id)
-          (insert-event! ds id doc "docs")
-          (update-doc! ds id doc)))))
+    (jdbc/with-transaction [tx ds]
+      (doseq [[id doc] id-and-docs
+              :let [id (str id)]]
+        (if (c/evicted-doc? doc)
+          (do
+            (insert-event! tx id doc "docs")
+            (evict-doc! tx id doc))
+          (if-not (doc-exists? tx id)
+            (insert-event! tx id doc "docs")
+            (update-doc! tx id doc))))))
 
   (fetch-docs [this ids]
     (->> (for [id-batch (partition-all 100 ids)
