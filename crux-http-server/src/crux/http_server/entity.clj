@@ -162,28 +162,33 @@
 (defn ->edn-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [entity entity-history]} _]
+    (encode-to-output-stream [_ {:keys [entity entity-history limit]} _]
       (fn [^OutputStream output-stream]
         (with-open [w (io/writer output-stream)]
           (if entity-history
-            (try
-              (print-dup (iterator-seq entity-history) w)
-              (finally
-                (cio/try-close entity-history)))
+            (if limit
+              (binding [*out* w]
+                (pr entity-history))
+              (try
+                (print-dup (iterator-seq entity-history) w)
+                (finally
+                  (cio/try-close entity-history))))
             (binding [*out* w]
               (pr entity))))))))
 
 (defn- ->tj-encoder [_]
   (reify
     mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [entity entity-history]} _]
+    (encode-to-output-stream [_ {:keys [entity entity-history limit]} _]
       (fn [^OutputStream output-stream]
         (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
           (if entity-history
-            (try
-              (transit/write w (iterator-seq entity-history))
-              (finally
-                (cio/try-close entity-history)))
+            (if limit
+              (transit/write w entity-history)
+              (try
+                (transit/write w (iterator-seq entity-history))
+                (finally
+                  (cio/try-close entity-history))))
             (transit/write w entity)))))))
 
 (defn ->entity-muuntaja [opts]
@@ -199,15 +204,21 @@
                 (m/install {:name "application/edn"
                             :encoder [->edn-encoder]}))))
 
-(defn entity-history-cursor [entity-history {:keys [limit valid-time transaction-time]}]
-  (cio/fmap-cursor (fn [entity-history]
-                     (cond->> (map #(update % :crux.db/content-hash str) entity-history)
-                       valid-time (drop-while #(< (:crux.db/valid-time %) valid-time))
-                       transaction-time (drop-while #(< (:crux.tx/tx-time %) transaction-time))
-                       limit (take limit)))
-    entity-history))
+(defn entity-history-cursor [entity-history]
+  {:entity-history (cio/fmap-cursor
+                     (fn [entity-history] (map #(update % :crux.db/content-hash str) entity-history))
+                     entity-history)})
 
-(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit] :as ks}]
+(defn entity-history-page [entity-history {:keys [resume-after-tx-id limit] :as params}]
+  (let [page (cond->> (map #(update % :crux.db/content-hash str) (iterator-seq entity-history))
+               resume-after-tx-id ((fn [hist] (rest (drop-while #(not= resume-after-tx-id (:crux.tx/tx-id %)) hist))))
+               limit (take (inc limit)))]
+    (if (>= limit (count page))
+      {:entity-history page}
+      (merge {:entity-history (butlast page) :resume-after-tx-id (:crux.tx/tx-id (last page))}
+        (select-keys params [:limit :sort-order])))))
+
+(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit resume-after-tx-id] :as params}]
   (try
     (let [eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
                                (URLDecoder/decode eid))
@@ -216,8 +227,9 @@
           entity-history (api/open-entity-history db eid sort-order history-opts)]
       (if-not (.hasNext entity-history)
         {:not-found? true}
-        (-> {:entity-history (entity-history-cursor entity-history ks)}
-          (cond-> limit (assoc :entity-history-next (first (seq (drop limit entity-history))))))))
+        (if limit
+          (entity-history-page entity-history params)
+          (entity-history-cursor entity-history))))
     (catch Exception e
       {:error e})))
 
@@ -251,18 +263,22 @@
              :else 200)
    :body res})
 
-(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history headers] :as res} req]
-  (clojure.pprint/pprint res)
+(defn resume-history-link [{:keys [eid resume-after-tx-id limit sort-order]}]
+  (if resume-after-tx-id
+    {:headers {"Link" (str "</_crux/entity?eid=" eid "&history=true&limit=" limit "&sort-order=" sort-order "&resume-after-tx-id=" resume-after-tx-id ">; rel=\"next\"")}}
+    {}))
+
+(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history limit headers] :as res} req]
   (cond
     no-entity? {:status 400, :body {:error "Missing eid"}}
     not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
-    entity-history {:status 200, :body {:entity-history entity-history}}
+    entity-history (merge {:status 200, :body {:entity-history entity-history :limit limit}} (resume-history-link res))
     :else {:status 200, :body {:entity entity}}))
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)
-        {:strs [eid history sort-order limit
+        {:strs [eid history sort-order limit resume-after-tx-id
                 valid-time transaction-time
                 start-valid-time start-transaction-time
                 end-valid-time end-transaction-time
@@ -277,6 +293,7 @@
               (search-entity-history (assoc entity-options
                                             :sort-order (some-> sort-order keyword)
                                             :limit (some-> ^String limit Long/parseLong)
+                                            :resume-after-tx-id (some-> ^String resume-after-tx-id Long/parseLong)
                                             :history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
                                                            :with-docs? (some-> ^String with-docs Boolean/valueOf)
                                                            :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
@@ -286,4 +303,6 @@
               (search-entity (assoc entity-options
                                     :link-entities? (some-> ^String link-entities? Boolean/valueOf))))))
         (transform-query-resp req)
-        (->> (m/format-response entity-muuntaja req)))))
+        ((fn [r] (clojure.pprint/pprint r) r))
+        (->> (m/format-response entity-muuntaja req))
+        ((fn [r] (println r) r)))))
