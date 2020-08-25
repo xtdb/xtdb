@@ -1,10 +1,21 @@
 = crux-kafka
 
-This project contains `crux.kafka.KafkaTxLog` which is an implementation of
-`TxLog` backed by Apache Kafka for strong durability and
-scalability guarantees.
+This Crux module allows you to use Apache's https://kafka.apache.org[Kafka] as Crux's 'transaction log' and/or 'document store', for strong durability and scalability guarantees.
 
-For tests, see `/crux-test/test/crux/kafka_test.clj`.
+.deps.edn
+[source,clojure]
+----
+juxt/crux-kafka {:mvn/version "20.09-1.11.0-beta"}
+----
 
-This project also contains the `crux.kafka` namespace which
-houses Kafka related Crux modules.
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-kafka</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
+----
+
+For more details, see the https://opencrux.com/reference/kafka.html[Kafka documentation]

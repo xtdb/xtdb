@@ -55,8 +55,7 @@
                                   :kafka-config ::k/kafka-config
                                   :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
                                                                     :db-dir (io/file dev-node-dir "ek-documents")}}}
-            :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}
-            ::k/tx-consumer {:kafka-config ::k/kafka-config}}}))
+            :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}}}))
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
 (ir/set-prep! (fn [] standalone-config))

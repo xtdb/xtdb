@@ -132,7 +132,9 @@
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
 
-(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer, tx-topic, kafka-config]
+(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer,
+                       tx-topic, kafka-config,
+                       ^Closeable consumer]
   db/TxLog
   (submit-tx [this tx-events]
     (try
@@ -165,11 +167,15 @@
        (boolean (.listTopics latest-submitted-tx-consumer))
        (catch Exception e
          (log/debug e "Could not list Kafka topics:")
-         false))}))
+         false))})
 
-(defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
-                            :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}}
-  [{:keys [tx-topic-opts kafka-config] :as options}]
+  Closeable
+  (close [_]
+    (cio/try-close consumer)))
+
+(defn ->ingest-only-tx-log {::sys/deps {:kafka-config `->kafka-config
+                                        :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}}
+  [{:keys [tx-topic-opts kafka-config]}]
   (let [latest-submitted-tx-consumer (->consumer {:kafka-config kafka-config})
         producer (->producer {:kafka-config kafka-config})
         tx-topic-opts (-> tx-topic-opts
@@ -182,20 +188,22 @@
     (with-open [admin-client (->admin-client {:kafka-config kafka-config})]
       (ensure-topic-exists admin-client tx-topic-opts)
       (ensure-tx-topic-has-single-partition admin-client tx-topic))
-    (->KafkaTxLog producer latest-submitted-tx-consumer tx-topic kafka-config)))
+    (map->KafkaTxLog {:producer producer
+                      :latest-submitted-tx-consumer latest-submitted-tx-consumer
+                      :tx-topic tx-topic
+                      :kafka-config kafka-config})))
 
-;;;; TxConsumer
-
-(defn- ->tx-consumer {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
-                                        {:kafka-config `->kafka-config
-                                         :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}})
-                      ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
-                                        {:poll-wait-duration {:spec ::sys/duration
-                                                              :required? true
-                                                              :doc "How long to wait when polling Kafka"
-                                                              :default (Duration/ofSeconds 1)}})}
+(defn ->tx-log {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
+                                  (::sys/deps (meta #'->ingest-only-tx-log)))
+                ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
+                                  (::sys/args (meta #'->ingest-only-tx-log))
+                                  {:poll-wait-duration {:spec ::sys/duration
+                                                        :required? true
+                                                        :doc "How long to wait when polling Kafka"
+                                                        :default (Duration/ofSeconds 1)}})}
   [{:keys [kafka-config tx-topic-opts poll-wait-duration] :as opts}]
-  (let [tx-topic (:topic-name tx-topic-opts)
+  (let [tx-log (->ingest-only-tx-log opts)
+        tx-topic (:topic-name tx-topic-opts)
         tp (TopicPartition. tx-topic 0)
         consumer (doto (->consumer {:kafka-config kafka-config})
                    (.assign #{tp}))
@@ -209,10 +217,11 @@
                                                                    (->> (consumer-seqs consumer poll-wait-duration)
                                                                         (mapcat identity)
                                                                         (map tx-record->tx-log-entry)))))]
-    (reify Closeable
-      (close [_]
-        (cio/try-close polling-consumer)
-        (cio/try-close consumer)))))
+    (-> tx-log
+        (assoc :consumer (reify Closeable
+                           (close [_]
+                             (cio/try-close polling-consumer)
+                             (cio/try-close consumer)))))))
 
 ;;;; DocumentStore
 
@@ -295,11 +304,17 @@
         (reset! !error e)
         (log/error e "Error while consuming documents")))))
 
-(def doc-topic-config
-  {"cleanup.policy" "compact"})
+(defn- ensure-doc-topic-exists [{:keys [kafka-config doc-topic-opts]}]
+  (with-open [admin-client (->admin-client {:kafka-config kafka-config})]
+    (ensure-topic-exists admin-client (-> doc-topic-opts
+                                          (update :topic-config
+                                                  (fn [topic-config]
+                                                    (merge {"cleanup.policy" "compact"} topic-config)))))))
 
 (defn ->document-store {::sys/deps {:kafka-config `->kafka-config
-                                    :doc-topic-opts {:crux/module `->topic-opts, :topic-name "crux-docs", :num-partitions 1}
+                                    :doc-topic-opts {:crux/module `->topic-opts,
+                                                     :topic-name "crux-docs",
+                                                     :num-partitions 1}
                                     :local-document-store 'crux.kv-document-store/->document-store
                                     :indexer :crux/indexer}
                         ::sys/args {:group-id {:doc "Kafka client group.id"
@@ -310,8 +325,7 @@
                                                          :doc "How long to wait when polling Kafka"
                                                          :default (Duration/ofSeconds 1)}} }
   [{:keys [indexer local-document-store kafka-config doc-topic-opts] :as opts}]
-  (with-open [admin-client (->admin-client {:kafka-config kafka-config})]
-    (ensure-topic-exists admin-client doc-topic-opts))
+  (ensure-doc-topic-exists opts)
 
   (map->KafkaDocumentStore {:producer (->producer {:kafka-config kafka-config})
                             :doc-topic (:topic-name doc-topic-opts)
@@ -334,9 +348,7 @@
                                                 :doc-topic-opts {:crux/module `->topic-opts
                                                                  :topic-name "crux-docs"
                                                                  :num-partitions 1}}}
-  [{:keys [kafka-config doc-topic-opts]}]
-  (with-open [admin-client (->admin-client {:kafka-config kafka-config})]
-    (ensure-topic-exists admin-client doc-topic-opts))
-
+  [{:keys [kafka-config doc-topic-opts] :as opts}]
+  (ensure-doc-topic-exists opts)
   (->IngestOnlyDocumentStore (->producer {:kafka-config kafka-config})
                              (:topic-name doc-topic-opts)))

@@ -246,7 +246,6 @@
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-        ::k/tx-consumer {:kafka-config ::k/kafka-config}
         :crux/tx-log {:crux/module `k/->tx-log
                       :kafka-config ::k/kafka-config
                       :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
@@ -262,7 +261,6 @@
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9091"}
-        ::k/tx-consumer {:kafka-config ::k/kafka-config}
         :crux/tx-log {:crux/module `k/->tx-log
                       :kafka-config ::k/kafka-config
                       :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
@@ -285,7 +283,6 @@
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-        ::k/tx-consumer {:kafka-config ::k/kafka-config}
         :crux/tx-log {:crux/module `k/->tx-log
                       :kafka-config ::k/kafka-config
                       :tx-topic-opts {:topic-name (str "kafka-lmdb-tx-" uuid)}}

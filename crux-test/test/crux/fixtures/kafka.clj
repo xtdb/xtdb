@@ -48,11 +48,7 @@
     (binding [*tx-topic* (str "tx-topic-" test-id)]
       (fix/with-opts {::k/kafka-config {:bootstrap-servers *kafka-bootstrap-servers*}
                       ::tx-topic-opts {:crux/module `k/->topic-opts, :topic-name *tx-topic*}
-                      :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config, :tx-topic-opts ::tx-topic-opts}
-                      ::tx-consumer {:crux/module `k/->tx-consumer
-                                     :kafka-config ::k/kafka-config
-                                     :tx-topic-opts ::tx-topic-opts
-                                     :group-id (str test-id)}}
+                      :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config, :tx-topic-opts ::tx-topic-opts}}
         f))))
 
 (defn with-cluster-doc-store-opts [f]
