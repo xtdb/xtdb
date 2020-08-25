@@ -75,6 +75,12 @@
     "Transaction Time"]
    [:div.entity-vt-tt__value (str tt)]])
 
+(defn remove-times-if-hidden
+  [form-values component]
+  (cond-> form-values
+    (not @(rf/subscribe [::sub/show-vt? component])) (assoc-in [:values "valid-time"] nil)
+    (not @(rf/subscribe [::sub/show-tt? component])) (assoc-in [:values "transaction-time"] nil)))
+
 (defn query-validation
   [values]
   (let [invalid-query? (try
@@ -160,7 +166,7 @@
                     :prevent-default? true
                     :clean-on-unmount? true
                     :initial-values @(rf/subscribe [::sub/initial-values-query])
-                    :on-submit #(rf/dispatch [::events/go-to-query-view %])}
+                    :on-submit #(rf/dispatch [::events/go-to-query-view (remove-times-if-hidden % :query)])}
          (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
            (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
                  disabled? (or loading? (some some? (vals errors)))]
@@ -253,7 +259,7 @@
                     :clean-on-unmount? true
                     :validation entity-validation
                     :initial-values @(rf/subscribe [::sub/initial-values-entity])
-                    :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
+                    :on-submit #(rf/dispatch [::events/go-to-entity-view (remove-times-if-hidden % :entity)])}
          (fn [{:keys [values
                       touched
                       errors
