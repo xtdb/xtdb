@@ -1,5 +1,6 @@
 name: about
 title: Crux
 version: master
+start_page: ROOT:what-is-crux.adoc
 nav:
   - nav.adoc

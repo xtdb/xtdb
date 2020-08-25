@@ -12,20 +12,15 @@ content:
     - url: ../
       start_path: docs/tutorials
       branches: HEAD
+#   - url: https://github.com/juxt/crux
+#      start_path: docs/reference
+#      branches:
+#        - example-version-branch
+#      tag:
+#        - release-version
     - url: ../
       start_path: docs/reference
       branches: HEAD
-  #  - url: ../
-  #    start_path: docs/concepts
-  #    branches: HEAD
-  #  - url: ../
-  #    start_path: docs/reference
-  #    branches: HEAD
-  # - url: https://github.com/juxt/crux
-  #   start_path: docs/reference
-  #   branches:
-  #     - test-release-branch-1.5
-  #     - test-release-branch-1.4
 ui:
   bundle:
     url: ./crux-site/ui-bundle.zip
