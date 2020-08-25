@@ -44,7 +44,11 @@
                :checked show-vt?
                :on-change #(rf/dispatch [::events/toggle-show-vt component show-vt?])}]
       [:div.input-group-label.label
-       [:label "Valid Time"]]
+       [:label "Valid Time"] [:a.label-hint
+                              {:href "https://opencrux.com/about/bitemporality.html#valid"
+                               :target "_blank"
+                               :title "Learn More"}
+                              "ⓘ"]]
       [:div.date-time-input
        {:class (when-not show-vt? "hidden")}
        [datetime-input props "valid-time"]
@@ -57,7 +61,11 @@
                :checked show-tt?
                :on-change #(rf/dispatch [::events/toggle-show-tt component show-tt?])}]
       [:div.input-group-label.label
-       [:label "Transaction Time" ]]
+       [:label "Transaction Time" ] [:a.label-hint
+                                     {:href "https://opencrux.com/about/bitemporality.html#transaction"
+                                      :target "_blank"
+                                      :title "Learn More"}
+                                     "ⓘ"]]
       [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
        [datetime-input props "transaction-time"]

@@ -467,16 +467,24 @@ html, body {
 }
 
 .input-group-label {
-    width: 7rem;
+    width: 9rem;
     margin-right: 1rem;
     margin-bottom: 0rem;
     margin-left: 0.5rem;
+    display: flex;
+    align-items: center;
 }
 
 .input-error {
     font-size: 0.8rem;
     color: darkred;
     margin-top: 0.5rem;
+}
+
+.label-hint {
+    margin-left: 0.3rem;
+    color: black;
+    text-decoration: none;
 }
 
 // END FORM ELEMENTS
