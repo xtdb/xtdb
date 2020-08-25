@@ -303,6 +303,4 @@
               (search-entity (assoc entity-options
                                     :link-entities? (some-> ^String link-entities? Boolean/valueOf))))))
         (transform-query-resp req)
-        ((fn [r] (clojure.pprint/pprint r) r))
-        (->> (m/format-response entity-muuntaja req))
-        ((fn [r] (println r) r)))))
+        (->> (m/format-response entity-muuntaja req)))))

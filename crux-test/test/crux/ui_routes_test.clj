@@ -61,9 +61,9 @@
                                 (-> (get-result-from-path "/_crux/entity?eid=:ivan&link-entities?=true" accept-type)
                                     (parse-body accept-type)))]
       (t/is (= {:crux.db/id :ivan, :linking (entity-ref/->EntityRef :peter)}
-               (get-linked-entities "application/edn"))))
-      ; (t/is (= {:crux.db/id :ivan, :linking (entity-ref/->EntityRef :peter)}
-      ;          (get-linked-entities "application/transit+json"))))))
+               (get-linked-entities "application/edn")))
+      (t/is (= {:crux.db/id :ivan, :linking (entity-ref/->EntityRef :peter)}
+               (get-linked-entities "application/transit+json"))))
 
     ;; Testing getting query results
     (let [get-query (fn [accept-type]
@@ -78,8 +78,8 @@
     (let [get-query (fn [accept-type]
                       (set (-> (get-result-from-path "/_crux/query?find=[e]&where=[e+%3Acrux.db%2Fid+_]&link-entities?=true" accept-type)
                                (parse-body accept-type))))]
-      (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/edn"))))
-      ; (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/transit+json"))))
+      (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/edn")))
+      (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/transit+json"))))
 
     ;; Test file-type based negotiation
     (t/is (= #{[":ivan"] [":peter"] ["e"]}
