@@ -45,12 +45,6 @@
         <artifactId>crux-http-server</artifactId>
         <version>${crux.crux-version}-alpha</version>
     </dependency>
-
-    <dependency>
-      <groupId>juxt</groupId>
-      <artifactId>crux-cli</artifactId>
-      <version>${crux.crux-version}-beta</version>
-    </dependency>
   </dependencies>
 
   <repositories>

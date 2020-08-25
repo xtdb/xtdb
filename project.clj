@@ -9,7 +9,6 @@
    "crux-sql"
    "crux-test"
    "crux-s3"
-   "crux-cli"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -37,7 +36,6 @@
    [juxt/crux-sql "crux-git-version-alpha"]
    [juxt/crux-test "crux-git-version"]
    [juxt/crux-bench "crux-git-version"]
-   [juxt/crux-cli "crux-git-version-beta"]
 
    [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
 

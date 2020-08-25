@@ -1,15 +1,13 @@
 (ns ^:no-doc crux.cli
   (:require [clojure.edn :as edn]
-            [clojure.pprint :as pp]
+            [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [crux.node :as n]
-            [crux.config :as cc]
-            [crux.io :as cio]
-            [clojure.java.io :as io]
             [crux.api :as crux]
-            [cheshire.core :as json])
-  (:import (java.io Closeable File)))
+            [crux.io :as cio]
+            [crux.node :as n]
+            [clojure.data.json :as json])
+  (:import java.io.File))
 
 (defn- if-it-exists [^File f]
   (when (.exists f)
@@ -30,15 +28,9 @@
 
    ["-j" "--json JSON" "Options as JSON."
     :default nil
-    :parse-fn edn/read-string]
+    :parse-fn json/read-str]
 
    ["-h" "--help"]])
-
-(defn load-edn [f]
-  (edn/read-string (slurp f)))
-
-(defn load-json [f]
-  (json/decode (slurp f)))
 
 (defn parse-args [args]
   (let [{:keys [options errors summary] :as parsed-opts} (cli/parse-opts args cli-options)]
@@ -48,14 +40,11 @@
       (:help options) {::help summary}
 
       :else (let [{:keys [file edn json]} options]
-              {::node-opts [(or (when file
-                                  (case (file-extension file)
-                                    "edn" (load-edn file)
-                                    "json" (load-json file)))
-                                (some-> (io/file "crux.edn") if-it-exists (load-edn))
-                                (some-> (io/file "crux.json") if-it-exists (load-json))
-                                (some-> (io/resource "crux.edn") (load-edn))
-                                (some-> (io/resource "crux.json") (load-json)))
+              {::node-opts [(or file
+                                (some-> (io/file "crux.edn") if-it-exists)
+                                (some-> (io/file "crux.json") if-it-exists)
+                                (io/resource "crux.edn")
+                                (io/resource "crux.json"))
 
                             json
                             edn]}))))

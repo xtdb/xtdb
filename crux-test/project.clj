@@ -49,7 +49,7 @@
 
                                    ;; General:
                                    [ch.qos.logback/logback-classic "1.2.3"]
-                                   [org.clojure/data.json "0.2.7"]
+                                   [org.clojure/data.json "1.0.0"]
                                    [org.clojure/data.csv "1.0.0"]
                                    [clj-http "3.10.1"]
 

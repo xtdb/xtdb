@@ -1,17 +1,42 @@
 (ns ^:no-doc crux.system
   (:refer-clojure :exclude [ref])
-  (:require [clojure.spec.alpha :as s]
-            [com.stuartsierra.dependency :as dep]
+  (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [clojure.set :as set]
+            [com.stuartsierra.dependency :as dep]
             [crux.io :as cio])
-  (:import (java.io Closeable File Writer)
-           (java.nio.file Path Paths)
-           (java.time Duration)
-           (java.util Map List)
-           (java.util.concurrent TimeUnit)
-           (crux.api ICruxAPI)))
+  (:import [java.io Closeable File Writer]
+           java.net.URL
+           [java.nio.file Path Paths]
+           java.time.Duration
+           java.util.concurrent.TimeUnit
+           java.util.Map))
+
+(defprotocol OptsSource
+  (load-opts [src]))
+
+(alter-meta! #'load-opts assoc :private true)
+
+(defn- read-opts [src file-name]
+  (cond
+    (str/ends-with? file-name ".json") (json/read-str (slurp src))
+    (str/ends-with? file-name ".edn") (edn/read-string (slurp src))
+    :else (throw (IllegalArgumentException. (format "Unsupported options type: '%s'" file-name)))))
+
+(extend-protocol OptsSource
+  Map
+  (load-opts [src] src)
+
+  File
+  (load-opts [src] (read-opts src (.getName src)))
+
+  URL
+  (load-opts [src] (read-opts src (.getFile src)))
+
+  nil
+  (load-opts [_] nil))
 
 (defn- spread-opts [opts m]
   (->> m
@@ -106,6 +131,7 @@
 
   ([opts prep-ks]
    (let [root-opts (->> (cond-> opts (not (vector? opts)) vector)
+                        (map load-opts)
                         reverse
                         (reduce spread-opts {})
                         (into {} (map (juxt (comp vector keyword key) val))))]

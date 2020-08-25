@@ -1,6 +1,6 @@
 (defproject juxt/crux-bench "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/data.json "0.2.7"]
+                 [org.clojure/data.json "1.0.0"]
                  [org.clojure/tools.cli "1.0.194"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-jdbc "crux-git-version-beta"]

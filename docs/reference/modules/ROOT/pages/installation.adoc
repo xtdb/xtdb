@@ -79,8 +79,7 @@ Similarly, to start Crux using Clojure's CLI tooling:
 {:deps {org.clojure/clojure {:mvn/version "1.10.1"}
 
         juxt/crux-core {:mvn/version "20.09-1.11.0-beta"}
-        juxt/crux-http-server {:mvn/version "20.09-1.11.0-alpha"}
-        juxt/crux-cli {:mvn/version "20.09-1.11.0-beta"}}}
+        juxt/crux-http-server {:mvn/version "20.09-1.11.0-alpha"}}}
 ----
 
 .crux.edn
