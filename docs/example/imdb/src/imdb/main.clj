@@ -61,7 +61,7 @@
                          :kafka-config :crux.kafka/kafka-config
                          :local-document-store {:kv-store :rocksdb}}
    :crux/indexer {:kv-store :rocksdb}
-   :rocksdb {:crux/module 'crux.kv.rocksdb/->kv-store
+   :rocksdb {:crux/module 'crux.rocksdb/->kv-store
              :db-dir index-dir}})
 
 (def storage-dir "dev-storage")

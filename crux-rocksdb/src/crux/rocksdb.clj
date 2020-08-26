@@ -1,9 +1,9 @@
-(ns ^:no-doc crux.kv.rocksdb
+(ns ^:no-doc crux.rocksdb
   "RocksDB KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
-            [crux.kv.rocksdb.loader]
+            [crux.rocksdb.loader]
             [crux.memory :as mem]
             [crux.system :as sys]
             [crux.io :as cio])

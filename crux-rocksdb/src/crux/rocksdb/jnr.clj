@@ -1,11 +1,11 @@
-(ns ^:no-doc crux.kv.rocksdb.jnr
+(ns ^:no-doc crux.rocksdb.jnr
   "RocksDB KV backend for Crux using JNR:
   https://github.com/jnr/jnr-ffi"
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.kv.rocksdb.loader]
+            [crux.rocksdb.loader]
             [crux.memory :as mem]
             [crux.system :as sys])
   (:import java.io.Closeable
@@ -103,8 +103,8 @@
                                  ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
   (^void rocksdb_iter_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter]))
 
-(defn- load-rocksdb-native-lib ^crux.kv.rocksdb.jnr.RocksDB []
-  (.load (LibraryLoader/create RocksDB) crux.kv.rocksdb.loader/rocksdb-library-path))
+(defn- load-rocksdb-native-lib ^crux.rocksdb.jnr.RocksDB []
+  (.load (LibraryLoader/create RocksDB) crux.rocksdb.loader/rocksdb-library-path))
 
 (def ^:private ^RocksDB rocksdb)
 (def ^:private ^jnr.ffi.Runtime rt)

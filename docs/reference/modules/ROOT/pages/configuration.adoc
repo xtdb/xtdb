@@ -121,7 +121,7 @@ To override the implementation and parameters of this KV store (for example, to 
 ICruxAPI cruxNode = Crux.startNode(n -> {
   n.with("crux/tx-log", txLog -> {
      txLog.with("kv-store", kv -> {
-       kv.module("crux.kv.rocksdb/->kv-store");
+       kv.module("crux.rocksdb/->kv-store");
        kv.set("db-dir", new File("/tmp/rocksdb"));
     });
   });
@@ -135,7 +135,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 {
   "crux/tx-log": {
     "kv-store": {
-      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "crux/module": "crux.rocksdb/->kv-store",
       "db-dir": "/tmp/txs"
     }
   },
@@ -147,7 +147,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 .Clojure/EDN
 [source,clojure]
 ----
-{:crux/tx-log {:kv-store {:crux/module 'crux.kv.rocksdb/->kv-store
+{:crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                           :db-dir (io/file "/tmp/txs")}}
  :crux/document-store {...}
  :crux/indexer {...}}
@@ -175,13 +175,13 @@ For example, if we were to write the following, the transaction log and the docu
 {
   "crux/tx-log": {
     "kv-store": {
-      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "crux/module": "crux.rocksdb/->kv-store",
       "db-dir": "/tmp/txs"
     }
   },
   "crux/document-store": {
     "kv-store": {
-      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "crux/module": "crux.rocksdb/->kv-store",
       "db-dir": "/tmp/docs"
     }
   }
@@ -196,7 +196,7 @@ We specify a new top-level module, and then refer to it by name where required:
 ----
 ICruxAPI cruxNode = Crux.startNode(n -> {
    n.with("my-rocksdb", rocks -> {
-     rocks.module("crux.kv.rocksdb/->kv-store");
+     rocks.module("crux.rocksdb/->kv-store");
      rocks.set("db-dir", new File("/tmp/rocksdb"));
    });
    n.with("crux/document-store", docStore -> {
@@ -212,7 +212,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 ----
 {
   "my-rocksdb": {
-    "crux/module": "crux.kv.rocksdb/->kv-store",
+    "crux/module": "crux.rocksdb/->kv-store",
     "db-dir": "/tmp/txs"
   },
   "crux/tx-log": {
@@ -226,7 +226,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 .Clojure/EDN
 [source,clojure]
 ----
-{:my-rocksdb {:crux/module 'crux.kv.rocksdb/->kv-store
+{:my-rocksdb {:crux/module 'crux.rocksdb/->kv-store
               :db-dir (io/file "/tmp/rocksdb")}
  :crux/tx-log {:kv-store :my-rocksdb}
  :crux/document-store {:kv-store :my-rocksdb}}

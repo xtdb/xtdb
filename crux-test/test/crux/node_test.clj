@@ -4,7 +4,7 @@
             [crux.io :as cio]
             [crux.jdbc :as j]
             crux.kv.memdb
-            [crux.kv.rocksdb :as rocks]
+            [crux.rocksdb :as rocks]
             [crux.node :as n]
             [clojure.spec.alpha :as s]
             [crux.fixtures :as f]
@@ -60,21 +60,21 @@
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "crux/module" "crux.kv.rocksdb/->kv-store")
+                                        (.put "crux/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "txs"))))))
                         (.put "crux/document-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "crux/module" "crux.kv.rocksdb/->kv-store")
+                                        (.put "crux/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "docs"))))))
                         (.put "crux/indexer"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "crux/module" "crux.kv.rocksdb/->kv-store")
+                                        (.put "crux/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "indexes"))))))))]
-      (t/is (= "crux.kv.rocksdb.RocksKv"
+      (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
                (kv/kv-name (get-in node [:document-store :document-store :kv]))
                (kv/kv-name (get-in node [:indexer :kv-store]))))

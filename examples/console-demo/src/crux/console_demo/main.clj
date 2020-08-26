@@ -4,7 +4,7 @@
             [integrant.repl :as ir]
             [clojure.string :as string]
             [clojure.java.io :as io]
-            [crux.kv.rocksdb :as rocks])
+            [crux.rocksdb :as rocks])
   (:import java.io.Closeable)
   (:gen-class))
 

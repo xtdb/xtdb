@@ -22,7 +22,7 @@
                   (.with "kv-store"
                          (consume [c]
                            (doto ^ModuleConfigurator c
-                             (.module "crux.kv.rocksdb/->kv-store")
+                             (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "txs"))))))))
        (.with "crux/document-store"
               (consume [c]
@@ -30,7 +30,7 @@
                   (.with "kv-store"
                          (consume [c]
                            (doto ^ModuleConfigurator c
-                             (.module "crux.kv.rocksdb/->kv-store")
+                             (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "docs"))))))))
        (.with "crux/indexer"
               (consume [c]
@@ -38,13 +38,13 @@
                   (.with "kv-store"
                          (consume [c]
                            (doto ^ModuleConfigurator c
-                             (.module "crux.kv.rocksdb/->kv-store")
+                             (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "indexes"))))))))))))
 
 (t/deftest test-configure-rocks
   (fix/with-tmp-dir "data" [data-dir]
     (with-open [node (start-rocks-node data-dir)]
-      (t/is (= "crux.kv.rocksdb.RocksKv"
+      (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
                (kv/kv-name (get-in node [:document-store :document-store :kv]))
                (kv/kv-name (get-in node [:indexer :kv-store]))))

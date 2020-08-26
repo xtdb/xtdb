@@ -7,7 +7,7 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
-            [crux.kv.rocksdb :as rocks]
+            [crux.rocksdb :as rocks]
             [clojure.java.io :as io]
             [crux.system :as sys])
   (:import (crux.api ICruxAPI)

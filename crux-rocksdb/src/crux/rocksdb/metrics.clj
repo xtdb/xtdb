@@ -1,9 +1,9 @@
-(ns ^:no-doc crux.kv.rocksdb.metrics
+(ns ^:no-doc crux.rocksdb.metrics
   (:require [clojure.string :as str]
             [crux.metrics :as m]
             [crux.metrics.dropwizard :as dw]
             [crux.system :as sys]
-            [crux.kv.rocksdb :as rocks]
+            [crux.rocksdb :as rocks]
             [clojure.set :as set])
   (:import (org.rocksdb RocksDB Statistics StatisticsCollector StatsCollectorInput StatisticsCollectorCallback TickerType)
            (java.io Closeable)

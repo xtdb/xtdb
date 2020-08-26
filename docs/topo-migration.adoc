@@ -43,19 +43,19 @@ Right, some examples:
  :crux.standalone/event-log-dir "event-log"}
 
 ;; after
-{:legacy-standalone-db {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir "event-log"}
+{:legacy-standalone-db {:crux/module `crux.rocksdb/->kv-store, :db-dir "event-log"}
  :crux/tx-log {:kv-store :legacy-standalone-db}
  :crux/document-store {:kv-store :legacy-standalone-db}
- :crux/indexer {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir "indexes"}}}
+ :crux/indexer {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir "indexes"}}}
 ----
 +
 It's no longer necessary to share the RocksDB instance for the tx-log and document-store - you can specify this as follows:
 +
 [source,clojure]
 ----
-{:crux/tx-log {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir "tx-log"}}
- :crux/document-store {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir "docs"}}
- :crux/indexer {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir "indexes"}}}
+{:crux/tx-log {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir "tx-log"}}
+ :crux/document-store {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir "docs"}}
+ :crux/indexer {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir "indexes"}}}
 ----
 +
 For LMDB, use `+crux.kv.lmdb/->kv-store+`.
@@ -66,7 +66,7 @@ The Kafka document store requires a local document store for fast random documen
 [source,clojure]
 ----
 (require '[crux.kafka :as k]
-         '[crux.kv.rocksdb :as rocks])
+         '[crux.rocksdb :as rocks])
 
 ;; before
 {:crux.node/topology '[crux.kafka/topology crux.kv.rocksdb/kv-store]
@@ -170,8 +170,8 @@ Previously, you could only attach RocksDB metrics to the query indices KV store 
                        crux.kv.rocksdb/kv-store-with-metrics]}
 
 ;; after
-{:crux/indexer {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store
-                           :metrics {:crux/module `crux.kv.rocksdb.metrics/->metrics
+{:crux/indexer {:kv-store {:crux/module `crux.rocksdb/->kv-store
+                           :metrics {:crux/module `crux.rocksdb.metrics/->metrics
                                      :instance "indexer"}}}}
 ----
 

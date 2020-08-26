@@ -90,8 +90,8 @@
   (fix/with-tmp-dir "crux-tmp" [tmp]
     (let [with-fixtures (t/join-fixtures [fk/with-cluster-tx-log-opts
                                           fk/with-cluster-doc-store-opts
-                                          (fix/with-opts {:crux/indexer {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir (io/file tmp "indexes")}}
-                                                          :crux/document-store {:local-document-store {:kv-store {:crux/module `crux.kv.rocksdb/->kv-store, :db-dir (io/file tmp "docs")}}}})])]
+                                          (fix/with-opts {:crux/indexer {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir (io/file tmp "indexes")}}
+                                                          :crux/document-store {:local-document-store {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir (io/file tmp "docs")}}}})])]
       (with-fixtures
         (fn []
           (fix/with-node

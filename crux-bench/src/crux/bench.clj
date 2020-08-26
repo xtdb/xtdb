@@ -1,7 +1,7 @@
 (ns crux.bench
   (:require [crux.io :as cio]
             [crux.kafka.embedded :as ek]
-            [crux.kv.rocksdb :as rocks]
+            [crux.rocksdb :as rocks]
             [crux.kv.lmdb :as lmdb]
             [crux.jdbc :as jdbc]
             [crux.api :as api]
@@ -221,7 +221,7 @@
       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store
                                 :db-dir (io/file data-dir "indexes")
-                                :metrics `crux.kv.rocksdb.metrics/->metrics}}
+                                :metrics `crux.rocksdb.metrics/->metrics}}
       :crux.metrics.cloudwatch/reporter {}})
 
    "h2-rocksdb"

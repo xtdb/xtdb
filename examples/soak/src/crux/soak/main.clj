@@ -194,7 +194,7 @@
   (.stop server))
 
 (defn config []
-  {:soak/crux-node (merge {:crux.node/topology ['crux.kafka/topology 'crux.kv.rocksdb/kv-store]}
+  {:soak/crux-node (merge {:crux.node/topology ['crux.kafka/topology 'crux.rocksdb/kv-store]}
                           (config/crux-node-config))
    :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
                        :server-opts {:port 8080, :join? false}}})

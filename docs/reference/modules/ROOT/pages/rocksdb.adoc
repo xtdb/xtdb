@@ -24,7 +24,7 @@ juxt/crux-rocksdb {:mvn/version "20.09-1.11.0-beta"}
 
 == Using RocksDB
 
-Replace the implementation of the desired component with `+crux.kv.rocksdb/->kv-store+`
+Replace the implementation of the desired component with `+crux.rocksdb/->kv-store+`
 
 .JSON
 [source,json]
@@ -32,7 +32,7 @@ Replace the implementation of the desired component with `+crux.kv.rocksdb/->kv-
 {
   "crux/indexer": {
     "kv-store": {
-      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "crux/module": "crux.rocksdb/->kv-store",
       "db-dir": "/tmp/rocksdb"
     }
   },
@@ -45,7 +45,7 @@ Replace the implementation of the desired component with `+crux.kv.rocksdb/->kv-
 .Clojure/EDN
 [source,clojure]
 ----
-{:crux/indexer {:kv-store {:crux/module 'crux.kv.rocksdb/->kv-store
+{:crux/indexer {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                            :db-dir (io/file "/tmp/rocksdb")}}
  :crux/document-store {...}
  :crux/tx-log {...}}
@@ -74,9 +74,9 @@ To include RocksDB metrics in monitoring, override the `metrics` dependency:
 {
   "crux/indexer": {
     "kv-store": {
-      "crux/module": "crux.kv.rocksdb/->kv-store",
+      "crux/module": "crux.rocksdb/->kv-store",
       "metrics": {
-        "crux/module": "crux.kv.rocksdb.metrics/->metrics"
+        "crux/module": "crux.rocksdb.metrics/->metrics"
       }
       ...
     }

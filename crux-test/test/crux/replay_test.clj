@@ -3,7 +3,7 @@
             [clojure.test :as t]
             [crux.api :as crux]
             [crux.fixtures :as fix]
-            [crux.kv.rocksdb :as rocks])
+            [crux.rocksdb :as rocks])
   (:import java.time.Duration))
 
 (t/deftest drop-db
