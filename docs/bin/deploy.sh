@@ -2,7 +2,13 @@
 set -x
 set -e
 
-PREFIX=${1:-"/_${OPENCRUX_PREFIX:-$(whoami)}"}
+prefix_user=$(whoami)
+
+if [ "$prefix_user" == "james" ]; then
+    prefix_user=jms
+fi
+
+PREFIX=${1:-"/${OPENCRUX_PREFIX:-_$prefix_user}"}
 echo Deploying to https://opencrux.com$PREFIX
 
 cd $(dirname "$0")/..
