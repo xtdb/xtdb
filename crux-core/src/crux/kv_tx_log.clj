@@ -133,12 +133,12 @@
                            (rejectedExecution [_ runnable executor]
                              (.put queue runnable))))))
 
-(defn ->ingest-only-tx-log {::sys/deps {:kv-store 'crux.kv.memdb/->kv-store}}
+(defn ->ingest-only-tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}}
   [{:keys [kv-store]}]
   (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
                  :kv-store kv-store}))
 
-(defn ->tx-log {::sys/deps {:kv-store 'crux.kv.memdb/->kv-store
+(defn ->tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
                             :tx-ingester :crux/tx-ingester
                             :indexer :crux/indexer}}
   [{:keys [tx-ingester indexer kv-store]}]

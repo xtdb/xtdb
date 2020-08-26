@@ -7,7 +7,6 @@
             [crux.status :as status]
             [crux.morton :as morton]
             [crux.system :as sys]
-            [crux.kv.memdb :as memdb]
             [clojure.spec.alpha :as s])
   (:import (crux.codec Id EntityTx)
            crux.api.IndexVersionOutOfSyncException
@@ -757,7 +756,7 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(defn ->kv-indexer {::sys/deps {:kv-store 'crux.kv.memdb/->kv-store}
+(defn ->kv-indexer {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                     ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                           :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store] :as opts}]

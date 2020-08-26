@@ -19,10 +19,10 @@
 
 (def rocks-dep {:crux/module `crux.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
 (def lmdb-dep {:crux/module `crux.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
-(def memdb-dep {:crux/module `crux.kv.memdb/->kv-store})
+(def memkv-dep {:crux/module `crux.mem-kv/->kv-store})
 
 (defn with-each-kv-store* [f]
-  (doseq [kv-opts [memdb-dep
+  (doseq [kv-opts [memkv-dep
                    rocks-dep
                    {:crux/module `crux.rocksdb.jnr/->kv-store
                     :db-dir-suffix "rocksdb-jnr"}

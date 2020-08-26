@@ -97,7 +97,7 @@
   (fkv/with-kv-store-opts (case kv
                             :rocks fkv/rocks-dep
                             :lmdb fkv/lmdb-dep
-                            :mem fkv/memdb-dep)
+                            :mem fkv/memkv-dep)
     (fix/with-node
       (fn []
         (when verbose (print ":insert... ") (flush))

@@ -7,7 +7,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fork :as fork]
-            [crux.kv.memdb :as mem-kv]
+            [crux.mem-kv :as mem-kv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]

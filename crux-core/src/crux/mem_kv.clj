@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.kv.memdb
+(ns ^:no-doc crux.mem-kv
   "In-memory KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
@@ -17,10 +17,10 @@
            [(mem/->on-heap k)
             (mem/->on-heap v)])
          (into {})
-         (nippy/freeze-to-file (io/file file "memdb")))))
+         (nippy/freeze-to-file (io/file file "memkv")))))
 
 (defn- restore-db [dir]
-  (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memdb"))]
+  (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memkv"))]
          [(mem/->off-heap k)
           (mem/->off-heap v)])
        (into (sorted-map-by mem/buffer-comparator))))
@@ -110,6 +110,6 @@
    (let [db-dir (some-> db-dir (.toFile))]
      (map->MemKv {:db-dir (when persist-on-close?
                             db-dir)
-                  :db (atom (if (.isFile (io/file db-dir "memdb"))
+                  :db (atom (if (.isFile (io/file db-dir "memkv"))
                               (restore-db db-dir)
                               (sorted-map-by mem/buffer-comparator)))}))))

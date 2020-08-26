@@ -3,7 +3,7 @@
             [crux.config :as cc]
             [crux.io :as cio]
             [crux.jdbc :as j]
-            crux.kv.memdb
+            crux.mem-kv
             [crux.rocksdb :as rocks]
             [crux.node :as n]
             [clojure.spec.alpha :as s]
