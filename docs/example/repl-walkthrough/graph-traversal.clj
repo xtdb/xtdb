@@ -55,9 +55,8 @@
                                    (keys n))))))
 
 
-;; this standalone configuration is the easiest way to try Crux, no Kafka needed
 (def node
-  (crux/start-node {:crux.node/topology 'crux.standalone/topology}))
+  (crux/start-node {}))
 
 (crux/submit-tx
   node
