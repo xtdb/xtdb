@@ -1,19 +1,61 @@
 = LMDB
 
-LMDB is a drop-in module for Crux's primary kv-store.
+https://symas.com/lmdb/[LMDB] can be used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 
-LMDB tends to provide faster queries than RocksDB in exchange for a slower ingest rate.
+LMDB tends to provide faster queries than xref:lmdb.adoc[LMDB] in exchange for a slower ingest rate.
 
 == Project Dependency
 
-[source,clojure,subs="normal"]
-----
-include::example$deps.edn[tags=LMDBDeps]
-----
+In order to use LMDB within Crux, you must first add LMDB as a project dependency:
 
-== Starting a node using LMDB
-
+.deps.edn
 [source,clojure]
 ----
-include::example$src/docs/examples.clj[tags=start-standalone-with-lmdb]
+juxt/crux-lmdb {:mvn/version "20.09-1.11.0-alpha"}
 ----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-lmdb</artifactId>
+    <version>20.09-1.11.0-alpha</version>
+</dependency>
+----
+
+== Using LMDB
+
+Replace the implementation of the desired component with `+crux.kv.lmdb/->kv-store+`
+
+.JSON
+[source,json]
+----
+{
+  "crux/indexer": {
+    "kv-store": {
+      "crux/module": "crux.kv.lmdb/->kv-store",
+      "db-dir": "/tmp/lmdb"
+    }
+  },
+
+  "crux/document-store": { ... },
+  "crux/tx-log": { ... }
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux/indexer {:kv-store {:crux/module 'crux.kv.lmdb/->kv-store
+                           :db-dir (io/file "/tmp/lmdb")}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+
+== Parameters
+
+* `db-dir` (required, string/`File`/`Path`): path to LMDB data directory
+* `sync?` (boolean, default false): sync to disk after every write
+* `env-flags` (int): LMDB flags
+* `env-mapsize`(int): LMDB map size

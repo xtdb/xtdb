@@ -275,12 +275,16 @@
         (finally
           (.unlock mapsize-lock stamp))))))
 
-(defn ->kv-store {::sys/args (-> (merge (-> kv/args
-                                            (update :db-dir assoc :required? true, :default "data"))
-                                        {:env-flags {:doc "LMDB Flags"
-                                                     :spec ::sys/nat-int}
-                                         :env-mapsize {:doc "LMDB Map size"
-                                                       :spec ::sys/nat-int}}))}
+(defn ->kv-store {::sys/args (-> {:db-dir {:doc "Directory to store K/V files"
+                                           :required? true
+                                           :spec ::sys/path}
+                                  :sync? {:doc "Sync the KV store to disk after every write."
+                                          :default false
+                                          :spec ::sys/boolean}
+                                  :env-flags {:doc "LMDB Flags"
+                                              :spec ::sys/nat-int}
+                                  :env-mapsize {:doc "LMDB Map size"
+                                                :spec ::sys/nat-int}})}
   [{:keys [db-dir sync? env-flags env-mapsize]}]
   (let [env-flags (or env-flags
                       (bit-or default-env-flags
