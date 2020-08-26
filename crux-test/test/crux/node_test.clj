@@ -1,25 +1,20 @@
 (ns crux.node-test
-  (:require [clojure.test :as t]
-            [crux.config :as cc]
-            [crux.io :as cio]
-            [crux.jdbc :as j]
-            crux.mem-kv
-            [crux.rocksdb :as rocks]
-            [crux.node :as n]
-            [clojure.spec.alpha :as s]
-            [crux.fixtures :as f]
-            [clojure.java.io :as io]
-            [crux.tx :as tx]
-            [crux.tx.event :as txe]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t]
             [crux.api :as api]
             [crux.bus :as bus]
-            [crux.kv :as kv])
-  (:import java.util.Date
-           crux.api.Crux
-           (java.util HashMap ArrayList)
-           (clojure.lang Keyword)
-           (java.time Duration)
-           (java.util.concurrent TimeoutException)))
+            [crux.fixtures :as f]
+            [crux.io :as cio]
+            [crux.jdbc :as j]
+            [crux.kv :as kv]
+            [crux.node :as n]
+            [crux.rocksdb :as rocks]
+            [crux.tx :as tx]
+            [crux.tx.event :as txe])
+  (:import crux.api.Crux
+           java.time.Duration
+           [java.util Date HashMap]
+           java.util.concurrent.TimeoutException))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
@@ -34,15 +29,19 @@
 
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Missing module.+:dialect"
-                          (api/start-node {:crux/document-store {:crux/module `j/->document-store}}))))
+                          #"Error parsing opts"
+                          (api/start-node {:crux/document-store {:crux/module `j/->document-store}})))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Missing module .+ :dialect"
+                          (api/start-node {:crux/document-store {:crux/module `j/->document-store
+                                                                 :connection-pool {:db-spec {}}}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
-                                   ::j/tx-consumer {}
-                                   :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
-                                   ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest")}})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                   :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                   ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
+                                                        :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n))))
 
 (t/deftest test-can-set-indexes-kv-store
@@ -83,11 +82,11 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
-                                   ::j/tx-consumer {}
-                                   :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
-                                   :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv1")}}
-                                   ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest1")}})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                   :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                   :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+                                   ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
+                                                        :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n)
 
       (let [valid-time (Date.)
@@ -101,11 +100,11 @@
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))
 
-      (with-open [n2 (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :data-source ::data-source, :dbtype "h2"}
-                                      ::j/tx-consumer {}
-                                      :crux/document-store {:crux/module `j/->document-store, :data-source ::data-source, :dbtype "h2"}
+      (with-open [n2 (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                      :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
                                       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
-                                      ::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "cruxtest2")}})]
+                                      ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                           :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}})]
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]

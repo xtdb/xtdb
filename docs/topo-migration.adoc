@@ -94,7 +94,7 @@ The Kafka document store requires a local document store for fast random documen
 ----
 * A Postgres tx-log/document-store:
 +
-In JDBC, we tend to share the `DataSource` between tx-log and document-store, although it's also possible to use different `DataSource`s if need be.
+In JDBC, we tend to share the connection pool between tx-log and document-store, although it's also possible to use different connection pools if need be.
 +
 [source,clojure]
 ----
@@ -108,19 +108,14 @@ In JDBC, we tend to share the `DataSource` between tx-log and document-store, al
  :crux.jdbc/user "<user>"
  :crux.jdbc/password "<password>"}
 
-;; after - shared data source
-{:data-source {:crux/module `jdbc/->data-source,
-               :dbtype "postgresql"
-               :dbname "cruxdb"
-               :host "<host>"
-               :user "<user>"
-               :password "<password>"}
- :crux/tx-log {:crux/module `crux.jdbc/->tx-log
-               :dbtype "postgresql"
-               :data-source :data-source}
- :crux/document-store {:crux/module `crux.jdbc/->document-store
-                       :dbtype "postgresql"
-                       :data-source :data-source}
+;; after - shared connection pool
+{::jdbc/connection-pool {:dialect 'crux.jdbc.psql/->dialect
+                         :db-spec {:dbname "cruxdb"
+                                   :host "<host>"
+                                   :user "<user>"
+                                   :password "<password>"}}
+ :crux/tx-log {:crux/module `crux.jdbc/->tx-log, :connection-pool ::jdbc/connection-pool}
+ :crux/document-store {:crux/module `crux.jdbc/->document-store, :connection-pool ::jdbc/connection-pool}
  :crux/indexer {...}}
 ----
 * A Kafka tx-log, S3 document store:

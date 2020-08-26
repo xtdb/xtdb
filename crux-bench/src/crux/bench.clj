@@ -13,7 +13,8 @@
             [crux.fixtures :as f]
             [crux.bus :as bus]
             [crux.kv :as kv]
-            [crux.kafka :as k])
+            [crux.kafka :as k]
+            [crux.jdbc :as j])
   (:import (java.util.concurrent Executors ExecutorService)
            (java.util UUID Date List)
            (java.time Duration Instant)
@@ -226,20 +227,20 @@
 
    "h2-rocksdb"
    (fn [data-dir]
-     {::data-source {:crux/module `crux.jdbc.h2/->data-source, :db-file (io/file data-dir "h2")}
-      :crux/tx-log {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "h2"}
-      :crux/document-store {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "h2"}
+     {::j/connection-pool {:dialect 'crux.jdbc.h2/->dialect
+                           :db-spec {:dbname (str (io/file data-dir "h2"))}}
+      :crux/tx-log {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
+      :crux/document-store {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      ::jdbc/tx-consumer {}
       :crux.metrics.cloudwatch/reporter {}})
 
    "sqlite-rocksdb"
    (fn [data-dir]
-     {::data-source {:crux/module `crux.jdbc.sqlite/->data-source, :db-file (io/file data-dir "sqlite")}
-      :crux/tx-log {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "sqlite"}
-      :crux/document-store {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "sqlite"}
+     {::j/connection-pool {:dialect 'crux.jdbc.sqlite/->dialect
+                           :db-spec {:dbname (str (io/file data-dir "sqlite"))}}
+      :crux/tx-log {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
+      :crux/document-store {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      ::jdbc/tx-consumer {}
       :crux.metrics.cloudwatch/reporter {}})
 
    "kafka-rocksdb"

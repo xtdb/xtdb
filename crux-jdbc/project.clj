@@ -7,6 +7,7 @@
                  [org.clojure/tools.logging "1.1.0"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [seancorfield/next.jdbc "1.1.582"]
+                 [org.clojure/java.data "1.0.86"]
                  [com.zaxxer/HikariCP "3.4.5"]
                  [com.taoensso/nippy "2.15.1"]
 

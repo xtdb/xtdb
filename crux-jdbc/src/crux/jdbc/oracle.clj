@@ -1,33 +1,34 @@
 (ns ^:no-doc crux.jdbc.oracle
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc]
-            [clojure.spec.alpha :as s]
-            [taoensso.nippy :as nippy]
-            [crux.system :as sys])
-  (:import [oracle.sql TIMESTAMP BLOB]))
+            [taoensso.nippy :as nippy])
+  (:import [oracle.sql BLOB TIMESTAMP]))
 
-(defn- schema-exists? [ds]
-  (pos? (val (first (jdbc/execute-one! ds ["SELECT COUNT(*) FROM user_tables where table_name = 'TX_EVENTS'"])))))
+(defn- schema-exists? [pool]
+  (-> (jdbc/execute-one! pool ["SELECT COUNT(*) FROM user_tables where table_name = 'TX_EVENTS'"])
+      first val pos?))
 
-(defn- setup-schema! [ds]
-  (when-not (schema-exists? ds)
-    (jdbc/execute! ds ["create table tx_events (
-  event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
-  tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
-  v BLOB NOT NULL, compacted INTEGER NOT NULL)"])
-    (jdbc/execute! ds ["create index tx_events_event_key_idx on tx_events(compacted, event_key)"])))
+(defn ->dialect [_]
+  (reify j/Dialect
+    (db-type [_] :oracle)
 
-(defmethod j/->date :oracle [dbtype ^TIMESTAMP d]
+    (setup-schema! [_ pool]
+     (when-not (schema-exists? pool)
+       (jdbc/execute! pool ["
+CREATE TABLE tx_events (
+  event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_key VARCHAR2(255),
+  tx_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  topic VARCHAR2(255) NOT NULL,
+  v BLOB NOT NULL,
+  compacted INTEGER NOT NULL)"])
+
+       (jdbc/execute! pool ["CREATE INDEX tx_events_event_key_idx ON tx_events(compacted, event_key)"])))))
+
+(defmethod j/->date :oracle [^TIMESTAMP d _]
   (assert d)
   (.dateValue d))
 
-(defmethod j/->v :oracle [_ ^BLOB v]
+;; TODO readAllBytes doesn't exists in JDK8
+(defmethod j/<-blob :oracle [^BLOB v _]
   (-> v .getBinaryStream .readAllBytes nippy/thaw))
-
-(defn ->data-source {::sys/deps {:open-data-source `j/->open-data-source}
-                     ::sys/args {:username {:spec ::sys/string}
-                                 :user {:spec ::sys/string}}}
-  [{:keys [open-data-source username user]}]
-  (doto (open-data-source {:dbtype "oracle"
-                           :username (or username user)})
-    (setup-schema!)))
