@@ -315,7 +315,7 @@
                                     :doc-topic-opts {:crux/module `->topic-opts,
                                                      :topic-name "crux-docs",
                                                      :num-partitions 1}
-                                    :local-document-store 'crux.kv-document-store/->document-store
+                                    :local-document-store 'crux.kv.document-store/->document-store
                                     :indexer :crux/indexer}
                         ::sys/args {:group-id {:doc "Kafka client group.id"
                                                :required? false

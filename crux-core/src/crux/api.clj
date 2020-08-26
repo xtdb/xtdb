@@ -364,11 +364,11 @@
   Throws IndexVersionOutOfSyncException if the index needs rebuilding."
   ^crux.api.ICruxAPI [options]
   (let [system (-> (sys/prep-system (into [{:crux/node 'crux.node/->node
-                                            :crux/indexer 'crux.kv-indexer/->kv-indexer
+                                            :crux/indexer 'crux.kv.indexer/->kv-indexer
                                             :crux/bus 'crux.bus/->bus
                                             :crux/tx-ingester 'crux.tx/->tx-ingester
-                                            :crux/document-store 'crux.kv-document-store/->document-store
-                                            :crux/tx-log 'crux.kv-tx-log/->tx-log
+                                            :crux/document-store 'crux.kv.document-store/->document-store
+                                            :crux/tx-log 'crux.kv.tx-log/->tx-log
                                             :crux/query-engine 'crux.query/->query-engine}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]

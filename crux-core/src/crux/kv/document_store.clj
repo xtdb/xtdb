@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.kv-document-store
+(ns ^:no-doc crux.kv.document-store
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.document-store :as ds]

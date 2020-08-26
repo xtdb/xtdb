@@ -1,10 +1,10 @@
-(ns crux.kv-tx-log
+(ns crux.kv.tx-log
   (:require [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.kv-indexer :as kvi]
+            [crux.kv.indexer :as kvi]
             [crux.memory :as mem]
             [crux.system :as sys]
             [crux.tx :as tx]
@@ -47,11 +47,11 @@
     (deliver !submitted-tx ::closed))
 
   (let [tx-time (Date.)
-        tx-id (inc (or (kvi/read-meta kv-store ::latest-submitted-tx-id) -1))
+        tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
         next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
     (kv/store kv-store [[(encode-tx-event-key-to nil next-tx)
                          (mem/->nippy-buffer tx-events)]
-                        (kvi/meta-kv ::latest-submitted-tx-id tx-id)])
+                        (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)])
 
     (deliver !submitted-tx next-tx)
 
@@ -80,7 +80,7 @@
          submitted-tx))))
 
   (latest-submitted-tx [this]
-    (when-let [tx-id (kvi/read-meta kv-store ::latest-submitted-tx-id)]
+    (when-let [tx-id (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
 
   (open-tx-log [this after-tx-id]

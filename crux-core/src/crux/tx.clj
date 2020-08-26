@@ -10,7 +10,7 @@
             [crux.tx.event :as txe]
             [crux.api :as api]
             [crux.fork :as fork]
-            [crux.kv-indexer :as kvi]
+            [crux.kv.indexer :as kvi]
             [crux.mem-kv :as mem-kv]
             [crux.system :as sys])
   (:import crux.codec.EntityTx

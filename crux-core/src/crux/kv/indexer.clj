@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.kv-indexer
+(ns ^:no-doc crux.kv.indexer
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -161,7 +161,7 @@
            (.putBytes (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr)) v 0 (.capacity v)))
          (mem/limit-buffer (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr) (.capacity v)))))))
 
-(defn- decode-ecav-key-from ^crux.kv_indexer.Quad [^DirectBuffer k ^long eid-size]
+(defn- decode-ecav-key-from ^crux.kv.indexer.Quad [^DirectBuffer k ^long eid-size]
   (let [length (long (.capacity k))]
     (assert (<= (+ c/index-id-size eid-size c/id-size c/id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
@@ -723,12 +723,12 @@
       {:tombstones tombstones}))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id] :as tx}]
-    (kv/store kv-store [(meta-kv ::latest-completed-tx tx)
+    (kv/store kv-store [(meta-kv :crux.kv-indexer/latest-completed-tx tx)
                         [(encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer]]))
 
   (index-entity-txs [this tx entity-txs]
     (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
-                                  (meta-kv ::latest-completed-tx tx))
+                                  (meta-kv :crux.kv-indexer/latest-completed-tx tx))
                             (into (sorted-map-by mem/buffer-comparator)))))
 
   (store-index-meta [_ k v]
@@ -741,7 +741,7 @@
     (read-meta kv-store k not-found))
 
   (latest-completed-tx [this]
-    (db/read-index-meta this ::latest-completed-tx))
+    (db/read-index-meta this :crux.kv-indexer/latest-completed-tx))
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]

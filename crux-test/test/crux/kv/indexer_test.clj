@@ -1,4 +1,4 @@
-(ns crux.kv-indexer-test
+(ns crux.kv.indexer-test
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
@@ -7,7 +7,7 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.kv :as fkv]
-            [crux.kv-indexer :as kvi]
+            [crux.kv.indexer :as kvi]
             [crux.tx :as tx])
   (:import crux.codec.EntityTx
            java.util.Date))

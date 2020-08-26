@@ -36,8 +36,8 @@
 (defn open-ingest-client ^ICruxAsyncIngestAPI [options]
   (let [system (-> (sys/prep-system [{:crux/ingest-client `->ingest-client
                                       :crux/bus 'crux.bus/->bus
-                                      :crux/document-store 'crux.kv-document-store/->document-store
-                                      :crux/tx-log 'crux.kv-tx-log/->ingest-only-tx-log}
+                                      :crux/document-store 'crux.kv.document-store/->document-store
+                                      :crux/tx-log 'crux.kv.tx-log/->ingest-only-tx-log}
                                      options])
                    (sys/start-system))]
     (-> (:crux/ingest-client system)
