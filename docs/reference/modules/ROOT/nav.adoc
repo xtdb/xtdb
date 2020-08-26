@@ -18,3 +18,4 @@
 ** xref:jdbc.adoc[JDBC]
 ** xref:lmdb.adoc[LMDB]
 ** xref:rocksdb.adoc[RocksDB]
+** xref:s3.adoc[S3]
