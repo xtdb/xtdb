@@ -9,7 +9,6 @@
   </root>
   <logger name="crux" level="INFO" />
   <logger name="crux.node" level="WARN" />
-  <logger name="crux.standalone" level="ERROR" />
   <logger name="crux.hash" level="WARN" />
   <logger name="crux.http-server" level="WARN" />
   <logger name="crux.kafka" level="WARN" />

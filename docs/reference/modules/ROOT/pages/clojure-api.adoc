@@ -314,26 +314,16 @@ Represents the database as of a specific valid and transaction time.
 (defn start-node ^ICruxAPI [options])
 ----
 
-NOTE: requires any dependendies on the classpath that the Crux modules may need.
+NOTE: requires any dependencies on the classpath that the Crux modules may need.
 
-Options:
+Accepts a map, or a JSON/EDN file or classpath resource.
 
-[source,clojure]
-----
-{:crux.node/topology ['crux.standalone/topology]}
-----
+See https://opencrux.com/reference/configuration.html for details.
 
-Options are specified as keywords using their long format name, like
-`:crux.kafka/bootstrap-servers` etc. See the individual modules used in the specified
-topology for option descriptions.
+Returns a node which implements ICruxAPI and java.io.Closeable.
+Latter allows the node to be stopped by calling `(.close node)`.
 
-returns a node which implements ICruxAPI and
-java.io.Closeable. Latter allows the node to be stopped by
-calling `(.close node)`.
-
-throws IndexVersionOutOfSyncException if the index needs rebuilding.
-throws NonMonotonicTimeException if the clock has moved backwards since
-last run. Only applicable when using the event log.
+Throws IndexVersionOutOfSyncException if the index needs rebuilding.
 
 === new-api-client
 
@@ -342,13 +332,11 @@ last run. Only applicable when using the event log.
 (defn new-api-client ^ICruxAPI [url])
 ----
 
-Creates a new remote API client ICruxAPI. The remote client
-requires valid and transaction time to be specified for all
-calls to `db`.
+Creates a new remote API client ICruxAPI.
+The remote client requires valid and transaction time to be specified for all calls to `db`.
 
-NOTE: requires either clj-http or http-kit on the classpath,
-see crux.remote-api-client/*internal-http-request-fn*
-for more information.
+NOTE: Requires either clj-http or http-kit on the classpath,
+See https://opencrux.com/reference/http.html for more information.
 
 Param `url` the URL to a Crux HTTP end-point.
 
@@ -361,26 +349,11 @@ Returns a remote API client.
 (defn new-ingest-client ^ICruxAsyncIngestAPI [options])
 ----
 
-Starts an ingest client for transacting into Kafka without running a
-full local node with index.
+Starts an ingest client for transacting into Crux without running a full local node with index.
 
-For valid options, see crux.kafka/default-options. Options are
-specified as keywords using their long format name, like
-:crux.kafka/bootstrap-servers etc.
+Accepts a map, or a JSON/EDN file or classpath resource.
 
-Options:
+For valid options, see https://opencrux.com/reference/configuration.html.
 
-[source,clojure]
-----
-{:crux.kafka/bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
- :crux.kafka/group-id "group-id"
- :crux.kafka/tx-topic "crux-transaction-log"
- :crux.kafka/doc-topic "crux-docs"
- :crux.kafka/create-topics true
- :crux.kafka/doc-partitions 1
- :crux.kafka/replication-factor 1}
-----
-
-Returns a crux.api.ICruxIngestAPI component that implements
-java.io.Closeable, which allows the client to be stopped by calling
-close.
+Returns a crux.api.ICruxIngestAPI component that implements java.io.Closeable.
+Latter allows the node to be stopped by calling `(.close node)`.
