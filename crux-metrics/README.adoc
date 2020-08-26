@@ -1,0 +1,21 @@
+= crux-metrics
+
+This module provides components that expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
+
+.deps.edn
+[source,clojure]
+----
+juxt/crux-metrics {:mvn/version "20.09-1.11.0-beta"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-metrics</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
+----
+
+For more details, see the https://opencrux.com/reference/monitoring.html[metrics documentation]

@@ -1,4 +1,4 @@
-(ns crux.metrics.dropwizard.console
+(ns crux.metrics.console
   (:require [crux.metrics :as metrics]
             [clojure.string :as string]
             [crux.system :as sys])

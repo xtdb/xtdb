@@ -1,4 +1,4 @@
-(ns crux.metrics.dropwizard.cloudwatch
+(ns crux.metrics.cloudwatch
   (:require [clojure.string :as string]
             [crux.metrics :as metrics]
             [crux.system :as sys])
@@ -51,7 +51,7 @@
                       (cond-> region ^CloudWatchAsyncClientBuilder (.region (Region/of region)))
                       (.build))]
 
-    (-> (CloudWatchReporter/forRegistry registry cw-client "crux.metrics.dropwizard.cloudwatch")
+    (-> (CloudWatchReporter/forRegistry registry cw-client "crux.metrics.cloudwatch")
         (cond-> jvm-metrics? .withJvmMetrics
                 dry-run? .withDryRun
                 high-resolution? .withHighResolution

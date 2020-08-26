@@ -1,8 +1,9 @@
-(ns crux.metrics.dropwizard.csv
+(ns crux.metrics.csv
   (:require [clojure.java.io :as io]
             [crux.metrics :as metrics]
             [crux.system :as sys])
   (:import [com.codahale.metrics CsvReporter MetricRegistry]
+           java.nio.file.Path
            java.time.Duration
            java.util.concurrent.TimeUnit))
 
@@ -23,12 +24,12 @@
                                               :default TimeUnit/MILLISECONDS
                                               :spec ::sys/time-unit}}}
   ^com.codahale.metrics.CsvReporter
-  [{:keys [^MetricRegistry registry report-frequency locale rate-unit duration-unit metric-filter file-name]}]
+  [{:keys [^MetricRegistry registry report-frequency rate-unit duration-unit ^Path output-file]}]
 
-  (-> (CsvReporter/forRegistry registry)
-      (cond-> locale (.formatFor locale)
-              rate-unit (.convertRatesTo rate-unit)
-              duration-unit (.convertDurationsTo duration-unit)
-              metric-filter (.filter metric-filter))
-      (.build (io/file file-name))
-      (doto (.start (.toMillis ^Duration report-frequency) TimeUnit/MILLISECONDS))))
+  (let [output-file (doto (.toFile output-file)
+                      (io/make-parents))]
+    (-> (CsvReporter/forRegistry registry)
+        (cond-> rate-unit (.convertRatesTo rate-unit)
+                duration-unit (.convertDurationsTo duration-unit))
+        (.build output-file)
+        (doto (.start (.toMillis ^Duration report-frequency) TimeUnit/MILLISECONDS)))))

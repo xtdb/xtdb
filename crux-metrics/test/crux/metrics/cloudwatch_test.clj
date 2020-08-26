@@ -1,5 +1,5 @@
-(ns crux.metrics.dropwizard.cloudwatch-test
-  (:require [crux.metrics.dropwizard.cloudwatch :as sut]
+(ns crux.metrics.cloudwatch-test
+  (:require [crux.metrics.cloudwatch :as sut]
             [clojure.test :as t]))
 
 (t/deftest test-include-metric

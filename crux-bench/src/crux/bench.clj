@@ -213,7 +213,7 @@
      {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      :crux.metrics.dropwizard.cloudwatch/reporter {}})
+      :crux.metrics.cloudwatch/reporter {}})
 
    "standalone-rocksdb-with-metrics"
    (fn [data-dir]
@@ -222,7 +222,7 @@
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store
                                 :db-dir (io/file data-dir "indexes")
                                 :metrics `crux.kv.rocksdb.metrics/->metrics}}
-      :crux.metrics.dropwizard.cloudwatch/reporter {}})
+      :crux.metrics.cloudwatch/reporter {}})
 
    "h2-rocksdb"
    (fn [data-dir]
@@ -231,7 +231,7 @@
       :crux/document-store {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "h2"}
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       ::jdbc/tx-consumer {}
-      :crux.metrics.dropwizard.cloudwatch/reporter {}})
+      :crux.metrics.cloudwatch/reporter {}})
 
    "sqlite-rocksdb"
    (fn [data-dir]
@@ -240,7 +240,7 @@
       :crux/document-store {:crux/module `jdbc/->tx-log, :data-source ::data-source, :dbtype "sqlite"}
       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       ::jdbc/tx-consumer {}
-      :crux.metrics.dropwizard.cloudwatch/reporter {}})
+      :crux.metrics.cloudwatch/reporter {}})
 
    "kafka-rocksdb"
    (fn [data-dir]
@@ -255,7 +255,7 @@
                               :local-document-store {:kv-store {:crux/module `rocks/->kv-store
                                                                 :db-dir (io/file data-dir "doc-store")}}}
         :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexer")}}
-        :crux.metrics.dropwizard.cloudwatch/reporter {}}))
+        :crux.metrics.cloudwatch/reporter {}}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
@@ -270,14 +270,14 @@
                               :local-document-store {:kv-store {:crux/module `rocks/->kv-store
                                                                 :db-dir (io/file data-dir "doc-store")}}}
         :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexer")}}
-        :crux.metrics.dropwizard.cloudwatch/reporter {}}))
+        :crux.metrics.cloudwatch/reporter {}}))
 
    "standalone-lmdb"
    (fn [data-dir]
      {:crux/tx-log {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
       :crux/document-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
       :crux/indexer {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      :crux.metrics.dropwizard.cloudwatch/reporter {}})
+      :crux.metrics.cloudwatch/reporter {}})
 
    "kafka-lmdb"
    (fn [data-dir]
@@ -292,7 +292,7 @@
                               :local-document-store {:kv-store {:crux/module `lmdb/->kv-store
                                                                 :db-dir (io/file data-dir "doc-store")}}}
         :crux/indexer {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexer")}}
-        :crux.metrics.dropwizard.cloudwatch/reporter {}}))})
+        :crux.metrics.cloudwatch/reporter {}}))})
 
 (defn with-embedded-kafka* [f]
   (f/with-tmp-dir "embedded-kafka" [data-dir]

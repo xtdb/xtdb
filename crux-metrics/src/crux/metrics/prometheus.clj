@@ -1,4 +1,4 @@
-(ns crux.metrics.dropwizard.prometheus
+(ns crux.metrics.prometheus
   (:require [crux.metrics :as metrics]
             [crux.system :as sys]
             [iapetos.collector.jvm :as jvm]
@@ -33,7 +33,7 @@
                        ::sys/args {:port {:doc "Port for prometheus exporter server"
                                           :default 8080
                                           :spec ::sys/int}
-                                   :jvm-metrics? {:doc "Dictates if jvm metrics are exported"
+                                   :jvm-metrics? {:doc "Dictates if JVM metrics are exported"
                                                   :default false
                                                   :spec ::sys/boolean}}}
   [{:keys [^MetricRegistry registry port jvm-metrics?]}]

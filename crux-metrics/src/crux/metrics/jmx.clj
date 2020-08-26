@@ -1,4 +1,4 @@
-(ns crux.metrics.dropwizard.jmx
+(ns crux.metrics.jmx
   (:require [crux.metrics :as metrics]
             [crux.system :as sys])
   (:import com.codahale.metrics.jmx.JmxReporter
