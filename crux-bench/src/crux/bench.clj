@@ -2,7 +2,7 @@
   (:require [crux.io :as cio]
             [crux.kafka.embedded :as ek]
             [crux.rocksdb :as rocks]
-            [crux.kv.lmdb :as lmdb]
+            [crux.lmdb :as lmdb]
             [crux.jdbc :as jdbc]
             [crux.api :as api]
             [clojure.data.json :as json]

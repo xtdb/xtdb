@@ -18,7 +18,7 @@
   `(with-kv-store* (fn [~@bindings] ~@body)))
 
 (def rocks-dep {:crux/module `crux.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
-(def lmdb-dep {:crux/module `crux.kv.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
+(def lmdb-dep {:crux/module `crux.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
 (def memdb-dep {:crux/module `crux.kv.memdb/->kv-store})
 
 (defn with-each-kv-store* [f]
@@ -27,7 +27,7 @@
                    {:crux/module `crux.rocksdb.jnr/->kv-store
                     :db-dir-suffix "rocksdb-jnr"}
                    lmdb-dep
-                   {:crux/module `crux.kv.lmdb.jnr/->kv-store
+                   {:crux/module `crux.lmdb.jnr/->kv-store
                     :db-dir-suffix "lmdb-jnr"
                     :env-mapsize 4096}]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]

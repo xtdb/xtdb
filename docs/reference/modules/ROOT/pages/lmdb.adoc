@@ -26,7 +26,7 @@ juxt/crux-lmdb {:mvn/version "20.09-1.11.0-alpha"}
 
 == Using LMDB
 
-Replace the implementation of the desired component with `+crux.kv.lmdb/->kv-store+`
+Replace the implementation of the desired component with `+crux.lmdb/->kv-store+`
 
 .JSON
 [source,json]
@@ -34,7 +34,7 @@ Replace the implementation of the desired component with `+crux.kv.lmdb/->kv-sto
 {
   "crux/indexer": {
     "kv-store": {
-      "crux/module": "crux.kv.lmdb/->kv-store",
+      "crux/module": "crux.lmdb/->kv-store",
       "db-dir": "/tmp/lmdb"
     }
   },
@@ -47,7 +47,7 @@ Replace the implementation of the desired component with `+crux.kv.lmdb/->kv-sto
 .Clojure/EDN
 [source,clojure]
 ----
-{:crux/indexer {:kv-store {:crux/module 'crux.kv.lmdb/->kv-store
+{:crux/indexer {:kv-store {:crux/module 'crux.lmdb/->kv-store
                            :db-dir (io/file "/tmp/lmdb")}}
  :crux/document-store {...}
  :crux/tx-log {...}}

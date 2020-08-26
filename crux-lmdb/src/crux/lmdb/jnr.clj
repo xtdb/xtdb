@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.kv.lmdb.jnr
+(ns ^:no-doc crux.lmdb.jnr
   "LMDB KV backend for Crux (alternative)."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]

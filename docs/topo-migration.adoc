@@ -58,7 +58,7 @@ It's no longer necessary to share the RocksDB instance for the tx-log and docume
  :crux/indexer {:kv-store {:crux/module `crux.rocksdb/->kv-store, :db-dir "indexes"}}}
 ----
 +
-For LMDB, use `+crux.kv.lmdb/->kv-store+`.
+For LMDB, use `+crux.lmdb/->kv-store+`.
 * A Kafka tx-log/document-store with RocksDB query indices:
 +
 The Kafka document store requires a local document store for fast random document access - previously this used the same KV store as the query indices, but now it's decoupled and explicit:

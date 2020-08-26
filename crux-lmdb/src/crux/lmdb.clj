@@ -1,4 +1,4 @@
-(ns crux.kv.lmdb
+(ns crux.lmdb
   "LMDB KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
@@ -61,7 +61,7 @@
       (finally
         (close-fn)))))
 
-(defn- new-transaction ^crux.kv.lmdb.LMDBTransaction [^StampedLock mapsize-lock env flags]
+(defn- new-transaction ^crux.lmdb.LMDBTransaction [^StampedLock mapsize-lock env flags]
   (let [txn-stamp (.readLock mapsize-lock)]
     (try
       (with-open [stack (MemoryStack/stackPush)]
@@ -113,7 +113,7 @@
   (close [_]
     (LMDB/mdb_cursor_close cursor)))
 
-(defn- new-cursor ^crux.kv.lmdb.LMDBCursor [dbi txn]
+(defn- new-cursor ^crux.lmdb.LMDBCursor [dbi txn]
   (with-open [stack (MemoryStack/stackPush)]
     (let [pp (.mallocPointer stack 1)]
       (success? (LMDB/mdb_cursor_open txn dbi pp))
