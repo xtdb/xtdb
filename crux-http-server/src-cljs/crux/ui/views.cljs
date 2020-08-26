@@ -444,6 +444,16 @@
            (common/edn->pretty-string key)]]
          [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 
+(defn render-metrics-map
+  [metrics-map]
+  (if metrics-map
+    [render-status-map metrics-map]
+    [:div.node-info__content
+     [:span.metrics-warning
+      "You do not have the metrics status reporter enabled - to read about metrics in Crux, see "
+      [:a {:href "https://opencrux.com/reference/monitoring.html"} "here"]
+      "."]]))
+
 (defn status-pane
   []
   (let [status-map @(rf/subscribe [::sub/node-status])
@@ -452,14 +462,16 @@
     [:<>
      [tab/tab-bar {:tabs [{:k :overview, :label "Overview"}
                           {:k :configuration, :label "Current Configuration"}
-                          {:k :attributes, :label "Attribute Cardinalities"}]
+                          {:k :attributes, :label "Attribute Cardinalities"}
+                          {:k :metrics, :label "Node Metrics"}]
                    :current-tab [::sub/status-tab]
                    :on-tab-selected [::events/status-tab-selected]}]
 
      (case @(rf/subscribe [::sub/status-tab])
-       :overview [render-status-map status-map]
+       :overview [render-status-map (dissoc status-map :crux.metrics)]
        :configuration [render-status-map options-map]
-       :attributes [render-attribute-stats attributes-map])]))
+       :attributes [render-attribute-stats attributes-map]
+       :metrics (render-metrics-map (:crux.metrics status-map)))]))
 
 (defn console-pane []
   [:<>
