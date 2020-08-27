@@ -164,7 +164,6 @@
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [entity entity-history limit]} _]
       (fn [^OutputStream output-stream]
-        (println "Limit: " limit)
         (with-open [w (io/writer output-stream)]
           (if entity-history
             (if limit
@@ -212,11 +211,10 @@
 
 (defn- normalize-date
   [^Date t]
-  (when t
-    (->> t
-      (.toInstant)
-      ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
-      (.format iso-format))))
+  (some->> t
+    (.toInstant)
+    ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
+    (.format iso-format)))
 
 (defn entity-history-page [entity-history tx-time {:keys [eid resume-after-tx-id limit sort-order]
                                                     {:keys [start end with-corrections? with-docs?]} :history-opts}]
@@ -226,7 +224,7 @@
     (if (>= limit (count page))
       {:entity-history page}
       (let [[start-valid-time start-transaction-time end-valid-time end-transaction-time] (map normalize-date (mapcat (juxt :crux.db/valid-time :crux.tx/tx-time) [start end]))
-            end-valid-time (or end-valid-time (normalize-date tx-time))
+            end-transaction-time (or end-transaction-time (normalize-date tx-time))
             continuation-opts (cond-> {:resume-after-tx-id (:crux.tx/tx-id (last page))
                                        :end-transaction-time end-transaction-time
                                        :history true
@@ -294,7 +292,6 @@
 (defn- resume-history-link [{:keys [scheme server-name server-port uri]} continuation-opts]
   (if continuation-opts
     (let [url (str  (name scheme) "://" server-name ":" server-port uri (query-string continuation-opts))]
-      (println url)
       {"Link" (str "<" url ">; rel=\"next\"")}) ;; RFC5988
     {}))
 

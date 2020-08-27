@@ -9,8 +9,13 @@
             [clojure.data.csv :as csv]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
             [crux.http-server.entity-ref :as entity-ref]
-            [clojure.java.io :as io])
-  (:import (java.io InputStream)))
+            [crux.http-server.entity :as entity]
+            [clojure.java.io :as io]
+            [clojure.string :as str])
+  (:import  java.io.InputStream
+            java.util.Date
+            [java.net URL URLDecoder]
+            [java.time Instant ZonedDateTime ZoneId]))
 
 (t/use-fixtures :each
   fix/with-standalone-topology
@@ -24,7 +29,19 @@
     "text/csv" (with-open [rdr (io/reader body)]
                  (doall (csv/read-csv rdr)))
     "text/tsv" (with-open [rdr (io/reader body)]
-                 (doall (csv/read-csv rdr :separator \tab)))))
+                 (doall (csv/read-csv rdr :separator \tab)))
+    :not-found))
+
+(defn- parse-history-continuation-link [res]
+  (let [qry (some->> (get-in res [:links :next :href])
+              (URLDecoder/decode)
+              (URL.)
+              (.getQuery))]
+    (when qry
+      (->> (str/split qry #"&")
+        (map #(str/split % #"="))
+        (map #(vector (keyword (first %)) (last %)))
+        (into {})))))
 
 (defn- get-result-from-path
   ([path]
@@ -33,6 +50,13 @@
    (http/get (str *api-url* path)
              {:accept accept-type
               :as :stream})))
+
+(defn- normalize-date
+  [^Date t]
+  (some->> t
+    (.toInstant)
+    ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
+    (.format entity/iso-format)))
 
 (t/deftest test-ui-routes
   ;; Insert data
@@ -102,14 +126,27 @@
               (submit-ivan (java.util.Date.) i))
             (http/get (str *api-url* "/await-tx?tx-id=" (dec n))))]
 
-      (create-ivan-history 20)
+      (let [hist (create-ivan-history 20)
+            tx-time (normalize-date (:crux.tx/tx-time (read-string (:body hist))))
+            path "/_crux/entity?eid=:ivan&history=true&sort-order=desc&with-docs=true"
+            parse-response (fn [res accept-type] {:body (parse-body res accept-type) :link-params (parse-history-continuation-link res)})
+            get-entity-history (fn [accept-type limit] (-> (get-result-from-path (str path (when-not (zero? limit) (str "&limit=" limit)))  accept-type)
+                                                           (parse-response accept-type)))]
 
-      ;; Test getting the entity history with different types and limits
-      (let [get-entity-history (fn [accept-type limit] (-> (get-result-from-path (str "/_crux/entity?eid=:ivan&history=true&sort-order=desc&with-docs=true" (when-not (zero? limit) (str "&limit=" limit)))  accept-type)
-                                                         (parse-body accept-type)))]
-        (doseq [h (get-entity-history "application/edn" 10)]
-          (println h))
+        ;; First 10 items of history
+        (let [hist (get-entity-history "application/edn" 10)]
+          (t/is (= 10 (count (:body hist)))))
 
-        (t/is (= 10 (count (get-entity-history "application/edn" 10))))
-        (t/is (= 10 (count (get-entity-history "application/transit+json" 10))))
-        (t/is (= 20 (count (get-entity-history "application/edn" 0)))))))
+        ;; First 10 items of history
+        (let [hist (get-entity-history "application/transit+json" 10)]
+          (t/is (= 10 (count (:body hist)))))
+
+        ;; Unrestricted history
+        (let [hist (get-entity-history "application/edn" 0)]
+          (t/is (= 20 (count (:body hist))))
+          (t/is (= nil (:link-params hist))))
+
+        ;; Unrestricted history
+        (let [hist (get-entity-history "application/transit+json" 0)]
+          (t/is (= 20 (count (:body hist))))
+          (t/is (= nil (:link-params hist)))))))
