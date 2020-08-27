@@ -34,14 +34,19 @@
 
 (defn- parse-history-continuation-link [res]
   (let [qry (some->> (get-in res [:links :next :href])
-              (URLDecoder/decode)
               (URL.)
-              (.getQuery))]
+              (.getQuery)
+              (URLDecoder/decode))]
     (when qry
       (->> (str/split qry #"&")
         (map #(str/split % #"="))
         (map #(vector (keyword (first %)) (last %)))
         (into {})))))
+
+(defn- relative-path [url]
+  (->> (URL. url)
+    ((juxt #(.getPath %) #(.getQuery %)))
+    (str/join "?")))
 
 (defn- get-result-from-path
   ([path]
@@ -121,34 +126,47 @@
                             :as :stream})
               (parse-body "application/edn")))
 
-          (create-ivan-history [n]
-            (doseq [i (range 1 (inc n))]
+          (create-ivan-history [start-id n]
+            (doseq [i (range start-id (+ start-id n))]
               (submit-ivan (java.util.Date.) i))
-            (http/get (str *api-url* "/await-tx?tx-id=" (dec n))))]
+            (http/get (str *api-url* "/await-tx?tx-id=" (dec (+ start-id n)))))]
 
-      (let [hist (create-ivan-history 20)
+      (let [hist (create-ivan-history 0 20)
             tx-time (normalize-date (:crux.tx/tx-time (read-string (:body hist))))
             path "/_crux/entity?eid=:ivan&history=true&sort-order=desc&with-docs=true"
-            parse-response (fn [res accept-type] {:body (parse-body res accept-type) :link-params (parse-history-continuation-link res)})
-            get-entity-history (fn [accept-type limit] (-> (get-result-from-path (str path (when-not (zero? limit) (str "&limit=" limit)))  accept-type)
-                                                           (parse-response accept-type)))]
+            parse-response (fn [res accept-type] {:body (parse-body res accept-type)
+                                                  :link (get-in res [:links :next :href])
+                                                  :link-params (parse-history-continuation-link res)})
+            get-entity-history (fn [path accept-type limit] (-> (get-result-from-path (str path (when-not (zero? limit) (str "&limit=" limit)))  accept-type)
+                                                              (parse-response accept-type)))]
 
         ;; First 10 items of history
-        (let [hist (get-entity-history "application/edn" 10)]
+        (let [hist (get-entity-history path "application/edn" 10)]
           (t/is (= 10 (count (:body hist))))
-          (t/is (= tx-time (get-in hist [:link-params :end-transaction-time]))))
+          (t/is (= tx-time (get-in hist [:link-params :transaction-time])))
 
-        ;; First 10 items of history
-        (let [hist (get-entity-history "application/transit+json" 10)]
+          ;; Add some more history, to check that the next page doesn't include these items
+          (create-ivan-history 20 5)
+
+          ;; Next page should be the last, with only 10 items
+          (let [nxt (get-entity-history (relative-path (:link hist)) "application/edn" 0)]
+            (t/is (= 10 (count (:body nxt))))
+            (t/is (= nil (:link nxt)))))
+
+        ;; First 10 items of history, as at the original transaction time
+        (let [hist (get-entity-history (str path "&transaction-time=" tx-time) "application/transit+json" 10)
+              nxt (get-entity-history (relative-path (:link hist)) "application/transit+json" 0)]
           (t/is (= 10 (count (:body hist))))
-          (t/is (= tx-time (get-in hist [:link-params :end-transaction-time]))))
+          (t/is (= tx-time (get-in hist [:link-params :transaction-time])))
+          (t/is (= 10 (count (:body nxt))))
+          (t/is (= nil (:link nxt))))
 
         ;; Unrestricted history
-        (let [hist (get-entity-history "application/edn" 0)]
-          (t/is (= 20 (count (:body hist))))
-          (t/is (= nil (:link-params hist))))
+        (let [hist (get-entity-history path "application/edn" 0)]
+          (t/is (= 25 (count (:body hist))))
+          (t/is (= nil (:link hist))))
 
         ;; Unrestricted history
-        (let [hist (get-entity-history "application/transit+json" 0)]
-          (t/is (= 20 (count (:body hist))))
-          (t/is (= nil (:link-params hist)))))))
+        (let [hist (get-entity-history path "application/transit+json" 0)]
+          (t/is (= 25 (count (:body hist))))
+          (t/is (= nil (:link hist)))))))

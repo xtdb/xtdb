@@ -216,29 +216,30 @@
     ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
     (.format iso-format)))
 
-(defn entity-history-page [entity-history tx-time {:keys [eid resume-after-tx-id limit sort-order]
+(defn entity-history-page [entity-history tx-time {:keys [eid resume-from-tx-id limit sort-order]
                                                     {:keys [start end with-corrections? with-docs?]} :history-opts}]
   (let [page (cond->> (map #(update % :crux.db/content-hash str) (iterator-seq entity-history))
-               resume-after-tx-id ((fn [hist] (rest (drop-while #(not= resume-after-tx-id (:crux.tx/tx-id %)) hist))))
+               resume-from-tx-id ((fn [hist] (drop-while #(not= resume-from-tx-id (:crux.tx/tx-id %)) hist)))
                limit (take (inc limit)))]
     (if (>= limit (count page))
-      {:entity-history page}
+      {:entity-history page :limit limit}
       (let [[start-valid-time start-transaction-time end-valid-time end-transaction-time] (map normalize-date (mapcat (juxt :crux.db/valid-time :crux.tx/tx-time) [start end]))
-            end-transaction-time (or end-transaction-time (normalize-date tx-time))
-            continuation-opts (cond-> {:resume-after-tx-id (:crux.tx/tx-id (last page))
-                                       :end-transaction-time end-transaction-time
+            transaction-time (normalize-date tx-time)
+            continuation-opts (cond-> {:resume-from-tx-id (:crux.tx/tx-id (last page))
+                                       :transaction-time transaction-time
                                        :history true
                                        :limit limit
-                                       :sort-order sort-order
+                                       :sort-order (name sort-order)
                                        :eid eid}
                                 start-valid-time (assoc :start-valid-time start-valid-time)
                                 start-transaction-time (assoc :start-transaction-time start-transaction-time)
                                 end-valid-time (assoc :end-valid-time end-valid-time)
+                                end-transaction-time (assoc :end-transaction-time end-transaction-time)
                                 with-corrections? (assoc :with-corrections with-corrections?)
                                 with-docs? (assoc :with-docs with-docs?))]
         (assoc {:entity-history (butlast page) :limit limit} :continuation-opts continuation-opts)))))
 
-(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit resume-after-tx-id] :as params}]
+(defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit resume-from-tx-id] :as params}]
   (try
     (let [eid (edn/read-string {:readers {'crux/id c/id-edn-reader}}
                                (URLDecoder/decode eid))
@@ -305,7 +306,7 @@
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
   (let [req (m/negotiate-and-format-request entity-muuntaja req)
-        {:strs [eid history sort-order limit resume-after-tx-id
+        {:strs [eid history sort-order limit resume-from-tx-id
                 valid-time transaction-time
                 start-valid-time start-transaction-time
                 end-valid-time end-transaction-time
@@ -320,7 +321,7 @@
               (search-entity-history (assoc entity-options
                                             :sort-order (some-> sort-order keyword)
                                             :limit (some-> ^String limit Long/parseLong)
-                                            :resume-after-tx-id (some-> ^String resume-after-tx-id Long/parseLong)
+                                            :resume-from-tx-id (some-> ^String resume-from-tx-id Long/parseLong)
                                             :history-opts {:with-corrections? (some-> ^String with-corrections Boolean/valueOf)
                                                            :with-docs? (some-> ^String with-docs Boolean/valueOf)
                                                            :start {:crux.db/valid-time (some-> start-valid-time (instant/read-instant-date))
