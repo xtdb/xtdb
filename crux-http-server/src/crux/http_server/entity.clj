@@ -14,7 +14,7 @@
             [crux.io :as cio]
             [clojure.java.io :as io])
   (:import [crux.api ICruxAPI NodeOutOfSyncException]
-           java.net.URLDecoder
+           [java.net URLDecoder URLEncoder]
            [java.time Duration Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
            java.io.ByteArrayOutputStream
@@ -209,14 +209,28 @@
                      (fn [entity-history] (map #(update % :crux.db/content-hash str) entity-history))
                      entity-history)})
 
-(defn entity-history-page [entity-history {:keys [resume-after-tx-id limit] :as params}]
+(defn entity-history-page [entity-history {:keys [eid resume-after-tx-id limit sort-order]
+                                            {:keys [start end with-corrections? with-docs?]} :history-opts}]
   (let [page (cond->> (map #(update % :crux.db/content-hash str) (iterator-seq entity-history))
                resume-after-tx-id ((fn [hist] (rest (drop-while #(not= resume-after-tx-id (:crux.tx/tx-id %)) hist))))
                limit (take (inc limit)))]
     (if (>= limit (count page))
       {:entity-history page}
-      (merge {:entity-history (butlast page) :resume-after-tx-id (:crux.tx/tx-id (last page))}
-        (select-keys params [:limit :sort-order])))))
+      (let [[start-valid-time start-transaction-time] ((juxt :crux.db/valid-time :crux.tx/tx-time) start)
+            [end-valid-time end-transaction-time] ((juxt :crux.db/valid-time :crux.tx/tx-time) end)
+            end-valid-time (or end-valid-time)
+            continuation-opts (cond-> {:resume-after-tx-id (:crux.tx/tx-id (last page))
+                                       :end-transaction-time end-transaction-time
+                                       :history true
+                                       :limit limit
+                                       :sort-order sort-order
+                                       :eid eid}
+                                start-valid-time (assoc :start-valid-time start-valid-time)
+                                start-transaction-time (assoc :start-transaction-time start-transaction-time)
+                                end-valid-time (assoc :end-valid-time end-valid-time)
+                                with-corrections? (assoc :with-corrections with-corrections?)
+                                with-docs? (assoc :with-docs with-docs?))]
+        (assoc {:entity-history (butlast page)} :continuation-opts continuation-opts)))))
 
 (defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit resume-after-tx-id] :as params}]
   (try
@@ -263,17 +277,24 @@
              :else 200)
    :body res})
 
-(defn resume-history-link [{:keys [eid resume-after-tx-id limit sort-order]}]
-  (if resume-after-tx-id
-    {:headers {"Link" (str "</_crux/entity?eid=" eid "&history=true&limit=" limit "&sort-order=" sort-order "&resume-after-tx-id=" resume-after-tx-id ">; rel=\"next\"")}}
+(defn- query-string [m]
+  (letfn [(encode-param [map-entry] (str (name (key map-entry)) "=" (URLEncoder/encode (str (val map-entry)) "UTF-8")))]
+    (->> (map encode-param m)
+      (string/join "&")
+      (str "?"))))
+
+(defn- resume-history-link [{:keys [scheme server-name server-port uri]} continuation-opts]
+  (if continuation-opts
+    (let [url (str  (name scheme) "://" server-name ":" server-port uri (query-string continuation-opts))]
+      {"Link" (str "<" url ">; rel=\"next\"")})
     {}))
 
-(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history limit headers] :as res} req]
+(defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history limit continuation-opts headers] :as res} req]
   (cond
     no-entity? {:status 400, :body {:error "Missing eid"}}
     not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
-    entity-history (merge {:status 200, :body {:entity-history entity-history :limit limit}} (resume-history-link res))
+    entity-history (merge {:status 200, :body {:entity-history entity-history} :headers (merge headers (resume-history-link req continuation-opts))})
     :else {:status 200, :body {:entity entity}}))
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
