@@ -18,7 +18,7 @@ The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol quer
 Only a small subset of SPARQL is supported and no other RDF features are available.
 
 [#start-http-server]
-== Starting a HTTP Server
+== Starting an HTTP Server
 
 === Project Dependency
 
@@ -27,12 +27,33 @@ Only a small subset of SPARQL is supported and no other RDF features are availab
 include::example$deps.edn[tags=HTTPDeps]
 ----
 
-You can start up a *HTTP server* on a node by including `crux.http-server/module` in your topology, optionally passing the server port:
+You can start up a *HTTP server* on a node by including `crux.http-server/server` in your node configuration, optionally passing the server port:
 
+.JSON
+[source,json]
+----
+{
+  "crux.http-server/server": {
+    "port": 3000,
+    ...
+  }
+}
+----
+
+.Clojure/EDN
 [source,clojure]
 ----
-include::example$src/docs/examples.clj[tags=start-standalone-http-node]
+{:crux.http-server/server {:port 3000
+                           ...}
 ----
+
+// TODO Authorization section
+
+=== Parameters
+
+* `port` (int, default 3000)
+* `read-only?` (boolean, default false): start the HTTP server in read-only mode
+* `jwks` (string): https://jwt.io/[JSON Web Token] (JWT) key set to authorise requests against - `{"keys": [...]}`
 
 [#start-remote-client]
 == Using a Remote API Client
