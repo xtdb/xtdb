@@ -135,11 +135,13 @@
 
         ;; First 10 items of history
         (let [hist (get-entity-history "application/edn" 10)]
-          (t/is (= 10 (count (:body hist)))))
+          (t/is (= 10 (count (:body hist))))
+          (t/is (= tx-time (get-in hist [:link-params :end-transaction-time]))))
 
         ;; First 10 items of history
         (let [hist (get-entity-history "application/transit+json" 10)]
-          (t/is (= 10 (count (:body hist)))))
+          (t/is (= 10 (count (:body hist))))
+          (t/is (= tx-time (get-in hist [:link-params :end-transaction-time]))))
 
         ;; Unrestricted history
         (let [hist (get-entity-history "application/edn" 0)]
