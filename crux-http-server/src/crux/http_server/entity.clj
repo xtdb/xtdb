@@ -164,6 +164,7 @@
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [entity entity-history limit]} _]
       (fn [^OutputStream output-stream]
+        (println "Limit: " limit)
         (with-open [w (io/writer output-stream)]
           (if entity-history
             (if limit
@@ -230,7 +231,7 @@
                                 end-valid-time (assoc :end-valid-time end-valid-time)
                                 with-corrections? (assoc :with-corrections with-corrections?)
                                 with-docs? (assoc :with-docs with-docs?))]
-        (assoc {:entity-history (butlast page)} :continuation-opts continuation-opts)))))
+        (assoc {:entity-history (butlast page) :limit limit} :continuation-opts continuation-opts)))))
 
 (defn search-entity-history [{:keys [crux-node eid valid-time transaction-time sort-order history-opts limit resume-after-tx-id] :as params}]
   (try
@@ -294,7 +295,7 @@
     no-entity? {:status 400, :body {:error "Missing eid"}}
     not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error {:status 400, :body {:error (.getMessage ^Exception error)}}
-    entity-history (merge {:status 200, :body {:entity-history entity-history} :headers (merge headers (resume-history-link req continuation-opts))})
+    entity-history (merge {:status 200, :body {:entity-history entity-history :limit limit} :headers (merge headers (resume-history-link req continuation-opts))})
     :else {:status 200, :body {:entity entity}}))
 
 (defn entity-state [req {:keys [entity-muuntaja] :as options}]
