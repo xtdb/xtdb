@@ -3,7 +3,6 @@
             [clojure.edn :as edn]
             [clojure.test :as t]
             [crux.api :as crux]
-            [crux.codec :as c]
             [clj-http.client :as http]
             [cognitect.transit :as transit]
             [clojure.data.csv :as csv]
