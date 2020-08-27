@@ -210,16 +210,23 @@
                      (fn [entity-history] (map #(update % :crux.db/content-hash str) entity-history))
                      entity-history)})
 
-(defn entity-history-page [entity-history {:keys [eid resume-after-tx-id limit sort-order]
-                                            {:keys [start end with-corrections? with-docs?]} :history-opts}]
+(defn- normalize-date
+  [^Date t]
+  (when t
+    (->> t
+      (.toInstant)
+      ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
+      (.format iso-format))))
+
+(defn entity-history-page [entity-history tx-time {:keys [eid resume-after-tx-id limit sort-order]
+                                                    {:keys [start end with-corrections? with-docs?]} :history-opts}]
   (let [page (cond->> (map #(update % :crux.db/content-hash str) (iterator-seq entity-history))
                resume-after-tx-id ((fn [hist] (rest (drop-while #(not= resume-after-tx-id (:crux.tx/tx-id %)) hist))))
                limit (take (inc limit)))]
     (if (>= limit (count page))
       {:entity-history page}
-      (let [[start-valid-time start-transaction-time] ((juxt :crux.db/valid-time :crux.tx/tx-time) start)
-            [end-valid-time end-transaction-time] ((juxt :crux.db/valid-time :crux.tx/tx-time) end)
-            end-valid-time (or end-valid-time)
+      (let [[start-valid-time start-transaction-time end-valid-time end-transaction-time] (map normalize-date (mapcat (juxt :crux.db/valid-time :crux.tx/tx-time) [start end]))
+            end-valid-time (or end-valid-time (normalize-date tx-time))
             continuation-opts (cond-> {:resume-after-tx-id (:crux.tx/tx-id (last page))
                                        :end-transaction-time end-transaction-time
                                        :history true
@@ -243,7 +250,7 @@
       (if-not (.hasNext entity-history)
         {:not-found? true}
         (if limit
-          (entity-history-page entity-history params)
+          (entity-history-page entity-history (api/transaction-time db) params)
           (entity-history-cursor entity-history))))
     (catch Exception e
       {:error e})))
@@ -287,7 +294,8 @@
 (defn- resume-history-link [{:keys [scheme server-name server-port uri]} continuation-opts]
   (if continuation-opts
     (let [url (str  (name scheme) "://" server-name ":" server-port uri (query-string continuation-opts))]
-      {"Link" (str "<" url ">; rel=\"next\"")})
+      (println url)
+      {"Link" (str "<" url ">; rel=\"next\"")}) ;; RFC5988
     {}))
 
 (defmethod transform-query-resp :default [{:keys [eid error no-entity? not-found? entity entity-history limit continuation-opts headers] :as res} req]
