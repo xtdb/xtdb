@@ -302,7 +302,6 @@ $spacing: 0.5rem;
     .table__main {
 	position: relative;
 	background: white;
-	overflow-x: auto;
     }
 
     .table__main--loading {
@@ -552,7 +551,6 @@ $spacing: 0.5rem;
 	.table__main {
 	    min-height: 50vh;
 	    max-height: initial;
-	    height: 90%;
 	}
 
 	.table__main--loading {
