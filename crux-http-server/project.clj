@@ -38,7 +38,10 @@
                              [joda-time "2.9.9"]
                              [expound "0.8.4"]]}
              :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
-                                     :target "crux-http-server/cljs-target/public/css/"}}}
+                                     :target "crux-http-server/cljs-target/public/css/"}}
+
+             :test {:dependencies []}}
+
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"
                           ["clean"]

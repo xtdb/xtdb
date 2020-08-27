@@ -13,7 +13,9 @@
              :test {:dependencies [[juxt/crux-test "crux-git-version"]
                                    [org.clojure/test.check "0.10.0"]
                                    [juxt/crux-http-server "crux-git-version-alpha"]
-                                   [org.apache.httpcomponents/httpclient "4.5.9"]
-                                   [org.ow2.asm/asm "7.1"]]}}
+                                   [org.apache.httpcomponents/httpclient "4.5.12"]
+                                   [org.apache.httpcomponents/httpcore "4.4.13"]
+                                   [org.ow2.asm/asm "7.1"]
+                                   [com.fasterxml.jackson.core/jackson-core "2.10.2"] ]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

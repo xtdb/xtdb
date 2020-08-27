@@ -1,6 +1,6 @@
 (defproject juxt/crux-s3 "crux-git-version-beta"
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/tools.logging "1.0.0"]
+                 [org.clojure/tools.logging "1.1.0"]
 
                  [juxt/crux-core "crux-git-version-beta"]
                  [software.amazon.awssdk/s3 "2.10.61"]

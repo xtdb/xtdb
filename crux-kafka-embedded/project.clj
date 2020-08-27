@@ -12,7 +12,7 @@
 
                  ;; dependency conflict resolution
                  [org.slf4j/slf4j-api "1.7.29"]
-                 [com.fasterxml.jackson.core/jackson-annotations "2.9.9"]]
+                 [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)

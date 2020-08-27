@@ -63,6 +63,7 @@
    [org.apache.commons/commons-text "1.7"]
    [org.apache.commons/commons-compress "1.19"]
    [org.javassist/javassist "3.22.0-GA"]
+   [org.lz4/lz4-java "1.7.1"]
    [commons-codec "1.12"]
    [joda-time "2.9.9"]
    [org.eclipse.jetty/jetty-util "9.4.22.v20191022"]
