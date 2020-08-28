@@ -6,7 +6,8 @@
             [crux.memory :as mem]
             [crux.status :as status]
             [crux.morton :as morton]
-            [crux.kv.memdb :as memdb])
+            [crux.kv.memdb :as memdb]
+            [clojure.spec.alpha :as s])
   (:import (crux.codec Id EntityTx)
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
@@ -303,16 +304,18 @@
     (some->> (kv/get-value snapshot (encode-index-version-key-to (.get seek-buffer-tl)))
              (decode-index-version-value-from))))
 
-(defn- check-and-store-index-version [kv]
-  (if-let [index-version (current-index-version kv)]
-    (when (not= c/index-version index-version)
-      (throw (IndexVersionOutOfSyncException.
-              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
-    (doto kv
-      (kv/store [[(encode-index-version-key-to nil)
-                  (encode-index-version-value-to nil c/index-version)]])
-      (kv/fsync)))
-  kv)
+(defn- check-and-store-index-version [kv {::keys [skip-index-version-bump]}]
+  (let [index-version (current-index-version kv)]
+    (or (when (and index-version (not= c/index-version index-version))
+          (let [[skip-from skip-to] skip-index-version-bump]
+            (when-not (and (= skip-from index-version)
+                           (= skip-to c/index-version))
+              (throw (IndexVersionOutOfSyncException.
+                      (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))))
+        (doto kv
+          (kv/store [[(encode-index-version-key-to nil)
+                      (encode-index-version-value-to nil c/index-version)]])
+          (kv/fsync)))))
 
 ;; Meta
 
@@ -755,6 +758,8 @@
 
 (def kv-indexer
   {:start-fn (fn [{:crux.node/keys [kv-store]} args]
-               (check-and-store-index-version kv-store)
+               (check-and-store-index-version kv-store args)
                (->KvIndexer kv-store))
-   :deps [:crux.node/kv-store]})
+   :deps [:crux.node/kv-store]
+   :args {::skip-index-version-bump {:crux.config/type (s/tuple int? int?)
+                                     :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}})
