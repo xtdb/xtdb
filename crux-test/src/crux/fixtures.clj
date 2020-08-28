@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [crux.api :as crux]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [clojure.test :as t])
   (:import crux.api.ICruxAPI
            java.io.File
            java.nio.file.attribute.FileAttribute
