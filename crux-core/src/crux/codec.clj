@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 12)
+(def index-version 12)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -361,6 +361,22 @@
   Boolean
   (id->buffer [this to]
     (id-function to (nippy/fast-freeze this)))
+
+  Byte
+  (id->buffer [this to]
+    (id->buffer (long this) to))
+
+  Short
+  (id->buffer [this to]
+    (id->buffer (long this) to))
+
+  Integer
+  (id->buffer [this to]
+    (id->buffer (long this) to))
+
+  Float
+  (id->buffer [this to]
+    (id->buffer (double this) to))
 
   Number
   (id->buffer [this to]
