@@ -118,21 +118,29 @@
                       (parse-body "text/tsv")))))))
 
 (t/deftest test-history-pagination
-  (letfn [(submit-ivan [valid-time version]
+  (letfn [(submit-ivan [version valid-time]
             (-> (http/post (str *api-url* "/tx-log")
                            {:content-type :edn
                             :body (pr-str [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :version version} valid-time]])
                             :as :stream})
               (parse-body "application/edn")))
 
-          (create-ivan-history [start-id n]
-            (doseq [i (range start-id (+ start-id n))]
-              (submit-ivan (java.util.Date.) i))
-            (http/get (str *api-url* "/await-tx?tx-id=" (dec (+ start-id n)))))]
+          ;; Create n items of history, in batches of m at the same valid-time
+          (create-ivan-history [start-id n m]
+            (let [valid-times [#inst "2020-08-24T12:00:00"
+                               #inst "2020-08-25T12:00:00"
+                               #inst "2020-08-26T12:00:00"
+                               #inst "2020-08-27T12:00:00"]
+                  ids (partition-all m (range start-id (+ start-id n)))
+                  batches (zipmap ids (cycle valid-times))]
+              (doseq [[versions valid-time] batches
+                      version versions]
+                (submit-ivan  version valid-time))
+              (http/get (str *api-url* "/await-tx?tx-id=" (+ start-id (dec n))))))]
 
-      (let [hist (create-ivan-history 0 20)
-            tx-time (normalize-date (:crux.tx/tx-time (read-string (:body hist))))
-            path "/_crux/entity?eid=:ivan&history=true&sort-order=desc&with-docs=true"
+      (let [res (create-ivan-history 0 20 3)
+            tx-time (normalize-date (:crux.tx/tx-time (read-string (:body res))))
+            path "/_crux/entity?eid=:ivan&history=true&sort-order=asc&with-docs=true&with-corrections=true"
             parse-response (fn [res accept-type] {:body (parse-body res accept-type)
                                                   :link (get-in res [:links :next :href])
                                                   :link-params (parse-history-continuation-link res)})
@@ -143,29 +151,38 @@
         (let [hist (get-entity-history path "application/edn" 10)]
           (t/is (= 10 (count (:body hist))))
           (t/is (= tx-time (get-in hist [:link-params :transaction-time])))
+          (t/is (= [0 1 2 12 13 14 3 4 5 15] (map :crux.tx/tx-id (:body hist))))
 
-          ;; Add some more history, to check that the next page doesn't include these items
-          (create-ivan-history 20 5)
+          ; Add some more history, to check that the next page doesn't include these items
+          (create-ivan-history 20 5 3)
 
           ;; Next page should be the last, with only 10 items
           (let [nxt (get-entity-history (relative-path (:link hist)) "application/edn" 0)]
+            (println (count (:body nxt)))
             (t/is (= 10 (count (:body nxt))))
-            (t/is (= nil (:link nxt)))))
+            (t/is (= nil (:link nxt)))
+            (t/is (= [16 17 6 7 8 18 19 9 10 11] (map :crux.tx/tx-id (:body nxt))))))
 
         ;; First 10 items of history, as at the original transaction time
         (let [hist (get-entity-history (str path "&transaction-time=" tx-time) "application/transit+json" 10)
               nxt (get-entity-history (relative-path (:link hist)) "application/transit+json" 0)]
           (t/is (= 10 (count (:body hist))))
           (t/is (= tx-time (get-in hist [:link-params :transaction-time])))
+          (t/is (= [0 1 2 12 13 14 3 4 5 15] (map :crux.tx/tx-id (:body hist))))
           (t/is (= 10 (count (:body nxt))))
+          (t/is (= [16 17 6 7 8 18 19 9 10 11] (map :crux.tx/tx-id (:body nxt))))
           (t/is (= nil (:link nxt))))
 
-        ;; Unrestricted history
+        ;; Unrestricted history - should now return 25 items
         (let [hist (get-entity-history path "application/edn" 0)]
           (t/is (= 25 (count (:body hist))))
+          (t/is (= [0 1 2 12 13 14 20 21 22 3 4 5 15 16 17 23 24 6 7 8 18 19 9 10 11]
+                   (map :crux.tx/tx-id (:body hist))))
           (t/is (= nil (:link hist))))
 
-        ;; Unrestricted history
+        ;; Unrestricted history - should now return 25 items
         (let [hist (get-entity-history path "application/transit+json" 0)]
           (t/is (= 25 (count (:body hist))))
+          (t/is (= [0 1 2 12 13 14 20 21 22 3 4 5 15 16 17 23 24 6 7 8 18 19 9 10 11]
+                   (map :crux.tx/tx-id (:body hist))))
           (t/is (= nil (:link hist)))))))

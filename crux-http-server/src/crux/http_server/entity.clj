@@ -228,13 +228,15 @@
       {:entity-history page :limit limit}
       (let [[start-valid-time start-transaction-time end-valid-time end-transaction-time] (map normalize-date (mapcat (juxt :crux.db/valid-time :crux.tx/tx-time) [start end]))
             transaction-time (normalize-date tx-time)
+            start-valid-time (or start-valid-time (normalize-date (:crux.db/valid-time (last page))))
             continuation-opts (cond-> {:resume-from-tx-id (:crux.tx/tx-id (last page))
                                        :transaction-time transaction-time
+                                       :start-valid-time start-valid-time
                                        :history true
                                        :limit limit
                                        :sort-order (name sort-order)
                                        :eid eid}
-                                start-valid-time (assoc :start-valid-time start-valid-time)
+                                ; start-valid-time (assoc :start-valid-time start-valid-time)
                                 start-transaction-time (assoc :start-transaction-time start-transaction-time)
                                 end-valid-time (assoc :end-valid-time end-valid-time)
                                 end-transaction-time (assoc :end-transaction-time end-transaction-time)
