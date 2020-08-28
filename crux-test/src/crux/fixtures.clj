@@ -4,7 +4,8 @@
             [crux.io :as cio]
             [crux.node :as n]
             [crux.standalone :as standalone]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [clojure.test :as t])
   (:import crux.api.ICruxAPI
            (java.util ArrayList List UUID)
            (java.io File)
@@ -93,3 +94,21 @@
 ;; be type hinted without via a var.
 (defn vec->array-list ^java.util.List [^List v]
   (ArrayList. v))
+
+(defmethod t/assert-expr 'thrown-with-cause? [msg form]
+  (let [klass (second form)
+        body (nthnext form 2)]
+    `(try
+       (let [res# ~@body]
+         (t/do-report {:type :fail, :message ~msg,
+                       :expected '~form, :actual res#}))
+       (catch Exception e#
+         (try
+           (if-let [cause# (.getCause e#)]
+             (throw cause#)
+             (t/do-report {:type :fail, :message ~msg,
+                           :expected '~form, :actual nil}))
+           (catch ~klass e#
+             (t/do-report {:type :pass, :message ~msg,
+                           :expected '~form, :actual e#})
+             e#))))))
