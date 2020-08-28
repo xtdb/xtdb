@@ -158,7 +158,6 @@
 
           ;; Next page should be the last, with only 10 items
           (let [nxt (get-entity-history (relative-path (:link hist)) "application/edn" 0)]
-            (println (count (:body nxt)))
             (t/is (= 10 (count (:body nxt))))
             (t/is (= nil (:link nxt)))
             (t/is (= [16 17 6 7 8 18 19 9 10 11] (map :crux.tx/tx-id (:body nxt))))))
