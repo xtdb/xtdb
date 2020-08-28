@@ -121,14 +121,17 @@
     (resolve-entity-map linked-entities (dissoc entity :crux.db/id))]
    (vt-tt-entity-box valid-time transaction-time)])
 
+(def entity-history-limit 100)
+
 (defn- entity-history->html [{:keys [eid entity-history]}]
   [:div.entity-histories__container
    [:div.entity-histories
-    (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
-      [:div.entity-history__container
-       [:div.entity-map
-        (resolve-entity-map {} doc)]
-       (vt-tt-entity-box valid-time tx-time)])]])
+    (take entity-history-limit
+      (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
+        [:div.entity-history__container
+         [:div.entity-map
+          (resolve-entity-map {} doc)]
+         (vt-tt-entity-box valid-time tx-time)]))]])
 
 (defn ->entity-html-encoder [opts]
   (reify mfc/EncodeToBytes
