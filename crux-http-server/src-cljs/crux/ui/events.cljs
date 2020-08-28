@@ -52,6 +52,11 @@
         :dispatch [:navigate tab {} (get-in db [:previous-params tab])]}))))
 
 (rf/reg-event-db
+ ::status-tab-selected
+ (fn [db [_ tab]]
+   (assoc-in db [:status :selected-tab] tab)))
+
+(rf/reg-event-db
  ::toggle-form-pane
  (fn [db [_ & bool]]
    (update-in db [:form-pane :hidden?] #(if (seq bool) (first bool) (not %)))))
@@ -114,13 +119,11 @@
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
    (let [{:strs [q valid-time transaction-time]} values
-         show-vt? (get-in db [:form-pane :show-vt? :query])
-         show-tt? (get-in db [:form-pane :show-tt? :query])
          query-params (->>
                        (merge
                         (common/edn->query-params (reader/read-string q))
-                        {:valid-time (when show-vt? (t/instant (.toDate (js/moment valid-time))))
-                         :transaction-time (when show-tt? (t/instant (.toDate (js/moment transaction-time))))})
+                        {:valid-time (some-> valid-time js/moment .toDate t/instant)
+                         :transaction-time (some-> transaction-time js/moment .toDate t/instant)})
                        (remove #(nil? (second %)))
                        (into {}))
          history-elem (dissoc query-params :valid-time :transaction-time)
@@ -180,11 +183,9 @@
 (rf/reg-event-fx
  ::go-to-entity-view
  (fn [{:keys [db]} [_ {{:strs [eid valid-time transaction-time]} :values}]]
-   (let [show-vt? (get-in db [:form-pane :show-vt? :entity])
-         show-tt? (get-in db [:form-pane :show-tt? :entity])
-         query-params (->>
-                       {:valid-time (when show-vt? (t/instant (.toDate (js/moment valid-time))))
-                        :transaction-time (when show-tt? (t/instant (.toDate (js/moment transaction-time))))
+   (let [query-params (->>
+                       {:valid-time (some-> valid-time js/moment .toDate t/instant)
+                        :transaction-time (some-> transaction-time js/moment .toDate t/instant)
                         :eid eid}
                        (remove #(nil? (second %)))
                        (into {}))]

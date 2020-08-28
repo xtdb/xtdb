@@ -282,7 +282,7 @@
 (defn- handler [request {:keys [crux-node ::read-only?]}]
   (condp check-path request
     [#"^/$" [:get]]
-    (redirect-response "/_crux/index")
+    (redirect-response "/_crux/query")
 
     [#"^/entity/.+$" [:get]]
     (entity crux-node request)
@@ -346,61 +346,6 @@
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       nil)))
 
-(defn- root-page []
-  [:div.root-page
-   [:div.root-background]
-   [:div.root-contents
-    [:h1.root-title "Console Overview"]
-    ;;[:h2.root-subtitle "Crux Console"]
-    [:div.root-info-summary
-     [:div.root-info "✓ Crux node is active"]
-     [:div.root-info "✓ HTTP is enabled"]]
-    ;;[:div.root-info "✓ version"]
-   ;; [:h2.root-subtitle "There are N indexed documents"]
-   ;; [:h2.root-subtitle "There are have been T transactions"]
-   ;; [:h2.root-subtitle "This node is read-only over HTTP"]
-    [:div.root-tiles
-     [:a.root-tile
-      {:href "/_crux/query"}
-      [:i.fas.fa-search]
-      [:br]
-      "Query"]
-     [:a.root-tile
-      {:href "/_crux/status"}
-      [:i.fas.fa-wrench]
-      [:br]
-      "Status"]
-     [:a.root-tile
-      {:href "https://opencrux.com/reference" :target "_blank"}
-      [:i.fas.fa-book]
-      [:br]
-      "Docs"]]]])
-
-(defn ->root-html-encoder [opts]
-  (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ res charset]
-      (let [^String resp (util/raw-html {:body (root-page)
-                                         :title "/_crux"
-                                         :options opts}) ]
-        (.getBytes resp ^String charset)))))
-
-(defn- ->root-muuntaja [opts]
-  (m/create (-> m/default-options
-                (dissoc :formats)
-                (assoc :default-format "text/html")
-                (m/install {:name "text/html"
-                            :encoder [->root-html-encoder opts]
-                            :return :bytes}))))
-
-(defn- root-handler [req {:keys [root-muuntaja] :as opts}]
-  (let [root-muuntaja (->root-muuntaja opts)
-        req (cond->> req
-              (not (get-in req [:muuntaja/response :format])) (m/negotiate-and-format-request root-muuntaja))]
-    (->> {:status 200
-          :headers {"Content-Location" "/_crux/index.html"}
-          :body '()}
-         (m/format-response root-muuntaja req))))
-
 (defn- ->data-browser-handler [{:keys [crux-node] :as options}]
   (let [options (assoc options
                        :query-muuntaja (query/->query-muuntaja options)
@@ -408,12 +353,6 @@
                        :status-muuntaja (status/->status-muuntaja options))]
     (fn [request]
       (condp check-path request
-        [#"^/_crux/index$" [:get]]
-        (root-handler request options)
-
-        [#"^/_crux/index.html$" [:get]]
-        (root-handler (assoc-in request [:muuntaja/response :format] "text/html") options)
-
         [#"^/_crux/status" [:get]]
         (status/status request options)
 

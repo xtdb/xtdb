@@ -6,9 +6,6 @@
   [""
    ["/attribute-stats"
     {:name :attribute-stats}]
-   ["/_crux/index"
-    {:name :homepage
-     :link-text "Home"}]
    ["/_crux/status"
     {:name :status
      :link-text "Status"

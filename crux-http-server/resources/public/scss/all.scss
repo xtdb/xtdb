@@ -194,25 +194,11 @@ html, body {
     margin: auto;
     margin-top: 1rem;
 }
-.node-info {
-    margin: 0 2em 2em 0;
-    padding: 1em;
-}
-
-.node-info__container {
-    display: flex;
-}
-
-.node-info__title {
-    color: black;
-    font-weight: bold;
-    font-size: 1.5rem;
-}
 
 .node-info__content {
     white-space: pre-wrap;
-    padding: 10px;
     background-color: white;
+    padding: 0 1rem;
 }
 
 .node-info__content p {
@@ -337,8 +323,13 @@ html, body {
 
 .CodeMirror-readOnly {
     .CodeMirror {
+	cursor: pointer;
 	box-shadow: none;
 	background: none;
+    }
+
+    .CodeMirror-lines {
+	cursor: pointer;
     }
 
     .textarea {
@@ -370,24 +361,13 @@ html, body {
 }
 
 .form-pane__history-scrollable-el-left {
-    padding: 0 0 .5rem 1rem;
+    padding: 1rem 0 1rem 1rem;
     flex: 1;
     border-bottom: 1px solid #dbdbdb;
 }
 
-.form-pane__history-buttons {
-    display:flex;
-    justify-content: flex-end;
-}
-
-.form-pane__history-button {
-    background: #e3e1e1;
-    cursor: pointer;
-    font-size: .8rem;
-    padding: .3rem .5rem;
-    margin-left: .2rem;
-    font-weight: bold;
-    z-index: 4;
+.form-pane__history-scrollable-el-left:hover {
+    background: #f1f1f1;
 }
 
 .form-pane__history-headings {
@@ -446,7 +426,7 @@ html, body {
 .crux-time {
     display: flex;
     align-items: center;
-    margin-top: 1rem;
+    margin-bottom: .5rem;
     margin-right: 1rem;
     height: var(--crux-time-height);
 }
@@ -487,16 +467,24 @@ html, body {
 }
 
 .input-group-label {
-    width: 7rem;
+    width: 9rem;
     margin-right: 1rem;
     margin-bottom: 0rem;
     margin-left: 0.5rem;
+    display: flex;
+    align-items: center;
 }
 
 .input-error {
     font-size: 0.8rem;
     color: darkred;
     margin-top: 0.5rem;
+}
+
+.label-hint {
+    margin-left: 0.3rem;
+    color: black;
+    text-decoration: none;
 }
 
 // END FORM ELEMENTS
@@ -859,13 +847,6 @@ ul.entity-group__value li::before {
     background: #f1f1f1;
     width: max-content;
     margin-left:auto;
-}
-
-.form-pane__history-info {
-    font-size: 0.9rem;
-    background: #e3e1e1;
-    padding: .6rem;
-    margin-bottom: .6rem;
 }
 
 .form__button {

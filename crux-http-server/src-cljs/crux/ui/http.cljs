@@ -70,18 +70,19 @@
  ::fetch-node-status
  (fn [{:keys [db]} _]
    (let [meta-results (get-in db [:meta-results :status-results])]
-     (if meta-results
-       {:db (-> (assoc-in db [:status :http] (:status-map meta-results))
-                (assoc-in [:attribute-stats :http] (:attribute-stats meta-results))
-                (assoc :meta-results nil))
-        :dispatch [:crux.ui.events/set-node-status-loading false]}
-       {:scroll-top nil
-        :dispatch [:crux.ui.events/set-node-status-loading true]
-        :http-xhrio {:method :get
-                     :uri (common/route->url :status)
-                     :response-format (ajax-edn/edn-response-format)
-                     :on-success [::success-fetch-node-status]
-                     :on-failure [::fail-fetch-node-status]}}))))
+     (cond
+       meta-results {:db (-> (assoc-in db [:status :http] (:status-map meta-results))
+                             (assoc-in [:attribute-stats :http] (:attribute-stats meta-results))
+                             (assoc :meta-results nil))
+                     :dispatch [:crux.ui.events/set-node-status-loading false]}
+       :else {:scroll-top nil
+              :db (dissoc db :load-from-state?)
+              :dispatch [:crux.ui.events/set-node-status-loading true]
+              :http-xhrio {:method :get
+                           :uri (common/route->url :status)
+                           :response-format (ajax-edn/edn-response-format)
+                           :on-success [::success-fetch-node-status]
+                           :on-failure [::fail-fetch-node-status]}}))))
 
 (rf/reg-event-fx
  ::success-fetch-node-status

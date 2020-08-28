@@ -44,7 +44,11 @@
                :checked show-vt?
                :on-change #(rf/dispatch [::events/toggle-show-vt component show-vt?])}]
       [:div.input-group-label.label
-       [:label "Valid Time"]]
+       [:label "Valid Time"] [:a.label-hint
+                              {:href "https://opencrux.com/about/bitemporality.html#valid"
+                               :target "_blank"
+                               :title "Learn More"}
+                              "ⓘ"]]
       [:div.date-time-input
        {:class (when-not show-vt? "hidden")}
        [datetime-input props "valid-time"]
@@ -57,7 +61,11 @@
                :checked show-tt?
                :on-change #(rf/dispatch [::events/toggle-show-tt component show-tt?])}]
       [:div.input-group-label.label
-       [:label "Transaction Time" ]]
+       [:label "Transaction Time" ] [:a.label-hint
+                                     {:href "https://opencrux.com/about/bitemporality.html#transaction"
+                                      :target "_blank"
+                                      :title "Learn More"}
+                                     "ⓘ"]]
       [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
        [datetime-input props "transaction-time"]
@@ -74,6 +82,12 @@
    [:div.entity-vt-tt__title
     "Transaction Time"]
    [:div.entity-vt-tt__value (str tt)]])
+
+(defn remove-times-if-hidden
+  [form-values component]
+  (cond-> form-values
+    (not @(rf/subscribe [::sub/show-vt? component])) (assoc-in [:values "valid-time"] nil)
+    (not @(rf/subscribe [::sub/show-tt? component])) (assoc-in [:values "transaction-time"] nil)))
 
 (defn query-validation
   [values]
@@ -123,8 +137,6 @@
   [set-values]
   (let [query-history-list @(rf/subscribe [::sub/query-form-history])]
     [:<>
-     [:div.form-pane__history-info
-      "Query history is stored within temporary storage in your browser"]
      (if (not-empty query-history-list)
        [:div.form-pane__history-scrollable
         (reverse
@@ -132,20 +144,14 @@
           (fn [idx {:strs [q] :as history-q}]
             ^{:key (gensym)}
             [:div.form-pane__history-scrollable-el
+             [:div.form-pane__history-scrollable-el-left
+              {:on-click #(do (set-values {"q" q})
+                              (rf/dispatch [::events/query-form-tab-selected :edit-query]))}
+              [:div
+               [cm/code-mirror-static q {:class "cm-textarea__query"}]]]
              [:div.form-pane__history-delete
               {:on-click #(rf/dispatch [::events/remove-query-from-local-storage idx])}
-              [:i.fas.fa-trash-alt]]
-             [:div.form-pane__history-scrollable-el-left
-              [:div.form-pane__history-buttons
-               [:div.form-pane__history-button
-                {:on-click #(do (set-values {"q" q})
-                                (rf/dispatch [::events/query-form-tab-selected :edit-query]))}
-                "Edit"]
-               [:div.form-pane__history-button
-                {:on-click #(rf/dispatch [::events/go-to-historical-query history-q])}
-                "Run"]]
-              [:div
-               [cm/code-mirror-static q {:class "cm-textarea__query"}]]]])
+              [:i.fas.fa-trash-alt]]])
           query-history-list))]
        [:div.form-pane__history-empty
         [:b "No recent queries found."]])]))
@@ -168,9 +174,7 @@
                     :prevent-default? true
                     :clean-on-unmount? true
                     :initial-values @(rf/subscribe [::sub/initial-values-query])
-                    :on-submit #(do
-                                  (rf/dispatch [:crux.ui.collapsible/toggle [::query-form ::query-editor] false])
-                                  (rf/dispatch [::events/go-to-query-view %]))}
+                    :on-submit #(rf/dispatch [::events/go-to-query-view (remove-times-if-hidden % :query)])}
          (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
            (let [loading? @(rf/subscribe [::sub/query-result-pane-loading?])
                  disabled? (or loading? (some some? (vals errors)))]
@@ -198,7 +202,7 @@
     [:<>
      (cond
        error [:div.error-box error]
-       (empty? (:rows data)) [:div.no-results "No results found!"]
+       (and (empty? (:rows data)) (not (:loading? data))) [:div.no-results "No results found!"]
        :else [:<>
               [:<>
                [:div.query-table-topbar
@@ -207,15 +211,15 @@
                       row-count (count (:rows data))
                       count-string (if (> row-count limit) (str limit "+") (str row-count))]
                   [:div.query-result-info
-                   "Found " [:b count-string] " result" (when (> row-count 1) "s")
+                   [:b count-string] " result" (when (> row-count 1) "s")
                    (when (not= start-time end-time)
                      [:<>
                       " in " [:b (common/format-duration->seconds (t/between start-time end-time))] " seconds"])])
                 [:div.query-table-downloads
-                 "Download results as:"
                  [:a.query-table-downloads__link
                   {:href @(rf/subscribe [::sub/query-data-download-link "csv"])}
                   "CSV"]
+                 "|"
                  [:a.query-table-downloads__link
                   {:href @(rf/subscribe [::sub/query-data-download-link "tsv"])}
                   "TSV"]]]]
@@ -225,7 +229,6 @@
   []
   [:<>
    [query-form]
-
    (when @(rf/subscribe [::sub/query-submitted?])
      [query-table])])
 
@@ -264,7 +267,7 @@
                     :clean-on-unmount? true
                     :validation entity-validation
                     :initial-values @(rf/subscribe [::sub/initial-values-entity])
-                    :on-submit #(rf/dispatch [::events/go-to-entity-view %])}
+                    :on-submit #(rf/dispatch [::events/go-to-entity-view (remove-times-if-hidden % :entity)])}
          (fn [{:keys [values
                       touched
                       errors
@@ -410,15 +413,6 @@
         :document [entity-document]
         :history [entity-history-document])])])
 
-(defn console-pane []
-  [:<>
-   [tab/tab-bar {:tabs [{:k :query, :label "Datalog Query"}
-                        {:k :entity, :label "Browse Documents"}]
-                 :current-tab [::sub/console-tab]
-                 :on-tab-selected [::events/console-tab-selected]}]
-   (case @(rf/subscribe [::sub/console-tab])
-     :query [query-pane]
-     :entity [entity-pane])])
 
 (defn render-status-map
   [status-map]
@@ -450,55 +444,48 @@
            (common/edn->pretty-string key)]]
          [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 
-(defn status-page
+(defn render-metrics-map
+  [metrics-map]
+  (if metrics-map
+    [render-status-map metrics-map]
+    [:div.node-info__content
+     [:span.metrics-warning
+      "You do not have the metrics status reporter enabled - to read about metrics in Crux, see "
+      [:a {:href "https://opencrux.com/reference/monitoring.html"} "here"]
+      "."]]))
+
+(defn status-pane
   []
   (let [status-map @(rf/subscribe [::sub/node-status])
         options-map @(rf/subscribe [::sub/node-options])
         attributes-map @(rf/subscribe [::sub/node-attribute-stats])]
-    [:div.status
-     [:h1 "Status"]
-     [:div.node-info__container
-      [:div.node-info
-       [:h2.node-info__title "Overview"]
-       [render-status-map status-map]]
-      [:div.node-info
-       [:h2.node-info__title "Current Configuration"]
-       [render-status-map options-map]]]
-     [:div.node-attributes
-      [:h2.node-info__title "Attribute Cardinalities"]
-      [render-attribute-stats attributes-map]]]))
+    [:<>
+     [tab/tab-bar {:tabs [{:k :overview, :label "Overview"}
+                          {:k :configuration, :label "Current Configuration"}
+                          {:k :attributes, :label "Attribute Cardinalities"}
+                          {:k :metrics, :label "Node Metrics"}]
+                   :current-tab [::sub/status-tab]
+                   :on-tab-selected [::events/status-tab-selected]}]
 
-(defn root-page
-  []
-  [:div.root-page
-   [:div.root-background]
-   [:div.root-contents
-    [:h1.root-title "Console Overview"]
-;;    [:h2.root-subtitle "Small Description Here"]
-    [:div.root-info-summary
-     [:div.root-info "✓ Crux node is active"]
-     [:div.root-info "✓ HTTP is enabled"]]
-    [:div.root-tiles
-     [:a.root-tile
-      {:href (common/route->url :query)}
-      [:i.fas.fa-search]
-      [:br]
-      "Query"]
-     [:a.root-tile
-      {:href (common/route->url :status)}
-      [:i.fas.fa-wrench]
-      [:br]
-      "Status"]
-     [:a.root-tile
-      {:href "https://opencrux.com/reference" :target "_blank"}
-      [:i.fas.fa-book]
-      [:br]
-      "Docs"]]]])
+     (case @(rf/subscribe [::sub/status-tab])
+       :overview [render-status-map (dissoc status-map :crux.metrics)]
+       :configuration [render-status-map options-map]
+       :attributes [render-attribute-stats attributes-map]
+       :metrics (render-metrics-map (:crux.metrics status-map)))]))
+
+(defn console-pane []
+  [:<>
+   [tab/tab-bar {:tabs [{:k :query, :label "Datalog Query"}
+                        {:k :entity, :label "Browse Documents"}
+                        {:k :status, :label "Node Status"}]
+                 :current-tab [::sub/console-tab]
+                 :on-tab-selected [::events/console-tab-selected]}]
+   (case @(rf/subscribe [::sub/console-tab])
+     :query [query-pane]
+     :entity [entity-pane]
+     :status [status-pane])])
 
 (defn view []
   (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
     [:div.container.page-pane
-     (cond
-       (= name :homepage) [root-page]
-       (= name :status) [status-page]
-       :else [console-pane])]))
+     [console-pane]]))

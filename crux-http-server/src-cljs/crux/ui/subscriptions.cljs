@@ -19,14 +19,19 @@
 
 (def query-root-str
   (string/join "\n"
-               [";; To perform a query:"
-                ";; 1) Enter a query into this query editor, such as the following example"
-                ";; 2) Optionally, select a \"valid time\" and/or \"transaction time\" to query against"
-                ";; 3) Submit the query and the tuple results will be displayed in a table below"
+               [";; Welcome to the Crux Console!"
+                ";;"
+                ";; The Console is a tool for exploring your data and helping you write"
+                ";; Datalog queries. The console also displays useful status information."
+                ";;"
+                ";; See the documentation for help on how to construct queries."
+                ";;"
+                ";; Keyboard Shortcuts:"
+                ";; Ctrl+Enter (Submit Query)"
                 ""
                 "{"
-                " :find [?e]                ;; return a set of tuples each consisting of a unique ?e value"
-                " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
+                " :find [?e]"
+                " :where [[?e :crux.db/id]]"
                 "}"]))
 
 (rf/reg-sub
@@ -154,6 +159,11 @@
  ::query-form-tab
  (fn [db _]
    (get-in db [:query-form :selected-tab] :edit-query)))
+
+(rf/reg-sub
+ ::status-tab
+ (fn [db _]
+   (get-in db [:status :selected-tab] :overview)))
 
 (rf/reg-sub
  ::query-submitted?

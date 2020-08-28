@@ -53,23 +53,20 @@
            [:body
             [:nav.header
              [:div.crux-logo
-              [:a {:href "/_crux/index"}
+              [:a {:href "/_crux/query"}
                [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
              [:span.mobile-hidden
-              [:b (when-let [label (get-in options [:node-options :crux.http-server/label])]
-                    (format "\"%s\"" label))]]
+              [:b (when-let [label (get-in options [:node-options :crux.http-server/label])] label)]]
              [:div.header__links
-              [:a.header__link {:href "/_crux/query"} "Query"]
-              [:a.header__link {:href "/_crux/status"} "Status"]
-              [:div.header-dropdown
+              [:a.header__link {:href "https://opencrux.com/reference/get-started.html" :target "_blank"} "Documentation"]
+              [:a.header__link {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip Chat"]
+              [:a.header__link {:href "mailto:crux@juxt.pro" :target "_blank"} "Email Support"]
+              #_[:div.header-dropdown
                [:button.header-dropdown__button
-                "Help"
+                "Placeholder"
                 [:i.fa.fa-caret-down]]
                [:div.header-dropdown__links
-                [:a {:href "https://opencrux.com/reference" :target "_blank"} "Documentation"]
-                [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip Chat"]
-                ;; [:a {:href "https://clojurians.slack.com/messages/crux" :target "_blank"} "Clojurians Slack"]
-                [:a {:href "mailto:crux@juxt.pro" :target "_blank"} "Email Support"]]]]]
+                [:a "Placeholder"]]]]]
             [:div.console
              [:div#app
               [:div.container.page-pane body]]]
