@@ -236,7 +236,6 @@
                                        :limit limit
                                        :sort-order (name sort-order)
                                        :eid eid}
-                                ; start-valid-time (assoc :start-valid-time start-valid-time)
                                 start-transaction-time (assoc :start-transaction-time start-transaction-time)
                                 end-valid-time (assoc :end-valid-time end-valid-time)
                                 end-transaction-time (assoc :end-transaction-time end-transaction-time)
