@@ -1,35 +1,10 @@
 (ns docs.examples
-  (:require [clojure.java.io :as io]))
-
-;; tag::include-crux-api[]
-(require '[crux.api :as crux])
-;; end::include-crux-api[]
+  (:require [clojure.java.io :as io]
+            [crux.api :as crux]))
 
 ;; tag::require-ek[]
 (require '[crux.kafka.embedded :as ek])
 ;; end::require-ek[]
-
-(comment
-  ;; tag::start-in-memory-node[]
-  (crux/start-node {})
-  ;; end::start-in-memory-node[]
-  )
-
-(defn close-node [^java.io.Closeable node]
-;; tag::close-node[]
-(.close node)
-;; end::close-node[]
-  )
-
-;; tag::start-standalone-http-node[]
-(defn start-standalone-http-node [port storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology crux.http-server/module]
-                    :crux.http-server/port port
-                    :crux.standalone/event-log-dir (io/file storage-dir "event-log")
-                    :crux.kv/db-dir (io/file storage-dir "indexes")
-                    ;; by default, the HTTP server is read-write - set this flag to make it read-only
-                    :crux.http-server/read-only? false}))
-;; end::start-standalone-http-node[]
 
 ;; tag::ek-example[]
 (defn start-embedded-kafka [kafka-port storage-dir]
@@ -44,65 +19,10 @@
 ;; end::ek-close[]
 )
 
-;; tag::start-cluster-node[]
-(defn start-cluster [kafka-port storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.rocksdb/kv-store]
-                    :crux.kafka/bootstrap-servers (str "localhost:" kafka-port)
-                    :crux.kv/db-dir (io/file storage-dir "indexes")}))
-;; end::start-cluster-node[]
-
-;; tag::start-standalone-with-rocks[]
-(defn start-rocks-node [storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology
-                                          crux.rocksdb/kv-store]
-                    :crux.standalone/event-log-dir (io/file storage-dir "event-log")
-                    :crux.standalone/event-log-kv-store 'crux.rocksdb/kv
-                    :crux.kv/db-dir (str (io/file storage-dir "indexes"))}))
-;; end::start-standalone-with-rocks[]
-
-;; tag::start-standalone-with-lmdb[]
-(defn start-lmdb-node [storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology
-                                          crux.lmdb/kv-store]
-                    :crux.standalone/event-log-kv-store 'crux.lmdb/kv
-                    :crux.standalone/event-log-dir (io/file storage-dir "event-log")
-                    :crux.kv/db-dir (io/file storage-dir "indexes")}))
-;; end::start-standalone-with-lmdb[]
-
-;; tag::start-jdbc-node[]
-(defn start-jdbc-node []
-  (crux/start-node {:crux.node/topology '[crux.jdbc/topology]
-                    :crux.jdbc/dbtype "postgresql"
-                    :crux.jdbc/dbname "cruxdb"
-                    :crux.jdbc/host "<host>"
-                    :crux.jdbc/user "<user>"
-                    :crux.jdbc/password "<password>"}))
-;; end::start-jdbc-node[]
-
 ;; tag::start-http-client[]
 (defn start-http-client [port]
   (crux/new-api-client (str "http://localhost:" port)))
 ;; end::start-http-client[]
-
-(defn example-submit-tx [node]
-;; tag::submit-tx[]
-(crux/submit-tx
- node
- [[:crux.tx/put
-   {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
-    :name "Pablo"
-    :last-name "Picasso"}
-   #inst "2018-05-18T09:20:27.966-00:00"]]) ; valid time
-;; end::submit-tx[]
-)
-
-(defn example-query [node]
-;; tag::query[]
-(crux/q (crux/db node)
-        '{:find [e]
-          :where [[e :name "Pablo"]]})
-;; end::query[]
-)
 
 (defn example-query-entity [node]
 ;; tag::query-entity[]
@@ -116,18 +36,6 @@
         '{:find [e]
           :where [[e :name "Pablo"]]})
 ;; end::query-valid-time[]
-)
-
-#_(comment
-;; tag::should-get[]
-#{[:dbpedia.resource/Pablo-Picasso]}
-;; end::should-get[]
-
-;; tag::should-get-entity[]
-{:crux.db/id :dbpedia.resource/Pablo-Picasso
- :name "Pablo"
- :last-name "Picasso"}
-;; end::should-get-entity[]
 )
 
 (defn query-example-setup [node]

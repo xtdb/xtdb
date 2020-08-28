@@ -32,9 +32,9 @@ We can then start up an in-memory Crux node with:
 .Clojure
 [source,clojure]
 ----
-include::example$src/docs/examples.clj[tags=include-crux-api]
+(require '[crux.api :as crux])
 
-include::example$src/docs/examples.clj[tags=start-in-memory-node,indent=0]
+(crux/start-node {})
 ----
 
 .Java
