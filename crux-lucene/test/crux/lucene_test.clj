@@ -23,7 +23,6 @@
 (t/deftest test-can-search-string
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
 
-
   (assert (not-empty (c/q (c/db *api*) '{:find [?id]
                                          :where [[?id :name "Ivan"]]})))
 
@@ -47,23 +46,41 @@
     ;; Search Pred-fn:
     (with-open [db (c/open-db *api*)]
       (t/is (not-empty (c/q db {:find '[?id]
-                                :where '[[?id :name]
-                                         [(?full-text :name "Ivan")]]
-                                :args [{:?full-text #(with-open [search-results ^crux.api.ICursor (l/search *api* (name %1) %2)]
-                                                       (let [[^Document doc] (iterator-seq search-results)
-                                                             eid (mem/->off-heap (.-bytes (.getBinaryValue ^Document doc "eid")))
-                                                             content-hash ((:entity-resolver-fn db) eid)]
-                                                         ;; Check the doc?
-                                                         (boolean doc)))}]}))))))
+                                :where '[[(?full-text :name "Ivan") [?e ?name]]
+                                         [?e :gender :female]]
+                                :args [{:?full-text #(with-open [search-results ^crux.api.ICursor (l/search *api* (name %1) %2)
+                                                                 (let [[^Document doc] (iterator-seq search-results)
+                                                                       eid (mem/->off-heap (.-bytes (.getBinaryValue ^Document doc "eid")))
+                                                                       content-hash ((:entity-resolver-fn db) eid)]
+                                                                   ;; Check the doc?
 
-;; Musings:
+                                                                   ;; AVE from Lucene
+                                                                   ;; Go to bitemp to get C
+                                                                   ;; Go to ECAV to get check entity at C has the AV
 
-;; Why wouldn't you put the TT into docs.
-;;  Presumably docs then can't be compacted?
-;;  Diff to Crux architecture of splitting content vs temporal
+                                                                   (boolean doc))])}]})))))
+  {:find '[?id]
+   :where '[[?e :gender :female]]
+   :args [{:?e :?name} (full-text-search :name "Ivan")]}
 
-;; References:
 
-;; See https://github.com/juxt/crux-rnd/blob/master/src/crux/datalog/lucene.clj
-;; https://www.toptal.com/database/full-text-search-of-dialogues-with-apache-lucene
-;; https://lucene.apache.org/core/8_6_0/core/index.html
+  ;; Musings:
+
+  ;; Why wouldn't you put the TT into docs.
+  ;;  Presumably docs then can't be compacted?
+  ;;  Diff to Crux architecture of splitting content vs temporal
+
+  ;; Need to return an entity-id + val (destructuring), to match
+
+  ;; Questions (jms/jdt)
+  ;;  Score (weak result matches?)
+  ;;  Don't want to eagerly pull back all results (give me best 10 results) - impact Crux Query ordering, witout a subsequent re-order
+
+  ;; ---------------
+
+  ;; References:
+
+  ;; See https://github.com/juxt/crux-rnd/blob/master/src/crux/datalog/lucene.clj
+  ;; https://www.toptal.com/database/full-text-search-of-dialogues-with-apache-lucene
+  ;; https://lucene.apache.org/core/8_6_0/core/index.html
+  )
