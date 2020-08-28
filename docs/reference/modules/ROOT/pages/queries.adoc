@@ -481,16 +481,23 @@ include::example$src/docs/examples.clj[tags=streaming-query]
 == History API
 
 [#history-full-document-history]
-=== Full Document History
-Crux allows you to retrieve all versions of a document:
+=== Full Entity History
+Crux allows you to retrieve all versions of a given entity:
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=history-full]
 ----
 
+=== Retrieving previous documents
+When retrieving the previous versions of an entity, you have the option to additionally return the documents associated with those versions (by using `:with-docs?` in the additional options map)
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=history-with-docs]
+----
+
 [#history-document-history-range]
 === Document History Range
-Retrievable document versions can be bounded by four time coordinates:
+Retrievable entity versions can be bounded by four time coordinates:
 
 * valid-time-start
 * tx-time-start
