@@ -48,24 +48,6 @@ with few lifecycle members added.
      block)")
 ----
 
-=== document
-
-[source,clojure]
-----
-  (document [node content-hash]
-    "Reads a document from the document store based on its
-    content hash.")
-----
-
-=== documents
-
-[source,clojure]
-----
-  (documents [node content-hash-set]
-    "Reads the set of documents from the document store based on their
-    respective content hashes. Returns a map content-hash->document")
-----
-
 === status
 
 [source,clojure]
