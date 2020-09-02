@@ -21,7 +21,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def index-version 12)
+(def index-version 13)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
