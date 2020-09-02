@@ -1,7 +1,7 @@
 name: reference
 title: Reference
-version: master
-display_version: Latest
+version: 20.09-1.11.0
+# display_version: Latest
 start_page: ROOT:get-started.adoc
 nav:
   - modules/ROOT/nav.adoc

@@ -5,7 +5,7 @@
 * xref:queries.adoc[Queries]
 * Core API
 ** xref:clojure-api.adoc[Clojure]
-** https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.08-1.10.1/index.html[Java,window=_blank]
+** https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/20.09-1.11.0/index.html[Java,window=_blank]
 * xref:building.adoc[Building]
 * xref:monitoring.adoc[Monitoring]
 * Feature Modules
