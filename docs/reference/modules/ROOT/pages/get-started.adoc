@@ -1,5 +1,4 @@
 = Get Started
-:page-aliases: docs::index.adoc
 :toc: macro
 
 toc::[]
