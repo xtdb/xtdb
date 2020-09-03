@@ -54,7 +54,7 @@
     (println 'query (q node {:find '[?name] 
                              :where '[[c-id :course/name ?name]]
                              :args [{'c-id (:crux.db/id :course/math101)}]}))
-
+    
     ;; Even though the println in blobs fetch-docs returns the correct doc,
     ;; no doc is returned from the call to crux/entity:
     (println 'entity (crux/entity (crux/db node) :course/math101))
