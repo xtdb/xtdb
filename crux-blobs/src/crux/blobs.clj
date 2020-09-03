@@ -19,10 +19,10 @@
       edn/read-string))
 
 (defn put-blob [sas-token storage-account container blob-name blob-bytes]
-  (future ;; TODO ETag
-    (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
-        (http/put {:headers {"x-ms-blob-type" "BlockBlob"}
-                   :body blob-bytes}))))
+  ;; TODO ETag
+  (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
+      (http/put {:headers {"x-ms-blob-type" "BlockBlob"}
+                 :body blob-bytes})))
 
 (defn delete-blob [sas-token storage-account container blob-name]
   (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
@@ -33,9 +33,9 @@
 
   (submit-docs [_ docs]
     (->> (for [[id doc] docs]
-           (put-blob sas-token storage-account container
-                     (str id)
-                     (.getBytes (str doc))))
+           (future (put-blob sas-token storage-account container
+                             (str id)
+                             (.getBytes (str doc)))))
          vec
          (run! deref)))
 
