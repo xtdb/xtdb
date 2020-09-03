@@ -7,11 +7,8 @@
             [crux.lru :as lru]
             [clj-http.client :as http]))
 
-(set! *warn-on-reflection* true)
-
 (s/def ::storage-account string?)
 (s/def ::container string?)
-(s/def ::blob-name string?)
 
 (defn get-blob [sas-token storage-account container blob-name]
   (println 'get-blob blob-name)
