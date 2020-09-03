@@ -22,10 +22,10 @@
   [{:crux.db/id :country/denmark
     :country/name "Denmark"}
 
-   {:crux.db/id :region/some-region
+   {:crux.db/id :region/hovedstaden
     :country :country/denmark}
 
-   {:crux.db/id :municipality/some-municipality
+   {:crux.db/id :municipality/copenhagen
     :region :region/hovedstaden}
 
    {:crux.db/id :org/some-org
