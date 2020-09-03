@@ -1,0 +1,43 @@
+= crux-blobs
+
+This Crux module allows you to use Azure Blob Storage Service (blobs) as Crux's 'document store'.
+
+== Getting started
+
+First, include `[juxt/crux-s3 "RELEASE"]` in your project.clj, or `{juxt/crux-s3 {:mvn/version "RELEASE"}}` in your deps.edn.
+
+Then, include `'crux.blobs/blobs-doc-store` in your topology - for example:
+
+[source,clojure]
+----
+{:crux.node/topology '[crux.kafka/topology
+                       crux.blobs/blobs-doc-store]
+
+ :crux.blobs/container "your-container"
+
+ ;; (optional)
+ :crux.blobs/prefix "path/to/docs"}
+----
+
+== Configuration
+
+While the above is sufficient to get `crux-blobs` working out of the box, there are a plethora of configuration options in Blob Storage - how to get credentials, object properties, serialisation of the documents, etc.
+We expose these via the https://github.com/juxt/crux/blob/master/crux-blobs/src/crux/blobs/BlobsConfigurator.java[`crux.blobs.BlobsConfigurator`] interface - you can supply an instance using the following in your topology map:
+
+[source,clojure]
+----
+{:crux.node/topology '[...]
+ ...
+ :crux.blobs/configurator {:start-fn (fn [deps args]
+                                       (reify BlobsConfigurator
+                                         ...))}}
+----
+
+Through this interface, you can supply an `BlobsAsyncClient` for crux-blobs to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
+By default, we get credentials through the usual Azure Blob Storage SAS Token, and store documents using https://github.com/ptaoussanis/nippy[Nippy].
+
+== Bugs/PRs
+
+Please submit these through Github in the usual way - thanks!
+
+Help is available through our usual channels - https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip] and http://clojurians.net/[#crux on Clojurians Slack].

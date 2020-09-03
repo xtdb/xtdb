@@ -9,6 +9,7 @@
    "crux-sql"
    "crux-test"
    "crux-s3"
+   "crux-blobs"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -101,6 +102,7 @@
                "crux-http-server/test"
                "crux-metrics/test"
                "crux-s3/test"
+               "crux-blobs/test"
                "crux-bench/test"
                "crux-test/test"]
 
