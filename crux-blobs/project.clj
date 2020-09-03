@@ -2,7 +2,6 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [org.clojure/data.xml "0.2.0-alpha6"]
                  [clj-http "3.10.1"]]
 
   :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
