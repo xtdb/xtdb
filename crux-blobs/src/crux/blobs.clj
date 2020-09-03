@@ -11,7 +11,6 @@
 (s/def ::container string?)
 
 (defn get-blob [sas-token storage-account container blob-name]
-  (println 'get-blob blob-name)
   ;; TODO : ETag
   (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
       http/get
