@@ -9,21 +9,12 @@
                     :crux.blobs/storage-account (System/getenv "CRUX_BLOBS_STORAGE_ACCOUNT")
                     :crux.blobs/container (System/getenv "CRUX_BLOBS_CONTAINER")}))
 
-(defn ingest
-  [node docs]
-  (crux/submit-tx node
-                  (vec (for [doc docs]
-                         [:crux.tx/put doc]))))
-
-(defn ingest-await
+(defn await-ingest
   [node docs]
   (crux/await-tx node
                  (crux/submit-tx node
                                  (vec (for [doc docs]
                                         [:crux.tx/put doc])))))
-
-(defn q [node query]
-  (crux/q (crux/db node) query))
 
 (def init-data
   [{:crux.db/id :country/denmark
@@ -50,7 +41,7 @@
     :org :org/some-org
     :courses [:course/math101]}])
 
-(defn n []
+(defn ingest->entity []
   (with-open [node (start-node "/tmp/")]
-    (ingest-await node init-data)
+    (await-ingest node init-data)
     (crux/entity (crux/db node) :course/math101)))
