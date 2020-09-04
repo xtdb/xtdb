@@ -115,6 +115,8 @@
             "build" ["do" ["sub" "install"] ["sub" "test"]]}
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
-             :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}}
+             :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}
+             :with-blobs-tests {:jvm-opts ["-Dcrux.blobs.test-storage-account=crux-blobs-test-storage-account"
+                                           "-Dcrux.blobs.test-container=crux-blobs-test-container"]}}
 
   :pedantic? :warn)

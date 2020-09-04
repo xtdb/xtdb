@@ -10,38 +10,39 @@
 (s/def ::storage-account string?)
 (s/def ::container string?)
 
-(defn get-blob [sas-token storage-account container blob-name]
+(defn- get-blob [sas-token storage-account container blob-name]
   ;; TODO : ETag
-  (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
-      http/get
-      :body
-      edn/read-string))
+  (try
+    (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
+        http/get
+        :body
+        edn/read-string)
+    (catch Exception _ ;; TODO : Log not found etc.
+      nil)))
 
-(defn put-blob [sas-token storage-account container blob-name blob-bytes]
+(defn- put-blob [sas-token storage-account container blob-name blob-bytes]
   ;; TODO ETag
   (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
       (http/put {:headers {"x-ms-blob-type" "BlockBlob"}
                  :body blob-bytes})))
-
-(defn delete-blob [sas-token storage-account container blob-name]
-  (-> (format "https://%s.blob.core.windows.net/%s/%s?%s" storage-account container blob-name sas-token)
-      (http/delete {:headers {"x-ms-delete-snapshots" "include"}})))
 
 (defrecord BlobsDocumentStore [sas-token storage-account container]
   db/DocumentStore
 
   (submit-docs [_ docs]
     (->> (for [[id doc] docs]
-           (future (put-blob sas-token storage-account container
-                             (str id)
-                             (.getBytes (str doc)))))
+           (future
+             (put-blob sas-token storage-account container
+                       (str id)
+                       (.getBytes (str doc)))))
          vec
          (run! deref)))
 
   (fetch-docs [_ docs]
-    (println 'fetch-docs (count docs))
     (reduce
-     #(assoc %1 %2 (get-blob sas-token storage-account container (str %2)))
+     #(if-let [doc (get-blob sas-token storage-account container (str %2))]
+        (assoc %1 %2 doc)
+        %1)
      {}
      docs)))
 
