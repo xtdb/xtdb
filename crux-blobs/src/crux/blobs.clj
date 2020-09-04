@@ -7,6 +7,7 @@
             [crux.document-store :as ds]
             [crux.lru :as lru]))
 
+(s/def ::sas-token string?)
 (s/def ::storage-account string?)
 (s/def ::container string?)
 
@@ -47,19 +48,21 @@
      docs)))
 
 (def blobs-doc-store
-  {::configurator {:start-fn (fn [_ _]
-                               {::sas-token (System/getenv "CRUX_BLOBS_SAS_TOKEN")})}
-   
-   ::n/document-store {:start-fn (fn [{{::keys [sas-token]} ::configurator} {:crux.document-store/keys [doc-cache-size]
-                                                                             ::keys [storage-account container]}]
-                                   (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
-                                                             (->BlobsDocumentStore sas-token storage-account container)))
-                       :args {::storage-account {:require? true
+  {::n/document-store {:start-fn (fn [_ {:crux.document-store/keys [doc-cache-size]
+                                         ::keys [sas-token storage-account container]}]
+                                   (ds/->CachedDocumentStore
+                                    (lru/new-cache doc-cache-size)
+                                    (->BlobsDocumentStore sas-token
+                                                          storage-account
+                                                          container)))
+                       :args {::sas-token {:required? true
+                                           :crux.config/type ::sas-token
+                                           :doc "Azure Blob Storage SAS Token"}
+                              ::storage-account {:required? true
                                                  :crux.config/type ::storage-account
                                                  :doc "Azure Storage Account Name"}
                               ::container {:required? true,
                                            :crux.config/type ::container
                                            :doc "Azure Blob Storage Container"}
-                              :crux.document-store/doc-cache-size ds/doc-cache-size-opt}
-                       :deps #{::configurator}}})
+                              :crux.document-store/doc-cache-size ds/doc-cache-size-opt}}})
 
