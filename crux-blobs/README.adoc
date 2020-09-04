@@ -12,18 +12,17 @@ Then, include `'crux.blobs/blobs-doc-store` in your topology - for example:
 ----
 {:crux.node/topology '[crux.kafka/topology
                        crux.blobs/blobs-doc-store]
+ :crux.blobs/sas-token       "your-sas-token"
  :crux.blobs/storage-account "your-storage-account"
- :crux.blobs/container "your-container"}
+ :crux.blobs/container       "your-container"}
 ----
 
 == Configuration
 
-In addition to the above configuration, you need to create a SAS token for the Blob container you're using. You create this using the Azure portal [TODO: More info/screenshots etc.].
+You create a SAS token for the Blob container via the Azure portal: https://portal.azure.com
+[TODO: More info/screenshots etc.].
 
-You simply add the SAS token to your environment, using the following environment variable:
-`CRUX_BLOBS_SAS_TOKEN`.
-
-Currently documents are stored as EDN. TODO: Use nippy https://github.com/ptaoussanis/nippy[Nippy].
+Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
 == Bugs/PRs
 
