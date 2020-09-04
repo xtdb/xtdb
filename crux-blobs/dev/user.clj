@@ -15,6 +15,13 @@
                   (vec (for [doc docs]
                          [:crux.tx/put doc]))))
 
+(defn ingest-await
+  [node docs]
+  (crux/await-tx node
+                 (crux/submit-tx node
+                                 (vec (for [doc docs]
+                                        [:crux.tx/put doc])))))
+
 (defn q [node query]
   (crux/q (crux/db node) query))
 
@@ -45,12 +52,5 @@
 
 (defn n []
   (with-open [node (start-node "/tmp/")]
-    (ingest node init-data)
-
-    ;; workaround - need to synchronize the ingestion above!
-    (Thread/sleep 2500)
-    (println 'query (q node {:find '[?name] 
-                             :where '[[c-id :course/name ?name]]
-                             :args [{'c-id :course/math101}]}))
-    
-    (println 'entity (crux/entity (crux/db node) :country/denmark))))
+    (ingest-await node init-data)
+    (crux/entity (crux/db node) :course/math101)))
