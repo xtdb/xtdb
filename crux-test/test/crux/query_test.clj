@@ -1147,7 +1147,13 @@
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q {:find [y]
                                                     :where [[(identity x) y]]}
-                                                   'x 1) [x]]]})))))
+                                                   'x 1) [x]]]}))))
+
+    (t/testing "can handled quoted sub query"
+      (t/is (= #{[2]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q '{:find [y]
+                                                     :where [[(identity 2) y]]}) [x]]]})))))
 
   (t/testing "can inherit rules from parent query"
     (t/is (empty?

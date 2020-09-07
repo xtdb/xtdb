@@ -100,7 +100,8 @@
 (defmulti pred-args-spec first)
 
 (defmethod pred-args-spec 'q [_]
-  (s/cat :pred-fn #{'q} :args (s/spec (s/cat :query ::query
+  (s/cat :pred-fn #{'q} :args (s/spec (s/cat :query (s/or :quoted-query (s/cat :quote #{'quote} :query ::query)
+                                                          :query ::query)
                                              :args (s/* (s/cat :key (s/or :quoted-symbol (s/cat :quote #{'quote} :sym symbol?)
                                                                           :keyword keyword?)
                                                                :val some?))))
@@ -762,20 +763,21 @@
           pred-result (apply pred-fn args)]
       (bind-pred-result return encode-value-fn return-vars-tuple-idxs-in-join-order (get idx-id->idx idx-id) pred-result))))
 
+(defn- maybe-unquote [x]
+  (if (and (list? x) (= 'quote (first x)) (= 2 (count x)))
+    (recur (second x))
+    x))
+
 (defn- build-pred-constraints [rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
               pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars)
               arg-bindings (for [arg (cons pred-fn args)]
-                             (cond
-                               (and (logic-var? arg)
-                                    (not (pred-constraint? arg)))
+                             (if (and (logic-var? arg)
+                                      (not (pred-constraint? arg)))
                                (get var->bindings arg)
-                               (and (list? arg) (= 'quote (first arg)) (= 2 (count arg)))
-                               (second arg)
-                               :else
-                               arg))
+                               (maybe-unquote arg)))
               return-vars (c/vectorize-value return)
               return-vars->tuple-idx (zipmap return-vars (range))
               return-vars-tuple-idxs-in-join-order (vec (for [var vars-in-join-order
