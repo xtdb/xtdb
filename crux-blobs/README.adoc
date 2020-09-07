@@ -19,8 +19,13 @@ Then, include `'crux.blobs/blobs-doc-store` in your topology - for example:
 
 == Configuration
 
-You create a SAS token for the Blob container via the Azure portal: https://portal.azure.com
-[TODO: More info/screenshots etc.].
+First you need to create a `Storage Account`, then a `Container` for storing the documents.
+
+You need to create a SAS token for the Storage Account via the Azure portal: https://portal.azure.com. Under `Storage Account`, go to `Settings`. Then click `Shared access signature`. Create a new SAS token with `Allowed services`: `Blob` and `Allowed resources types`: `Container` and `Object`. You can select all allowed permissions.
+
+Select wanted `Start and expiry date/time`, `Allowed IP addresses` if applicable and `HTTPS only`. Leave the rest of the options as is.
+
+== Serialization
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
