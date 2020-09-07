@@ -1103,7 +1103,13 @@
     (t/is (= #{[4]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity #{[1 2] [3 4]}) [_ x]]
-                                             [(identity #{[4 2]}) [x _]]]})))))
+                                             [(identity #{[4 2]}) [x _]]]}))))
+
+  (t/testing "can bind full tuple"
+    (t/is (= #{[[1 2]]
+               [[3 4]]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) x]]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
