@@ -1065,6 +1065,46 @@
            (api/q (api/db *api*) '{:find [e]
                                    :where [[e :name [:ivan]]]})))))
 
+(t/deftest test-tuple-returns
+  (t/is (= #{[1 2]
+             [3 4]}
+           (api/q (api/db *api*) '{:find [x y]
+                                   :where [[(identity #{[1 2] [3 4]}) [x y]]]})))
+
+   (t/is (empty? (api/q (api/db *api*) '{:find [x y]
+                                         :where [[(identity #{}) [x y]]]})))
+
+  (t/testing "distinct tuples"
+    (t/is (= #{[1 2]}
+             (api/q (api/db *api*) '{:find [x y]
+                                     :where [[(identity [[1 2] [1 2]]) [x y]]]}))))
+
+  (t/testing "tuple var bindings need to be distinct"
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Return variables not distinct"
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(identity #{[1 2] [3 4]}) [x x]]]}))))
+
+  (t/testing "can bind sub tuple"
+    (t/is (= #{[1]
+               [3]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [x]]]})))
+
+    (t/is (= #{[2]
+               [4]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [_ x]]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [x]
+                                          :where [[(identity #{[1] [3]}) [_ x]]]})))
+
+    (t/is (= #{[4]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [_ x]]
+                                             [(identity #{[4 2]}) [x _]]]})))))
+
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
              [:range [[:sym-val {:op <, :sym age, :val 20}]]]]
