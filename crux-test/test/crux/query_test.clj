@@ -1111,6 +1111,68 @@
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity #{[1 2] [3 4]}) x]]})))))
 
+(t/deftest test-sub-queries
+  (t/is (= #{[4]}
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(q {:find [y]
+                                                :where [[(identity 2) x]
+                                                        [(+ x 2) y]]}) [x]]]})))
+
+  (t/is (empty?
+         (api/q (api/db *api*) '{:find [x]
+                                 :where [[(q {:find [y]
+                                              :where [[(identity 2) x]
+                                                      [(+ x 2) y]
+                                                      [(odd? y)]]}) [x]]]})))
+
+  (t/testing "can provide arguments"
+    (t/is (= #{[1 2 3]}
+             (api/q (api/db *api*) '{:find [x y z]
+                                     :where [[(q {:find [x y z]
+                                                  :where [[(identity 2) y]
+                                                          [(+ x y) z]]}
+                                                 :x 1) [x y z]]]})))
+
+    (t/is (= #{[1 3 4]}
+             (api/q (api/db *api*) '{:find [x y z]
+                                     :where [[(identity 1) x]
+                                             [(q {:find [z]
+                                                  :where [[(+ x 2) z]]}
+                                                 :x x)
+                                              [y]]
+                                             [(+ x y) z]]})))
+
+    (t/testing "can use quoted symbols as names"
+      (t/is (= #{[1]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q {:find [y]
+                                                    :where [[(identity x) y]]}
+                                                   'x 1) [x]]]})))))
+
+  (t/testing "can inherit rules from parent query"
+    (t/is (empty?
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(q {:find [y]
+                                                :where [[(identity 2) x]
+                                                        [(+ x 2) y]
+                                                        (is-odd? y)]}) [x]]]
+                                   :rules [[(is-odd? x)
+                                            [(odd? x)]]]}))))
+
+  (t/testing "can use as predicate"
+    (t/is (= #{[2]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity 2) x]
+                                             [(q {:find [x]
+                                                  :where [[(even? x)]]}
+                                                 :x x)]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [x]
+                                          :where [[(identity 2) x]
+                                                  [(q {:find [y]
+                                                       :where [[(odd? y)]]}
+                                                      :y x)]]})))))
+
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
              [:range [[:sym-val {:op <, :sym age, :val 20}]]]]
