@@ -46,7 +46,7 @@
                                            :crux.standalone/event-log-kv-store 'crux.kv.rocksdb/kv})]
           (t/is (= {:crux.tx/tx-id (dec n)}
                    (crux/latest-submitted-tx node)))
-          (t/is (crux/sync node (Duration/ofSeconds 5)))
+          (t/is (crux/sync node (Duration/ofSeconds 10)))
           (t/is (= n
                    (count (crux/q (crux/db node) '{:find [?e]
                                                    :where [[?e :crux.db/id]]})))))))))
