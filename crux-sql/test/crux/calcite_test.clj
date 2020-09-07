@@ -25,7 +25,7 @@
 (t/use-fixtures :each fix/with-standalone-topology cf/with-calcite-module fix/with-kv-dir fix/with-node with-each-connection-type with-sql-schema)
 
 (defn- inst->iso-str [^java.util.Date t]
-  (.format (ZonedDateTime/ofInstant (.toInstant t) (ZoneId/systemDefault)) DateTimeFormatter/ISO_INSTANT))
+  (.format (ZonedDateTime/ofInstant (.toInstant t) (ZoneId/of "UTC")) DateTimeFormatter/ISO_INSTANT))
 
 (t/deftest test-valid-time
   (let [id (java.util.UUID/randomUUID)
