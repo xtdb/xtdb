@@ -91,7 +91,7 @@
 (s/def ::or-body (s/+ (s/or :term ::term
                             :and ::and)))
 (s/def ::or (expression-spec 'or ::or-body))
-(s/def ::or-join (expression-spec 'or-join (s/cat :args ::rule-args
+(s/def ::or-join (expression-spec 'or-join (s/cat :args (s/and vector? ::rule-args)
                                                   :body ::or-body)))
 (defmulti pred-args-spec first)
 
@@ -514,9 +514,7 @@
                                                   body-vars)
                                         [free-vars
                                          bound-vars] (if (and or-join? (not (empty? bound-args)))
-                                                       (let [bound-vars (set/intersection known-vars (set bound-args))]
-                                                         [(set/difference (set (concat bound-args free-args)) bound-vars)
-                                                          bound-vars])
+                                                       [free-args bound-args]
                                                        [(set/difference or-vars known-vars)
                                                         (set/intersection or-vars known-vars)])]]
                               (do (when or-join?
