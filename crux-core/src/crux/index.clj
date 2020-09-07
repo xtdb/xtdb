@@ -144,6 +144,12 @@
 (defn- new-unary-join-iterator-state [idx value]
   (UnaryJoinIteratorState. idx (or value mem/empty-buffer)))
 
+(defn- long-mod ^long [^long num ^long div]
+  (let [m (rem num div)]
+    (if (or (zero? m) (= (pos? num) (pos? div)))
+      m
+      (+ m div))))
+
 (defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
   db/Index
   (seek-values [this k]
@@ -161,7 +167,7 @@
         (let [iterators ^objects (.iterators iterators-thunk)
               index (.index iterators-thunk)
               iterator-state ^UnaryJoinIteratorState (aget iterators index)
-              max-index (mod (dec index) (alength iterators))
+              max-index (long-mod (dec index) (alength iterators))
               max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
               match? (mem/buffers=? (.key iterator-state) max-k)
               idx (.idx iterator-state)]
@@ -170,7 +176,7 @@
                           (db/seek-values idx max-k))]
                   (when v
                     (set! (.-key iterator-state) v)
-                    (set! (.index iterators-thunk) (mod (inc index) (alength iterators)))
+                    (set! (.index iterators-thunk) (long-mod (inc index) (alength iterators)))
                     iterators-thunk))
                (set! (.thunk state)))
           (if match?
