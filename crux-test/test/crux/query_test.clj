@@ -1895,6 +1895,19 @@
                      [?e :name ?n]))]
       #{1 2 3 4 5 6}
 
+      [(or-join [?e]
+                [?e :name ?n]
+                (and [?e :age ?a]
+                     [?e :name ?n]))]
+      #{1 2 3 4 5 6}
+
+      [[(identity 1) ?e]
+       (or-join [[?e]]
+                [?e :name ?n]
+                (and [?e :age ?a]
+                     [?e :name ?n]))]
+      #{1}
+
       [[?e  :name ?a]
        [?e2 :name ?a]
        (or-join [?e]
