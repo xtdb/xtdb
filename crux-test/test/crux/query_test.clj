@@ -1171,7 +1171,14 @@
                                           :where [[(identity 2) x]
                                                   [(q {:find [y]
                                                        :where [[(odd? y)]]}
-                                                      :y x)]]})))))
+                                                      :y x)]]})))
+
+    (t/is (= #{[2]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity 2) x]
+                                             (not [(q {:find [y]
+                                                       :where [[(odd? y)]]}
+                                                      :y x)])]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
