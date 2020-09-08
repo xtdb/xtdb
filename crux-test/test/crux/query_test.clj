@@ -1130,24 +1130,20 @@
              (api/q (api/db *api*) '{:find [x y z]
                                      :where [[(q {:find [x y z]
                                                   :where [[(identity 2) y]
-                                                          [(+ x y) z]]}
-                                                 :x 1) [x y z]]]})))
+                                                          [(+ x y) z]]} :x 1) [x y z]]]})))
 
     (t/is (= #{[1 3 4]}
              (api/q (api/db *api*) '{:find [x y z]
                                      :where [[(identity 1) x]
                                              [(q {:find [z]
-                                                  :where [[(+ x 2) z]]}
-                                                 :x x)
-                                              [y]]
+                                                  :where [[(+ x 2) z]]} :x x) [y]]
                                              [(+ x y) z]]})))
 
     (t/testing "can use quoted symbols as names"
       (t/is (= #{[1]}
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q {:find [y]
-                                                    :where [[(identity x) y]]}
-                                                   'x 1) [x]]]}))))
+                                                    :where [[(identity x) y]]} 'x 1) [x]]]}))))
 
     (t/testing "can handle quoted sub query"
       (t/is (= #{[2]}
@@ -1182,21 +1178,18 @@
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity 2) x]
                                              [(q {:find [x]
-                                                  :where [[(even? x)]]}
-                                                 :x x)]]})))
+                                                  :where [[(even? x)]]} :x x)]]})))
 
     (t/is (empty? (api/q (api/db *api*) '{:find [x]
                                           :where [[(identity 2) x]
                                                   [(q {:find [y]
-                                                       :where [[(odd? y)]]}
-                                                      :y x)]]})))
+                                                       :where [[(odd? y)]]} :y x)]]})))
 
     (t/is (= #{[2]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity 2) x]
                                              (not [(q {:find [y]
-                                                       :where [[(odd? y)]]}
-                                                      :y x)])]})))))
+                                                       :where [[(odd? y)]]} :y x)])]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]

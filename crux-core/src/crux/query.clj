@@ -720,7 +720,7 @@
       false)
     pred-result))
 
-(defmethod pred-constraint 'q [{:keys [return] {:keys [pred-fn]} :pred :as clause} encode-value-fn idx-id arg-bindings return-vars-tuple-idxs-in-join-order rule-name->rules]
+(defmethod pred-constraint 'q [{:keys [return] :as clause} encode-value-fn idx-id arg-bindings return-vars-tuple-idxs-in-join-order rule-name->rules]
   (let [query (normalize-query (second arg-bindings))
         parent-rules (:rules (meta rule-name->rules))]
     (fn pred-constraint [index-store db idx-id->idx join-keys]
