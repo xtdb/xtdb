@@ -723,28 +723,27 @@
               true)
           false)))))
 
-(defn- bind-pred-result [return {:keys [encode-value-fn idx-id return-type return-vars-tuple-idxs-in-join-order]} idx-id->idx pred-result]
-  (let [idx (get idx-id->idx idx-id)]
-    (case return-type
-      :scalar
-      (do (idx/update-relation-virtual-index! idx [[pred-result]])
-          true)
+(defn- bind-pred-result [{:keys [encode-value-fn return-type return-vars-tuple-idxs-in-join-order]} idx pred-result]
+  (case return-type
+    :scalar
+    (do (idx/update-relation-virtual-index! idx [[pred-result]])
+        true)
 
-      :collection
-      (do (idx/update-relation-virtual-index! idx (mapv vector pred-result))
-          (not-empty pred-result))
+    :collection
+    (do (idx/update-relation-virtual-index! idx (mapv vector pred-result))
+        (not-empty pred-result))
 
-      (:tuple :relation)
-      (do (->> (for [tuple (if (= :relation return-type)
-                             pred-result
-                             [pred-result])
-                     :when (<= (count return-vars-tuple-idxs-in-join-order)
-                               (count tuple))]
-                 (mapv tuple return-vars-tuple-idxs-in-join-order))
-               (idx/update-relation-virtual-index! idx))
-          (not-empty pred-result))
+    (:tuple :relation)
+    (do (->> (for [tuple (if (= :relation return-type)
+                           pred-result
+                           [pred-result])
+                   :when (<= (count return-vars-tuple-idxs-in-join-order)
+                             (count tuple))]
+               (mapv tuple return-vars-tuple-idxs-in-join-order))
+             (idx/update-relation-virtual-index! idx))
+        (not-empty pred-result))
 
-      pred-result)))
+    pred-result))
 
 (defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
                                                             :as pred-ctx}]
@@ -760,7 +759,7 @@
                     (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
         (with-open [pred-result (.openQuery ^ICruxDatasource db query)]
           (and (.hasNext pred-result)
-               (bind-pred-result clause pred-ctx idx-id->idx (iterator-seq pred-result))))))))
+               (bind-pred-result pred-ctx (get idx-id->idx idx-id) (iterator-seq pred-result))))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
   (let [arg-bindings (vec (for [arg-binding (rest arg-bindings)]
@@ -790,7 +789,7 @@
                                (bound-result-for-var index-store arg-binding join-keys)
                                arg-binding))
           pred-result (apply pred-fn args)]
-      (bind-pred-result clause pred-ctx idx-id->idx pred-result))))
+      (bind-pred-result pred-ctx (get idx-id->idx idx-id) pred-result))))
 
 (defn- build-pred-constraints [rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
