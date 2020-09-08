@@ -250,6 +250,11 @@
                                       >= <=
                                       = =})
 
+(defn- maybe-unquote [x]
+  (if (and (list? x) (= 'quote (first x)) (= 2 (count x)))
+    (recur (second x))
+    x))
+
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym (str "self-join_" v "_"))]
     {:triple [(with-meta
@@ -786,11 +791,6 @@
                                arg-binding))
           pred-result (apply pred-fn args)]
       (bind-pred-result clause pred-ctx idx-id->idx pred-result))))
-
-(defn- maybe-unquote [x]
-  (if (and (list? x) (= 'quote (first x)) (= 2 (count x)))
-    (recur (second x))
-    x))
 
 (defn- build-pred-constraints [rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
