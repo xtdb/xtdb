@@ -8,9 +8,9 @@
                                           crux.azure.blobs/doc-store]
 	            :crux.standalone/event-log-dir (io/file storage-dir "event-log")
 	            :crux.kv/db-dir (io/file storage-dir "indexes")
-                    ::b/sas-token (System/getenv "CRUX_BLOBS_SAS_TOKEN")
-                    ::b/storage-account (System/getenv "CRUX_BLOBS_STORAGE_ACCOUNT")
-                    ::b/container (System/getenv "CRUX_BLOBS_CONTAINER")}))
+                    ::b/sas-token (System/getenv "CRUX_AZURE_BLOBS_SAS_TOKEN")
+                    ::b/storage-account (System/getenv "CRUX_AZURE_BLOBS_STORAGE_ACCOUNT")
+                    ::b/container (System/getenv "CRUX_AZURE_BLOBS_CONTAINER")}))
 
 (defn await-ingest
   [node docs]

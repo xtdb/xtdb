@@ -5,15 +5,15 @@
             [crux.topology :as topo]))
 
 (def test-azure-blobs-sas-token
-  (System/getenv "CRUX_BLOBS_TEST_SAS_TOKEN"))
+  (System/getenv "CRUX_AZURE_BLOBS_TEST_SAS_TOKEN"))
 
 (def test-azure-blobs-storage-account
-  (or (System/getProperty "crux.blobs.test-storage-account")
-      (System/getenv "CRUX_BLOBS_TEST_STORAGE_ACCOUNT")))
+  (or (System/getProperty "crux.azure.blobs.test-storage-account")
+      (System/getenv "CRUX_AZURE_BLOBS_TEST_STORAGE_ACCOUNT")))
 
 (def test-azure-blobs-container
-  (or (System/getProperty "crux.blobs.test-container")
-      (System/getenv "CRUX_BLOBS_TEST_CONTAINER")))
+  (or (System/getProperty "crux.azure.blobs.test-container")
+      (System/getenv "CRUX_AZURE_BLOBS_TEST_CONTAINER")))
 
 (t/use-fixtures :each
   (fn [f]
