@@ -478,7 +478,7 @@
                                                      :crux.sql.table/name "person"
                                                      :crux.sql.table/query '{:find [?id ?name]}
                                                      :crux.sql.table/columns '{?id :keyword}}])
-                              (query "SELECT * FROM PERSON")))))  )
+                              (query "SELECT * FROM PERSON"))))))
 
 (t/deftest test-simple-joins
   (fix/transact! *api* '[{:crux.db/id :crux.sql.schema/person

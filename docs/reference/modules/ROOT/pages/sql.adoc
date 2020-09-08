@@ -136,7 +136,7 @@ SQL driver] to your project and use the connection string:
 
 [source,properties]
 ----
-jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf
+jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf;timeZone=UTC
 ----
 
 `server-hostname` is the hostname of the Crux node.
@@ -155,14 +155,14 @@ You can then connect using the Avatica JDBC driver, for example:
 
 [source,clojure]
 ----
-(java.sql.DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf")
+(java.sql.DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf;timeZone=UTC")
 ----
 
 To connect via the https://github.com/julianhyde/sqlline[SQLLine] CLI tool,
 install https://get-coursier.io/docs/cli-installation[Coursier] and run:
 [source,bash]
 ----
-coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n crux -p crux -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf" -d org.apache.calcite.avatica.remote.Driver
+coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n crux -p crux -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf;timeZone=UTC" -d org.apache.calcite.avatica.remote.Driver
 ----
 
 [#column-types]

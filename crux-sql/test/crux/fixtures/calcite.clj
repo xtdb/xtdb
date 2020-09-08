@@ -18,7 +18,7 @@
       (f))))
 
 (defn with-avatica-connection [f]
-  (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1503;serialization=protobuf")]
+  (with-open [conn (DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1503;serialization=protobuf;timeZone=UTC")]
     (binding [*conn* conn]
       (f))))
 
