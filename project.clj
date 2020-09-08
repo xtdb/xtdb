@@ -9,7 +9,7 @@
    "crux-sql"
    "crux-test"
    "crux-s3"
-   "crux-blobs"
+   "crux-azure-blobs"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -102,7 +102,7 @@
                "crux-http-server/test"
                "crux-metrics/test"
                "crux-s3/test"
-               "crux-blobs/test"
+               "crux-azure-blobs/test"
                "crux-bench/test"
                "crux-test/test"]
 
@@ -116,7 +116,7 @@
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
              :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}
-             :with-blobs-tests {:jvm-opts ["-Dcrux.blobs.test-storage-account=crux-blobs-test-storage-account"
-                                           "-Dcrux.blobs.test-container=crux-blobs-test-container"]}}
+             :with-azure-blobs-tests {:jvm-opts ["-Dcrux.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
+                                                 "-Dcrux.azure.blobs.test-container=crux-azure-blobs-test-container"]}}
 
   :pedantic? :warn)
