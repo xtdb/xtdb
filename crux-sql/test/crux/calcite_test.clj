@@ -445,7 +445,7 @@
     (t/is (= ["Fred" "Malcolm" "Ivan"] (map :name (query q))))))
 
 (t/deftest test-different-data-types
-  (let [born #inst "2010"
+  (let [born #inst "2010-07-01"
         afloat (float 1.0)]
     (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
                            :crux.sql.table/name "person"

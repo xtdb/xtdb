@@ -452,7 +452,8 @@
     (.put "model" (str "inline:" (-> model
                                      (update-in [:schemas 0 :operand] assoc "CRUX_NODE" node-uuid)
                                      (update-in [:schemas 0 :operand] assoc "SCAN_ONLY" scan-only?)
-                                     json/generate-string)))))
+                                     json/generate-string)))
+    (.put "timeZone" "UTC")))
 
 (defrecord CalciteAvaticaServer [^HttpServer server node-uuid]
   java.io.Closeable
