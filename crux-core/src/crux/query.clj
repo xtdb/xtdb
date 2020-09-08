@@ -710,7 +710,7 @@
                                  (c/vectorize-value pred-result)
                                  pred-result))]
       (do (if (logic-var? return)
-            (idx/update-relation-virtual-index! idx values encode-value-fn true)
+            (idx/update-relation-virtual-index! idx (mapv vector values))
             (->> (for [tuple values
                        :when (<= (count return-vars-tuple-idxs-in-join-order)
                                  (count tuple))]
