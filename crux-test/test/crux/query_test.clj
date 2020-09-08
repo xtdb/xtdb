@@ -2332,13 +2332,11 @@
                #{["a" 1] ["abc" 3]})))
 
     (t/testing "Built-in vector, hashmap"
-      ;; Crux differs here by treating vectors and sets as multiple
-      ;; results.
-      #_(t/is (= (api/q db
-                        '{:find [?tx-data]
-                          :where [[(identity :db/add) ?op]
-                                  [(vector ?op -1 :attr 12) ?tx-data]]})
-                 #{[[:db/add -1 :attr 12]]}))
+      (t/is (= (api/q db
+                      '{:find [?tx-data]
+                        :where [[(identity :db/add) ?op]
+                                [(vector ?op -1 :attr 12) ?tx-data]]})
+               #{[[:db/add -1 :attr 12]]}))
 
       (t/is (= (api/q db
                       '{:find [?tx-data]
@@ -2372,13 +2370,12 @@
                                 [(identity 2) ?n]]})
                #{})))
 
-    ;; NOTE: Crux does not currently support destructuring.
-    #_(t/testing "Destructured conflicting function values for two bindings."
-        (t/is (= (d/q '[:find  ?n ?x
+    (t/testing "Destructured conflicting function values for two bindings."
+      (t/is (= (api/q db
+                      '[:find  ?n ?x
                         :where [(identity [3 4]) [?n ?x]]
-                        [(identity [1 2]) [?n ?x]]]
-                      db)
-                 #{})))
+                        [(identity [1 2]) [?n ?x]]])
+               #{})))
 
     (t/testing "Rule bindings interacting with function binding. (fn, rule)"
       (t/is (= (api/q db
@@ -2440,31 +2437,27 @@
                                 {:?in 4}]})
                  #{[2] [4]})))
 
-    ;; NOTE: Crux does not currently support destructuring.
-    #_(t/testing "Result bindings"
-        (t/is (= (d/q '[:find ?a ?c
-                        :in ?in
-                        :where [(ground ?in) [?a _ ?c]]]
-                      [:a :b :c])
-                 #{[:a :c]}))
+    (t/testing "Result bindings"
+      (t/is (= (api/q db '[:find ?a ?c
+                           :args {?in [:a :b :c]}
+                           :where [(identity ?in) [?a _ ?c]]])
+               #{[:a :c]}))
 
-        (t/is (= (d/q '[:find ?in
-                        :in ?in
-                        :where [(ground ?in) _]]
-                      :a)
-                 #{[:a]}))
+      (t/is (= (api/q db '[:find ?in
+                           :args {?in :a}
+                           :where [(identity ?in) _]])
+               #{[:a]}))
 
-        (t/is (= (d/q '[:find ?x ?z
-                        :in ?in
-                        :where [(ground ?in) [[?x _ ?z]...]]]
-                      [[:a :b :c] [:d :e :f]])
+      ;; TODO: Crux doesn't support tuple collections
+      #_(t/is (= (api/q db '[:find ?x ?z
+                             :args {?in [:a :b :c]} {?in [:d :e :f]}
+                             :where [(identity ?in) [[?x _ ?z] ...]]])
                  #{[:a :c] [:d :f]}))
 
-        (t/is (= (d/q '[:find ?in
-                        :in [?in ...]
-                        :where [(ground ?in) _]]
-                      [])
-                 #{})))))
+      (t/is (= (api/q db '[:find ?in
+                           :args {?in []}
+                           :where [(identity ?in) [_ ...]]])
+               #{})))))
 
 
 (t/deftest datascript-test-predicates
