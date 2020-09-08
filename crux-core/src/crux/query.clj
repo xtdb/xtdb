@@ -62,11 +62,10 @@
                                                      (var-get)))
                                           %))
                         (some-fn fn? logic-var?)))
-(s/def ::pred-return (s/and (s/or :scalar logic-var?
-                                  :tuple ::args-list
-                                  :collection (s/tuple logic-var? '#{...})
-                                  :relation (s/tuple ::args-list))
-                            (s/conformer second)))
+(s/def ::pred-return (s/or :scalar logic-var?
+                           :tuple ::args-list
+                           :collection (s/tuple logic-var? '#{...})
+                           :relation (s/tuple ::args-list)))
 (s/def ::pred (s/and vector? (s/cat :pred (s/and seq?
                                                  (s/cat :pred-fn ::pred-fn
                                                         :args (s/* any?)))
@@ -111,7 +110,7 @@
          :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec 'get-attr [_]
-  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? literal?))) :return logic-var?))
+  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? literal?))) :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec '== [_]
   (s/cat :pred-fn #{'==} :args (s/tuple some? some?)))
@@ -306,23 +305,6 @@
 
 (defn- find-return-vars [return]
   (some->> return (vector) (flatten) (filter logic-var?)))
-
-;; TODO: This is already done by the spec, but would require adapting
-;; all code using that form, so for now we pass the original
-;; return binding form around.
-(defn- return->return-type [return]
-  (cond
-    (logic-var? return)
-    :scalar
-    (and (vector? return)
-         (logic-var? (first return)) (= '... (second return)))
-    :collection
-    (and (vector? return) (vector? (first return)))
-    :relation
-    (vector? return)
-    :tuple
-    :else
-    :predicate))
 
 (defn- collect-vars [{triple-clauses :triple
                       not-clauses :not
@@ -745,7 +727,6 @@
                (idx/update-relation-virtual-index! idx))
           (not-empty pred-result))
 
-      :predicate
       pred-result)))
 
 (defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
@@ -815,7 +796,7 @@
                                                               :let [idx (get return-vars->tuple-idx var)]
                                                               :when idx]
                                                           idx))
-              return-type (return->return-type return)
+              return-type (first return)
               pred-ctx {:encode-value-fn encode-value-fn
                         :idx-id idx-id
                         :arg-bindings arg-bindings
@@ -828,7 +809,7 @@
           (throw (IllegalArgumentException.
                   (str "Return variables not distinct: " (cio/pr-edn-str clause)))))
         (s/assert ::pred-args (cond-> [pred-fn (vec args)]
-                                return (conj return)))
+                                return (conj (second return))))
         {:join-depth pred-join-depth
          :constraint-fn (pred-constraint clause pred-ctx)})))
 
@@ -1090,7 +1071,7 @@
         triple-clauses (remove leaf-triple-clauses triple-clauses)
         leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
                      {:pred {:pred-fn 'get-attr :args [e a]}
-                      :return v})]
+                      :return [:scalar v]})]
     (assoc type->clauses
            :triple triple-clauses
            :pred (vec (concat pred-clauses leaf-preds)))))
