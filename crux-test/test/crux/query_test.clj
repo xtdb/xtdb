@@ -1159,7 +1159,7 @@
                                      :where [[(identity #{[1 2] [3 4]}) [[_ x]]]
                                              [(identity #{[4 2]}) [[x _]]]]}))))
 
-  (t/testing "can bind full tuple"
+  (t/testing "can bind full tuple using collection binding"
     (t/is (= #{[[1 2]]
                [[3 4]]}
              (api/q (api/db *api*) '{:find [x]
@@ -2448,11 +2448,11 @@
                            :where [(identity ?in) _]])
                #{[:a]}))
 
-      ;; TODO: Crux doesn't support tuple collections
-      #_(t/is (= (api/q db '[:find ?x ?z
-                             :args {?in [:a :b :c]} {?in [:d :e :f]}
-                             :where [(identity ?in) [[?x _ ?z] ...]]])
-                 #{[:a :c] [:d :f]}))
+      (t/is (= (api/q db '[:find ?x ?z
+                           :args {?in [[:a :b :c]
+                                       [:d :e :f]]}
+                           :where [(identity ?in) [[?x _ ?z]]]])
+               #{[:a :c] [:d :f]}))
 
       (t/is (= (api/q db '[:find ?in
                            :args {?in []}
