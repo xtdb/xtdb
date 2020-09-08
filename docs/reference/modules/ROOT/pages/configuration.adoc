@@ -43,6 +43,18 @@ Without any explicit configuration, Crux will start an in-memory node.
 Crux has three main pluggable components - the transaction log, the document store, and the query index store.
 All three are backed by local KV stores by default, but they can be independently configured and overridden - you might choose to host the transaction log in Kafka, the document store in AWS's S3, and the query indices in RocksDB.
 
+[cols="1,3*^"]
+|===
+| | Transaction Log | Document Store | Index Store
+
+| xref:kafka.adoc[Kafka] | ✓ | ✓ |
+| xref:jdbc.adoc[JDBC] | ✓ | ✓ |
+| In-memory KV | ✓ | ✓ | ✓
+| xref:lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
+| xref:rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
+| xref:s3.adoc[S3] | | ✓ |
+|===
+
 For specific details and examples of how to configure each of these modules, see their individual sections.
 
 Each module has both an underlying implementation and overridable parameters - for each module, you can choose to keep the implementation and override its parameters, or you can choose to override the implementation entirely.
