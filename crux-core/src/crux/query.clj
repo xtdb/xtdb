@@ -28,7 +28,8 @@
            [java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
-  (symbol? x))
+  (and (symbol? x)
+       (not (contains? '#{... .} x))))
 
 (def ^:private literal? (complement (some-fn vector? logic-var?)))
 
@@ -62,7 +63,9 @@
                                           %))
                         (some-fn fn? logic-var?)))
 (s/def ::pred-return (s/and (s/or :scalar logic-var?
-                                  :tuple ::args-list)
+                                  :tuple ::args-list
+                                  :collection (s/tuple logic-var? '#{...})
+                                  :relation (s/tuple ::args-list))
                             (s/conformer second)))
 (s/def ::pred (s/and vector? (s/cat :pred (s/and seq?
                                                  (s/cat :pred-fn ::pred-fn
@@ -105,7 +108,7 @@
                                              :args (s/* (s/cat :key (s/or :quoted-symbol (s/cat :quote #{'quote} :sym symbol?)
                                                                           :keyword keyword?)
                                                                :val some?))))
-         :return (s/? ::args-list)))
+         :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec 'get-attr [_]
   (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? literal?))) :return logic-var?))
@@ -217,7 +220,9 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defmulti pred-constraint
-  (fn [{:keys [pred return] {:keys [pred-fn]} :pred :as clause} encode-value-fn idx-id arg-bindings return-vars-tuple-idxs-in-join-order rule-name->rules]
+  (fn [{:keys [pred return] {:keys [pred-fn]} :pred :as clause}
+       {:keys [encode-value-fn idx-id arg-bindings return-type
+               return-vars-tuple-idxs-in-join-order rule-name->rules]}]
     pred-fn))
 
 (defn- blank-var? [v]
@@ -269,15 +274,11 @@
                                                                  (get pred->built-in-range-pred pred-fn))]
                                           (assoc-in clause [:pred :pred-fn] range-pred)
                                           clause)]
-                             (cond
-                               (blank-var? return)
-                               (assoc clause :return (gensym "_"))
-                               (vector? return)
-                               (assoc clause :return (vec (for [return-var return]
-                                                            (if (blank-var? return-var)
-                                                              (gensym "_")
-                                                              return-var))))
-                               :else
+                             (if return
+                               (assoc clause :return (w/postwalk #(if (blank-var? %)
+                                                                    (gensym "_")
+                                                                    %)
+                                                                 return))
                                clause))]}
 
              :range (let [[order clause] (first clause)
@@ -302,6 +303,26 @@
              {type [clause]})))
 
        (apply merge-with into)))
+
+(defn- find-return-vars [return]
+  (some->> return (vector) (flatten) (filter logic-var?)))
+
+;; TODO: This is already done by the spec, but would require adapting
+;; all code using that form, so for now we pass the original
+;; return binding form around.
+(defn- return->return-type [return]
+  (cond
+    (logic-var? return)
+    :scalar
+    (and (vector? return)
+         (logic-var? (first return)) (= '... (second return)))
+    :collection
+    (and (vector? return) (vector? (first return)))
+    :relation
+    (vector? return)
+    :tuple
+    :else
+    :predicate))
 
 (defn- collect-vars [{triple-clauses :triple
                       not-clauses :not
@@ -336,15 +357,14 @@
      :not-vars (->> (vals not-vars)
                     (reduce into not-join-vars))
      :pred-vars (set (for [{:keys [pred return]} pred-clauses
-                           :let [return-vars (some-> return (c/vectorize-value))]
+                           :let [return-vars (find-return-vars return)]
                            var (concat return-vars
                                        (cond->> (:args pred)
                                          (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred))))
                            :when (logic-var? var)]
                        var))
      :pred-return-vars (set (for [{:keys [pred return]} pred-clauses
-                                  return-var (some-> return (c/vectorize-value))
-                                  :when (logic-var? return-var)]
+                                  return-var (find-return-vars return)]
                               return-var))
      :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
                             sym [sym sym-a sym-b]
@@ -493,7 +513,7 @@
         (fn [[pred-clause+idx-ids var->joins] {:keys [return] :as pred-clause}]
           (if return
             (let [idx-id (gensym "pred-return")
-                  return-vars (c/vectorize-value return)
+                  return-vars (find-return-vars return)
                   join {:id idx-id
                         :idx-fn
                         (fn [_ index-store _]
@@ -611,7 +631,7 @@
 
 (defn- build-pred-return-var-bindings [var->values-result-index pred-clauses]
   (->> (for [{:keys [return]} pred-clauses
-             return-var (some-> return (c/vectorize-value))
+             return-var (find-return-vars return)
              :let [result-index (get var->values-result-index return-var)]]
          [return-var (value-var-binding return-var result-index :pred)])
        (into {})))
@@ -688,7 +708,7 @@
             (str "Clause refers to unknown variable: "
                  var " " (cio/pr-edn-str clause))))))
 
-(defmethod pred-constraint 'get-attr [_ encode-value-fn idx-id arg-bindings _ _]
+(defmethod pred-constraint 'get-attr [_ {:keys [encode-value-fn idx-id arg-bindings]}]
   (let [arg-bindings (rest arg-bindings)
         [e-var attr not-found] arg-bindings
         not-found? (= 3 (count arg-bindings))
@@ -704,23 +724,32 @@
               true)
           false)))))
 
-(defn- bind-pred-result [return encode-value-fn return-vars-tuple-idxs-in-join-order idx pred-result]
-  (if return
-    (if-let [values (not-empty (if (logic-var? return)
-                                 (c/vectorize-value pred-result)
-                                 pred-result))]
-      (do (if (logic-var? return)
-            (idx/update-relation-virtual-index! idx (mapv vector values))
-            (->> (for [tuple values
-                       :when (<= (count return-vars-tuple-idxs-in-join-order)
-                                 (count tuple))]
-                   (mapv tuple return-vars-tuple-idxs-in-join-order))
-                 (idx/update-relation-virtual-index! idx)))
+(defn- bind-pred-result [return {:keys [encode-value-fn idx-id return-type return-vars-tuple-idxs-in-join-order]} idx-id->idx pred-result]
+  (let [idx (get idx-id->idx idx-id)]
+    (case return-type
+      :scalar
+      (do (idx/update-relation-virtual-index! idx [[pred-result]])
           true)
-      false)
-    pred-result))
 
-(defmethod pred-constraint 'q [{:keys [return] :as clause} encode-value-fn idx-id arg-bindings return-vars-tuple-idxs-in-join-order rule-name->rules]
+      :collection
+      (do (idx/update-relation-virtual-index! idx (mapv vector pred-result))
+          (not-empty pred-result))
+
+      (:tuple :relation)
+      (do (->> (for [tuple (if (= :relation return-type)
+                             pred-result
+                             [pred-result])
+                     :when (<= (count return-vars-tuple-idxs-in-join-order)
+                               (count tuple))]
+                 (mapv tuple return-vars-tuple-idxs-in-join-order))
+               (idx/update-relation-virtual-index! idx))
+          (not-empty pred-result))
+
+      :predicate
+      pred-result)))
+
+(defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
+                                                            :as pred-ctx}]
   (let [query (normalize-query (second arg-bindings))
         parent-rules (:rules (meta rule-name->rules))]
     (fn pred-constraint [index-store db idx-id->idx join-keys]
@@ -733,9 +762,9 @@
                     (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
         (with-open [pred-result (.openQuery ^ICruxDatasource db query)]
           (and (.hasNext pred-result)
-               (bind-pred-result return encode-value-fn return-vars-tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result))))))))
+               (bind-pred-result clause pred-ctx idx-id->idx (iterator-seq pred-result))))))))
 
-(defn- built-in-unification-pred [unifier-fn encode-value-fn arg-bindings]
+(defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
   (let [arg-bindings (vec (for [arg-binding (rest arg-bindings)]
                             (if (instance? VarBinding arg-binding)
                               arg-binding
@@ -748,20 +777,22 @@
                        arg-binding))]
         (unifier-fn values)))))
 
-(defmethod pred-constraint '== [_ encode-value-fn _ arg-bindings _ _]
-  (built-in-unification-pred #(boolean (not-empty (apply set/intersection %))) encode-value-fn arg-bindings))
+(defmethod pred-constraint '== [_ pred-ctx]
+  (built-in-unification-pred #(boolean (not-empty (apply set/intersection %))) pred-ctx))
 
-(defmethod pred-constraint '!= [_ encode-value-fn _ arg-bindings _ _]
-  (built-in-unification-pred #(empty? (apply set/intersection %)) encode-value-fn arg-bindings))
+(defmethod pred-constraint '!= [_ pred-ctx]
+  (built-in-unification-pred #(empty? (apply set/intersection %)) pred-ctx))
 
-(defmethod pred-constraint :default [{:keys [return] {:keys [pred-fn]} :pred} encode-value-fn idx-id arg-bindings return-vars-tuple-idxs-in-join-order _]
+(defmethod pred-constraint :default [{:keys [return] {:keys [pred-fn]} :pred :as clause}
+                                     {:keys [encode-value-fn idx-id arg-bindings]
+                                      :as pred-ctx}]
   (fn pred-constraint [index-store db idx-id->idx join-keys]
     (let [[pred-fn & args] (for [arg-binding arg-bindings]
                              (if (instance? VarBinding arg-binding)
                                (bound-result-for-var index-store arg-binding join-keys)
                                arg-binding))
           pred-result (apply pred-fn args)]
-      (bind-pred-result return encode-value-fn return-vars-tuple-idxs-in-join-order (get idx-id->idx idx-id) pred-result))))
+      (bind-pred-result clause pred-ctx idx-id->idx pred-result))))
 
 (defn- maybe-unquote [x]
   (if (and (list? x) (= 'quote (first x)) (= 2 (count x)))
@@ -778,12 +809,19 @@
                                       (not (pred-constraint? arg)))
                                (get var->bindings arg)
                                (maybe-unquote arg)))
-              return-vars (c/vectorize-value return)
+              return-vars (find-return-vars return)
               return-vars->tuple-idx (zipmap return-vars (range))
               return-vars-tuple-idxs-in-join-order (vec (for [var vars-in-join-order
                                                               :let [idx (get return-vars->tuple-idx var)]
                                                               :when idx]
-                                                          idx))]]
+                                                          idx))
+              return-type (return->return-type return)
+              pred-ctx {:encode-value-fn encode-value-fn
+                        :idx-id idx-id
+                        :arg-bindings arg-bindings
+                        :return-type return-type
+                        :return-vars-tuple-idxs-in-join-order return-vars-tuple-idxs-in-join-order
+                        :rule-name->rules rule-name->rules}]]
     (do (validate-existing-vars var->bindings clause pred-vars)
         (when-not (= (count return-vars)
                      (count (set return-vars)))
@@ -792,7 +830,7 @@
         (s/assert ::pred-args (cond-> [pred-fn (vec args)]
                                 return (conj return)))
         {:join-depth pred-join-depth
-         :constraint-fn (pred-constraint clause encode-value-fn idx-id arg-bindings return-vars-tuple-idxs-in-join-order rule-name->rules)})))
+         :constraint-fn (pred-constraint clause pred-ctx)})))
 
 ;; TODO: For or (but not or-join) it might be possible to embed the
 ;; entire or expression into the parent join via either OrVirtualIndex
@@ -919,7 +957,7 @@
              (let [pred-vars (filter logic-var? (:args pred))]
                (->> (for [pred-var pred-vars
                           :when return
-                          return-var (c/vectorize-value return)]
+                          return-var (find-return-vars return)]
                       [return-var pred-var])
                     (reduce
                      (fn [g [r a]]
@@ -1019,7 +1057,7 @@
                                         (filter logic-var?)
                                         (set)
                                         (set/superset? acc))
-                                 (apply conj acc (c/vectorize-value return))
+                                 (apply conj acc (find-return-vars return))
                                  acc))
                              known-vars))]
     (if (= new-known-vars known-vars)
