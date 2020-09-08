@@ -27,6 +27,7 @@
               :crux.jdbc/dbname *db-name*}
         tx (with-open [api (Crux/startNode opts)]
              (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])
+             (Thread/sleep 10) ; to avoid two txs at the same ms
              (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]]))]
 
     (with-open [api2 (Crux/startNode opts)]
