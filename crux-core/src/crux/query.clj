@@ -257,6 +257,17 @@
                 {:self-join? true})]
      :pred [{:pred {:pred-fn '== :args [v-var e]}}]}))
 
+(defn- lift-up-sub-query-args [{:keys [pred-fn args] :as pred}]
+  (if (and (= 'q pred-fn) (= 1 (count args)))
+    (let [q (normalize-query (maybe-unquote (first args)))
+          q-args (:args q)]
+      (when (> (count q-args) 1)
+        (throw (IllegalArgumentException. (str "Sub-queries don't support more than one argument tuple: " (pr-str pred)))))
+      (assoc pred :args (vec (cons (dissoc q :args)
+                                   (apply concat (for [[k v] (first q-args)]
+                                                   [(keyword (maybe-unquote k)) v]))))))
+    pred))
+
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          (if (= :triple type)
@@ -272,7 +283,8 @@
                                                                  (every? logic-var? args)
                                                                  (get pred->built-in-range-pred pred-fn))]
                                           (assoc-in clause [:pred :pred-fn] range-pred)
-                                          clause)]
+                                          clause)
+                                 clause (update clause :pred lift-up-sub-query-args)]
                              (if return
                                (assoc clause :return (w/postwalk #(if (blank-var? %)
                                                                     (gensym "_")
