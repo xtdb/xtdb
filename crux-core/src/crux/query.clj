@@ -33,7 +33,7 @@
 
 (def ^:private literal? (complement (some-fn vector? logic-var?)))
 
-(declare pred-constraint)
+(declare pred-constraint aggregate)
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -45,6 +45,9 @@
 
 (defn- pred-constraint? [x]
   (contains? (methods pred-constraint) x))
+
+(defn- aggregate? [x]
+  (contains? (methods aggregate) x))
 
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? c/valid-id? set?)
                                       :a (s/and c/valid-id? some?)
@@ -137,7 +140,9 @@
   (s/or :logic-var logic-var?
         :project (s/spec (s/cat :project #{'eql/project}
                                 :logic-var logic-var?
-                                :project-spec ::eql/query))))
+                                :project-spec ::eql/query))
+        :aggregate (s/spec (s/cat :aggregate-fn aggregate?
+                                  :logic-var logic-var?))))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 
@@ -224,6 +229,59 @@
        {:keys [encode-value-fn idx-id arg-bindings return-type
                return-vars-tuple-idxs-in-join-order rule-name->rules]}]
     pred-fn))
+
+(defmulti aggregate (fn [name] name))
+
+(set! *unchecked-math* true)
+
+(defmethod aggregate 'count [_]
+  (fn
+    (^long [] 0)
+    (^long [^long acc] acc)
+    (^long [^long acc _] (inc acc))))
+
+(defmethod aggregate 'count-distinct [_]
+  (fn
+    ([] #{})
+    (^long [acc] (count acc))
+    ([acc x] (conj acc x))))
+
+(defmethod aggregate 'sum [_]
+  (fn
+    ([] 0)
+    ([acc] acc)
+    ([acc x] (+ acc x))))
+
+(defmethod aggregate 'avg [_]
+  (fn
+    ([] [0 0])
+    ([[c s]] (/ s c))
+    ([[c s] x]
+     [(inc (long c)) (+ s x)])))
+
+(defmethod aggregate 'min [_]
+  (fn
+    ([])
+    ([acc] acc)
+    ([acc x]
+     (if acc
+       (if (pos? (compare acc x))
+         x
+         acc)
+       x))))
+
+(defmethod aggregate 'max [_]
+  (fn
+    ([])
+    ([acc] acc)
+    ([acc x]
+     (if acc
+       (if (neg? (compare acc x))
+         x
+         acc)
+       x))))
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn- blank-var? [v]
   (when (logic-var? v)
@@ -1402,6 +1460,7 @@
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
+                  :var-type :logic-var
                   :var-binding (var->bindings arg)
                   :->result (fn [value {:keys [entity-resolver-fn]}]
                               (or (when full-results?
@@ -1410,11 +1469,49 @@
                                         (get docs (c/new-id hash)))))
                                   value))}
       :project {:logic-var (:logic-var arg)
+                :var-type :project
                 :var-binding (var->bindings (:logic-var arg))
                 :->result (lru/compute-if-absent projection-cache (:project-spec arg)
                                                  identity
                                                  (fn [spec]
-                                                   (compile-project-spec (s/unform ::eql/query spec))))})))
+                                                   (compile-project-spec (s/unform ::eql/query spec))))}
+      :aggregate {:logic-var (:logic-var arg)
+                  :var-type :aggregate
+                  :var-binding (var->bindings (:logic-var arg))
+                  :aggregate-fn (aggregate (:aggregate-fn arg))
+                  :->result (fn [value _]
+                              value)})))
+
+(defn- aggregate-result [compiled-find result]
+  (let [grouping-var-idxs (vec (for [[n {:keys [var-type]}] (map-indexed vector compiled-find)
+                                     :when (not= :aggregate var-type)]
+                                 n))
+        idx->aggregate (->> (for [[n {:keys [aggregate-fn]}] (map-indexed vector compiled-find)
+                                  :when aggregate-fn]
+                              [n aggregate-fn])
+                            (into {}))
+        groups (reduce
+                (fn [acc tuple]
+                  (let [group (map tuple grouping-var-idxs)
+                        group-acc (or (get acc group)
+                                      (reduce
+                                       (fn [acc [n aggregate-fn]]
+                                         (assoc acc n (aggregate-fn)))
+                                       tuple
+                                       idx->aggregate))]
+                    (assoc acc group (reduce
+                                      (fn [acc [n aggregate-fn]]
+                                        (update acc n #(aggregate-fn % (get tuple n))))
+                                      group-acc
+                                      idx->aggregate))))
+                {}
+                result)]
+    (for [[_ group-acc] groups]
+      (reduce
+       (fn [acc [n aggregate-fn]]
+         (update acc n aggregate-fn))
+       group-acc
+       idx->aggregate))))
 
 (defn query [{:keys [valid-time transact-time document-store indexer options index-store] :as db} ^ConformedQuery conformed-q]
   (let [q (.q-normalized conformed-q)
@@ -1432,7 +1529,8 @@
           db (assoc db :entity-resolver-fn entity-resolver-fn)
           {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
-          find-logic-vars (mapv :logic-var compiled-find)]
+          find-logic-vars (mapv :logic-var compiled-find)
+          aggregate? (contains? (set (map :var-type compiled-find)) :aggregate)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (IllegalArgumentException.
@@ -1453,6 +1551,7 @@
                                (bound-result-for-var index-store var-binding join-keys)))
                         compiled-find))
 
+         aggregate? (aggregate-result compiled-find)
          order-by (cio/external-sort (order-by-comparator find-logic-vars order-by))
          offset (drop offset)
          limit (take limit)

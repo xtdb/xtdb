@@ -2577,6 +2577,106 @@
                             '{:find [?x]
                               :where [[(crux.query-test/sample-query-fn) ?x]]})))))
 
+
+(defmethod crux.query/aggregate 'sort-reverse [_]
+  (fn
+    ([] [])
+    ([acc] (vec (reverse (sort acc))))
+    ([acc x] (conj acc x))))
+
+(t/deftest datascript-test-aggregates
+  (let [db (api/db *api*)]
+    #_(t/testing "with"
+        (t/is (= (d/q '[:find ?heads
+                        :with ?monster
+                        :in   [[?monster ?heads]] ]
+                      [["Medusa" 1]
+                       ["Cyclops" 1]
+                       ["Chimera" 1] ])
+                 [[1] [1] [1]])))
+
+    ;; This is solved as Crux performs the aggregation before turning
+    ;; it into a set.
+    #_(t/testing "Wrong grouping without :with"
+        (t/is (= (api/q db '[:find (sum ?heads)
+                             :where [(identity [["Cerberus" 3]
+                                                ["Medusa" 1]
+                                                ["Cyclops" 1]
+                                                ["Chimera" 1]]) [[?monster ?heads]]]])
+                 #{[4]})))
+
+    (t/testing "Multiple aggregates, correct grouping with :with"
+      (t/is (= (api/q db '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
+                           ;; :with ?monster
+                           :where [(identity [["Cerberus" 3]
+                                              ["Medusa" 1]
+                                              ["Cyclops" 1]
+                                              ["Chimera" 1]]) [[?monster ?heads]]]])
+               #{[6 1 3 4 2]})))
+
+    (t/testing "Min and max are using comparator instead of default compare"
+      ;; Wrong: using js '<' operator
+      ;; (apply min [:a/b :a-/b :a/c]) => :a-/b
+      ;; (apply max [:a/b :a-/b :a/c]) => :a/c
+      ;; Correct: use IComparable interface
+      ;; (sort compare [:a/b :a-/b :a/c]) => (:a/b :a/c :a-/b)
+      (t/is (= (api/q db '[:find (min ?x) (max ?x)
+                           :where [(identity [:a-/b :a/b]) [?x ...]]])
+               #{[:a/b :a-/b]}))
+
+      ;; TODO: Crux doesn't support multiple-arity aggregations.
+      #_(is (= (d/q '[:find (min 2 ?x) (max 2 ?x)
+                      :in [?x ...]]
+                    [:a/b :a-/b :a/c])
+               [[[:a/b :a/c] [:a/c :a-/b]]])))
+
+
+    (t/testing "Grouping"
+      (t/is (= (set (api/q db '[:find ?color (max ?amount) (min ?amount)
+                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                                                   [:blue 7] [:blue 8]]) [[?color ?amount]]]]))
+               #{[:red  5 1]
+                 [:blue 8 7]})))
+
+    #_(t/testing "Grouping and parameter passing"
+        (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
+                           :in   [[?color ?x]] ?amount ]
+                         [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                          [:blue 7] [:blue 8]]
+                         3))
+               #{[:red  [3 4 5] [1 2 3]]
+                 [:blue [7 8]   [7 8]]})))
+
+    (t/testing "avg aggregate"
+      (t/is (= (ffirst (api/q db '[:find (avg ?x)
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               31)))
+
+    ;; TODO: Crux doesn't support these, but can be implemented.
+    #_(t/testing "median aggregate"
+        (is (= (ffirst (d/q '[:find (median ?x)
+                              :in [?x ...]]
+                            [10 15 20 35 75]))
+               20)))
+
+    #_(t/testing "variance aggregate"
+        (is (= (ffirst (d/q '[:find (variance ?x)
+                              :in [?x ...]]
+                            [10 15 20 35 75]))
+               554)))
+
+    #_(t/testing "stddev aggregate"
+        (is (= (ffirst (d/q '[:find (stddev ?x)
+                              :in [?x ...]]
+                            [10 15 20 35 75]))
+               23.53720459187964)))
+
+    (t/testing "Custom aggregates"
+      (t/is (= (set (api/q db '[:find ?color (sort-reverse ?x)
+                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
+
 (t/deftest test-can-bind-function-returns-to-falsy
   ;; Datomic does allow binding falsy values, DataScript doesn't
   ;; see "Returning nil from function filters out tuple from result"
