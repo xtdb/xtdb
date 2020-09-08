@@ -1,20 +1,20 @@
-= crux-blobs
+= crux-azure-blobs
 
 This Crux module allows you to use Azure Blob Storage Service (blobs) as Crux's 'document store'.
 
 == Getting started
 
-First, include `[juxt/crux-blobs "RELEASE"]` in your project.clj, or `{juxt/crux-blobs {:mvn/version "RELEASE"}}` in your deps.edn.
+First, include `[juxt/crux-azure-blobs "RELEASE"]` in your project.clj, or `{juxt/crux-azure-blobs {:mvn/version "RELEASE"}}` in your deps.edn.
 
-Then, include `'crux.blobs/blobs-doc-store` in your topology - for example:
+Then, include `'crux.azure.blobs/doc-store` in your topology - for example:
 
 [source,clojure]
 ----
 {:crux.node/topology '[crux.kafka/topology
-                       crux.blobs/blobs-doc-store]
- :crux.blobs/sas-token       "your-sas-token"
- :crux.blobs/storage-account "your-storage-account"
- :crux.blobs/container       "your-container"}
+                       crux.azure.blobs/doc-store]
+ :crux.azure.blobs/sas-token       "your-sas-token"
+ :crux.azure.blobs/storage-account "your-storage-account"
+ :crux.azure.blobs/container       "your-container"}
 ----
 
 == Configuration

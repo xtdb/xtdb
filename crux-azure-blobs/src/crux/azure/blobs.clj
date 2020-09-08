@@ -1,4 +1,4 @@
-(ns crux.blobs
+(ns crux.azure.blobs
   (:require [clojure.spec.alpha :as s]
             [clj-http.client :as http]
             [taoensso.nippy :as nippy]
@@ -27,7 +27,7 @@
       (http/put {:headers {"x-ms-blob-type" "BlockBlob"}
                  :body blob-bytes})))
 
-(defrecord BlobsDocumentStore [sas-token storage-account container]
+(defrecord AzureBlobsDocumentStore [sas-token storage-account container]
   db/DocumentStore
 
   (submit-docs [_ docs]
@@ -47,14 +47,14 @@
      {}
      docs)))
 
-(def blobs-doc-store
+(def doc-store
   {::n/document-store {:start-fn (fn [_ {:crux.document-store/keys [doc-cache-size]
                                          ::keys [sas-token storage-account container]}]
                                    (ds/->CachedDocumentStore
                                     (lru/new-cache doc-cache-size)
-                                    (->BlobsDocumentStore sas-token
-                                                          storage-account
-                                                          container)))
+                                    (->AzureBlobsDocumentStore sas-token
+                                                               storage-account
+                                                               container)))
                        :args {::sas-token {:required? true
                                            :crux.config/type ::sas-token
                                            :doc "Azure Blob Storage SAS Token"}

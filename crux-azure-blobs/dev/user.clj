@@ -1,11 +1,11 @@
 (ns user
   (:require [clojure.java.io :as io]
             [crux.api :as crux]
-            [crux.blobs :as b]))
+            [crux.azure.blobs :as b]))
 
 (defn start-node [storage-dir]
   (crux/start-node {:crux.node/topology '[crux.standalone/topology
-                                          crux.blobs/blobs-doc-store]
+                                          crux.azure.blobs/doc-store]
 	            :crux.standalone/event-log-dir (io/file storage-dir "event-log")
 	            :crux.kv/db-dir (io/file storage-dir "indexes")
                     ::b/sas-token (System/getenv "CRUX_BLOBS_SAS_TOKEN")
@@ -38,13 +38,19 @@
     :level :a
     :org :org/some-org}
 
-   {:crux.db/id :class/some-class
-    :class/name "Some class"
-    :level :a
+   {:crux.db/id :team/some-team
+    :team/name "Some Team"
+    :experience-level 10
     :org :org/some-org
-    :courses [:course/math101]}])
+    :requirements #{:course/math101}}])
 
-(defn ingest->entity []
+(defn ingest-query-entity []
   (with-open [node (start-node "/tmp/")]
     (await-ingest node init-data)
-    (crux/entity (crux/db node) :course/math101)))
+    (let [db (crux/db node)]
+      (->> {:find '[cls]
+            :where '[[cls :requirements cid]]
+            :args '[{cid :course/math101}]}
+           (crux/q db)
+           (map first)
+           (map #(crux/entity db %))))))
