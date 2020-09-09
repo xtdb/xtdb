@@ -10,7 +10,8 @@
   (:import org.apache.lucene.analysis.Analyzer
            [org.apache.lucene.document Document Field StoredField TextField]
            [org.apache.lucene.index IndexWriter IndexWriterConfig]
-           org.apache.lucene.store.Directory))
+           org.apache.lucene.store.Directory
+           crux.ByteUtils))
 
 (defn with-lucene-module [f]
   (with-tmp-dir "lucene" [db-dir]
@@ -50,7 +51,10 @@
     ;; for each result out of lucene, we want to do the bitemporal dance, is there anything else?
 
     ;; Step 1, without pruning out stale data from lucene, we need to re-check the current C of the E still has the AV
-    ;; how do we do this? Can compare the v in the doc.
+    ;; how do we do this? Can compare the v in the doc (using sha1s, or do a check)
+
+    ;; option 1.a
+    ;; Could put the C into the doc, simpler
 
     ;; option 2 to write up:
     ;; JMS -> go to AVE
@@ -64,17 +68,15 @@
                                 :args [{:?full-text (fn [attr v]
                                                       (with-open [search-results ^crux.api.ICursor (l/search *api* (name attr) v)]
                                                         (let [{:keys [entity-resolver-fn index-store]} db
-                                                              eids (->> (iterator-seq search-results)
-                                                                        (keep (fn [^Document doc]
-                                                                                (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
-                                                                                      v (db/encode-value index-store (.getBinaryValue ^Document doc (name attr)))]
-                                                                                  (when (db/aev index-store attr eid v entity-resolver-fn)
-                                                                                    eid)))))]
-
-                                                          ;; I'll need to make value->id-buffer?
-                                                          ;; Could store eids in lucene as id-buffers
-
-                                                          ;; Need the v..
+                                                              eids (keep (fn [^Document doc]
+                                                                           (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
+                                                                                 v (db/encode-value index-store (.get ^Document doc (name attr)))
+                                                                                 vs-in-crux (db/aev index-store attr eid v entity-resolver-fn)]
+                                                                             (not-empty (filter (fn [v-in-crux]
+                                                                                                  (= 0 (ByteUtils/compareBuffers v-in-crux v Integer/MAX_VALUE)))
+                                                                                                vs-in-crux))
+                                                                             eid))
+                                                                         (iterator-seq search-results))]
                                                           (boolean (seq eids)))))}]})))))
 
   #_{:find '[?id]
