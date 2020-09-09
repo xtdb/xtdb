@@ -45,21 +45,6 @@
         (t/is (= 1 (count docs)))
         (t/is (= "Ivan" (.get ^Document (first docs) "name")))))
 
-    ;; option 1:
-    ;; We store the eid in the lucene doc and AV
-    ;; The pred-fn does a search, it needs to idenfity entities
-    ;; for each result out of lucene, we want to do the bitemporal dance, is there anything else?
-
-    ;; Step 1, without pruning out stale data from lucene, we need to re-check the current C of the E still has the AV
-    ;; how do we do this? Can compare the v in the doc (using sha1s, or do a check)
-
-    ;; option 1.a
-    ;; Could put the C into the doc, simpler
-
-    ;; option 2 to write up:
-    ;; JMS -> go to AVE
-    ;; unindex-eids
-
     ;; Search Pred-fn:
     (with-open [db (c/open-db *api*)]
       (t/is (not-empty (c/q db {:find '[?e]
@@ -83,6 +68,12 @@
      :where '[[?e :gender :female]]
      :args [{:?e :?name} (full-text-search :name "Ivan")]}
 
+  ;; option 1.a
+  ;; Could put the C into the doc, simpler, docs don't benefit from structural sharing across Cs
+
+  ;; option 2 to write up:
+  ;; JMS -> go to AVE, don't store eid or C in the index.
+  ;; Requires sophisticated eviction, to use unindex-eids equivalent
 
   ;; Musings:
 
