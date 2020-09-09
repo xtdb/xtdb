@@ -303,13 +303,15 @@
 (defmethod aggregate 'variance [_]
   (let [mean (aggregate 'avg)]
     (fn
-      ([] [[] (mean)])
-      ([[acc m]] (let [mean (mean m)]
-                   (maybe-ratio (/ (reduce + (for [x acc]
-                                               (Math/pow (- x mean) 2)))
-                                   (count acc)))))
-      ([[acc m] x]
-       [(conj acc x) (mean m x)]))))
+      ([] [0 (mean)])
+      ([[m2 [c _]]] (maybe-ratio (/ m2 c)))
+      ([[m2 [c _ :as m]] x]
+       (let [delta (if (zero? c)
+                     x
+                     (- x (mean m)))
+             m (mean m x)
+             delta2 (- x (mean m))]
+         [(+ m2 (* delta delta2)) m])))))
 
 (defmethod aggregate 'stddev [_]
   (let [variance (aggregate 'variance)]
