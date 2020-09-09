@@ -1065,6 +1065,223 @@
            (api/q (api/db *api*) '{:find [e]
                                    :where [[e :name [:ivan]]]})))))
 
+(t/deftest test-collection-returns
+  (t/testing "vectors"
+    (t/is (= #{[1]
+               [2]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(vector 1 2) [x ...]]]})))
+
+    (t/is (= #{}
+           (api/q (api/db *api*)
+                  '{:find [x]
+                    :where [[(vector) [x ...]]]}))))
+
+  (t/testing "sets"
+    (t/is (= #{[1]
+               [2]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(sorted-set 1 2) [x ...]]]})))
+
+
+
+    (t/is (= #{}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(sorted-set) [x ...]]]}))))
+
+  (t/testing "maps"
+    (t/is (= #{[[1 2]]}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(hash-map 1 2) [x ...]]]})))
+
+    (t/is (= #{}
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(hash-map) [x ...]]]})))))
+
+(t/deftest test-tuple-returns
+  (t/is (= #{[1 2]}
+           (api/q (api/db *api*) '{:find [x y]
+                                   :where [[(identity [1 2]) [x y]]]})))
+
+  (t/is (= #{[2]}
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(identity [1 2]) [_ x]]]})))
+
+    (t/is (= #{[1]}
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(identity [1 2]) [x]]]})))
+
+   (t/is (empty? (api/q (api/db *api*) '{:find [x y]
+                                         :where [[(identity #{}) [x y]]]}))))
+
+(t/deftest test-relation-returns
+  (t/is (= #{[1 2]
+             [3 4]}
+           (api/q (api/db *api*) '{:find [x y]
+                                   :where [[(identity #{[1 2] [3 4]}) [[x y]]]]})))
+
+   (t/is (empty? (api/q (api/db *api*) '{:find [x y]
+                                         :where [[(identity #{}) [[x y]]]]})))
+
+  (t/testing "distinct tuples"
+    (t/is (= #{[1 2]}
+             (api/q (api/db *api*) '{:find [x y]
+                                     :where [[(identity [[1 2] [1 2]]) [[x y]]]]}))))
+
+  (t/testing "tuple var bindings need to be distinct"
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Return variables not distinct"
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(identity #{[1 2] [3 4]}) [[x x]]]]}))))
+
+  (t/testing "can bind sub tuple"
+    (t/is (= #{[1]
+               [3]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [[x]]]]})))
+
+    (t/is (= #{[2]
+               [4]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [[_ x]]]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [x]
+                                          :where [[(identity #{[1] [3]}) [[_ x]]]]})))
+
+    (t/is (= #{[4]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [[_ x]]]
+                                             [(identity #{[4 2]}) [[x _]]]]}))))
+
+  (t/testing "can bind full tuple using collection binding"
+    (t/is (= #{[[1 2]]
+               [[3 4]]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity #{[1 2] [3 4]}) [x ...]]]})))))
+
+(t/deftest test-sub-queries
+  (t/is (= #{[4]}
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(q {:find [y]
+                                                :where [[(identity 2) x]
+                                                        [(+ x 2) y]]}) [[x]]]]})))
+
+  (t/is (empty?
+         (api/q (api/db *api*) '{:find [x]
+                                 :where [[(q {:find [y]
+                                              :where [[(identity 2) x]
+                                                      [(+ x 2) y]
+                                                      [(odd? y)]]}) [[x]]]]})))
+
+  (t/testing "can provide arguments"
+    (t/is (= #{[1 2 3]}
+             (api/q (api/db *api*) '{:find [x y z]
+                                     :where [[(q {:find [x y z]
+                                                  :args [{:x 1}]
+                                                  :where [[(identity 2) y]
+                                                          [(+ x y) z]]}) [[x y z]]]]})))
+
+    (t/is (= #{[1 3 4]}
+             (api/q (api/db *api*) '{:find [x y z]
+                                     :where [[(identity 1) x]
+                                             [(q {:find [z]
+                                                  :args [{:x x}]
+                                                  :where [[(+ x 2) z]]}) [[y]]]
+                                             [(+ x y) z]]})))
+
+    (t/testing "can use varargs instead of inline arguments"
+      (t/is (= #{[1 3 4]}
+               (api/q (api/db *api*) '{:find [x y z]
+                                       :where [[(identity 1) x]
+                                               [(q {:find [z]
+                                                    :where [[(+ x 2) z]]} :x x) [[y]]]
+                                               [(+ x y) z]]})))
+
+      (t/testing "can use quoted symbols"
+        (t/is (= #{[1]}
+                 (api/q (api/db *api*) '{:find [x]
+                                         :where [[(q {:find [y]
+                                                      :where [[(identity x) y]]} 'x 1) [[x]]]]})))))
+
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Sub-queries don't support more than one argument tuple"
+           (api/q (api/db *api*) '{:find [x y z]
+                                     :where [[(identity 1) x]
+                                             [(q {:find [z]
+                                                  :args [{:x x} {:x 1}]
+                                                  :where [[(+ x 2) z]]}) [[y]]]
+                                             [(+ x y) z]]})))
+
+    (t/testing "can use symbols as argument names"
+      (t/is (= #{[1]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q {:find [y]
+                                                    :args [{x 1}]
+                                                    :where [[(identity x) y]]}) [[x]]]]})))
+
+      (t/testing "can use quoted symbols"
+        (t/is (= #{[1]}
+                 (api/q (api/db *api*) '{:find [x]
+                                         :where [[(q {:find [y]
+                                                      :args [{'x 1}]
+                                                      :where [[(identity x) y]]}) [[x]]]]})))))
+
+    (t/testing "can handle quoted sub query"
+      (t/is (= #{[2]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q '{:find [y]
+                                                     :where [[(identity 2) y]]}) [[x]]]]}))))
+
+    (t/testing "can handle vector sub queries"
+      (t/is (= #{[2]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q [:find y
+                                                    :where [(identity 2) y]]) [[x]]]]}))))
+
+    (t/testing "can handle string sub queries"
+      (t/is (= #{[2]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q "[:find y
+                                                     :where [(identity 2) y]]") [[x]]]]})))))
+
+  (t/testing "can inherit rules from parent query"
+    (t/is (empty?
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[(q {:find [y]
+                                                :where [[(identity 2) x]
+                                                        [(+ x 2) y]
+                                                        (is-odd? y)]}) [[x]]]]
+                                   :rules [[(is-odd? x)
+                                            [(odd? x)]]]}))))
+
+  (t/testing "can use as predicate"
+    (t/is (= #{[2]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity 2) x]
+                                             [(q {:find [x]
+                                                  :args [{:x x}]
+                                                  :where [[(even? x)]]})]]})))
+
+    (t/is (empty? (api/q (api/db *api*) '{:find [x]
+                                          :where [[(identity 2) x]
+                                                  [(q {:find [y]
+                                                       :args [{:y x}]
+                                                       :where [[(odd? y)]]})]]})))
+
+    (t/is (= #{[2]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(identity 2) x]
+                                             (not [(q {:find [y]
+                                                       :args [{:y x}]
+                                                       :where [[(odd? y)]]})])]})))))
+
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
              [:range [[:sym-val {:op <, :sym age, :val 20}]]]]
@@ -2152,13 +2369,11 @@
                #{["a" 1] ["abc" 3]})))
 
     (t/testing "Built-in vector, hashmap"
-      ;; Crux differs here by treating vectors and sets as multiple
-      ;; results.
-      #_(t/is (= (api/q db
-                        '{:find [?tx-data]
-                          :where [[(identity :db/add) ?op]
-                                  [(vector ?op -1 :attr 12) ?tx-data]]})
-                 #{[[:db/add -1 :attr 12]]}))
+      (t/is (= (api/q db
+                      '{:find [?tx-data]
+                        :where [[(identity :db/add) ?op]
+                                [(vector ?op -1 :attr 12) ?tx-data]]})
+               #{[[:db/add -1 :attr 12]]}))
 
       (t/is (= (api/q db
                       '{:find [?tx-data]
@@ -2192,13 +2407,12 @@
                                 [(identity 2) ?n]]})
                #{})))
 
-    ;; NOTE: Crux does not currently support destructuring.
-    #_(t/testing "Destructured conflicting function values for two bindings."
-        (t/is (= (d/q '[:find  ?n ?x
+    (t/testing "Destructured conflicting function values for two bindings."
+      (t/is (= (api/q db
+                      '[:find  ?n ?x
                         :where [(identity [3 4]) [?n ?x]]
-                        [(identity [1 2]) [?n ?x]]]
-                      db)
-                 #{})))
+                        [(identity [1 2]) [?n ?x]]])
+               #{})))
 
     (t/testing "Rule bindings interacting with function binding. (fn, rule)"
       (t/is (= (api/q db
@@ -2260,31 +2474,27 @@
                                 {:?in 4}]})
                  #{[2] [4]})))
 
-    ;; NOTE: Crux does not currently support destructuring.
-    #_(t/testing "Result bindings"
-        (t/is (= (d/q '[:find ?a ?c
-                        :in ?in
-                        :where [(ground ?in) [?a _ ?c]]]
-                      [:a :b :c])
-                 #{[:a :c]}))
+    (t/testing "Result bindings"
+      (t/is (= (api/q db '[:find ?a ?c
+                           :args {?in [:a :b :c]}
+                           :where [(identity ?in) [?a _ ?c]]])
+               #{[:a :c]}))
 
-        (t/is (= (d/q '[:find ?in
-                        :in ?in
-                        :where [(ground ?in) _]]
-                      :a)
-                 #{[:a]}))
+      (t/is (= (api/q db '[:find ?in
+                           :args {?in :a}
+                           :where [(identity ?in) _]])
+               #{[:a]}))
 
-        (t/is (= (d/q '[:find ?x ?z
-                        :in ?in
-                        :where [(ground ?in) [[?x _ ?z]...]]]
-                      [[:a :b :c] [:d :e :f]])
-                 #{[:a :c] [:d :f]}))
+      (t/is (= (api/q db '[:find ?x ?z
+                           :args {?in [[:a :b :c]
+                                       [:d :e :f]]}
+                           :where [(identity ?in) [[?x _ ?z]]]])
+               #{[:a :c] [:d :f]}))
 
-        (t/is (= (d/q '[:find ?in
-                        :in [?in ...]
-                        :where [(ground ?in) _]]
-                      [])
-                 #{})))))
+      (t/is (= (api/q db '[:find ?in
+                           :args {?in []}
+                           :where [(identity ?in) [_ ...]]])
+               #{})))))
 
 
 (t/deftest datascript-test-predicates
@@ -2381,44 +2591,6 @@
            (api/q (api/db *api*)
                   '{:find [b]
                     :where [[(identity true) b]]}))))
-
-(t/deftest test-can-bind-function-returns-to-multiple-values
-  (t/testing "vectors"
-    (t/is (= #{[1]
-               [2]}
-             (api/q (api/db *api*)
-                    '{:find [x]
-                      :where [[(vector 1 2) x]]})))
-
-    (t/is (= #{}
-           (api/q (api/db *api*)
-                  '{:find [x]
-                    :where [[(vector) x]]}))))
-
-  (t/testing "sets"
-    (t/is (= #{[1]
-               [2]}
-             (api/q (api/db *api*)
-                    '{:find [x]
-                      :where [[(sorted-set 1 2) x]]})))
-
-
-
-    (t/is (= #{}
-             (api/q (api/db *api*)
-                    '{:find [x]
-                      :where [[(sorted-set) x]]}))))
-
-  (t/testing "maps are treated as single values"
-    (t/is (= #{[{1 2}]}
-             (api/q (api/db *api*)
-                    '{:find [x]
-                      :where [[(hash-map 1 2) x]]})))
-
-    (t/is (= #{[{}]}
-             (api/q (api/db *api*)
-                    '{:find [x]
-                      :where [[(hash-map) x]]})))))
 
 (t/deftest test-can-use-any-value-as-entity-id
   (fix/transact! *api* [{:crux.db/id "ivan@example.com" :name "Ivan"}
