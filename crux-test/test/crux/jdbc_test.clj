@@ -9,36 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as jdbcr]))
 
-(defn- with-each-jdbc-node [f]
-  (t/testing "H2 Database"
-    (fj/with-h2-opts f))
-  (t/testing "SQLite Database"
-    (fj/with-sqlite-opts f))
-  (t/testing "Postgresql Database"
-    (fj/with-embedded-postgres f))
-
-  ;; Optional:
-  #_(t/testing "MySQL Database"
-      ;; docker run --rm --name crux-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -p 3306:3306 -d mysql:8.0.21
-      ;; mariadb -h 127.0.0.1 -u root -p
-      ;; CREATE DATABASE cruxtest;
-      (fj/with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"} f))
-
-  #_(when (.exists (clojure.java.io/file ".testing-oracle.edn"))
-      (t/testing "Oracle Database"
-        (fj/with-jdbc-node "oracle" f
-          (read-string (slurp ".testing-oracle.edn")))))
-
-  #_(t/testing "MSSQL Database"
-      ;; docker run --rm --name crux-mssql -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
-      ;; mssql-cli
-      ;; CREATE DATABASE cruxtest;
-      (fj/with-mssql-opts {:db-spec {:dbname "cruxtest"}
-                           :pool-opts {:username "sa"
-                                       :password "yourStrong(!)Password"}}
-        f)))
-
-(t/use-fixtures :each with-each-jdbc-node fix/with-node)
+(t/use-fixtures :each fj/with-each-jdbc-node fix/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
