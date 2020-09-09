@@ -1,8 +1,6 @@
 (ns ^:no-doc crux.jdbc.psql
   (:require [crux.jdbc :as j]
-            [next.jdbc :as jdbc]
-            [crux.system :as sys]
-            [clojure.spec.alpha :as s]))
+            [next.jdbc :as jdbc]))
 
 (defn ->dialect [_]
   (reify j/Dialect
@@ -14,7 +12,7 @@
 CREATE TABLE IF NOT EXISTS tx_events (
   event_offset SERIAL PRIMARY KEY,
   event_key VARCHAR,
-  tx_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  tx_time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   topic VARCHAR NOT NULL,
   v BYTEA NOT NULL,
   compacted INTEGER NOT NULL)"])
