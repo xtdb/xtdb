@@ -1642,7 +1642,9 @@
           find-logic-vars (mapv :logic-var compiled-find)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
-          project? (contains? var-types :project)]
+          project? (or (contains? var-types :project) full-results?)
+          var-bindings (mapv :var-binding compiled-find)
+          ->result-fns (mapv :->result compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (IllegalArgumentException.
@@ -1654,19 +1656,18 @@
 
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                  (into []
-                        (map (fn [{:keys [var-binding]}]
-                               (bound-result-for-var index-store var-binding join-keys)))
-                        compiled-find))
+                  (mapv (fn [var-binding]
+                          (bound-result-for-var index-store var-binding join-keys))
+                        var-bindings))
 
          aggregate? (aggregate-result compiled-find)
          order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         :always (map (fn [row]
-                        (mapv (fn [value {:keys [->result]}]
-                                (->result value db))
-                              row compiled-find)))
+         project? (map (fn [row]
+                         (mapv (fn [value ->result]
+                                 (->result value db))
+                               row ->result-fns)))
          project? (partition-all (or (:batch-size q-conformed)
                                      (::batch-size options)
                                      100))
