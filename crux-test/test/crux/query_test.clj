@@ -3205,13 +3205,13 @@
                                                        [x :val v]]
                                                :order-by [[v :asc]]}))))
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Order by requires a var from :find\. unreturned var:"
+                          #"Order by requires an element from :find\. unreturned element:"
                           (api/q (api/db *api*) '{:find [e]
                                                   :where [[x :crux.db/id e]
                                                           [x :val v]]
                                                   :order-by [[v :asc]]})))
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Order by requires a var from :find\. unreturned var:"
+                          #"Order by requires an element from :find\. unreturned element:"
                           (api/q (api/db *api*) '{:find [e]
                                                   :where [[x :crux.db/id e]
                                                           [x :val v]]

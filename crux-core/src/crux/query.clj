@@ -164,7 +164,7 @@
 (s/def ::full-results? boolean?)
 
 (s/def ::order-element (s/and vector?
-                              (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
+                              (s/cat :find-arg ::find-arg :direction (s/? #{:asc :desc}))))
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
 (s/def ::timeout nat-int?)
@@ -1347,16 +1347,16 @@
 ;; different sort order for example for ids, where the hash used in
 ;; the indexes won't sort the same as the actual value. For this to
 ;; work well this would need to be revisited.
-(defn- order-by-comparator [vars order-by]
-  (let [var->index (zipmap vars (range))]
+(defn- order-by-comparator [find order-by]
+  (let [find-arg->index (zipmap find (range))]
     (reify Comparator
       (compare [_ a b]
         (loop [diff 0
-               [{:keys [var direction]} & order-by] order-by]
+               [{:keys [find-arg direction]} & order-by] order-by]
           (if (or (not (zero? diff))
-                  (nil? var))
+                  (nil? find-arg))
             diff
-            (let [index (get var->index var)]
+            (let [index (get find-arg->index find-arg)]
               (recur (long (cond-> (compare (get a index)
                                             (get b index))
                              (= :desc direction) -))
@@ -1535,14 +1535,10 @@
               :when (nil? var-binding)]
         (throw (IllegalArgumentException.
                 (str "Find refers to unknown variable: " logic-var))))
-      (doseq [{:keys [var]} order-by
-              :when (not (contains? var->bindings var))]
+      (doseq [{:keys [find-arg]} order-by
+              :when (not (some #{find-arg} find))]
         (throw (IllegalArgumentException.
-                (str "Order by refers to unknown variable: " var))))
-      (doseq [{:keys [var]} order-by
-              :when (not (some #{var} find-logic-vars))]
-        (throw (IllegalArgumentException.
-                (str "Order by requires a var from :find. unreturned var: " var))))
+                (str "Order by requires an element from :find. unreturned element: " find-arg))))
 
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
@@ -1552,7 +1548,7 @@
                         compiled-find))
 
          aggregate? (aggregate-result compiled-find)
-         order-by (cio/external-sort (order-by-comparator find-logic-vars order-by))
+         order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
          :always (map (fn [row]
