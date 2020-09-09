@@ -1567,12 +1567,14 @@
       :logic-var {:logic-var arg
                   :var-type :logic-var
                   :var-binding (var->bindings arg)
-                  :->result (fn [value {:keys [entity-resolver-fn]}]
-                              (or (when full-results?
-                                    (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
+                  :->result (if full-results?
+                              (fn [value {:keys [entity-resolver-fn]}]
+                                (or (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
                                       (let-docs [docs #{hash}]
-                                        (get docs (c/new-id hash)))))
-                                  value))}
+                                        (get docs (c/new-id hash))))
+                                    value))
+                              (fn [value _]
+                                value))}
       :project {:logic-var (:logic-var arg)
                 :var-type :project
                 :var-binding (var->bindings (:logic-var arg))
