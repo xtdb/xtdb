@@ -269,9 +269,9 @@
 
 (defmethod aggregate 'count-distinct [_]
   (fn
-    ([] #{})
-    (^long [acc] (count acc))
-    ([acc x] (conj acc x))))
+    ([] (transient #{}))
+    ([acc] (count (persistent! acc)))
+    ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'sum [_]
   (fn
@@ -290,15 +290,16 @@
 
 (defmethod aggregate 'median [_]
   (fn
-    ([] [])
-    ([acc] (let [acc (sort acc)
+    ([] (transient []))
+    ([acc] (let [acc (persistent! acc)
+                 acc (sort acc)
                  n (count acc)
                  half-n (quot n 2)]
              (if (odd? n)
                (nth acc half-n)
                (maybe-ratio (/ (+ (nth acc half-n)
                                   (nth acc (dec half-n))) 2)))))
-    ([acc x] (conj acc x))))
+    ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'variance [_]
   (let [mean (aggregate 'avg)]
@@ -323,21 +324,21 @@
 
 (defmethod aggregate 'distinct [_]
   (fn
-    ([] #{})
-    ([acc] acc)
-    ([acc x] (conj acc x))))
+    ([] (transient #{}))
+    ([acc] (persistent! acc))
+    ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'rand [_ n]
   (fn
-    ([] [])
-    ([acc] (vec (take n (shuffle acc))))
-    ([acc x] (conj acc x))))
+    ([] (transient []))
+    ([acc] (vec (take n (shuffle (persistent! acc)))))
+    ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'sample [_ n]
   (fn
-    ([] #{})
-    ([acc] (vec (take n (shuffle acc))))
-    ([acc x] (conj acc x))))
+    ([] (transient #{}))
+    ([acc] (vec (take n (shuffle (persistent! acc)))))
+    ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'min
   ([_]
