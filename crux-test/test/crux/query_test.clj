@@ -1112,12 +1112,13 @@
            (api/q (api/db *api*) '{:find [x]
                                    :where [[(identity [1 2]) [_ x]]]})))
 
-    (t/is (= #{[1]}
+  (t/is (= #{[1]}
            (api/q (api/db *api*) '{:find [x]
                                    :where [[(identity [1 2]) [x]]]})))
 
-   (t/is (empty? (api/q (api/db *api*) '{:find [x y]
-                                         :where [[(identity #{}) [x y]]]}))))
+  (t/testing "can bind excess vars to nil"
+    (t/is (= #{[nil nil]} (api/q (api/db *api*) '{:find [x y]
+                                                  :where [[(identity []) [x y]]]})))))
 
 (t/deftest test-relation-returns
   (t/is (= #{[1 2]
@@ -1151,13 +1152,15 @@
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity #{[1 2] [3 4]}) [[_ x]]]]})))
 
-    (t/is (empty? (api/q (api/db *api*) '{:find [x]
-                                          :where [[(identity #{[1] [3]}) [[_ x]]]]})))
-
     (t/is (= #{[4]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity #{[1 2] [3 4]}) [[_ x]]]
-                                             [(identity #{[4 2]}) [[x _]]]]}))))
+                                             [(identity #{[4 2]}) [[x _]]]]})))
+
+    (t/testing "can bind excess vars to nil"
+      (t/is (= #{[nil]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(identity #{[1] [3]}) [[_ x]]]]})))))
 
   (t/testing "can bind full tuple using collection binding"
     (t/is (= #{[[1 2]]

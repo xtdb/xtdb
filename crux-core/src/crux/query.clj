@@ -735,14 +735,13 @@
         (not-empty pred-result))
 
     (:tuple :relation)
-    (do (->> (for [tuple (if (= :relation return-type)
-                           pred-result
-                           [pred-result])
-                   :when (<= (count return-vars-tuple-idxs-in-join-order)
-                             (count tuple))]
-               (mapv tuple return-vars-tuple-idxs-in-join-order))
-             (idx/update-relation-virtual-index! idx))
-        (not-empty pred-result))
+    (let [pred-result (if (= :relation return-type)
+                         pred-result
+                         [pred-result])]
+      (->> (for [tuple pred-result]
+             (mapv #(nth tuple % nil) return-vars-tuple-idxs-in-join-order))
+           (idx/update-relation-virtual-index! idx))
+      (not-empty pred-result))
 
     pred-result))
 
