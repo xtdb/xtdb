@@ -1112,12 +1112,13 @@
            (api/q (api/db *api*) '{:find [x]
                                    :where [[(identity [1 2]) [_ x]]]})))
 
-    (t/is (= #{[1]}
+  (t/is (= #{[1]}
            (api/q (api/db *api*) '{:find [x]
                                    :where [[(identity [1 2]) [x]]]})))
 
-   (t/is (empty? (api/q (api/db *api*) '{:find [x y]
-                                         :where [[(identity #{}) [x y]]]}))))
+  (t/testing "can bind excess vars to nil"
+    (t/is (= #{[nil nil]} (api/q (api/db *api*) '{:find [x y]
+                                                  :where [[(identity []) [x y]]]})))))
 
 (t/deftest test-relation-returns
   (t/is (= #{[1 2]
@@ -1151,13 +1152,15 @@
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity #{[1 2] [3 4]}) [[_ x]]]]})))
 
-    (t/is (empty? (api/q (api/db *api*) '{:find [x]
-                                          :where [[(identity #{[1] [3]}) [[_ x]]]]})))
-
     (t/is (= #{[4]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity #{[1 2] [3 4]}) [[_ x]]]
-                                             [(identity #{[4 2]}) [[x _]]]]}))))
+                                             [(identity #{[4 2]}) [[x _]]]]})))
+
+    (t/testing "can bind excess vars to nil"
+      (t/is (= #{[nil]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(identity #{[1] [3]}) [[_ x]]]]})))))
 
   (t/testing "can bind full tuple using collection binding"
     (t/is (= #{[[1 2]]
@@ -2574,6 +2577,107 @@
                             '{:find [?x]
                               :where [[(crux.query-test/sample-query-fn) ?x]]})))))
 
+
+(defmethod crux.query/aggregate 'sort-reverse [_]
+  (fn
+    ([] [])
+    ([acc] (vec (reverse (sort acc))))
+    ([acc x] (conj acc x))))
+
+(t/deftest datascript-test-aggregates
+  (let [db (api/db *api*)]
+    #_(t/testing "with"
+        (t/is (= (d/q '[:find ?heads
+                        :with ?monster
+                        :in   [[?monster ?heads]] ]
+                      [["Medusa" 1]
+                       ["Cyclops" 1]
+                       ["Chimera" 1] ])
+                 [[1] [1] [1]])))
+
+    ;; This is solved as Crux performs the aggregation before turning
+    ;; it into a set.
+    #_(t/testing "Wrong grouping without :with"
+        (t/is (= (api/q db '[:find (sum ?heads)
+                             :where [(identity [["Cerberus" 3]
+                                                ["Medusa" 1]
+                                                ["Cyclops" 1]
+                                                ["Chimera" 1]]) [[?monster ?heads]]]])
+                 #{[4]})))
+
+    (t/testing "Multiple aggregates, correct grouping with :with"
+      (t/is (= (api/q db '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
+                           ;; :with ?monster
+                           :where [(identity [["Cerberus" 3]
+                                              ["Medusa" 1]
+                                              ["Cyclops" 1]
+                                              ["Chimera" 1]]) [[?monster ?heads]]]])
+               #{[6 1 3 4 2]})))
+
+    (t/testing "Min and max are using comparator instead of default compare"
+      ;; Wrong: using js '<' operator
+      ;; (apply min [:a/b :a-/b :a/c]) => :a-/b
+      ;; (apply max [:a/b :a-/b :a/c]) => :a/c
+      ;; Correct: use IComparable interface
+      ;; (sort compare [:a/b :a-/b :a/c]) => (:a/b :a/c :a-/b)
+      (t/is (= (api/q db '[:find (min ?x) (max ?x)
+                           :where [(identity [:a-/b :a/b]) [?x ...]]])
+               #{[:a/b :a-/b]}))
+
+      (t/is (= (api/q db '[:find (min 2 ?x) (max 2 ?x)
+                           :where [(identity [:a/b :a-/b :a/c]) [?x ...]]])
+               #{[[:a/b :a/c] [:a/c :a-/b]]})))
+
+    (t/testing "Grouping"
+      (t/is (= (set (api/q db '[:find ?color (max ?x) (min ?x)
+                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red  5 1]
+                 [:blue 8 7]})))
+
+    (t/testing "Grouping and parameter passing"
+      (t/is (= (set (api/q db '[:find ?color (max 3 ?x) (min 3 ?x)
+                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red  [3 4 5] [1 2 3]]
+                 [:blue [7 8]   [7 8]]})))
+
+    ;; NOTE: Crux only support a single final logic var in aggregates.
+    #_(t/testing "Grouping and parameter passing"
+        (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
+                           :in   [[?color ?x]] ?amount ]
+                         [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                          [:blue 7] [:blue 8]]
+                         3))
+               #{[:red  [3 4 5] [1 2 3]]
+                 [:blue [7 8]   [7 8]]})))
+
+    (t/testing "avg aggregate"
+      (t/is (= (ffirst (api/q db '[:find (avg ?x)
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               31)))
+
+    (t/testing "median aggregate"
+      (t/is (= (ffirst (api/q db '[:find (median ?x)
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               20)))
+
+    (t/testing "variance aggregate"
+      (t/is (= (ffirst (api/q db '[:find (variance ?x)
+                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
+                554.0))) ;; double
+
+    (t/testing "stddev aggregate"
+      (t/is (= (ffirst (api/q db '[:find (stddev ?x)
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               23.53720459187964)))
+
+    (t/testing "Custom aggregates"
+      (t/is (= (set (api/q db '[:find ?color (sort-reverse ?x)
+                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
+
 (t/deftest test-can-bind-function-returns-to-falsy
   ;; Datomic does allow binding falsy values, DataScript doesn't
   ;; see "Returning nil from function filters out tuple from result"
@@ -3102,13 +3206,13 @@
                                                        [x :val v]]
                                                :order-by [[v :asc]]}))))
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Order by requires a var from :find\. unreturned var:"
+                          #"Order by requires an element from :find\. unreturned element:"
                           (api/q (api/db *api*) '{:find [e]
                                                   :where [[x :crux.db/id e]
                                                           [x :val v]]
                                                   :order-by [[v :asc]]})))
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Order by requires a var from :find\. unreturned var:"
+                          #"Order by requires an element from :find\. unreturned element:"
                           (api/q (api/db *api*) '{:find [e]
                                                   :where [[x :crux.db/id e]
                                                           [x :val v]]

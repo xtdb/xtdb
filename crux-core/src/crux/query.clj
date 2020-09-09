@@ -33,7 +33,7 @@
 
 (def ^:private literal? (complement (some-fn vector? logic-var?)))
 
-(declare pred-constraint)
+(declare pred-constraint aggregate)
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -45,6 +45,9 @@
 
 (defn- pred-constraint? [x]
   (contains? (methods pred-constraint) x))
+
+(defn- aggregate? [x]
+  (contains? (methods aggregate) x))
 
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? c/valid-id? set?)
                                       :a (s/and c/valid-id? some?)
@@ -99,6 +102,54 @@
 (s/def ::or (expression-spec 'or ::or-body))
 (s/def ::or-join (expression-spec 'or-join (s/cat :args (s/and vector? ::rule-args)
                                                   :body ::or-body)))
+(s/def ::term (s/or :triple ::triple
+                    :not ::not
+                    :not-join ::not-join
+                    :or ::or
+                    :or-join ::or-join
+                    :range ::range
+                    :rule ::rule
+                    :pred ::pred))
+
+(s/def ::aggregate (s/cat :aggregate-fn aggregate?
+                          :args (s/* literal?)
+                          :logic-var logic-var?))
+
+(s/def ::find-arg
+  (s/or :logic-var logic-var?
+        :project (s/cat :project #{'eql/project}
+                        :logic-var logic-var?
+                        :project-spec ::eql/query)
+        :aggregate ::aggregate))
+
+(s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
+
+(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
+
+(s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
+(s/def ::args (s/coll-of ::arg-tuple :kind vector?))
+
+(s/def ::rule-head (s/and list?
+                          (s/cat :name (s/and symbol? (complement built-ins))
+                                 :args ::rule-args)))
+(s/def ::rule-definition (s/and vector?
+                                (s/cat :head ::rule-head
+                                       :body (s/+ ::term))))
+(s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
+
+(s/def ::offset nat-int?)
+(s/def ::limit nat-int?)
+(s/def ::full-results? boolean?)
+
+(s/def ::order-element (s/and vector?
+                              (s/cat :find-arg (s/or :logic-var logic-var?
+                                                     :aggregate ::aggregate)
+                                     :direction (s/? #{:asc :desc}))))
+(s/def ::order-by (s/coll-of ::order-element :kind vector?))
+
+(s/def ::timeout nat-int?)
+(s/def ::batch-size pos-int?)
+
 (defmulti pred-args-spec first)
 
 (defmethod pred-args-spec 'q [_]
@@ -124,46 +175,26 @@
 
 (s/def ::pred-args (s/multi-spec pred-args-spec first))
 
-(s/def ::term (s/or :triple ::triple
-                    :not ::not
-                    :not-join ::not-join
-                    :or ::or
-                    :or-join ::or-join
-                    :range ::range
-                    :rule ::rule
-                    :pred ::pred))
+(defmulti aggregate-args-spec first)
 
-(s/def ::find-arg
-  (s/or :logic-var logic-var?
-        :project (s/spec (s/cat :project #{'eql/project}
-                                :logic-var logic-var?
-                                :project-spec ::eql/query))))
+(defmethod aggregate-args-spec 'max [_]
+  (s/cat :aggregate-fn '#{max} :args (s/or :zero empty?
+                                           :one (s/tuple pos-int?))))
 
-(s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
+(defmethod aggregate-args-spec 'min [_]
+  (s/cat :aggregate-fn '#{min} :args (s/or :zero empty?
+                                           :one (s/tuple pos-int?))))
 
-(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
+(defmethod aggregate-args-spec 'rand [_]
+  (s/cat :aggregate-fn '#{rand} :args (s/tuple pos-int?)))
 
-(s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
-(s/def ::args (s/coll-of ::arg-tuple :kind vector?))
+(defmethod aggregate-args-spec 'sample [_]
+  (s/cat :aggregate-fn '#{sample} :args (s/tuple pos-int?)))
 
-(s/def ::rule-head (s/and list?
-                          (s/cat :name (s/and symbol? (complement built-ins))
-                                 :args ::rule-args)))
-(s/def ::rule-definition (s/and vector?
-                                (s/cat :head ::rule-head
-                                       :body (s/+ ::term))))
-(s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
+(defmethod aggregate-args-spec :default [_]
+  (s/cat :aggregate-fn symbol? :args empty?))
 
-(s/def ::offset nat-int?)
-(s/def ::limit nat-int?)
-(s/def ::full-results? boolean?)
-
-(s/def ::order-element (s/and vector?
-                              (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
-(s/def ::order-by (s/coll-of ::order-element :kind vector?))
-
-(s/def ::timeout nat-int?)
-(s/def ::batch-size pos-int?)
+(s/def ::aggregate-args (s/multi-spec aggregate-args-spec first))
 
 (defn normalize-query [q]
   (cond
@@ -224,6 +255,138 @@
        {:keys [encode-value-fn idx-id arg-bindings return-type
                return-vars-tuple-idxs-in-join-order rule-name->rules]}]
     pred-fn))
+
+(defmulti aggregate (fn [name & args] name))
+
+(set! *unchecked-math* true)
+
+(defn- maybe-ratio [n]
+  (if (ratio? n)
+    (double n)
+    n))
+
+(defmethod aggregate 'count [_]
+  (fn
+    (^long [] 0)
+    (^long [^long acc] acc)
+    (^long [^long acc _] (inc acc))))
+
+(defmethod aggregate 'count-distinct [_]
+  (fn
+    ([] (transient #{}))
+    ([acc] (count (persistent! acc)))
+    ([acc x] (conj! acc x))))
+
+(defmethod aggregate 'sum [_]
+  (fn
+    ([] 0)
+    ([acc] acc)
+    ([acc x] (+ acc x))))
+
+(defmethod aggregate 'avg [_]
+  (let [count (aggregate 'count)
+        sum (aggregate 'sum)]
+    (fn
+      ([] [(count) (sum)])
+      ([[c s]] (maybe-ratio (/ s c)))
+      ([[c s] x]
+       [(count c x) (sum s x)]))))
+
+(defmethod aggregate 'median [_]
+  (fn
+    ([] (transient []))
+    ([acc] (let [acc (persistent! acc)
+                 acc (sort acc)
+                 n (count acc)
+                 half-n (quot n 2)]
+             (if (odd? n)
+               (nth acc half-n)
+               (maybe-ratio (/ (+ (nth acc half-n)
+                                  (nth acc (dec half-n))) 2)))))
+    ([acc x] (conj! acc x))))
+
+(defmethod aggregate 'variance [_]
+  (let [mean (aggregate 'avg)]
+    (fn
+      ([] [0 (mean)])
+      ([[m2 [c _]]] (maybe-ratio (/ m2 c)))
+      ([[m2 [c _ :as m]] x]
+       (let [delta (if (zero? c)
+                     x
+                     (- x (mean m)))
+             m (mean m x)
+             delta2 (- x (mean m))]
+         [(+ m2 (* delta delta2)) m])))))
+
+(defmethod aggregate 'stddev [_]
+  (let [variance (aggregate 'variance)]
+    (fn
+      ([] (variance))
+      ([v] (Math/sqrt (variance v)))
+      ([v x]
+       (variance v x)))))
+
+(defmethod aggregate 'distinct [_]
+  (fn
+    ([] (transient #{}))
+    ([acc] (persistent! acc))
+    ([acc x] (conj! acc x))))
+
+(defmethod aggregate 'rand [_ n]
+  (fn
+    ([] (transient []))
+    ([acc] (vec (take n (shuffle (persistent! acc)))))
+    ([acc x] (conj! acc x))))
+
+(defmethod aggregate 'sample [_ n]
+  (fn
+    ([] (transient #{}))
+    ([acc] (vec (take n (shuffle (persistent! acc)))))
+    ([acc x] (conj! acc x))))
+
+(defmethod aggregate 'min
+  ([_]
+   (fn
+     ([])
+     ([acc] acc)
+     ([acc x]
+      (if acc
+        (if (pos? (compare acc x))
+          x
+          acc)
+        x))))
+  ([_ n]
+   (fn
+     ([] (sorted-set))
+     ([acc] (vec acc))
+     ([acc x]
+      (let [acc (conj acc x)]
+        (if (> (count acc) n)
+          (disj acc (last acc))
+          acc))))))
+
+(defmethod aggregate 'max
+  ([_]
+   (fn
+     ([])
+     ([acc] acc)
+     ([acc x]
+      (if acc
+        (if (neg? (compare acc x))
+          x
+          acc)
+        x))))
+  ([_ n]
+   (fn
+     ([] (sorted-set))
+     ([acc] (vec acc))
+     ([acc x]
+      (let [acc (conj acc x)]
+        (if (> (count acc) n)
+          (disj acc (first acc))
+          acc))))))
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn- blank-var? [v]
   (when (logic-var? v)
@@ -735,14 +898,13 @@
         (not-empty pred-result))
 
     (:tuple :relation)
-    (do (->> (for [tuple (if (= :relation return-type)
-                           pred-result
-                           [pred-result])
-                   :when (<= (count return-vars-tuple-idxs-in-join-order)
-                             (count tuple))]
-               (mapv tuple return-vars-tuple-idxs-in-join-order))
-             (idx/update-relation-virtual-index! idx))
-        (not-empty pred-result))
+    (let [pred-result (if (= :relation return-type)
+                         pred-result
+                         [pred-result])]
+      (->> (for [tuple pred-result]
+             (mapv #(nth tuple % nil) return-vars-tuple-idxs-in-join-order))
+           (idx/update-relation-virtual-index! idx))
+      (not-empty pred-result))
 
     pred-result))
 
@@ -1290,16 +1452,16 @@
 ;; different sort order for example for ids, where the hash used in
 ;; the indexes won't sort the same as the actual value. For this to
 ;; work well this would need to be revisited.
-(defn- order-by-comparator [vars order-by]
-  (let [var->index (zipmap vars (range))]
+(defn- order-by-comparator [find order-by]
+  (let [find-arg->index (zipmap find (range))]
     (reify Comparator
       (compare [_ a b]
         (loop [diff 0
-               [{:keys [var direction]} & order-by] order-by]
+               [{:keys [find-arg direction]} & order-by] order-by]
           (if (or (not (zero? diff))
-                  (nil? var))
+                  (nil? find-arg))
             diff
-            (let [index (get var->index var)]
+            (let [index (get find-arg->index find-arg)]
               (recur (long (cond-> (compare (get a index)
                                             (get b index))
                              (= :desc direction) -))
@@ -1403,19 +1565,63 @@
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
+                  :var-type :logic-var
                   :var-binding (var->bindings arg)
-                  :->result (fn [value {:keys [entity-resolver-fn]}]
-                              (or (when full-results?
-                                    (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
+                  :->result (if full-results?
+                              (fn [value {:keys [entity-resolver-fn]}]
+                                (or (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
                                       (let-docs [docs #{hash}]
-                                        (get docs (c/new-id hash)))))
-                                  value))}
+                                        (get docs (c/new-id hash))))
+                                    value))
+                              (fn [value _]
+                                value))}
       :project {:logic-var (:logic-var arg)
+                :var-type :project
                 :var-binding (var->bindings (:logic-var arg))
                 :->result (lru/compute-if-absent projection-cache (:project-spec arg)
                                                  identity
                                                  (fn [spec]
-                                                   (compile-project-spec (s/unform ::eql/query spec))))})))
+                                                   (compile-project-spec (s/unform ::eql/query spec))))}
+      :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
+                     {:logic-var (:logic-var arg)
+                      :var-type :aggregate
+                      :var-binding (var->bindings (:logic-var arg))
+                      :aggregate-fn (apply aggregate (:aggregate-fn arg) (:args arg))
+                      :->result (fn [value _]
+                                  value)}))))
+
+(defn- aggregate-result [compiled-find result]
+  (let [indexed-compiled-find (map-indexed vector compiled-find)
+        grouping-var-idxs (vec (for [[n {:keys [var-type]}] indexed-compiled-find
+                                     :when (not= :aggregate var-type)]
+                                 n))
+        idx->aggregate (->> (for [[n {:keys [aggregate-fn]}] indexed-compiled-find
+                                  :when aggregate-fn]
+                              [n aggregate-fn])
+                            (into {}))
+        groups (persistent!
+                (reduce
+                 (fn [acc tuple]
+                   (let [group (mapv tuple grouping-var-idxs)
+                         group-acc (or (get acc group)
+                                       (reduce-kv
+                                        (fn [acc n aggregate-fn]
+                                          (assoc acc n (aggregate-fn)))
+                                        tuple
+                                        idx->aggregate))]
+                     (assoc! acc group (reduce-kv
+                                        (fn [acc n aggregate-fn]
+                                          (update acc n #(aggregate-fn % (get tuple n))))
+                                        group-acc
+                                        idx->aggregate))))
+                 (transient {})
+                 result))]
+    (for [[_ group-acc] groups]
+      (reduce-kv
+       (fn [acc n aggregate-fn]
+         (update acc n aggregate-fn))
+       group-acc
+       idx->aggregate))))
 
 (defn query [{:keys [valid-time transact-time document-store indexer options index-store] :as db} ^ConformedQuery conformed-q]
   (let [q (.q-normalized conformed-q)
@@ -1433,19 +1639,18 @@
           db (assoc db :entity-resolver-fn entity-resolver-fn)
           {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
-          find-logic-vars (mapv :logic-var compiled-find)]
+          find-logic-vars (mapv :logic-var compiled-find)
+          var-types (set (map :var-type compiled-find))
+          aggregate? (contains? var-types :aggregate)
+          project? (contains? var-types :project)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (IllegalArgumentException.
                 (str "Find refers to unknown variable: " logic-var))))
-      (doseq [{:keys [var]} order-by
-              :when (not (contains? var->bindings var))]
+      (doseq [{:keys [find-arg]} order-by
+              :when (not (some #{find-arg} find))]
         (throw (IllegalArgumentException.
-                (str "Order by refers to unknown variable: " var))))
-      (doseq [{:keys [var]} order-by
-              :when (not (some #{var} find-logic-vars))]
-        (throw (IllegalArgumentException.
-                (str "Order by requires a var from :find. unreturned var: " var))))
+                (str "Order by requires an element from :find. unreturned element: " find-arg))))
 
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
@@ -1454,24 +1659,25 @@
                                (bound-result-for-var index-store var-binding join-keys)))
                         compiled-find))
 
-         order-by (cio/external-sort (order-by-comparator find-logic-vars order-by))
+         aggregate? (aggregate-result compiled-find)
+         order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
          :always (map (fn [row]
                         (mapv (fn [value {:keys [->result]}]
                                 (->result value db))
                               row compiled-find)))
-         :always (partition-all (or (:batch-size q-conformed)
-                                    (::batch-size options)
-                                    100))
-         :always (map (fn [results]
-                        (->> results
-                             (mapv raise-doc-lookup-out-of-coll)
-                             raise-doc-lookup-out-of-coll)))
-         :always (mapcat (fn [lookup]
-                           (if (::hashes (meta lookup))
-                             (recur (replace-docs lookup (lookup-docs lookup db)))
-                             lookup))))))))
+         :project (partition-all (or (:batch-size q-conformed)
+                                     (::batch-size options)
+                                     100))
+         :project (map (fn [results]
+                         (->> results
+                              (mapv raise-doc-lookup-out-of-coll)
+                              raise-doc-lookup-out-of-coll)))
+         :project (mapcat (fn [lookup]
+                            (if (::hashes (meta lookup))
+                              (recur (replace-docs lookup (lookup-docs lookup db)))
+                              lookup))))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
