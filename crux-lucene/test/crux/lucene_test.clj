@@ -5,7 +5,8 @@
             [crux.fixtures :as fix :refer [*api* submit+await-tx with-tmp-dir]]
             [crux.lucene :as l]
             [crux.memory :as mem]
-            [crux.node :as n])
+            [crux.node :as n]
+            [crux.db :as db])
   (:import org.apache.lucene.analysis.Analyzer
            [org.apache.lucene.document Document Field StoredField TextField]
            [org.apache.lucene.index IndexWriter IndexWriterConfig]
@@ -33,7 +34,7 @@
     ;; Index
     (with-open [iw (IndexWriter. d, iwc)]
       (let [doc (doto (Document.)
-                  (.add (Field. "eid", (mem/->on-heap (cc/->id-buffer :ivan)) StoredField/TYPE))
+                  (.add (Field. "eid", (mem/->on-heap (cc/->value-buffer :ivan)) StoredField/TYPE))
                   (.add (Field. "name", "Ivan", TextField/TYPE_STORED)))]
         (.addDocument iw doc)))
 
@@ -43,25 +44,42 @@
         (t/is (= 1 (count docs)))
         (t/is (= "Ivan" (.get ^Document (first docs) "name")))))
 
+    ;; option 1:
+    ;; We store the eid in the lucene doc and AV
+    ;; The pred-fn does a search, it needs to idenfity entities
+    ;; for each result out of lucene, we want to do the bitemporal dance, is there anything else?
+
+    ;; Step 1, without pruning out stale data from lucene, we need to re-check the current C of the E still has the AV
+    ;; how do we do this? Can compare the v in the doc.
+
+    ;; option 2 to write up:
+    ;; JMS -> go to AVE
+    ;; unindex-eids
+
     ;; Search Pred-fn:
     (with-open [db (c/open-db *api*)]
-      (t/is (not-empty (c/q db {:find '[?id]
-                                :where '[[(?full-text :name "Ivan") [?e ?name]]
-                                         [?e :gender :female]]
-                                :args [{:?full-text #(with-open [search-results ^crux.api.ICursor (l/search *api* (name %1) %2)
-                                                                 (let [[^Document doc] (iterator-seq search-results)
-                                                                       eid (mem/->off-heap (.-bytes (.getBinaryValue ^Document doc "eid")))
-                                                                       content-hash ((:entity-resolver-fn db) eid)]
-                                                                   ;; Check the doc?
+      (t/is (not-empty (c/q db {:find '[?e]
+                                :where '[[(?full-text :name "Ivan")]
+                                         [?e :crux.db/id]]
+                                :args [{:?full-text (fn [attr v]
+                                                      (with-open [search-results ^crux.api.ICursor (l/search *api* (name attr) v)]
+                                                        (let [{:keys [entity-resolver-fn index-store]} db
+                                                              eids (->> (iterator-seq search-results)
+                                                                        (keep (fn [^Document doc]
+                                                                                (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
+                                                                                      v (db/encode-value index-store (.getBinaryValue ^Document doc (name attr)))]
+                                                                                  (when (db/aev index-store attr eid v entity-resolver-fn)
+                                                                                    eid)))))]
 
-                                                                   ;; AVE from Lucene
-                                                                   ;; Go to bitemp to get C
-                                                                   ;; Go to ECAV to get check entity at C has the AV
+                                                          ;; I'll need to make value->id-buffer?
+                                                          ;; Could store eids in lucene as id-buffers
 
-                                                                   (boolean doc))])}]})))))
-  {:find '[?id]
-   :where '[[?e :gender :female]]
-   :args [{:?e :?name} (full-text-search :name "Ivan")]}
+                                                          ;; Need the v..
+                                                          (boolean (seq eids)))))}]})))))
+
+  #_{:find '[?id]
+     :where '[[?e :gender :female]]
+     :args [{:?e :?name} (full-text-search :name "Ivan")]}
 
 
   ;; Musings:
@@ -75,6 +93,7 @@
   ;; Questions (jms/jdt)
   ;;  Score (weak result matches?)
   ;;  Don't want to eagerly pull back all results (give me best 10 results) - impact Crux Query ordering, witout a subsequent re-order
+  ;;  Cardinality many? (make a test for this)
 
   ;; ---------------
 
