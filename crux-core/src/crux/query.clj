@@ -1667,14 +1667,14 @@
                         (mapv (fn [value {:keys [->result]}]
                                 (->result value db))
                               row compiled-find)))
-         :project (partition-all (or (:batch-size q-conformed)
+         project? (partition-all (or (:batch-size q-conformed)
                                      (::batch-size options)
                                      100))
-         :project (map (fn [results]
+         project? (map (fn [results]
                          (->> results
                               (mapv raise-doc-lookup-out-of-coll)
                               raise-doc-lookup-out-of-coll)))
-         :project (mapcat (fn [lookup]
+         project? (mapcat (fn [lookup]
                             (if (::hashes (meta lookup))
                               (recur (replace-docs lookup (lookup-docs lookup db)))
                               lookup))))))))
