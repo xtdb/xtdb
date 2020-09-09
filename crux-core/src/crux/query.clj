@@ -102,11 +102,12 @@
 (defmulti pred-args-spec first)
 
 (defmethod pred-args-spec 'q [_]
-  (s/cat :pred-fn #{'q} :args (s/spec (s/cat :query (s/or :quoted-query (s/cat :quote #{'quote} :query ::query)
-                                                          :query ::query)
-                                             :args (s/* (s/cat :key (s/or :quoted-symbol (s/cat :quote #{'quote} :sym symbol?)
-                                                                          :keyword keyword?)
-                                                               :val some?))))
+  (s/cat :pred-fn #{'q}
+         :args (s/spec (s/cat :query (s/or :quoted-query (s/cat :quote #{'quote} :query ::query)
+                                           :query ::query)
+                              :args (s/* (s/cat :key (s/or :quoted-symbol (s/cat :quote #{'quote} :sym symbol?)
+                                                           :keyword keyword?)
+                                                :val any?))))
          :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec 'get-attr [_]
