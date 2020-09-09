@@ -62,46 +62,14 @@ include::example$src/docs/examples.clj[tags=start-http-client]
 [#table-conversion%header,cols="d,d,d"]
 |===
 |uri|method|description
-|<<#rest-home,`/`>>|GET|returns various details about the state of the database
-|<<#rest-entity, `/entity/[:key]`>>|GET|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
-|<<#rest-entity-tx, `/entity-tx/[:key]`>>|GET|Returns the transaction that most recently set a key
-|<<#rest-entity, `/entity-history/[:key]`>>|GET|Returns the history of the given entity and optional valid-time/transaction-time co-ordinates
-|<<#rest-query, `/query`>>|POST|Takes a datalog query and returns its results
-|<<#rest-sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
-|<<#rest-tx-log, `/tx-log`>>|GET| Returns a list of all transactions
-|<<#rest-tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
+|<<#entity, `/entity/[:key]`>>|GET|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
+|<<#entity-tx, `/entity-tx/[:key]`>>|GET|Returns the transaction that most recently set a key
+|<<#entity, `/entity-history/[:key]`>>|GET|Returns the history of the given entity and optional valid-time/transaction-time co-ordinates
+|<<#query, `/query`>>|POST|Takes a datalog query and returns its results
+|<<#sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
+|<<#tx-log, `/tx-log`>>|GET| Returns a list of all transactions
+|<<#tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
 |===
-
-[#home]
-=== GET `/`
-
-Returns various details about the state of the database. Can be used as a health check.
-
-[source,bash]
-----
-curl -X GET $nodeURL/
-----
-[source,clj]
-----
-{:crux.kv/kv-store "crux.kv.rocksdb/kv",
- :crux.kv/estimate-num-keys 92,
- :crux.kv/size 72448,
- :crux.tx/last-completed-tx
-   {:crux.tx/tx-id 19,
-    :crux.tx/tx-time #inst "2019-01-08T11:06:41.869-00:00"}
- :crux.zk/zk-active? true,
- :crux.tx-log/consumer-state
-   {:crux.kafka.topic-partition/crux-docs-0
-      {:next-offset 25,
-       :time #inst "2019-01-08T11:06:41.867-00:00",
-       :lag 0},
-    :crux.kafka.topic-partition/crux-transaction-log-0
-      {:next-offset 19,
-       :time #inst "2019-01-08T11:06:41.869-00:00",
-       :lag 0}}}
-----
-
-NOTE: `estimate-num-keys` is an (over)estimate of the number of transactions in the log (each of which is a key in RocksDB). RocksDB https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ[does not provide] an exact key count.
 
 [#entity]
 === GET `/entity/[:key]`
