@@ -127,6 +127,27 @@
 
 (s/def ::pred-args (s/multi-spec pred-args-spec first))
 
+(defmulti aggregate-args-spec first)
+
+(defmethod aggregate-args-spec 'max [_]
+  (s/cat :aggregate-fn '#{max} :args (s/or :zero empty?
+                                           :one (s/tuple pos-int?))))
+
+(defmethod aggregate-args-spec 'min [_]
+  (s/cat :aggregate-fn '#{min} :args (s/or :zero empty?
+                                           :one (s/tuple pos-int?))))
+
+(defmethod aggregate-args-spec 'rand [_]
+  (s/cat :aggregate-fn '#{rand} :args (s/tuple pos-int?)))
+
+(defmethod aggregate-args-spec 'sample [_]
+  (s/cat :aggregate-fn '#{sample} :args (s/tuple pos-int?)))
+
+(defmethod aggregate-args-spec :default [_]
+  (s/cat :aggregate-fn symbol? :args empty?))
+
+(s/def ::aggregate-args (s/multi-spec aggregate-args-spec first))
+
 (s/def ::term (s/or :triple ::triple
                     :not ::not
                     :not-join ::not-join
@@ -142,6 +163,7 @@
                                 :logic-var logic-var?
                                 :project-spec ::eql/query))
         :aggregate (s/spec (s/cat :aggregate-fn aggregate?
+                                  :args (s/* literal?)
                                   :logic-var logic-var?))))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
@@ -230,9 +252,14 @@
                return-vars-tuple-idxs-in-join-order rule-name->rules]}]
     pred-fn))
 
-(defmulti aggregate (fn [name] name))
+(defmulti aggregate (fn [name & args] name))
 
 (set! *unchecked-math* true)
+
+(defn- maybe-ratio [n]
+  (if (ratio? n)
+    (double n)
+    n))
 
 (defmethod aggregate 'count [_]
   (fn
@@ -253,33 +280,104 @@
     ([acc x] (+ acc x))))
 
 (defmethod aggregate 'avg [_]
-  (fn
-    ([] [0 0])
-    ([[c s]] (/ s c))
-    ([[c s] x]
-     [(inc (long c)) (+ s x)])))
+  (let [count (aggregate 'count)
+        sum (aggregate 'sum)]
+    (fn
+      ([] [(count) (sum)])
+      ([[c s]] (maybe-ratio (/ s c)))
+      ([[c s] x]
+       [(count c x) (sum s x)]))))
 
-(defmethod aggregate 'min [_]
+(defmethod aggregate 'median [_]
   (fn
-    ([])
-    ([acc] acc)
-    ([acc x]
-     (if acc
-       (if (pos? (compare acc x))
-         x
-         acc)
-       x))))
+    ([] [])
+    ([acc] (let [acc (sort acc)
+                 n (count acc)
+                 half-n (quot n 2)]
+             (if (odd? n)
+               (nth acc half-n)
+               (maybe-ratio (/ (+ (nth acc half-n)
+                                  (nth acc (dec half-n))) 2)))))
+    ([acc x] (conj acc x))))
 
-(defmethod aggregate 'max [_]
+(defmethod aggregate 'variance [_]
+  (let [mean (aggregate 'avg)]
+    (fn
+      ([] [[] (mean)])
+      ([[acc m]] (let [mean (mean m)]
+                   (maybe-ratio (/ (reduce + (for [x acc]
+                                               (Math/pow (- x mean) 2)))
+                                   (count acc)))))
+      ([[acc m] x]
+       [(conj acc x) (mean m x)]))))
+
+(defmethod aggregate 'stddev [_]
+  (let [variance (aggregate 'variance)]
+    (fn
+      ([] (variance))
+      ([v] (Math/sqrt (variance v)))
+      ([v x]
+       (variance v x)))))
+
+(defmethod aggregate 'distinct [_]
   (fn
-    ([])
+    ([] #{})
     ([acc] acc)
-    ([acc x]
-     (if acc
-       (if (neg? (compare acc x))
-         x
-         acc)
-       x))))
+    ([acc x] (conj acc x))))
+
+(defmethod aggregate 'rand [_ n]
+  (fn
+    ([] [])
+    ([acc] (vec (take n (shuffle acc))))
+    ([acc x] (conj acc x))))
+
+(defmethod aggregate 'sample [_ n]
+  (fn
+    ([] #{})
+    ([acc] (vec (take n (shuffle acc))))
+    ([acc x] (conj acc x))))
+
+(defmethod aggregate 'min
+  ([_]
+   (fn
+     ([])
+     ([acc] acc)
+     ([acc x]
+      (if acc
+        (if (pos? (compare acc x))
+          x
+          acc)
+        x))))
+  ([_ n]
+   (fn
+     ([] (sorted-set))
+     ([acc] (vec acc))
+     ([acc x]
+      (let [acc (conj acc x)]
+        (if (> (count acc) n)
+          (disj acc (last acc))
+          acc))))))
+
+(defmethod aggregate 'max
+  ([_]
+   (fn
+     ([])
+     ([acc] acc)
+     ([acc x]
+      (if acc
+        (if (neg? (compare acc x))
+          x
+          acc)
+        x))))
+  ([_ n]
+   (fn
+     ([] (sorted-set))
+     ([acc] (vec acc))
+     ([acc x]
+      (let [acc (conj acc x)]
+        (if (> (count acc) n)
+          (disj acc (first acc))
+          acc))))))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1475,18 +1573,20 @@
                                                  identity
                                                  (fn [spec]
                                                    (compile-project-spec (s/unform ::eql/query spec))))}
-      :aggregate {:logic-var (:logic-var arg)
-                  :var-type :aggregate
-                  :var-binding (var->bindings (:logic-var arg))
-                  :aggregate-fn (aggregate (:aggregate-fn arg))
-                  :->result (fn [value _]
-                              value)})))
+      :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
+                     {:logic-var (:logic-var arg)
+                      :var-type :aggregate
+                      :var-binding (var->bindings (:logic-var arg))
+                      :aggregate-fn (apply aggregate (:aggregate-fn arg) (:args arg))
+                      :->result (fn [value _]
+                                  value)}))))
 
 (defn- aggregate-result [compiled-find result]
-  (let [grouping-var-idxs (vec (for [[n {:keys [var-type]}] (map-indexed vector compiled-find)
+  (let [indexed-compiled-find (map-indexed vector compiled-find)
+        grouping-var-idxs (vec (for [[n {:keys [var-type]}] indexed-compiled-find
                                      :when (not= :aggregate var-type)]
                                  n))
-        idx->aggregate (->> (for [[n {:keys [aggregate-fn]}] (map-indexed vector compiled-find)
+        idx->aggregate (->> (for [[n {:keys [aggregate-fn]}] indexed-compiled-find
                                   :when aggregate-fn]
                               [n aggregate-fn])
                             (into {}))
@@ -1494,21 +1594,21 @@
                 (fn [acc tuple]
                   (let [group (map tuple grouping-var-idxs)
                         group-acc (or (get acc group)
-                                      (reduce
-                                       (fn [acc [n aggregate-fn]]
+                                      (reduce-kv
+                                       (fn [acc n aggregate-fn]
                                          (assoc acc n (aggregate-fn)))
                                        tuple
                                        idx->aggregate))]
-                    (assoc acc group (reduce
-                                      (fn [acc [n aggregate-fn]]
+                    (assoc acc group (reduce-kv
+                                      (fn [acc n aggregate-fn]
                                         (update acc n #(aggregate-fn % (get tuple n))))
                                       group-acc
                                       idx->aggregate))))
                 {}
                 result)]
     (for [[_ group-acc] groups]
-      (reduce
-       (fn [acc [n aggregate-fn]]
+      (reduce-kv
+       (fn [acc n aggregate-fn]
          (update acc n aggregate-fn))
        group-acc
        idx->aggregate))))

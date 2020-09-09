@@ -2624,20 +2624,25 @@
                            :where [(identity [:a-/b :a/b]) [?x ...]]])
                #{[:a/b :a-/b]}))
 
-      ;; TODO: Crux doesn't support multiple-arity aggregations.
-      #_(is (= (d/q '[:find (min 2 ?x) (max 2 ?x)
-                      :in [?x ...]]
-                    [:a/b :a-/b :a/c])
-               [[[:a/b :a/c] [:a/c :a-/b]]])))
-
+      (t/is (= (api/q db '[:find (min 2 ?x) (max 2 ?x)
+                           :where [(identity [:a/b :a-/b :a/c]) [?x ...]]])
+               #{[[:a/b :a/c] [:a/c :a-/b]]})))
 
     (t/testing "Grouping"
-      (t/is (= (set (api/q db '[:find ?color (max ?amount) (min ?amount)
+      (t/is (= (set (api/q db '[:find ?color (max ?x) (min ?x)
                                 :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
-                                                   [:blue 7] [:blue 8]]) [[?color ?amount]]]]))
+                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
                #{[:red  5 1]
                  [:blue 8 7]})))
 
+    (t/testing "Grouping and parameter passing"
+      (t/is (= (set (api/q db '[:find ?color (max 3 ?x) (min 3 ?x)
+                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
+                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red  [3 4 5] [1 2 3]]
+                 [:blue [7 8]   [7 8]]})))
+
+    ;; NOTE: Crux only support a single final logic var in aggregates.
     #_(t/testing "Grouping and parameter passing"
         (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
                            :in   [[?color ?x]] ?amount ]
@@ -2652,23 +2657,19 @@
                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
                31)))
 
-    ;; TODO: Crux doesn't support these, but can be implemented.
-    #_(t/testing "median aggregate"
-        (is (= (ffirst (d/q '[:find (median ?x)
-                              :in [?x ...]]
-                            [10 15 20 35 75]))
+    (t/testing "median aggregate"
+      (t/is (= (ffirst (api/q db '[:find (median ?x)
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
                20)))
 
-    #_(t/testing "variance aggregate"
-        (is (= (ffirst (d/q '[:find (variance ?x)
-                              :in [?x ...]]
-                            [10 15 20 35 75]))
-               554)))
+    (t/testing "variance aggregate"
+      (t/is (= (ffirst (api/q db '[:find (variance ?x)
+                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
+                554.0))) ;; double
 
-    #_(t/testing "stddev aggregate"
-        (is (= (ffirst (d/q '[:find (stddev ?x)
-                              :in [?x ...]]
-                            [10 15 20 35 75]))
+    (t/testing "stddev aggregate"
+      (t/is (= (ffirst (api/q db '[:find (stddev ?x)
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
                23.53720459187964)))
 
     (t/testing "Custom aggregates"
