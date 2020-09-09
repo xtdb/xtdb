@@ -124,7 +124,7 @@
                         :foo {:b 2, :a 1}})))))
 
 (t/deftest test-java-type-serialisation-1044
-  (with-open [node (crux/start-node {:crux.node/topology 'crux.standalone/topology})]
+  (with-open [node (crux/start-node {})]
     (let [doc {:crux.db/id :foo
                :date (java.util.Date.)
                :uri (java.net.URI. "https://google.com")

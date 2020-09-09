@@ -4,12 +4,13 @@
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.query-state :as qs]
+            [crux.system :as sys]
             [clojure.tools.logging :as log])
   (:import (crux.api Crux ICruxAPI ICruxIngestAPI
-                     ICruxAsyncIngestAPI ICruxDatasource ICursor
+                     ICruxAsyncIngestAPI ICruxDatasource
                      HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
-           java.io.Closeable
-           java.util.Date
+           java.lang.AutoCloseable
+           (java.util Date)
            java.time.Duration
            [java.util.function Supplier Consumer]))
 
@@ -351,23 +352,29 @@
     (.submitTxAsync this (conform-tx-ops tx-ops))))
 
 (defn start-node
-  "NOTE: requires any dependendies on the classpath that the Crux modules may need.
+  "NOTE: requires any dependencies on the classpath that the Crux modules may need.
 
-  options {:crux.node/topology 'crux.standalone/topology}
+  Accepts a map, or a JSON/EDN file or classpath resource.
 
-  Options are specified as keywords using their long format name, like
-  :crux.kafka/bootstrap-servers etc. See the individual modules used in the specified
-  topology for option descriptions.
+  See https://opencrux.com/reference/configuration.html for details.
 
-  returns a node which implements ICruxAPI and
-  java.io.Closeable. Latter allows the node to be stopped by
-  calling `(.close node)`.
+  Returns a node which implements ICruxAPI and java.io.Closeable.
+  Latter allows the node to be stopped by calling `(.close node)`.
 
-  throws IndexVersionOutOfSyncException if the index needs rebuilding.
-  throws NonMonotonicTimeException if the clock has moved backwards since
-    last run. Only applicable when using the event log."
-  ^ICruxAPI [options]
-  (Crux/startNode options))
+  Throws IndexVersionOutOfSyncException if the index needs rebuilding."
+  ^crux.api.ICruxAPI [options]
+  (let [system (-> (sys/prep-system (into [{:crux/node 'crux.node/->node
+                                            :crux/indexer 'crux.kv.indexer/->kv-indexer
+                                            :crux/bus 'crux.bus/->bus
+                                            :crux/tx-ingester 'crux.tx/->tx-ingester
+                                            :crux/document-store 'crux.kv.document-store/->document-store
+                                            :crux/tx-log 'crux.kv.tx-log/->tx-log
+                                            :crux/query-engine 'crux.query/->query-engine}]
+                                          (cond-> options (not (vector? options)) vector)))
+                   (sys/start-system))]
+    (reset! (get-in system [:crux/node :!system]) system)
+    (-> (:crux/node system)
+        (assoc :close-fn #(.close ^AutoCloseable system)))))
 
 (defn- ->RemoteClientOptions [{:keys [->jwt-token] :as opts}]
   (RemoteClientOptions. (when ->jwt-token
@@ -375,13 +382,11 @@
                             (get [_] (->jwt-token))))))
 
 (defn new-api-client
-  "Creates a new remote API client ICruxAPI. The remote client
-  requires valid and transaction time to be specified for all
-  calls to `db`.
+  "Creates a new remote API client ICruxAPI.
+  The remote client requires valid and transaction time to be specified for all calls to `db`.
 
-  NOTE: requires crux-http-client on the classpath, see
-  crux.remote-api-client/*internal-http-request-fn* for more
-  information.
+  NOTE: Requires either clj-http or http-kit on the classpath,
+  See https://opencrux.com/reference/http.html for more information.
 
   url the URL to a Crux HTTP end-point.
   (OPTIONAL) auth-supplier a supplier function which provides an auth token string for the Crux HTTP end-point.
@@ -393,24 +398,13 @@
    (Crux/newApiClient url (->RemoteClientOptions opts))))
 
 (defn new-ingest-client
-  "Starts an ingest client for transacting into Kafka without running a
-  full local node with index.
+  "Starts an ingest client for transacting into Crux without running a full local node with index.
 
-  For valid options, see crux.kafka/default-options. Options are
-  specified as keywords using their long format name, like
-  :crux.kafka/bootstrap-servers etc.
+  Accepts a map, or a JSON/EDN file or classpath resource.
 
-  options
-  {:crux.kafka/bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
-   :crux.kafka/group-id           \"group-id\"
-   :crux.kafka/tx-topic           \"crux-transaction-log\"
-   :crux.kafka/doc-topic          \"crux-docs\"
-   :crux.kafka/create-topics      true
-   :crux.kafka/doc-partitions     1
-   :crux.kafka/replication-factor 1}
+  See https://opencrux.com/reference/configuration.html for details.
 
-  Returns a crux.api.ICruxIngestAPI component that implements
-  java.io.Closeable, which allows the client to be stopped by calling
-  close."
+  Returns a crux.api.ICruxIngestAPI component that implements java.io.Closeable.
+  Latter allows the node to be stopped by calling `(.close node)`."
   ^ICruxAsyncIngestAPI [options]
   (Crux/newIngestClient options))

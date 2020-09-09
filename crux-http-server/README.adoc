@@ -1,8 +1,21 @@
 = crux-http-server
 
-This project contains a module to start up a Crux HTTP server.
+This module offers an HTTP server that allows you to send transactions and run queries via a REST API.
 
-To start it, include `crux.http-server/module` in your topology.
-You can specify `:crux.http-server/port` in your topology to set the port.
+.deps.edn
+[source,clojure]
+----
+juxt/crux-http-server {:mvn/version "20.09-1.11.0-alpha"}
+----
 
-For tests, see usage of `/crux-test/test/crux/fixtures/http_server.clj`.
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-http-server</artifactId>
+    <version>20.09-1.11.0-alpha</version>
+</dependency>
+----
+
+For more details, see the https://opencrux.com/reference/http.html[HTTP documentation].

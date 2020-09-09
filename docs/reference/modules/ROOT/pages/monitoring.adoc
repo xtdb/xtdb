@@ -1,254 +1,266 @@
 = Monitoring Crux
+:toc: macro
 
-Crux can display metrics through a variety of interfaces.
+Crux can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
 
-Internally, it uses https://metrics.dropwizard.io/4.1.2/[dropwizard's metrics library] to register all the metrics and then passes the registry around to reporters to display the data in a suitable application.
+We expose metrics about transaction ingestion and running queries; if you use RocksDB you can also xref:rocksdb.adoc#monitoring[expose internal RocksDB metrics].
+
+toc::[levels=1]
 
 == Project Dependency
 
 In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
 
+.deps.edn
 [source,clojure]
 ----
-include::example$deps.edn[tags=MetricsDeps]
+juxt/crux-metrics {:mvn/version "20.09-1.11.0-beta"}
 ----
 
-The various types of metric reporters bring in their own sets of dependencies, so we expect these to be provided by the user in their own project (in order to keep the core of `crux-metrics` as lightweight as possible).
-Reporters requiring further dependencies will have an 'additional dependencies' section.
-
-== Getting Started
-
-By default `indexer` and `query` metrics are included. It is also
-possible to add `rocksdb` metrics when it is being used. These arguments can be
-used whenever any of the topologies to display metrics are included.
-
-.Registry arguments
-[#table-conversion%header,cols="d,d,d,d"]
-|===
-|Field|Property|Default|Description
-|`:crux.metrics/with-indexer-metrics?`|`boolean`|`true`| Includes indexer metrics in the metrics registry
-|`:crux.metrics/with-query-metrics?`|`boolean`|`true`| Includes query metrics in the metrics registry
-|===
-
-== RocksDB metrics
-
-To include the RocksDB metrics when monitoring the
-`'crux.kv.rocksdb/kv-store-with-metrics` module should be included in the
-topology map (in place of `'crux.kv.rocksdb/kv-store`):
-
-[source,clj]
+.pom.xml
+[source,xml]
 ----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.kv.rocksdb/kv-store-with-metrics
-                                      ...]
-                 ...})
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-metrics</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
 ----
 
-== Reporters
+You will also need to include dependencies for your individual reporters - these are outlined below.
 
-Crux currently supports the following outputs:
+== Metrics module
 
-* Console `stdout`
-* CSV file
-* https://en.wikipedia.org/wiki/Java_Management_Extensions[JMX]
-* https://prometheus.io/docs/introduction/overview/[Prometheus] (reporter & http exporter)
-* https://docs.aws.amazon.com/cloudwatch/index.html[AWS Cloudwatch metrics]
+The Crux metric reporters depend on a common metrics module:
 
-[#metrics-console]
-=== Console
-
-This component logs metrics to `sysout` at regular intervals.
-
-[source,clj]
+.JSON
+[source,json]
 ----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard.console/reporter]
-                 ...
-                 })
+{
+  "crux.metrics/metrics": { ... },
+}
 ----
 
-.Console metrics arguments
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Field|Property|Description
-|`:crux.metrics.dropwizard.console/report-frequency`|`int`| Interval in seconds between output dump
-|`:crux.metrics.dropwizard.console/rate-unit`|`time-unit`| Unit which rates are displayed
-|`:crux.metrics.dropwizard.console/duration-unit`|`time-unit`| Unit which durations are displayed
-|===
+You can omit this if you're happy with its default parameters.
 
-[#metrics-csv]
-=== CSV
+=== Parameters
 
-This component logs metrics to a csv file at regular intervals. Only filename
-is required.
+* `with-indexer-metrics?` (boolean, default true): includes indexer metrics in the metrics registry
+* `with-query-metrics?` (boolean, default true): includes query metrics in the metrics registry
 
-[source,clj]
-----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard.csv/reporter]
-                 :crux.metrics.dropwizard.csv/file-name "csv-out"
-                 ...
-                 })
-----
+[#prometheus-reporter]
+== Prometheus reporter
 
-.CSV metrics arguments
-[#table-conversion%header,cols="d,d,d,d"]
-|===
-|Field|Property|Required|Description
-|`:crux.metrics.dropwizard.csv/file-name`|`string`| `true` | Output folder name (must already exist)
-|`:crux.metrics.dropwizard.csv/report-frequency`|`int` | `false` | Interval in seconds between file write
-|`:crux.metrics.dropwizard.csv/rate-unit`|`time-unit`|`false`| Unit which rates are displayed
-|`:crux.metrics.dropwizard.csv/duration-unit`|`time-unit`|`false`| Unit which durations are displayed
-|===
-
-[#metrics-jmx]
-=== JMX
-
-Provides JMX mbeans output.
-
-[#metrics-jmx-dependencies]
-*Additional Dependencies*
+This reporter pushes metrics to a Prometheus 'Pushgateway' at regular intervals.
 
 You will need to add the following dependencies, alongside `crux-metrics`, in your project:
 
+=== Additional dependencies
+
+.deps.edn
+[source,clojure]
+----
+org.dhatim/dropwizard-prometheus {:mvn/version "2.2.0"}
+io.prometheus/simpleclient_pushgateway {:mvn/version "0.8.1"}
+io.prometheus/simpleclient_dropwizard {:mvn/version "0.8.1"}
+io.prometheus/simpleclient_hotspot {:mvn/version "0.8.1"}
+clj-commons/iapetos {:mvn/version "0.1.9"}
+----
+
+=== Node configuration
+
+.JSON
+[source,json]
+----
+{
+  "crux.metrics.prometheus/reporter": { ... }
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux.metrics.prometheus/reporter { ... }}
+----
+
+=== Parameters
+
+* `registry` (registry, defaults to shared registry)
+* `push-gateway` (string, required)
+* `report-frequency` (string/`Duration`, default `"PT1S"`)
+* `prefix` (string): prefix all metric titles with this string
+
+[#prometheus-http]
+== Prometheus HTTP exporter
+
+The Prometheus HTTP exporter starts a standalone server hosting Prometheus metrics.
+
+=== Additional dependencies
+
+.deps.edn
+[source,clojure]
+----
+org.dhatim/dropwizard-prometheus {:mvn/version "2.2.0"}
+io.prometheus/simpleclient_dropwizard {:mvn/version "0.8.1"}
+io.prometheus/simpleclient_hotspot {:mvn/version "0.8.1"}
+io.prometheus/simpleclient_httpserver {:mvn/version "0.8.1"}
+clj-commons/iapetos {:mvn/version "0.1.9"}
+----
+
+=== Node configuration
+
+.JSON
+[source,json]
+----
+{
+  "crux.metrics.prometheus/http-exporter": { ... }
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux.metrics.prometheus/http-exporter { ... }}
+----
+
+=== Parameters
+
+* `registry` (registry, defaults to shared registry)
+* `port` (int, default 8080) port number for Prometheus client server.
+* `jvm-metrics?` (boolean, default false): includes JVM metrics in the metrics dump
+
+[#cloudwatch]
+== AWS Cloudwatch
+
+In addition to extra dependencies, you'll need to ensure that your application has the `cloudwatch:PutMetricData` permission.
+
+=== Additional dependencies
+
+.deps.edn
+[source,clojure]
+----
+io.github.azagniotov/dropwizard-metrics-cloudwatch {:mvn/version "2.0.3"}
+software.amazon.awssdk/cloudwatch {:mvn/version "2.10.61"}
+----
+
+=== Node configuration
+
+.JSON
+[source,json]
+----
+{
+  "crux.metrics.cloudwatch/reporter": { ... }
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux.metrics.cloudwatch/reporter { ... }}
+----
+
+=== Parameters
+
+* `registry` (registry, defaults to shared registry)
+* `high-resolution?` (boolean, default false): increase push rate from 1 minute to 1 second
+* `dimensions` (`Map<String, String>`): dimensions to include in the pushed metrics
+* `jvm-metrics?` (boolean, default false): includes JVM metrics in the pushed metrics
+* `region` (string): override default AWS region for uploading metrics
+* `ignore-rules` (`List<String>`): a list of metrics to ignore, in gitignore format. e.g. `["crux.tx" "!crux.tx.ingest"]` would ignore `crux.tx.*`, except `crux.tx.ingest`
+* `dry-run?` (boolean, default false): reporter outputs to a local SLF4J logger instead
+* `dry-run-report-frequency` (string/`Duration`, default `"PT1S"`)
+
+[#jmx]
+== JMX
+
+=== Additional Dependencies
+
+.deps.edn
 [source,clj]
 ----
-include::example$deps.edn[tags=MetricsJMXDeps]
+io.dropwizard.metrics/metrics-jmx {:mvn/version "4.1.2"}
 ----
 
-*Getting Started*
+=== Node configuration
 
-[source,clj]
+.JSON
+[source,json]
 ----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard.jmx/reporter]
-                 ...
-                 })
-----
-
-.JMX metrics arguments
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Field|Property|Description
-|`:crux.metrics.dropwizard.jmx/domain`|`string`| Change metrics domain group
-|`:crux.metrics.dropwizard.jmx/rate-unit`|`time-unit`| Unit which rates are displayed
-|`:crux.metrics.dropwizard.jmx/duration-unit`|`time-unit`| Unit which durations are displayed
-|===
-
-
-[#metrics-prometheus]
-=== Prometheus
-
-[#config-metrics-prometheus-dependencies]
-*Additional Dependencies*
-
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
-
-[source,clj]
-----
-include::example$deps.edn[tags=MetricsPrometheusDeps]
+{
+  "crux.metrics.jmx/reporter": { ... }
+}
 ----
 
-[#metrics-prometheus-exporter]
-==== HTTP-Exporter
-
-The prometheus http exporter starts a standalone server hosting prometheus
-metrics by default at http://localhost:8080/metrics. The port can be changed
-with an argument, and jvm metrics can be included in the dump.
-
-*Getting Started*
-
-[source,clj]
+.Clojure/EDN
+[source,clojure]
 ----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard.prometheus/http-exporter]
-                 ...
-                 })
+{:crux.metrics.jmx/reporter { ... }}
 ----
 
-.Prometheus exporter metrics arguments
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Field|Property|Description
-|`:crux.metrics.dropwizard.prometheus/port`|`int`| Desired port number for prometheus client server. Defaults to `8080`
-|`:crux.metrics.dropwizard.prometheus/jvm-metrics?`|`boolean`| If `true` jvm metrics are included in the metrics dump
-|===
+=== Parameters
 
-[#metrics-prometheus-reporter]
-==== Reporter
+* `registry` (registry, defaults to shared registry)
+* `domain` (string): custom JMS domain
+* `rate-unit` (`TimeUnit`, default 'seconds'): unit to report rates
+* `duration-unit` (`TimeUnit`, default 'seconds'): unit to report durations
 
-This component pushes prometheus metrics to a specified `pushgateway` at
-regular durations (by default 1 second).
+[#console]
+== Console
 
-*Getting Started*
+The console reporter logs metrics to standard-out at regular intervals.
 
-[source,clj]
+It has no additional dependencies.
+
+=== Node configuration
+
+.JSON
+[source,json]
 ----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard.prometheus/reporter]
-                 :crux.metric.dropwizard.prometheus/pushgateway "localhost:9090"
-                 ...
-                 })
-----
-
-.Prometheus reporter metrics arguments
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Field|Property|Description
-|`:crux.metrics.dropwizard.prometheus/push-gateway`|`string`| Address of the prometheus server. This field is required
-|`:crux.metrics.dropwizard.prometheus/report-frequency`|`duration`| Time in ISO-8601 standard between metrics push. Defaults to "PT1S".
-|`:crux.metrics.dropwizard.prometheus/prefix`|`string`| Prefix all metric titles with this string
-|===
-
-[#metrics-cloudwatch]
-=== AWS Cloudwatch metrics
-
-Pushes metrics to Cloudwatch. This is indented to be used with a crux node
-running inside a EBS/Fargate instance. It attempts to get the relevant
-credentials through system variables.
-Crux uses this in its aws benchmarking system which can be found
-https://github.com/juxt/crux/tree/master/crux-bench[here].
-
-[#metrics-cloudwatch-dependencies]
-*Additional Dependencies*
-
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
-
-[source,clj]
-----
-include::example$deps.edn[tags=MetricsCloudwatchDeps]
+{
+  "crux.metrics.console/reporter": { ... }
+}
 ----
 
-*Getting Started*
-
-[source,clj]
+.Clojure/EDN
+[source,clojure]
 ----
-(api/start-node {:crux.node/topology ['crux.standalone/topology
-                                      'crux.metrics.dropwizard.cloudwatch/reporter]
-                 ...
-                 })
+{:crux.metrics.console/reporter { ... }}
 ----
 
-.Cloudwatch metrics arguments
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Field|Property|Description
-|`:crux.metrics.dropwizard.prometheus/duration`|`duration`| Time between metrics push
-|`:crux.metrics.dropwizard.prometheus/dry-run?`|`boolean`| When `true` the reporter outputs to `cloujure.logging/log*`
-|`:crux.metrics.dropwizard.prometheus/jvm-metrics?`|`boolean`| Should jvm metrics be included in the pushed metrics?
-|`:crux.metrics.dropwizard.prometheus/jvm-dimensions`|`string-map`| Should jvm metrics be included in the pushed metrics?
-|`:crux.metrics.dropwizard.prometheus/region`|`string`| Cloudwatch region for uploading metrics. Not required inside a EBS/Fargate instance but needed for local testing.
-|`:crux.metrics.dropwizard.prometheus/ignore-rules`|`string-list`| A list of strings to ignore specific metrics, in gitignore format. e.g. `["crux.tx" "!crux.tx.ingest"]` would ignore crux.tx.*, except crux.tx.ingest
-|===
+=== Parameters
 
-[#metrics-cloudwatch-tips]
-==== Tips for running
+* `registry` (registry, defaults to shared registry)
+* `report-frequency` (string/`Duration`, default `"PT1S"`)
+* `rate-unit` (`TimeUnit`, default 'seconds'): unit to report rates
+* `duration-unit` (`TimeUnit`, default 'seconds'): unit to report durations
 
-To upload metrics to Cloudwatch locally the desired region needs to be
-specified with `:crux.metrics.dropwizard.prometheus/region`, and your aws
-credentials at `~/.aws/credentials` need to be visible (If ran in docker, mount
-these as a volume).
+[#csv]
+== CSV
 
-When ran on aws if using cloudformation the node needs to have the permission
-`'cloudwatch:PutMetricData'`. For a example see Crux's benchmarking system
-https://github.com/juxt/crux/tree/master/crux-bench[here].
+The CSV reporter logs metrics to a CSV file at regular intervals.
+
+It has no additional dependencies.
+
+=== Node configuration
+
+.JSON
+[source,json]
+----
+{
+  "crux.metrics.csv/reporter": { ... }
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux.metrics.csv/reporter { ... }}
+----
+
+=== Parameters
+
+* `registry` (registry, defaults to shared registry)
+* `output-file` (string/`File`/`Path`, required)
+* `report-frequency` (string/`Duration`, default `"PT1S"`)
+* `rate-unit` (`TimeUnit`, default 'seconds'): unit to report rates
+* `duration-unit` (`TimeUnit`, default 'seconds'): unit to report durations

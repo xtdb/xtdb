@@ -1,7 +1,11 @@
 (ns crux.bench.sorted-maps-microbench
   (:require [clojure.java.io :as io]
             [crux.api :as crux]
-            [crux.bench :as bench]))
+            [crux.bench :as bench]
+            [crux.kafka.embedded :as ek]
+            [crux.fixtures :as fix]
+            [crux.kafka :as k]
+            [crux.rocksdb :as rocks]))
 
 (defn submit-batches [node]
   (for [doc-batch (->> (for [n (range 25000)]
@@ -29,16 +33,16 @@
     (run-benches node [:subsequent-submits :subsequent-await])))
 
 (comment
-  (require '[crux.kafka.embedded :as ek]
-           '[crux.fixtures :as f])
-
-  (f/with-tmp-dir "crux" [tmp-dir]
-    (with-open [ek (ek/start-embedded-kafka
-                    #:crux.kafka.embedded{:zookeeper-data-dir (str (io/file tmp-dir "zk-data"))
-                                          :kafka-dir (str (io/file tmp-dir "kafka-data"))
-                                          :kafka-log-dir (str (io/file tmp-dir "kafka-log"))})
-                node (crux/start-node {:crux.node/topology 'crux.kafka/topology
-                                       :crux.node/kv-store 'crux.kv.rocksdb/kv
-                                       :crux.kv/db-dir (str (io/file tmp-dir "rocks"))})]
+  (fix/with-tmp-dir "crux" [tmp-dir]
+    (with-open [ek (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file tmp-dir "zk-data")
+                                                  :kafka-dir (io/file tmp-dir "kafka-data")
+                                                  :kafka-log-dir (io/file tmp-dir "kafka-log")})
+                node (crux/start-node {::k/kafka-config {:bootstrap-servers "localhost:9092"}
+                                       :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}
+                                       :crux/document-store {:crux/module `k/->document-store
+                                                             :kafka-config ::k/kafka-config
+                                                             :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                                               :db-dir (io/file tmp-dir "doc-store")}}}
+                                       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file tmp-dir "indexer")}}})]
       (bench/with-bench-ns :sorted-maps
         (run-benches node [:initial-submits :initial-await])))))

@@ -11,9 +11,9 @@
 
 (defn with-rocksdb-node* [f]
   (f/with-tmp-dir "dev-storage" [data-dir]
-    (with-open [node (api/start-node {:crux.node/topology '[crux.standalone/topology
-                                                            crux.kv.rocksdb/kv-store]
-                                      :crux.kv/db-dir (str (io/file data-dir "db-dir-1"))})]
+    (with-open [node (api/start-node {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
+                                      :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
+                                      :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
       (f node))))
 
 (defmacro with-rocksdb-node [[node-binding] & body]

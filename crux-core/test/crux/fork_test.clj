@@ -1,13 +1,12 @@
 (ns crux.fork-test
-  (:require [crux.fork :as fork]
-            [clojure.test :as t]
-            [crux.fixtures :as fix :refer [*api*]]
+  (:require [clojure.test :as t]
             [crux.api :as crux]
-            [crux.tx :as tx]
-            [crux.db :as db])
-  (:import [java.util Date]))
+            [crux.db :as db]
+            [crux.fixtures :as fix :refer [*api*]]
+            [crux.tx :as tx])
+  (:import java.util.Date))
 
-(t/use-fixtures :each fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (t/deftest test-simple-fork
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivna"}]])

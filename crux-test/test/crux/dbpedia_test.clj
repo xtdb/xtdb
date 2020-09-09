@@ -8,7 +8,7 @@
             [crux.sparql :as sparql]))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fk/with-cluster-node-opts fix/with-kv-dir fix/with-node)
+(t/use-fixtures :each fk/with-cluster-tx-log-opts fk/with-cluster-doc-store-opts fix/with-node)
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (fix/submit+await-tx (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))

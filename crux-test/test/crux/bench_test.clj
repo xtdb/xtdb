@@ -6,24 +6,26 @@
             [crux.fixtures.kv :as fkv]
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [crux.kv :as kv])
   (:import java.util.Date))
 
-(def queries {:name '{:find [e]
-                      :where [[e :name "Ivan"]]}
-              :multiple-clauses '{:find [e]
-                                  :where [[e :name "Ivan"]
-                                          [e :last-name "Ivanov"]]}
-              :join '{:find [e2]
-                      :where [[e :last-name "Ivanov"]
-                              [e :last-name name1]
-                              [e2 :last-name name1]]}
-              :range '{:find [e]
-                       :where [[e :age age]
-                               [(> age 20)]]}
-              :hardcoded-name '{:find [e]
-                                :where [[e :name name]]
-                                :args [{:name "davros"}]}})
+(def queries
+  {:name '{:find [e]
+           :where [[e :name "Ivan"]]}
+   :multiple-clauses '{:find [e]
+                       :where [[e :name "Ivan"]
+                               [e :last-name "Ivanov"]]}
+   :join '{:find [e2]
+           :where [[e :last-name "Ivanov"]
+                   [e :last-name name1]
+                   [e2 :last-name name1]]}
+   :range '{:find [e]
+            :where [[e :age age]
+                    [(> age 20)]]}
+   :hardcoded-name '{:find [e]
+                     :where [[e :name name]]
+                     :args [{:name "davros"}]}})
 
 (defmacro duration
   "Times the execution of a function,
@@ -42,22 +44,19 @@
       (double (/ (- (System/nanoTime) start#) 1e6)))))
 
 (defn- insert-docs [ts docs]
-  (api/submit-tx *api* (fix/maps->tx-ops docs ts)))
+  (fix/submit+await-tx (fix/maps->tx-ops docs ts)))
 
 (defn- insert-data [n batch-size ts]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly fix/random-person))))]
     (insert-docs ts people)))
 
 (defn- perform-query [ts query]
-  (let [q (query queries)
-        q-fn (fn []
-               (let [db (api/db *api* ts)]
-                 (if (= query :id)
-                   (api/entity db :hardcoded-id)
-                   (api/q db q))))]
-    ;; Assert this query is in good working order first:
-    (assert (pos? (count (q-fn))))
-    (q-fn)))
+  (let [db (api/db *api* ts)
+        res (if (= query :hardcoded-id)
+              (api/entity db :hardcoded-id)
+              (api/q db (get queries query)))]
+    (assert (not-empty res))
+    res))
 
 (defn- do-benchmark [ts samples speed verbose query]
   (when verbose
@@ -87,55 +86,52 @@
     result))
 
 (defn bench
-  [& {:keys [n batch-size ts query samples kv speed verbose preload]
-      :or {n 1000
-           batch-size 10
-           samples 100 ;; should always be >2
-           query :name
-           ts (Date.)
-           kv :rocks
-           speed :instant
-           verbose false}}]
-  ((case kv
-     :rocks fkv/with-rocksdb
-     :lmdb fkv/with-lmdb
-     :mem fkv/with-memdb)
-   (fn []
-     (fix/with-kv-dir
-       (fn []
-         (fix/with-standalone-topology
-           (fn []
-             (fix/with-node
-               (fn []
-                 (when verbose (print ":insert... ") (flush))
-                 (when preload
-                   (insert-docs ts preload))
-                 (let [insert-time (duration (insert-data n batch-size ts))
-                       queries-to-bench (if (= query :all)
-                                          (keys queries)
-                                          (flatten [query]))]
-                   (when verbose (println insert-time))
-                   (merge {:insert insert-time}
-                          (zipmap
-                           queries-to-bench
-                           (map (partial do-benchmark ts samples speed verbose)
-                                queries-to-bench)))))))))))))
+  [{:keys [n batch-size ts query samples kv speed verbose preload]
+    :or {n 1000
+         batch-size 10
+         samples 100 ;; should always be >2
+         query :name
+         kv :rocks
+         speed :instant
+         verbose false}}]
+  (fkv/with-kv-store-opts (case kv
+                            :rocks fkv/rocks-dep
+                            :lmdb fkv/lmdb-dep
+                            :mem fkv/memkv-dep)
+    (fix/with-node
+      (fn []
+        (when verbose (print ":insert... ") (flush))
+        (when preload
+          (insert-docs ts preload))
+        (let [insert-time (duration (insert-data n batch-size ts))
+              queries-to-bench (if (= query :all)
+                                 (keys queries)
+                                 (flatten [query]))]
+          (when verbose (println insert-time))
+          (merge {:insert insert-time}
+                 (zipmap
+                  queries-to-bench
+                  (map (partial do-benchmark ts samples speed verbose)
+                       queries-to-bench))))))))
+
 (comment
   (bench)
 
-  (bench :verbose true :preload [(assoc (fix/random-person)
-                                        :crux.db/id :hardcoded-id
-                                        :name "davros")]
-         :n 10000
-         :samples 10000
-         :query :hardcoded-name) ;;2.5
+  (bench {:verbose true
+          :preload [(assoc (fix/random-person)
+                           :crux.db/id :hardcoded-id
+                           :name "davros")]
+          :n 10000
+          :samples 10000
+          :query :hardcoded-id}) ;;2.5
 
-  (bench :verbose true :preload [(assoc (fix/random-person)
-                                        :crux.db/id :hardcoded-id
-                                        :name "davros")]
-         :n 10000
-         :samples 10000
-         :query :id) ;;2.3
+  (bench {:verbose true
+          :preload [(assoc (fix/random-person)
+                           :crux.db/id :hardcoded-id
+                           :name "davros")]
+          :n 10000
+          :samples 10000
+          :query :id}) ;;2.3
   )
 
 (defn acceptable-duration ;; for one query, in msec
@@ -145,13 +141,10 @@
     :range 200
     100)) ;; default
 
-
-(log/warn "Not running crux.bench-test, it's failing intermittently on Circle")
-#_(t/deftest test-query-speed
-  (let [benchmark (bench
-                   :sample 3
-                   :query [:name :multiple-clauses :range] ;; excluding :join until it's fixed
-                   :speed :instant)]
+(t/deftest test-query-speed
+  (let [benchmark (bench {:sample 3
+                          :query [:name :multiple-clauses :range] ;; excluding :join until it's fixed
+                          :speed :instant})]
     (run! (fn [query]
             (t/testing (str query " is reasonably fast")
               (t/is

@@ -10,8 +10,9 @@
             [crux.tx.event :as txe]
             [crux.api :as api]
             [crux.fork :as fork]
-            [crux.kv-indexer :as kvi]
-            [crux.kv.memdb :as mem-kv])
+            [crux.kv.indexer :as kvi]
+            [crux.mem-kv :as mem-kv]
+            [crux.system :as sys])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
@@ -367,7 +368,7 @@
     (log/debug "Indexing tx-id:" (::tx-id tx))
     (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
-    (let [forked-indexer (fork/->forked-indexer indexer (kvi/->KvIndexer (mem-kv/->mem-kv))
+    (let [forked-indexer (fork/->forked-indexer indexer (kvi/->kv-indexer {:kv-store (mem-kv/->kv-store)})
                                                 (::db/valid-time fork-at)
                                                 (::tx-time fork-at))
           forked-document-store (fork/->forked-document-store document-store)]
@@ -388,19 +389,19 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
-(defn ->tx-ingester [deps]
-  (map->TxIngester (assoc deps :!error (atom nil))))
+(defn ->tx-ingester {::sys/deps {:indexer :crux/indexer
+                                 :document-store :crux/document-store
+                                 :bus :crux/bus
+                                 :query-engine :crux/query-engine}
+                     ::sys/args {:stats-executor? {:default true
+                                                   :spec ::sys/boolean}}}
+  [{:keys [stats-executor?] :as deps}]
+  (map->TxIngester (assoc deps
+                          :!error (atom nil)
+                          :stats-executor (when stats-executor?
+                                            (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))))
 
-(def tx-ingester
-  {:start-fn (fn [{:crux.node/keys [indexer document-store bus query-engine]} args]
-               (->tx-ingester {:indexer indexer
-                               :document-store document-store
-                               :bus bus
-                               :query-engine query-engine
-                               :stats-executor (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))}))
-   :deps [:crux.node/indexer :crux.node/document-store :crux.node/bus :crux.node/query-engine]})
-
-(defn- index-tx-log [{:crux.node/keys [tx-ingester indexer]} {::keys [^Duration poll-sleep-duration]} open-next-txs]
+(defn- index-tx-log [{:keys [tx-ingester indexer ^Duration poll-sleep-duration]} open-next-txs]
   (log/info "Started tx-consumer")
   (try
     (while true
@@ -439,19 +440,16 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defn ->polling-tx-consumer ^java.io.Closeable [{:crux.node/keys [indexer tx-ingester] :as deps}
-                                                {::keys [poll-sleep-duration] :as args}
-                                                open-next-txs]
-  (let [executor-thread (doto (Thread. #(index-tx-log deps args open-next-txs))
+(defn ->polling-tx-consumer {::sys/deps {:indexer :crux/indexer
+                                         :tx-ingester :crux/tx-ingester}
+                             ::sys/args {:poll-sleep-duration {:spec ::sys/duration
+                                                               :default (Duration/ofMillis 100)
+                                                               :doc "How long to sleep between polling for new transactions"}}}
+  [opts open-next-txs]
+  (let [executor-thread (doto (Thread. #(index-tx-log opts open-next-txs))
                           (.setName "crux-polling-tx-consumer")
                           (.start))]
     (reify Closeable
       (close [_]
         (.interrupt executor-thread)
         (.join executor-thread)))))
-
-(def polling-tx-consumer
-  {:deps [:crux.node/tx-ingester :crux.node/indexer :crux.node/tx-log]
-   :args {::poll-sleep-duration {:default (Duration/ofMillis 100)
-                                 :doc "How long to sleep between polling for new transactions"
-                                 :crux.config/type :crux.config/duration}}})

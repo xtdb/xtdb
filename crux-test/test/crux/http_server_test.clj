@@ -5,8 +5,7 @@
             [crux.fixtures.http-server :as fh]))
 
 (t/use-fixtures :each
-  fix/with-standalone-topology
-  #(fix/with-opts {:crux.http-server/read-only? true} %)
+  (fix/with-opts {:crux.http-server/server {:read-only? true}})
   fh/with-http-server fix/with-node fh/with-http-client)
 
 (t/deftest test-read-only-node

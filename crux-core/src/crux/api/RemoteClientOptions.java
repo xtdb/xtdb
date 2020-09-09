@@ -1,6 +1,5 @@
 package crux.api;
 
-import java.util.Date;
 import java.util.function.Supplier;
 
 public class RemoteClientOptions {

@@ -1,8 +1,9 @@
 (defproject juxt/crux-bench "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/data.json "0.2.7"]
+                 [org.clojure/data.json "1.0.0"]
                  [org.clojure/tools.cli "1.0.194"]
                  [juxt/crux-core "crux-git-version-beta"]
+                 [juxt/crux-jdbc "crux-git-version-beta"]
                  [juxt/crux-kafka "crux-git-version-beta"]
                  [juxt/crux-kafka-embedded "crux-git-version-beta"]
                  [juxt/crux-rocksdb "crux-git-version-beta"]
@@ -33,6 +34,7 @@
                  ;; Dependency resolution
                  [commons-collections "3.2.2"]
                  [commons-beanutils "1.9.3"]
+                 [org.apache.commons/commons-compress "1.19"]
                  [io.netty/netty-all "4.1.51.Final"]
                  [io.netty/netty-resolver "4.1.51.Final"]
                  [io.netty/netty-handler "4.1.51.Final"]
@@ -49,7 +51,9 @@
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
-                 [org.reactivestreams/reactive-streams "1.0.3"]]
+                 [com.github.spotbugs/spotbugs-annotations "3.1.9"]
+                 [org.reactivestreams/reactive-streams "1.0.3"]
+                 [org.codehaus.janino/commons-compiler "3.0.11"]]
 
   :middleware [leiningen.project-version/middleware]
 

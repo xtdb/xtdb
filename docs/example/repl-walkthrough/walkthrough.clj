@@ -1,16 +1,16 @@
-; load a repl with the latest crux-core dependency, e.g. using clj:
-; $ clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
+;; load a repl with the latest crux-core dependency, e.g. using clj:
+;; $ clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.crux-standalone
   (:require [crux.api :as crux])
   (:import (crux.api ICruxAPI)))
 
-;; this standalone configuration is the easiest way to try Crux, no Kafka needed
+;; this in-memory configuration is the easiest way to try Crux, no Kafka needed
 (def node
-  (crux/start-node {:crux.node/topology 'crux.standalone/topology}))
+  (crux/start-node {}))
 
 
-; transaction containing a `put` operation, optionally specifying a valid time
+;; transaction containing a `put` operation, optionally specifying a valid time
 (crux/submit-tx
   node
   [[:crux.tx/put
@@ -27,15 +27,18 @@
     #inst "1881-10-25T09:20:27.966-00:00"]]) ; valid time, Picasso's birth
 
 
-; transaction containing a `cas` (compare-and-swap) operation
+;; transaction containing a `match` operation
 (crux/submit-tx
   node
-  [[:crux.tx/cas
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; old version
+  [[:crux.tx/match ; check old version
+    :dbpedia.resource/Pablo-Picasso
+    {:crux.db/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
      :last-name "Picasso"
      :location "Spain"}
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; new version
+    #inst "1973-04-08T09:20:27.966-00:00"]
+   [:crux.tx/put ; put new version if it matches
+    {:crux.db/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
      :last-name "Picasso"
      :height 1.63
@@ -43,20 +46,20 @@
     #inst "1973-04-08T09:20:27.966-00:00"]]) ; valid time, Picasso's death
 
 
-; transaction containing a `delete` operation, historical versions remain
+;; transaction containing a `delete` operation, historical versions remain
 (crux/submit-tx
   node
   [[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
     #inst "1973-04-08T09:20:27.966-00:00"]])
 
 
-; transaction containing an `evict` operation, historical data is destroyed
+;; transaction containing an `evict` operation, historical data is destroyed
 (crux/submit-tx
   node
   [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
 
 
-; query the node as-of now
+;; query the node as-of now
 (crux/q
   (crux/db node)
   '{:find [e]
@@ -64,7 +67,7 @@
     :full-results? true}) ; using `:full-results?` is useful for manual queries
 
 
-; `put` the new version of the document again
+;; `put` the new version of the document again
 (crux/submit-tx
   node
   [[:crux.tx/put
@@ -76,7 +79,7 @@
     #inst "1973-04-08T09:20:27.966-00:00"]])
 
 
-; again, query the node as-of now
+;; again, query the node as-of now
 (crux/q
   (crux/db node)
   '{:find [e]
@@ -84,36 +87,9 @@
     :full-results? true})
 
 
-; again, query the node as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
+;; again, query the node as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
 (crux/q
   (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true})
-
-
-(comment
-  ; use the following to help when not starting the node from the REPL
-
-  (defn run-node [{:keys [server-port] :as options} with-node-fn]
-    (with-open [crux-node (crux/start-node options)]
-      (with-node-fn crux-node)))
-
-  (declare s node)
-
-  ; run a node and return control to the REPL
-  (def ^ICruxAPI s
-    (future
-      (run-node
-        crux-options
-        (fn [crux-node]
-          (def node crux-node)
-          (Thread/sleep Long/MAX_VALUE)))))
-
-  ; close the node by cancelling the future
-  (future-cancel s)
-
-  ; ...or close the node directly
-  (.close node)
-
-)

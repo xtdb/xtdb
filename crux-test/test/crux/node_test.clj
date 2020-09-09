@@ -1,31 +1,25 @@
 (ns crux.node-test
-  (:require [clojure.test :as t]
-            [crux.config :as cc]
-            [crux.io :as cio]
-            crux.jdbc
-            crux.kv.memdb
-            crux.kv.rocksdb
-            [crux.node :as n]
-            [clojure.spec.alpha :as s]
-            [crux.fixtures :as f]
-            [clojure.java.io :as io]
-            crux.standalone
-            [crux.tx :as tx]
-            [crux.tx.event :as txe]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t]
             [crux.api :as api]
-            [crux.bus :as bus])
-  (:import java.util.Date
-           crux.api.Crux
-           (java.util HashMap)
-           (clojure.lang Keyword)
-           (java.time Duration)
-           (java.util.concurrent TimeoutException)))
+            [crux.bus :as bus]
+            [crux.fixtures :as f]
+            [crux.io :as cio]
+            [crux.jdbc :as j]
+            [crux.kv :as kv]
+            [crux.node :as n]
+            [crux.rocksdb :as rocks]
+            [crux.tx :as tx]
+            [crux.tx.event :as txe])
+  (:import crux.api.Crux
+           java.time.Duration
+           [java.util Date HashMap]
+           java.util.concurrent.TimeoutException))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
     (try
-      (let [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                        :crux.kv/db-dir (str (io/file data-dir "db"))})]
+      (let [n (api/start-node {})]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -33,63 +27,66 @@
       (catch IllegalStateException e
         (t/is (= "Crux node is closed" (.getMessage e)))))))
 
-(t/deftest test-start-node-complain-if-no-topology
-  (try
-    (with-open [n (n/start {})]
-      (t/is false))
-    (catch IllegalArgumentException e
-      (t/is (re-find #"Please specify :crux.node/topology" (.getMessage e))))))
-
 (t/deftest test-start-node-should-throw-missing-argument-exception
-  (f/with-tmp-dir "data" [data-dir]
-    (try
-      (with-open [n (n/start {:crux.node/topology '[crux.jdbc/topology]
-                              :crux.kv/db-dir (str (io/file data-dir "db"))})]
-        (t/is false))
-      (catch Throwable e
-        (t/is (re-find #"Arg :crux.jdbc/dbtype required" (.getMessage e))))
-      (finally
-        (cio/delete-dir data-dir)))))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Error parsing opts"
+                          (api/start-node {:crux/document-store {:crux/module `j/->document-store}})))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Missing module .+ :dialect"
+                          (api/start-node {:crux/document-store {:crux/module `j/->document-store
+                                                                 :connection-pool {:db-spec {}}}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
-                            :crux.kv/db-dir (str (io/file data-dir "kv-store"))
-                            :crux.jdbc/dbtype "h2"
-                            :crux.jdbc/dbname (str (io/file data-dir "cruxtest"))})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                   :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                   ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
+                                                        :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n))))
 
-(t/deftest test-can-set-standalone-kv-store
+(t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux.node/topology ['crux.standalone/topology]
-                            :crux.kv/kv-store :crux.kv.memdb/kv
-                            :crux.kv/db-dir (str (io/file data-dir "db"))})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
+                                   :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
+                                   :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
       (t/is n))))
 
-(t/deftest test-properties-file-to-node
+(t/deftest start-node-from-java
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start (assoc (cc/load-properties (clojure.java.io/resource "sample.properties"))
-                             :crux.db/db-dir (str (io/file data-dir "db"))))]
-      (t/is (instance? crux.standalone.StandaloneTxLog (-> n :tx-log)))
-      (t/is (= (Duration/ofSeconds 20) (-> n :options :crux.tx-log/await-tx-timeout))))))
-
-(t/deftest topology-resolution-from-java
-  (f/with-tmp-dir "data" [data-dir]
-    (let [mem-db-node-options
-          (doto (HashMap.)
-            (.put :crux.node/topology 'crux.standalone/topology)
-            (.put :crux.node/kv-store 'crux.kv.memdb/kv)
-            (.put :crux.kv/db-dir (str (io/file data-dir "db-dir"))))
-          memdb-node (Crux/startNode mem-db-node-options)]
-      (t/is memdb-node)
-      (t/is (not (.close memdb-node))))))
+    (with-open [node (Crux/startNode
+                      (doto (HashMap.)
+                        (.put "crux/tx-log"
+                              (doto (HashMap.)
+                                (.put "kv-store"
+                                      (doto (HashMap.)
+                                        (.put "crux/module" "crux.rocksdb/->kv-store")
+                                        (.put "db-dir" (io/file data-dir "txs"))))))
+                        (.put "crux/document-store"
+                              (doto (HashMap.)
+                                (.put "kv-store"
+                                      (doto (HashMap.)
+                                        (.put "crux/module" "crux.rocksdb/->kv-store")
+                                        (.put "db-dir" (io/file data-dir "docs"))))))
+                        (.put "crux/indexer"
+                              (doto (HashMap.)
+                                (.put "kv-store"
+                                      (doto (HashMap.)
+                                        (.put "crux/module" "crux.rocksdb/->kv-store")
+                                        (.put "db-dir" (io/file data-dir "indexes"))))))))]
+      (t/is (= "crux.rocksdb.RocksKv"
+               (kv/kv-name (get-in node [:tx-log :kv-store]))
+               (kv/kv-name (get-in node [:document-store :document-store :kv]))
+               (kv/kv-name (get-in node [:indexer :kv-store]))))
+      (t/is (= (.toPath (io/file data-dir "txs"))
+               (get-in node [:tx-log :kv-store :db-dir]))))))
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (n/start {:crux.node/topology ['crux.jdbc/topology]
-                            :crux.kv/db-dir (str (io/file data-dir "kv1"))
-                            :crux.jdbc/dbtype "h2"
-                            :crux.jdbc/dbname (str (io/file data-dir "cruxtest1"))})]
+    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                   :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                   :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+                                   ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
+                                                        :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n)
 
       (let [valid-time (Date.)
@@ -103,10 +100,11 @@
                                   '{:find [e]
                                     :where [[e :name "Ivan"]]})))
 
-      (with-open [n2 (n/start {:crux.node/topology ['crux.jdbc/topology]
-                               :crux.kv/db-dir (str (io/file data-dir "kv2"))
-                               :crux.jdbc/dbtype "h2"
-                               :crux.jdbc/dbname (str (io/file data-dir "cruxtest2"))})]
+      (with-open [n2 (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                      :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+                                      ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                           :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}})]
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]

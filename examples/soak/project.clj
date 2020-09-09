@@ -1,6 +1,6 @@
 (defproject juxt/soak "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/data.json "0.2.7"]
+                 [org.clojure/data.json "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-kafka "crux-git-version-beta"]
                  [juxt/crux-rocksdb "crux-git-version-beta"]

@@ -6,7 +6,7 @@
             [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)))
 
-(t/use-fixtures :each fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (def nodes
   (for [n [{:user/name :User1, :hasRoleInGroups #{:U1G3R34 :U1G2R23}}

@@ -6,7 +6,8 @@
             [clojure.spec.alpha :as s]
             [taoensso.nippy :as nippy]
             [clojure.string :as string]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [crux.system :as sys])
   (:import (crux.s3 S3Configurator)
            (java.util.concurrent CompletableFuture)
            (java.util.function BiFunction)
@@ -62,25 +63,24 @@
 (s/def ::bucket string?)
 (s/def ::prefix string?)
 
-(def s3-doc-store
-  {::configurator {:start-fn (fn [deps args]
-                               (reify S3Configurator))}
+(defn ->configurator [_]
+  (reify S3Configurator))
 
-   ::n/document-store {:start-fn (fn [{::keys [^S3Configurator configurator]} {:crux.document-store/keys [doc-cache-size]
-                                                                               ::keys [bucket prefix]}]
-                                   (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
-                                                             (->S3DocumentStore configurator
-                                                                                (.makeClient configurator)
-                                                                                bucket
-                                                                                (cond
-                                                                                  (string/blank? prefix) ""
-                                                                                  (string/ends-with? prefix "/") prefix
-                                                                                  :else (str prefix "/")))))
-                       :args {::bucket {:required? true,
-                                        :crux.config/type ::bucket
-                                        :doc "S3 bucket"}
-                              ::prefix {:required? false,
-                                        :crux.config/type ::prefix
-                                        :doc "S3 prefix"}
-                              :crux.document-store/doc-cache-size ds/doc-cache-size-opt}
-                       :deps #{::configurator}}})
+(defn ->document-store {::sys/args {:bucket {:required? true,
+                                             :spec ::bucket
+                                             :doc "S3 bucket"}
+                                    :prefix {:required? false,
+                                             :spec ::prefix
+                                             :doc "S3 prefix"}
+                                    :doc-cache-size ds/doc-cache-size-opt}
+                        ::sys/deps {:configurator `->configurator}}
+
+  [{:keys [bucket prefix ^S3Configurator configurator doc-cache-size]}]
+  (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
+                            (->S3DocumentStore configurator
+                                               (.makeClient configurator)
+                                               bucket
+                                               (cond
+                                                 (string/blank? prefix) ""
+                                                 (string/ends-with? prefix "/") prefix
+                                                 :else (str prefix "/")))))

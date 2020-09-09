@@ -1,6 +1,21 @@
 = crux-rocksdb
 
-This project contains `RocksKv` which is an implementation of `kv/KvStore`,
-used for indexes and the standalone mode event logs.
+https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 
-For tests, see `/crux-test/test/crux/kv_test.clj`.
+.deps.edn
+[source,clojure]
+----
+juxt/crux-rocksdb {:mvn/version "20.09-1.11.0-beta"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-rocksdb</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
+----
+
+For more details, see the https://opencrux.com/reference/rocksdb.html[RocksDB documentation]

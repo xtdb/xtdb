@@ -13,7 +13,7 @@
             [edn-query-language.core :as eql])
   (:import java.util.UUID))
 
-(t/use-fixtures :each fix/with-kv-dir fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (t/deftest test-sanity-check
   (fix/transact! *api* (fix/people [{:name "Ivan"}]))

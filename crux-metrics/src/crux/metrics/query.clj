@@ -6,7 +6,7 @@
   (:import java.util.Date))
 
 (defn assign-listeners
-  [registry {:crux.node/keys [bus]}]
+  [registry {:crux/keys [bus]}]
   (let [!timer-store (atom {})
         query-timer (dropwizard/timer registry ["query" "timer"])]
     (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}

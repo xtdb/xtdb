@@ -8,21 +8,18 @@
 (def ^:dynamic *http-server-api* nil)
 
 (def api-implementations
-  (-> {:local-standalone (t/join-fixtures [fix/with-standalone-topology fix/with-kv-dir fix/with-node])
-       :remote (t/join-fixtures [fix/with-standalone-topology
-                                 fix/with-kv-dir
-                                 fh/with-http-server
+  (-> {:local-standalone fix/with-node
+       :remote (t/join-fixtures [fh/with-http-server
                                  fix/with-node
                                  (fn [f] (binding [*http-server-api* *api*] (f)))
                                  fh/with-http-client])
-       :h2 (t/join-fixtures [#(fj/with-jdbc-node :h2 %) fix/with-kv-dir fix/with-node])
-       :sqlite (t/join-fixtures [#(fj/with-jdbc-node :sqlite %) fix/with-kv-dir fix/with-node])
-       :local-kafka (-> (t/join-fixtures [fk/with-cluster-node-opts fix/with-kv-dir fix/with-node])
+       :h2 (t/join-fixtures [fj/with-h2-opts fix/with-node])
+       :sqlite (t/join-fixtures [fj/with-sqlite-opts fix/with-node])
+       :local-kafka (-> (t/join-fixtures [fk/with-cluster-tx-log-opts
+                                          fk/with-cluster-doc-store-opts
+                                          fix/with-node])
                         (with-meta {::embedded-kafka? true}))
-       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-node-opts
-                                                     fix/with-standalone-doc-store
-                                                     fix/with-kv-dir
-                                                     fix/with-node])
+       :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-tx-log-opts fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
       #_(select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])

@@ -6,7 +6,7 @@
             [clojure.java.io :as io])
   (:import java.io.Closeable))
 
-(t/use-fixtures :each fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (def manifest
   {:crux.db/id :manifest

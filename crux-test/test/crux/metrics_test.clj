@@ -7,12 +7,12 @@
             [crux.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
 
-(t/use-fixtures :each fix/with-kv-dir fix/with-standalone-topology fix/with-node)
+(t/use-fixtures :each fix/with-node)
 
 (t/deftest test-indexer-metrics
-  (let [{:crux.node/keys [node bus indexer]} (:crux.node/topology (meta *api*))
+  (let [{:crux/keys [bus] :as sys} @(:!system *api*)
         registry (dropwizard/new-registry)
-        mets (indexer-metrics/assign-listeners registry #:crux.node{:node node, :bus bus, :indexer indexer})]
+        mets (indexer-metrics/assign-listeners registry sys)]
     (t/testing "initial ingest values"
       (t/is (nil? (dropwizard/value (:tx-id-lag mets))))
       (t/is (zero? (dropwizard/meter-count (:docs-ingested-meter mets))))
@@ -28,9 +28,9 @@
       (t/is (= 1 (dropwizard/meter-count (:tx-ingest-timer mets)))))))
 
 (t/deftest test-query-metrics
-  (let [{:crux.node/keys [bus]} (:crux.node/topology (meta *api*))
+  (let [{:crux/keys [bus] :as sys} @(:!system *api*)
         registry (dropwizard/new-registry)
-        mets (query-metrics/assign-listeners registry #:crux.node{:bus bus})]
+        mets (query-metrics/assign-listeners registry sys)]
 
     (t/testing "initial query timer values"
       (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))

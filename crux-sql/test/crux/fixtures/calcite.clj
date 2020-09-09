@@ -22,15 +22,11 @@
     (binding [*conn* conn]
       (f))))
 
-(defn with-calcite-module [f]
-  (fix/with-opts (-> fix/*opts*
-                     (update ::n/topology conj cal/module)
-                     (assoc :crux.calcite/port 1503))
-    f))
+(def with-calcite-module
+  (fix/with-opts {::cal/server {:port 1503}}))
 
-(defn with-scan-only [f]
-  (fix/with-opts {:crux.calcite/scan-only? true}
-    f))
+(def with-scan-only
+  (fix/with-opts {::cal/server {::cal/scan-only? true}}))
 
 (defn query [q]
   (with-open [stmt (.createStatement *conn*)

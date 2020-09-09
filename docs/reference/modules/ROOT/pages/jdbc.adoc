@@ -1,48 +1,182 @@
 = JDBC Nodes
 
-Crux nodes can use JDBC databases to store their transaction logs and document stores.
+Crux nodes can use JDBC databases to store their transaction logs and/or document stores.
 
 image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
 
-JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`] internally and pass through the relevant configuration options that you can find https://github.com/seancorfield/next-jdbc/blob/develop/doc/all-the-options.md[here].
-
-
-Below is the minimal configuration you will need:
-
-.Minimal JDBC Configuration
-[#table-conversion%header,cols="d,d"]
-|===
-|Property|Description
-|`:crux.jdbc/dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
-|`:crux.jdbc/dbname`|Database Name
-|===
-
-Depending on the type of JDBC database used, you may also need some of the following properties:
-
-.Other JDBC Properties
-[#table-conversion%header,cols="d,d"]
-|===
-|Property|Description
-|`:crux.jdbc/host`|Database Host
-|`:crux.jdbc/user`|Database Username
-|`:crux.jdbc/password`|Database Password
-|===
-
-[#jdbc-dependency]
 == Project Dependencies
 
+.deps.edn
 [source,clojure]
 ----
-include::example$deps.edn[tags=CruxDep]
-include::example$deps.edn[tags=JDBCDeps]
+juxt/crux-jdbc {:mvn/version "20.09-1.11.0-beta"}
 ----
 
-[#jdbc-start]
-== Getting started
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-jdbc</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
+----
 
-Use the API to start a JDBC node, configuring it with the required parameters:
+== Example configuration
 
+JDBC transaction logs and document stores depend on a 'connection pool' component - if you use both, they can share the same connection pool.
+
+Connection pools require a JDBC 'dialect' - out of the box, Crux supports the following:
+
+[#dialects]
+* H2: `+crux.jdbc.h2/->dialect+`
+* MySQL: `+crux.jdbc.mysql/->dialect+`
+* Microsoft SQL Server: `+crux.jdbc.mssql/->dialect+`
+* Oracle: `+crux.jdbc.oracle/->dialect+`
+* PostgreSQL: `+crux.jdbc.psql/->dialect+`
+* SQLite: `+crux.jdbc.sqlite/->dialect+`
+
+Each of these also require an additional dependency to pull in the relevant JDBC driver - see the Crux JDBC https://github.com/juxt/crux/blob/master/crux-jdbc/project.clj[project.clj] for our latest dependencies.
+
+[#db-spec]
+The connection pool also requires a `db-spec` - a map containing either a full `jdbcUrl` or its component parts, including `dbtype` (provided by the dialect by default), `host`, `port`, `dbname`.
+Any other attributes supplied (`user`, `password`, say) are appended to the URL as query parameters - see your individual JDBC driver for full details.
+
+[#pool-opts]
+Crux uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
+You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3.2.0/com/zaxxer/hikari/HikariConfig.html[`HikariConfig`] via `pool-opts` - for example, to `setMaximumPoolSize`, add `maximumPoolSize` to your configuration.
+
+=== JDBC as a Transaction Log
+
+.JSON
+[source,json]
+----
+{
+  "crux/tx-log": {
+    "crux/module": "crux.jdbc/->tx-log",
+    "connection-pool": {
+      "dialect": {
+        "crux/module": "crux.jdbc.psql/->dialect"
+      },
+      "pool-opts": { ... },
+      "db-spec": { ... }
+    },
+
+    "poll-sleep-duration": "PT1S"
+  },
+
+  ...
+}
+----
+
+.Clojure/EDN
 [source,clojure]
 ----
-include::example$src/docs/examples.clj[tags=start-jdbc-node]
+{:crux/tx-log {:crux/module 'crux.jdbc/->tx-log
+               :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+                                 :pool-opts { ... }
+                                 :db-spec { ... }}
+               :poll-sleep-duration "PT1S"}
+ ...}
 ----
+
+If you do not want the local node to index transactions, you can use the xref:#ingest-only-tx-log[`+crux.jdbc/->ingest-only-tx-log+`] module.
+
+=== JDBC as a Document Store
+
+.JSON
+[source,json]
+----
+{
+  "crux/document-store": {
+    "crux/module": "crux.jdbc/->document-store",
+    "connection-pool": {
+      "dialect": {
+        "crux/module": "crux.jdbc.psql/->dialect"
+      },
+      "pool-opts": { ... },
+      "db-spec": { ... }
+    }
+  },
+
+  ...
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux/document-store {:crux/module 'crux.jdbc/->document-store
+                       :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+                                         :pool-opts { ... }
+                                         :db-spec { ... }}}
+ ...}
+----
+
+=== Sharing connection pools
+
+If you use JDBC for both the transaction log and document store, you can share the same connection pool between the two modules as follows:
+
+.JSON
+[source,json]
+----
+{
+  "crux.jdbc/connection-pool": {
+    "dialect": {
+      "crux/module": "crux.jdbc.psql/->dialect"
+    },
+    "pool-opts": { ... },
+    "db-spec": { ... }
+  },
+
+
+  "crux/document-store": {
+    "crux/module": "crux.jdbc/->document-store",
+    "connection-pool": "crux.jdbc/connection-pool"
+  },
+
+  "crux/tx-log": {
+    "crux/module": "crux.jdbc/->tx-log",
+    "connection-pool": "crux.jdbc/connection-pool"
+  },
+
+  ...
+}
+----
+
+.Clojure/EDN
+[source,clojure]
+----
+{:crux.jdbc/connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+                             :pool-opts { ... }
+                             :db-spec { ... }}
+ :crux/tx-log {:crux/module 'crux.jdbc/->tx-log
+               :connection-pool :crux.jdbc/connection-pool}
+ :crux/document-store {:crux/module 'crux.jdbc/->document-store
+                       :connection-pool :crux.jdbc/connection-pool}
+ ...}
+----
+
+== Parameters
+
+=== Connection pool (`+crux.jdbc/->connection-pool+`)
+
+* `dialect` (dialect, required): JDBC xref:#dialects[dialect]
+* `pool-opts` (map): see xref:#pool-opts[above]
+* `db-spec` (map, required): see xref:#db-spec[above]
+
+
+=== Transaction log (`+crux.kafka/->tx-log+`)
+
+* `connection-pool`
+* `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
+
+[#ingest-only-tx-log]
+=== Ingest-only transaction log (`+crux.kafka/->ingest-only-tx-log+`)
+
+* `connection-pool`
+
+=== Document store (`+crux.kafka/->document-store+`)
+
+* `connection-pool`
+* `doc-cache-size` (int): size of in-memory document cache

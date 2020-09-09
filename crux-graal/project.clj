@@ -12,7 +12,7 @@
   :jvm-opts ["-Dclojure.compiler.direct-linking=true"
              "-Dclojure.spec.compile-asserts=false"]
 
-  :aot [crux.kv.memdb crux.kv.rocksdb crux.main.graal]
+  :aot [crux.mem-kv crux.rocksdb crux.main.graal]
   :main crux.main.graal
 
   :pedantic? :warn)

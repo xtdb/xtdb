@@ -1,95 +1,96 @@
 (ns crux.jdbc
-  (:require [clojure.core.reducers :as r]
-            [clojure.tools.logging :as log]
+  (:require [clojure.java.data :as jd]
+            [clojure.string :as str]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.document-store :as ds]
+            [crux.io :as cio]
             [crux.lru :as lru]
-            [crux.node :as n]
+            [crux.system :as sys]
             [crux.tx :as tx]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
             [taoensso.nippy :as nippy]
-            [clojure.string :as str]
-            [crux.io :as cio]
-            [crux.codec :as c]
-            [crux.api :as api])
-  (:import com.zaxxer.hikari.HikariDataSource
-           [java.util.concurrent LinkedBlockingQueue TimeUnit]
-           java.util.Date))
+            [clojure.spec.alpha :as s])
+  (:import (com.zaxxer.hikari HikariDataSource HikariConfig)
+           java.util.Date
+           java.io.Closeable
+           java.sql.Timestamp))
 
-(defn- dbtype->crux-jdbc-dialect [dbtype]
-  (condp contains? dbtype
-    #{"h2"} :h2
-    #{"mysql"} :mysql
-    #{"mssql"} :mssql
-    #{"sqlite"} :sqlite
-    #{"postgresql" "pgsql"} :psql
-    #{"oracle"} :oracle))
+(defprotocol Dialect
+  (setup-schema! [_ pool])
+  (db-type [_]))
 
-(defmulti setup-schema! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
+(defmulti ->date (fn [d dialect] (db-type dialect)) :default ::default)
 
-(defmulti prep-for-tests! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
-
-(defmethod prep-for-tests! :default [_ ds] (jdbc/execute! ds ["DROP TABLE IF EXISTS tx_events"]))
-
-(defmulti ->date (fn [dbtype d] (dbtype->crux-jdbc-dialect dbtype)))
-
-(defmethod ->date :default [_ t]
+(defmethod ->date ::default [t _]
   (assert t)
-  (java.util.Date. (.getTime ^java.sql.Timestamp t)))
+  (Date. (.getTime ^Timestamp t)))
 
-(defmulti ->v (fn [dbtype d] (dbtype->crux-jdbc-dialect dbtype)))
+(defmulti <-blob (fn [blob dialect] (db-type dialect)) :default ::default)
 
-(defmethod ->v :default [_ v] (nippy/thaw v))
+(defmethod <-blob ::default [v _] (nippy/thaw v))
 
-(defmulti ->pool-options (fn [dbtype options] (dbtype->crux-jdbc-dialect dbtype)))
+(defrecord HikariConnectionPool [^HikariDataSource pool dialect]
+  Closeable
+  (close [_]
+    (cio/try-close pool)))
 
-(defmethod ->pool-options :default [_ options] options)
-
-(deftype Tx [^Date time ^long id])
-
-(defn- tx-result->tx-data [ds dbtype tx-result]
-  (let [tx-result (condp contains? dbtype
-                    #{"sqlite" "mysql"}
+(defn ->connection-pool {::sys/deps {:dialect nil}
+                         ::sys/args {:pool-opts {:doc "Extra camelCase options to be set on HikariConfig"
+                                                 :spec (s/map-of ::sys/keyword any?)}
+                                     :db-spec {:doc "db-spec to be passed to next.jdbc"
+                                               :spec (s/map-of ::sys/keyword any?)
+                                               :required? true}}}
+  [{:keys [pool-opts dialect db-spec]}]
+  (let [jdbc-url (-> (jdbcc/jdbc-url (merge {:dbtype (name (db-type dialect))} db-spec))
+                     ;; mssql doesn't like trailing '?'
+                     (str/replace #"\?$" ""))
+        pool-opts (merge pool-opts {:jdbcUrl jdbc-url})]
+    (->HikariConnectionPool (doto (HikariDataSource. (jd/to-java HikariConfig pool-opts))
+                              (->> (setup-schema! dialect)))
+                            dialect)))
+;; TODO to multimethod?
+(defn- tx-result->tx-data [tx-result pool dialect]
+  (let [tx-result (condp contains? (db-type dialect)
+                    #{:sqlite :mysql}
                     (let [id (first (vals tx-result))]
-                      (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
+                      (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
 
-                    #{"mssql"}
+                    #{:mssql}
                     (if-let [id (:generated_keys tx-result)]
-                      (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
+                      (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})
                       tx-result)
 
-                    #{"oracle"}
+                    #{:oracle}
                     (let [id (first (vals tx-result))]
-                      (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE ROWID = ?" id]
+                      (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE ROWID = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
-    (let [tx-id (:event_offset tx-result)
-          tx-time (:tx_time tx-result)]
-      (Tx. (->date dbtype tx-time) tx-id))))
+    {::tx/tx-id (long (:event_offset tx-result))
+     ::tx/tx-time (-> (:tx_time tx-result) (->date dialect))}))
 
-(defn- insert-event! [ds event-key v topic]
+(defn- insert-event! [pool event-key v topic]
   (let [b (nippy/freeze v)]
-    (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
+    (jdbc/execute-one! pool ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
 
-(defn- doc-exists? [ds k]
-  (not-empty (jdbc/execute-one! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
+(defn- doc-exists? [pool k]
+  (not-empty (jdbc/execute-one! pool ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
-(defn- update-doc! [ds k doc]
-  (jdbc/execute! ds ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze doc) k]))
+(defn- update-doc! [pool k doc]
+  (jdbc/execute! pool ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze doc) k]))
 
-(defn- evict-doc! [ds k tombstone]
-  (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze tombstone) k]))
+(defn- evict-doc! [pool k tombstone]
+  (jdbc/execute! pool ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze tombstone) k]))
 
-(defrecord JdbcDocumentStore [ds dbtype]
+(defrecord JdbcDocumentStore [pool dialect]
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (jdbc/with-transaction [tx ds]
+    (jdbc/with-transaction [tx pool]
       (doseq [[id doc] id-and-docs
               :let [id (str id)]]
         (if (c/evicted-doc? doc)
@@ -102,23 +103,29 @@
 
   (fetch-docs [this ids]
     (->> (for [id-batch (partition-all 100 ids)
-               row (jdbc/execute! ds (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s) AND COMPACTED = 0"
+               row (jdbc/execute! pool (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s) AND COMPACTED = 0"
                                                     (->> (repeat (count id-batch) "?") (str/join ", ")))]
                                            (map (comp str c/new-id) id-batch))
                                   {:builder-fn jdbcr/as-unqualified-lower-maps})]
            row)
-         (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(->v dbtype (:v %))))
+         (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(-> (:v %) (<-blob dialect))))
          (into {}))))
 
-(defrecord JdbcTxLog [ds dbtype]
+(defn ->document-store {::sys/deps {:connection-pool `->connection-pool}
+                        ::sys/args {:doc-cache-size ds/doc-cache-size-opt}}
+  [{{:keys [pool dialect]} :connection-pool, :keys [doc-cache-size]}]
+  (->> (->JdbcDocumentStore pool dialect)
+       (ds/->CachedDocumentStore (lru/new-cache doc-cache-size))))
+
+(defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog
   (submit-tx [this tx-events]
-    (let [^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "txs"))]
-      (delay {:crux.tx/tx-id (.id tx)
-              :crux.tx/tx-time (.time tx)})))
+    (let [tx (-> (insert-event! pool nil tx-events "txs")
+                 (tx-result->tx-data pool dialect))]
+      (delay tx)))
 
   (open-tx-log [this after-tx-id]
-    (let [conn (jdbc/get-connection ds)
+    (let [conn (jdbc/get-connection pool)
           stmt (jdbc/prepare conn
                              ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
                               (or after-tx-id 0)])
@@ -126,54 +133,31 @@
       (cio/->cursor #(run! cio/try-close [rs stmt conn])
                     (->> (resultset-seq rs)
                          (map (fn [y]
-                                {:crux.tx/tx-id (int (:event_offset y))
-                                 :crux.tx/tx-time (->date dbtype (:tx_time y))
-                                 :crux.tx.event/tx-events (->v dbtype (:v y))}))))))
+                                {:crux.tx/tx-id (long (:event_offset y))
+                                 :crux.tx/tx-time (-> (:tx_time y) (->date dialect))
+                                 :crux.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
   (latest-submitted-tx [this]
-    (when-let [max-offset (-> (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
+    (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
-      {:crux.tx/tx-id max-offset})))
+      {:crux.tx/tx-id (long max-offset)}))
 
-(defn conform-next-jdbc-properties [m]
-  (into {} (->> m
-                (filter (fn [[k]] (= "crux.jdbc" (namespace k))))
-                (map (fn [[k v]] [(keyword (name k)) v])))))
+  Closeable
+  (close [_]
+    (cio/try-close tx-consumer)))
 
-(def ^:private require-lock 'lock)
+(defn ->ingest-only-tx-log {::sys/deps {:connection-pool `->connection-pool}}
+  [{{:keys [pool dialect]} :connection-pool}]
+  (map->JdbcTxLog {:pool pool, :dialect dialect}))
 
-(defn- start-jdbc-ds [_ options]
-  (let [{:keys [dbtype] :as options} (conform-next-jdbc-properties options)]
-    (locking require-lock
-      (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype))))))
-    (let [ds (jdbcc/->pool HikariDataSource (->pool-options dbtype options))]
-      (setup-schema! dbtype ds)
-      ds)))
-
-(def topology
-  (merge n/base-topology
-         {::ds {:start-fn start-jdbc-ds
-                :args {::dbtype {:doc "Database type"
-                                 :required? true
-                                 :crux.config/type :crux.config/string}
-                       ::dbname {:doc "Database name"
-                                 :required? true
-                                 :crux.config/type :crux.config/string}}}
-
-          ::n/tx-log {:start-fn (fn [{::keys [ds]} {::keys [dbtype]}]
-                                  (->JdbcTxLog ds dbtype))
-                      :deps [::ds]}
-
-          ::n/document-store {:start-fn (fn [{::keys [ds]} {:crux.document-store/keys [doc-cache-size] ::keys [dbtype]}]
-                                          (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
-                                                                    (->JdbcDocumentStore ds dbtype)))
-                              :args {:crux.document-store/doc-cache-size ds/doc-cache-size-opt}
-                              :deps [::ds]}
-
-          ::tx-consumer (merge (-> tx/polling-tx-consumer
-                                   (update :deps conj ::n/tx-log))
-                               {:start-fn (fn [{::n/keys [tx-log] :as deps} args]
-                                            (tx/->polling-tx-consumer deps args
-                                                                      (fn [after-tx-id]
-                                                                        (db/open-tx-log tx-log after-tx-id))))})}))
+(defn ->tx-log {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
+                                  (::sys/deps (meta #'->ingest-only-tx-log)))
+                ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
+                                  (::sys/args (meta #'->ingest-only-tx-log)))}
+  [opts]
+  (let [tx-log (->ingest-only-tx-log opts)]
+    (-> tx-log
+        (assoc :tx-consumer (tx/->polling-tx-consumer opts
+                                                      (fn [after-tx-id]
+                                                        (db/open-tx-log tx-log after-tx-id)))))))

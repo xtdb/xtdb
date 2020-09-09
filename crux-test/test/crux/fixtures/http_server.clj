@@ -10,9 +10,7 @@
 
 (defn with-http-server [f]
   (let [server-port (cio/free-port)]
-    (fix/with-opts (-> fix/*opts*
-                       (update :crux.node/topology conj 'crux.http-server/module)
-                       (assoc :crux.http-server/port server-port))
+    (fix/with-opts {:crux.http-server/server {:port server-port}}
       (fn []
         (binding [*api-url* (str "http://" *host* ":" server-port)]
           (f))))))

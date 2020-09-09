@@ -32,8 +32,8 @@
 ;; individual tests.
 (t/use-fixtures :once
   fk/with-embedded-kafka-cluster
-  fk/with-cluster-node-opts
-  fix/with-kv-dir
+  fk/with-cluster-tx-log-opts
+  fk/with-cluster-doc-store-opts
   fix/with-node
   fl/with-lubm-data)
 

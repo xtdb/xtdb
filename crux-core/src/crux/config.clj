@@ -60,17 +60,3 @@
 (s/def ::doc string?)
 (s/def ::default any?)
 (s/def ::required? boolean?)
-
-(defn load-properties [f]
-  (with-open [rdr (io/reader f)]
-    (let [props (Properties.)]
-      (.load props rdr)
-      (into {}
-            (for [[k v] props]
-              [(keyword k) v])))))
-
-(defn load-edn [f]
-  (with-open [rdr (io/reader f)]
-    (into {}
-          (for [[k v] (edn/read-string (slurp rdr))]
-            [(keyword k) v]))))

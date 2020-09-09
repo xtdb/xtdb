@@ -178,16 +178,14 @@ Launch a REPL using the very latest Clojars `-SNAPSHOT` release:
 clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
 ```
 
-Start a standalone in-memory (i.e. not persisted anywhere) node:
+Start an in-memory (i.e. not persisted anywhere) node:
 
 ``` clojure
 (require '[crux.api :as crux])
 (import '[crux.api ICruxAPI])
 
 (def my-node
-  (crux/start-node
-    ;; see 'configuration' section of docs for LMDB/RocksDB storage options
-    {:crux.node/topology ['crux.standalone/topology]}))
+  (crux/start-node {}))
 ```
 
 `put` a document:

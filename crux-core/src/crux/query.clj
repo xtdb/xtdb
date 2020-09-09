@@ -7,7 +7,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fork :as fork]
-            [crux.kv.memdb :as mem-kv]
+            [crux.mem-kv :as mem-kv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]
@@ -18,7 +18,8 @@
             [crux.tx.conform :as txc]
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [crux.system :as sys])
   (:import [clojure.lang Box ExceptionInfo MapEntry]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
@@ -1424,14 +1425,14 @@
     (db/open-nested-index-store index-store)
     (db/open-index-store indexer)))
 
-(defn- with-entity-resolver-cache [entity-resolver-fn options]
-  (let [entity-cache (lru/new-cache (::entity-cache-size options))]
+(defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
+  (let [entity-cache (lru/new-cache entity-cache-size)]
     (fn [k]
       (lru/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
-(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-store options] :as db}]
+(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-store entity-cache?] :as db}]
   (cond-> #(db/entity-as-of-resolver index-store % valid-time transact-time)
-    (::entity-cache? options) (with-entity-resolver-cache options)))
+    entity-cache? (with-entity-resolver-cache db)))
 
 (defn- validate-args [args]
   (let [ks (keys (first args))]
@@ -1623,7 +1624,7 @@
        group-acc
        idx->aggregate))))
 
-(defn query [{:keys [valid-time transact-time document-store indexer options index-store] :as db} ^ConformedQuery conformed-q]
+(defn query [{:keys [valid-time transact-time document-store indexer index-store] :as db} ^ConformedQuery conformed-q]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
@@ -1669,7 +1670,7 @@
                                  (->result value db))
                                row ->result-fns)))
          project? (partition-all (or (:batch-size q-conformed)
-                                     (::batch-size options)
+                                     (:batch-size db)
                                      100))
          project? (map (fn [results]
                          (->> results
@@ -1696,8 +1697,7 @@
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache projection-cache
                             index-store
-                            entity-resolver-fn
-                            options]
+                            entity-resolver-fn]
   Closeable
   (close [_]
     (when index-store
@@ -1716,7 +1716,7 @@
     (with-open [res (.openQuery this query)]
       (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)
             ^Future
-            interrupt-job (when-let [timeout-ms (get query :timeout (::query-timeout options))]
+            interrupt-job (when-let [timeout-ms (get query :timeout (:query-timeout this))]
                             (let [caller-thread (Thread/currentThread)]
                               (.schedule interrupt-executor
                                          ^Runnable
@@ -1829,8 +1829,7 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         indexer bus
-                        query-cache conform-cache projection-cache
-                        options]
+                        query-cache conform-cache projection-cache]
   api/DBProvider
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
@@ -1869,39 +1868,33 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
-(def query-engine
-  {:start-fn (fn [{:crux.node/keys [indexer bus document-store]}
-                  {::keys [query-cache-size conform-cache-size projection-cache-size] :as args}]
-               (let [interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))]
-                 (map->QueryEngine
-                  {:indexer indexer
-                   :conform-cache (lru/new-cache conform-cache-size)
-                   :query-cache (lru/new-cache query-cache-size)
-                   :projection-cache (lru/new-cache projection-cache-size)
-                   :document-store document-store
-                   :bus bus
-                   :interrupt-executor interrupt-executor
-                   :options args})))
-   :deps [:crux.node/indexer :crux.node/bus :crux.node/document-store]
-   :args {::query-cache-size {:doc "Compiled Query Cache Size"
-                              :default 10240
-                              :crux.config/type :crux.config/nat-int}
-          ::conform-cache-size {:doc "Conformed Query Cache Size"
-                                :default 10240
-                                :crux.config/type :crux.config/nat-int}
-          ::projection-cache-size {:doc "Projection Cache Size"
-                                   :default 10240
-                                   :crux.config/type :crux.config/nat-int}
-          ::entity-cache? {:doc "Enable Query Entity Cache"
-                           :default true
-                           :crux.config/type :crux.config/boolean}
-          ::entity-cache-size {:doc "Query Entity Cache Size"
-                               :default 10000
-                               :crux.config/type :crux.config/pos-int}
-          ::query-timeout {:doc "Query Timeout ms"
-                           :default 30000
-                           :crux.config/type :crux.config/pos-int}
-          ::batch-size {:doc "Batch size of results"
-                        :default 100
-                        :required? true
-                        :crux.config/type :crux.config/pos-int}}})
+(defn ->query-engine {::sys/deps {:indexer :crux/indexer
+                                  :bus :crux/bus
+                                  :document-store :crux/document-store}
+                      ::sys/args {:query-cache-size {:doc "Compiled Query Cache Size"
+                                                     :default 10240
+                                                     :spec ::sys/nat-int}
+                                  :conform-cache-size {:doc "Conformed Query Cache Size"
+                                                       :default 10240
+                                                       :spec ::sys/nat-int}
+                                  :projection-cache-size {:doc "Projection Cache Size"
+                                                          :default 10240
+                                                          :spec ::sys/nat-int}
+                                  :entity-cache? {:doc "Enable Query Entity Cache"
+                                                  :default true
+                                                  :spec ::sys/boolean}
+                                  :entity-cache-size {:doc "Query Entity Cache Size"
+                                                      :default 10000
+                                                      :spec ::sys/nat-int}
+                                  :query-timeout {:doc "Query Timeout ms"
+                                                  :default 30000
+                                                  :spec ::sys/nat-int}
+                                  :batch-size {:doc "Batch size of results"
+                                               :default 100
+                                               :required? true
+                                               :spec ::sys/pos-int}}}
+  [{:keys [query-cache-size conform-cache-size projection-cache-size] :as opts}]
+  (map->QueryEngine (merge opts {:conform-cache (lru/new-cache conform-cache-size)
+                                 :query-cache (lru/new-cache query-cache-size)
+                                 :projection-cache (lru/new-cache projection-cache-size)
+                                 :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))})))

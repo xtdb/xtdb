@@ -1,16 +1,14 @@
 (ns ^:no-doc crux.fixtures
-  (:require [clojure.test.check.clojure-test :as tcct]
+  (:require [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tcct]
             [crux.api :as crux]
             [crux.io :as cio]
-            [crux.node :as n]
-            [crux.standalone :as standalone]
-            [crux.tx :as tx]
             [clojure.test :as t])
   (:import crux.api.ICruxAPI
-           (java.util ArrayList List UUID)
-           (java.io File)
-           (java.nio.file Files FileVisitResult SimpleFileVisitor)
-           java.nio.file.attribute.FileAttribute))
+           java.io.File
+           java.nio.file.attribute.FileAttribute
+           java.nio.file.Files
+           [java.util ArrayList List UUID]))
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
@@ -28,22 +26,13 @@
                             ~@body)))
 
 (def ^:dynamic ^ICruxAPI *api*)
-(def ^:dynamic *opts* nil)
+(def ^:dynamic *opts* [])
 
-(defn with-opts [opts f]
-  (binding [*opts* (merge *opts* opts)]
-    (f)))
-
-(defn with-standalone-topology [f]
-  (with-opts {::n/topology '[crux.standalone/topology]}
-    f))
-
-(defn with-standalone-doc-store [f]
-  (with-opts (-> *opts*
-                 (update ::n/topology conj (-> standalone/topology
-                                               (select-keys [::n/document-store
-                                                             ::standalone/event-log]))))
-    f))
+(defn with-opts
+  ([opts] (fn [f] (with-opts opts f)))
+  ([opts f]
+   (binding [*opts* (conj *opts* opts)]
+     (f))))
 
 (defn with-kv-dir [f]
   (with-tmp-dir "kv-store" [db-dir]

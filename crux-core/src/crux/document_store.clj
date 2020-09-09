@@ -3,59 +3,13 @@
             [clojure.set :as set]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream]
-           java.util.function.Supplier
-           org.agrona.ExpandableDirectByteBuffer
-           [org.agrona DirectBuffer MutableDirectBuffer]
-           clojure.lang.MapEntry
-           crux.codec.Id
-           crux.kv.KvSnapshot))
-
-(def ^:private ^ThreadLocal seek-buffer-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (ExpandableDirectByteBuffer.)))))
-
-(defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
-  (assert (= c/id-size (.capacity content-hash)) (mem/buffer->hex content-hash))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size)))]
-    (mem/limit-buffer
-     (doto b
-       (.putByte 0 c/content-hash->doc-index-id)
-       (.putBytes c/index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash)))
-     (+ c/index-id-size c/id-size))))
-
-(defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
-  (assert (= (+ c/index-id-size c/id-size) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= c/content-hash->doc-index-id index-id))
-    (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)))
-
-(defrecord KvDocumentStore [kv]
-  db/DocumentStore
-  (fetch-docs [this ids]
-    (with-open [snapshot (kv/new-snapshot kv)]
-      (persistent!
-       (reduce
-        (fn [acc id]
-          (let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))]
-            (if-let [doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
-              (assoc! acc id doc)
-              acc)))
-        (transient {}) ids))))
-
-  (submit-docs [this id-and-docs]
-    (kv/store kv (for [[id doc] id-and-docs]
-                   (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
-                                    (mem/->nippy-buffer doc)))))
-
-  Closeable
-  (close [_]))
+            [taoensso.nippy :as nippy]
+            [crux.system :as sys])
+  (:import clojure.lang.MapEntry
+           (java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream)
+           (java.nio.file Path)))
 
 (defrecord FileDocumentStore [dir]
   db/DocumentStore
@@ -121,21 +75,17 @@
 
 (def ^:const default-doc-cache-size (* 128 1024))
 
-(def doc-cache-size-opt {:doc "Cache size to use for document store."
-                         :default default-doc-cache-size
-                         :crux.config/type :crux.config/nat-int})
+(def doc-cache-size-opt
+  {:doc "Cache size to use for document store."
+   :default default-doc-cache-size
+   :spec ::sys/nat-int})
 
-(def kv-document-store
-  {:start-fn (fn [{:keys [crux.node/kv-store]} {::keys [doc-cache-size]}]
-               (->CachedDocumentStore (lru/new-cache doc-cache-size) (->KvDocumentStore kv-store)))
-   :deps [:crux.node/kv-store]
-   :args {::doc-cache-size doc-cache-size-opt}})
-
-(def file-document-store
-  {:start-fn (fn [_ {:keys [::doc-cache-size crux.index/file-document-store-dir]}]
-               (.mkdirs (io/file file-document-store-dir))
-               (->CachedDocumentStore (lru/new-cache doc-cache-size) (->FileDocumentStore file-document-store-dir)))
-   :args {::file-document-store-dir {:doc "Directory to store documents"
-                                     :required? true
-                                     :crux.config/type :crux.config/string}
-          ::doc-cache-size doc-cache-size-opt}})
+(defn ->file-document-store {::sys/args {:dir {:doc "Directory to store documents"
+                                                :required? true
+                                                :spec ::sys/path}
+                                          :doc-cache-size doc-cache-size-opt}}
+  [{:keys [^Path dir doc-cache-size]}]
+  (let [dir (.toFile dir)]
+    (.mkdirs dir)
+    (->CachedDocumentStore (lru/new-cache doc-cache-size)
+                           (->FileDocumentStore dir))))

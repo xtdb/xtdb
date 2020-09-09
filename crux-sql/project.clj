@@ -17,7 +17,9 @@
 
                                    ;; dependency conflict resolution:
                                    [com.google.guava/guava "26.0-jre"]
-                                   [com.google.code.findbugs/jsr305 "3.0.2"]]}}
+                                   [com.google.code.findbugs/jsr305 "3.0.2"]
+                                   [org.apache.commons/commons-lang3 "3.9"]
+                                   [commons-io "2.6"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

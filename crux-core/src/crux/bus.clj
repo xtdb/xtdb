@@ -1,6 +1,7 @@
 (ns ^:no-doc crux.bus
   (:refer-clojure :exclude [send await])
   (:require [crux.io :as cio]
+            [crux.system :as sys]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s])
   (:import [java.io Closeable]
@@ -108,14 +109,11 @@
     (doseq [{:keys [executor]} (->> @!listeners (mapcat val))]
       (close-executor executor))))
 
-(defn ->bus [{::keys [sync?] :as opts}]
-  (->EventBus (atom {})
-              (Executors/newSingleThreadExecutor (cio/thread-factory "crux-bus-await-thread"))
-              sync?))
-
-(def bus
-  {:start-fn (fn [deps args]
-               (->bus args))
-   :args {::sync? {:doc "Synchronous sends on bus?"
-                   :default false
-                   :crux.config/type :crux.config/boolean}}})
+(defn ->bus {::sys/args {:sync? {:doc "Send bus messages on caller thread"
+                                 :default false
+                                 :spec ::sys/boolean}}}
+  ([] (->bus {}))
+  ([{:keys [sync?] :as opts}]
+   (->EventBus (atom {})
+               (Executors/newSingleThreadExecutor (cio/thread-factory "crux-bus-await-thread"))
+               sync?)))

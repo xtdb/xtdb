@@ -21,7 +21,7 @@
            [java.time Duration]
            [crux.codec EntityTx]))
 
-(t/use-fixtures :each fix/with-standalone-topology fix/with-kv-dir fix/with-node fix/with-silent-test-check
+(t/use-fixtures :each fix/with-node fix/with-silent-test-check
   (fn [f]
     (f)
     (#'tx/reset-tx-fn-error)))
@@ -937,7 +937,7 @@
         foo-doc {:crux.db/id :foo}
         !arg-doc-resps (atom [{:crux.db.fn/args [foo-doc]}
                               {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :foo) (c/new-id foo-doc)]]}])
-        ->mocked-doc-store (fn [_deps _args]
+        ->mocked-doc-store (fn [_opts]
                              (reify db/DocumentStore
                                (submit-docs [_ docs])
                                (fetch-docs [_ ids]
@@ -948,9 +948,7 @@
                                                                    (fn [id]
                                                                      (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
                                                                        (merge doc {:crux.db/id id})))))))))))]
-    (with-open [node (api/start-node {:crux.node/topology
-                                      ['crux.standalone/topology
-                                       {:crux.node/document-store {:start-fn ->mocked-doc-store}}]})]
+    (with-open [node (api/start-node {:crux/document-store ->mocked-doc-store})]
       (api/submit-tx node [[:crux.tx/put put-fn]])
       (api/submit-tx node [[:crux.tx/fn :put-fn foo-doc]])
       (api/sync node)

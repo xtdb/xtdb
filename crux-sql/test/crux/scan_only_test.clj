@@ -17,7 +17,7 @@
                          :crux.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
   (f))
 
-(t/use-fixtures :each fix/with-standalone-topology cf/with-scan-only cf/with-calcite-module fix/with-kv-dir fix/with-node with-each-connection-type with-sql-schema)
+(t/use-fixtures :each cf/with-calcite-module cf/with-scan-only fix/with-node with-each-connection-type with-sql-schema)
 
 (t/deftest test-sql-query
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}

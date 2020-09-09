@@ -1,6 +1,21 @@
 = crux-http-client
 
-This project contains `crux.remote-api-client` which implements the
-complete Crux API using a remote Crux instance over HTTP (via `crux-http-server`).
+This module offers an HTTP client that allows you to send transactions and run queries to a Crux link:../crux-http-server/[HTTP server].
 
-For tests, see usage of `/crux-test/test/crux/fixtures/http_server.clj`.
+.deps.edn
+[source,clojure]
+----
+juxt/crux-http-client {:mvn/version "20.09-1.11.0-beta"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-http-client</artifactId>
+    <version>20.09-1.11.0-beta</version>
+</dependency>
+----
+
+For more details, see the https://opencrux.com/reference/http.html[HTTP documentation].

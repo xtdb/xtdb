@@ -3,7 +3,8 @@
             [integrant.core :as ig]
             [integrant.repl :as ir]
             [clojure.string :as string]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.rocksdb :as rocks])
   (:import java.io.Closeable)
   (:gen-class))
 
@@ -33,12 +34,12 @@
   (.close node))
 
 (defn config []
-  {:console-demo/crux-node {:crux.node/topology ['crux.standalone/topology
-                                                 'crux.kv.rocksdb/kv-store
-                                                 'crux.http-server/module
-                                                 'crux.metrics/registry]
-                            :crux.http-server/read-only? true
-                            :crux.http-server/label "Console Demo"}})
+  {:console-demo/crux-node {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/tx-log"}}
+                            :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/doc-store"}}
+                            :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/indices"}}
+                            :crux.http-server/server {:read-only? true
+                                                      :server-label "Console Demo"}
+                            :crux.metrics/registry {}}})
 
 (defn -main [& args]
   (ir/set-prep! config)

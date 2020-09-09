@@ -1,14 +1,22 @@
 (ns ^:no-doc crux.jdbc.psql
   (:require [crux.jdbc :as j]
-            [next.jdbc :as jdbc]))
+            [next.jdbc :as jdbc]
+            [crux.system :as sys]
+            [clojure.spec.alpha :as s]))
 
-(defmethod j/setup-schema! :psql [_ ds]
-  (jdbc/execute! ds ["create table if not exists tx_events (
-  event_offset serial PRIMARY KEY, event_key VARCHAR,
-  tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
-  v bytea NOT NULL,
+(defn ->dialect [_]
+  (reify j/Dialect
+    (db-type [_] :postgresql)
+
+    (setup-schema! [_ pool]
+      (doto pool
+        (jdbc/execute! ["
+CREATE TABLE IF NOT EXISTS tx_events (
+  event_offset SERIAL PRIMARY KEY,
+  event_key VARCHAR,
+  tx_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  topic VARCHAR NOT NULL,
+  v BYTEA NOT NULL,
   compacted INTEGER NOT NULL)"])
-  (jdbc/execute! ds ["create index if not exists tx_events_event_key_idx on tx_events(compacted, event_key)"]))
 
-(defmethod j/->pool-options :psql [_ {:keys [username user] :as options}]
-  (assoc options :username (or username user)))
+        (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx ON tx_events(compacted, event_key)"])))))
