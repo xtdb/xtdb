@@ -2,24 +2,20 @@
 
 [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
 
-Crux is an open source document database with bitemporal graph queries. Java,
-Clojure and HTTP APIs are provided.
+[Crux](https://opencrux.com) is a general purpose database with graph-oriented bitemporal indexes.
+Datalog, SQL & EQL queries are supported, and Java, HTTP & Clojure APIs are
+provided.
 
 Crux follows an _unbundled_ architectural approach, which means that it is
-assembled from highly decoupled components through the use of semi-immutable
-logs at the core of its design. Logs can currently be stored in LMDB or RocksDB
-for standalone single-node deployments, or using Kafka for clustered
-deployments. Indexes can currently be stored using LMDB or RocksDB.
+assembled from decoupled components through the use of an immutable log and
+document store at the core of its design. A range of storage options are
+available for embedded usage and cloud native scaling.
 
-Crux is built for efficient bitemporal indexing of schemaless documents, and
-this simplicity enables broad possibilities for creating layered extensions on
-top, such as to add additional transaction, query, and schema capabilities.
-Crux does not currently support SQL but it does provide an EDN-based
+Bitemporal indexing of schemaless documents enables broad possibilities for
+creating layered extensions on top, such as to add additional transaction,
+query, and schema capabilities. In addition to SQL, Crux supplies a
 [Datalog](https://en.wikipedia.org/wiki/Datalog) query interface that can be
-used to express a comprehensive range of SQL-like join operations as well as
-recursive graph traversals.
-
-Crux has been available as a *Public Alpha* since 19<sup>th</sup> April 2019.
+used to express complex joins and recursive graph traversals.
 
 ## CircleCI Build
 
@@ -27,12 +23,21 @@ Crux has been available as a *Public Alpha* since 19<sup>th</sup> April 2019.
 
 ## Latest Release
 
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux-core)
+Maven coordinates for the [Clojars Repository](https://clojars.org/juxt/crux-core):
+
+```xml
+<dependency>
+  <groupId>juxt</groupId>
+  <artifactId>crux-core</artifactId>
+  <version>20.09-1.11.0-beta</version>
+</dependency>
+```
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg?style=for-the-badge)](https://clojars.org/juxt/crux-core)
 
 ## Unbundled Architecture
 
 Crux embraces the transaction log as the central point of coordination when
-running as a distributed system. Use of a separate document log enables simple
+running as a distributed system. Use of a separate document store enables simple
 eviction of active and historical data to assist with technical compliance for
 information privacy regulations.
 
@@ -44,54 +49,21 @@ information privacy regulations.
 
 <img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/about/modules/ROOT/images/crux-node-1.svg" width="1000px">
 
-This design makes it feasible and desirable to embed Crux nodes directly in
+This design makes it feasible and desirable to embed Crux nodes directly within
 your application processes, which reduces deployment complexity and eliminates
 round-trip overheads when running complex application queries.
 
-###
-
-## Data Model
-
-<img alt="Document database with graph queries" role="img" aria-label="Crux Venn" src="./docs/about/modules/ROOT/images/crux-venn-1.svg" width="500px">
-
-Crux is fundamentally a store of versioned EDN documents. The only requirement
-is that you specify a valid `:crux.db/id` key which links the documents to
-their corresponding entities. The fields within these documents are
-automatically indexed as Entity-Attribute-Value triples to support efficient
-graph queries. Document versions are indexed by `valid-time` (in addition to
-`transaction-time`) which allows you to model updates into the past, present or
-future.
-
-Crux supports a Datalog query interface for reading data and traversing
-relationships across all documents. Queries are executed so that the results
-are lazily streamed from the underlying indexes. Queries can be made against
-consistent point-in-time snapshots of your database from any Crux node
-connected to the same transaction log, by specifying `transaction-time` and/or
-`valid-time`.
-
 ## Documentation
 
-Please visit our [official documentation](https://opencrux.com) to get started with Crux.
+Please visit [the docs](https://opencrux.com) to get started with Crux.
 
 ## Community & Contact
 
+We use Zulip for our main community chat:
+
 [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
 
-### 3rd Party Modules
-* [avisi-apps/crux-xodus](https://github.com/avisi-apps/crux-xodus) - pure-JVM
-  alternative to `crux-rocksdb` and `crux-lmdb`
-* [avisi-apps/crux-active-objects](https://github.com/avisi-apps/crux-active-objects)
-  - TxLog implementation backed by Active Objects for use inside Atlassian
-    Addons
-
-### Companies using Crux
-
-* [Oscaro (eCommerce)](https://www.oscaro.com)
-* [Avisi (AtlasCRM)](https://www.avisi.nl/blog/crux-our-final-database-migration) - ["Crux: Our Final Database Migration"](https://www.avisi.nl/blog/crux-our-final-database-migration)
-* [Gnurdle (consulting)](https://gnurdle.github.io/HoppyResume2017.html)
-* Yours? Let us know :)
-
-crux@juxt.pro
+Feel free to say hello: crux@juxt.pro
 
 ## Repo Layout
 
@@ -105,115 +77,12 @@ Project directories are published to Clojars independently so that you can
 maintain granular dependencies on precisely the individual components needed
 for your application.
 
-### Core
+### Developing inside this Crux project
 
-#### crux-core
+ The top-level project ties all the other projects together for convenience
+ whilst working within this repo.
 
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux-core)
-
-### Cluster Node storage
-
-#### crux-kafka
-
-For scalability and durability.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-kafka.svg)](https://clojars.org/juxt/crux-kafka)
-
-#### crux-kafka-embedded
-
-Useful for experimentation and testing.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-kafka-embedded.svg)](https://clojars.org/juxt/crux-kafka-embedded)
-
-### Local KV and Standalone mode storage
-
-#### crux-lmdb
-
-Better read performance for intensive querying.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-lmdb.svg)](https://clojars.org/juxt/crux-lmdb)
-
-#### crux-rocksdb
-
-Better write performance for heavy ingestion.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rocksdb.svg)](https://clojars.org/juxt/crux-rocksdb)
-
-`crux-rocksdb` is a good default choice.
-
-### HTTP
-
-#### Server
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-http-server.svg)](https://clojars.org/juxt/crux-http-server)
-
-#### Client
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-http-client.svg)](https://clojars.org/juxt/crux-http-client)
-
-### Additional
-
-#### crux-rdf
-
-Import RDF data and run a subset of SPARQL queries.
-
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rdf.svg)](https://clojars.org/juxt/crux-rdf)
-
-## Crux Labs
-
-Have a look at the more experimental modules being developed over at [Crux Labs](https://github.com/crux-labs), such as [`crux-dataflow`](https://github.com/crux-labs/crux-dataflow) and the [`crux-console`](https://github.com/crux-labs/crux-console).
-
-We will use Crux Labs as a place to test ideas and early module development, that may eventually be officially supported and migrated to the official Crux repository.
-
-## Using Clojure
-
-Please note that Clojure is not _required_ when using Crux. HTTP and Java
-APIs are also available.
-
-### REPL
-
-Launch a REPL using the very latest Clojars `-SNAPSHOT` release:
-
-``` sh
-clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
-```
-
-Start an in-memory (i.e. not persisted anywhere) node:
-
-``` clojure
-(require '[crux.api :as crux])
-(import '[crux.api ICruxAPI])
-
-(def my-node
-  (crux/start-node {}))
-```
-
-`put` a document:
-
-``` clojure
-(def my-document
-  {:crux.db/id :some/fancy-id
-   :arbitrary-key ["an untyped value" 123]
-   :nested-map {"and values" :can-be-arbitrarily-nested}})
-
-(crux/submit-tx my-node [[:crux.tx/put my-document]])
-```
-
-Take an immutable snapshot of the database:
-
-``` clojure
-(def my-db (crux/db my-node))
-```
-
-Retrieve the current version of the document:
-
-``` clojure
-(crux/entity my-db :some/fancy-id)
-```
-
-### Developing Crux
-
-* To run a REPL that includes dependencies for all components of Crux, first build the sub-modules using `lein sub install`.
+* To run a Clojure REPL that includes dependencies for all components of Crux, first build the sub-modules using `lein sub install`.
 * Start a REPL with `lein repl` (with `--headless` if you're just going to connect to it from your editor).
 * Once you've connected to the REPL, in the `user` namespace, run:
   * `(go)` to start up the dev node
@@ -262,5 +131,5 @@ SOFTWARE.
 
 ### Dependencies
 
-A list of compiled dependencies and corresponding licenses is available
-[here](LICENSE-deps.adoc).
+A complete list of compiled dependencies and corresponding licenses is
+maintained and available on request.
