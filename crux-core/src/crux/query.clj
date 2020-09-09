@@ -102,6 +102,54 @@
 (s/def ::or (expression-spec 'or ::or-body))
 (s/def ::or-join (expression-spec 'or-join (s/cat :args (s/and vector? ::rule-args)
                                                   :body ::or-body)))
+(s/def ::term (s/or :triple ::triple
+                    :not ::not
+                    :not-join ::not-join
+                    :or ::or
+                    :or-join ::or-join
+                    :range ::range
+                    :rule ::rule
+                    :pred ::pred))
+
+(s/def ::aggregate (s/cat :aggregate-fn aggregate?
+                          :args (s/* literal?)
+                          :logic-var logic-var?))
+
+(s/def ::find-arg
+  (s/or :logic-var logic-var?
+        :project (s/cat :project #{'eql/project}
+                        :logic-var logic-var?
+                        :project-spec ::eql/query)
+        :aggregate ::aggregate))
+
+(s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
+
+(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
+
+(s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
+(s/def ::args (s/coll-of ::arg-tuple :kind vector?))
+
+(s/def ::rule-head (s/and list?
+                          (s/cat :name (s/and symbol? (complement built-ins))
+                                 :args ::rule-args)))
+(s/def ::rule-definition (s/and vector?
+                                (s/cat :head ::rule-head
+                                       :body (s/+ ::term))))
+(s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
+
+(s/def ::offset nat-int?)
+(s/def ::limit nat-int?)
+(s/def ::full-results? boolean?)
+
+(s/def ::order-element (s/and vector?
+                              (s/cat :find-arg (s/or :logic-var logic-var?
+                                                     :aggregate ::aggregate)
+                                     :direction (s/? #{:asc :desc}))))
+(s/def ::order-by (s/coll-of ::order-element :kind vector?))
+
+(s/def ::timeout nat-int?)
+(s/def ::batch-size pos-int?)
+
 (defmulti pred-args-spec first)
 
 (defmethod pred-args-spec 'q [_]
@@ -147,50 +195,6 @@
   (s/cat :aggregate-fn symbol? :args empty?))
 
 (s/def ::aggregate-args (s/multi-spec aggregate-args-spec first))
-
-(s/def ::term (s/or :triple ::triple
-                    :not ::not
-                    :not-join ::not-join
-                    :or ::or
-                    :or-join ::or-join
-                    :range ::range
-                    :rule ::rule
-                    :pred ::pred))
-
-(s/def ::find-arg
-  (s/or :logic-var logic-var?
-        :project (s/spec (s/cat :project #{'eql/project}
-                                :logic-var logic-var?
-                                :project-spec ::eql/query))
-        :aggregate (s/spec (s/cat :aggregate-fn aggregate?
-                                  :args (s/* literal?)
-                                  :logic-var logic-var?))))
-
-(s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
-
-(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
-
-(s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
-(s/def ::args (s/coll-of ::arg-tuple :kind vector?))
-
-(s/def ::rule-head (s/and list?
-                          (s/cat :name (s/and symbol? (complement built-ins))
-                                 :args ::rule-args)))
-(s/def ::rule-definition (s/and vector?
-                                (s/cat :head ::rule-head
-                                       :body (s/+ ::term))))
-(s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
-
-(s/def ::offset nat-int?)
-(s/def ::limit nat-int?)
-(s/def ::full-results? boolean?)
-
-(s/def ::order-element (s/and vector?
-                              (s/cat :find-arg ::find-arg :direction (s/? #{:asc :desc}))))
-(s/def ::order-by (s/coll-of ::order-element :kind vector?))
-
-(s/def ::timeout nat-int?)
-(s/def ::batch-size pos-int?)
 
 (defn normalize-query [q]
   (cond
@@ -1593,22 +1597,23 @@
                                   :when aggregate-fn]
                               [n aggregate-fn])
                             (into {}))
-        groups (reduce
-                (fn [acc tuple]
-                  (let [group (map tuple grouping-var-idxs)
-                        group-acc (or (get acc group)
-                                      (reduce-kv
-                                       (fn [acc n aggregate-fn]
-                                         (assoc acc n (aggregate-fn)))
-                                       tuple
-                                       idx->aggregate))]
-                    (assoc acc group (reduce-kv
-                                      (fn [acc n aggregate-fn]
-                                        (update acc n #(aggregate-fn % (get tuple n))))
-                                      group-acc
-                                      idx->aggregate))))
-                {}
-                result)]
+        groups (persistent!
+                (reduce
+                 (fn [acc tuple]
+                   (let [group (mapv tuple grouping-var-idxs)
+                         group-acc (or (get acc group)
+                                       (reduce-kv
+                                        (fn [acc n aggregate-fn]
+                                          (assoc acc n (aggregate-fn)))
+                                        tuple
+                                        idx->aggregate))]
+                     (assoc! acc group (reduce-kv
+                                        (fn [acc n aggregate-fn]
+                                          (update acc n #(aggregate-fn % (get tuple n))))
+                                        group-acc
+                                        idx->aggregate))))
+                 (transient {})
+                 result))]
     (for [[_ group-acc] groups]
       (reduce-kv
        (fn [acc n aggregate-fn]
