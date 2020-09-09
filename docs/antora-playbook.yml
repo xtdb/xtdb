@@ -14,10 +14,9 @@ content:
       branches: HEAD
     - url: ../
       start_path: docs/reference
-      tags:
-        - 20.09-1.11.0
       branches:
         - HEAD
+        - docs-20.09-1.11.0
 ui:
   bundle:
     url: ./crux-site/ui-bundle.zip
