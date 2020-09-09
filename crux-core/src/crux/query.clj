@@ -1640,7 +1640,9 @@
           {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
           find-logic-vars (mapv :logic-var compiled-find)
-          aggregate? (contains? (set (map :var-type compiled-find)) :aggregate)]
+          var-types (set (map :var-type compiled-find))
+          aggregate? (contains? var-types :aggregate)
+          project? (contains? var-types :project)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (IllegalArgumentException.
@@ -1665,17 +1667,17 @@
                         (mapv (fn [value {:keys [->result]}]
                                 (->result value db))
                               row compiled-find)))
-         :always (partition-all (or (:batch-size q-conformed)
-                                    (::batch-size options)
-                                    100))
-         :always (map (fn [results]
-                        (->> results
-                             (mapv raise-doc-lookup-out-of-coll)
-                             raise-doc-lookup-out-of-coll)))
-         :always (mapcat (fn [lookup]
-                           (if (::hashes (meta lookup))
-                             (recur (replace-docs lookup (lookup-docs lookup db)))
-                             lookup))))))))
+         :project (partition-all (or (:batch-size q-conformed)
+                                     (::batch-size options)
+                                     100))
+         :project (map (fn [results]
+                         (->> results
+                              (mapv raise-doc-lookup-out-of-coll)
+                              raise-doc-lookup-out-of-coll)))
+         :project (mapcat (fn [lookup]
+                            (if (::hashes (meta lookup))
+                              (recur (replace-docs lookup (lookup-docs lookup db)))
+                              lookup))))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
   (some-> (db/entity-as-of index-store eid valid-time transact-time)
