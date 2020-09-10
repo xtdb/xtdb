@@ -1,16 +1,16 @@
 (ns crux.lucene
-  (:require [crux.db :as db]
+  (:require [crux.codec :as cc]
+            [crux.db :as db]
             [crux.io :as cio]
             [crux.lucene :as l]
             [crux.memory :as mem]
-            [crux.node :as n]
             [crux.system :as sys])
   (:import crux.ByteUtils
            java.io.Closeable
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           org.apache.lucene.document.Document
+           [org.apache.lucene.document Document Field StoredField TextField]
            org.apache.lucene.index.DirectoryReader
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search IndexSearcher ScoreDoc]
@@ -21,6 +21,16 @@
   (close [this]
     (doseq [^Closeable c [directory]]
       (.close c))))
+
+(defn crux-doc->lucene-doc [crux-doc]
+  (let [doc (doto (Document.)
+              (.add (Field. "eid", (mem/->on-heap (cc/->value-buffer (:crux.db/id crux-doc))) StoredField/TYPE)))]
+    (reduce-kv (fn [^Document doc k v]
+                 (when (string? v)
+                   (.add doc (Field. (name k), ^String v, TextField/TYPE_STORED)))
+                 doc)
+               doc
+               (dissoc crux-doc :crux.db/id))))
 
 (defn search [node, k, v]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} (:crux.lucene/node @(:!system node))
@@ -55,7 +65,7 @@
                                             vs-in-crux))
                          eid))
                      (iterator-seq search-results))]
-      (boolean (seq eids)))))
+      (map #(vector (db/decode-value index-store %)) eids))))
 
 (defn ->node
   {::node {:start-fn start-lucene-node
