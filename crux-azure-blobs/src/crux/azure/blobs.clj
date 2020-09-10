@@ -3,13 +3,9 @@
             [clj-http.client :as http]
             [taoensso.nippy :as nippy]
             [crux.db :as db]
-            [crux.node :as n]
+            [crux.system :as sys]
             [crux.document-store :as ds]
             [crux.lru :as lru]))
-
-(s/def ::sas-token string?)
-(s/def ::storage-account string?)
-(s/def ::container string?)
 
 (defn- get-blob [sas-token storage-account container blob-name]
   ;; TODO : ETag
@@ -18,7 +14,7 @@
         http/get
         :body
         ((fn [^String s] (.getBytes s))))
-    (catch Exception _ ;; TODO : Log not found etc.
+    (catch Exception _ ;; TODO : Log "not found" etc.
       nil)))
 
 (defn- put-blob [sas-token storage-account container blob-name blob-bytes]
@@ -47,22 +43,25 @@
      {}
      docs)))
 
-(def doc-store
-  {::n/document-store {:start-fn (fn [_ {:crux.document-store/keys [doc-cache-size]
-                                         ::keys [sas-token storage-account container]}]
-                                   (ds/->CachedDocumentStore
-                                    (lru/new-cache doc-cache-size)
-                                    (->AzureBlobsDocumentStore sas-token
-                                                               storage-account
-                                                               container)))
-                       :args {::sas-token {:required? true
-                                           :crux.config/type ::sas-token
-                                           :doc "Azure Blob Storage SAS Token"}
-                              ::storage-account {:required? true
-                                                 :crux.config/type ::storage-account
-                                                 :doc "Azure Storage Account Name"}
-                              ::container {:required? true,
-                                           :crux.config/type ::container
-                                           :doc "Azure Blob Storage Container"}
-                              :crux.document-store/doc-cache-size ds/doc-cache-size-opt}}})
+(s/def ::sas-token string?)
+(s/def ::storage-account string?)
+(s/def ::container string?)
+
+(defn ->document-store {::sys/args {:sas-token {:required? true
+                                                :spec ::sas-token
+                                                :doc "Azure Blob Storage SAS Token"}
+                                    :storage-account {:required? true
+                                                      :spec ::storage-account
+                                                      :doc "Azure Storage Account Name"}
+                                    :container {:required? true,
+                                                :spec ::container
+                                                :doc "Azure Blob Storage Container"}
+                                    :doc-cache-size ds/doc-cache-size-opt}
+                        ::sys/deps {:configurator `->configurator}}
+  [{:keys [sas-token storage-account container doc-cache-size]}]
+  (ds/->CachedDocumentStore
+   (lru/new-cache doc-cache-size)
+   (->AzureBlobsDocumentStore sas-token
+                              storage-account
+                              container)))
 

@@ -1,16 +1,18 @@
 (ns user
   (:require [clojure.java.io :as io]
             [crux.api :as crux]
-            [crux.azure.blobs :as b]))
+            [crux.rocksdb :as rocks]
+            [crux.azure.blobs :as azb]))
 
 (defn start-node [storage-dir]
-  (crux/start-node {:crux.node/topology '[crux.standalone/topology
-                                          crux.azure.blobs/doc-store]
-	            :crux.standalone/event-log-dir (io/file storage-dir "event-log")
-	            :crux.kv/db-dir (io/file storage-dir "indexes")
-                    ::b/sas-token (System/getenv "CRUX_AZURE_BLOBS_SAS_TOKEN")
-                    ::b/storage-account (System/getenv "CRUX_AZURE_BLOBS_STORAGE_ACCOUNT")
-                    ::b/container (System/getenv "CRUX_AZURE_BLOBS_CONTAINER")}))
+  (crux/start-node {:crux/tx-log {:crux/module `rocks/->kv-store
+                                  :db-dir (io/file storage-dir "tx-log")}
+                    :crux/document-store {:crux/module `azb/->document-store
+                                          :sas-token (System/getenv "CRUX_AZURE_BLOBS_SAS_TOKEN")
+                                          :storage-account (System/getenv "CRUX_AZURE_BLOBS_STORAGE_ACCOUNT")
+                                          :container (System/getenv "CRUX_AZURE_BLOBS_CONTAINER")}
+                    :crux/indexer {:crux/module `rocks/->kv-store
+                                   :db-dir (io/file storage-dir "indexes")}}))
 
 (defn await-ingest
   [node docs]
