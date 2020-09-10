@@ -163,7 +163,7 @@
          :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec 'get-attr [_]
-  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? literal?))) :return (s/? ::pred-return)))
+  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? any?))) :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec '== [_]
   (s/cat :pred-fn #{'==} :args (s/tuple some? some?)))
@@ -902,7 +902,7 @@
       (let [e (.get join-keys e-result-index)
             vs (db/aev index-store attr e nil entity-resolver-fn)
             values (if (and (empty? vs) not-found?)
-                     (c/vectorize-value not-found)
+                     [not-found]
                      (not-empty (mapv #(db/decode-value index-store %) vs)))]
         (bind-pred-result pred-ctx (get idx-id->idx idx-id) values)))))
 

@@ -1005,6 +1005,17 @@
                                      :where [[e :name "Ivan"]
                                              [(get-attr e :age 0) [age ...]]]}))))
 
+  (t/testing "use as predicate"
+    (t/is (= #{[:ivan]}
+             (api/q (api/db *api*) '{:find [e]
+                                     :where [[e :name "Ivan"]
+                                             [(get-attr e :name)]]})))
+
+    (t/is (empty?
+           (api/q (api/db *api*) '{:find [e]
+                                   :where [[e :name "Ivan"]
+                                           [(get-attr e :email)]]}))))
+
   (t/testing "optional not found attribute"
     (t/is (= #{[:ivan ["N/A"]]}
              (api/q (api/db *api*) '{:find [e email]
@@ -1016,16 +1027,10 @@
                                      :where [[e :name "Ivan"]
                                              [(get-attr e :email "N/A") [email ...]]]})))
 
-    (t/is (= #{[:ivan "ivan@example.com"]
-               [:ivan "ivanov@example.com"]}
+    (t/is (= #{[:ivan nil]}
              (api/q (api/db *api*) '{:find [e email]
                                      :where [[e :name "Ivan"]
-                                             [(get-attr e :email #{"ivan@example.com"
-                                                                   "ivanov@example.com"}) [email ...]]]})))
-
-    (t/is (empty? (api/q (api/db *api*) '{:find [e email]
-                                          :where [[e :name "Ivan"]
-                                                  [(get-attr e :email #{}) [email ...]]]})))))
+                                             [(get-attr e :email nil) [email ...]]]})))))
 
 (t/deftest test-multiple-values-literals
   (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}
