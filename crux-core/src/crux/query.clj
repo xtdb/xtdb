@@ -163,7 +163,7 @@
          :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec 'get-attr [_]
-  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? literal?))) :return (s/? ::pred-return)))
+  (s/cat :pred-fn  #{'get-attr} :args (s/spec (s/cat :e-var logic-var? :attr literal? :not-found (s/? any?))) :return (s/? ::pred-return)))
 
 (defmethod pred-args-spec '== [_]
   (s/cat :pred-fn #{'==} :args (s/tuple some? some?)))
@@ -872,22 +872,6 @@
             (str "Clause refers to unknown variable: "
                  var " " (cio/pr-edn-str clause))))))
 
-(defmethod pred-constraint 'get-attr [_ {:keys [encode-value-fn idx-id arg-bindings]}]
-  (let [arg-bindings (rest arg-bindings)
-        [e-var attr not-found] arg-bindings
-        not-found? (= 3 (count arg-bindings))
-        not-found (mapv encode-value-fn (c/vectorize-value not-found))
-        e-result-index (.result-index ^VarBinding e-var)]
-    (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
-      (let [e (.get join-keys e-result-index)
-            vs (db/aev index-store attr e nil entity-resolver-fn)]
-        (if-let [values (if (and (empty? vs) not-found?)
-                          not-found
-                          (not-empty vs))]
-          (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values identity true)
-              true)
-          false)))))
-
 (defn- bind-pred-result [{:keys [encode-value-fn return-type return-vars-tuple-idxs-in-join-order]} idx pred-result]
   (case return-type
     :scalar
@@ -908,6 +892,36 @@
       (not-empty pred-result))
 
     pred-result))
+
+(defmethod pred-constraint 'get-attr [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
+  (let [arg-bindings (rest arg-bindings)
+        [e-var attr not-found] arg-bindings
+        not-found? (= 3 (count arg-bindings))
+        e-result-index (.result-index ^VarBinding e-var)]
+    (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
+      (let [e (.get join-keys e-result-index)
+            vs (db/aev index-store attr e nil entity-resolver-fn)
+            return-not-found? (and (empty? vs) not-found?)]
+        (if (and (empty? vs) (not not-found?))
+          false
+          (case return-type
+            :collection
+            (let [values (if return-not-found?
+                           [(encode-value-fn not-found)]
+                           vs)]
+              (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values identity true)
+              true)
+
+            (:scalar :tuple :relation)
+            (let [values (if return-not-found?
+                           [not-found]
+                           (mapv #(db/decode-value index-store %) vs))]
+              (bind-pred-result pred-ctx (get idx-id->idx idx-id) values)
+              true)
+
+            (if return-not-found?
+              not-found
+              true)))))))
 
 (defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
                                                             :as pred-ctx}]
@@ -1246,7 +1260,7 @@
         triple-clauses (remove leaf-triple-clauses triple-clauses)
         leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
                      {:pred {:pred-fn 'get-attr :args [e a]}
-                      :return [:scalar v]})]
+                      :return [:collection v]})]
     (assoc type->clauses
            :triple triple-clauses
            :pred (vec (concat pred-clauses leaf-preds)))))
