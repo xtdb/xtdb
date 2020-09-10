@@ -901,16 +901,21 @@
     (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
       (let [e (.get join-keys e-result-index)
             vs (db/aev index-store attr e nil entity-resolver-fn)]
-        (if (= :collection return-type)
+        (case return-type
+          :collection
           (let [values (if (and (empty? vs) not-found?)
                          [(encode-value-fn not-found)]
                          (not-empty vs))]
             (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values identity true)
             values)
+
+          (:scalar :tuple :relation)
           (let [values (if (and (empty? vs) not-found?)
                          [not-found]
                          (not-empty (mapv #(db/decode-value index-store %) vs)))]
-            (bind-pred-result pred-ctx (get idx-id->idx idx-id) values)))))))
+            (bind-pred-result pred-ctx (get idx-id->idx idx-id) values))
+
+          (not-empty vs))))))
 
 (defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
                                                             :as pred-ctx}]
