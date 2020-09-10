@@ -14,12 +14,10 @@
 
 (defn with-lucene-module [f]
   (with-tmp-dir "lucene" [db-dir]
-    (fix/with-opts (-> fix/*opts*
-                       (update ::n/topology conj crux.lucene/module)
-                       (assoc :crux.lucene/db-dir db-dir))
+    (fix/with-opts {::l/node {:db-dir (.toPath ^java.io.File db-dir)}}
       f)))
 
-(t/use-fixtures :each fix/with-standalone-topology with-lucene-module fix/with-kv-dir fix/with-node)
+(t/use-fixtures :each with-lucene-module fix/with-node)
 
 (t/deftest test-can-search-string
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
@@ -27,12 +25,11 @@
   (assert (not-empty (c/q (c/db *api*) '{:find [?id]
                                          :where [[?id :name "Ivan"]]})))
 
-  (let [d ^Directory (:directory (:crux.lucene/node (:crux.node/topology (meta *api*))))
-        analyzer ^Analyzer (:analyzer (:crux.lucene/node (:crux.node/topology (meta *api*))))
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} (:crux.lucene/node @(:!system *api*))
         iwc (IndexWriterConfig. analyzer)]
 
     ;; Index
-    (with-open [iw (IndexWriter. d, iwc)]
+    (with-open [iw (IndexWriter. directory, iwc)]
       (let [doc (doto (Document.)
                   (.add (Field. "eid", (mem/->on-heap (cc/->value-buffer :ivan)) StoredField/TYPE))
                   (.add (Field. "name", "Ivan", TextField/TYPE_STORED)))]
@@ -49,7 +46,7 @@
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]
                                      :where '[[(crux.lucene/full-text node db :name "Ivan")]
                                               [?e :crux.db/id]]
-                                     :args [{:db db :node *api*}]})))))))
+                                     :args [{:db db :node *api* :?foo-fn identity}]})))))))
 
 ;; TODO:
 ;;  Cardinality search

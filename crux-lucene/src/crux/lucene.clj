@@ -3,9 +3,11 @@
             [crux.io :as cio]
             [crux.lucene :as l]
             [crux.memory :as mem]
-            [crux.node :as n])
+            [crux.node :as n]
+            [crux.system :as sys])
   (:import crux.ByteUtils
            java.io.Closeable
+           java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
            org.apache.lucene.document.Document
@@ -21,7 +23,7 @@
       (.close c))))
 
 (defn search [node, k, v]
-  (let [{:keys [^Analyzer analyzer ^Directory directory]} (:crux.lucene/node (:crux.node/topology (meta node)))
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} (:crux.lucene/node @(:!system node))
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
         qp (QueryParser. k analyzer)
@@ -55,10 +57,11 @@
                      (iterator-seq search-results))]
       (boolean (seq eids)))))
 
-(defn- start-lucene-node [_ {::keys [db-dir]}]
+(defn ->node
+  {::node {:start-fn start-lucene-node
+           ::sys/args {:db-dir {:doc "Lucene DB Dir"
+                                :required? true
+                                :spec ::sys/path}}}}
+  [{:keys [^Path db-dir]}]
   (let [directory (FSDirectory/open db-dir)]
     (LuceneNode. directory (StandardAnalyzer.))))
-
-(def module {::node {:start-fn start-lucene-node
-                     :args {::db-dir {:doc "Lucene DB Dir"
-                                      :crux.config/type :crux.config/path}}}})
