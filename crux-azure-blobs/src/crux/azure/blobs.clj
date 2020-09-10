@@ -56,8 +56,7 @@
                                     :container {:required? true,
                                                 :spec ::container
                                                 :doc "Azure Blob Storage Container"}
-                                    :doc-cache-size ds/doc-cache-size-opt}
-                        ::sys/deps {:configurator `->configurator}}
+                                    :doc-cache-size ds/doc-cache-size-opt}}
   [{:keys [sas-token storage-account container doc-cache-size]}]
   (ds/->CachedDocumentStore
    (lru/new-cache doc-cache-size)
