@@ -5,8 +5,7 @@
             [crux.lucene :as l]
             [crux.memory :as mem]
             [crux.system :as sys])
-  (:import crux.ByteUtils
-           java.io.Closeable
+  (:import java.io.Closeable
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -60,9 +59,7 @@
                        (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
                              v (db/encode-value index-store (.get ^Document doc (name attr)))
                              vs-in-crux (db/aev index-store attr eid v entity-resolver-fn)]
-                         (not-empty (filter (fn [v-in-crux]
-                                              (= 0 (ByteUtils/compareBuffers v-in-crux v Integer/MAX_VALUE)))
-                                            vs-in-crux))
+                         (not-empty (filter (partial mem/buffers=? v) vs-in-crux))
                          eid))
                      (iterator-seq search-results))]
       (map #(vector (db/decode-value index-store %)) eids))))
