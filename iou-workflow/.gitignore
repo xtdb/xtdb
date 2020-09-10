@@ -1,0 +1,15 @@
+logs/
+
+# Clojure
+.cpcache
+
+# Gradle
+.gradle/
+build/
+gradle.properties
+
+# IntelliJ
+*.iml
+*.iws
+*.ipr
+.idea
