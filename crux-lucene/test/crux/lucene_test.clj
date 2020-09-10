@@ -1,14 +1,11 @@
 (ns crux.lucene-test
   (:require [clojure.test :as t]
             [crux.api :as c]
-            [crux.codec :as cc]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx with-tmp-dir]]
-            [crux.lucene :as l]
-            [crux.memory :as mem]
-            [crux.node :as n])
+            [crux.lucene :as l])
   (:import org.apache.lucene.analysis.Analyzer
-           [org.apache.lucene.document Document Field StoredField TextField]
+           org.apache.lucene.document.Document
            [org.apache.lucene.index IndexWriter IndexWriterConfig]
            org.apache.lucene.store.Directory))
 
@@ -48,8 +45,3 @@
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]
                                      :where '[[(text-search :name "Ivan") [[?e]]]
                                               [?e :crux.db/id]]})))))))
-
-;; TODO:
-;;  Cardinality search
-;;  Transactions
-;;  Decorate Crux node
