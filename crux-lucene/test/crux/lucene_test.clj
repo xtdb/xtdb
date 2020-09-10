@@ -31,7 +31,7 @@
       (.addDocument iw (l/crux-doc->lucene-doc doc)))
 
     (t/testing "using Lucene directly"
-      (with-open [search-results ^crux.api.ICursor (l/search *api* "name" "Ivan")]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/node @(:!system *api*)) "name" "Ivan")]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (first docs) "name"))))))
@@ -41,7 +41,13 @@
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]
                                      :where '[[(crux.lucene/full-text node db :name "Ivan") [[?e]]]
                                               [?e :crux.db/id]]
-                                     :args [{:db db :node *api* :?foo-fn identity}]})))))))
+                                     :args [{:db db :node (:crux.lucene/node @(:!system *api*))}]})))))
+
+    (t/testing "using in-built function"
+      (with-open [db (c/open-db *api*)]
+        (t/is (= #{[:ivan]} (c/q db {:find '[?e]
+                                     :where '[[(text-search :name "Ivan") [[?e]]]
+                                              [?e :crux.db/id]]})))))))
 
 ;; TODO:
 ;;  Cardinality search

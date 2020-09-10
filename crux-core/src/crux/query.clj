@@ -918,7 +918,7 @@
     (throw (err/illegal-arg :clause-unknown-var
                             {::err/message  (str "Clause refers to unknown variable: " var " " (cio/pr-edn-str clause))}))))
 
-(defn- bind-binding [bind-type tuple-idxs-in-join-order idx result]
+(defn bind-binding [bind-type tuple-idxs-in-join-order idx result]
   (case bind-type
     :scalar
     (do (idx/update-relation-virtual-index! idx [[result]])

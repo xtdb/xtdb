@@ -3,7 +3,9 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.lucene :as l]
+            [clojure.spec.alpha :as s]
             [crux.memory :as mem]
+            [crux.query :as q]
             [crux.system :as sys])
   (:import java.io.Closeable
            java.nio.file.Path
@@ -14,6 +16,8 @@
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search IndexSearcher ScoreDoc]
            [org.apache.lucene.store Directory FSDirectory]))
+
+(def ^:dynamic *node*)
 
 (defrecord LuceneNode [directory analyzer]
   java.io.Closeable
@@ -32,7 +36,7 @@
                (dissoc crux-doc :crux.db/id))))
 
 (defn search [node, k, v]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} (:crux.lucene/node @(:!system node))
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
         qp (QueryParser. k analyzer)
@@ -41,16 +45,6 @@
     (cio/->cursor (fn []
                     (.close directory-reader))
                   (map #(.doc index-searcher (.-doc ^ScoreDoc %)) score-docs))))
-
-;; Potential improvements / options:
-
-;; option 2
-;; Put the C into the doc
-;; Simpler, docs don't benefit from structural sharing across Cs
-
-;; option 3
-;; Go to AVE, don't store eid or C in the index.
-;; Requires sophisticated eviction, to use unindex-eids equivalent
 
 (defn full-text [node db attr v]
   (with-open [search-results ^crux.api.ICursor (search node (name attr) v)]
@@ -64,11 +58,33 @@
                      (iterator-seq search-results))]
       (map #(vector (db/decode-value index-store %)) eids))))
 
+(defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
+  (let [[attr vval] (rest arg-bindings)]
+    (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
+      (let [values (full-text *node* db attr vval)]
+        (if (empty? values)
+          false
+          (do
+            (q/bind-pred-result pred-ctx (get idx-id->idx idx-id) values)
+            true))))))
+
 (defn ->node
   {::node {:start-fn start-lucene-node
            ::sys/args {:db-dir {:doc "Lucene DB Dir"
                                 :required? true
                                 :spec ::sys/path}}}}
   [{:keys [^Path db-dir]}]
-  (let [directory (FSDirectory/open db-dir)]
-    (LuceneNode. directory (StandardAnalyzer.))))
+  (let [directory (FSDirectory/open db-dir)
+        node (LuceneNode. directory (StandardAnalyzer.))]
+    (alter-var-root #'*node* (constantly node))))
+
+
+;; Potential improvements / options:
+
+;; option 2
+;; Put the C into the doc
+;; Simpler, docs don't benefit from structural sharing across Cs
+
+;; option 3
+;; Go to AVE, don't store eid or C in the index.
+;; Requires sophisticated eviction, to use unindex-eids equivalent
