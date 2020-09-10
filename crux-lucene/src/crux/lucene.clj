@@ -3,7 +3,6 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.lucene :as l]
-            [clojure.spec.alpha :as s]
             [crux.memory :as mem]
             [crux.query :as q]
             [crux.system :as sys])
@@ -77,14 +76,3 @@
   (let [directory (FSDirectory/open db-dir)
         node (LuceneNode. directory (StandardAnalyzer.))]
     (alter-var-root #'*node* (constantly node))))
-
-
-;; Potential improvements / options:
-
-;; option 2
-;; Put the C into the doc
-;; Simpler, docs don't benefit from structural sharing across Cs
-
-;; option 3
-;; Go to AVE, don't store eid or C in the index.
-;; Requires sophisticated eviction, to use unindex-eids equivalent
