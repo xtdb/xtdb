@@ -13,14 +13,14 @@
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
            [org.apache.lucene.document Document Field StoredField TextField]
-           org.apache.lucene.index.DirectoryReader
+           [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig]
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search IndexSearcher ScoreDoc]
            [org.apache.lucene.store Directory FSDirectory]))
 
 (def ^:dynamic *node*)
 
-(defrecord LuceneNode [directory analyzer index-writer-config]
+(defrecord LuceneNode [directory analyzer]
   java.io.Closeable
   (close [this]
     (doseq [^Closeable c [directory]]
@@ -37,8 +37,9 @@
                (dissoc crux-doc :crux.db/id))))
 
 (defn index-docs! [node docs]
-  (let [{:keys [^Directory directory index-writer-config]} node]
-    (with-open [iw (IndexWriter. directory, index-writer-config)]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
+        iwc (IndexWriterConfig. analyzer)]
+    (with-open [iw (IndexWriter. directory, iwc)]
       (doseq [doc docs]
         (.addDocument iw (l/crux-doc->lucene-doc doc))))))
 
@@ -63,7 +64,7 @@
                          (not-empty (filter (partial mem/buffers=? v) vs-in-crux))
                          eid))
                      (iterator-seq search-results))]
-      (map #(vector (db/decode-value index-store %)) eids))))
+      (into [] (map #(vector (db/decode-value index-store %)) eids)))))
 
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr q/literal? :v string?)) :return (s/? ::q/pred-return)))
@@ -89,10 +90,13 @@
   (unindex-eids [this eids]
     (db/unindex-eids indexer eids))
   (index-entity-txs [this tx entity-txs]
-    (let [content-hashes (entity-txes->content-hashes entity-txs)
-          docs (vals (db/fetch-docs document-store content-hashes))]
-      (index-docs! lucene-node docs)
-      (db/index-entity-txs indexer tx entity-txs)))
+    (try
+      (let [content-hashes (entity-txes->content-hashes entity-txs)
+            docs (vals (db/fetch-docs document-store content-hashes))]
+        (index-docs! lucene-node docs)
+        (db/index-entity-txs indexer tx entity-txs))
+      (catch Throwable t
+        (clojure.tools.logging/error t))))
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed indexer tx))
   (store-index-meta [this k v]
@@ -115,8 +119,7 @@
   [{:keys [^Path db-dir]}]
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
-        index-writer-config (IndexWriterConfig. analyzer)
-        node (LuceneNode. directory analyzer index-writer-config)]
+        node (LuceneNode. directory analyzer)]
     (alter-var-root #'*node* (constantly node))))
 
 (defn ->indexer

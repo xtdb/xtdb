@@ -42,4 +42,16 @@
           (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #""
                                   (c/q db {:find '[?e]
                                            :where '[[(text-search "Ivan") [[?e]]]
-                                                    [?e :crux.db/id]]}))))))))
+                                                    [?e :crux.db/id]]}))))
+
+        (t/testing "fuzzy"
+          (t/is (= #{[:ivan]} (c/q db {:find '[?e]
+                                       :where '[[(text-search :name "Iv*") [[?e]]]
+                                                [?e :crux.db/id]]}))))))
+
+    (t/testing "Subsequent tx/doc"
+      (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan2 :name "Ivbn"}]])
+      (with-open [db (c/open-db *api*)]
+        (t/is (= #{[:ivan] [:ivan2]} (c/q db {:find '[?e]
+                                              :where '[[(text-search :name "Iv?n") [[?e]]]
+                                                       [?e :crux.db/id]]})))))))
