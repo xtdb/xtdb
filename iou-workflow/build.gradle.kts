@@ -27,3 +27,10 @@ dependencies {
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)
 }
 
+tasks.withType(Test::class) {
+    enableAssertions = false
+}
+
+quasar {
+    excludePackages.addAll(file("$projectDir/src/main/resources/quasar-exclude.txt").readLines())
+}
