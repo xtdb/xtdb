@@ -1,25 +1,6 @@
 (ns user
-  (:require [clojure.java.io :as io]
-            [crux.api :as crux]
-            [crux.rocksdb :as rocks]
+  (:require [crux.api :as crux]
             [crux.azure.blobs :as azb]))
-
-(defn start-node [storage-dir]
-  (crux/start-node {:crux/tx-log {:crux/module `rocks/->kv-store
-                                  :db-dir (io/file storage-dir "tx-log")}
-                    :crux/document-store {:crux/module `azb/->document-store
-                                          :sas-token (System/getenv "CRUX_AZURE_BLOBS_SAS_TOKEN")
-                                          :storage-account (System/getenv "CRUX_AZURE_BLOBS_STORAGE_ACCOUNT")
-                                          :container (System/getenv "CRUX_AZURE_BLOBS_CONTAINER")}
-                    :crux/indexer {:crux/module `rocks/->kv-store
-                                   :db-dir (io/file storage-dir "indexes")}}))
-
-(defn await-ingest
-  [node docs]
-  (crux/await-tx node
-                 (crux/submit-tx node
-                                 (vec (for [doc docs]
-                                        [:crux.tx/put doc])))))
 
 (def init-data
   [{:crux.db/id :country/denmark
@@ -46,8 +27,22 @@
     :org :org/some-org
     :requirements #{:course/math101}}])
 
+(defn start-node []
+  (crux/start-node
+   {:crux/document-store {:crux/module `azb/->document-store
+                          :sas-token (System/getenv "CRUX_AZURE_BLOBS_SAS_TOKEN")
+                          :storage-account (System/getenv "CRUX_AZURE_BLOBS_STORAGE_ACCOUNT")
+                          :container (System/getenv "CRUX_AZURE_BLOBS_CONTAINER")}}))
+
+(defn await-ingest
+  [node docs]
+  (crux/await-tx node
+                 (crux/submit-tx node
+                                 (vec (for [doc docs]
+                                        [:crux.tx/put doc])))))
+
 (defn ingest-query-entity []
-  (with-open [node (start-node "/tmp/")]
+  (with-open [node (start-node)]
     (await-ingest node init-data)
     (let [db (crux/db node)]
       (->> {:find '[cls]
