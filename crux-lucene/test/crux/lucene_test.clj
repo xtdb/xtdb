@@ -54,4 +54,14 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan] [:ivan2]} (c/q db {:find '[?e]
                                               :where '[[(text-search :name "Iv?n") [[?e]]]
-                                                       [?e :crux.db/id]]})))))))
+                                                       [?e :crux.db/id]]})))))
+
+    (t/testing "Eviction"
+      (submit+await-tx [[:crux.tx/evict :ivan]])
+      (with-open [db (c/open-db *api*)]
+        (t/is (empty? (c/q db {:find '[?e]
+                               :where
+                               '[[(text-search :name "Ivan") [[?e]]]
+                                 [?e :crux.db/id]]}))))
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/node @(:!system *api*)) "name" "Ivan")]
+        (t/is (empty? (iterator-seq search-results)))))))

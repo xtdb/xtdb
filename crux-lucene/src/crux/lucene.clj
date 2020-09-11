@@ -12,10 +12,11 @@
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           [org.apache.lucene.document Document Field StoredField TextField]
+           [org.apache.lucene.document Document Field StoredField TextField BinaryPoint BinaryDocValuesField]
+           [org.apache.lucene.util BytesRef]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig]
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search IndexSearcher ScoreDoc]
+           [org.apache.lucene.search IndexSearcher ScoreDoc Query]
            [org.apache.lucene.store Directory FSDirectory]))
 
 (def ^:dynamic *node*)
@@ -26,9 +27,18 @@
     (doseq [^Closeable c [directory]]
       (.close c))))
 
+(defn- id->stored-bytes [eid]
+  (mem/->on-heap (cc/->value-buffer eid)))
+
 (defn crux-doc->lucene-doc [crux-doc]
   (let [doc (doto (Document.)
-              (.add (Field. "eid", (mem/->on-heap (cc/->value-buffer (:crux.db/id crux-doc))) StoredField/TYPE)))]
+              #_(.add (BinaryDocValuesField. "eid2" (BytesRef. ^bytes (id->stored-bytes (:crux.db/id crux-doc)))))
+              ;; BinaryDocValuesField
+              #_(.add (BinaryPoint. "eid3", ^bytes (into-array ^bytes [(id->stored-bytes (:crux.db/id crux-doc))])))
+                                        ;              (.add (Field. "eid3", ^bytes  TextField/TYPE_STORED))
+              (.add (Field. "eid2", ^String (.utf8ToString (BytesRef. ^bytes (id->stored-bytes (:crux.db/id crux-doc)))) TextField/TYPE_STORED))
+              (.add (Field. "eid", ^bytes (id->stored-bytes (:crux.db/id crux-doc)) StoredField/TYPE))
+              )]
     (reduce-kv (fn [^Document doc k v]
                  (when (string? v)
                    (.add doc (Field. (name k), ^String v, TextField/TYPE_STORED)))
@@ -46,6 +56,18 @@
     (cio/->cursor (fn []
                     (.close directory-reader))
                   (map #(.doc index-searcher (.-doc ^ScoreDoc %)) score-docs))))
+
+(defn delete! [node, eids]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
+        qp (QueryParser. "eid2" analyzer)
+        qs (map #(.parse qp (.utf8ToString (BytesRef. ^bytes (id->stored-bytes %)))) eids)
+        ;qs (map #(BinaryPoint/newExactQuery "eid2" (id->stored-bytes %)) eids)
+                                        ;qs (map #(BinaryDocValuesField. "eid2" (BytesRef. ^bytes (id->stored-bytes %))) eids)
+;        qs (map #(BinaryDocValuesField. "eid" (.utf8ToString (BytesRef. ^bytes (id->stored-bytes %)))) eids)
+                ]
+
+    (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
+      (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn full-text [node db attr v]
   (with-open [search-results ^crux.api.ICursor (search node (name attr) v)]
@@ -81,11 +103,14 @@
   (index-docs [this docs]
     (db/index-docs indexer docs))
   (unindex-eids [this eids]
+    (try
+      (delete! lucene-node eids)
+      (catch Throwable t
+        (clojure.tools.logging/error t)))
     (db/unindex-eids indexer eids))
   (index-entity-txs [this tx entity-txs]
     (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
-          iwc (IndexWriterConfig. analyzer)
-          index-writer (IndexWriter. directory, iwc)]
+          index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (try
         (let [content-hashes (entity-txes->content-hashes entity-txs)
               docs (vals (db/fetch-docs document-store content-hashes))]
@@ -94,6 +119,7 @@
           (db/index-entity-txs indexer tx entity-txs)
           (.close index-writer))
         (catch Throwable t
+          (clojure.tools.logging/error t)
           (.rollback index-writer)))))
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed indexer tx))
