@@ -36,7 +36,7 @@
               ;; BinaryDocValuesField
               #_(.add (BinaryPoint. "eid3", ^bytes (into-array ^bytes [(id->stored-bytes (:crux.db/id crux-doc))])))
                                         ;              (.add (Field. "eid3", ^bytes  TextField/TYPE_STORED))
-              (.add (Field. "eid2", ^String (.utf8ToString (BytesRef. ^bytes (id->stored-bytes (:crux.db/id crux-doc)))) TextField/TYPE_STORED))
+              (.add (Field. "eid", ^String (.utf8ToString (BytesRef. ^bytes (id->stored-bytes (:crux.db/id crux-doc)))) TextField/TYPE_STORED))
               (.add (Field. "eid", ^bytes (id->stored-bytes (:crux.db/id crux-doc)) StoredField/TYPE))
               )]
     (reduce-kv (fn [^Document doc k v]
@@ -59,7 +59,7 @@
 
 (defn delete! [node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        qp (QueryParser. "eid2" analyzer)
+        qp (QueryParser. "eid" analyzer)
         qs (map #(.parse qp (.utf8ToString (BytesRef. ^bytes (id->stored-bytes %)))) eids)
         ;qs (map #(BinaryPoint/newExactQuery "eid2" (id->stored-bytes %)) eids)
                                         ;qs (map #(BinaryDocValuesField. "eid2" (BytesRef. ^bytes (id->stored-bytes %))) eids)
