@@ -7,7 +7,8 @@
             [crux.memory :as mem]
             [crux.query :as q]
             [crux.system :as sys])
-  (:import java.io.Closeable
+  (:import crux.codec.EntityTx
+           java.io.Closeable
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -19,7 +20,7 @@
 
 (def ^:dynamic *node*)
 
-(defrecord LuceneNode [directory analyzer]
+(defrecord LuceneNode [directory analyzer index-writer-config]
   java.io.Closeable
   (close [this]
     (doseq [^Closeable c [directory]]
@@ -34,6 +35,12 @@
                  doc)
                doc
                (dissoc crux-doc :crux.db/id))))
+
+(defn index-docs! [node docs]
+  (let [{:keys [^Directory directory index-writer-config]} node]
+    (with-open [iw (IndexWriter. directory, index-writer-config)]
+      (doseq [doc docs]
+        (.addDocument iw (l/crux-doc->lucene-doc doc))))))
 
 (defn search [node, k, v]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
@@ -71,12 +78,50 @@
             (q/bind-pred-result pred-ctx (get idx-id->idx idx-id) values)
             true))))))
 
+(defn- entity-txes->content-hashes [txes]
+  (set (for [^EntityTx entity-tx txes]
+         (.content-hash entity-tx))))
+
+(defrecord CompactingIndexer [indexer document-store lucene-node]
+  db/Indexer
+  (index-docs [this docs]
+    (db/index-docs indexer docs))
+  (unindex-eids [this eids]
+    (db/unindex-eids indexer eids))
+  (index-entity-txs [this tx entity-txs]
+    (let [content-hashes (entity-txes->content-hashes entity-txs)
+          docs (vals (db/fetch-docs document-store content-hashes))]
+      (index-docs! lucene-node docs)
+      (db/index-entity-txs indexer tx entity-txs)))
+  (mark-tx-as-failed [this tx]
+    (db/mark-tx-as-failed indexer tx))
+  (store-index-meta [this k v]
+    (db/store-index-meta indexer k v))
+  (read-index-meta [this k]
+    (db/read-index-meta indexer k))
+  (read-index-meta [this k not-found]
+    (db/read-index-meta indexer k not-found))
+  (latest-completed-tx [this]
+    (db/latest-completed-tx indexer))
+  (tx-failed? [this tx-id]
+    (db/tx-failed? indexer tx-id))
+  (open-index-store ^java.io.Closeable [this]
+    (db/open-index-store indexer)))
+
 (defn ->node
-  {::node {:start-fn start-lucene-node
-           ::sys/args {:db-dir {:doc "Lucene DB Dir"
-                                :required? true
-                                :spec ::sys/path}}}}
+  {::sys/args {:db-dir {:doc "Lucene DB Dir"
+                        :required? true
+                        :spec ::sys/path}}}
   [{:keys [^Path db-dir]}]
   (let [directory (FSDirectory/open db-dir)
-        node (LuceneNode. directory (StandardAnalyzer.))]
+        analyzer (StandardAnalyzer.)
+        index-writer-config (IndexWriterConfig. analyzer)
+        node (LuceneNode. directory analyzer index-writer-config)]
     (alter-var-root #'*node* (constantly node))))
+
+(defn ->indexer
+  {::sys/deps {:indexer :crux/indexer
+               :document-store :crux/document-store
+               :lucene-node ::node}}
+  [{:keys [indexer document-store lucene-node]}]
+  (CompactingIndexer. indexer document-store lucene-node))

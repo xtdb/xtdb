@@ -4,28 +4,20 @@
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx with-tmp-dir]]
             [crux.lucene :as l])
-  (:import org.apache.lucene.analysis.Analyzer
-           org.apache.lucene.document.Document
-           [org.apache.lucene.index IndexWriter IndexWriterConfig]
-           org.apache.lucene.store.Directory))
+  (:import org.apache.lucene.document.Document))
 
 (defn with-lucene-module [f]
   (with-tmp-dir "lucene" [db-dir]
-    (fix/with-opts {::l/node {:db-dir (.toPath ^java.io.File db-dir)}}
+    (fix/with-opts {::l/node {:db-dir (.toPath ^java.io.File db-dir)}
+                    :crux/indexer {:crux/module 'crux.lucene/->indexer
+                                   :indexer 'crux.kv.indexer/->kv-indexer}}
       f)))
 
 (t/use-fixtures :each with-lucene-module fix/with-node)
 
 (t/deftest test-can-search-string
-  (let [doc {:crux.db/id :ivan :name "Ivan"}
-        {:keys [^Directory directory ^Analyzer analyzer]} (:crux.lucene/node @(:!system *api*))
-        iwc (IndexWriterConfig. analyzer)]
-
+  (let [doc {:crux.db/id :ivan :name "Ivan"}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
-
-    ;; Index
-    (with-open [iw (IndexWriter. directory, iwc)]
-      (.addDocument iw (l/crux-doc->lucene-doc doc)))
 
     (t/testing "using Lucene directly"
       (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/node @(:!system *api*)) "name" "Ivan")]
