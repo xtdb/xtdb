@@ -1,6 +1,5 @@
 (ns crux.azure.blobs
-  (:require [clojure.spec.alpha :as s]
-            [clj-http.client :as http]
+  (:require [clj-http.client :as http]
             [taoensso.nippy :as nippy]
             [crux.db :as db]
             [crux.system :as sys]
@@ -43,18 +42,14 @@
      {}
      docs)))
 
-(s/def ::sas-token string?)
-(s/def ::storage-account string?)
-(s/def ::container string?)
-
 (defn ->document-store {::sys/args {:sas-token {:required? true
-                                                :spec ::sas-token
+                                                :spec ::sys/string
                                                 :doc "Azure Blob Storage SAS Token"}
                                     :storage-account {:required? true
-                                                      :spec ::storage-account
+                                                      :spec ::sys/string
                                                       :doc "Azure Storage Account Name"}
                                     :container {:required? true,
-                                                :spec ::container
+                                                :spec ::sys/string
                                                 :doc "Azure Blob Storage Container"}
                                     :doc-cache-size ds/doc-cache-size-opt}}
   [{:keys [sas-token storage-account container doc-cache-size]}]
