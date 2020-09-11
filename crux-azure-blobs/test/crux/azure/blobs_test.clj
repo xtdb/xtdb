@@ -20,13 +20,13 @@
     (when (and test-azure-blobs-sas-token
                test-azure-blobs-storage-account
                test-azure-blobs-container)
-      (with-open [sys (-> (sys/prep-system {::azb/->document-store
+      (with-open [sys (-> (sys/prep-system {::azb/document-store
                                             {:sas-token test-azure-blobs-sas-token
                                              :storage-account test-azure-blobs-storage-account
                                              :container test-azure-blobs-container}})
                           (sys/start-system))]
 
-        (binding [dst/*doc-store* (::azb/->document-store sys)]
+        (binding [dst/*doc-store* (::azb/document-store sys)]
           (f))))))
 
 (defn test-ns-hook []
