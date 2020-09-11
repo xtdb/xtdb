@@ -20,8 +20,27 @@ class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsT
         private val processTx = Clojure.`var`("crux.corda.service/process-tx")
     }
 
+    private fun setupCruxTxsTable() {
+        serviceHub.jdbcSession().createStatement().use { stmt ->
+            stmt.execute("""
+                CREATE TRIGGER IF NOT EXISTS crux_tx_trigger
+                  AFTER INSERT, UPDATE ON node_transactions
+                  FOR EACH ROW 
+                  CALL "crux.corda.workflow.NodeTransactionTrigger"""".trimIndent())
+
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS crux_txs (
+                  crux_tx_id IDENTITY NOT NULL PRIMARY KEY,
+                  crux_tx_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  corda_tx_id VARCHAR(64) NOT NULL UNIQUE REFERENCES node_transactions(tx_id)
+                )""".trimIndent())
+        }
+    }
+
     init {
         cruxNode = startCruxNode(serviceHub) as ICruxAPI
+
+        setupCruxTxsTable()
 
         try {
             serviceHub.validatedTransactions.updates.subscribe { tx ->
