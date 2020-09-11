@@ -96,7 +96,8 @@
     (try
       (delete! lucene-node eids)
       (catch Throwable t
-        (clojure.tools.logging/error t)))
+        (clojure.tools.logging/error t)
+        (throw t)))
     (db/unindex-eids indexer eids))
   (index-entity-txs [this tx entity-txs]
     (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
@@ -110,7 +111,8 @@
           (.close index-writer))
         (catch Throwable t
           (clojure.tools.logging/error t)
-          (.rollback index-writer)))))
+          (.rollback index-writer)
+          (throw t)))))
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed indexer tx))
   (store-index-meta [this k v]
