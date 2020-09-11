@@ -6,11 +6,35 @@ Resources:
     Properties:
       BucketName: 'opencrux-docs'
       AccessControl: PublicRead
-      WebsiteConfiguration:
-        IndexDocument: 'index.html'
       Tags:
         - Key: juxt:team
           Value: crux-core
+      WebsiteConfiguration:
+        IndexDocument: 'index.html'
+        ErrorDocument: '404.html'
+
+        # suggest testing redirects with 302s first
+        # and confirming via e.g. `curl -Ls -o /dev/null -w %{url_effective} opencrux.com/docs`
+        RoutingRules:
+        - RoutingRuleCondition:
+            KeyPrefixEquals: 'support'
+          RedirectRule:
+            ReplaceKeyWith: 'main/public-beta.html'
+            HostName: www.opencrux.com
+            Protocol: https
+        - RoutingRuleCondition:
+            KeyPrefixEquals: 'docs'
+          RedirectRule:
+            ReplaceKeyWith: 'reference/installation.html'
+            HostName: www.opencrux.com
+            Protocol: https
+            HttpRedirectCode: 301
+        - RoutingRuleCondition:
+            KeyPrefixEquals: 'reference/get-started.html'
+          RedirectRule:
+            ReplaceKeyWith: 'reference/installation.html'
+            HostName: www.opencrux.com
+            Protocol: https
 
   S3BucketPolicy:
     Type: AWS::S3::BucketPolicy
