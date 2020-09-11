@@ -36,13 +36,6 @@
                doc
                (dissoc crux-doc :crux.db/id))))
 
-(defn index-docs! [node docs]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        iwc (IndexWriterConfig. analyzer)]
-    (with-open [iw (IndexWriter. directory, iwc)]
-      (doseq [doc docs]
-        (.addDocument iw (l/crux-doc->lucene-doc doc))))))
-
 (defn search [node, k, v]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         directory-reader (DirectoryReader/open directory)
@@ -90,13 +83,18 @@
   (unindex-eids [this eids]
     (db/unindex-eids indexer eids))
   (index-entity-txs [this tx entity-txs]
-    (try
-      (let [content-hashes (entity-txes->content-hashes entity-txs)
-            docs (vals (db/fetch-docs document-store content-hashes))]
-        (index-docs! lucene-node docs)
-        (db/index-entity-txs indexer tx entity-txs))
-      (catch Throwable t
-        (clojure.tools.logging/error t))))
+    (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
+          iwc (IndexWriterConfig. analyzer)
+          index-writer (IndexWriter. directory, iwc)]
+      (try
+        (let [content-hashes (entity-txes->content-hashes entity-txs)
+              docs (vals (db/fetch-docs document-store content-hashes))]
+          (doseq [doc docs]
+            (.addDocument index-writer (l/crux-doc->lucene-doc doc)))
+          (db/index-entity-txs indexer tx entity-txs)
+          (.close index-writer))
+        (catch Throwable t
+          (.rollback index-writer)))))
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed indexer tx))
   (store-index-meta [this k v]
