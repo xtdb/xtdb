@@ -1,7 +1,8 @@
 package com.example.workflow
 
+import clojure.lang.Keyword
 import com.example.contract.IOUState
-import net.corda.core.contracts.TransactionVerificationException
+import crux.corda.workflow.CruxService
 import net.corda.core.node.services.queryBy
 import net.corda.core.utilities.getOrThrow
 import net.corda.testing.core.singleIdentity
@@ -13,7 +14,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 class IOUFlowTests {
     private lateinit var network: MockNetwork
@@ -41,6 +41,8 @@ class IOUFlowTests {
 
     @Test
     fun `flow records the correct IOU in both parties' vaults`() {
+        val nodes = listOf(a, b)
+
         val iouValue = 1
         val flow = ExampleFlow.Initiator(1, b.info.singleIdentity())
         val future = a.startFlow(flow)
@@ -49,12 +51,12 @@ class IOUFlowTests {
         val signedTx = future.getOrThrow()
 
         // We check the recorded transaction in both transaction storages.
-        for (node in listOf(a, b)) {
+        for (node in nodes) {
             assertEquals(signedTx, node.services.validatedTransactions.getTransaction(signedTx.id))
         }
 
         // We check the recorded IOU in both vaults.
-        for (node in listOf(a, b)) {
+        for (node in nodes) {
             node.transaction {
                 val ious = node.services.vaultService.queryBy<IOUState>().states
                 assertEquals(1, ious.size)
@@ -63,6 +65,23 @@ class IOUFlowTests {
                 assertEquals(recordedState.lender, a.info.singleIdentity())
                 assertEquals(recordedState.borrower, b.info.singleIdentity())
             }
+        }
+
+        val txIdKey = Keyword.intern("crux.tx/tx-id")
+
+        // We check Crux gets a transaction
+        for (node in nodes) {
+            val cruxNode = node.services.cordaService(CruxService::class.java).cruxNode
+            assertEquals(1L, cruxNode.latestCompletedTx()[txIdKey])
+
+            assertEquals(
+                listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
+                cruxNode.db().query("""
+                    {:find [?l ?b ?v] 
+                     :where [[?iou :iou-state/lender ?l]
+                             [?iou :iou-state/borrower ?b]
+                             [?iou :iou-state/value ?v]]}""".trimIndent())
+                    .first())
         }
     }
 }

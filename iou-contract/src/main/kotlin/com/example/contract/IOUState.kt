@@ -1,5 +1,7 @@
 package com.example.contract
 
+import crux.corda.contract.CruxDoc
+import crux.corda.contract.CruxState
 import net.corda.core.contracts.BelongsToContract
 import net.corda.core.contracts.ContractState
 import net.corda.core.contracts.LinearState
@@ -23,8 +25,16 @@ import net.corda.core.schemas.QueryableState
 data class IOUState(val value: Int,
                     val lender: Party,
                     val borrower: Party,
-                    override val linearId: UniqueIdentifier = UniqueIdentifier()):
-        LinearState, QueryableState {
+                    override val linearId: UniqueIdentifier = UniqueIdentifier()) :
+    LinearState, QueryableState, CruxState {
+
+    override val cruxDoc = CruxDoc(
+        id = linearId.id,
+        doc = mapOf(
+            "iou-state/value" to value,
+            "iou-state/lender" to lender.name.toString(),
+            "iou-state/borrower" to borrower.name.toString()))
+
     /** The public keys of the involved parties. */
     override val participants: List<AbstractParty> get() = listOf(lender, borrower)
 

@@ -9,7 +9,7 @@ import net.corda.core.serialization.SingletonSerializeAsToken
 @CordaService
 class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsToken() {
 
-    private val cruxNode: ICruxAPI
+    val cruxNode: ICruxAPI
 
     companion object {
         init {
@@ -20,13 +20,19 @@ class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsT
         private val processTx = Clojure.`var`("crux.corda.service/process-tx")
     }
 
-    private fun setupCruxTxsTable() {
+    private fun setupCruxTables() {
         serviceHub.jdbcSession().createStatement().use { stmt ->
             stmt.execute("""
                 CREATE TRIGGER IF NOT EXISTS crux_tx_trigger
                   AFTER INSERT, UPDATE ON node_transactions
-                  FOR EACH ROW 
+                  FOR EACH ROW
                   CALL "crux.corda.workflow.NodeTransactionTrigger"""".trimIndent())
+
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS crux_docs (
+                  id VARCHAR PRIMARY KEY,
+                  doc BINARY
+                )""".trimIndent())
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS crux_txs (
@@ -40,7 +46,7 @@ class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsT
     init {
         cruxNode = startCruxNode(serviceHub) as ICruxAPI
 
-        setupCruxTxsTable()
+        setupCruxTables()
 
         try {
             serviceHub.validatedTransactions.updates.subscribe { tx ->

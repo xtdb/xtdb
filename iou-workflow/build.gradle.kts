@@ -1,7 +1,10 @@
+import dev.clojurephant.plugin.clojure.tasks.ClojureNRepl
+
 plugins {
     kotlin("jvm")
     id("net.corda.plugins.cordapp")
     id("net.corda.plugins.quasar-utils")
+    id("dev.clojurephant.clojure")
 }
 
 val cordaGroup = "net.corda"
@@ -25,10 +28,18 @@ dependencies {
 
     testImplementation("junit", "junit", "4.12")
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)
+    testImplementation("org.clojure", "clojure", "1.10.0")
+    testImplementation("juxt", "crux-core", "20.09-1.11.1-beta-SNAPSHOT")
 }
 
 tasks.withType(Test::class) {
     enableAssertions = false
+}
+
+tasks.withType(ClojureNRepl::class.java) {
+    forkOptions {
+        jvmArgs!!.add("-javaagent:${project.configurations["quasar"].singleFile}")
+    }
 }
 
 quasar {
