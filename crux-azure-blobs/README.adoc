@@ -6,24 +6,26 @@ This Crux module allows you to use Azure Blob Storage Service (blobs) as Crux's 
 
 First, include `[juxt/crux-azure-blobs "RELEASE"]` in your project.clj, or `{juxt/crux-azure-blobs {:mvn/version "RELEASE"}}` in your deps.edn.
 
-Then, include `'crux.azure.blobs/doc-store` in your topology - for example:
+Then, include `'crux.azure.blobs/->document-store` in your node module configuration - for example:
 
 [source,clojure]
 ----
-{:crux.node/topology '[crux.kafka/topology
-                       crux.azure.blobs/doc-store]
- :crux.azure.blobs/sas-token       "your-sas-token"
- :crux.azure.blobs/storage-account "your-storage-account"
- :crux.azure.blobs/container       "your-container"}
+{:crux/document-store {:crux/module `crux.azure.blobs/->document-store
+                       :sas-token "your-sas-token"
+                       :storage-account "your-storage-account"
+                       :container "your-container-name"}}
 ----
 
 == Configuration
 
 First you need to create a `Storage Account`, then a `Container` for storing the documents.
 
-You need to create a SAS token for the Storage Account via the Azure portal: https://portal.azure.com. Under `Storage Account`, go to `Settings`. Then click `Shared access signature`. Create a new SAS token with `Allowed services`: `Blob` and `Allowed resources types`: `Container` and `Object`. You can select all allowed permissions.
+Then you need to create a SAS token for the Storage Account via the Azure portal:
+https://portal.azure.com.
 
-Select wanted `Start and expiry date/time`, `Allowed IP addresses` if applicable and `HTTPS only`. Leave the rest of the options as is.
+Under `Storage Account`, go to `Settings`. Then click `Shared access signature`. Create a new SAS token with `Allowed services`: `Blob` and `Allowed resources types`: `Container` and `Object`. You can select all allowed permissions.
+
+Select needed `Start and expiry date/time`, `Allowed IP addresses` if applicable and `HTTPS only`. Leave the rest of the options as is.
 
 == Serialization
 
