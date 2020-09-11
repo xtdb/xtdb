@@ -28,11 +28,11 @@
            (java.util Collection Comparator Date List UUID)
            (java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit)))
 
-(defn- logic-var? [x]
+(defn logic-var? [x]
   (and (symbol? x)
        (not (contains? '#{... . $ %} x))))
 
-(def ^:private literal? (complement (some-fn vector? logic-var?)))
+(def literal? (complement (some-fn vector? logic-var?)))
 
 (declare pred-constraint aggregate)
 
