@@ -24,8 +24,9 @@ class IOUFlowTests {
     fun setup() {
         network = MockNetwork(MockNetworkParameters(cordappsForAllNodes = listOf(
             TestCordapp.findCordapp("com.example.contract"),
-            TestCordapp.findCordapp("com.example.workflow")
-        )))
+            TestCordapp.findCordapp("com.example.workflow"),
+            TestCordapp.findCordapp("crux.corda.contract"),
+            TestCordapp.findCordapp("crux.corda.workflow"))))
         a = network.createPartyNode()
         b = network.createPartyNode()
         // For real nodes this happens automatically, but we have to manually register the flow for tests.
