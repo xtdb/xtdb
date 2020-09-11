@@ -44,4 +44,10 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]
                                      :where '[[(text-search :name "Ivan") [[?e]]]
-                                              [?e :crux.db/id]]})))))))
+                                              [?e :crux.db/id]]})))
+
+        (t/testing "bad spec"
+          (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #""
+                                  (c/q db {:find '[?e]
+                                           :where '[[(text-search "Ivan") [[?e]]]
+                                                    [?e :crux.db/id]]}))))))))

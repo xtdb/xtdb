@@ -1,5 +1,6 @@
 (ns crux.lucene
-  (:require [crux.codec :as cc]
+  (:require [clojure.spec.alpha :as s]
+            [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.lucene :as l]
@@ -56,6 +57,9 @@
                          eid))
                      (iterator-seq search-results))]
       (map #(vector (db/decode-value index-store %)) eids))))
+
+(defmethod q/pred-args-spec 'text-search [_]
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr q/literal? :v string?)) :return (s/? ::q/pred-return)))
 
 (defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
   (let [[attr vval] (rest arg-bindings)]
