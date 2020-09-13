@@ -997,7 +997,12 @@
   (t/testing "unknown attribute"
     (t/is (empty? (api/q (api/db *api*) '{:find [e email]
                                           :where [[e :name "Ivan"]
-                                                  [(get-attr e :email) [email ...]]]}))))
+                                                  [(get-attr e :email) [email ...]]]})))
+
+    (t/testing "unknown attribute as scalar"
+      (t/is (= #{[:ivan nil]} (api/q (api/db *api*) '{:find [e email]
+                                                      :where [[e :name "Ivan"]
+                                                              [(get-attr e :email) email]]})))))
 
   (t/testing "optional found attribute"
     (t/is (= #{[:ivan 21]}
@@ -1189,6 +1194,32 @@
                                    :where [[(q {:find [y]
                                                 :where [[(identity 2) x]
                                                         [(+ x 2) y]]}) [[x]]]]})))
+
+  (t/testing "can bind resulting relation as scalar"
+    (t/is (= #{[[[4]]]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(q {:find [y]
+                                                  :where [[(identity 2) x]
+                                                          [(+ x 2) y]]}) x]]})))
+
+    (t/testing "can bind empty resulting relation as scalar"
+      (t/is (= #{[nil]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q {:find [x]
+                                                    :where [[(vector) [x ...]]]}) x]]})))))
+
+  (t/testing "can bind resulting relation as tuple"
+    (t/is (= #{[[4]]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(q {:find [y]
+                                                  :where [[(identity 2) x]
+                                                          [(+ x 2) y]]}) [x]]]})))
+
+    (t/testing "can bind empty resulting relation as tuple"
+      (t/is (= #{[nil]}
+               (api/q (api/db *api*) '{:find [x]
+                                       :where [[(q {:find [x]
+                                                    :where [[(vector) [x ...]]]}) [x]]]})))))
 
   (t/is (empty?
          (api/q (api/db *api*) '{:find [x]

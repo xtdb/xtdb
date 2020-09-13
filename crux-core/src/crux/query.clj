@@ -900,28 +900,14 @@
         e-result-index (.result-index ^VarBinding e-var)]
     (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
       (let [e (.get join-keys e-result-index)
-            vs (db/aev index-store attr e nil entity-resolver-fn)
-            return-not-found? (and (empty? vs) not-found?)]
-        (if (and (empty? vs) (not not-found?))
-          false
-          (case return-type
-            :collection
-            (let [values (if return-not-found?
-                           [(encode-value-fn not-found)]
-                           vs)]
-              (idx/update-relation-virtual-index! (get idx-id->idx idx-id) values identity true)
+            vs (db/aev index-store attr e nil entity-resolver-fn)]
+        (if (and (seq vs) (= :collection return-type))
+          (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs identity true)
               true)
-
-            (:scalar :tuple :relation)
-            (let [values (if return-not-found?
+          (let [values (if (and (empty? vs) not-found?)
                            [not-found]
                            (mapv #(db/decode-value index-store %) vs))]
-              (bind-pred-result pred-ctx (get idx-id->idx idx-id) values)
-              true)
-
-            (if return-not-found?
-              not-found
-              true)))))))
+            (bind-pred-result pred-ctx (get idx-id->idx idx-id) (not-empty values))))))))
 
 (defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
                                                             :as pred-ctx}]
@@ -936,8 +922,7 @@
             query (cond-> (assoc query :args args)
                     (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
         (with-open [pred-result (.openQuery ^ICruxDatasource db query)]
-          (and (.hasNext pred-result)
-               (bind-pred-result pred-ctx (get idx-id->idx idx-id) (iterator-seq pred-result))))))))
+          (bind-pred-result pred-ctx (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
   (let [arg-bindings (vec (for [arg-binding (rest arg-bindings)]
