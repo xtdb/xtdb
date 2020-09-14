@@ -902,8 +902,8 @@
             (str "Clause refers to unknown variable: "
                  var " " (cio/pr-edn-str clause))))))
 
-(defn- bind-binding [{:keys [return-type return-vars-tuple-idxs-in-join-order]} idx result]
-  (case return-type
+(defn- bind-binding [bind-type tuple-idxs-in-join-order idx result]
+  (case bind-type
     :scalar
     (do (idx/update-relation-virtual-index! idx [[result]])
         true)
@@ -913,17 +913,18 @@
         (not-empty result))
 
     (:tuple :relation)
-    (let [result (if (= :relation return-type)
+    (let [result (if (= :relation bind-type)
                    result
                    [result])]
       (->> (for [tuple result]
-             (mapv #(nth tuple % nil) return-vars-tuple-idxs-in-join-order))
+             (mapv #(nth tuple % nil) tuple-idxs-in-join-order))
            (idx/update-relation-virtual-index! idx))
       (not-empty result))
 
     result))
 
-(defmethod pred-constraint 'get-attr [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
+(defmethod pred-constraint 'get-attr [_ {:keys [encode-value-fn idx-id arg-bindings
+                                                return-type tuple-idxs-in-join-order] :as pred-ctx}]
   (let [arg-bindings (rest arg-bindings)
         [e-var attr not-found] arg-bindings
         not-found? (= 3 (count arg-bindings))
@@ -937,9 +938,10 @@
           (let [values (if (and (empty? vs) not-found?)
                            [not-found]
                            (mapv #(db/decode-value index-snapshot %) vs))]
-            (bind-binding pred-ctx (get idx-id->idx idx-id) (not-empty values))))))))
+            (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
 
-(defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
+(defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules
+                                                                   return-type tuple-idxs-in-join-order]
                                                             :as pred-ctx}]
   (let [query (normalize-query (second arg-bindings))
         parent-rules (:rules (meta rule-name->rules))]
@@ -952,7 +954,7 @@
             query (cond-> (assoc query :args args)
                     (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
         (with-open [pred-result (.openQuery ^ICruxDatasource db query (object-array 0))]
-          (bind-binding pred-ctx (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
+          (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
   (let [arg-bindings (vec (for [arg-binding (rest arg-bindings)]
@@ -974,7 +976,8 @@
   (built-in-unification-pred #(empty? (apply set/intersection %)) pred-ctx))
 
 (defmethod pred-constraint :default [{:keys [return] {:keys [pred-fn]} :pred :as clause}
-                                     {:keys [encode-value-fn idx-id arg-bindings]
+                                     {:keys [encode-value-fn idx-id arg-bindings
+                                             return-type tuple-idxs-in-join-order]
                                       :as pred-ctx}]
   (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
     (let [[pred-fn & args] (for [arg-binding arg-bindings]
@@ -982,15 +985,14 @@
                                (bound-result-for-var index-snapshot arg-binding join-keys)
                                arg-binding))
           pred-result (apply pred-fn args)]
-      (bind-binding pred-ctx (get idx-id->idx idx-id) pred-result))))
+      (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) pred-result))))
 
-(defn- build-bind-vars-tuple-idxs-in-join-order [bind-vars vars-in-join-order]
-  (let [bind-vars->tuple-idx (zipmap bind-vars (range))
-        bind-vars-tuple-idxs-in-join-order (vec (for [var vars-in-join-order
-                                                      :let [idx (get bind-vars->tuple-idx var)]
-                                                      :when idx]
-                                                  idx))]
-    bind-vars-tuple-idxs-in-join-order))
+(defn- build-tuple-idxs-in-join-order [bind-vars vars-in-join-order]
+  (let [bind-vars->tuple-idx (zipmap bind-vars (range))]
+    (vec (for [var vars-in-join-order
+               :let [idx (get bind-vars->tuple-idx var)]
+               :when idx]
+           idx))))
 
 (defn- build-pred-constraints [rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
@@ -1003,13 +1005,13 @@
                                (get var->bindings arg)
                                (maybe-unquote arg)))
               return-vars (find-binding-vars return)
-              return-vars-tuple-idxs-in-join-order (build-bind-vars-tuple-idxs-in-join-order return-vars vars-in-join-order)
+              return-vars-tuple-idxs-in-join-order (build-tuple-idxs-in-join-order return-vars vars-in-join-order)
               return-type (first return)
               pred-ctx {:encode-value-fn encode-value-fn
                         :idx-id idx-id
                         :arg-bindings arg-bindings
                         :return-type return-type
-                        :return-vars-tuple-idxs-in-join-order return-vars-tuple-idxs-in-join-order
+                        :tuple-idxs-in-join-order return-vars-tuple-idxs-in-join-order
                         :rule-name->rules rule-name->rules}]]
     (do (validate-existing-vars var->bindings clause pred-vars)
         (when-not (= (count return-vars)
@@ -1090,7 +1092,7 @@
                                                                       (assoc *recursion-table* cache-key [])
                                                                       *recursion-table*)]
                                           (let [{:keys [n-ary-join
-                                                        var->bindings]} (build-sub-query index-snapshot db where args [] rule-name->rules stats)
+                                                        var->bindings]} (build-sub-query index-snapshot db where args [] [] rule-name->rules stats)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
                                             (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                               (if has-free-vars?
@@ -1367,8 +1369,8 @@
         in-bindings (vec (for [[idx-id in] (map vector in-idx-ids in)
                                :let [bind-vars (find-binding-vars (second in))]]
                            {:idx-id idx-id
-                            :in in
-                            :bind-vars-tuple-idxs-in-join-order (build-bind-vars-tuple-idxs-in-join-order bind-vars vars-in-join-order)}))]
+                            :bind-type (first in)
+                            :tuple-idxs-in-join-order (build-tuple-idxs-in-join-order bind-vars vars-in-join-order)}))]
     {:depth->constraints depth->constraints
      :var->range-constraints var->range-constraints
      :var->logic-var-range-constraint-fns var->logic-var-range-constraint-fns
@@ -1447,9 +1449,9 @@
          (get idx-id->idx args-idx-id)
          (vec (for [arg (distinct args)]
                 (mapv #(arg-for-var arg %) arg-vars-in-join-order)))))
-      (doseq [[{:keys [idx-id in bind-vars-tuple-idxs-in-join-order]} in-arg] (map vector in-bindings in-args)]
-        (bind-binding {:return-type (first in)
-                       :return-vars-tuple-idxs-in-join-order bind-vars-tuple-idxs-in-join-order}
+      (doseq [[{:keys [idx-id bind-type tuple-idxs-in-join-order]} in-arg] (map vector in-bindings in-args)]
+        (bind-binding bind-type
+                      tuple-idxs-in-join-order
                       (get idx-id->idx idx-id)
                       in-arg)))
     (log/debug :where (cio/pr-edn-str where))
@@ -1463,8 +1465,8 @@
 
 (defn query-plan-for [q encode-value-fn stats]
   (s/assert ::query q)
-  (let [{:keys [where args rules]} (s/conform ::query q)]
-    (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
+  (let [{:keys [where in args rules]} (s/conform ::query q)]
+    (compile-sub-query encode-value-fn where (arg-vars args) in (rule-name->rules rules) stats)))
 
 (defn- open-index-snapshot ^java.io.Closeable [{:keys [index-store index-snapshot] :as db}]
   (if index-snapshot
