@@ -50,11 +50,20 @@
                                                 [?e :crux.db/id]]}))))))
 
     (t/testing "Subsequent tx/doc"
-      (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan2 :name "Ivbn"}]])
-      (with-open [db (c/open-db *api*)]
-        (t/is (= #{[:ivan] [:ivan2]} (c/q db {:find '[?e]
-                                              :where '[[(text-search :name "Iv?n") [[?e]]]
-                                                       [?e :crux.db/id]]})))))
+      (with-open [before-db (c/open-db *api*)]
+        (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan2 :name "Ivbn"}]])
+        (let [q {:find '[?e] :where '[[(text-search :name "Iv?n") [[?e]]] [?e :crux.db/id]]}]
+          (t/is (= #{[:ivan]} (c/q before-db q)))
+          (with-open [db (c/open-db *api*)]
+            (t/is (= #{[:ivan] [:ivan2]} (c/q db q)))))))
+
+    (t/testing "Modifying doc"
+      (with-open [before-db (c/open-db *api*)]
+        (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Derek"}]])
+        (let [q {:find '[?e] :where '[[(text-search :name "Derek") [[?e]]] [?e :crux.db/id]]}]
+          (t/is (not (seq (c/q before-db q))))
+          (with-open [db (c/open-db *api*)]
+            (t/is (= #{[:ivan]} (c/q db q)))))))
 
     (t/testing "Eviction"
       (submit+await-tx [[:crux.tx/evict :ivan]])

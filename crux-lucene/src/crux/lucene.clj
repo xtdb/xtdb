@@ -66,8 +66,8 @@
                        (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
                              v (db/encode-value index-store (.get ^Document doc (name attr)))
                              vs-in-crux (db/aev index-store attr eid v entity-resolver-fn)]
-                         (not-empty (filter (partial mem/buffers=? v) vs-in-crux))
-                         eid))
+                         (when (not-empty (filter (partial mem/buffers=? v) vs-in-crux))
+                           eid)))
                      (iterator-seq search-results))]
       (into [] (map #(vector (db/decode-value index-store %)) eids)))))
 
