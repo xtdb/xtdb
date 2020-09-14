@@ -111,7 +111,7 @@
 (s/def ::transact-time date?)
 (s/def ::args (s/coll-of any? :kind vector?))
 
-(s/def ::query-map (s/and #(set/superset? #{:query :valid-time :transact-time} (keys %))
+(s/def ::query-map (s/and #(set/superset? #{:query :args :valid-time :transact-time} (keys %))
                           (s/keys :req-un [:crux.query/query]
                                   :opt-un [::args
                                            ::valid-time
