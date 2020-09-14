@@ -2,7 +2,6 @@
 
 Crux nodes can be xref:#embedded[embedded within your JVM application], or they can be started standalone through a xref:#uberjar[pre-built Crux JAR], via xref:#docker[Docker], or using xref:#clojure-cli[Clojure CLI tooling].
 
-
 This guide will show you how to set up an in-memory node using the `crux-core` module.
 You can then proceed to add further modules (eg for persistence) as required - see the documentation of the individual modules for more information.
 

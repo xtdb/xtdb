@@ -1,7 +1,4 @@
 = Transactions
-:toc: macro
-
-toc::[]
 
 [#overview]
 == Overview

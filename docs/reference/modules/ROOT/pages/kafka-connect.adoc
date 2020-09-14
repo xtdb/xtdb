@@ -1,7 +1,4 @@
 = Kafka Connect
-:toc: macro
-
-toc::[]
 
 [#intro]
 == Introduction

@@ -1,7 +1,4 @@
 = SQL
-:toc: macro
-
-toc::[]
 
 SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
 

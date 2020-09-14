@@ -1,9 +1,6 @@
 = Configuration
-:toc: macro
 
 A Crux node consists of a number of modules, which can be independently configured and augmented.
-
-toc::[]
 
 Once you have an xref:installation.adoc[in-memory Crux node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programatically:
 
