@@ -47,7 +47,7 @@
     op))
 
 (defn- put-delete-etxs [k start-valid-time end-valid-time content-hash
-                        {::keys [tx-time tx-id], :keys [crux.db/valid-time]} {:keys [index-store]}]
+                        {::keys [tx-time tx-id], :keys [crux.db/valid-time]} {:keys [index-snapshot]}]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
                           (c/->EntityTx eid vt tx-time tx-id content-hash))
@@ -56,7 +56,7 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (let [entity-history (db/entity-history index-store eid :desc {:start {:crux.db/valid-time end-valid-time}})]
+        (let [entity-history (db/entity-history index-snapshot eid :desc {:start {:crux.db/valid-time end-valid-time}})]
           (into (->> (cons start-valid-time
                            (->> (map etx->vt entity-history)
                                 (take-while #(neg? (compare start-valid-time %)))))
@@ -70,10 +70,10 @@
                    (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))])))
 
       (->> (cons start-valid-time
-                 (when-let [visible-entity (some-> (db/entity-as-of index-store eid start-valid-time tx-time)
+                 (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-time)
 
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (->> (db/entity-history index-store eid :asc {:start {:crux.db/valid-time start-valid-time}})
+                   (->> (db/entity-history index-snapshot eid :asc {:start {:crux.db/valid-time start-valid-time}})
                         (remove (comp #{start-valid-time} :valid-time))
                         (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
                         (mapv etx->vt))))
@@ -88,8 +88,8 @@
 
 (defmethod index-tx-event :crux.tx/match [[op k v at-valid-time :as match-op]
                                           {::keys [tx-time tx-id], :keys [crux.db/valid-time], :as tx}
-                                          {:keys [index-store] :as tx-ingester}]
-  {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-store
+                                          {:keys [index-snapshot] :as tx-ingester}]
+  {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot
                                                                 (c/new-id k)
                                                                 (or at-valid-time valid-time tx-time)
                                                                 tx-time)]
@@ -98,11 +98,11 @@
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {::keys [tx-time tx-id], :keys [crux.db/valid-time] :as tx}
-                                        {:keys [index-store document-store] :as tx-ingester}]
+                                        {:keys [index-snapshot document-store] :as tx-ingester}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time valid-time tx-time)]
 
-    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-store eid valid-time tx-time)
+    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-time)
                            current-id (c/new-id content-hash)
                            expected-id (c/new-id old-v)]
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
@@ -164,7 +164,7 @@
 
 (defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
-                                       {:keys [query-engine document-store index-store], :as tx-ingester}]
+                                       {:keys [query-engine document-store index-snapshot], :as tx-ingester}]
   (let [fn-id (c/new-id k)
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
         args-content-hash (c/new-id args-doc)
@@ -288,13 +288,13 @@
             abort? (loop [[tx-event & more-tx-events] tx-events]
                      (when tx-event
                        (let [{:keys [new-tx-events abort?]}
-                             (with-open [index-store (db/open-index-store forked-indexer)]
+                             (with-open [index-snapshot (db/open-index-snapshot forked-indexer)]
                                (let [{:keys [pre-commit-fn tx-events evict-eids etxs docs]}
                                      (index-tx-event (-> tx-event
                                                          (with-tx-fn-args forked-deps))
                                                      tx
                                                      (-> forked-deps
-                                                         (assoc :index-store index-store)))]
+                                                         (assoc :index-snapshot index-snapshot)))]
                                  (db/submit-docs forked-document-store docs)
 
                                  (if (and pre-commit-fn (not (pre-commit-fn)))

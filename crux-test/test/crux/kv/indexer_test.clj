@@ -85,10 +85,10 @@
                     (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
 
                       (write-etxs (vals vt+tt->etx))
-                      (with-open [index-store (db/open-index-store *indexer*)]
+                      (with-open [index-snapshot (db/open-index-snapshot *indexer*)]
                         (->> (for [[vt tt] (concat txs queries)]
                                (= (entity-as-of vt+tt->etx vt tt)
-                                  (db/entity-as-of index-store eid vt tt)))
+                                  (db/entity-as-of index-snapshot eid vt tt)))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-range-test 50
@@ -102,12 +102,12 @@
                   (with-fresh-indexer
                     (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
                       (write-etxs (vals vt+tt->etx))
-                      (with-open [index-store (db/open-index-store *indexer*)]
+                      (with-open [index-snapshot (db/open-index-snapshot *indexer*)]
                         (->> (for [[[vt1 tt1] [vt2 tt2]] (partition 2 (concat txs queries))
                                    :let [[vt-end vt-start] (sort [vt1 vt2])
                                          [tt-end tt-start] (sort [tt1 tt2])
                                          expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (->> (db/entity-history index-store
+                                         actual (->> (db/entity-history index-snapshot
                                                                         eid :desc
                                                                         {:start {:crux.db/valid-time vt-start
                                                                                  :crux.tx/tx-time tt-start}
@@ -128,12 +128,12 @@
                   (with-fresh-indexer
                     (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
                       (write-etxs (vals vt+tt->etx))
-                      (with-open [index-store (db/open-index-store *indexer*)]
+                      (with-open [index-snapshot (db/open-index-snapshot *indexer*)]
                         (->> (for [[vt-start tt-start] (concat txs queries)
                                    :let [vt-end (Date. Long/MIN_VALUE)
                                          tt-end (Date. Long/MIN_VALUE)
                                          expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (->> (db/entity-history index-store eid :desc
+                                         actual (->> (db/entity-history index-snapshot eid :desc
                                                                         {:start {:crux.db/valid-time vt-start
                                                                                  :crux.tx/tx-time tt-start}})
                                                      (set))]]
@@ -151,12 +151,12 @@
                   (with-fresh-indexer
                     (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
                       (write-etxs (vals vt+tt->etx))
-                      (with-open [index-store (db/open-index-store *indexer*)]
+                      (with-open [index-snapshot (db/open-index-snapshot *indexer*)]
                         (->> (for [[vt-end tt-end] (concat txs queries)
                                    :let [vt-start (Date. Long/MAX_VALUE)
                                          tt-start (Date. Long/MAX_VALUE)
                                          expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (->> (db/entity-history index-store eid :desc
+                                         actual (->> (db/entity-history index-snapshot eid :desc
                                                                         {:end {:crux.db/valid-time vt-end
                                                                                :crux.tx/tx-time tt-end}})
                                                      (set))]]
@@ -173,13 +173,13 @@
                   (with-fresh-indexer
                     (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
                       (write-etxs (vals vt+tt->etx))
-                      (with-open [index-store (db/open-index-store *indexer*)]
+                      (with-open [index-snapshot (db/open-index-snapshot *indexer*)]
                         (let [vt-start (Date. Long/MAX_VALUE)
                               tt-start (Date. Long/MAX_VALUE)
                               vt-end (Date. Long/MIN_VALUE)
                               tt-end (Date. Long/MIN_VALUE)
                               expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                              actual (->> (db/entity-history index-store eid :desc {})
+                              actual (->> (db/entity-history index-snapshot eid :desc {})
                                           (set))]
                           (= expected actual))))))))
 

@@ -438,9 +438,9 @@
          (cond-> (not with-corrections?) (->> (partition-by :vt)
                                               (map first)))))))
 
-;;;; IndexStore
+;;;; IndexSnapshot
 
-(declare new-kv-index-store)
+(declare new-kv-index-snapshot)
 
 (defn- advance-iterator-to-hash-cache-value [i value-buffer]
   (let [hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
@@ -448,30 +448,30 @@
     (and found-k
          (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
-(defn- value-buffer->id-buffer [index-store ^DirectBuffer value-buffer]
-  (c/->id-buffer (db/decode-value index-store value-buffer)))
+(defn- value-buffer->id-buffer [index-snapshot ^DirectBuffer value-buffer]
+  (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
 
-(defrecord KvIndexStore [snapshot
+(defrecord KvIndexSnapshot [snapshot
                          close-snapshot?
                          level-1-iterator-delay
                          level-2-iterator-delay
                          entity-as-of-iterator-delay
                          decode-value-iterator-delay
-                         nested-index-store-state
+                         nested-index-snapshot-state
                          ^Map temp-hash-cache
                          ^AtomicBoolean closed?]
   Closeable
   (close [_]
     (when (.compareAndSet closed? false true)
-      (doseq [nested-index-store @nested-index-store-state]
-        (cio/try-close nested-index-store))
+      (doseq [nested-index-snapshot @nested-index-snapshot-state]
+        (cio/try-close nested-index-snapshot))
       (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay]
               :when (realized? i)]
         (cio/try-close @i))
       (when close-snapshot?
         (cio/try-close snapshot))))
 
-  db/IndexStore
+  db/IndexSnapshot
   (av [this a min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
           prefix (encode-av-key-to nil attr-buffer)
@@ -614,10 +614,10 @@
         (.put temp-hash-cache (mem/copy-to-unpooled-buffer value-buffer) value))
       value-buffer))
 
-  (open-nested-index-store [this]
-    (let [nested-index-store (new-kv-index-store snapshot temp-hash-cache false)]
-      (swap! nested-index-store-state conj nested-index-store)
-      nested-index-store)))
+  (open-nested-index-snapshot [this]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache false)]
+      (swap! nested-index-snapshot-state conj nested-index-snapshot)
+      nested-index-snapshot)))
 
 ;;;; Indexer
 
@@ -641,8 +641,8 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-store [snapshot temp-hash-cache close-snapshot?]
-  (->KvIndexStore snapshot
+(defn- new-kv-index-snapshot [snapshot temp-hash-cache close-snapshot?]
+  (->KvIndexSnapshot snapshot
                   close-snapshot?
                   (delay (kv/new-iterator snapshot))
                   (delay (kv/new-iterator snapshot))
@@ -747,8 +747,8 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
-  (open-index-store [this]
-    (new-kv-index-store (kv/new-snapshot kv-store) (HashMap.) true))
+  (open-index-snapshot [this]
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) true))
 
   status/Status
   (status-map [this]
