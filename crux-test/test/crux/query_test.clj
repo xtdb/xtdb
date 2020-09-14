@@ -313,44 +313,39 @@
 
 (t/deftest test-exceptions
   (t/testing "Unbound query variable"
-    (try
-      (api/q (api/db *api*) '{:find [bah]
-                              :where [[e :name]]})
-      (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (= "Find refers to unknown variable: bah" (.getMessage e)))))
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Find refers to unknown variable: bah"
+           (api/q (api/db *api*) '{:find [bah]
+                                   :where [[e :name]]})))
 
-    (try
-      (api/q (api/db *api*) '{:find [x]
-                              :where [[x :foo]
-                                      [(+ 1 bah)]]})
-      (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (re-find #"Clause refers to unknown variable: bah" (.getMessage e)))))
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Clause refers to unknown variable: bah"
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[x :foo]
+                                           [(+ 1 bah)]]})))
 
-    (try
-      (api/q (api/db *api*) '{:find [x]
-                              :where [[x :foo]
-                                      [(+ 1 bah) bah]]})
-      (t/is (= true false) "Expected exception")
-      (catch RuntimeException e
-        (t/is (re-find #"Circular dependency between bah and bah" (.getMessage e)))))
+    (t/is (thrown-with-msg?
+           RuntimeException
+           #"Circular dependency between bah and bah"
+           (api/q (api/db *api*) '{:find [x]
+                                   :where [[x :foo]
+                                           [(+ 1 bah) bah]]})))
 
-    (try
-      (api/q (api/db *api*) '{:find [foo]
-                              :where [[(+ 1 bar) foo]
-                                      [(+ 1 foo) bar]]})
-      (t/is (= true false) "Expected exception")
-      (catch RuntimeException e
-        (t/is (re-find #"Circular dependency between bar and foo" (.getMessage e)))))
+    (t/is (thrown-with-msg?
+           RuntimeException
+           #"Circular dependency between bar and foo"
+           (api/q (api/db *api*) '{:find [foo]
+                                   :where [[(+ 1 bar) foo]
+                                           [(+ 1 foo) bar]]})))
 
-    (try
-      (api/q (api/db *api*) '{:find [foo]
-                              :where [[(+ 1 foo) bar]
-                                      [(+ 1 bar) foo]]})
-      (t/is (= true false) "Expected exception")
-      (catch RuntimeException e
-        (t/is (re-find #"Circular dependency between foo and bar" (.getMessage e)))))))
+    (t/is (thrown-with-msg?
+           RuntimeException
+           #"Circular dependency between foo and bar"
+           (api/q (api/db *api*) '{:find [foo]
+                                   :where [[(+ 1 foo) bar]
+                                           [(+ 1 bar) foo]]})))))
 
 (t/deftest test-not-query
   (t/is (= '[[:triple {:e e :a :name :v name}]
@@ -518,24 +513,20 @@
                                                       [e :name "Ivan"]))]})))))
 
 (t/deftest test-ors-must-use-same-vars
-  (try
-    (api/q (api/db *api*) '{:find [e]
-                            :where [[e :name name]
-                                    (or [e1 :last-name "Ivanov"]
-                                        [e2 :last-name "Ivanov"])]})
-    (t/is (= true false) "Expected assertion error")
-    (catch IllegalArgumentException e
-      (t/is (re-find #"Or requires same logic variables"
-                     (.getMessage e)))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Or requires same logic variables"
+         (api/q (api/db *api*) '{:find [e]
+                                 :where [[e :name name]
+                                         (or [e1 :last-name "Ivanov"]
+                                             [e2 :last-name "Ivanov"])]})))
 
-  (try
-    (api/q (api/db *api*) '{:find [x]
-                            :where [(or-join [x]
-                                             [e1 :last-name "Ivanov"])]})
-    (t/is (= true false) "Expected assertion error")
-    (catch IllegalArgumentException e
-      (t/is (re-find #"Or join variable never used: x"
-                     (.getMessage e))))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Or join variable never used: x"
+         (api/q (api/db *api*) '{:find [x]
+                                 :where [(or-join [x]
+                                                  [e1 :last-name "Ivanov"])]}))))
 
 (t/deftest test-ors-can-introduce-new-bindings
   (let [[petr ivan ivanova] (fix/transact! *api* (fix/people [{:name "Petr" :last-name "Smith" :sex :male}
@@ -1503,35 +1494,32 @@
                                                         [(is-ivan-or-petr? i)
                                                          [i :name "Petr"]]]}))))
 
-  (try
-    (api/q (api/db *api*) '{:find [i]
-                            :where [[i :age age]
-                                    (over-twenty-one? age)]})
-    (t/is (= true false) "Expected exception")
-    (catch IllegalArgumentException e
-      (t/is (re-find #"Unknown rule: " (.getMessage e)))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Unknown rule:"
+         (api/q (api/db *api*) '{:find [i]
+                                 :where [[i :age age]
+                                         (over-twenty-one? age)]})))
 
-  (try
-    (api/q (api/db *api*) '{:find [i]
-                            :where [[i :age age]
-                                    (over-twenty-one? i age)]
-                            :rules [[(over-twenty-one? x)
-                                     [(>= x 21)]]]})
-    (t/is (= true false) "Expected exception")
-    (catch IllegalArgumentException e
-      (t/is (re-find #"Rule invocation has wrong arity, expected: 1" (.getMessage e)))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Rule invocation has wrong arity, expected: 1"
+         (api/q (api/db *api*) '{:find [i]
+                                 :where [[i :age age]
+                                         (over-twenty-one? i age)]
+                                 :rules [[(over-twenty-one? x)
+                                          [(>= x 21)]]]})))
 
-  (try
-    (api/q (api/db *api*) '{:find [i]
-                            :where [[i :age age]
-                                    (is-ivan-or-petr? i name)]
-                            :rules [[(is-ivan-or-petr? i name)
-                                     [i :name "Ivan"]]
-                                    [(is-ivan-or-petr? i)
-                                     [i :name "Petr"]]]})
-    (t/is (= true false) "Expected exception")
-    (catch IllegalArgumentException e
-      (t/is (re-find #"Rule definitions require same arity:" (.getMessage e))))))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Rule definitions require same arity:"
+         (api/q (api/db *api*) '{:find [i]
+                                 :where [[i :age age]
+                                         (is-ivan-or-petr? i name)]
+                                 :rules [[(is-ivan-or-petr? i name)
+                                          [i :name "Ivan"]]
+                                         [(is-ivan-or-petr? i)
+                                          [i :name "Petr"]]]}))))
 
 ;; https://github.com/juxt/crux/issues/70
 
