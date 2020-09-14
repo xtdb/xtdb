@@ -22,19 +22,21 @@ Resources:
             ReplaceKeyWith: 'main/public-beta.html'
             HostName: www.opencrux.com
             Protocol: https
+            HttpRedirectCode: 302
         - RoutingRuleCondition:
             KeyPrefixEquals: 'docs'
           RedirectRule:
             ReplaceKeyWith: 'reference/installation.html'
             HostName: www.opencrux.com
             Protocol: https
-            HttpRedirectCode: 301
+            HttpRedirectCode: 302
         - RoutingRuleCondition:
             KeyPrefixEquals: 'reference/get-started.html'
           RedirectRule:
             ReplaceKeyWith: 'reference/installation.html'
             HostName: www.opencrux.com
             Protocol: https
+            HttpRedirectCode: 302
 
   S3BucketPolicy:
     Type: AWS::S3::BucketPolicy
