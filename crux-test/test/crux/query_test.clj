@@ -345,7 +345,14 @@
            #"Circular dependency between foo and bar"
            (api/q (api/db *api*) '{:find [foo]
                                    :where [[(+ 1 foo) bar]
-                                           [(+ 1 bar) foo]]})))))
+                                           [(+ 1 bar) foo]]})))
+
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Range constraint refers to unknown variable: x"
+           (api/q (api/db *api*) '{:find [e]
+                                   :where [[e :name v]
+                                           [(> 2 x)]]})))))
 
 (t/deftest test-not-query
   (t/is (= '[[:triple {:e e :a :name :v name}]

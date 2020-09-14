@@ -432,7 +432,7 @@
     (let [q (normalize-query (maybe-unquote (first args)))
           q-args (:args q)]
       (when (> (count q-args) 1)
-        (throw (IllegalArgumentException. (str "Sub-queries don't support more than one argument tuple: " (pr-str pred)))))
+        (throw (IllegalArgumentException. (str "Sub-queries don't support more than one argument tuple: " (cio/pr-edn-str pred)))))
       (assoc pred :args (vec (cons (dissoc q :args)
                                    (apply concat (for [[k v] (first q-args)]
                                                    [(keyword (maybe-unquote k)) v]))))))
@@ -829,10 +829,16 @@
 ;; TODO: Get rid of assumption that value-buffer-type-id is always one
 ;; byte. Or better, move construction or handling of ranges to the
 ;; IndexStore and remove the need for the type-prefix completely.
-(defn- build-var-range-constraints [encode-value-fn range-clauses]
-  (->> (for [[var clauses] (group-by :sym range-clauses)]
+(defn- build-var-range-constraints [encode-value-fn range-clauses var->bindings]
+  (doseq [{:keys [sym sym-a sym-b] :as clause} range-clauses
+          var [sym sym-a sym-b]
+          :when (logic-var? var)]
+    (when-not (contains? var->bindings var)
+      (throw (IllegalArgumentException.
+              (str "Range constraint refers to unknown variable: " var " " (cio/pr-edn-str clause))))))
+  (->> (for [[var clauses] (group-by :sym range-clauses)
+             :when (logic-var? var)]
          [var (->> (for [{:keys [op val sym]} clauses
-                         :when (logic-var? sym)
                          :let [val (encode-value-fn val)]]
                      (new-range-constraint-wrapper-fn op (Box. val)))
                    (apply comp))])
@@ -1318,7 +1324,7 @@
                                                  var->values-result-index
                                                  join-depth
                                                  (keys var->attr)))
-        var->range-constraints (build-var-range-constraints encode-value-fn range-clauses)
+        var->range-constraints (build-var-range-constraints encode-value-fn range-clauses var->bindings)
         var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns encode-value-fn range-clauses var->bindings)
         not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
         not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
@@ -1750,7 +1756,7 @@
                  (bus/send bus {:crux/event-type ::failed-query
                                 ::query safe-query
                                 ::query-id query-id
-                                ::error {:type (pr-str (type e))
+                                ::error {:type (cio/pr-edn-str (type e))
                                          :message (.getMessage e)}}))
                (throw e)))
            (cio/->cursor (fn []
@@ -1824,7 +1830,7 @@
         (api/db in-flight-tx valid-time)))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time transact-time]} ^Writer w]
-  (.write w (format "#<CruxDB %s>" (pr-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
+  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         indexer bus
