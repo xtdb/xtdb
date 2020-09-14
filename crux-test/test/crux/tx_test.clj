@@ -44,7 +44,7 @@
         {:crux.tx/keys [tx-time tx-id]}
         (fix/submit+await-tx [[:crux.tx/put picasso valid-time]])]
 
-    (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (t/testing "can see entity at transact and valid time"
         (t/is (= (c/map->EntityTx {:eid picasso-eid
                                    :content-hash content-hash
@@ -77,7 +77,7 @@
              new-tx-id   :crux.tx/tx-id}
             (fix/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-        (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+        (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= (c/map->EntityTx {:eid picasso-eid
                                      :content-hash new-content-hash
                                      :vt new-valid-time
@@ -95,7 +95,7 @@
              new-tx-id   :crux.tx/tx-id}
             (fix/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-        (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+        (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= (c/map->EntityTx {:eid picasso-eid
                                      :content-hash new-content-hash
                                      :vt new-valid-time
@@ -119,7 +119,7 @@
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/put new-picasso new-valid-time]])]
 
-            (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+            (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
               (t/is (= (c/map->EntityTx {:eid picasso-eid
                                          :content-hash new-content-hash
                                          :vt new-valid-time
@@ -135,13 +135,13 @@
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
-            (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+            (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
               (t/is (nil? (.content-hash (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time))))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-time))))))))))
 
     (t/testing "can retrieve history of entity"
-      (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+      (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (= 5 (count (db/entity-history index-snapshot :http://dbpedia.org/resource/Pablo_Picasso :desc
                                              {:with-corrections? true}))))))))
 
@@ -154,7 +154,7 @@
 
         (api/await-tx *api* cas-failure-tx (Duration/ofMillis 1000))
 
-        (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+        (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id picasso)
                                       :vt picasso-tx-time
@@ -166,7 +166,7 @@
       (let [new-picasso (assoc picasso :new? true)
             {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/cas picasso new-picasso]])]
 
-        (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+        (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id new-picasso)
                                       :vt new-tx-time
@@ -183,7 +183,7 @@
     (let [ivan {:crux.db/id :ivan, :value 12}
           {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/cas nil ivan]])]
 
-      (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+      (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
                                     :content-hash (c/new-id ivan)
                                     :vt ivan-tx-time
@@ -200,7 +200,7 @@
 
         (api/await-tx *api* match-failure-tx (Duration/ofMillis 1000))
 
-        (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+        (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id picasso)
                                       :vt picasso-tx-time
@@ -213,7 +213,7 @@
             {new-tx-time :crux.tx/tx-time, new-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/match picasso-id picasso]
                                                                                            [:crux.tx/put new-picasso]])]
 
-        (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+        (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
                                       :content-hash (c/new-id new-picasso)
                                       :vt new-tx-time
@@ -231,7 +231,7 @@
           {ivan-tx-time :crux.tx/tx-time, ivan-tx-id :crux.tx/tx-id} (fix/submit+await-tx [[:crux.tx/match :ivan nil]
                                                                                            [:crux.tx/put ivan]])]
 
-      (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+      (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
                                     :content-hash (c/new-id ivan)
                                     :vt ivan-tx-time
@@ -243,7 +243,7 @@
   (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
         {evict-tx-time :crux.tx/tx-time} (fix/submit+await-tx [[:crux.tx/evict picasso-id]])]
 
-    (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [picasso-history (db/entity-history index-snapshot picasso-id :desc {})]
         (t/testing "eviction removes tx history"
           (t/is (empty? picasso-history)))
@@ -277,7 +277,7 @@
                               (index-evict!))))
 
     (t/testing "no docs evicted yet"
-      (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+      (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (seq (->> (db/fetch-docs (:document-store *api*)
                                        (->> (db/entity-history index-snapshot picasso-id :desc {})
                                             (keep :content-hash)))
@@ -289,7 +289,7 @@
         (db/submit-docs (:document-store *api*) docs)
 
         (t/testing "eviction removes docs"
-          (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+          (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
             (t/is (empty? (->> (db/fetch-docs (:document-store *api*)
                                               (->> (db/entity-history index-snapshot picasso-id :desc {})
                                                    (keep :content-hash)))
@@ -301,7 +301,7 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
-    (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
+    (db/index-docs (:index-store *api*) {(c/new-id ivan1) ivan1
                                      (c/new-id ivan2) ivan2})
 
     (index-tx {:crux.tx/tx-time t, :crux.tx/tx-id 1}
@@ -309,7 +309,7 @@
     (index-tx {:crux.tx/tx-time t, :crux.tx/tx-id 2}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
-    (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))
                 (c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
                (db/entity-history index-snapshot :ivan :desc {:with-corrections? true})))
@@ -326,8 +326,8 @@
         ivan2 (assoc ivan :value 2)
         t1 #inst "2020-05-01"
         t2 #inst "2020-05-02"]
-    (db/index-docs (:indexer *api*) {(c/new-id ivan1) ivan1
-                                     (c/new-id ivan2) ivan2})
+    (db/index-docs (:index-store *api*) {(c/new-id ivan1) ivan1
+                                         (c/new-id ivan2) ivan2})
 
     (index-tx {:crux.tx/tx-time t1, :crux.tx/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
@@ -335,7 +335,7 @@
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2)) t1]
                   [:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
-    (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [etx-v1-t1 (c/->EntityTx (c/new-id :ivan) t1 t1 1 (c/new-id ivan1))
             etx-v1-t2 (c/->EntityTx (c/new-id :ivan) t1 t2 2 (c/new-id ivan2))
             etx-v2-t2 (c/->EntityTx (c/new-id :ivan) t2 t2 2 (c/new-id ivan2))]
@@ -389,7 +389,7 @@
 
                          (api/await-tx *api* last-tx nil)
 
-                         (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+                         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
                            (t/is (= (for [[vt tx-idx value] history]
                                       [vt (get-in res [tx-idx :crux.tx/tx-id]) (c/new-id (when value
                                                                                            (assoc ivan :value value)))])
@@ -493,7 +493,7 @@
         tx (fix/submit+await-tx (for [n (range number-of-versions)]
                                   [:crux.tx/put (assoc ivan :version n) (Date. (+ (.getTime start-valid-time) (inc (long n))))]))]
 
-    (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [baseline-time (let [start-time (System/nanoTime)
                                 valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
@@ -832,7 +832,7 @@
 
         db (api/db *api*)]
 
-    (with-open [index-snapshot (db/open-index-snapshot (:indexer *api*))]
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [eid->history (fn [eid]
                            (let [history (db/entity-history index-snapshot
                                                             (c/new-id eid) :asc

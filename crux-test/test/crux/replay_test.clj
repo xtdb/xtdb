@@ -13,8 +13,8 @@
                                                                           :db-dir (io/file event-log-dir "doc-store")}}
                                          :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
                                                                   :db-dir (io/file event-log-dir "tx-log")}}
-                                         :crux/indexer {:kv-store {:crux/module `rocks/->kv-store,
-                                                                   :db-dir db-dir-1}}})]
+                                         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                       :db-dir db-dir-1}}})]
         (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :hello}]])))
 
     (fix/with-tmp-dir "db-dir-2" [db-dir-2]
@@ -22,8 +22,8 @@
                                                                           :db-dir (io/file event-log-dir "doc-store")}}
                                          :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
                                                                   :db-dir (io/file event-log-dir "tx-log")}}
-                                         :crux/indexer {:kv-store {:crux/module `rocks/->kv-store,
-                                                                   :db-dir db-dir-2}}})]
+                                         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                       :db-dir db-dir-2}}})]
         (t/is (= {:crux.tx/tx-id 0}
                  (crux/latest-submitted-tx node)))
         (t/is (crux/sync node (Duration/ofSeconds 2)))
@@ -38,8 +38,8 @@
                                                                             :db-dir (io/file event-log-dir "doc-store")}}
                                            :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
                                                                     :db-dir (io/file event-log-dir "tx-log")}}
-                                           :crux/indexer {:kv-store {:crux/module `rocks/->kv-store,
-                                                                     :db-dir db-dir-1}}})]
+                                           :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                         :db-dir db-dir-1}}})]
           (dotimes [x n]
             (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id (str "id-" x)}]]))))
 
@@ -48,8 +48,8 @@
                                                                             :db-dir (io/file event-log-dir "doc-store")}}
                                            :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
                                                                     :db-dir (io/file event-log-dir "tx-log")}}
-                                           :crux/indexer {:kv-store {:crux/module `rocks/->kv-store,
-                                                                     :db-dir db-dir-2}}})]
+                                           :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                         :db-dir db-dir-2}}})]
           (t/is (= {:crux.tx/tx-id (dec n)}
                    (crux/latest-submitted-tx node)))
           (t/is (crux/sync node (Duration/ofSeconds 10)))

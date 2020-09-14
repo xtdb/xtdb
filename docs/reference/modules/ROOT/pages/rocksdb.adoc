@@ -30,7 +30,7 @@ Replace the implementation of the desired component with `+crux.rocksdb/->kv-sto
 [source,json]
 ----
 {
-  "crux/indexer": {
+  "crux/index-store": {
     "kv-store": {
       "crux/module": "crux.rocksdb/->kv-store",
       "db-dir": "/tmp/rocksdb"
@@ -45,8 +45,8 @@ Replace the implementation of the desired component with `+crux.rocksdb/->kv-sto
 .Clojure/EDN
 [source,clojure]
 ----
-{:crux/indexer {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                           :db-dir (io/file "/tmp/rocksdb")}}
+{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                               :db-dir (io/file "/tmp/rocksdb")}}
  :crux/document-store {...}
  :crux/tx-log {...}}
 ----
@@ -72,7 +72,7 @@ To include RocksDB metrics in monitoring, override the `metrics` dependency:
 [source,json]
 ----
 {
-  "crux/indexer": {
+  "crux/index-store": {
     "kv-store": {
       "crux/module": "crux.rocksdb/->kv-store",
       "metrics": {

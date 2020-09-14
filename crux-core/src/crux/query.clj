@@ -1425,10 +1425,10 @@
   (let [{:keys [where args rules]} (s/conform ::query q)]
     (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
 
-(defn- open-index-snapshot ^java.io.Closeable [{:keys [indexer index-snapshot] :as db}]
+(defn- open-index-snapshot ^java.io.Closeable [{:keys [index-store index-snapshot] :as db}]
   (if index-snapshot
     (db/open-nested-index-snapshot index-snapshot)
-    (db/open-index-snapshot indexer)))
+    (db/open-index-snapshot index-store)))
 
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
   (let [entity-cache (lru/new-cache entity-cache-size)]
@@ -1629,11 +1629,11 @@
        group-acc
        idx->aggregate))))
 
-(defn query [{:keys [valid-time transact-time document-store indexer index-snapshot] :as db} ^ConformedQuery conformed-q]
+(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-        stats (db/read-index-meta indexer :crux/attribute-stats)]
+        stats (db/read-index-meta index-store :crux/attribute-stats)]
     (log/debug :query (cio/pr-edn-str (-> q
                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                           (dissoc :args))))
@@ -1697,7 +1697,7 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-(defrecord QueryDatasource [document-store indexer bus tx-ingester
+(defrecord QueryDatasource [document-store index-store bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache projection-cache
@@ -1778,7 +1778,7 @@
                          HistoryOptions$SortOrder/ASC :asc
                          HistoryOptions$SortOrder/DESC :desc)
             with-docs? (.withDocs opts)
-            index-snapshot (db/open-index-snapshot indexer)
+            index-snapshot (db/open-index-snapshot index-store)
 
             opts (cond-> {:with-corrections? (.withCorrections opts)
                           :with-docs? with-docs?
@@ -1814,7 +1814,7 @@
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time
                                ::tx/tx-time transact-time}}
-                    (if-let [latest-completed-tx (db/latest-completed-tx indexer)]
+                    (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
                                                 (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))
@@ -1833,13 +1833,13 @@
   (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
-                        indexer bus
+                        index-store bus
                         query-cache conform-cache projection-cache]
   api/DBProvider
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
   (db [this valid-time tx-time]
-    (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx indexer))
+    (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
           _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
               (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
                                                       tx-time latest-tx-time)
@@ -1850,7 +1850,7 @@
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
       (map->QueryDatasource (assoc this
-                                   :tx-ingester (tx/->tx-ingester {:indexer indexer
+                                   :tx-ingester (tx/->tx-ingester {:index-store index-store
                                                                    :document-store document-store
                                                                    :bus bus
                                                                    :query-engine this})
@@ -1873,7 +1873,7 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
-(defn ->query-engine {::sys/deps {:indexer :crux/indexer
+(defn ->query-engine {::sys/deps {:index-store :crux/index-store
                                   :bus :crux/bus
                                   :document-store :crux/document-store}
                       ::sys/args {:query-cache-size {:doc "Compiled Query Cache Size"

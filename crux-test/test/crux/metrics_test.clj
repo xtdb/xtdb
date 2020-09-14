@@ -2,17 +2,17 @@
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.metrics.indexer :as indexer-metrics]
+            [crux.metrics.index-store :as index-store-metrics]
             [crux.metrics.query :as query-metrics]
             [crux.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
 
 (t/use-fixtures :each fix/with-node)
 
-(t/deftest test-indexer-metrics
+(t/deftest test-index-store-metrics
   (let [{:crux/keys [bus] :as sys} @(:!system *api*)
         registry (dropwizard/new-registry)
-        mets (indexer-metrics/assign-listeners registry sys)]
+        mets (index-store-metrics/assign-listeners registry sys)]
     (t/testing "initial ingest values"
       (t/is (nil? (dropwizard/value (:tx-id-lag mets))))
       (t/is (zero? (dropwizard/meter-count (:docs-ingested-meter mets))))

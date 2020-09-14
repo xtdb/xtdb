@@ -32,7 +32,7 @@
                            (doto ^ModuleConfigurator c
                              (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "docs"))))))))
-       (.with "crux/indexer"
+       (.with "crux/index-store"
               (consume [c]
                 (doto ^ModuleConfigurator c
                   (.with "kv-store"
@@ -47,7 +47,7 @@
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
                (kv/kv-name (get-in node [:document-store :document-store :kv]))
-               (kv/kv-name (get-in node [:indexer :kv-store]))))
+               (kv/kv-name (get-in node [:index-store :kv-store]))))
       (t/is (= (.toPath (io/file data-dir "txs"))
                (get-in node [:tx-log :kv-store :db-dir]))))))
 

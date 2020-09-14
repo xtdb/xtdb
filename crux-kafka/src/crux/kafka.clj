@@ -258,15 +258,15 @@
                 (throw (RuntimeException. "Doc indexing error" error)))
               (recur indexed))))))))
 
-(defn- read-doc-offsets [indexer]
-  (->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
+(defn- read-doc-offsets [index-store]
+  (->> (db/read-index-meta index-store :crux.tx-log/consumer-state)
        (into {} (map (fn [[k {:keys [next-offset]}]]
                        [(let [[_ t p] (re-matches #"(.+)-(\d+)" k)]
                           (TopicPartition. t (Long/parseLong p)))
                         next-offset])))))
 
-(defn- store-doc-offsets [indexer tp-offsets]
-  (db/store-index-meta indexer :crux.tx-log/consumer-state (->> tp-offsets
+(defn- store-doc-offsets [index-store tp-offsets]
+  (db/store-index-meta index-store :crux.tx-log/consumer-state (->> tp-offsets
                                                                 (into {} (map (fn [[k v]]
                                                                                 [(str k) {:next-offset v}]))))))
 
@@ -280,9 +280,9 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{:keys [local-document-store indexer !error doc-topic-opts kafka-config group-id poll-wait-duration]}]
+(defn- index-doc-log [{:keys [local-document-store index-store !error doc-topic-opts kafka-config group-id poll-wait-duration]}]
   (let [doc-topic (:topic-name doc-topic-opts)
-        tp-offsets (read-doc-offsets indexer)]
+        tp-offsets (read-doc-offsets index-store)]
     (try
       (with-open [consumer (doto (->consumer {:kafka-config (assoc kafka-config
                                                                    "group.id" (or group-id (str (UUID/randomUUID))))})
@@ -292,7 +292,7 @@
                                 (reduce (fn [tp-offsets doc-records]
                                           (db/submit-docs local-document-store (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
-                                            (->> (store-doc-offsets indexer))))
+                                            (->> (store-doc-offsets index-store))))
                                         tp-offsets))]
             (when (Thread/interrupted)
               (throw (InterruptedException.)))
@@ -316,7 +316,7 @@
                                                      :topic-name "crux-docs",
                                                      :num-partitions 1}
                                     :local-document-store 'crux.kv.document-store/->document-store
-                                    :indexer :crux/indexer}
+                                    :index-store :crux/index-store}
                         ::sys/args {:group-id {:doc "Kafka client group.id"
                                                :required? false
                                                :spec ::sys/string}
@@ -324,12 +324,12 @@
                                                          :required? true
                                                          :doc "How long to wait when polling Kafka"
                                                          :default (Duration/ofSeconds 1)}} }
-  [{:keys [indexer local-document-store kafka-config doc-topic-opts] :as opts}]
+  [{:keys [index-store local-document-store kafka-config doc-topic-opts] :as opts}]
   (ensure-doc-topic-exists opts)
 
   (map->KafkaDocumentStore {:producer (->producer {:kafka-config kafka-config})
                             :doc-topic (:topic-name doc-topic-opts)
-                            :indexer indexer
+                            :index-store index-store
                             :local-document-store local-document-store
                             :!indexing-error (atom nil)
                             :indexing-thread (doto (Thread. #(index-doc-log opts))

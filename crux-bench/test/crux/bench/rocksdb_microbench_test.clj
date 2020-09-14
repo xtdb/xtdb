@@ -13,7 +13,7 @@
   (f/with-tmp-dir "dev-storage" [data-dir]
     (with-open [node (api/start-node {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
                                       :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
-                                      :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
+                                      :crux/index-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
       (f node))))
 
 (defmacro with-rocksdb-node [[node-binding] & body]
@@ -30,4 +30,4 @@
             (time
              (doseq [doc-batch (->> (take 10000 condition-docs)
                                     (partition-all 100))]
-               (db/index-docs (:indexer node) (->> doc-batch (into {} (map (juxt c/new-id identity)))))))))))))
+               (db/index-docs (:index-store node) (->> doc-batch (into {} (map (juxt c/new-id identity)))))))))))))

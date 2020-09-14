@@ -1,6 +1,6 @@
 (ns crux.metrics
   (:require [crux.metrics.dropwizard :as dropwizard]
-            [crux.metrics.indexer :as indexer-metrics]
+            [crux.metrics.index-store :as index-store-metrics]
             [crux.metrics.query :as query-metrics]
             [crux.status :as status]
             [crux.system :as sys])
@@ -11,18 +11,18 @@
 
 (defn ->metrics {::sys/deps {:registry ::registry
                              :crux/node :crux/node
-                             :crux/indexer :crux/indexer
+                             :crux/index-store :crux/index-store
                              :crux/bus :crux/bus}
-                 ::sys/args {:with-indexer-metrics? {:doc "Include metrics on the indexer"
-                                                     :default true
-                                                     :spec ::sys/boolean}
+                 ::sys/args {:with-index-store-metrics? {:doc "Include metrics on the index-store"
+                                                         :default true
+                                                         :spec ::sys/boolean}
                              :with-query-metrics? {:doc "Include metrics on queries"
                                                    :default true
                                                    :spec ::sys/boolean}}}
-  [{:keys [registry with-indexer-metrics? with-query-metrics?] :as opts}]
-  (let [deps (select-keys opts #{:crux/node :crux/indexer :crux/bus})]
+  [{:keys [registry with-index-store-metrics? with-query-metrics?] :as opts}]
+  (let [deps (select-keys opts #{:crux/node :crux/index-store :crux/bus})]
     {:registry (cond-> registry
-                 with-indexer-metrics? (doto (indexer-metrics/assign-listeners deps))
+                 with-index-store-metrics? (doto (index-store-metrics/assign-listeners deps))
                  with-query-metrics? (doto (query-metrics/assign-listeners deps)))}))
 
 (defn- ns->ms [time-ns]

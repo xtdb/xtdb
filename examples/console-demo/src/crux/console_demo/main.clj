@@ -36,7 +36,7 @@
 (defn config []
   {:console-demo/crux-node {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/tx-log"}}
                             :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/doc-store"}}
-                            :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/indices"}}
+                            :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir "data/indices"}}
                             :crux.http-server/server {:read-only? true
                                                       :server-label "Console Demo"}
                             :crux.metrics/registry {}}})

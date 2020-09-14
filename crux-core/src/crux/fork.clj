@@ -107,17 +107,17 @@
     (cio/try-close mem-index-snapshot)
     (cio/try-close inner-index-snapshot)))
 
-(defrecord ForkedIndexer [inner-indexer mem-indexer !evicted-eids !etxs capped-valid-time capped-transact-time]
-  db/Indexer
+(defrecord ForkedIndexStore [inner-index-store mem-index-store !evicted-eids !etxs capped-valid-time capped-transact-time]
+  db/IndexStore
   (index-docs [this docs]
-    (db/index-docs mem-indexer docs))
+    (db/index-docs mem-index-store docs))
 
   (unindex-eids [this eids]
     (swap! !evicted-eids set/union (set eids))
-    (db/unindex-eids mem-indexer eids)
+    (db/unindex-eids mem-index-store eids)
 
-    (with-open [inner-index-snapshot (db/open-index-snapshot inner-indexer)
-                mem-index-snapshot (db/open-index-snapshot mem-indexer)]
+    (with-open [inner-index-snapshot (db/open-index-snapshot inner-index-store)
+                mem-index-snapshot (db/open-index-snapshot mem-index-store)]
       (let [tombstones (->> (for [eid eids
                                   etx (concat (db/entity-history inner-index-snapshot eid :asc
                                                                  {:with-corrections? true})
@@ -134,47 +134,47 @@
                             (into {} (map (juxt (fn [^EntityTx etx]
                                                   [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
                                                 identity)))))
-    (db/index-entity-txs mem-indexer tx entity-txs))
+    (db/index-entity-txs mem-index-store tx entity-txs))
 
   (store-index-meta [this k v]
-    (db/store-index-meta mem-indexer k v))
+    (db/store-index-meta mem-index-store k v))
 
   (read-index-meta [this k]
     (db/read-index-meta this k nil))
 
   (read-index-meta [this k not-found]
-    (let [v (db/read-index-meta mem-indexer k ::not-found)]
+    (let [v (db/read-index-meta mem-index-store k ::not-found)]
       (if (not= v ::not-found)
         v
-        (db/read-index-meta inner-indexer k not-found))))
+        (db/read-index-meta inner-index-store k not-found))))
 
   (latest-completed-tx [this]
-    (or (db/latest-completed-tx mem-indexer)
-        (db/latest-completed-tx inner-indexer)))
+    (or (db/latest-completed-tx mem-index-store)
+        (db/latest-completed-tx inner-index-store)))
 
   (mark-tx-as-failed [this tx]
-    (db/mark-tx-as-failed mem-indexer tx))
+    (db/mark-tx-as-failed mem-index-store tx))
 
   (tx-failed? [this tx-id]
-    (or (db/tx-failed? mem-indexer tx-id)
-        (db/tx-failed? inner-indexer tx-id)))
+    (or (db/tx-failed? mem-index-store tx-id)
+        (db/tx-failed? inner-index-store tx-id)))
 
   (open-index-snapshot ^java.io.Closeable [this]
-    (->ForkedIndexSnapshot (db/open-index-snapshot inner-indexer)
-                           (db/open-index-snapshot mem-indexer)
+    (->ForkedIndexSnapshot (db/open-index-snapshot inner-index-store)
+                           (db/open-index-snapshot mem-index-store)
                            @!evicted-eids
                            capped-valid-time
                            capped-transact-time)))
 
-(defn newly-evicted-eids [indexer]
-  @(:!evicted-eids indexer))
+(defn newly-evicted-eids [index-store]
+  @(:!evicted-eids index-store))
 
-(defn new-etxs [indexer]
-  (vals @(:!etxs indexer)))
+(defn new-etxs [index-store]
+  (vals @(:!etxs index-store)))
 
-(defn ->forked-indexer [inner-indexer mem-indexer
+(defn ->forked-index-store [inner-index-store mem-index-store
                         capped-valid-time capped-transact-time]
-  (->ForkedIndexer inner-indexer mem-indexer
+  (->ForkedIndexStore inner-index-store mem-index-store
                    (atom #{}) (atom {})
                    capped-valid-time capped-transact-time))
 

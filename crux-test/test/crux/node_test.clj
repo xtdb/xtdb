@@ -48,7 +48,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (api/start-node {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
                                    :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
-                                   :crux/indexer {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
+                                   :crux/index-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
       (t/is n))))
 
 (t/deftest start-node-from-java
@@ -67,7 +67,7 @@
                                       (doto (HashMap.)
                                         (.put "crux/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "docs"))))))
-                        (.put "crux/indexer"
+                        (.put "crux/index-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
@@ -76,7 +76,7 @@
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
                (kv/kv-name (get-in node [:document-store :document-store :kv]))
-               (kv/kv-name (get-in node [:indexer :kv-store]))))
+               (kv/kv-name (get-in node [:index-store :kv-store]))))
       (t/is (= (.toPath (io/file data-dir "txs"))
                (get-in node [:tx-log :kv-store :db-dir]))))))
 
@@ -84,7 +84,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                    :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                   :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+                                   :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
                                    ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
                                                         :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n)
@@ -102,7 +102,7 @@
 
       (with-open [n2 (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                       :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                      :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+                                      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
                                       ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
                                                            :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}})]
 

@@ -10,7 +10,7 @@
             [crux.tx.event :as txe]
             [crux.api :as api]
             [crux.fork :as fork]
-            [crux.kv.indexer :as kvi]
+            [crux.kv.index-store :as kvi]
             [crux.mem-kv :as mem-kv]
             [crux.system :as sys])
   (:import crux.codec.EntityTx
@@ -217,9 +217,9 @@
 (defmethod index-tx-event :default [[op & _] tx tx-ingester]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
 
-(defn- update-stats [{:keys [indexer ^ExecutorService stats-executor] :as tx-ingester} docs-stats]
-  (let [stats-fn ^Runnable #(->> (apply merge-with + (db/read-index-meta indexer :crux/attribute-stats) docs-stats)
-                                 (db/store-index-meta indexer :crux/attribute-stats))]
+(defn- update-stats [{:keys [index-store ^ExecutorService stats-executor] :as tx-ingester} docs-stats]
+  (let [stats-fn ^Runnable #(->> (apply merge-with + (db/read-index-meta index-store :crux/attribute-stats) docs-stats)
+                                 (db/store-index-meta index-store :crux/attribute-stats))]
     (if stats-executor
       (.submit stats-executor stats-fn)
       (stats-fn))))
@@ -229,7 +229,7 @@
          [k (count (c/vectorize-value v))])
        (into {})))
 
-(defn index-docs [{:keys [bus indexer] :as tx-ingester} docs]
+(defn index-docs [{:keys [bus index-store] :as tx-ingester} docs]
   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
     (throw (IllegalArgumentException.
             (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
@@ -237,7 +237,7 @@
   (when (seq docs)
     (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
 
-    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs indexer docs)]
+    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store docs)]
       (update-stats tx-ingester (->> (vals indexed-docs)
                                      (map doc-predicate-stats)))
 
@@ -255,8 +255,8 @@
     evt))
 
 (defrecord InFlightTx [tx !state !tx-events !error
-                       forked-indexer forked-document-store
-                       query-engine indexer document-store bus
+                       forked-index-store forked-document-store
+                       query-engine index-store document-store bus
                        stats-executor]
   db/DocumentStore
   (submit-docs [_ docs]
@@ -282,13 +282,13 @@
 
     (try
       (index-docs this (txc/tx-events->docs forked-document-store tx-events))
-      (let [forked-deps {:indexer forked-indexer
+      (let [forked-deps {:index-store forked-index-store
                          :document-store forked-document-store
-                         :query-engine (assoc query-engine :indexer forked-indexer)}
+                         :query-engine (assoc query-engine :index-store forked-index-store)}
             abort? (loop [[tx-event & more-tx-events] tx-events]
                      (when tx-event
                        (let [{:keys [new-tx-events abort?]}
-                             (with-open [index-snapshot (db/open-index-snapshot forked-indexer)]
+                             (with-open [index-snapshot (db/open-index-snapshot forked-index-store)]
                                (let [{:keys [pre-commit-fn tx-events evict-eids etxs docs]}
                                      (index-tx-event (-> tx-event
                                                          (with-tx-fn-args forked-deps))
@@ -301,7 +301,7 @@
                                    {:abort? true}
 
                                    (do
-                                     (doto forked-indexer
+                                     (doto forked-index-store
                                        (db/index-docs docs)
                                        (db/unindex-eids evict-eids)
                                        (db/index-entity-txs tx etxs))
@@ -326,17 +326,17 @@
     (when (:fork-at tx)
       (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-indexer))]
-      (let [{:keys [tombstones]} (db/unindex-eids indexer evict-eids)]
+    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
+      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
         (db/submit-docs document-store tombstones)))
 
     (when-let [new-docs (fork/new-docs forked-document-store)]
-      (db/index-docs indexer new-docs)
+      (db/index-docs index-store new-docs)
       (update-stats this (map doc-predicate-stats (vals new-docs)))
 
       (db/submit-docs document-store new-docs))
 
-    (db/index-entity-txs indexer tx (fork/new-etxs forked-indexer))
+    (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
 
     (bus/send bus {:crux/event-type ::indexed-tx,
                    ::submitted-tx tx,
@@ -355,30 +355,30 @@
                     (->> (fork/new-docs forked-document-store)
                          (into {} (filter (comp :crux.db.fn/failed? val)))))
 
-    (db/mark-tx-as-failed indexer tx)
+    (db/mark-tx-as-failed index-store tx)
 
     (bus/send bus {:crux/event-type ::indexed-tx,
                    ::submitted-tx tx,
                    :committed? false
                    ::txe/tx-events @!tx-events})))
 
-(defrecord TxIngester [!error indexer document-store bus query-engine ^ExecutorService stats-executor]
+(defrecord TxIngester [!error index-store document-store bus query-engine ^ExecutorService stats-executor]
   db/TxIngester
   (begin-tx [_ {:keys [fork-at], ::keys [tx-time] :as tx}]
     (log/debug "Indexing tx-id:" (::tx-id tx))
     (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
-    (let [forked-indexer (fork/->forked-indexer indexer (kvi/->kv-indexer {:kv-store (mem-kv/->kv-store)})
-                                                (::db/valid-time fork-at)
-                                                (::tx-time fork-at))
+    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)})
+                                                        (::db/valid-time fork-at)
+                                                        (::tx-time fork-at))
           forked-document-store (fork/->forked-document-store document-store)]
       (->InFlightTx tx (atom :open) (atom []) !error
-                    forked-indexer
+                    forked-index-store
                     forked-document-store
                     (assoc query-engine
-                           :indexer forked-indexer
+                           :index-store forked-index-store
                            :document-store forked-document-store)
-                    indexer document-store bus
+                    index-store document-store bus
                     stats-executor)))
   (ingester-error [_] @!error)
 
@@ -389,7 +389,7 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
-(defn ->tx-ingester {::sys/deps {:indexer :crux/indexer
+(defn ->tx-ingester {::sys/deps {:index-store :crux/index-store
                                  :document-store :crux/document-store
                                  :bus :crux/bus
                                  :query-engine :crux/query-engine}
@@ -401,13 +401,13 @@
                           :stats-executor (when stats-executor?
                                             (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))))
 
-(defn- index-tx-log [{:keys [tx-ingester indexer ^Duration poll-sleep-duration]} open-next-txs]
+(defn- index-tx-log [{:keys [tx-ingester index-store ^Duration poll-sleep-duration]} open-next-txs]
   (log/info "Started tx-consumer")
   (try
     (while true
       (let [consumed-txs? (when-let [^crux.api.ICursor
                                      txs (try
-                                           (open-next-txs (::tx-id (db/latest-completed-tx indexer)))
+                                           (open-next-txs (::tx-id (db/latest-completed-tx index-store)))
                                            (catch InterruptedException e (throw e))
                                            (catch Exception e
                                              (log/warn e "Error polling for txs, will retry")))]
@@ -440,7 +440,7 @@
 
   (log/info "Shut down tx-consumer"))
 
-(defn ->polling-tx-consumer {::sys/deps {:indexer :crux/indexer
+(defn ->polling-tx-consumer {::sys/deps {:index-store :crux/index-store
                                          :tx-ingester :crux/tx-ingester}
                              ::sys/args {:poll-sleep-duration {:spec ::sys/duration
                                                                :default (Duration/ofMillis 100)

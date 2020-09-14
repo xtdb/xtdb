@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.metrics.indexer
+(ns ^:no-doc crux.metrics.index-store
   (:require [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]
@@ -7,7 +7,7 @@
 
 (defn assign-tx-id-lag [registry {:crux/keys [node]}]
   (dropwizard/gauge registry
-                    ["indexer" "tx-id-lag"]
+                    ["index-store" "tx-id-lag"]
                     #(when-let [completed (api/latest-completed-tx node)]
                        (- (::tx/tx-id (api/latest-submitted-tx node))
                           (::tx/tx-id completed)))))
@@ -20,12 +20,12 @@
                   (reset! !last-tx-lag (- (System/currentTimeMillis)
                                           (.getTime ^Date (::tx/tx-time submitted-tx))))))
     (dropwizard/gauge registry
-                      ["indexer" "tx-latency"]
+                      ["index-store" "tx-latency"]
                       (fn []
                         (first (reset-vals! !last-tx-lag 0))))))
 
 (defn assign-doc-meter [registry {:crux/keys [bus]}]
-  (let [meter (dropwizard/meter registry ["indexer" "indexed-docs"])]
+  (let [meter (dropwizard/meter registry ["index-store" "indexed-docs"])]
     (bus/listen bus
                 {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [doc-ids]}]
@@ -34,7 +34,7 @@
     meter))
 
 (defn assign-av-meter [registry {:crux/keys [bus]}]
-  (let [meter (dropwizard/meter registry ["indexer" "indexed-avs"])]
+  (let [meter (dropwizard/meter registry ["index-store" "indexed-avs"])]
     (bus/listen bus
                 {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [av-count]}]
@@ -42,7 +42,7 @@
     meter))
 
 (defn assign-bytes-meter [registry {:crux/keys [bus]}]
-  (let [meter (dropwizard/meter registry ["indexer" "indexed-bytes"])]
+  (let [meter (dropwizard/meter registry ["index-store" "indexed-bytes"])]
     (bus/listen bus
                 {:crux/event-types #{:crux.tx/indexed-docs}}
                 (fn [{:keys [bytes-indexed]}]
@@ -51,7 +51,7 @@
     meter))
 
 (defn assign-tx-timer [registry {:crux/keys [bus]}]
-  (let [timer (dropwizard/timer registry ["indexer" "indexed-txs"])
+  (let [timer (dropwizard/timer registry ["index-store" "indexed-txs"])
         !timer (atom nil)]
     (bus/listen bus
                 {:crux/event-types #{:crux.tx/indexing-tx}}

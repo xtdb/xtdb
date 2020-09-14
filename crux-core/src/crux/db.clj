@@ -13,8 +13,8 @@
   (max-depth [this]))
 ;; end::LayeredIndex[]
 
-;; tag::Indexer[]
-(defprotocol Indexer
+;; tag::IndexStore[]
+(defprotocol IndexStore
   (index-docs [this docs])
   (unindex-eids [this eids])
   (index-entity-txs [this tx entity-txs])
@@ -24,7 +24,7 @@
   (latest-completed-tx [this])
   (tx-failed? [this tx-id])
   (open-index-snapshot ^java.io.Closeable [this]))
-;; end::Indexer[]
+;; end::IndexStore[]
 
 ;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot

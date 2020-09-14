@@ -136,7 +136,7 @@ You can use the same local document store as the query indices, as follows:
     }
   },
 
-  "crux/indexer": {
+  "crux/index-store": {
     "kv-store": "local-rocksdb"
   }
 
@@ -152,7 +152,7 @@ You can use the same local document store as the query indices, as follows:
                  :db-dir "/tmp/rocksdb"}
  :crux/document-store {...
                        :local-document-store {:kv-store :local-rocksdb}}
- :crux/indexer {:kv-store :local-rocksdb}}
+ :crux/index-store {:kv-store :local-rocksdb}}
 ----
 
 === Sharing connection config between the transaction log and the document store
