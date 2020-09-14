@@ -151,7 +151,7 @@
 (s/def ::timeout nat-int?)
 (s/def ::batch-size pos-int?)
 
-(s/def ::in (s/and vector? (s/cat :source-var '#{$}
+(s/def ::in (s/and vector? (s/cat :source-var (s/? '#{$})
                                   :bindings (s/* ::binding))))
 
 (defmulti pred-args-spec first)
@@ -160,9 +160,7 @@
   (s/cat :pred-fn #{'q}
          :args (s/spec (s/cat :query (s/or :quoted-query (s/cat :quote #{'quote} :query ::query)
                                            :query ::query)
-                              :args (s/* (s/cat :key (s/or :quoted-symbol (s/cat :quote #{'quote} :sym symbol?)
-                                                           :keyword keyword?)
-                                                :val any?))))
+                              :args (s/* any?)))
          :return (s/? ::binding)))
 
 (defmethod pred-args-spec 'get-attr [_]
@@ -429,17 +427,6 @@
                 {:self-join? true})]
      :pred [{:pred {:pred-fn '== :args [v-var e]}}]}))
 
-(defn- lift-up-sub-query-args [{:keys [pred-fn args] :as pred}]
-  (if (and (= 'q pred-fn) (= 1 (count args)))
-    (let [q (normalize-query (maybe-unquote (first args)))
-          q-args (:args q)]
-      (when (> (count q-args) 1)
-        (throw (IllegalArgumentException. (str "Sub-queries don't support more than one argument tuple: " (cio/pr-edn-str pred)))))
-      (assoc pred :args (vec (cons (dissoc q :args)
-                                   (apply concat (for [[k v] (first q-args)]
-                                                   [(keyword (maybe-unquote k)) v]))))))
-    pred))
-
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          (if (= :triple type)
@@ -455,8 +442,7 @@
                                                                  (every? logic-var? args)
                                                                  (get pred->built-in-range-pred pred-fn))]
                                           (assoc-in clause [:pred :pred-fn] range-pred)
-                                          clause)
-                                 clause (update clause :pred lift-up-sub-query-args)]
+                                          clause)]
                              (if return
                                (assoc clause :return (w/postwalk #(if (blank-var? %)
                                                                     (gensym "_")
@@ -946,14 +932,13 @@
   (let [query (normalize-query (second arg-bindings))
         parent-rules (:rules (meta rule-name->rules))]
     (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
-      (let [[_ _ & arg-kvs] (for [arg-binding arg-bindings]
+      (let [[_ _ & args] (for [arg-binding arg-bindings]
                               (if (instance? VarBinding arg-binding)
                                 (bound-result-for-var index-snapshot arg-binding join-keys)
                                 arg-binding))
-            args [(apply hash-map arg-kvs)]
-            query (cond-> (assoc query :args args)
+            query (cond-> query
                     (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
-        (with-open [pred-result (.openQuery ^ICruxDatasource db query (object-array 0))]
+        (with-open [pred-result (.openQuery ^ICruxDatasource db query (object-array args))]
           (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
