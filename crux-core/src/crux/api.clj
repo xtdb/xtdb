@@ -309,10 +309,29 @@
   The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
   If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil."))
 
-(defn q [db q & args]
+(defn q
+  "q[uery] a Crux db.
+  query param is a datalog query in map, vector or string form.
+  This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
+  otherwise, it will return a vector of result tuples."
+  [db q & args]
   (q* db q args))
 
-(defn open-q ^crux.api.ICursor [db q & args]
+(defn open-q
+  "lazily q[uery] a Crux db.
+  query param is a datalog query in map, vector or string form.
+
+  This function returns a Cursor of result tuples - once you've consumed
+  as much of the sequence as you need to, you'll need to `.close` the sequence.
+  A common way to do this is using `with-open`:
+
+  (with-open [res (crux/open-q db '{:find [...]
+                                    :where [...]})]
+    (doseq [row (iterator-seq res)]
+      ...))
+
+  Once the sequence is closed, attempting to iterate it is undefined."
+  ^crux.api.ICursor [db q & args]
   (open-q* db q args))
 
 (let [arglists '(^crux.api.ICursor
