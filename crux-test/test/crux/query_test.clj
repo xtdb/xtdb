@@ -1271,35 +1271,19 @@
                                                   :where [[(+ x 2) z]]} x) [[y]]]
                                              [(+ x y) z]]})))
 
-    (t/testing "can use varargs instead of inline arguments"
-      (t/is (= #{[1 3 4]}
-               (api/q (api/db *api*) '{:find [x y z]
-                                       :where [[(identity 1) x]
-                                               [(q {:find [z]
-                                                    :in [$ x]
-                                                    :where [[(+ x 2) z]]} x) [[y]]]
-                                               [(+ x y) z]]})))
+    (t/is (= #{[1]}
+             (api/q (api/db *api*) '{:find [x]
+                                     :where [[(q {:find [y]
+                                                  :in [$ x]
+                                                  :where [[(identity x) y]]} 1) [[x]]]]})))
 
-      (t/testing "can use quoted symbols"
-        (t/is (= #{[1]}
-                 (api/q (api/db *api*) '{:find [x]
-                                         :where [[(q {:find [y]
-                                                      :in [$ x]
-                                                      :where [[(identity x) y]]} 1) [[x]]]]})))))
-
-    (t/testing "can use symbols as argument names"
-      (t/is (= #{[1]}
-               (api/q (api/db *api*) '{:find [x]
-                                       :where [[(q {:find [y]
-                                                    :in [$ x]
-                                                    :where [[(identity x) y]]} 1) [[x]]]]})))
-
-      (t/testing "can use quoted symbols"
-        (t/is (= #{[1]}
-                 (api/q (api/db *api*) '{:find [x]
-                                         :where [[(q {:find [y]
-                                                      :in [$ x]
-                                                      :where [[(identity x) y]]} 1) [[x]]]]})))))
+    (t/is (= #{[1 3 4]}
+             (api/q (api/db *api*) '{:find [x y z]
+                                     :where [[(identity 1) x]
+                                             [(q {:find [z]
+                                                  :in [$ x]
+                                                  :where [[(+ x 2) z]]} x) [[y]]]
+                                             [(+ x y) z]]})))
 
     (t/testing "can handle quoted sub query"
       (t/is (= #{[2]}
