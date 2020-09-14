@@ -59,8 +59,8 @@
     (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
-(defn full-text [node db attr v]
-  (with-open [search-results ^crux.api.ICursor (search node (name attr) v)]
+(defn full-text [node db attr arg-v]
+  (with-open [search-results ^crux.api.ICursor (search node (name attr) arg-v)]
     (let [{:keys [entity-resolver-fn index-store]} db]
       (->> (iterator-seq search-results)
            (keep (fn [[^Document doc score]]
@@ -78,12 +78,7 @@
 (defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
   (let [[attr vval] (rest arg-bindings)]
     (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-      (let [values (full-text *node* db attr vval)]
-        (if (empty? values)
-          false
-          (do
-            (q/bind-pred-result pred-ctx (get idx-id->idx idx-id) values)
-            true))))))
+      (q/bind-pred-result pred-ctx (get idx-id->idx idx-id) (full-text *node* db attr vval)))))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
