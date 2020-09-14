@@ -244,13 +244,13 @@
   include tx-id and tx-time.
   eid is an object that can be coerced into an entity id.")
 
-  (q [db query]
+  (q* [db query args]
     "q[uery] a Crux db.
   query param is a datalog query in map, vector or string form.
   This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
   otherwise, it will return a vector of result tuples.")
 
-  (open-q ^crux.api.ICursor [db query]
+  (open-q* ^crux.api.ICursor [db query args]
     "lazily q[uery] a Crux db.
   query param is a datalog query in map, vector or string form.
 
@@ -309,6 +309,12 @@
   The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
   If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil."))
 
+(defn q [db q & args]
+  (q* db q args))
+
+(defn open-q ^crux.api.ICursor [db q & args]
+  (open-q* db q args))
+
 (let [arglists '(^crux.api.ICursor
                  [db eid sort-order]
                  ^crux.api.ICursor
@@ -323,8 +329,8 @@
   (entity [this eid] (.entity this eid))
   (entity-tx [this eid] (.entityTx this eid))
 
-  (q [this query] (.query this query))
-  (open-q [this query] (.openQuery this query))
+  (q* [this query args] (.query this query (object-array args)))
+  (open-q* [this query args] (.openQuery this query (object-array args)))
 
   (entity-history
     ([this eid sort-order] (entity-history this eid sort-order {}))

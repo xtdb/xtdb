@@ -120,6 +120,31 @@
                                                                :where [[e :name name]]
                                                                :args [{:name "Petr"}]}))))
 
+    (t/testing "Can query entity by single field"
+      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                               :in [$ name]
+                                                               :where [[e :name name]]} "Ivan")))
+
+      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                               :in [$ name last-name]
+                                                               :where [[e :name name]
+                                                                       [e :last-name last-name]]} "Ivan" "Ivanov")))
+
+      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                               :in [$ [name]]
+                                                               :where [[e :name name]]} ["Ivan"])))
+
+      (t/is (= #{[(:crux.db/id ivan)]
+                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+                                                               :in [$ [[name]]]
+                                                               :where [[e :name name]]} [["Ivan"]
+                                                                                         ["Petr"]])))
+
+      (t/is (= #{[(:crux.db/id ivan)]
+                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+                                                               :in [$ [name ...]]
+                                                               :where [[e :name name]]} ["Ivan" "Petr"]))))
+
     (t/testing "Can query entity by entity position"
       (t/is (= #{["Ivan"]
                  ["Petr"]} (api/q (api/db *api*) {:find '[name]
