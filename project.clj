@@ -40,7 +40,7 @@
    [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
 
    [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
-   [com.h2database/h2 "1.4.199"]
+   [com.h2database/h2 "1.4.200"]
    [com.opentable.components/otj-pg-embedded "0.13.1"]
    [org.xerial/sqlite-jdbc "3.28.0"]
    [mysql/mysql-connector-java "8.0.17"]
