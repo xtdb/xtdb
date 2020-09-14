@@ -109,10 +109,12 @@
 (def ^:private date? (partial instance? Date))
 (s/def ::valid-time date?)
 (s/def ::transact-time date?)
+(s/def ::args (s/coll-of any? :kind vector?))
 
 (s/def ::query-map (s/and #(set/superset? #{:query :valid-time :transact-time} (keys %))
                           (s/keys :req-un [:crux.query/query]
-                                  :opt-un [::valid-time
+                                  :opt-un [::args
+                                           ::valid-time
                                            ::transact-time])))
 
 (defn- validate-or-throw [body-edn spec]
@@ -122,7 +124,7 @@
 (defn- query [^ICruxAPI crux-node request]
   (let [query-map (doto (body->edn request) (validate-or-throw ::query-map))
         db (util/db-for-request crux-node query-map)
-        result (api/open-q db (:query query-map))]
+        result (api/open-q db (:query query-map) (:args query-map))]
     (-> (streamed-edn-response result (iterator-seq result))
         (add-last-modified (.transactionTime db)))))
 
