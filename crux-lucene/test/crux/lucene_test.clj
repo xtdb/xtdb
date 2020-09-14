@@ -23,7 +23,7 @@
       (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/node @(:!system *api*)) "name" "Ivan")]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
-          (t/is (= "Ivan" (.get ^Document (first docs) "name"))))))
+          (t/is (= "Ivan" (.get ^Document (ffirst docs) "name"))))))
 
     (t/testing "using predicate function"
       (with-open [db (c/open-db *api*)]
@@ -73,4 +73,14 @@
                                '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
       (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/node @(:!system *api*)) "name" "Ivan")]
-        (t/is (empty? (iterator-seq search-results)))))))
+        (t/is (empty? (iterator-seq search-results)))))
+
+    (t/testing "Scores"
+      (submit+await-tx [[:crux.tx/put {:crux.db/id "test0" :name "ivon"}]])
+      (submit+await-tx [[:crux.tx/put {:crux.db/id "test1" :name "ivan"}]])
+      (submit+await-tx [[:crux.tx/put {:crux.db/id "test2" :name "testivantest"}]])
+      (submit+await-tx [[:crux.tx/put {:crux.db/id "test3" :name "testing"}]])
+      (submit+await-tx [[:crux.tx/put {:crux.db/id "test4" :name "ivanpost"}]])
+      (with-open [db (c/open-db *api*)]
+        (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
+                 (c/q db {:find '[?e ?v ?score] :where '[[(text-search :name "ivan*") [[?e ?v ?score]]] [?e :crux.db/id]]})))))))

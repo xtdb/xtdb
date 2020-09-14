@@ -50,7 +50,7 @@
         score-docs (.-scoreDocs (.search index-searcher q 10))]
     (cio/->cursor (fn []
                     (.close directory-reader))
-                  (map #(.doc index-searcher (.-doc ^ScoreDoc %)) score-docs))))
+                  (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d)) (.-score d))) score-docs))))
 
 (defn delete! [node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
@@ -61,15 +61,16 @@
 
 (defn full-text [node db attr v]
   (with-open [search-results ^crux.api.ICursor (search node (name attr) v)]
-    (let [{:keys [entity-resolver-fn index-store]} db
-          eids (keep (fn [^Document doc]
-                       (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
-                             v (db/encode-value index-store (.get ^Document doc (name attr)))
-                             vs-in-crux (db/aev index-store attr eid v entity-resolver-fn)]
-                         (when (not-empty (filter (partial mem/buffers=? v) vs-in-crux))
-                           eid)))
-                     (iterator-seq search-results))]
-      (into [] (map #(vector (db/decode-value index-store %)) eids)))))
+    (let [{:keys [entity-resolver-fn index-store]} db]
+      (->> (iterator-seq search-results)
+           (keep (fn [[^Document doc score]]
+                   (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
+                         v (.get ^Document doc (name attr))
+                         encoded-v (db/encode-value index-store v)
+                         vs-in-crux (db/aev index-store attr eid encoded-v entity-resolver-fn)]
+                     (when (not-empty (filter (partial mem/buffers=? encoded-v) vs-in-crux))
+                       [(db/decode-value index-store eid) v score]))))
+           (into [])))))
 
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr q/literal? :v string?)) :return (s/? ::q/pred-return)))
