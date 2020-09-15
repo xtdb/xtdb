@@ -37,7 +37,7 @@
                                             :crux/bus 'crux.bus/->bus
                                             :crux/document-store 'crux.kv.document-store/->document-store
                                             :crux/tx-log 'crux.kv.tx-log/->ingest-only-tx-log}]
-                                          options))
+                                          (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
     (-> (:crux/ingest-client system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))
