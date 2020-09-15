@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.soak.config
-  (:require [clojure.string :as string]
+  (:require [crux.kafka :as k]
+            [clojure.string :as string]
             [nomad.config :as n])
   (:import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest
            software.amazon.awssdk.services.secretsmanager.SecretsManagerClient))
@@ -24,12 +25,14 @@
    "security.protocol" "SASL_SSL"})
 
 (defn crux-node-config []
-  {:crux.kafka/bootstrap-servers (:broker confluent-creds)
-   :crux.kafka/replication-factor 3
-   :crux.kafka/tx-topic "soak-transaction-log"
-   :crux.kafka/doc-topic "soak-docs"
-   :crux.kafka/doc-partitions 1
-   :crux.kafka/kafka-properties-map (kafka-properties)})
+  {::k/kafka-config {:bootstrap-servers (:broker confluent-creds)
+                     :properties-map (kafka-properties)}
+   :crux/tx-log {:kafka-config ::k/kafka-config
+                 :tx-topic-opts {:topic-name "soak-transaction-log"
+                                 :replication-factor 3}}
+   :crux/document-store {:kafka-config ::k/kafka-config
+                         :doc-topic-opts {:topic-name "soak-docs"
+                                          :replication-factor 3}}})
 
 (defn load-secret-key []
   (-> (SecretsManagerClient/create)

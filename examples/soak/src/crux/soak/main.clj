@@ -1,11 +1,14 @@
 (ns ^:no-doc crux.soak.main
   (:require [bidi.bidi :as bidi]
             [bidi.ring :as br]
+            [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [crux.api :as api]
+            [crux.rocksdb :as rocksdb]
             [crux.soak.config :as config]
+            [crux.kafka :as k]
             [hiccup2.core :refer [html]]
             [integrant.core :as ig]
             [integrant.repl :as ir]
@@ -15,9 +18,8 @@
             [ring.util.response :as resp])
   (:import crux.api.NodeOutOfSyncException
            java.io.Closeable
-           java.text.SimpleDateFormat
-           (java.time ZonedDateTime Duration Instant LocalDate LocalTime ZoneId)
-           (java.time.format DateTimeFormatter)
+           [java.time Duration LocalDate LocalTime ZonedDateTime ZoneId]
+           java.time.format.DateTimeFormatter
            java.util.Date
            org.eclipse.jetty.server.Server))
 
@@ -194,8 +196,13 @@
   (.stop server))
 
 (defn config []
-  {:soak/crux-node (merge {:crux.node/topology ['crux.kafka/topology 'crux.rocksdb/kv-store]}
-                          (config/crux-node-config))
+  {:soak/crux-node [{:crux/tx-log {:crux/module `k/->tx-log}
+                     :crux/document-store {:crux/module `k/->document-store
+                                           :local-document-store {:kv-store ::rocksdb}}
+                     ::rocksdb {:crux/module `rocksdb/->kv-store
+                                :db-dir (io/file "indexes")}
+                     :crux/indexer {:kv-store ::rocksdb}}
+                    (config/crux-node-config)]
    :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
                        :server-opts {:port 8080, :join? false}}})
 

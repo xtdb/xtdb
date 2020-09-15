@@ -2,6 +2,7 @@
   (:require [clj-http.client :as http]
             [clojure.string :as string]
             [crux.api :as crux]
+            [crux.kafka :as k]
             [crux.soak.config :as config]
             [nomad.config :as n])
   (:import java.time.Duration
@@ -79,7 +80,9 @@
   (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
 
   (let [mode (first args)]
-    (with-open [node (crux/new-ingest-client (config/crux-node-config))]
+    (with-open [node (crux/new-ingest-client [{:crux/tx-log {:crux/module `k/->ingest-only-tx-log}
+                                               :crux/document-store {:crux/module `k/->ingest-only-document-store}}
+                                              (config/crux-node-config)])]
       (crux/submit-tx node
                       (case mode
                         "current" (->> (vals locations)
