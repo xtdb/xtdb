@@ -12,7 +12,7 @@
 (declare tpch-queries parse-tpch-result validate-tpch-query)
 
 (defn run-tpch-query [node n]
-  (crux/q (crux/db node) (get tpch-queries (dec n))))
+  (crux/q (crux/db node) (assoc (get tpch-queries (dec n)) :timeout 120000)))
 
 (defn run-tpch-test [node {:keys [scale-factor] :as opts}]
   (let [scale-factor (or scale-factor 0.01)]
@@ -187,8 +187,7 @@
                   [(* l_extendedprice ret_1) ret_2]
                   [(pr-str l_shipdate) ret_3]
                   [(subs ret_3 7 11) l_year]]
-          :order-by [[supp_nation :asc] [cust_nation :asc] [l_year :asc]]
-          :timeout 60000})
+          :order-by [[supp_nation :asc] [cust_nation :asc] [l_year :asc]]})
 
 ;; "Elapsed time: 22993.637183 msecs"
 (def q8 '{:find [o_year
