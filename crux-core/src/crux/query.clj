@@ -245,7 +245,7 @@
             (assoc-in [:q-conformed :args] args)))
       conformed-query)))
 
-(declare open-index-store build-sub-query)
+(declare open-index-snapshot build-sub-query)
 
 ;; NOTE: :min-count generates boxed math warnings, so this goes below
 ;; the spec.
@@ -546,24 +546,24 @@
     (or (find arg (symbol (name var)))
         (find arg (keyword (name var))))))
 
-(defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn]} index-store {:keys [vars-in-join-order]}]
+(defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn]} index-snapshot {:keys [vars-in-join-order]}]
   (let [order (keep #{e v} vars-in-join-order)
-        nested-index-store (db/open-nested-index-store index-store)]
+        nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)]
     (if (= v (first order))
       (let [v-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/av nested-index-store a k entity-resolver-fn)))
+                     (db/av nested-index-snapshot a k entity-resolver-fn)))
             e-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/ave nested-index-store a (.key ^IndexStoreIndexState (.state v-idx)) k entity-resolver-fn)))]
+                     (db/ave nested-index-snapshot a (.key ^IndexStoreIndexState (.state v-idx)) k entity-resolver-fn)))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
       (let [e-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/ae nested-index-store a k entity-resolver-fn)))
+                     (db/ae nested-index-snapshot a k entity-resolver-fn)))
             v-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/aev nested-index-store a (.key ^IndexStoreIndexState (.state e-idx)) k entity-resolver-fn)))]
+                     (db/aev nested-index-snapshot a (.key ^IndexStoreIndexState (.state e-idx)) k entity-resolver-fn)))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
 
@@ -571,8 +571,8 @@
   (sort-by (fn [{:keys [a]}]
              (get stats a 0)) triple-clauses))
 
-(defn- new-literal-index [index-store v]
-  (let [encode-value-fn (partial db/encode-value index-store)]
+(defn- new-literal-index [index-snapshot v]
+  (let [encode-value-fn (partial db/encode-value index-snapshot)]
     (if (c/multiple-values? v)
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
@@ -628,22 +628,22 @@
           (reduce
            (fn [var->joins {:keys [e a v] :as clause}]
              (let [join {:id (gensym "triple")
-                         :idx-fn (fn [db index-store compiled-query]
+                         :idx-fn (fn [db index-snapshot compiled-query]
                                    (new-binary-index clause
                                                      db
-                                                     index-store
+                                                     index-snapshot
                                                      compiled-query))}
                    var->joins (merge-with into var->joins {v [join]
                                                            e [join]})
                    var->joins (if (literal? e)
                                 (merge-with into var->joins {e [{:idx-fn
-                                                                 (fn [db index-store compiled-query]
-                                                                   (new-literal-index index-store e))}]})
+                                                                 (fn [db index-snapshot compiled-query]
+                                                                   (new-literal-index index-snapshot e))}]})
                                 var->joins)
                    var->joins (if (literal? v)
                                 (merge-with into var->joins {v [{:idx-fn
-                                                                 (fn [db index-store compiled-query]
-                                                                   (new-literal-index index-store v))}]})
+                                                                 (fn [db index-snapshot compiled-query]
+                                                                   (new-literal-index index-snapshot v))}]})
                                 var->joins)]
                var->joins))
            var->joins))]))
@@ -658,10 +658,10 @@
     (let [idx-id (gensym "args")
           join {:id idx-id
                 :idx-fn
-                (fn [_ index-store _]
+                (fn [_ index-snapshot _]
                   (idx/new-relation-virtual-index []
                                                   (count arg-vars)
-                                                  (partial db/encode-value index-store)))}]
+                                                  (partial db/encode-value index-snapshot)))}]
       [idx-id
        (->> arg-vars
             (reduce
@@ -680,10 +680,10 @@
                   return-vars (find-return-vars return)
                   join {:id idx-id
                         :idx-fn
-                        (fn [_ index-store _]
+                        (fn [_ index-snapshot _]
                           (idx/new-relation-virtual-index []
                                                           (count return-vars)
-                                                          (partial db/encode-value index-store)))}]
+                                                          (partial db/encode-value index-snapshot)))}]
               [(conj pred-clause+idx-ids [pred-clause idx-id])
                (->> return-vars
                     (reduce
@@ -751,10 +751,10 @@
                 join (when (seq free-vars)
                        {:id idx-id
                         :idx-fn
-                        (fn [_ index-store _]
+                        (fn [_ index-snapshot _]
                           (idx/new-relation-virtual-index []
                                                           (count free-vars)
-                                                          (partial db/encode-value index-store)))})]
+                                                          (partial db/encode-value index-snapshot)))})]
             (when (not (apply = (map :or-vars or-branches)))
               (throw (IllegalArgumentException.
                       (str "Or requires same logic variables: " (cio/pr-edn-str clause)))))
@@ -828,7 +828,7 @@
 
 ;; TODO: Get rid of assumption that value-buffer-type-id is always one
 ;; byte. Or better, move construction or handling of ranges to the
-;; IndexStore and remove the need for the type-prefix completely.
+;; IndexSnapshot and remove the need for the type-prefix completely.
 (defn- build-var-range-constraints [encode-value-fn range-clauses var->bindings]
   (doseq [{:keys [sym sym-a sym-b] :as clause} range-clauses
           var [sym sym-a sym-b]
@@ -861,14 +861,14 @@
                    val (Box. mem/empty-buffer)]
                {:join-depth range-join-depth
                 :range-constraint-wrapper-fn (new-range-constraint-wrapper-fn op val)
-                :constraint-fn (fn range-constraint [index-store db idx-id->idx ^List join-keys]
+                :constraint-fn (fn range-constraint [index-snapshot db idx-id->idx ^List join-keys]
                                  (set! (.-val val) (.get join-keys first-index))
                                  true)}))]})
        (apply merge-with into {})))
 
-(defn- bound-result-for-var [index-store ^VarBinding var-binding ^List join-keys]
+(defn- bound-result-for-var [index-snapshot ^VarBinding var-binding ^List join-keys]
   (->> (.get join-keys (.result-index var-binding))
-       (db/decode-value index-store)))
+       (db/decode-value index-snapshot)))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
@@ -904,25 +904,25 @@
         [e-var attr not-found] arg-bindings
         not-found? (= 3 (count arg-bindings))
         e-result-index (.result-index ^VarBinding e-var)]
-    (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
+    (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
       (let [e (.get join-keys e-result-index)
-            vs (db/aev index-store attr e nil entity-resolver-fn)]
+            vs (db/aev index-snapshot attr e nil entity-resolver-fn)]
         (if (and (seq vs) (= :collection return-type))
           (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs identity true)
               true)
           (let [values (if (and (empty? vs) not-found?)
                            [not-found]
-                           (mapv #(db/decode-value index-store %) vs))]
+                           (mapv #(db/decode-value index-snapshot %) vs))]
             (bind-pred-result pred-ctx (get idx-id->idx idx-id) (not-empty values))))))))
 
 (defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules]
                                                             :as pred-ctx}]
   (let [query (normalize-query (second arg-bindings))
         parent-rules (:rules (meta rule-name->rules))]
-    (fn pred-constraint [index-store db idx-id->idx join-keys]
+    (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
       (let [[_ _ & arg-kvs] (for [arg-binding arg-bindings]
                               (if (instance? VarBinding arg-binding)
-                                (bound-result-for-var index-store arg-binding join-keys)
+                                (bound-result-for-var index-snapshot arg-binding join-keys)
                                 arg-binding))
             args [(apply hash-map arg-kvs)]
             query (cond-> (assoc query :args args)
@@ -936,7 +936,7 @@
                               arg-binding
                               (->> (map encode-value-fn (c/vectorize-value arg-binding))
                                    (into (sorted-set-by mem/buffer-comparator))))))]
-    (fn unification-constraint [index-store db idx-id->idx ^List join-keys]
+    (fn unification-constraint [index-snapshot db idx-id->idx ^List join-keys]
       (let [values (for [arg-binding arg-bindings]
                      (if (instance? VarBinding arg-binding)
                        (sorted-set-by mem/buffer-comparator (.get join-keys (.result-index ^VarBinding arg-binding)))
@@ -952,10 +952,10 @@
 (defmethod pred-constraint :default [{:keys [return] {:keys [pred-fn]} :pred :as clause}
                                      {:keys [encode-value-fn idx-id arg-bindings]
                                       :as pred-ctx}]
-  (fn pred-constraint [index-store db idx-id->idx join-keys]
+  (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
     (let [[pred-fn & args] (for [arg-binding arg-bindings]
                              (if (instance? VarBinding arg-binding)
-                               (bound-result-for-var index-store arg-binding join-keys)
+                               (bound-result-for-var index-snapshot arg-binding join-keys)
                                arg-binding))
           pred-result (apply pred-fn args)]
       (bind-pred-result pred-ctx (get idx-id->idx idx-id) pred-result))))
@@ -1006,10 +1006,10 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [index-store {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [index-snapshot {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} args]
   (let [eid (get (first args) e)
-        v (db/encode-value index-store v)
-        [found-v] (db/aev index-store a eid v entity-resolver-fn)]
+        v (db/encode-value index-snapshot v)
+        [found-v] (db/aev index-snapshot a eid v entity-resolver-fn)]
     (when (and found-v (mem/buffers=? v found-v))
       [])))
 
@@ -1032,10 +1032,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [index-store db idx-id->idx join-keys]
+         (fn or-constraint [index-snapshot db idx-id->idx join-keys]
            (let [args (when (seq bound-vars)
                         [(->> (for [var-binding bound-var-bindings]
-                                (bound-result-for-var index-store var-binding join-keys))
+                                (bound-result-for-var index-snapshot var-binding join-keys))
                               (zipmap bound-vars))])
                  branch-results (for [[branch-index {:keys [where
                                                             single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
@@ -1043,8 +1043,8 @@
                                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
                                             cached-result (when cache-key
                                                             (get *recursion-table* cache-key))]]
-                                  (with-open [index-store ^Closeable (open-index-store db)]
-                                    (let [db (assoc db :index-store index-store)]
+                                  (with-open [index-snapshot ^Closeable (open-index-snapshot db)]
+                                    (let [db (assoc db :index-snapshot index-snapshot)]
                                       (cond
                                         cached-result
                                         cached-result
@@ -1052,7 +1052,7 @@
                                         single-e-var-triple?
                                         (let [[[_ clause]] where]
                                           (or-single-e-var-triple-fast-path
-                                           index-store
+                                           index-snapshot
                                            db
                                            clause
                                            args))
@@ -1062,13 +1062,13 @@
                                                                       (assoc *recursion-table* cache-key [])
                                                                       *recursion-table*)]
                                           (let [{:keys [n-ary-join
-                                                        var->bindings]} (build-sub-query index-store db where args rule-name->rules stats)
+                                                        var->bindings]} (build-sub-query index-snapshot db where args rule-name->rules stats)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
                                             (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                               (if has-free-vars?
                                                 (vec (for [join-keys idx-seq]
                                                        (vec (for [var-binding free-vars-in-join-order-bindings]
-                                                              (bound-result-for-var index-store var-binding join-keys)))))
+                                                              (bound-result-for-var index-snapshot var-binding join-keys)))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -1092,20 +1092,20 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [index-store db idx-id->idx join-keys]
-           (with-open [index-store ^Closeable (open-index-store db)]
-             (let [db (assoc db :index-store index-store)
+         (fn not-constraint [index-snapshot db idx-id->idx join-keys]
+           (with-open [index-snapshot ^Closeable (open-index-snapshot db)]
+             (let [db (assoc db :index-snapshot index-snapshot)
                    args (when (seq not-vars)
                           [(->> (for [var-binding not-var-bindings]
-                                  (bound-result-for-var index-store var-binding join-keys))
+                                  (bound-result-for-var index-snapshot var-binding join-keys))
                                 (zipmap not-vars))])
-                   {:keys [n-ary-join]} (build-sub-query index-store db not-clause args rule-name->rules stats)]
+                   {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause args rule-name->rules stats)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
-(defn- constrain-join-result-by-constraints [index-store db idx-id->idx depth->constraints join-keys]
+(defn- constrain-join-result-by-constraints [index-snapshot db idx-id->idx depth->constraints join-keys]
   (->> (get depth->constraints (count join-keys))
        (every? (fn [f]
-                 (f index-store db idx-id->idx join-keys)))))
+                 (f index-snapshot db idx-id->idx join-keys)))))
 
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps]
   (let [g (->> (keys var->joins)
@@ -1346,7 +1346,7 @@
      :args-idx-id args-idx-id
      :attr-stats (select-keys stats (vals var->attr))}))
 
-(defn- build-idx-id->idx [db index-store {:keys [var->joins] :as compiled-query}]
+(defn- build-idx-id->idx [db index-snapshot {:keys [var->joins] :as compiled-query}]
   (->> (for [[_ joins] var->joins
              {:keys [id idx-fn] :as join} joins
              :when id]
@@ -1355,7 +1355,7 @@
         (fn [acc [id idx-fn]]
           (if (contains? acc id)
             acc
-            (assoc acc id (idx-fn db index-store compiled-query))))
+            (assoc acc id (idx-fn db index-snapshot compiled-query))))
         {})))
 
 (defn- add-logic-var-constraints [{:keys [var->logic-var-range-constraint-fns]
@@ -1375,11 +1375,11 @@
                                                     logic-var+range-constraint)))))
     compiled-query))
 
-(defn- build-sub-query [index-store {:keys [query-cache] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [index-snapshot {:keys [query-cache] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
-        encode-value-fn (partial db/encode-value index-store)
+        encode-value-fn (partial db/encode-value index-snapshot)
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
@@ -1396,15 +1396,15 @@
                                   (fn [_]
                                     (compile-sub-query encode-value-fn where arg-vars rule-name->rules stats)))
                                  (add-logic-var-constraints))
-        idx-id->idx (build-idx-id->idx db index-store compiled-query)
+        idx-id->idx (build-idx-id->idx db index-snapshot compiled-query)
         unary-join-indexes (for [v vars-in-join-order]
                              (-> (idx/new-unary-join-virtual-index
                                   (vec (for [{:keys [id idx-fn] :as join} (get var->joins v)]
                                          (or (get idx-id->idx id)
-                                             (idx-fn db index-store compiled-query)))))
+                                             (idx-fn db index-snapshot compiled-query)))))
                                  (idx/wrap-with-range-constraints (get var->range-constraints v))))
         constrain-result-fn (fn [join-keys]
-                              (constrain-join-result-by-constraints index-store db idx-id->idx depth->constraints join-keys))]
+                              (constrain-join-result-by-constraints index-snapshot db idx-id->idx depth->constraints join-keys))]
     (when (and (seq args) args-idx-id)
       (binding [nippy/*freeze-fallback* :write-unfreezable]
         (idx/update-relation-virtual-index!
@@ -1425,18 +1425,18 @@
   (let [{:keys [where args rules]} (s/conform ::query q)]
     (compile-sub-query encode-value-fn where (arg-vars args) (rule-name->rules rules) stats)))
 
-(defn- open-index-store ^java.io.Closeable [{:keys [indexer index-store] :as db}]
-  (if index-store
-    (db/open-nested-index-store index-store)
-    (db/open-index-store indexer)))
+(defn- open-index-snapshot ^java.io.Closeable [{:keys [index-store index-snapshot] :as db}]
+  (if index-snapshot
+    (db/open-nested-index-snapshot index-snapshot)
+    (db/open-index-snapshot index-store)))
 
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
   (let [entity-cache (lru/new-cache entity-cache-size)]
     (fn [k]
       (lru/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
-(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-store entity-cache?] :as db}]
-  (cond-> #(db/entity-as-of-resolver index-store % valid-time transact-time)
+(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot entity-cache?] :as db}]
+  (cond-> #(db/entity-as-of-resolver index-snapshot % valid-time transact-time)
     entity-cache? (with-entity-resolver-cache db)))
 
 (defn- validate-args [args]
@@ -1523,7 +1523,7 @@
     (into [(let [join-child-fns (into {} (map (juxt :dispatch-key project-child-fns)) forward-joins)
                  prop-dispatch-keys (into #{} (map :dispatch-key) props)
                  special-dispatch-keys (into #{} (map :dispatch-key) special)]
-             (fn [value {:keys [document-store index-store entity-resolver-fn] :as db}]
+             (fn [value {:keys [document-store index-snapshot entity-resolver-fn] :as db}]
                (when-not (and (empty? prop-dispatch-keys)
                               (empty? special-dispatch-keys)
                               (empty? join-child-fns))
@@ -1551,11 +1551,11 @@
                   forward-key (keyword (namespace dispatch-key)
                                        (subs (name dispatch-key) 1))
                   one? (= :one (get-in join [:params :crux/cardinality]))]
-              (fn [value {:keys [document-store index-store entity-resolver-fn] :as db}]
-                (->> (vec (for [v (cond->> (db/ave index-store (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
+              (fn [value {:keys [document-store index-snapshot entity-resolver-fn] :as db}]
+                (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
                                     one? (take 1)
                                     :always vec)]
-                            (project-child (db/decode-value index-store v) child-fns db)))
+                            (project-child (db/decode-value index-snapshot v) child-fns db)))
                      (raise-doc-lookup-out-of-coll)
                      (after-doc-lookup (fn [res]
                                          [(MapEntry/create dispatch-key
@@ -1629,21 +1629,21 @@
        group-acc
        idx->aggregate))))
 
-(defn query [{:keys [valid-time transact-time document-store indexer index-store] :as db} ^ConformedQuery conformed-q]
+(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
-        stats (db/read-index-meta indexer :crux/attribute-stats)]
+        stats (db/read-index-meta index-store :crux/attribute-stats)]
     (log/debug :query (cio/pr-edn-str (-> q
                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
                                           (dissoc :args))))
     (validate-args args)
     (let [rule-name->rules (with-meta (rule-name->rules rules) {:rules (:rules q)})
-          db (assoc db :index-store index-store)
+          db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (or (:entity-resolver-fn db)
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
-          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-store db where args rule-name->rules stats)
+          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-snapshot db where args rule-name->rules stats)
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
           find-logic-vars (mapv :logic-var compiled-find)
           var-types (set (map :var-type compiled-find))
@@ -1663,7 +1663,7 @@
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
                   (mapv (fn [var-binding]
-                          (bound-result-for-var index-store var-binding join-keys))
+                          (bound-result-for-var index-snapshot var-binding join-keys))
                         var-bindings))
 
          aggregate? (aggregate-result compiled-find)
@@ -1686,36 +1686,36 @@
                               (recur (replace-docs lookup (lookup-docs lookup db)))
                               lookup))))))))
 
-(defn entity-tx [{:keys [valid-time transact-time] :as db} index-store eid]
-  (some-> (db/entity-as-of index-store eid valid-time transact-time)
+(defn entity-tx [{:keys [valid-time transact-time] :as db} index-snapshot eid]
+  (some-> (db/entity-as-of index-snapshot eid valid-time transact-time)
           (c/entity-tx->edn)))
 
-(defn- entity [{:keys [document-store] :as db} index-store eid]
-  (when-let [content-hash (some-> (entity-tx db index-store eid)
+(defn- entity [{:keys [document-store] :as db} index-snapshot eid]
+  (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
                                   :crux.db/content-hash)]
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-(defrecord QueryDatasource [document-store indexer bus tx-ingester
+(defrecord QueryDatasource [document-store index-store bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache projection-cache
-                            index-store
+                            index-snapshot
                             entity-resolver-fn]
   Closeable
   (close [_]
-    (when index-store
-      (.close ^Closeable index-store)))
+    (when index-snapshot
+      (.close ^Closeable index-snapshot)))
 
   ICruxDatasource
   (entity [this eid]
-    (with-open [index-store (open-index-store this)]
-      (entity this index-store eid)))
+    (with-open [index-snapshot (open-index-snapshot this)]
+      (entity this index-snapshot eid)))
 
   (entityTx [this eid]
-    (with-open [index-store (open-index-store this)]
-      (entity-tx this index-store eid)))
+    (with-open [index-snapshot (open-index-snapshot this)]
+      (entity-tx this index-snapshot eid)))
 
   (query [this query]
     (with-open [res (.openQuery this query)]
@@ -1736,8 +1736,8 @@
               (.cancel interrupt-job false)))))))
 
   (openQuery [db query]
-    (let [index-store (open-index-store db)
-          db (assoc db :index-store index-store)
+    (let [index-snapshot (open-index-snapshot db)
+          db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
 
@@ -1760,7 +1760,7 @@
                                          :message (.getMessage e)}}))
                (throw e)))
            (cio/->cursor (fn []
-                           (cio/try-close index-store)
+                           (cio/try-close index-snapshot)
                            (when bus
                              (bus/send bus {:crux/event-type ::completed-query
                                             ::query safe-query
@@ -1778,7 +1778,7 @@
                          HistoryOptions$SortOrder/ASC :asc
                          HistoryOptions$SortOrder/DESC :desc)
             with-docs? (.withDocs opts)
-            index-store (db/open-index-store indexer)
+            index-snapshot (db/open-index-snapshot index-store)
 
             opts (cond-> {:with-corrections? (.withCorrections opts)
                           :with-docs? with-docs?
@@ -1798,8 +1798,8 @@
                        (update-in [:start :crux.tx/tx-time]
                                   with-upper-bound transact-time)))]
 
-        (cio/->cursor #(.close index-store)
-                      (->> (db/entity-history index-store eid sort-order opts)
+        (cio/->cursor #(.close index-snapshot)
+                      (->> (db/entity-history index-snapshot eid sort-order opts)
                            (map (fn [^EntityTx etx]
                                   (cond-> {:crux.tx/tx-time (.tt etx)
                                            :crux.tx/tx-id (.tx-id etx)
@@ -1814,7 +1814,7 @@
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time
                                ::tx/tx-time transact-time}}
-                    (if-let [latest-completed-tx (db/latest-completed-tx indexer)]
+                    (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
                                                 (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))
@@ -1833,13 +1833,13 @@
   (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
-                        indexer bus
+                        index-store bus
                         query-cache conform-cache projection-cache]
   api/DBProvider
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
   (db [this valid-time tx-time]
-    (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx indexer))
+    (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
           _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
               (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
                                                       tx-time latest-tx-time)
@@ -1850,7 +1850,7 @@
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
       (map->QueryDatasource (assoc this
-                                   :tx-ingester (tx/->tx-ingester {:indexer indexer
+                                   :tx-ingester (tx/->tx-ingester {:index-store index-store
                                                                    :document-store document-store
                                                                    :bus bus
                                                                    :query-engine this})
@@ -1861,8 +1861,8 @@
   (open-db [this valid-time] (api/open-db this valid-time nil))
   (open-db [this valid-time tx-time]
     (let [db (api/db this valid-time tx-time)
-          index-store (open-index-store db)
-          db (assoc db :index-store index-store)
+          index-snapshot (open-index-snapshot db)
+          db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (new-entity-resolver-fn db)]
       (assoc db :entity-resolver-fn entity-resolver-fn)))
 
@@ -1873,7 +1873,7 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
-(defn ->query-engine {::sys/deps {:indexer :crux/indexer
+(defn ->query-engine {::sys/deps {:index-store :crux/index-store
                                   :bus :crux/bus
                                   :document-store :crux/document-store}
                       ::sys/args {:query-cache-size {:doc "Compiled Query Cache Size"

@@ -27,7 +27,7 @@
               submitted-tx))]
 
       (with-open [node (crux/start-node (merge ingest-opts
-                                               {:crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
+                                               {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
         (crux/await-tx node submitted-tx)
         (t/is (true? (crux/tx-committed? node submitted-tx)))
         (t/is (= #{[:ivan]} (crux/q (crux/db node)

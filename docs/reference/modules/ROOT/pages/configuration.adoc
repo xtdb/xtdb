@@ -138,7 +138,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
     });
   });
   n.with("crux/document-store", docStore -> { ... });
-  n.with("crux/indexer", indexer -> { ... });
+  n.with("crux/index-store", indexStore -> { ... });
 });
 ----
 .JSON
@@ -153,7 +153,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   },
 
   "crux/document-store": { ... },
-  "crux/indexer": { ... }
+  "crux/index-store": { ... }
 }
 ----
 .Clojure/EDN
@@ -162,7 +162,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 {:crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                           :db-dir (io/file "/tmp/txs")}}
  :crux/document-store {...}
- :crux/indexer {...}}
+ :crux/index-store {...}}
 ----
 
 [IMPORTANT]

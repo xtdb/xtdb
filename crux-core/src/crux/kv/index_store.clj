@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.kv.indexer
+(ns ^:no-doc crux.kv.index-store
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -161,7 +161,7 @@
            (.putBytes (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr)) v 0 (.capacity v)))
          (mem/limit-buffer (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr) (.capacity v)))))))
 
-(defn- decode-ecav-key-from ^crux.kv.indexer.Quad [^DirectBuffer k ^long eid-size]
+(defn- decode-ecav-key-from ^crux.kv.index_store.Quad [^DirectBuffer k ^long eid-size]
   (let [length (long (.capacity k))]
     (assert (<= (+ c/index-id-size eid-size c/id-size c/id-size) length) (mem/buffer->hex k))
     (let [index-id (.getByte k 0)]
@@ -438,9 +438,9 @@
          (cond-> (not with-corrections?) (->> (partition-by :vt)
                                               (map first)))))))
 
-;;;; IndexStore
+;;;; IndexSnapshot
 
-(declare new-kv-index-store)
+(declare new-kv-index-snapshot)
 
 (defn- advance-iterator-to-hash-cache-value [i value-buffer]
   (let [hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
@@ -448,30 +448,30 @@
     (and found-k
          (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
-(defn- value-buffer->id-buffer [index-store ^DirectBuffer value-buffer]
-  (c/->id-buffer (db/decode-value index-store value-buffer)))
+(defn- value-buffer->id-buffer [index-snapshot ^DirectBuffer value-buffer]
+  (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
 
-(defrecord KvIndexStore [snapshot
-                         close-snapshot?
-                         level-1-iterator-delay
-                         level-2-iterator-delay
-                         entity-as-of-iterator-delay
-                         decode-value-iterator-delay
-                         nested-index-store-state
-                         ^Map temp-hash-cache
-                         ^AtomicBoolean closed?]
+(defrecord KvIndexSnapshot [snapshot
+                            close-snapshot?
+                            level-1-iterator-delay
+                            level-2-iterator-delay
+                            entity-as-of-iterator-delay
+                            decode-value-iterator-delay
+                            nested-index-snapshot-state
+                            ^Map temp-hash-cache
+                            ^AtomicBoolean closed?]
   Closeable
   (close [_]
     (when (.compareAndSet closed? false true)
-      (doseq [nested-index-store @nested-index-store-state]
-        (cio/try-close nested-index-store))
+      (doseq [nested-index-snapshot @nested-index-snapshot-state]
+        (cio/try-close nested-index-snapshot))
       (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay]
               :when (realized? i)]
         (cio/try-close @i))
       (when close-snapshot?
         (cio/try-close snapshot))))
 
-  db/IndexStore
+  db/IndexSnapshot
   (av [this a min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
           prefix (encode-av-key-to nil attr-buffer)
@@ -614,12 +614,12 @@
         (.put temp-hash-cache (mem/copy-to-unpooled-buffer value-buffer) value))
       value-buffer))
 
-  (open-nested-index-store [this]
-    (let [nested-index-store (new-kv-index-store snapshot temp-hash-cache false)]
-      (swap! nested-index-store-state conj nested-index-store)
-      nested-index-store)))
+  (open-nested-index-snapshot [this]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache false)]
+      (swap! nested-index-snapshot-state conj nested-index-snapshot)
+      nested-index-snapshot)))
 
-;;;; Indexer
+;;;; IndexStore
 
 (defn- ->content-idx-kvs [docs]
   (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
@@ -641,19 +641,19 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-store [snapshot temp-hash-cache close-snapshot?]
-  (->KvIndexStore snapshot
-                  close-snapshot?
-                  (delay (kv/new-iterator snapshot))
-                  (delay (kv/new-iterator snapshot))
-                  (delay (kv/new-iterator snapshot))
-                  (delay (kv/new-iterator snapshot))
-                  (atom [])
-                  temp-hash-cache
-                  (AtomicBoolean.)))
+(defn- new-kv-index-snapshot [snapshot temp-hash-cache close-snapshot?]
+  (->KvIndexSnapshot snapshot
+                     close-snapshot?
+                     (delay (kv/new-iterator snapshot))
+                     (delay (kv/new-iterator snapshot))
+                     (delay (kv/new-iterator snapshot))
+                     (delay (kv/new-iterator snapshot))
+                     (atom [])
+                     temp-hash-cache
+                     (AtomicBoolean.)))
 
-(defrecord KvIndexer [kv-store]
-  db/Indexer
+(defrecord KvIndexStore [kv-store]
+  db/IndexStore
   (index-docs [this docs]
     (let [crux-db-id (c/->id-buffer :crux.db/id)
           docs (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -747,8 +747,8 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
-  (open-index-store [this]
-    (new-kv-index-store (kv/new-snapshot kv-store) (HashMap.) true))
+  (open-index-snapshot [this]
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) true))
 
   status/Status
   (status-map [this]
@@ -756,9 +756,9 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(defn ->kv-indexer {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
-                    ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
-                                                          :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
+(defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
+                        ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
+                                                              :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexer kv-store))
+  (->KvIndexStore kv-store))

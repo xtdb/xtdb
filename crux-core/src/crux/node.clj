@@ -84,7 +84,7 @@
                   (- (.getTime started-at) (.getTime finished-at))))
        (take slow-queries-max-count)))
 
-(defrecord CruxNode [kv-store tx-log document-store indexer tx-ingester bus query-engine
+(defrecord CruxNode [kv-store tx-log document-store index-store tx-ingester bus query-engine
                      !running-queries close-fn !system closed? ^StampedLock lock]
   ICruxAPI
   (db [this] (.db this nil nil))
@@ -115,7 +115,7 @@
   (attributeStats [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/read-index-meta indexer :crux/attribute-stats)))
+      (db/read-index-meta index-store :crux/attribute-stats)))
 
   (submitTx [this tx-ops]
     (cio/with-read-lock lock
@@ -133,7 +133,7 @@
            (NodeOutOfSyncException.
             (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
             tx-time latest-tx-time))
-          (not (db/tx-failed? indexer tx-id))))))
+          (not (db/tx-failed? index-store tx-id))))))
 
   (openTxLog ^ICursor [this after-tx-id with-ops?]
     (cio/with-read-lock lock
@@ -146,7 +146,7 @@
         (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
               tx-log-iterator (db/open-tx-log tx-log after-tx-id)
               tx-log (->> (iterator-seq tx-log-iterator)
-                          (remove #(db/tx-failed? indexer (:crux.tx/tx-id %)))
+                          (remove #(db/tx-failed? index-store (:crux.tx/tx-id %)))
                           (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
                           (map (if with-ops?
                                  (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
@@ -190,7 +190,7 @@
   (latestCompletedTx [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/latest-completed-tx indexer)))
+      (db/latest-completed-tx index-store)))
 
   (latestSubmittedTx [this]
     (db/latest-submitted-tx tx-log))
@@ -269,7 +269,7 @@
                                        :status :completed}
                                       node-opts))))
 
-(defn- ->node {::sys/deps {:indexer :crux/indexer
+(defn- ->node {::sys/deps {:index-store :crux/index-store
                            :tx-ingester :crux/tx-ingester
                            :bus :crux/bus
                            :document-store :crux/document-store

@@ -45,7 +45,7 @@ You can omit this if you're happy with its default parameters.
 
 === Parameters
 
-* `with-indexer-metrics?` (boolean, default true): includes indexer metrics in the metrics registry
+* `with-index-store-metrics?` (boolean, default true): includes index-store metrics in the metrics registry
 * `with-query-metrics?` (boolean, default true): includes query metrics in the metrics registry
 
 [#prometheus-reporter]

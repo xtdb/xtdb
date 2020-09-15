@@ -4,7 +4,7 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.kv.indexer :as kvi]
+            [crux.kv.index-store :as kvi]
             [crux.memory :as mem]
             [crux.system :as sys]
             [crux.tx :as tx]
@@ -140,15 +140,15 @@
 
 (defn ->tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
                             :tx-ingester :crux/tx-ingester
-                            :indexer :crux/indexer}}
-  [{:keys [tx-ingester indexer kv-store]}]
+                            :index-store :crux/index-store}}
+  [{:keys [tx-ingester index-store kv-store]}]
   (let [^ExecutorService ingest-executor (bounded-solo-thread-pool 1024 (cio/thread-factory "crux-standalone-tx-ingest"))
         tx-log (->KvTxLog (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
                           ingest-executor
                           kv-store
                           tx-ingester)
         latest-submitted-tx-id (::tx/tx-id (db/latest-submitted-tx tx-log))
-        latest-completed-tx-id (::tx/tx-id (db/latest-completed-tx indexer))]
+        latest-completed-tx-id (::tx/tx-id (db/latest-completed-tx index-store))]
     (when (not= latest-submitted-tx-id latest-completed-tx-id)
       (.submit ingest-executor
                ^Runnable (fn []

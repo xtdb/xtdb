@@ -44,7 +44,7 @@
                      kv-opts))]
       (fix/with-opts {:crux/tx-log {:kv-store (->kv-opts "tx-log")}
                       :crux/document-store {:kv-store (->kv-opts "doc-store")}
-                      :crux/indexer {:kv-store (->kv-opts "indexer")}}
+                      :crux/index-store {:kv-store (->kv-opts "index-store")}}
         f))))
 
 (defmacro with-kv-store-opts [kv-dep & body]

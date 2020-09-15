@@ -30,7 +30,7 @@
   (.close node))
 
 (def standalone-config
-  {:crux {:crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "indexes")}}
+  {:crux {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "indexes")}}
           :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "documents")}}
           :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "tx-log")}}
           :crux.metrics.jmx/reporter {}
@@ -50,8 +50,8 @@
     {:embedded-kafka {:kafka-port kafka-port
                       :kafka-dir (io/file dev-node-dir "kafka")}
      :crux {::k/kafka-config {:bootstrap-servers (str "localhost:" kafka-port)}
-            :crux/indexer {:kv-store {:crux/module `rocks/->kv-store
-                                      :db-dir (io/file dev-node-dir "ek-indexes")}}
+            :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                          :db-dir (io/file dev-node-dir "ek-indexes")}}
             :crux/document-store {:crux/module `k/->document-store,
                                   :kafka-config ::k/kafka-config
                                   :local-document-store {:kv-store {:crux/module `rocks/->kv-store,

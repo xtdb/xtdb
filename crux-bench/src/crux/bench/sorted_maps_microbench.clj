@@ -43,6 +43,6 @@
                                                              :kafka-config ::k/kafka-config
                                                              :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
                                                                                                :db-dir (io/file tmp-dir "doc-store")}}}
-                                       :crux/indexer {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file tmp-dir "indexer")}}})]
+                                       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file tmp-dir "index-store")}}})]
       (bench/with-bench-ns :sorted-maps
         (run-benches node [:initial-submits :initial-await])))))

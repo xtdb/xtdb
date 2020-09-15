@@ -32,7 +32,7 @@ Replace the implementation of the desired component with `+crux.lmdb/->kv-store+
 [source,json]
 ----
 {
-  "crux/indexer": {
+  "crux/index-store": {
     "kv-store": {
       "crux/module": "crux.lmdb/->kv-store",
       "db-dir": "/tmp/lmdb"
@@ -47,8 +47,8 @@ Replace the implementation of the desired component with `+crux.lmdb/->kv-store+
 .Clojure/EDN
 [source,clojure]
 ----
-{:crux/indexer {:kv-store {:crux/module 'crux.lmdb/->kv-store
-                           :db-dir (io/file "/tmp/lmdb")}}
+{:crux/index-store {:kv-store {:crux/module 'crux.lmdb/->kv-store
+                               :db-dir (io/file "/tmp/lmdb")}}
  :crux/document-store {...}
  :crux/tx-log {...}}
 ----

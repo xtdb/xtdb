@@ -13,8 +13,8 @@
   (max-depth [this]))
 ;; end::LayeredIndex[]
 
-;; tag::Indexer[]
-(defprotocol Indexer
+;; tag::IndexStore[]
+(defprotocol IndexStore
   (index-docs [this docs])
   (unindex-eids [this eids])
   (index-entity-txs [this tx entity-txs])
@@ -23,11 +23,11 @@
   (read-index-meta [this k] [this k not-found])
   (latest-completed-tx [this])
   (tx-failed? [this tx-id])
-  (open-index-store ^java.io.Closeable [this]))
-;; end::Indexer[]
+  (open-index-snapshot ^java.io.Closeable [this]))
+;; end::IndexStore[]
 
-;; tag::IndexStore[]
-(defprotocol IndexStore
+;; tag::IndexSnapshot[]
+(defprotocol IndexSnapshot
   (av [this a min-v entity-resolver-fn])
   (ave [this a v min-e entity-resolver-fn])
   (ae [this a min-e entity-resolver-fn])
@@ -37,8 +37,8 @@
   (entity-history [this eid sort-order opts])
   (decode-value [this value-buffer])
   (encode-value [this value])
-  (open-nested-index-store ^java.io.Closeable [this]))
-;; end::IndexStore[]
+  (open-nested-index-snapshot ^java.io.Closeable [this]))
+;; end::IndexSnapshot[]
 
 ;; tag::TxLog[]
 (defprotocol TxLog
