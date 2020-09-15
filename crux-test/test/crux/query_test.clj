@@ -242,6 +242,11 @@
                                                              :in [$ name]
                                                              :where [[e :name name]]} "Ivan")))
 
+    (t/testing "the db var is optional"
+      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                               :in [name]
+                                                               :where [[e :name name]]} "Ivan"))))
+
     (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
                                                              :in [$ name last-name]
                                                              :where [[e :name name]

@@ -1407,7 +1407,7 @@
   ;; differently.
   (let [in-bindings (:bindings in)
         arg-vars (arg-vars args)
-        encode-value-fn (partial db/encode-value index-store)
+        encode-value-fn (partial db/encode-value index-snapshot)
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
@@ -1663,10 +1663,10 @@
        group-acc
        idx->aggregate))))
 
-(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q]
+(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
-        {:keys [find where args rules offset limit order-by full-results?]} q-conformed
+        {:keys [find where in args rules offset limit order-by full-results?]} q-conformed
         stats (db/read-index-meta index-store :crux/attribute-stats)]
     (log/debug :query (cio/pr-edn-str (-> q
                                           (assoc :arg-keys (mapv (comp set keys) (:args q)))
@@ -1770,7 +1770,7 @@
               (.cancel interrupt-job false)))))))
 
   (openQuery [db query args]
-    (let [index-snapshot (open-index-store db)
+    (let [index-snapshot (open-index-snapshot db)
           db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
