@@ -4,6 +4,7 @@
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.query-state :as qs]
+            [crux.ingest-client :as ic]
             [crux.system :as sys]
             [clojure.tools.logging :as log])
   (:import (crux.api Crux ICruxAPI ICruxIngestAPI
@@ -407,4 +408,4 @@
   Returns a crux.api.ICruxIngestAPI component that implements java.io.Closeable.
   Latter allows the node to be stopped by calling `(.close node)`."
   ^ICruxAsyncIngestAPI [options]
-  (Crux/newIngestClient options))
+  (ic/open-ingest-client options))

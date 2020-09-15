@@ -1,11 +1,10 @@
 (ns crux.ingest-client
   (:require [crux.db :as db]
-            [crux.tx :as tx]
-            [crux.tx.conform :as txc]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.tx.conform :as txc])
   (:import crux.api.ICruxAsyncIngestAPI
-           java.lang.AutoCloseable
-           (java.io Closeable Writer)))
+           [java.io Closeable Writer]
+           java.lang.AutoCloseable))
 
 (defrecord CruxIngestClient [tx-log document-store close-fn]
   ICruxAsyncIngestAPI
@@ -34,11 +33,11 @@
   (->CruxIngestClient tx-log document-store nil))
 
 (defn open-ingest-client ^ICruxAsyncIngestAPI [options]
-  (let [system (-> (sys/prep-system [{:crux/ingest-client `->ingest-client
-                                      :crux/bus 'crux.bus/->bus
-                                      :crux/document-store 'crux.kv.document-store/->document-store
-                                      :crux/tx-log 'crux.kv.tx-log/->ingest-only-tx-log}
-                                     options])
+  (let [system (-> (sys/prep-system (into [{:crux/ingest-client `->ingest-client
+                                            :crux/bus 'crux.bus/->bus
+                                            :crux/document-store 'crux.kv.document-store/->document-store
+                                            :crux/tx-log 'crux.kv.tx-log/->ingest-only-tx-log}]
+                                          options))
                    (sys/start-system))]
     (-> (:crux/ingest-client system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))
