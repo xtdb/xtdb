@@ -238,30 +238,34 @@
   (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
                                                       {:name "Petr" :last-name "Petrov"}]))]
 
-    (t/testing "Can query entity by single field"
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                               :in [$ name]
-                                                               :where [[e :name name]]} "Ivan")))
+    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                             :in [$ name]
+                                                             :where [[e :name name]]} "Ivan")))
 
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                               :in [$ name last-name]
-                                                               :where [[e :name name]
-                                                                       [e :last-name last-name]]} "Ivan" "Ivanov")))
+    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                             :in [$ name last-name]
+                                                             :where [[e :name name]
+                                                                     [e :last-name last-name]]} "Ivan" "Ivanov")))
 
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                               :in [$ [name]]
-                                                               :where [[e :name name]]} ["Ivan"])))
+    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+                                                             :in [$ [name]]
+                                                             :where [[e :name name]]} ["Ivan"])))
 
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                               :in [$ [[name]]]
-                                                               :where [[e :name name]]} [["Ivan"]
-                                                                                         ["Petr"]])))
+    (t/is (= #{[(:crux.db/id ivan)]
+               [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+                                                             :in [$ [[name]]]
+                                                             :where [[e :name name]]} [["Ivan"]
+                                                                                       ["Petr"]])))
 
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                               :in [$ [name ...]]
-                                                               :where [[e :name name]]} ["Ivan" "Petr"]))))))
+    (t/is (= #{[(:crux.db/id ivan)]
+               [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+                                                             :in [$ [name ...]]
+                                                             :where [[e :name name]]} ["Ivan" "Petr"])))
+
+    (t/testing "can access the db"
+      (t/is (= #{[crux.query.QueryDatasource]} (api/q (api/db *api*) '{:find [t]
+                                                                       :in [$]
+                                                                       :where [[(type $) t]]}))))))
 
 (t/deftest test-multiple-results
   (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "1"}

@@ -966,8 +966,14 @@
                                       :as pred-ctx}]
   (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
     (let [[pred-fn & args] (for [arg-binding arg-bindings]
-                             (if (instance? VarBinding arg-binding)
+                             (cond
+                               (instance? VarBinding arg-binding)
                                (bound-result-for-var index-snapshot arg-binding join-keys)
+
+                               (= '$ arg-binding)
+                               db
+
+                               :else
                                arg-binding))
           pred-result (apply pred-fn args)]
       (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) pred-result))))
