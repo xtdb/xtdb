@@ -25,7 +25,7 @@
           {:success? (every? true? (for [n (range 1 23)]
                                      (let [actual (run-tpch-query node n)]
                                        (if (= 0.01 scale-factor)
-                                         (validate-tpch-query actual (parse-tpch-result n))
+                                         (every? true? (validate-tpch-query actual (parse-tpch-result n)))
                                          (boolean actual)))))})))))
 
   ;; "Elapsed time: 21994.835831 msecs"
