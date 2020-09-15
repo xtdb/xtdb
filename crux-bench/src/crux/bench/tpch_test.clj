@@ -28,7 +28,7 @@
                                          (every? true? (validate-tpch-query actual (parse-tpch-result n)))
                                          (boolean actual)))))})))))
 
-  ;; "Elapsed time: 21994.835831 msecs"
+;; "Elapsed time: 21994.835831 msecs"
 (def q1 '{:find [l_returnflag
                  l_linestatus
                  (sum l_quantity)
