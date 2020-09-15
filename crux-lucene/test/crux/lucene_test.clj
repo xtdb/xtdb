@@ -83,4 +83,22 @@
       (submit+await-tx [[:crux.tx/put {:crux.db/id "test4" :name "ivanpost"}]])
       (with-open [db (c/open-db *api*)]
         (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
-                 (c/q db {:find '[?e ?v ?score] :where '[[(text-search :name "ivan*") [[?e ?v ?score]]] [?e :crux.db/id]]})))))))
+                 (c/q db {:find '[?e ?v ?score]
+                          :where '[[(text-search :name "ivan*") [[?e ?v ?score]]]
+                                   [?e :crux.db/id]]})))))
+
+    (t/testing "cardinality many"
+      (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :foo #{"atar" "abar" "nomatch"}}]])
+
+      (with-open [db (c/open-db *api*)]
+        (t/is (= #{[:ivan "atar"]}
+                 (c/q db {:find '[?e ?v]
+                          :where '[[(text-search :foo "atar") [[?e ?v]]]
+                                   [?e :crux.db/id]]}))))
+
+      (with-open [db (c/open-db *api*)]
+        (t/is (= #{[:ivan "abar"]
+                   [:ivan "atar"]}
+                 (c/q db {:find '[?e ?v]
+                          :where '[[(text-search :foo "a?ar") [[?e ?v]]]
+                                   [?e :crux.db/id]]})))))))
