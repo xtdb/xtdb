@@ -13,7 +13,7 @@
                  [juxt/crux-test "crux-git-version"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
-                 [clj-http "3.10.0"]
+                 [clj-http "3.10.1"]
                  [software.amazon.awssdk/s3 "2.10.61"]
                  [com.amazonaws/aws-java-sdk-ses "1.11.720"]
                  [com.amazonaws/aws-java-sdk-logs "1.11.720"]

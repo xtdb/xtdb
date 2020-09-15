@@ -168,9 +168,9 @@ Resources:
               AwsVpcConfiguration:
                 AssignPublicIp: "ENABLED"
                 SecurityGroups:
-                  - "sg-0255e869"
+                  - "sg-0c74a21b1f6adf815"
                 Subnets:
-                  - "subnet-5140ba2b"
+                  - "subnet-0a6a6f684bc1d7232"
             TaskDefinitionArn:
               Ref: "SoakIngestCurrentTaskDef"
             TaskCount: 1
@@ -192,9 +192,9 @@ Resources:
               AwsVpcConfiguration:
                 AssignPublicIp: "ENABLED"
                 SecurityGroups:
-                  - "sg-0255e869"
+                  - "sg-0c74a21b1f6adf815"
                 Subnets:
-                  - "subnet-5140ba2b"
+                  - "subnet-0a6a6f684bc1d7232"
             TaskDefinitionArn:
               Ref: "SoakIngestForecastTaskDef"
             TaskCount: 1

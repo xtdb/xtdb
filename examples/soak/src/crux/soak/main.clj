@@ -8,7 +8,9 @@
             [crux.api :as api]
             [crux.rocksdb :as rocksdb]
             [crux.soak.config :as config]
+            [crux.checkpoint :as cp]
             [crux.kafka :as k]
+            [crux.s3.checkpoint :as s3.cp]
             [hiccup2.core :refer [html]]
             [integrant.core :as ig]
             [integrant.repl :as ir]
@@ -200,7 +202,11 @@
                      :crux/document-store {:crux/module `k/->document-store
                                            :local-document-store {:kv-store ::rocksdb}}
                      ::rocksdb {:crux/module `rocksdb/->kv-store
-                                :db-dir (io/file "indexes")}
+                                :db-dir (io/file "indexes")
+                                :checkpointer {:crux/module `cp/->checkpointer
+                                               :store {:crux/module `s3.cp/->cp-store
+                                                       :bucket "crux-soak-checkpoints"}
+                                               :approx-frequency (Duration/ofHours 6)}}
                      :crux/index-store {:kv-store ::rocksdb}}
                     (config/crux-node-config)]
    :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)

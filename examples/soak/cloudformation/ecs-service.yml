@@ -11,8 +11,17 @@ Parameters:
     Type: String
   LoadBalancerHTTPSListener:
     Type: String
+  CheckpointBucketName:
+    Type: String
+    Description: Name of the checkpoint S3 bucket
+    Default: crux-soak-checkpoints
 
 Resources:
+  CheckpointS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref CheckpointBucketName
+
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -63,6 +72,17 @@ Resources:
               Action:
                 - 'secretsmanager:GetSecretValue'
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - 's3:ListBucket'
+              Resource:
+                - !GetAtt ['CheckpointS3Bucket', 'Arn']
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+              Resource:
+                - !Join ['', [!GetAtt ['CheckpointS3Bucket', 'Arn'], '/*']]
 
   SoakTaskDef:
     Type: AWS::ECS::TaskDefinition
