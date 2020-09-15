@@ -7,6 +7,7 @@
             [crux.bench.ts-weather :as weather]
             [crux.bench.watdiv-crux :as watdiv-crux]
             [crux.bench.tpch-stress-test :as tpch-stress]
+            [crux.bench.tpch-test :as tpch]
             [clojure.set :as set]))
 
 (defn post-to-slack [results]
@@ -45,7 +46,12 @@
                     (-> (bench/with-comparison-times
                           (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
                                                                   :field-count tpch-field-count}))
-                        (doto post-to-slack))))})
+                        (doto post-to-slack))))
+   :tpch (fn [nodes {:keys [scale-factor] :as opts}]
+           (bench/with-nodes [node nodes]
+             (-> (bench/with-comparison-times
+                   (tpch/run-tpch-test node {:scale-factor scale-factor}))
+                 (doto post-to-slack))))})
 
 (defn parse-args [args]
   (let [{:keys [options summary errors]}
