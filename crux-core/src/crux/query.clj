@@ -416,7 +416,7 @@
                                       = =})
 
 (defn- maybe-unquote [x]
-  (if (and (list? x) (= 'quote (first x)) (= 2 (count x)))
+  (if (and (seq? x) (= 'quote (first x)) (= 2 (count x)))
     (recur (second x))
     x))
 
