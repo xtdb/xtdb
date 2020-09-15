@@ -201,7 +201,7 @@
                                            :local-document-store {:kv-store ::rocksdb}}
                      ::rocksdb {:crux/module `rocksdb/->kv-store
                                 :db-dir (io/file "indexes")}
-                     :crux/indexer {:kv-store ::rocksdb}}
+                     :crux/index-store {:kv-store ::rocksdb}}
                     (config/crux-node-config)]
    :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
                        :server-opts {:port 8080, :join? false}}})
