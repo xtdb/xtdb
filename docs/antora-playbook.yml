@@ -22,3 +22,6 @@ ui:
   bundle:
     url: ./crux-site/ui-bundle.zip
     snapshot: true
+asciidoc:
+  attributes:
+    page-pagination: true
