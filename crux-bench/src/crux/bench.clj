@@ -107,7 +107,7 @@
 (defn compact-node [node]
   (run-bench :compaction
     (let [pre-compact-bytes (:crux.kv/size (api/status node))]
-      (kv/compact (:kv-store node))
+      (kv/compact (get-in node [:index-store :kv-store]))
 
       {:bytes-on-disk pre-compact-bytes
        :compacted-bytes-on-disk (:crux.kv/size (api/status node))})))
