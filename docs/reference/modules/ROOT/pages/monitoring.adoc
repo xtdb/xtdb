@@ -10,13 +10,17 @@ toc::[levels=1]
 
 In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-metrics {:mvn/version "{crux_version}-beta"}
 ----
 
-.pom.xml
+pom.xml::
++
 [source,xml, subs=attributes+]
 ----
 <dependency>
@@ -25,6 +29,7 @@ juxt/crux-metrics {:mvn/version "{crux_version}-beta"}
     <version>{crux_version}-beta</version>
 </dependency>
 ----
+====
 
 You will also need to include dependencies for your individual reporters - these are outlined below.
 
@@ -68,7 +73,10 @@ clj-commons/iapetos {:mvn/version "0.1.9"}
 
 === Node configuration
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -76,11 +84,13 @@ clj-commons/iapetos {:mvn/version "0.1.9"}
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.metrics.prometheus/reporter { ... }}
 ----
+====
 
 === Parameters
 
@@ -108,7 +118,10 @@ clj-commons/iapetos {:mvn/version "0.1.9"}
 
 === Node configuration
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -116,11 +129,14 @@ clj-commons/iapetos {:mvn/version "0.1.9"}
 }
 ----
 
-.Clojure/EDN
+
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.metrics.prometheus/http-exporter { ... }}
 ----
+====
 
 === Parameters
 
@@ -144,7 +160,10 @@ software.amazon.awssdk/cloudwatch {:mvn/version "2.10.61"}
 
 === Node configuration
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -152,11 +171,13 @@ software.amazon.awssdk/cloudwatch {:mvn/version "2.10.61"}
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.metrics.cloudwatch/reporter { ... }}
 ----
+====
 
 === Parameters
 
@@ -182,7 +203,10 @@ io.dropwizard.metrics/metrics-jmx {:mvn/version "4.1.2"}
 
 === Node configuration
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -190,11 +214,13 @@ io.dropwizard.metrics/metrics-jmx {:mvn/version "4.1.2"}
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.metrics.jmx/reporter { ... }}
 ----
+====
 
 === Parameters
 
@@ -212,7 +238,10 @@ It has no additional dependencies.
 
 === Node configuration
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -220,11 +249,13 @@ It has no additional dependencies.
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.metrics.console/reporter { ... }}
 ----
+====
 
 === Parameters
 
@@ -242,7 +273,10 @@ It has no additional dependencies.
 
 === Node configuration
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -250,11 +284,13 @@ It has no additional dependencies.
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.metrics.csv/reporter { ... }}
 ----
+====
 
 === Parameters
 

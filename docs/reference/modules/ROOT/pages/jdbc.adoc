@@ -6,13 +6,17 @@ image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
 
 == Project Dependencies
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-jdbc {:mvn/version "{crux_version}-beta"}
 ----
 
-.pom.xml
+pom.xml::
++
 [source,xml, subs=attributes+]
 ----
 <dependency>
@@ -21,6 +25,7 @@ juxt/crux-jdbc {:mvn/version "{crux_version}-beta"}
     <version>{crux_version}-beta</version>
 </dependency>
 ----
+====
 
 == Example configuration
 
@@ -48,7 +53,10 @@ You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3
 
 === JDBC as a Transaction Log
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -69,7 +77,8 @@ You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/tx-log {:crux/module 'crux.jdbc/->tx-log
@@ -79,12 +88,16 @@ You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3
                :poll-sleep-duration "PT1S"}
  ...}
 ----
+====
 
 If you do not want the local node to index transactions, you can use the xref:#ingest-only-tx-log[`+crux.jdbc/->ingest-only-tx-log+`] module.
 
 === JDBC as a Document Store
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -103,7 +116,8 @@ If you do not want the local node to index transactions, you can use the xref:#i
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/document-store {:crux/module 'crux.jdbc/->document-store
@@ -112,12 +126,16 @@ If you do not want the local node to index transactions, you can use the xref:#i
                                          :db-spec { ... }}}
  ...}
 ----
+====
 
 === Sharing connection pools
 
 If you use JDBC for both the transaction log and document store, you can share the same connection pool between the two modules as follows:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -144,7 +162,8 @@ If you use JDBC for both the transaction log and document store, you can share t
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.jdbc/connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
@@ -156,6 +175,7 @@ If you use JDBC for both the transaction log and document store, you can share t
                        :connection-pool :crux.jdbc/connection-pool}
  ...}
 ----
+====
 
 == Parameters
 
