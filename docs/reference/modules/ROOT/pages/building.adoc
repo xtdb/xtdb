@@ -1,20 +1,83 @@
-= Building Crux artifacts
+= Building
 
-Alongside the various images available on https://hub.docker.com/u/juxt[*Dockerhub*], there are a number of artifacts available for getting started quickly with Crux.
+`crux-build` is a module within the crux repo with two key objectives:
 
-These can be found on the latest https://github.com/juxt/crux/releases[release] of Crux.
-Currently, these consist of a number of common configuration *uberjars* and a custom artifact builder.
+* Providing pre-configured JARs and Docker containers to start a basic implementation of Crux with no prior knowledge required.
+* Providing a mechanism to spin up custom Crux artifacts - with two necessary inputs:
+** A `deps.edn` file containing the dependencies that the node requires.
+** A `crux.edn` file, containing the configuration options to start the node with.
 
-To create your own custom artifacts for Crux:
+== Preconfigured Artifacts
 
-* Download and extract the `crux-builder.tar.gz` from the latest release
-* You can build an uberjar using either Clojure's `deps.edn` or Maven (whichever you're more comfortable with)
-** For Clojure, you can add further Crux dependencies in the `deps.edn` file, set the node config in crux.edn, and run `build-uberjar.sh`
-** For Maven, it's the same, but dependencies go in `pom.xml`
-* Additionally, you can build a Docker image using the `build-docker.sh` script in the **docker** directory.
+=== `crux-in-memory`
 
-== Docker
+Crux's in-memory artifacts start up a basic, in-memory Crux node, with an HTTP server.
 
-If you wish to use Crux with Docker (no JVM/JDK/Clojure install required!) we have the following:
+They can be downloaded:
 
-* https://hub.docker.com/r/juxt/crux-standalone[*Crux HTTP Node*]: An image of a standalone Crux node (using a in memory `kv-store` by default) & HTTP server, useful if you wish to a *freestanding Crux node* accessible over HTTP, only having to use Docker.
+* as a Docker image from https://hub.docker.com/r/juxt/[JUXT's Docker Hub]
+* as an uberjar, `crux-in-memory.jar`, from the relevant https://github.com/juxt/crux/releases[GitHub release]
+
+Communication with the node is done via the Crux REST API - see the xref:http.adoc[HTTP docs] for more information.
+
+== Building Artifacts
+
+Alongside the JARs deployed on the GitHub releases is `crux-builder.tar.gz` - the scripts within this archive can be used to build a custom Crux JAR or Docker container.
+
+=== Building a JAR (Clojure CLI tooling)
+
+The `clj-uberjar` folder contains a number of files:
+
+* a `deps.edn` file to configure the Maven dependencies required
+* a `crux.edn` file to configure the node itself
+* a `resources/logback.xml` to configure logging output
+* a `build-uberjar.sh` script to build the JAR.
+
+To use `rocksdb` as the index store, document store and transaction-log store of the node:
+
+* Add `crux-rocksdb` as a dependency in `deps.edn`:
++
+[source,clojure]
+----
+...
+include::example$deps.edn[tags=RocksDeps,indent=0]
+...
+----
+* In `crux.edn`, override the old topology with the following:
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/tmp/crux/indexes"}}
+ :crux/document-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/tmp/crux/documents"}}
+ :crux/tx-log {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/tmp/crux/tx-log"}}
+ :crux.http-server/server {}}
+----
+
+To build the JAR, run the `build-uberjar.sh` script.
+You can optionally pass the environment variable `UBERJAR_NAME` (for example, `crux-rocks.jar`) to the script, otherwise the built uberjar will be called `crux.jar`.
+
+Running the JAR will now start up a similar node to `crux-standalone` above - with the addition of persistent storage.
+
+=== Building a JAR (Maven tooling)
+
+Similarly to building a JAR using the Clojure CLI tooling, we can also build an uberjar using Maven.
+In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `crux.edn` file as before, and then run `build-uberjar.sh` to create the uberjar.
+
+=== Building a Docker Container
+
+In the `docker` directory, there are a similar set of files to the uberjar examples above, as well as a `Dockerfile` and a `build-docker.sh` script.
+
+As with building a JAR, to add `rocksdb` as the KV store - start by adding a dependency on `crux-rocksdb` within `deps.edn`.
+
+Override the topology within `crux.edn` with the following:
+
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/var/lib/crux/indexes"}}
+ :crux/document-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/var/lib/crux/documents"}}
+ :crux/tx-log {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/var/lib/crux/tx-log"}}
+ :crux.http-server/server {}}
+----
+
+To build your Docker container, run the `build-docker.sh` script.
+You can optionally pass the environment variables `IMAGE_NAME` and `IMAGE_VERSION` to tag the container with (by default, the custom Docker container is called `crux-custom:latest`).
