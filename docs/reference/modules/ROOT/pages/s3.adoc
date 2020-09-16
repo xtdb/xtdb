@@ -6,13 +6,17 @@ You can use AWS's Simple Storage Service (S3) as Crux's 'document store'.
 
 In order to use S3 within Crux, you must first add S3 as a project dependency:
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-s3 {:mvn/version "{crux_version}-beta"}
 ----
 
-.pom.xml
+pom.xml::
++
 [source,xml, subs=attributes+]
 ----
 <dependency>
@@ -21,18 +25,36 @@ juxt/crux-s3 {:mvn/version "{crux_version}-beta"}
     <version>{crux_version}-beta</version>
 </dependency>
 ----
+====
 
 == Using S3
 
 Replace the implementation of the document store with `+crux.s3/->document-store+`
 
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "crux/document-store": {
+    "crux/module": "crux.s3/->document-store",
+    "bucket": "your-bucket",
+    ...
+  },
+}
+----
+
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.document-store {:crux/module 'crux.s3/->document-store
                        :bucket "your-bucket"
                        ...}}
 ----
-
+====
 
 == Parameters
 
@@ -52,7 +74,10 @@ We expose these via the https://github.com/juxt/crux/blob/master/crux-s3/src/cru
 Through this interface, you can supply an `S3AsyncClient` for crux-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider, and store documents using https://github.com/ptaoussanis/nippy[Nippy].
 
-.Clojure
+[tabs]
+====
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.document-store {:crux/module 'crux.s3/->document-store
@@ -61,3 +86,4 @@ By default, we get credentials through the usual AWS credentials provider, and s
                                          ...)
                        ...}}
 ----
+====

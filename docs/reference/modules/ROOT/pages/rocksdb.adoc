@@ -6,13 +6,17 @@ https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query i
 
 In order to use RocksDB within Crux, you must first add RocksDB as a project dependency:
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-rocksdb {:mvn/version "{crux_version}-beta"}
 ----
 
-.pom.xml
+pom.xml::
++
 [source,xml, subs=attributes+]
 ----
 <dependency>
@@ -21,12 +25,16 @@ juxt/crux-rocksdb {:mvn/version "{crux_version}-beta"}
     <version>{crux_version}-beta</version>
 </dependency>
 ----
+====
 
 == Using RocksDB
 
 Replace the implementation of the desired component with `+crux.rocksdb/->kv-store+`
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -42,7 +50,8 @@ Replace the implementation of the desired component with `+crux.rocksdb/->kv-sto
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
@@ -50,6 +59,7 @@ Replace the implementation of the desired component with `+crux.rocksdb/->kv-sto
  :crux/document-store {...}
  :crux/tx-log {...}}
 ----
+====
 
 == Dependencies
 
@@ -68,7 +78,10 @@ Replace the implementation of the desired component with `+crux.rocksdb/->kv-sto
 
 To include RocksDB metrics in monitoring, override the `metrics` dependency:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -86,6 +99,17 @@ To include RocksDB metrics in monitoring, override the `metrics` dependency:
   "crux/tx-log": { ... }
 }
 ----
+
+Clojure/EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                               :metrics {:crux/module 'crux.rocksdb.metrics/->metrics}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+====
 
 === Parameters
 
