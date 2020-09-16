@@ -238,39 +238,51 @@
   (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
                                                       {:name "Petr" :last-name "Petrov"}]))]
 
-    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                             :in [$ name]
-                                                             :where [[e :name name]]} "Ivan")))
+    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+                                            '{:find [e]
+                                              :in [$ name]
+                                              :where [[e :name name]]}
+                                            "Ivan")))
 
     (t/testing "the db var is optional"
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                               :in [name]
-                                                               :where [[e :name name]]} "Ivan"))))
+      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+                                              '{:find [e]
+                                                :in [name]
+                                                :where [[e :name name]]}
+                                              "Ivan"))))
 
-    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                             :in [$ name last-name]
-                                                             :where [[e :name name]
-                                                                     [e :last-name last-name]]} "Ivan" "Ivanov")))
+    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+                                            '{:find [e]
+                                              :in [$ name last-name]
+                                              :where [[e :name name]
+                                                      [e :last-name last-name]]}
+                                            "Ivan" "Ivanov")))
 
-    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                             :in [$ [name]]
-                                                             :where [[e :name name]]} ["Ivan"])))
+    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+                                            '{:find [e]
+                                              :in [$ [name]]
+                                              :where [[e :name name]]}
+                                            ["Ivan"])))
 
-    (t/is (= #{[(:crux.db/id ivan)]
-               [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                             :in [$ [[name]]]
-                                                             :where [[e :name name]]} [["Ivan"]
-                                                                                       ["Petr"]])))
+    (t/is (= #{[(:crux.db/id ivan)] [(:crux.db/id petr)]}
+             (api/q (api/db *api*)
+                    '{:find [e]
+                      :in [$ [[name]]]
+                      :where [[e :name name]]}
+                    [["Ivan"] ["Petr"]])))
 
-    (t/is (= #{[(:crux.db/id ivan)]
-               [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                             :in [$ [name ...]]
-                                                             :where [[e :name name]]} ["Ivan" "Petr"])))
+    (t/is (= #{[(:crux.db/id ivan)] [(:crux.db/id petr)]}
+             (api/q (api/db *api*)
+                    '{:find [e]
+                      :in [$ [name ...]]
+                      :where [[e :name name]]}
+                    ["Ivan" "Petr"])))
 
     (t/testing "can access the db"
-      (t/is (= #{[crux.query.QueryDatasource]} (api/q (api/db *api*) '{:find [t]
-                                                                       :in [$]
-                                                                       :where [[(type $) t]]}))))))
+      (t/is (= #{[crux.query.QueryDatasource]} (api/q (api/db *api*)
+                                                      '{:find [t]
+                                                        :in [$]
+                                                        :where [[(type $) t]]}))))))
 
 (t/deftest test-multiple-results
   (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "1"}
@@ -1229,40 +1241,46 @@
            (api/q (api/db *api*) '{:find [x]
                                    :where [[(q {:find [y]
                                                 :where [[(identity 2) x]
-                                                        [(+ x 2) y]]}) [[x]]]]})))
+                                                        [(+ x 2) y]]})
+                                            [[x]]]]})))
 
   (t/testing "can bind resulting relation as scalar"
     (t/is (= #{[[[4]]]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(q {:find [y]
                                                   :where [[(identity 2) x]
-                                                          [(+ x 2) y]]}) x]]})))
+                                                          [(+ x 2) y]]})
+                                              x]]})))
 
     (t/testing "can bind empty resulting relation as scalar"
       (t/is (= #{[nil]}
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q {:find [x]
-                                                    :where [[(vector) [x ...]]]}) x]]})))))
+                                                    :where [[(vector) [x ...]]]})
+                                                x]]})))))
 
   (t/testing "can bind resulting relation as tuple"
     (t/is (= #{[[4]]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(q {:find [y]
                                                   :where [[(identity 2) x]
-                                                          [(+ x 2) y]]}) [x]]]})))
+                                                          [(+ x 2) y]]})
+                                              [x]]]})))
 
     (t/testing "can bind empty resulting relation as tuple"
       (t/is (= #{[nil]}
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q {:find [x]
-                                                    :where [[(vector) [x ...]]]}) [x]]]})))))
+                                                    :where [[(vector) [x ...]]]})
+                                                [x]]]})))))
 
   (t/is (empty?
          (api/q (api/db *api*) '{:find [x]
                                  :where [[(q {:find [y]
                                               :where [[(identity 2) x]
                                                       [(+ x 2) y]
-                                                      [(odd? y)]]}) [[x]]]]})))
+                                                      [(odd? y)]]})
+                                          [[x]]]]})))
 
   (t/testing "can provide arguments"
     (t/is (= #{[1 2 3]}
@@ -1270,47 +1288,54 @@
                                      :where [[(q {:find [x y z]
                                                   :in [$ x]
                                                   :where [[(identity 2) y]
-                                                          [(+ x y) z]]} 1) [[x y z]]]]})))
+                                                          [(+ x y) z]]} 1)
+                                              [[x y z]]]]})))
 
     (t/is (= #{[1 3 4]}
              (api/q (api/db *api*) '{:find [x y z]
                                      :where [[(identity 1) x]
                                              [(q {:find [z]
                                                   :in [$ x]
-                                                  :where [[(+ x 2) z]]} x) [[y]]]
+                                                  :where [[(+ x 2) z]]} x)
+                                              [[y]]]
                                              [(+ x y) z]]})))
 
     (t/is (= #{[1]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(q {:find [y]
                                                   :in [$ x]
-                                                  :where [[(identity x) y]]} 1) [[x]]]]})))
+                                                  :where [[(identity x) y]]} 1)
+                                              [[x]]]]})))
 
     (t/is (= #{[1 3 4]}
              (api/q (api/db *api*) '{:find [x y z]
                                      :where [[(identity 1) x]
                                              [(q {:find [z]
                                                   :in [$ x]
-                                                  :where [[(+ x 2) z]]} x) [[y]]]
+                                                  :where [[(+ x 2) z]]} x)
+                                              [[y]]]
                                              [(+ x y) z]]})))
 
     (t/testing "can handle quoted sub query"
       (t/is (= #{[2]}
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q '{:find [y]
-                                                     :where [[(identity 2) y]]}) [[x]]]]}))))
+                                                     :where [[(identity 2) y]]})
+                                                [[x]]]]}))))
 
     (t/testing "can handle vector sub queries"
       (t/is (= #{[2]}
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q [:find y
-                                                    :where [(identity 2) y]]) [[x]]]]}))))
+                                                    :where [(identity 2) y]])
+                                                [[x]]]]}))))
 
     (t/testing "can handle string sub queries"
       (t/is (= #{[2]}
                (api/q (api/db *api*) '{:find [x]
                                        :where [[(q "[:find y
-                                                     :where [(identity 2) y]]") [[x]]]]})))))
+                                                     :where [(identity 2) y]]")
+                                                [[x]]]]})))))
 
   (t/testing "can inherit rules from parent query"
     (t/is (empty?
@@ -1318,7 +1343,8 @@
                                    :where [[(q {:find [y]
                                                 :where [[(identity 2) x]
                                                         [(+ x 2) y]
-                                                        (is-odd? y)]}) [[x]]]]
+                                                        (is-odd? y)]})
+                                            [[x]]]]
                                    :rules [[(is-odd? x)
                                             [(odd? x)]]]}))))
 
@@ -1328,20 +1354,23 @@
                                      :where [[(identity 2) x]
                                              [(q {:find [x]
                                                   :in [$ x]
-                                                  :where [[(even? x)]]} x)]]})))
+                                                  :where [[(even? x)]]}
+                                                 x)]]})))
 
     (t/is (empty? (api/q (api/db *api*) '{:find [x]
                                           :where [[(identity 2) x]
                                                   [(q {:find [y]
                                                        :in [$ y]
-                                                       :where [[(odd? y)]]} x)]]})))
+                                                       :where [[(odd? y)]]}
+                                                      x)]]})))
 
     (t/is (= #{[2]}
              (api/q (api/db *api*) '{:find [x]
                                      :where [[(identity 2) x]
                                              (not [(q {:find [y]
                                                        :in [$ y]
-                                                       :where [[(odd? y)]]} x)])]})))))
+                                                       :where [[(odd? y)]]}
+                                                      x)])]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:triple {:e i, :a :age, :v age}]
