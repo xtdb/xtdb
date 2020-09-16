@@ -21,6 +21,9 @@
         (bench/run-bench :ingest
           (bench/with-additional-index-metrics node
             (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)))
+
+        ;; TODO we may want to split this up, à la WatDiv, so that we can see if
+        ;; specific queries are slower than our comparison databases
         (bench/run-bench :queries
           {:success? (every? true? (for [n (range 1 23)]
                                      (let [actual (run-tpch-query node n)]
