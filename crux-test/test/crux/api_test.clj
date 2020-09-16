@@ -101,7 +101,7 @@
       (t/testing "malformed query"
         (t/is (thrown-with-msg? Exception
                                 #"(status 400|Spec assertion failed)"
-                                (api/q db '{:find [e]}))))
+                                (api/q db '{:in [$ e]}))))
 
       (t/testing "query with streaming result"
         (with-open [res (api/open-q db '{:find [e]
