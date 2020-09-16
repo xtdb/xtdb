@@ -47,7 +47,9 @@
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
         qp (QueryParser. k analyzer)
-        q (.parse qp v)
+        q (.build
+           (doto (BooleanQuery$Builder.)
+             (.add (.parse qp v) BooleanClause$Occur/MUST)))
         score-docs (.-scoreDocs (.search index-searcher q 10))]
     (cio/->cursor (fn []
                     (.close directory-reader))
