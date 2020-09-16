@@ -267,19 +267,19 @@
     n))
 
 (defmethod aggregate 'count [_]
-  (fn
+  (fn aggregate-count
     (^long [] 0)
     (^long [^long acc] acc)
     (^long [^long acc _] (inc acc))))
 
 (defmethod aggregate 'count-distinct [_]
-  (fn
+  (fn aggregate-count-distinct
     ([] (transient #{}))
     ([acc] (count (persistent! acc)))
     ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'sum [_]
-  (fn
+  (fn aggregate-sum
     ([] 0)
     ([acc] acc)
     ([acc x] (+ acc x))))
@@ -287,14 +287,14 @@
 (defmethod aggregate 'avg [_]
   (let [count (aggregate 'count)
         sum (aggregate 'sum)]
-    (fn
+    (fn aggregate-average
       ([] [(count) (sum)])
       ([[c s]] (maybe-ratio (/ s c)))
       ([[c s] x]
        [(count c x) (sum s x)]))))
 
 (defmethod aggregate 'median [_]
-  (fn
+  (fn aggregate-median
     ([] (transient []))
     ([acc] (let [acc (persistent! acc)
                  acc (sort acc)
@@ -308,7 +308,7 @@
 
 (defmethod aggregate 'variance [_]
   (let [mean (aggregate 'avg)]
-    (fn
+    (fn aggregate-variance
       ([] [0 (mean)])
       ([[m2 [c _]]] (maybe-ratio (/ m2 c)))
       ([[m2 [c _ :as m]] x]
@@ -321,33 +321,33 @@
 
 (defmethod aggregate 'stddev [_]
   (let [variance (aggregate 'variance)]
-    (fn
+    (fn aggregate-stddev
       ([] (variance))
       ([v] (Math/sqrt (variance v)))
       ([v x]
        (variance v x)))))
 
 (defmethod aggregate 'distinct [_]
-  (fn
+  (fn aggregate-distinct
     ([] (transient #{}))
     ([acc] (persistent! acc))
     ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'rand [_ n]
-  (fn
+  (fn aggregate-rand
     ([] (transient []))
     ([acc] (vec (take n (shuffle (persistent! acc)))))
     ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'sample [_ n]
-  (fn
+  (fn aggregate-sample
     ([] (transient #{}))
     ([acc] (vec (take n (shuffle (persistent! acc)))))
     ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'min
   ([_]
-   (fn
+   (fn aggregate-min
      ([])
      ([acc] acc)
      ([acc x]
@@ -357,7 +357,7 @@
           acc)
         x))))
   ([_ n]
-   (fn
+   (fn aggregate-min-n
      ([] (sorted-set))
      ([acc] (vec acc))
      ([acc x]
@@ -368,7 +368,7 @@
 
 (defmethod aggregate 'max
   ([_]
-   (fn
+   (fn aggregate-max
      ([])
      ([acc] acc)
      ([acc x]
@@ -378,7 +378,7 @@
           acc)
         x))))
   ([_ n]
-   (fn
+   (fn aggregate-max-n
      ([] (sorted-set))
      ([acc] (vec acc))
      ([acc x]
