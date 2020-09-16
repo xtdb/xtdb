@@ -416,7 +416,7 @@
                                       = =})
 
 (defn- maybe-unquote [x]
-  (if (and (list? x) (= 'quote (first x)) (= 2 (count x)))
+  (if (and (seq? x) (= 'quote (first x)) (= 2 (count x)))
     (recur (second x))
     x))
 
@@ -724,6 +724,7 @@
                                         body-vars (->> (collect-vars (normalize-clauses where))
                                                        (vals)
                                                        (reduce into #{}))
+                                        body-vars (set (remove blank-var? body-vars))
                                         or-vars (if or-join?
                                                   (set (concat bound-args free-args))
                                                   body-vars)
