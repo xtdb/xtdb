@@ -130,16 +130,17 @@
                        :http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-  (query [this q]
-    (with-open [res (.openQuery this q)]
+  (query [this q args]
+    (with-open [res (.openQuery this q args)]
       (if (:order-by q)
         (vec (iterator-seq res))
         (set (iterator-seq res)))))
 
-  (openQuery [this q]
+  (openQuery [this q args]
     (let [in (api-request-sync (str url "/query")
                                {:body (assoc (as-of-map this)
-                                             :query (q/normalize-query q))
+                                             :query (q/normalize-query q)
+                                             :args (vec args))
                                 :->jwt-token ->jwt-token
                                 :http-opts {:as :stream}})]
       (cio/->cursor #(.close ^Closeable in)

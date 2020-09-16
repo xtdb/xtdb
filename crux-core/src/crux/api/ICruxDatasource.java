@@ -37,17 +37,19 @@ public interface ICruxDatasource extends Closeable {
      * otherwise, it will return a vector of result tuples.
      *
      * @param query the query in map, vector or string form.
+     * @param args  bindings for in.
      * @return      a set or vector of result tuples.
      */
-    public Collection<List<?>> query(Object query);
+    public Collection<List<?>> query(Object query, Object... args);
 
     /**
      * Queries the db lazily.
      *
      * @param query the query in map, vector or string form.
+     * @param args  bindings for in.
      * @return      a cursor of result tuples.
      */
-    public ICursor<List<?>> openQuery(Object query);
+    public ICursor<List<?>> openQuery(Object query, Object... args);
 
     /**
      * Eagerly retrieves entity history for the given entity.

@@ -94,11 +94,13 @@
         (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
         (t/is (= #{[:ivan]} (.query (.db n)
                                     '{:find [e]
-                                      :where [[e :name "Ivan"]]}))))
+                                      :where [[e :name "Ivan"]]}
+                                    (object-array 0)))))
 
       (t/is (= #{[:ivan]} (.query (.db n)
                                   '{:find [e]
-                                    :where [[e :name "Ivan"]]})))
+                                    :where [[e :name "Ivan"]]}
+                                  (object-array 0))))
 
       (with-open [n2 (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                       :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
@@ -108,20 +110,23 @@
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]
-                               :where [[e :name "Ivan"]]})))
+                               :where [[e :name "Ivan"]]}
+                             (object-array 0))))
 
         (let [valid-time (Date.)
               submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
           (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
           (t/is (= #{[:ivan]} (.query (.db n2)
                                       '{:find [e]
-                                        :where [[e :name "Iva"]]}))))
+                                        :where [[e :name "Iva"]]}
+                                      (object-array 0)))))
 
         (t/is n2))
 
       (t/is (= #{[:ivan]} (.query (.db n)
                                   '{:find [e]
-                                    :where [[e :name "Ivan"]]}))))))
+                                    :where [[e :name "Ivan"]]}
+                                  (object-array 0)))))))
 
 (defmacro with-latest-tx [latest-tx & body]
   `(with-redefs [api/latest-completed-tx (fn [node#]
