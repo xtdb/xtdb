@@ -279,10 +279,15 @@
                     ["Ivan" "Petr"])))
 
     (t/testing "can access the db"
-      (t/is (= #{[crux.query.QueryDatasource]} (api/q (api/db *api*)
-                                                      '{:find [t]
-                                                        :in [$]
-                                                        :where [[(type $) t]]}))))))
+      (t/is (= #{["class crux.query.QueryDatasource"]} (api/q (api/db *api*) '{:find [ts]
+                                                                               :in [$]
+                                                                               :where [[(str t) ts]
+                                                                                       [(type $) t]]}))))
+    (t/testing "where clause is optional"
+      (t/is (= #{[1]} (api/q (api/db *api*)
+                             '{:find [x]
+                               :in [$ x]}
+                             1))))))
 
 (t/deftest test-multiple-results
   (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "1"}

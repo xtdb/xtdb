@@ -215,8 +215,8 @@
     :else q))
 
 (s/def ::query (s/and (s/conformer #'normalize-query)
-                      (s/keys :req-un [::find ::where] :opt-un [::in ::args ::rules ::offset ::limit ::order-by ::timeout ::full-results? ::batch-size])))
-
+                      (s/keys :req-un [::find]
+                              :opt-un [::where ::in ::args ::rules ::offset ::limit ::order-by ::timeout ::full-results? ::batch-size])))
 
 (defrecord ConformedQuery [q-normalized q-conformed])
 
@@ -1286,6 +1286,7 @@
 
 (defn- compile-sub-query [encode-value-fn where arg-vars in rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
+        arg-and-in-vars (set/union arg-vars (set (find-binding-vars in)))
         {triple-clauses :triple
          range-clauses :range
          pred-clauses :pred
@@ -1293,7 +1294,7 @@
          not-join-clauses :not-join
          or-clauses :or
          or-join-clauses :or-join
-         :as type->clauses} (expand-leaf-preds (normalize-clauses where) arg-vars stats)
+         :as type->clauses} (expand-leaf-preds (normalize-clauses where) arg-and-in-vars stats)
         {:keys [e-vars
                 v-vars
                 range-vars
@@ -1302,14 +1303,14 @@
         var->joins {}
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
-                                                    arg-vars
+                                                    arg-and-in-vars
                                                     range-vars
                                                     stats)
         [args-idx-id var->joins] (arg-joins arg-vars var->joins)
         arg-vars (set/union arg-vars (set (find-binding-vars in)))
         [in-idx-ids var->joins] (in-joins in var->joins)
         [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
-        known-vars (set/union e-vars v-vars arg-vars)
+        known-vars (set/union e-vars v-vars arg-and-in-vars)
         known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
         [or-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
                                                                        :or
@@ -1324,7 +1325,7 @@
         or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                              or-join-clause+idx-id+or-branches)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-and-in-vars triple-join-deps)
         arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         var->values-result-index (zipmap vars-in-join-order (range))
         v-var->e (build-v-var->e triple-clauses var->values-result-index)
@@ -1338,7 +1339,7 @@
         var->attr (merge e-var->attr v-var->attr)
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
-                             (build-arg-var-bindings var->values-result-index arg-vars)
+                             (build-arg-var-bindings var->values-result-index arg-and-in-vars)
                              (build-var-bindings var->attr
                                                  v-var->e
                                                  e->v-var
