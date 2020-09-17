@@ -9,7 +9,7 @@ In order to use S3 within Crux, you must first add S3 as a project dependency:
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-s3 {:mvn/version "20.09-1.11.0-beta"}
+juxt/crux-s3 {:mvn/version "20.09-1.12.0-beta"}
 ----
 
 .pom.xml
@@ -18,7 +18,7 @@ juxt/crux-s3 {:mvn/version "20.09-1.11.0-beta"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-s3</artifactId>
-    <version>20.09-1.11.0-beta</version>
+    <version>20.09-1.12.0-beta</version>
 </dependency>
 ----
 

@@ -17,6 +17,7 @@ content:
       start_path: docs/reference
       branches:
         - HEAD
+        - 20.09-1.12.0
         - docs-20.09-1.11.0
 ui:
   bundle:

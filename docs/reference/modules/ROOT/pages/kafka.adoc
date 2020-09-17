@@ -19,7 +19,7 @@ For this reason, unless you want to keep both transactions and documents on Kafk
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-kafka {:mvn/version "20.09-1.11.0-beta"}
+juxt/crux-kafka {:mvn/version "20.09-1.12.0-beta"}
 ----
 
 .pom.xml
@@ -28,7 +28,7 @@ juxt/crux-kafka {:mvn/version "20.09-1.11.0-beta"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-kafka</artifactId>
-    <version>20.09-1.11.0-beta</version>
+    <version>20.09-1.12.0-beta</version>
 </dependency>
 ----
 

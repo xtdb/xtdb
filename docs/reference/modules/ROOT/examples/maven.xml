@@ -1,5 +1,5 @@
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-core</artifactId>
-    <version>20.09-1.11.0-beta</version>
+    <version>20.09-1.12.0-beta</version>
 </dependency>
