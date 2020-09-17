@@ -1,0 +1,14 @@
+= Crux Corda
+
+WIP!
+
+We have four Cordapps here - two production (`corda-contract` and `corda-workflow`) and two test (`iou-contract` and `iou-workflow`).
+
+Things of interest:
+
+* `corda-workflow/src/main/kotlin/crux/corda/workflow/CruxService.kt` - entry point for the Crux driver, a `CordaService`
+* `corda-workflow/src/main/clojure/crux/corda/service.clj` - the implementation of the Crux driver
+* `corda-contract/src/main/kotlin/crux/corda/contract/CruxState.kt` - interface that Corda states should implement to be included in Crux
+
+* `iou-contract/src/main/kotlin/com/example/contract/IOUState.kt` - example of a Corda state with a Crux mapping
+* `iou-workflow/src/test/kotlin/com/example/workflow/IOUFlowTests.kt` - E2E test for the IOU app
