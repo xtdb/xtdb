@@ -13,7 +13,7 @@ Crux gives you the ability to construct graph queries via a Datalog query langua
 Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
 
 This page walks through many of the more interesting queries that run as part of Crux's default test suite.
-See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
+See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
 
 Extensible Data Notation (edn) is used as the data format for the public Crux APIs.
 To gain an understanding of edn see xref:tutorials::essential-edn[Essential EDN for Crux].
@@ -61,8 +61,7 @@ include::example$src/docs/examples.clj[tags=basic-query]
 
 Let's try to work out what these 3 clauses do...
 
-`p1` and `n` are logical variables. Logic variables are often prefixed with `?`
-for clarity but this is optional.
+`p1` and `n` are logical variables (also referred to as "logic-vars" or simply "lvars"). Logic variables are often prefixed with `?` for clarity but this is optional.
 
 `[p1 :name n]` is looking for all entities that have a value under the
 attribute of `:name` and then binds the corresponding entity ID to `p1` and the
@@ -189,6 +188,60 @@ Result:
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-pred-1-r]
+----
+
+[#aggregates]
+== Aggregates
+
+[source,clojure]
+----
+{:find [(sum ?heads)
+        (min ?heads)
+        (max ?heads)
+        (count ?heads)
+        (count-distinct ?heads)]
+ :where [[(identity [["Cerberus" 3]
+                     ["Medusa" 1]
+                     ["Cyclops" 1]
+                     ["Chimera" 1]])
+                    [[?monster ?heads]]]}
+
+;;=> #{[6 1 3 4 2]}
+----
+
+The following built-in aggregates are provided as additional syntax for use within the `:find` clause and each accept at most one logical variable (e.g. `?lvar` in these examples):
+
+`(sum ?lvar)` accumulates as single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
+
+`(min ?lvar)` and `(max ?lvar)` return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operates on many types (integers, strings, collections etc.)
+
+`(min N ?lvar)` and `(max N ?lvar)` returns a sorted set of the N minimum/maximum items. N must be a positive integer and cannot be referenced via an additional logic-var.
+
+`(count ?lvar)` returns a single count of all values including any duplicates
+
+`(count-distinct ?lvar)` returns a single count of all unique values
+
+`(avg ?lvar) returns a single value equivalent to `sum / count`
+
+`(median ?lvar)`, `(variance ?lvar)` and `(stddev ?lvar)` return single values corresponding to the statistical definitions
+
+`(rand N ?lvar)` returns a vector of exactly N values, where some values may be duplicates if N is larger than the range
+
+`(sample N ?lvar)` returns a vector of at-most N distinct values
+
+`(distinct ?lvar)` returns a set of distinct values
+
+Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
+
+User-defined aggregates are supported by adding a new method (via Clojure `defmethod`) for `crux.query/aggregate`. For example:
+
+[source,clojure]
+----
+(defmethod crux.query/aggregate 'sort-reverse [_]
+  (fn
+    ([] [])
+    ([acc] (vec (reverse (sort acc))))
+    ([acc x] (conj acc x))))
 ----
 
 [#valid-time-travel]
@@ -604,6 +657,7 @@ vector
 This list is not necessarily exhaustive and is based on the partial re-usage of
 DataScript's query test suite within Crux's query tests.
 
+
 Crux does not support:
 
 - vars in the attribute position, such as `[e ?a "Ivan"]` or `[e _ "Ivan"]`
@@ -611,14 +665,8 @@ Crux does not support:
 Crux does _not yet_ support:
 
 - `ground`, `get-else`, `get-some`, `missing?`
-- aggregates
-- destructuring
+- backref attribute syntax (i.e. `[?child :example/_child ?parent]`)
 
-Note that many advanced query features can be achieved via custom predicate
-function calls since you can currently reference any fully qualified function
-that is loaded. In future, limitations on available functions may be introduced
-to enforce security restrictions for remote query execution.
+Note that many advanced query features can be achieved via custom predicate function calls since you can currently reference any fully qualified function that is loaded. In future, limitations on available functions may be introduced to enforce security restrictions for remote query execution.
 
-Test queries from DataScript such as "Rule with branches" and "Mutually
-recursive rules" work correctly with Crux and demonstrate advanced query
-patterns. See the Crux tests for details.
+Test queries from DataScript such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[Crux query tests] for details.

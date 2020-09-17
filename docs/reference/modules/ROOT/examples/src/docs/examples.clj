@@ -70,11 +70,9 @@
  ;; end::basic-query[]
 ))
 
-#_(comment
 ;; tag::basic-query-r[]
 #{[:smith]}
 ;; end::basic-query-r[]
-)
 
 (defn query-example-with-arguments-1 [node]
  (crux/q
@@ -87,11 +85,9 @@
  ;; end::query-with-arguments1[]
 ))
 
-#_(comment
 ;; tag::query-with-arguments1-r[]
 #{["Ivan"]}
 ;; end::query-with-arguments1-r[]
-)
 
 (defn query-example-with-arguments-2 [node]
  (crux/q
@@ -104,11 +100,9 @@
   ;; end::query-with-arguments2[]
 ))
 
-#_(comment
 ;; tag::query-with-arguments2-r[]
 #{[:petr] [:ivan]}
 ;; end::query-with-arguments2-r[]
-)
 
 (defn query-example-with-arguments-3 [node]
  (crux/q
@@ -118,16 +112,13 @@
   :where '[[e :name n]
            [e :last-name l]]
   :args [{'n "Ivan" 'l "Ivanov"}
-         {'n "Petr" 'l "Petrov"
-          }]}
+         {'n "Petr" 'l "Petrov"}]}
  ;; end::query-with-arguments3[]
 ))
 
-#_(comment
 ;; tag::query-with-arguments3-r[]
 #{[:petr] [:ivan]}
 ;; end::query-with-arguments3-r[]
-)
 
 (defn query-example-with-arguments-4 [node]
  (crux/q
@@ -141,11 +132,9 @@
  ;; end::query-with-arguments4[]
  ))
 
-#_(comment
- ;; tag::query-with-arguments4-r[]
- #{["Ivan"]}
- ;; end::query-with-arguments4-r[]
- )
+;; tag::query-with-arguments4-r[]
+#{["Ivan"]}
+;; end::query-with-arguments4-r[]
 
 (defn query-example-with-arguments-5 [node]
  (crux/q
@@ -157,11 +146,9 @@
  ;; end::query-with-arguments5[]
  ))
 
-#_(comment
 ;; tag::query-with-arguments5-r[]
 #{[22]}
 ;; end::query-with-arguments5-r[]
-)
 
 (defn query-example-with-predicate-1 [node]
   (crux/q
@@ -173,11 +160,9 @@
    ;; end::query-with-pred-1[]
  ))
 
-#_(comment
 ;; tag::query-with-pred-1-r[]
 #{[21]}
 ;; end::query-with-pred-1-r[]
-)
 
 (defn query-example-streaming [node prn]
   ;; tag::streaming-query[]
@@ -222,14 +207,12 @@
 ))
 
 ;; tag::query-at-t-q1-q[]
-; Using Clojure: `(api/q (api/db my-crux-system #inst "1986-10-23") q)`
+; Using Clojure: `(api/q (api/db my-crux-node #inst "1986-10-23") q)`
 ;; end::query-at-t-q1-q[]
 
-#_(comment
 ;; tag::query-at-t-q1-r[]
 #{}
 ;; end::query-at-t-q1-r[]
-)
 
 (defn query-example-at-time-q2 [node]
   (crux/q
@@ -239,19 +222,17 @@
              [e :last-name "Sparks"]]}))
 
 ;; tag::query-at-t-q2-q[]
-; Using Clojure: `(api/q (api/db my-crux-system) q)`
+; Using Clojure: `(api/q (api/db my-crux-node) q)`
 ;; end::query-at-t-q2-q[]
 
-#_(comment
 ;; tag::query-at-t-q2-r[]
 #{[:malcolm]}
 ;; end::query-at-t-q2-r[]
-)
 
 #_(comment
 ;; tag::history-full[]
 (api/submit-tx
-  system
+  node
   [[:crux.tx/put
     {:crux.db/id :ids.persons/Jeff
      :person/name "Jeff"
@@ -269,7 +250,7 @@
 
 ; Returning the history in descending order
 ; To return in ascending order, use :asc in place of :desc
-(api/entity-history (api/db system) :ids.persons/Jeff :desc)
+(api/entity-history (api/db node) :ids.persons/Jeff :desc)
 
 ; yields
 [{:crux.tx/tx-time #inst "2019-04-15T07:53:55.817-00:00",
@@ -284,7 +265,7 @@
 ;; end::history-full[]
 
 ;; tag::history-with-docs[]
-(api/entity-history (api/db system) :ids.persons/Jeff :desc {:with-docs? true})
+(api/entity-history (api/db node) :ids.persons/Jeff :desc {:with-docs? true})
 
 ; yields
 [{:crux.tx/tx-time #inst "2019-04-15T07:53:55.817-00:00",
@@ -312,7 +293,7 @@
 ; As we are returning results in :asc order, the :start map contains the earlier co-ordinates -
 ; If returning history range in descending order, we pass the later co-ordinates to the :start map
 (api/entity-history
- (api/db system)
+ (api/db node)
  :ids.persons/Jeff
  :asc
  {:start {:crux.db/valid-time #inst "2015-05-18T09:20:27.966" ; valid-time-start
@@ -360,7 +341,6 @@
  ;; end::join-q[]
 ))
 
-#_(comment
 ;; tag::join-r[]
 #{[:ivan :ivan]
   [:petr :petr]
@@ -370,8 +350,6 @@
   [:denis-a :denis-b]
   [:denis-b :denis-a]}
 ;; end::join-r[]
-
-)
 
 (defn query-example-join-q2-setup [node]
   (let [maps
@@ -396,11 +374,9 @@
  ;; end::join2-q[]
 ))
 
-(comment
 ;; tag::join2-r[]
 #{[:petr]}
 ;; end::join2-r[]
-)
 
 (comment
   ;; tag::bitemp0[]
