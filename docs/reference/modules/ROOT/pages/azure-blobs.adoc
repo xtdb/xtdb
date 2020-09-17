@@ -11,7 +11,7 @@ In order to use Blob Storage within Crux, you must first add this module as a pr
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-azure-blobs {:mvn/version "20.09-1.11.0-alpha"}
+juxt/crux-azure-blobs {:mvn/version "20.09-1.12.0-alpha"}
 ----
 
 .pom.xml
@@ -20,7 +20,7 @@ juxt/crux-azure-blobs {:mvn/version "20.09-1.11.0-alpha"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-azure-blobs</artifactId>
-    <version>20.09-1.11.0-alpha</version>
+    <version>20.09-1.12.0-alpha</version>
 </dependency>
 ----
 

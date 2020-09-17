@@ -9,7 +9,7 @@ image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-jdbc {:mvn/version "20.09-1.11.0-beta"}
+juxt/crux-jdbc {:mvn/version "20.09-1.12.0-beta"}
 ----
 
 .pom.xml
@@ -18,7 +18,7 @@ juxt/crux-jdbc {:mvn/version "20.09-1.11.0-beta"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-jdbc</artifactId>
-    <version>20.09-1.11.0-beta</version>
+    <version>20.09-1.12.0-beta</version>
 </dependency>
 ----
 

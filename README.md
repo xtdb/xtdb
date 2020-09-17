@@ -29,7 +29,7 @@ Maven coordinates for the [Clojars Repository](https://clojars.org/juxt/crux-cor
 <dependency>
   <groupId>juxt</groupId>
   <artifactId>crux-core</artifactId>
-  <version>20.09-1.11.0-beta</version>
+  <version>20.09-1.12.0-beta</version>
 </dependency>
 ```
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg?style=for-the-badge)](https://clojars.org/juxt/crux-core)

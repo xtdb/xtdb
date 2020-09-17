@@ -14,14 +14,14 @@ First, add the `crux-sql` dependency to your project:
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-sql</artifactId>
-    <version>20.09-1.11.0-alpha</version>
+    <version>20.09-1.12.0-alpha</version>
 </dependency>
 ----
 
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-sql {:mvn/version "20.09-1.11.0-alpha"}
+juxt/crux-sql {:mvn/version "20.09-1.12.0-alpha"}
 ----
 
 == Connecting
