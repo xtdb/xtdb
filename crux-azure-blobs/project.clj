@@ -1,4 +1,4 @@
-(defproject juxt/crux-azure-blobs "crux-git-version-beta"
+(defproject juxt/crux-azure-blobs "crux-git-version-alpha"
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
