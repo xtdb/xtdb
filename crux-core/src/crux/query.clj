@@ -336,7 +336,12 @@
 (defmethod aggregate 'rand [_ n]
   (fn aggregate-rand
     ([] (transient []))
-    ([acc] (vec (take n (repeatedly (partial shuffle (persistent! acc))))))
+    ([acc] (->> (persistent! acc)
+                (partial shuffle)
+                repeatedly
+                (apply concat)
+                (take n)
+                vec))
     ([acc x] (conj! acc x))))
 
 (defmethod aggregate 'sample [_ n]
