@@ -14,8 +14,9 @@
 ** xref:embedded-kafka.adoc[Kafka - Embedded]
 ** xref:sql.adoc[SQL]
 * Persistence Modules
+** xref:s3.adoc[AWS S3]
+** xref:azure-blobs.adoc[Azure Blobs]
 ** xref:kafka.adoc[Kafka]
 ** xref:jdbc.adoc[JDBC]
 ** xref:lmdb.adoc[LMDB]
 ** xref:rocksdb.adoc[RocksDB]
-** xref:s3.adoc[S3]
