@@ -44,12 +44,13 @@ All three are backed by local KV stores by default, but they can be independentl
 |===
 | | Transaction Log | Document Store | Index Store
 
+| xref:s3.adoc[AWS S3] | | ✓ |
+| xref:azure-blobs.adoc[Azure Blobs] | | ✓ |
 | xref:kafka.adoc[Kafka] | ✓ | ✓ |
 | xref:jdbc.adoc[JDBC] | ✓ | ✓ |
 | In-memory KV | ✓ | ✓ | ✓
 | xref:lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
 | xref:rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
-| xref:s3.adoc[S3] | | ✓ |
 |===
 
 For specific details and examples of how to configure each of these modules, see their individual sections.

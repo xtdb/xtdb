@@ -1,38 +1,21 @@
 = crux-azure-blobs
 
-This Crux module allows you to use Azure Blob Storage Service (blobs) as Crux's 'document store'.
+This Crux module allows you to use Azure's Blob Storage as Crux's 'document store'.
 
-== Getting started
-
-First, include `[juxt/crux-azure-blobs "RELEASE"]` in your project.clj, or `{juxt/crux-azure-blobs {:mvn/version "RELEASE"}}` in your deps.edn.
-
-Then, include `'crux.azure.blobs/->document-store` in your node module configuration - for example:
-
+.deps.edn
 [source,clojure]
 ----
-{:crux/document-store {:crux/module `crux.azure.blobs/->document-store
-                       :sas-token "your-sas-token"
-                       :storage-account "your-storage-account"
-                       :container "your-container-name"}}
+juxt/crux-azure-blobs {:mvn/version "20.09-1.11.0-alpha"}
 ----
 
-== Configuration
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-azure-blobs</artifactId>
+    <version>20.09-1.11.0-alpha</version>
+</dependency>
+----
 
-First you need to create a `Storage Account`, then a `Container` for storing the documents.
-
-Then you need to create a SAS token for the Storage Account via the Azure portal:
-https://portal.azure.com.
-
-Under `Storage Account`, go to `Settings`. Then click `Shared access signature`. Create a new SAS token with `Allowed services`: `Blob` and `Allowed resources types`: `Container` and `Object`. You can select all allowed permissions.
-
-Select needed `Start and expiry date/time`, `Allowed IP addresses` if applicable and `HTTPS only`. Leave the rest of the options as is.
-
-== Serialization
-
-Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
-
-== Bugs/PRs
-
-Please submit these through Github in the usual way - thanks!
-
-Help is available through our usual channels - https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip] and http://clojurians.net/[#crux on Clojurians Slack].
+For more details, see the https://opencrux.com/reference/azure-blobs.html[Azure Blobs documentation]

@@ -1,0 +1,55 @@
+= Crux Azure Blobs
+
+You can use Azure's Blob Storage as Crux's 'document store'.
+
+Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
+
+== Project Dependency
+
+In order to use Blob Storage within Crux, you must first add this module as a project dependency:
+
+.deps.edn
+[source,clojure]
+----
+juxt/crux-azure-blobs {:mvn/version "20.09-1.11.0-alpha"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-azure-blobs</artifactId>
+    <version>20.09-1.11.0-alpha</version>
+</dependency>
+----
+
+== Using Azure Blobs
+
+Replace the implementation of the document store with `+crux.azure.blobs/->document-store+`
+
+[source,clojure]
+----
+{:crux/document-store {:crux/module 'crux.azure.blobs/->document-store
+                       :sas-token "your-sas-token"
+                       :storage-account "your-storage-account"
+                       :container "your-container-name"}}
+----
+
+You'll need to create a `Storage Account`, then a `Container` for storing the documents.
+
+Then you need to create a SAS token for the Storage Account via the https://portal.azure.com[Azure portal].
+
+* Under `Storage Account`, go to `Settings`.
+* Then click `Shared access signature`.
+* Create a new SAS token with `Allowed services`: `Blob`, `Allowed resources types`: `Container` and `Object`.
+  You can select all allowed permissions.
+* Select needed `Start and expiry date/time`, `Allowed IP addresses` if applicable and `HTTPS only`.
+  Leave the rest of the options as-is.
+
+== Parameters
+
+* `sas-token` (string, required): 'shared access signature' for your chosen container.
+* `storage-account` (string, required)
+* `container` (string, required)
+* `doc-cache-size` (int): size of in-memory document cache
