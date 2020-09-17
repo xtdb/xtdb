@@ -2713,6 +2713,21 @@
                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
                23.53720459187964)))
 
+    (t/testing "distinct aggregate"
+      (t/is (= (ffirst (api/q db '[:find (distinct ?x)
+                                   :where [(identity [:a :b :c :a :d]) [?x ...]]]))
+               #{:a :b :c :d})))
+
+    (t/testing "sample aggregate"
+      (t/is (= (count (ffirst (api/q db '[:find (sample 7 ?x)
+                                   :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+               4)))
+
+    (t/testing "rand aggregate"
+      (t/is (= (count (ffirst (api/q db '[:find (rand 7 ?x)
+                                          :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+               7)))
+
     (t/testing "Custom aggregates"
       (t/is (= (set (api/q db '[:find ?color (sort-reverse ?x)
                                 :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]

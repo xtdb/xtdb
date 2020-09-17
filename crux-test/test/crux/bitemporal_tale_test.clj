@@ -4,11 +4,11 @@
             [clojure.java.io :as io]))
 
 (t/deftest bitemporal-tale-test
-  (with-open [system (crux/start-node {})]
-    (t/is system)
+  (with-open [node (crux/start-node {})]
+    (t/is node)
 
-    (crux/await-tx system (crux/submit-tx
-                           system
+    (crux/await-tx node (crux/submit-tx
+                           node
                            [[:crux.tx/put
                              {:crux.db/id :ids.people/Charles
                               :person/name "Charles"
@@ -21,8 +21,8 @@
                               :person/gold 10000}
                              #inst "1700-05-18"]]))
 
-    (crux/await-tx system (crux/submit-tx
-                           system
+    (crux/await-tx node (crux/submit-tx
+                           node
                            [[:crux.tx/put
                              {:crux.db/id :ids.people/Mary
                               :person/name "Mary"
@@ -44,8 +44,8 @@
                               :person/hp   60
                               :person/gold 70}
                              #inst "1715-05-18"]]))
-    (crux/await-tx system (crux/submit-tx
-                           system
+    (crux/await-tx node (crux/submit-tx
+                           node
                            [[:crux.tx/put
                              {:crux.db/id :ids.artefacts/cozy-mug
                               :artefact/title "A Rather Cozy Mug"
@@ -79,8 +79,8 @@
                               :artefact/title "A Tell DPS Laptop (what?)"}
                              #inst "2016-05-18"]]))
 
-    (crux/await-tx system (crux/submit-tx
-                           system
+    (crux/await-tx node (crux/submit-tx
+                           node
                            [[:crux.tx/put
                              {:crux.db/id :ids.places/continent
                               :place/title "Ah The Continent"}
@@ -95,7 +95,7 @@
                               :place/title "Coconut Island"
                               :place/location :ids.places/carribean}
                              #inst "1000-01-01"]]))
-    (def db (crux/db system))
+    (def db (crux/db node))
     (t/is (= {:crux.db/id :ids.people/Charles,
               :person/str 40,
               :person/dex 40,
@@ -130,22 +130,22 @@
                      '[:find ?name
                        :where
                        [_ :artefact/title ?name]])))
-    (crux/await-tx system (crux/submit-tx
-                           system
+    (crux/await-tx node (crux/submit-tx
+                           node
                            [[:crux.tx/delete :ids.artefacts/forbidden-beans
                              #inst "1690-05-18"]]))
 
-    (crux/await-tx system (crux/submit-tx
-                           system
+    (crux/await-tx node (crux/submit-tx
+                           node
                            [[:crux.tx/evict :ids.artefacts/laptop]]))
 
     (t/is (= #{["Key from an unknown door"] ["A used sword"] ["A Rather Cozy Mug"] ["Flintlock pistol"]}
-             (crux/q (crux/db system)
+             (crux/q (crux/db node)
                      '[:find ?name
                        :where
                        [_ :artefact/title ?name]])))
 
-    (def world-in-1599 (crux/db system #inst "1599-01-01"))
+    (def world-in-1599 (crux/db node #inst "1599-01-01"))
 
     (t/is world-in-1599)
 
@@ -157,7 +157,7 @@
 
 
     (defn first-ownership-tx []
-      [(let [charles (crux/entity (crux/db system #inst "1725-05-17") :ids.people/Charles)]
+      [(let [charles (crux/entity (crux/db node #inst "1725-05-17") :ids.people/Charles)]
          [:crux.tx/put
           (update charles
                   :person/has
@@ -166,7 +166,7 @@
                   :ids.artefacts/unknown-key)
           #inst "1725-05-18"])
 
-       (let [mary  (crux/entity (crux/db system #inst "1715-05-17") :ids.people/Mary)]
+       (let [mary  (crux/entity (crux/db node #inst "1715-05-17") :ids.people/Mary)]
          [:crux.tx/put
           (update mary
                   :person/has
@@ -176,9 +176,9 @@
           #inst "1715-05-18"])])
 
     (def first-ownership-tx-response
-      (crux/submit-tx system (first-ownership-tx)))
+      (crux/submit-tx node (first-ownership-tx)))
 
-    (crux/await-tx system first-ownership-tx-response)
+    (crux/await-tx node first-ownership-tx-response)
 
     (def who-has-what-query
       '[:find ?name ?atitle
@@ -191,10 +191,10 @@
                ["Mary" "Flintlock pistol"]
                ["Charles" "A Rather Cozy Mug"]
                ["Charles" "Key from an unknown door"]}
-             (crux/q (crux/db system #inst "1726-05-01") who-has-what-query)))
+             (crux/q (crux/db node #inst "1726-05-01") who-has-what-query)))
 
     (t/is (= #{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
-             (crux/q (crux/db system #inst "1716-05-01") who-has-what-query)))
+             (crux/q (crux/db node #inst "1716-05-01") who-has-what-query)))
 
     (def parametrized-query
       '[:find ?name
@@ -205,31 +205,31 @@
         :limit 10])
 
     (t/is (= #{["Mary"] ["Charles"]}
-             (set (crux/q (crux/db system #inst "1726-05-01") parametrized-query))))
+             (set (crux/q (crux/db node #inst "1726-05-01") parametrized-query))))
 
     (defn entity-update
       [entity-id new-attrs valid-time]
-      (let [entity-prev-value (crux/entity (crux/db system) entity-id)]
-        (crux/submit-tx system
+      (let [entity-prev-value (crux/entity (crux/db node) entity-id)]
+        (crux/submit-tx node
                         [[:crux.tx/put
                           (merge entity-prev-value new-attrs)
                           valid-time]])))
 
     (defn q
       [query]
-      (crux/q (crux/db system) query))
+      (crux/q (crux/db node) query))
 
     (defn entity
       [entity-id]
-      (crux/entity (crux/db system) entity-id))
+      (crux/entity (crux/db node) entity-id))
 
     (defn entity-at
       [entity-id valid-time]
-      (crux/entity (crux/db system valid-time) entity-id))
+      (crux/entity (crux/db node valid-time) entity-id))
 
     (defn entity-with-adjacent
       [entity-id keys-to-pull]
-      (let [db (crux/db system)
+      (let [db (crux/db node)
             ids->entities
             (fn [ids]
               (cond-> (map #(crux/entity db %) ids)
@@ -247,7 +247,7 @@
          (crux/entity db entity-id)
          keys-to-pull)))
 
-    (crux/await-tx system (entity-update :ids.people/Charles
+    (crux/await-tx node (entity-update :ids.people/Charles
                                          {:person/int  50}
                                          #inst "1730-05-18"))
     (t/is (= (entity :ids.people/Charles)
@@ -279,9 +279,9 @@
               :person/gold 10000,
               :person/born #inst "1700-05-18T00:00:00.000-00:00"}))
 
-    (crux/await-tx system (let [theft-date #inst "1740-06-18"]
+    (crux/await-tx node (let [theft-date #inst "1740-06-18"]
                             (crux/submit-tx
-                             system
+                             node
                              [[:crux.tx/put
                                (update (entity-at :ids.people/Charles theft-date)
                                        :person/has
@@ -298,13 +298,13 @@
                ["Mary" "Flintlock pistol"]
                ["Mary" "A Rather Cozy Mug"]
                ["Charles" "Key from an unknown door"]}
-             (crux/q (crux/db system #inst "1740-06-18") who-has-what-query)))
+             (crux/q (crux/db node #inst "1740-06-18") who-has-what-query)))
 
-    (crux/await-tx system (let [marys-birth-inst #inst "1710-05-18"
-                                db (crux/db system marys-birth-inst)
+    (crux/await-tx node (let [marys-birth-inst #inst "1710-05-18"
+                                db (crux/db node marys-birth-inst)
                                 baby-mary (crux/entity db :ids.people/Mary)]
                             (crux/submit-tx
-                             system
+                             node
                              [[:crux.tx/match
                                :ids.people/Mary
                                baby-mary
@@ -314,11 +314,11 @@
                                marys-birth-inst]])))
 
 
-    (crux/await-tx system (let [mug-lost-date  #inst "1723-01-09"
-                                db (crux/db system mug-lost-date)
+    (crux/await-tx node (let [mug-lost-date  #inst "1723-01-09"
+                                db (crux/db node mug-lost-date)
                                 mary (crux/entity db :ids.people/Mary)]
                             (crux/submit-tx
-                             system
+                             node
                              [[:crux.tx/match
                                :ids.people/Mary
                                mary
@@ -328,16 +328,16 @@
                                mug-lost-date]])))
     (t/is (= #{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
              (crux/q
-              (crux/db system #inst "1715-05-18")
+              (crux/db node #inst "1715-05-18")
               who-has-what-query)))
 
-    (crux/await-tx system (crux/submit-tx system (first-ownership-tx)))
+    (crux/await-tx node (crux/submit-tx node (first-ownership-tx)))
 
     (t/is (= #{["Mary" "A used sword"]
                ["Mary" "Flintlock pistol"]
                ["Mary" "A Rather Cozy Mug"]}
              (crux/q
-              (crux/db system #inst "1715-05-18")
+              (crux/db node #inst "1715-05-18")
               who-has-what-query)))
 
     (t/is (= #{["Mary" "A used sword"]
@@ -345,13 +345,13 @@
                ["Mary" "A Rather Cozy Mug"]
                ["Charles" "Key from an unknown door"]}
              (crux/q
-              (crux/db system #inst "1740-06-19")
+              (crux/db node #inst "1740-06-19")
               who-has-what-query)))
 
     (t/is (= #{["Mary" "A used sword"]
                ["Mary" "Flintlock pistol"]}
              (crux/q
-              (crux/db system
+              (crux/db node
                        #inst "1715-06-19"
                        (:crux.tx/tx-time first-ownership-tx-response))
               who-has-what-query)))))
