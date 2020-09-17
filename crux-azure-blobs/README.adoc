@@ -1,0 +1,21 @@
+= crux-azure-blobs
+
+This Crux module allows you to use Azure's Blob Storage as Crux's 'document store'.
+
+.deps.edn
+[source,clojure]
+----
+juxt/crux-azure-blobs {:mvn/version "20.09-1.11.0-alpha"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-azure-blobs</artifactId>
+    <version>20.09-1.11.0-alpha</version>
+</dependency>
+----
+
+For more details, see the https://opencrux.com/reference/azure-blobs.html[Azure Blobs documentation]
