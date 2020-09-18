@@ -169,14 +169,14 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
-      - run: javadoc -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
+      - run: javadoc -Xdoclint:none -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
       - aws-s3/sync:
           arguments: |
             --acl public-read
           from: crux-javadoc
           overwrite: true
           to: 's3://crux-doc/crux-javadoc/${CIRCLE_TAG}'
-      - run: javadoc -d crux-alpha-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api.alpha
+      - run: javadoc -Xdoclint:none -d crux-alpha-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api.alpha
       - aws-s3/sync:
           arguments: |
             --acl public-read
