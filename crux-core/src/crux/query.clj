@@ -1418,12 +1418,6 @@
                        (idx/new-n-ary-constraining-layered-virtual-index constrain-result-fn)))
      :var->bindings var->bindings}))
 
-(defn query-plan-for [q encode-value-fn stats]
-  (s/assert ::query q)
-  (let [{:keys [where in rules]} (s/conform ::query q)
-        [in in-args] (add-legacy-args q [])]
-    (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
-
 (defn- open-index-snapshot ^java.io.Closeable [{:keys [index-store index-snapshot] :as db}]
   (if index-snapshot
     (db/open-nested-index-snapshot index-snapshot)
@@ -1654,6 +1648,12 @@
                          (mapv #(arg-for-var arg-tuple %) arg-vars)))
                   in-args))])
     [in in-args]))
+
+(defn query-plan-for [q encode-value-fn stats]
+  (s/assert ::query q)
+  (let [{:keys [where in rules]} (s/conform ::query q)
+        [in in-args] (add-legacy-args q [])]
+    (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
 
 (defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
