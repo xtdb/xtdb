@@ -1641,18 +1641,18 @@
     (or (find arg (symbol (name var)))
         (find arg (keyword (name var))))))
 
-(defn- arg-vars [args]
+(defn- find-arg-vars [args]
   (let [ks (keys (first args))]
     (set (for [k ks]
            (symbol (name k))))))
 
 (defn- add-legacy-args [{:keys [args in] :as query} in-args]
-  (let [arg-vars (vec (arg-vars args))
-        in-args (cond-> (vec in-args)
-                  (seq args) (conj (vec (for [arg-tuple args]
-                                          (mapv #(arg-for-var arg-tuple %) arg-vars)))))
-        in (cond-> in
-             (seq arg-vars) (update :bindings conj [:relation [arg-vars]]))]
+  (if-let [arg-vars (not-empty (find-arg-vars args))]
+    (let [arg-vars (vec arg-vars)]
+      [(update in :bindings #(vec (cons [:relation [arg-vars]] %)))
+       (vec (cons (vec (for [arg-tuple args]
+                         (mapv #(arg-for-var arg-tuple %) arg-vars)))
+                  in-args))])
     [in in-args]))
 
 (defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
