@@ -103,7 +103,7 @@
                           :where '[[(text-search :foo "a?ar") [[?e ?v]]]
                                    [?e :crux.db/id]]})))))))
 
-#_(t/deftest test-scoring-shouldnt-be-impacted-by-past-docs
+#_(t/deftest test-scoring-shouldnt-be-impacted-by-non-matched-past-docs
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan :name "Ivan Bob"}]])
 
   (let [q {:find '[?v ?score]
@@ -119,6 +119,24 @@
 
     ;; The past data has made the doc we're looking for more
     ;; rare/unique, thus it will get a higher score:
+
+    (with-open [db (c/open-db *api*)]
+      (t/is (= prior-score (c/q db q))))))
+
+#_(t/deftest test-scoring-shouldnt-be-impacted-by-matched-past-docs
+  (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan Bob Bob"}]])
+
+  (let [q {:find '[?e ?v ?s]
+           :where '[[(text-search :name "Ivan") [[?e ?v ?s]]]
+                    [?e :crux.db/id]]}
+        prior-score (with-open [db (c/open-db *api*)]
+                      (c/q db q))]
+
+
+    (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan1" :name "Ivan"}]])
+    (submit+await-tx [[:crux.tx/delete "ivan1"]])
+
+    ;; The more exacting string in the past is distorting the present:
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
