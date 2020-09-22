@@ -21,3 +21,14 @@ juxt/crux-lucene {:mvn/version "20.09-1.11.0-alpha"}
 ----
 
 For more details, see the https://opencrux.com/reference/lucene.html[Crux Lucene documentation]
+
+== Scoring
+
+This module uses the default BM25Similarity similarity to calculate
+scores.
+
+Please note that although data is evicted from the Lucene index during
+the `crux.tx/evict` transaction operation, data is not removed during
+a normal `crux.tx/delete`. Therefore deleted content present in the
+Lucene impact will have a subtle impact on the returned scores (for
+example, scores are boosted for rare matches of terms in documents).

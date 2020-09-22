@@ -102,3 +102,23 @@
                  (c/q db {:find '[?e ?v]
                           :where '[[(text-search :foo "a?ar") [[?e ?v]]]
                                    [?e :crux.db/id]]})))))))
+
+#_(t/deftest test-scoring-shouldnt-be-impacted-by-past-docs
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan :name "Ivan Bob"}]])
+
+  (let [q {:find '[?v ?score]
+           :where '[[(text-search :name "Ivan") [[?e ?v ?score]]]
+                    [?e :crux.db/id]]}
+
+        prior-score (with-open [db (c/open-db *api*)]
+                      (c/q db q))]
+
+    (doseq [n (range 10)]
+      (submit+await-tx [[:crux.tx/put {:crux.db/id (str "id-" n) :name "NO MATCH"}]])
+      (submit+await-tx [[:crux.tx/delete (str "id-" n)]]))
+
+    ;; The past data has made the doc we're looking for more
+    ;; rare/unique, thus it will get a higher score:
+
+    (with-open [db (c/open-db *api*)]
+      (t/is (= prior-score (c/q db q))))))
