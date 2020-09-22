@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [crux.error :as err]
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
@@ -124,8 +125,9 @@
                        (empty? legacy-args) true
 
                        (not *evict-all-on-legacy-time-ranges?*)
-                       (throw (IllegalArgumentException. (str "Evict no longer supports time-range parameters. "
-                                                              "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")))
+                       (throw (err/illegal-arg :evict-with-time-range
+                                               {::err/message (str "Evict no longer supports time-range parameters. "
+                                                                   "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")}))
 
                        :else (do
                                (log/warnf "Evicting '%s' for all valid-times, '%s' set"
@@ -215,7 +217,7 @@
        :docs docs})))
 
 (defmethod index-tx-event :default [[op & _] tx tx-ingester]
-  (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
+  (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
 (defn- update-stats [{:keys [index-store ^ExecutorService stats-executor] :as tx-ingester} docs-stats]
   (let [stats-fn ^Runnable #(->> (apply merge-with + (db/read-index-meta index-store :crux/attribute-stats) docs-stats)
@@ -231,8 +233,8 @@
 
 (defn index-docs [{:keys [bus index-store] :as tx-ingester} docs]
   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
-    (throw (IllegalArgumentException.
-            (str "Missing required attribute :crux.db/id: " (cio/pr-edn-str missing-ids)))))
+    (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
+                                          :docs missing-ids})))
 
   (when (seq docs)
     (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
