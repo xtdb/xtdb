@@ -136,6 +136,8 @@
     (submit+await-tx [[:crux.tx/delete "ivan1"]])
 
     ;; The more exacting string in the past is distorting the present:
+    ;; This is still due to an idf effect (not as pronounced as uniqueness / rare)
+    ;; and more due to the avgdl changing (average length of field)
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
