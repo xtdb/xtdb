@@ -15,7 +15,7 @@
            [org.apache.lucene.document Document Field StoredField TextField]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig]
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search IndexSearcher Query ScoreDoc]
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder IndexSearcher Query ScoreDoc]
            [org.apache.lucene.store Directory FSDirectory]
            org.apache.lucene.util.BytesRef))
 
