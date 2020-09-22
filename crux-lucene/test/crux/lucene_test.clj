@@ -142,5 +142,23 @@
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
 
+
+(t/deftest test-structural-sharing
+  ;; TODO:
+  ;; https://stackoverflow.com/questions/9731671/lucene-how-to-add-document-without-duplication
+
+  (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
+  (let [q {:find '[?e ?v ?s]
+           :where '[[(text-search :name "Ivan") [[?e ?v ?s]]]
+                    [?e :crux.db/id]]}
+        prior-score (with-open [db (c/open-db *api*)]
+                      (c/q db q))]
+
+    (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
+    (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
+
+    (with-open [db (c/open-db *api*)]
+      (t/is (= prior-score (c/q db q))))))
+
 (t/deftest test-keyword-ids-are-breaking
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan-2 :name "Ivan Bob"}]]))
