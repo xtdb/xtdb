@@ -7,7 +7,8 @@
             [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
             [crux.calcite.types]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.error :as err])
   (:import clojure.lang.Symbol
            crux.calcite.CruxTable
            [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
@@ -167,7 +168,8 @@
           (->lambda-expression m
                                (filter #(instance? ParameterExpression %) exprs)
                                (mapv #(->ast % schema) operands)))
-        (throw (IllegalArgumentException. (str "Can't understand call " n))))))
+        (throw (err/illegal-arg :cant-understand-call
+                                {::err/message (str "Can't understand call " n)})))))
 
 (def ^:private crux-custom-fns
   {"KEYWORD" keyword
@@ -396,7 +398,8 @@
 (defn java-sql-types->calcite-sql-type [java-sql-type]
   (or (get mapped-types java-sql-type)
       (some-> java-sql-type java-sql-types SqlTypeName/getNameForJdbcType)
-      (throw (IllegalArgumentException. (str "Unrecognised java.sql.Types: " java-sql-type)))))
+      (throw (err/illegal-arg :unrecognised-sql-types
+                              {::err/message (str "Unrecognised java.sql.Types: " java-sql-type)}))))
 
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
@@ -407,7 +410,8 @@
       (let [col-name (->column-name c)
             col-def (columns c)
             _ (when-not col-def
-                (throw (IllegalArgumentException. (str "Unrecognised column: " c))))
+                (throw (err/illegal-arg :unrecognised-column
+                                        {::err/message (str "Unrecognised column: " c)})))
             col-type ^SqlTypeName (java-sql-types->calcite-sql-type col-def)]
         (log/trace "Adding column" col-name col-type)
         (doto field-info

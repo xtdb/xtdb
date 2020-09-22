@@ -6,7 +6,8 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.error :as err])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            java.util.concurrent.locks.StampedLock
@@ -95,7 +96,8 @@
 (defn- env-copy [^long env path]
   (let [file (io/file path)]
     (when (.exists file)
-      (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
+      (throw (err/illegal-arg :directory-exists
+                              {::err/message (str "Directory exists: " (.getAbsolutePath file))})))
     (.mkdirs file)
     (success? (LMDB/mdb_env_copy env (.getAbsolutePath file)))))
 

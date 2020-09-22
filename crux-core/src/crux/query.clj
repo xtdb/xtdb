@@ -15,6 +15,7 @@
             [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]
+            [crux.error :as err]
             [crux.tx.conform :as txc]
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
@@ -722,12 +723,12 @@
                               (do (when or-join?
                                     (when-not (= (count free-args)
                                                  (count (set free-args)))
-                                      (throw (IllegalArgumentException.
-                                              (str "Or join free variables not distinct: " (cio/pr-edn-str clause)))))
+                                      (throw (err/illegal-arg :indistinct-or-join-vars
+                                                              {::err/message (str "Or join free variables not distinct: " (cio/pr-edn-str clause))})))
                                     (doseq [var or-vars
                                             :when (not (contains? body-vars var))]
-                                      (throw (IllegalArgumentException.
-                                              (str "Or join variable never used: " var " " (cio/pr-edn-str clause))))))
+                                      (throw (err/illegal-arg :unused-or-join-var
+                                                              {::err/message  (str "Or join variable never used: " var " " (cio/pr-edn-str clause))}))))
                                   {:or-vars or-vars
                                    :free-vars free-vars
                                    :bound-vars bound-vars
@@ -743,8 +744,8 @@
                                                           (count free-vars)
                                                           (partial db/encode-value index-snapshot)))})]
             (when (not (apply = (map :or-vars or-branches)))
-              (throw (IllegalArgumentException.
-                      (str "Or requires same logic variables: " (cio/pr-edn-str clause)))))
+              (throw (err/illegal-arg :or-requires-same-logic-vars
+                                      {::err/message  (str "Or requires same logic variables: " (cio/pr-edn-str clause))})))
             [(conj or-clause+idx-id+or-branches [clause idx-id or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
@@ -821,8 +822,8 @@
           var [sym sym-a sym-b]
           :when (logic-var? var)]
     (when-not (contains? var->bindings var)
-      (throw (IllegalArgumentException.
-              (str "Range constraint refers to unknown variable: " var " " (cio/pr-edn-str clause))))))
+      (throw (err/illegal-arg :range-constraint-unknown-var
+                              {::err/message (str "Range constraint refers to unknown variable: " var " " (cio/pr-edn-str clause))}))))
   (->> (for [[var clauses] (group-by :sym range-clauses)
              :when (logic-var? var)]
          [var (->> (for [{:keys [op val sym]} clauses
@@ -861,9 +862,8 @@
   (doseq [var vars
           :when (not (or (pred-constraint? var)
                          (contains? var->bindings var)))]
-    (throw (IllegalArgumentException.
-            (str "Clause refers to unknown variable: "
-                 var " " (cio/pr-edn-str clause))))))
+    (throw (err/illegal-arg :clause-unknown-var
+                            {::err/message  (str "Clause refers to unknown variable: " var " " (cio/pr-edn-str clause))}))))
 
 (defn- bind-binding [bind-type tuple-idxs-in-join-order idx result]
   (case bind-type
@@ -984,8 +984,8 @@
     (do (validate-existing-vars var->bindings clause pred-vars)
         (when-not (= (count return-vars)
                      (count (set return-vars)))
-          (throw (IllegalArgumentException.
-                  (str "Return variables not distinct: " (cio/pr-edn-str clause)))))
+          (throw (err/illegal-arg :return-vars-not-distinct
+                                  {::err/message (str "Return variables not distinct: " (cio/pr-edn-str clause))})))
         (s/assert ::pred-args (cond-> [pred-fn (vec args)]
                                 return (conj (second return))))
         {:join-depth pred-join-depth
@@ -1147,8 +1147,8 @@
            (let [rule-name (:name clause)
                  rules (get rule-name->rules rule-name)]
              (when-not rules
-               (throw (IllegalArgumentException.
-                       (str "Unknown rule: " (cio/pr-edn-str sub-clause)))))
+               (throw (err/illegal-arg :unknown-rule
+                                       {::err/message (str "Unknown rule: " (cio/pr-edn-str sub-clause))})))
              (let [rule-args+num-bound-args+body (for [{:keys [head body]} rules
                                                        :let [{:keys [bound-args free-args]} (:args head)]]
                                                    [(vec (concat bound-args free-args))
@@ -1162,12 +1162,14 @@
                                                                    (map second)
                                                                    (distinct))]
                (when-not (= 1 (count arities))
-                 (throw (IllegalArgumentException. (str "Rule definitions require same arity: " (cio/pr-edn-str rules)))))
+                 (throw (err/illegal-arg :rule-definition-require-same-arity
+                                         {::err/message (str "Rule definitions require same arity: " (cio/pr-edn-str rules))})))
                (when-not (= 1 (count num-bound-args-groups))
-                 (throw (IllegalArgumentException. (str "Rule definitions require same number of bound args: " (cio/pr-edn-str rules)))))
+                 (throw (err/illegal-arg :rule-definition-require-same-num-bound-args
+                                         {::err/message (str "Rule definitions require same number of bound args: " (cio/pr-edn-str rules))})))
                (when-not (= arity (count (:args clause)))
-                 (throw (IllegalArgumentException.
-                         (str "Rule invocation has wrong arity, expected: " arity " " (cio/pr-edn-str sub-clause)))))
+                 (throw (err/illegal-arg :rule-invocation-wrong-arity
+                                         {::err/message (str "Rule invocation has wrong arity, expected: " arity " " (cio/pr-edn-str sub-clause))})))
                ;; TODO: the caches and expansion here needs
                ;; revisiting.
                (let [expanded-rules (for [[branch-index [args _ body]] (map-indexed vector rule-args+num-bound-args+body)
@@ -1436,16 +1438,17 @@
   (let [ks (keys (first args))]
     (doseq [m args]
       (when-not (every? #(contains? m %) ks)
-        (throw (IllegalArgumentException.
-                (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))))))))
+        (throw (err/illegal-arg :arg-maps-need-same-keys-as-first-map
+                                {::err/message (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))}))))))
 
 (defn- validate-in [in]
   (doseq [binding (:bindings in)
           :let [binding-vars (find-binding-vars binding)]]
     (when-not (= (count binding-vars)
                  (count (set binding-vars)))
-      (throw (IllegalArgumentException.
-              (str "In binding variables not distinct: " (cio/pr-edn-str binding)))))))
+      (throw (err/illegal-arg :indistinct-in-binding-variables
+                              {::err/message "In binding variables not distinct"
+                               :variables binding})))))
 
 ;; NOTE: For ascending sort, it might be possible to pick the right
 ;; join order so the resulting seq is already sorted, by ensuring the
@@ -1680,12 +1683,12 @@
           ->result-fns (mapv :->result compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
-        (throw (IllegalArgumentException.
-                (str "Find refers to unknown variable: " logic-var))))
+        (throw (err/illegal-arg :find-unknown-var
+                                {::err/message (str "Find refers to unknown variable: " logic-var)})))
       (doseq [{:keys [find-arg]} order-by
               :when (not (some #{find-arg} find))]
-        (throw (IllegalArgumentException.
-                (str "Order by requires an element from :find. unreturned element: " find-arg))))
+        (throw (err/illegal-arg :order-by-requires-find-element
+                                {::err/message  (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]

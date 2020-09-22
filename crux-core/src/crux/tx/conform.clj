@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.tx.conform
   (:require [crux.codec :as c]
+            [crux.error :as err]
             [crux.db :as db])
   (:import (java.util UUID)))
 
@@ -103,7 +104,8 @@
 
     (conform-tx-op-type op)
     (catch Exception e
-      (throw (IllegalArgumentException. (str "invalid tx-op: " (.getMessage e)) e)))))
+      (throw (err/illegal-arg :invalid-tx-op
+                              {::err/message (str "invalid tx-op: " (.getMessage e))})))))
 
 (defmulti ->tx-event :op :default ::default)
 
@@ -133,7 +135,8 @@
     arg-doc-id (conj arg-doc-id)))
 
 (defmethod ->tx-event ::default [tx-op]
-  (throw (IllegalArgumentException. (str "invalid op: " (pr-str tx-op)))))
+  (throw (err/illegal-arg :invalid-op
+                          {::err/message (str "invalid op: " (pr-str tx-op))})))
 
 (defmulti <-tx-event first
   :default ::default)
