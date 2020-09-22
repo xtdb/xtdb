@@ -132,7 +132,6 @@
         prior-score (with-open [db (c/open-db *api*)]
                       (c/q db q))]
 
-
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan1" :name "Ivan"}]])
     (submit+await-tx [[:crux.tx/delete "ivan1"]])
 
@@ -140,3 +139,6 @@
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
+
+(t/deftest test-keyword-ids-are-breaking
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan-2 :name "Ivan Bob"}]]))
