@@ -42,6 +42,11 @@
                 (.add (Field. "eid", ^bytes (id->stored-bytes (:crux.db/id crux-doc)) StoredField/TYPE))
                 (.add (Field. (name k), v, TextField/TYPE_STORED)))))))
 
+(defn- include? [{:keys [index-store entity-resolver-fn]} eid attr v]
+  (let [encoded-v (db/encode-value index-store v)
+        vs-in-crux (db/aev index-store attr eid encoded-v entity-resolver-fn)]
+    (boolean (not-empty (filter (partial mem/buffers=? encoded-v) vs-in-crux)))))
+
 (defn search [node, k, v]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         directory-reader (DirectoryReader/open directory)
@@ -64,14 +69,12 @@
 
 (defn full-text [node db attr arg-v]
   (with-open [search-results ^crux.api.ICursor (search node (name attr) arg-v)]
-    (let [{:keys [entity-resolver-fn index-store]} db]
+    (let [{:keys [index-store]} db]
       (->> (iterator-seq search-results)
            (keep (fn [[^Document doc score]]
                    (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
-                         v (.get ^Document doc (name attr))
-                         encoded-v (db/encode-value index-store v)
-                         vs-in-crux (db/aev index-store attr eid encoded-v entity-resolver-fn)]
-                     (when (not-empty (filter (partial mem/buffers=? encoded-v) vs-in-crux))
+                         v (.get ^Document doc (name attr))]
+                     (when (include? db eid attr v)
                        [(db/decode-value index-store eid) v score]))))
            (into [])))))
 
