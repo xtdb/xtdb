@@ -17,18 +17,18 @@ For this reason, unless you want to keep both transactions and documents on Kafk
 == Project Dependencies
 
 .deps.edn
-[source,clojure]
+[source,clojure, subs=attributes+]
 ----
-juxt/crux-kafka {:mvn/version "20.09-1.12.0-beta"}
+juxt/crux-kafka {:mvn/version "{crux_version}-beta"}
 ----
 
 .pom.xml
-[source,xml]
+[source,xml, subs=attributes+]
 ----
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-kafka</artifactId>
-    <version>20.09-1.12.0-beta</version>
+    <version>{crux_version}-beta</version>
 </dependency>
 ----
 

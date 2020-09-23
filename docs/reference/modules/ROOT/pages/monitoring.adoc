@@ -11,18 +11,18 @@ toc::[levels=1]
 In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
 
 .deps.edn
-[source,clojure]
+[source,clojure, subs=attributes+]
 ----
-juxt/crux-metrics {:mvn/version "20.09-1.12.0-beta"}
+juxt/crux-metrics {:mvn/version "{crux_version}-beta"}
 ----
 
 .pom.xml
-[source,xml]
+[source,xml, subs=attributes+]
 ----
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-metrics</artifactId>
-    <version>20.09-1.12.0-beta</version>
+    <version>{crux_version}-beta</version>
 </dependency>
 ----
 

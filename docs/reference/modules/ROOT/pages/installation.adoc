@@ -11,15 +11,19 @@ You can then proceed to add further modules (eg for persistence) as required - s
 Crux depends on Java 8+.
 
 .deps.edn
-[source,clojure]
+[source,clojure, subs=attributes+]
 ----
-include::example$deps.edn[tags=CruxDep,indent=0]
+juxt/crux-core {:mvn/version "{crux_version}-beta"}
 ----
 
 .pom.xml
-[source,xml]
+[source,xml, subs=attributes+]
 ----
-include::example$maven.xml[indent=0]
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-core</artifactId>
+    <version>{crux_version}-beta</version>
+</dependency>
 ----
 
 [#embedded]
@@ -73,12 +77,12 @@ Likewise, you can build custom Crux Docker images - see the https://juxt.pro/blo
 Similarly, to start Crux using Clojure's CLI tooling:
 
 .deps.edn
-[source,clojure]
+[source,clojure, subs=attributes+]
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.10.1"}
 
-        juxt/crux-core {:mvn/version "20.09-1.12.0-beta"}
-        juxt/crux-http-server {:mvn/version "20.09-1.12.0-alpha"}}}
+        juxt/crux-core {:mvn/version "{crux_version}-beta"}
+        juxt/crux-http-server {:mvn/version "{crux_version}-alpha"}}}
 ----
 
 .crux.edn

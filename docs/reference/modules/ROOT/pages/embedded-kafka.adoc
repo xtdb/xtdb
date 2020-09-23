@@ -6,10 +6,10 @@ running Kafka available to connect to (such as during development).
 [#embedded-kafka-dependency]
 == Project Dependencies
 
-[source,clojure,subs="normal"]
+[source,clojure,subs=attributes+]
 ----
-include::example$deps.edn[tags=CruxDep]
-include::example$deps.edn[tags=KafkaEmbeddedDeps]
+juxt/crux-core {:mvn/version "{crux_version}-beta"}
+juxt/crux-kafka-embedded {:mvn/version "{crux_version}-beta"}
 ----
 
 [#embedded-kafka-start]
