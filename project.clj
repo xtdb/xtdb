@@ -7,6 +7,7 @@
    "crux-http-client" "crux-http-server"
    "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
    "crux-sql"
+   "crux-lucene"
    "crux-test"
    "crux-s3"
    "crux-azure-blobs"
@@ -36,6 +37,7 @@
    [juxt/crux-rdf "crux-git-version-alpha"]
    [juxt/crux-sql "crux-git-version-alpha"]
    [juxt/crux-azure-blobs "crux-git-version-alpha"]
+   [juxt/crux-lucene "crux-git-version-alpha"]
    [juxt/crux-test "crux-git-version"]
    [juxt/crux-bench "crux-git-version"]
 
@@ -104,6 +106,8 @@
                "crux-metrics/test"
                "crux-s3/test"
                "crux-azure-blobs/test"
+               "crux-sql/crux-sql"
+               "crux-lucene/crux-lucene"
                "crux-bench/test"
                "crux-test/test"]
 
