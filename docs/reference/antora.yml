@@ -4,3 +4,6 @@ version: 20.09-1.12.0
 start_page: ROOT:installation.adoc
 nav:
   - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    crux_version: 20.09-1.12.0

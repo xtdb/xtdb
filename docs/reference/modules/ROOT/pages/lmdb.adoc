@@ -9,18 +9,18 @@ LMDB tends to provide faster queries than xref:rocksdb.adoc[RocksDB] in exchange
 In order to use LMDB within Crux, you must first add LMDB as a project dependency:
 
 .deps.edn
-[source,clojure]
+[source,clojure, subs=attributes+]
 ----
-juxt/crux-lmdb {:mvn/version "20.09-1.12.0-alpha"}
+juxt/crux-lmdb {:mvn/version "{crux_version}-alpha"}
 ----
 
 .pom.xml
-[source,xml]
+[source,xml, subs=attributes+]
 ----
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-lmdb</artifactId>
-    <version>20.09-1.12.0-alpha</version>
+    <version>{crux_version}-alpha</version>
 </dependency>
 ----
 
