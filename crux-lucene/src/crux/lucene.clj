@@ -12,12 +12,11 @@
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           [org.apache.lucene.document Document Field StoredField TextField]
-           [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig]
+           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder IndexSearcher Query ScoreDoc]
-           [org.apache.lucene.store Directory FSDirectory]
-           org.apache.lucene.util.BytesRef))
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder IndexSearcher Query ScoreDoc TermQuery]
+           [org.apache.lucene.store Directory FSDirectory]))
 
 (def ^:dynamic *node*)
 
@@ -30,17 +29,31 @@
 (defn- id->stored-bytes [eid]
   (mem/->on-heap (cc/->value-buffer eid)))
 
-(defn crux-doc->lucene-docs [crux-doc]
+(defn- ^String eid->str [eid]
+  (mem/buffer->hex (cc/->id-buffer eid)))
+
+(defn- crux-doc->triples [crux-doc]
   (->> (dissoc crux-doc :crux.db/id)
        (mapcat (fn [[k v]]
                  (for [v (if (coll? v) v [v])
                        :when (string? v)]
-                   [(name k) v])))
-       (map (fn [[k ^String v]]
-              (doto (Document.)
-                (.add (Field. "eid", ^String (.utf8ToString (BytesRef. ^bytes (id->stored-bytes (:crux.db/id crux-doc)))) TextField/TYPE_STORED))
-                (.add (Field. "eid", ^bytes (id->stored-bytes (:crux.db/id crux-doc)) StoredField/TYPE))
-                (.add (Field. (name k), v, TextField/TYPE_STORED)))))))
+                   [(:crux.db/id crux-doc) (name k) v])))))
+
+(defrecord DocumentId [eid a v])
+
+(defn- ^Document triple->doc [[eid k ^String v]]
+  (doto (Document.)
+    ;; To search for triples by eid-a-v for deduping
+    (.add (StringField. "id", (eid->str (DocumentId. eid k v)), Field$Store/NO))
+    ;; To use for entity resolution / bitemp filtering - stored, not searchable
+    (.add (StoredField. "eid", ^bytes (id->stored-bytes eid)))
+    ;; To search for triples by eid for eviction:
+    (.add (StringField. "eid", (eid->str eid), Field$Store/NO))
+    ;; The actual term, which will be tokenized
+    (.add (TextField. (name k), v, Field$Store/YES))))
+
+(defn- ^Term triple->term [[eid k ^String v]]
+  (Term. "id" (eid->str (DocumentId. eid k v))))
 
 (defn- include? [{:keys [index-store entity-resolver-fn]} eid attr v]
   (let [encoded-v (db/encode-value index-store v)
@@ -56,14 +69,23 @@
            (doto (BooleanQuery$Builder.)
              (.add (.parse qp v) BooleanClause$Occur/MUST)))
         score-docs (.-scoreDocs (.search index-searcher q 10))]
+;    (println (.explain index-searcher q( .-doc (first score-docs))))
     (cio/->cursor (fn []
                     (.close directory-reader))
                   (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d)) (.-score d))) score-docs))))
 
+(defn doc-count []
+  (let [{:keys [^Directory directory]} *node*
+        directory-reader (DirectoryReader/open directory)]
+    (.numDocs directory-reader)))
+
+(defn- write-docs! [^IndexWriter index-writer docs]
+  (doseq [d docs t (crux-doc->triples d)]
+    (.updateDocument index-writer (triple->term t) (triple->doc t))))
+
 (defn delete! [node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        qp (QueryParser. "eid" analyzer)
-        qs (map #(.parse qp (.utf8ToString (BytesRef. ^bytes (id->stored-bytes %)))) eids)]
+        qs (map #(TermQuery. (Term. "eid" (eid->str %))) eids)]
     (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
@@ -107,8 +129,7 @@
       (try
         (let [content-hashes (entity-txes->content-hashes entity-txs)
               docs (vals (db/fetch-docs document-store content-hashes))]
-          (doseq [doc docs]
-            (.addDocuments index-writer (l/crux-doc->lucene-docs doc)))
+          (write-docs! index-writer docs)
           (db/index-entity-txs indexer tx entity-txs)
           (.close index-writer))
         (catch Throwable t
