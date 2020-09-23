@@ -47,9 +47,9 @@ include::example$deps.edn[tags=RocksDeps,indent=0]
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/tmp/crux/indexes"}}
- :crux/document-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/tmp/crux/documents"}}
- :crux/tx-log {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/tmp/crux/tx-log"}}
+{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
+ :crux/document-store {:kv-store {:crux/module crux.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
+ :crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store, :db-dir "/tmp/crux/tx-log"}}
  :crux.http-server/server {}}
 ----
 
@@ -73,9 +73,9 @@ Override the topology within `crux.edn` with the following:
 
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/var/lib/crux/indexes"}}
- :crux/document-store {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/var/lib/crux/documents"}}
- :crux/tx-log {:kv-store {:crux/module `crux.rocksdb->kv-store, :db-dir "/var/lib/crux/tx-log"}}
+{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
+ :crux/document-store {:kv-store {:crux/module crux.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
+ :crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store, :db-dir "/var/lib/crux/tx-log"}}
  :crux.http-server/server {}}
 ----
 
