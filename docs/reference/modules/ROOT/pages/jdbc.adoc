@@ -166,17 +166,17 @@ If you use JDBC for both the transaction log and document store, you can share t
 * `db-spec` (map, required): see xref:#db-spec[above]
 
 
-=== Transaction log (`+crux.kafka/->tx-log+`)
+=== Transaction log (`+crux.jdbc/->tx-log+`)
 
 * `connection-pool`
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
 [#ingest-only-tx-log]
-=== Ingest-only transaction log (`+crux.kafka/->ingest-only-tx-log+`)
+=== Ingest-only transaction log (`+crux.jdbc/->ingest-only-tx-log+`)
 
 * `connection-pool`
 
-=== Document store (`+crux.kafka/->document-store+`)
+=== Document store (`+crux.jdbc/->document-store+`)
 
 * `connection-pool`
 * `doc-cache-size` (int): size of in-memory document cache
