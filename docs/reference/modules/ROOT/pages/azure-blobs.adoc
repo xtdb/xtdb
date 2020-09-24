@@ -8,13 +8,17 @@ Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
 In order to use Blob Storage within Crux, you must first add this module as a project dependency:
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-azure-blobs {:mvn/version "{crux_version}-alpha"}
 ----
 
-.pom.xml
+pom.xml::
++
 [source,xml, subs=attributes+]
 ----
 <dependency>
@@ -23,6 +27,7 @@ juxt/crux-azure-blobs {:mvn/version "{crux_version}-alpha"}
     <version>{crux_version}-alpha</version>
 </dependency>
 ----
+====
 
 == Using Azure Blobs
 
