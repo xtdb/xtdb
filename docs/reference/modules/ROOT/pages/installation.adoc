@@ -86,7 +86,10 @@ Likewise, you can build custom Crux Docker images - see the https://juxt.pro/blo
 
 Similarly, to start Crux using Clojure's CLI tooling:
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.10.1"}
@@ -94,12 +97,17 @@ Similarly, to start Crux using Clojure's CLI tooling:
         juxt/crux-core {:mvn/version "{crux_version}-beta"}
         juxt/crux-http-server {:mvn/version "{crux_version}-alpha"}}}
 ----
+====
 
-.crux.edn
+[tabs]
+====
+crux.edn::
++
 [source,clojure]
 ----
 {:crux.http-server/server {:port 3000}}
 ----
+====
 
 Then, start the node with `clojure -m crux.main`.
 

@@ -37,13 +37,17 @@ You will also need to include dependencies for your individual reporters - these
 
 The Crux metric reporters depend on a common metrics module:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
   "crux.metrics/metrics": { ... },
 }
 ----
+====
 
 You can omit this if you're happy with its default parameters.
 
@@ -61,7 +65,10 @@ You will need to add the following dependencies, alongside `crux-metrics`, in yo
 
 === Additional dependencies
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure]
 ----
 org.dhatim/dropwizard-prometheus {:mvn/version "2.2.0"}
@@ -70,6 +77,7 @@ io.prometheus/simpleclient_dropwizard {:mvn/version "0.8.1"}
 io.prometheus/simpleclient_hotspot {:mvn/version "0.8.1"}
 clj-commons/iapetos {:mvn/version "0.1.9"}
 ----
+====
 
 === Node configuration
 
@@ -106,7 +114,10 @@ The Prometheus HTTP exporter starts a standalone server hosting Prometheus metri
 
 === Additional dependencies
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure]
 ----
 org.dhatim/dropwizard-prometheus {:mvn/version "2.2.0"}
@@ -115,6 +126,7 @@ io.prometheus/simpleclient_hotspot {:mvn/version "0.8.1"}
 io.prometheus/simpleclient_httpserver {:mvn/version "0.8.1"}
 clj-commons/iapetos {:mvn/version "0.1.9"}
 ----
+====
 
 === Node configuration
 
@@ -151,12 +163,16 @@ In addition to extra dependencies, you'll need to ensure that your application h
 
 === Additional dependencies
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure]
 ----
 io.github.azagniotov/dropwizard-metrics-cloudwatch {:mvn/version "2.0.3"}
 software.amazon.awssdk/cloudwatch {:mvn/version "2.10.61"}
 ----
+====
 
 === Node configuration
 
@@ -195,11 +211,15 @@ Clojure/EDN::
 
 === Additional Dependencies
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clj]
 ----
 io.dropwizard.metrics/metrics-jmx {:mvn/version "4.1.2"}
 ----
+====
 
 === Node configuration
 
