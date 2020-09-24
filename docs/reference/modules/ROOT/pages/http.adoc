@@ -11,7 +11,7 @@ Multiple Crux nodes can placed be behind a HTTP load balancer to spread the writ
 Each Crux node in such a cluster will be independently catching up with the head of the transaction log, and since different queries might go to different nodes, you have to be slightly conscious of read consistency when designing your application to use Crux in this way.
 Fortunately, you can readily achieve read-your-writes consistency with the ability to query consistent point-in-time snapshots using specific temporal coordinates.
 
-The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol queries under `/sparql/`, rewriting the query into the Crux Datalog dialect.
+The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol queries under `/_crux/sparql/`, rewriting the query into the Crux Datalog dialect.
 Only a small subset of SPARQL is supported and no other RDF features are available.
 
 [#start-http-server]
@@ -78,170 +78,226 @@ If the node was started on `localhost:3000`, you can connect to it by doing the 
 include::example$src/docs/examples.clj[tags=start-http-client]
 ----
 
-[#http-api]
-== Using the HTTP API
+[#rest-api]
+== Using the REST API
 
-.API
-[#table-conversion%header,cols="d,d,d"]
-|===
-|uri|method|description
-|<<#entity, `/entity/[:key]`>>|GET|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
-|<<#entity-tx, `/entity-tx/[:key]`>>|GET|Returns the transaction that most recently set a key
-|<<#entity, `/entity-history/[:key]`>>|GET|Returns the history of the given entity and optional valid-time/transaction-time co-ordinates
-|<<#query, `/query`>>|POST|Takes a datalog query and returns its results
-|<<#sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
-|<<#tx-log, `/tx-log`>>|GET| Returns a list of all transactions
-|<<#tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
-|===
+All of the REST endpoints return both `application/edn` and https://github.com/cognitect/transit-clj[`application/transit+json`].
+Individual endpoints may return additional types - see their docs below.
+
+[#status]
+=== GET `/_crux/status`
+
+Returns the current status information of the node.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/status
+----
 
 [#entity]
-=== GET `/entity/[:key]`
+=== GET `/_crux/entity`
 
-Takes a key and, optionally, a `:valid-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
-
-See xref:bitemporality.adoc[Bitemporality] for more information.
+Returns the document map for a particular entity.
 
 [source,bash]
 ----
 curl -X GET \
      -H "Content-Type: application/edn" \
-     $nodeURL/entity/:tommy
+     $CRUX_URL/_crux/entity?eid=:tommy
 ----
 
-[source,clj]
-----
-{:crux.db/id :tommy, :name "Tommy", :last-name "Petrov"}
-----
+==== Query Parameters
+
+.*Required Parameters*
+* `eid` (Crux ID)
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `transaction-time` (date, defaulting to latest transaction time)
+
+=== GET `/_crux/entity?history=true`
+
+Returns the history of a particular entity.
 
 [source,bash]
 ----
 curl -X GET \
      -H "Content-Type: application/edn" \
-     $nodeURL/entity/:tommy?valid-time=1999-01-08T14%3A03%3A27%3A254-00%3A00
+     $CRUX_URL/_crux/entity?eid=:tommy&history=true&sort-order=asc
 ----
 
-[source,clj]
-----
-nil
-----
+==== Query Parameters
+
+.*Required Parameters*
+* `eid` (Crux ID)
+* `sort-order` (either `asc` or `desc`)
+
+.*Optional Parameters*
+* `with-corrections` (boolean, default false): includes bitemporal corrections in the response, inline, orted by valid-time then transaction-time
+* `with-docs` (boolean, default false): includes the documents in the response sequence, under the `:crux.db/doc` key
+* `start-valid-time`, `start-transaction-time` (inclusive, default unbounded): bitemporal co-ordinates to start at
+* `end-valid-time`, `end-transaction-time` (exclusive, default unbounded): bitemporal co-ordinates to stop at
 
 [#entity-tx]
-=== GET `/entity-tx`
+=== GET `/_crux/entity-tx`
 
-Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` transaction that most recently set that key at those times.
-
-See xref:bitemporality.adoc[Bitemporality] for more information.
+Returns the transaction details for an entity - returns a map containing the tx-id and tx-time.
 
 [source,bash]
 ----
 curl -X GET \
      -H "Content-Type: application/edn" \
-     $nodeURL/entity-tx/:foobar
-----
-[source,clj]
-----
-{:crux.db/id "8843d7f92416211de9ebb963ff4ce28125932878",
- :crux.db/content-hash "7af0444315845ab3efdfbdfa516e68952c1486f2",
- :crux.db/valid-time #inst "2019-01-08T16:34:47.738-00:00",
- :crux.tx/tx-id 0,
- :crux.tx/tx-time #inst "2019-01-08T16:34:47.738-00:00"}
+     $CRUX_URL/_crux/entity-tx?eid=:tommy
 ----
 
-[#entity-history]
-=== GET `/entity-history/[:key]`
+==== Query Parameters
 
-Returns the history for the given entity
+.*Required Parameters*
+* `eid` (Crux ID)
 
-[source,bash]
-----
-curl -X GET $nodeURL/entity-history/:ivan?sort-order=desc
-----
-
-Also accepts the following as optional query parameters:
-* `with-corrections` - includes bitemporal corrections in the response, inline, sorted by valid-time then transaction-time (default false)
-* `with-docs` - includes the documents in the response sequence, under the `:crux.db/doc` key (default false)
-* `start-valid-time`, `start-transaction-time` - bitemporal co-ordinates to start at (inclusive, default unbounded)
-* `end-valid-time`, `end-transaction-time` - bitemporal co-ordinates to stop at (exclusive, default unbounded)
-
-[source,clj]
-----
-[{:crux.db/id "a15f8b81a160b4eebe5c84e9e3b65c87b9b2f18e",
-  :crux.db/content-hash "c28f6d258397651106b7cb24bb0d3be234dc8bd1",
-  :crux.db/valid-time #inst "2019-01-07T14:57:08.462-00:00",
-  :crux.tx/tx-id 14,
-  :crux.tx/tx-time #inst "2019-01-07T16:51:55.185-00:00"
-  :crux.db/doc {...}}
-
- {...}]
-----
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `transaction-time` (date, defaulting to latest transaction time)
 
 [#query]
-=== POST `/query`
+=== GET `/_crux/query`
 
-Takes a Datalog query and returns its results.
+Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_crux/query.csv` and `/_crux/query.tsv` endpoints respectively).
 
 [source,bash]
 ----
-curl -X POST \
+curl -g \
+     -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/query?query={%3Afind+[e]+%3Awhere+[[e+%3Acrux.db/id+_]]}
+----
+
+==== Query Parameters
+
+.*Required Parameters*
+* `query` (URL encoded datalog query)
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `transaction-time` (date, defaulting to latest transaction time)
+
+[#query]
+=== POST `/_crux/query`
+
+Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_crux/query.csv` and `/_crux/query.tsv` endpoints respectively).
+
+[source,bash]
+----
+curl -g \
+     -X POST \
      -H "Content-Type: application/edn" \
      -d '{:query {:find [e] :where [[e :last-name "Petrov"]]}}' \
-     $nodeURL/query
+     $CRUX_URL/_crux/query?valid-time=2019-01-08T16:34:47.738-00:00
 ----
 
-[source,clj]
-----
-#{[:boris][:ivan]}
-----
+==== Parameters
 
-Note that you are able to add `:full-results? true` to the query map to easily retrieve the source documents relating to the entities in the result set. For instance to retrieve _all_ documents in a single query:
+===== Body Parameters
 
-[source,clj]
+.*Required Parameters*
+* `query` (URL encoded datalog query)
+
+===== Query Parameters
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `transaction-time` (date, defaulting to latest transaction time)
+
+
+[#attribute-stats]
+=== GET `/_crux/attribute-stats`
+
+Returns frequencies of indexed attributes
+
+[source,bash]
 ----
-curl -X POST \
+curl -X GET \
      -H "Content-Type: application/edn" \
-     -d '{:query {:find [e] :where [[e :crux.db/id _]] :full-results? true}}' \
-     $nodeURL/query
+     $CRUX_URL/_crux/attribute-stats
 ----
 
 [#sync]
-=== GET `/sync`
+=== GET `/_crux/sync`
 
-Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in milliseconds. Returns the transaction time of the most recent transaction.
+Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write).  Returns the transaction time of the most recent transaction.
 
 [source,bash]
 ----
-curl -X GET $nodeURL/sync?timeout=500
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/sync?timeout=500
 ----
 
-[source,clj]
+==== Query Parameters
+
+.*Optional Parameters*
+* `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
+
+[#await-tx]
+=== GET `/_crux/await-tx`
+
+Waits until the node has indexed a transaction that is at or past the supplied tx-id. Returns the most recent tx indexed by the node.
+
+[source,bash]
 ----
-#inst "2019-01-08T11:06:41.869-00:00"
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/await-tx?tx-id=1
 ----
+
+==== Query Parameters
+
+.*Required Parameters*
+* `tx-id` (integer): tx-id of transaction to wait for
+
+.*Optional Parameters*
+* `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
+
+[#await-tx-time]
+=== GET `/_crux/await-tx-time`
+
+Blocks until the node has indexed a transaction that is past the supplied tx-time. The returned date is the latest index time when this node has caught up as of this call.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/await-tx-time?tx-time=2020-09-10T11%3A16%3A10.983Z
+----
+
+==== Query Parameters
+
+.*Required Parameters*
+* `tx-time` (date): tx-time of to wait for
+
+.*Optional Parameters*
+* `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
 
 [#tx-log]
-=== GET `/tx-log`
+=== GET `/_crux/tx-log`
 
-Returns a list of all transactions, from oldest to newest transaction time.
+Returns a list of all transactions, from oldest to newest transaction time - optionally including documents.
 
 [source,bash]
 ----
-curl -X GET $nodeURL/tx-log
+curl -X GET $CRUX_URL/_crux/tx-log
 ----
 
-[source,clj]
-----
-({:crux.tx/tx-time #inst "2019-01-07T15:11:13.411-00:00",
-  :crux.api/tx-ops [[
-    :crux.tx/put "c28f6d258397651106b7cb24bb0d3be234dc8bd1"
-    #inst "2019-01-07T14:57:08.462-00:00"]],
-  :crux.tx/tx-id 0}
+==== Query Parameters
 
- {:crux.tx/tx-time #inst "2019-01-07T15:11:32.284-00:00",
-  ...})
-----
+.*Optional Parameters*
+* `after-tx-id` (integer, default unbounded): transaction id to start after.
+* `with-ops?` (boolean, defaults to false): should the operations with documents be included?
 
-[#tx-log-post]
-=== POST `/tx-log`
+[#submit-tx]
+=== POST `/_crux/submit-tx`
 
 Takes a vector of transactions (any combination of `:put`, `:delete`, `:match`, and `:evict`) and executes them in order. This is the only "write" endpoint.
 
@@ -252,9 +308,77 @@ curl -X POST \
      -d '[[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
           [:crux.tx/put {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
           [:crux.tx/delete :maria  #inst "2012-05-07T14:57:08.462-00:00"]]' \
-     $nodeURL/tx-log
+     $CRUX_URL/_crux/submit-tx
 ----
-[source,clj]
+
+=== GET `/_crux/tx-committed`
+
+Checks if a submitted tx was successfully committed, returning a map with tx-committed and either `true` or `false` (or a `NodeOutOfSyncException` exception response if the node has not yet indexed the transaction).
+
+[source,bash]
 ----
-{:crux.tx/tx-id 7, :crux.tx/tx-time #inst "2019-01-07T16:14:19.675-00:00"}
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/tx-committed?tx-id=1
+----
+
+==== Query Parameters
+
+.*Required Parameters*
+* `tx-id` (integer): tx-id of transaction to check
+
+
+=== GET `/_crux/latest-completed-tx`
+
+Returns the latest transaction to have been indexed by this node.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/latest-completed-tx
+----
+
+=== GET `/_crux/latest-submitted-tx`
+
+Returns the latest transaction to have been submitted to this cluster.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/latest-submitted-tx
+----
+
+=== GET `/_crux/active-queries`
+
+Returns a list of currently running queries.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/active-queries
+----
+
+=== GET `/_crux/recent-queries`
+
+Returns a list of recently completed/failed queries.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/recent-queries
+----
+
+=== GET `/_crux/slowest-queries`
+
+Returns a list of slowest completed/failed queries ran on the node.
+
+[source,bash]
+----
+curl -X GET \
+     -H "Content-Type: application/edn" \
+     $CRUX_URL/_crux/slowest-queries
 ----
