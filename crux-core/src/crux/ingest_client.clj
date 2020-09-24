@@ -1,5 +1,6 @@
 (ns crux.ingest-client
   (:require [crux.db :as db]
+            [crux.error :as err]
             [crux.system :as sys]
             [crux.tx.conform :as txc])
   (:import crux.api.ICruxAsyncIngestAPI
@@ -18,7 +19,8 @@
 
   (openTxLog ^crux.api.ICursor [_ after-tx-id with-ops?]
     (when with-ops?
-      (throw (IllegalArgumentException. "with-ops? not supported")))
+      (throw (err/illegal-arg :with-opts-not-supported
+                              {::err/message "with-ops? not supported"})))
     (db/open-tx-log tx-log after-tx-id))
 
   Closeable

@@ -6,7 +6,8 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.error :as err])
   (:import [java.io Closeable File Writer]
            java.net.URL
            [java.nio.file Path Paths]
@@ -23,7 +24,8 @@
   (cond
     (str/ends-with? file-name ".json") (json/read-str (slurp src))
     (str/ends-with? file-name ".edn") (edn/read-string (slurp src))
-    :else (throw (IllegalArgumentException. (format "Unsupported options type: '%s'" file-name)))))
+    :else (throw (err/illegal-arg :unsupported-options-type
+                                  {::err/message (format "Unsupported options type: '%s'" file-name)}))))
 
 (extend-protocol OptsSource
   Map
@@ -62,11 +64,13 @@
              (map (fn [[k {:keys [spec required? default]}]]
                     (let [v (first (get opts k [default]))]
                       (when (and required? (nil? v))
-                        (throw (IllegalArgumentException. (format "Arg %s required" (pr-str k)))))
+                        (throw (err/illegal-arg :arg-required
+                                                {::err/message (format "Arg %s required" (pr-str k))})))
 
                       (let [conformed-v (some-> v (cond->> spec (s/conform spec)))]
                         (if (s/invalid? conformed-v)
-                          (throw (IllegalArgumentException. (format "Arg %s = %s invalid: %s" (pr-str k) v (s/explain-str spec v))))
+                          (throw (err/illegal-arg :arg-invalid
+                                                  {::err/message (format "Arg %s = %s invalid: %s" (pr-str k) v (s/explain-str spec v))}))
                           [k conformed-v]))))))))
 
 (defrecord Module [start-fn before deps args]
@@ -83,7 +87,8 @@
                            (try
                              (parse-opts opts args)
                              (catch IllegalArgumentException e
-                               (throw (IllegalArgumentException. (format "Error parsing opts for %s" (pr-str k-path)) e)))))}
+                               (throw (err/illegal-arg :error-parsing-opts
+                                                       {::err/message (format "Error parsing opts for %s" (pr-str k-path))})))))}
      :deps (->> (keys deps)
                 (into {} (map (fn [k]
                                 [(conj k-path k)
@@ -124,7 +129,8 @@
         (fn? el) (reduced (prepare-dep (->Module el (::before (meta el)) (::deps (meta el)) (::args (meta el))) k-path opts))
         (instance? Map el) (spread-opts opts el)
         (nil? el) opts
-        :else (throw (IllegalArgumentException. (format "Unexpected config option %s" (pr-str el))))))))
+        :else (throw (err/illegal-arg :unexpected-config-option
+                                      {::err/message (format "Unexpected config option %s" (pr-str el))}))))))
 
 (defn prep-system
   ([opts] (prep-system opts nil))
@@ -143,7 +149,8 @@
                                          (with-default-module (last k-path))
                                          (->> (reduce (opts-reducer k-path) {})))]
            (when-not module
-             (throw (IllegalArgumentException. (str "Missing module at " (pr-str k-path)))))
+             (throw (err/illegal-arg :missing-module
+                                     {::err/message (str "Missing module at " (pr-str k-path))})))
 
            (recur (merge (dissoc opts k-path)
                          deps

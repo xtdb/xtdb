@@ -1,6 +1,7 @@
 (ns ^:no-doc crux.codec
   #:clojure.tools.namespace.repl{:load false, :unload false} ; because of the deftypes in here
   (:require [clojure.edn :as edn]
+            [crux.error :as err]
             [crux.hash :as hash]
             [crux.memory :as mem]
             [crux.morton :as morton]
@@ -289,7 +290,8 @@
       7 (Date. (decode-long buffer)) ;; date-value-type-id
       8 (decode-string buffer) ;; string-value-type-id
       9 (decode-char buffer) ;; char-value-type-id
-      (throw (IllegalArgumentException. (str "Unknown type id: " type-id))))))
+      (throw (err/illegal-arg :unknown-type-id
+                              {::err/message (str "Unknown type id: " type-id)})))))
 
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))
@@ -325,8 +327,8 @@
        (doto to
          (.putBytes 0 this))
        id-size)
-      (throw (IllegalArgumentException.
-              (str "Not an id byte array: " (mem/buffer->hex (mem/as-buffer this)))))))
+      (throw (err/illegal-arg :not-an-id-byte-array
+                              {::err/message (str "Not an id byte array: " (mem/buffer->hex (mem/as-buffer this)))}))))
 
   ByteBuffer
   (id->buffer [this ^MutableDirectBuffer to]
@@ -510,7 +512,8 @@
                                 (maybe-keyword-str id)
                                 (maybe-url-str id)
                                 (maybe-map-str id)
-                                (throw (IllegalArgumentException. "EDN reader doesn't support string IDs"))))))
+                                (throw (err/illegal-arg :unsupported-string-ids
+                                                        {::err/message "EDN reader doesn't support string IDs"}))))))
              (new-id id))
            id))
 

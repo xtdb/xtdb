@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.io :as cio]
+            [crux.error :as err]
             [cognitect.transit :as transit])
   (:import [org.apache.kafka.connect.data Schema Schema$Type Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
@@ -65,7 +66,8 @@
           (map->edn payload)
 
           :else
-          (throw (IllegalArgumentException. (str "Unknown JSON payload type: " record)))))
+          (throw (err/illegal-arg :unknown-json-payload-type
+                                  {::err/message (str "Unknown JSON payload type: " record)}))))
 
       (instance? Map value)
       (map->edn value)
@@ -78,7 +80,8 @@
           (c/read-edn-string-with-readers value)))
 
       :else
-      (throw (IllegalArgumentException. (str "Unknown message type: " record))))))
+      (throw (err/illegal-arg :unknown-message-type
+                              {::err/message (str "Unknown message type: " record)})))))
 
 (defn- coerce-eid [id]
   (cond
