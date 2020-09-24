@@ -1,15 +1,73 @@
 (ns crux.http-server.util
-  (:require [crux.io :as cio]
-            [crux.api :as api]
+  (:require [clojure.edn :as edn]
+            [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
-            [hiccup2.core :as hiccup2])
+            [crux.api :as api]
+            [crux.codec :as c]
+            [crux.io :as cio]
+            [hiccup2.core :as hiccup2]
+            [muuntaja.core :as m]
+            [muuntaja.format.core :as mfc]
+            [spec-tools.core :as st])
   (:import [crux.api ICruxAPI ICruxDatasource]
+           crux.codec.Id
+           [java.io ByteArrayOutputStream OutputStream]
+           [java.net URLDecoder URLEncoder]
            java.time.format.DateTimeFormatter
-           java.net.URLEncoder
            java.util.Date))
+
+(defn try-decode-edn [edn]
+  (try
+    (cond->> edn
+      (string? edn) (edn/read-string {:readers {'crux/id c/id-edn-reader}}))
+    (catch Exception e
+      ::s/invalid)))
+
+(s/def ::eid
+  (st/spec
+   {:spec c/valid-id?
+    :decode/string (fn [_ eid] (try-decode-edn eid))}))
+
+(s/def ::link-entities? boolean?)
+(s/def ::valid-time inst?)
+(s/def ::transaction-time inst?)
+(s/def ::timeout int?)
+(s/def ::tx-id int?)
 
 (def ^DateTimeFormatter default-date-formatter
   (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
+
+(def crux-id-write-handler
+  (transit/write-handler "crux.codec/id" #(str %)))
+
+(defn- ->tj-encoder [_]
+  (let [options {:handlers {Id crux-id-write-handler}}]
+    (reify
+      mfc/EncodeToBytes
+      (encode-to-bytes [_ data _]
+        (let [baos (ByteArrayOutputStream.)
+              writer (transit/writer baos :json options)]
+          (transit/write writer data)
+          (.toByteArray baos)))
+      mfc/EncodeToOutputStream
+      (encode-to-output-stream [_ data _]
+        (fn [^OutputStream output-stream]
+          (transit/write
+           (transit/writer output-stream :json options) data)
+          (.flush output-stream))))))
+
+(def default-muuntaja-options
+  (-> m/default-options
+      (update :formats select-keys ["application/edn"])
+      (assoc :default-format "application/edn")
+      (m/install {:name "application/transit+json"
+                  :encoder [->tj-encoder]})))
+
+(def default-muuntaja
+  (m/create default-muuntaja-options))
+
+(def output-stream-muuntaja
+  (m/create (assoc default-muuntaja-options :return :output-stream)))
 
 (defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
@@ -78,4 +136,4 @@
                              encoded-eid
                              (.toInstant ^Date valid-time)
                              (.toInstant ^Date transaction-time))]
-    (str "/_crux/entity" query-params)))
+    (str "/entity" query-params)))

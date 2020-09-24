@@ -4,7 +4,7 @@
 
 (def routes
   [""
-   ["/attribute-stats"
+   ["/_crux/attribute-stats"
     {:name :attribute-stats}]
    ["/_crux/status"
     {:name :status

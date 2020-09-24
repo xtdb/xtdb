@@ -2,7 +2,7 @@
   (:require
    [ajax.edn :as ajax-edn]
    [ajax.protocols :refer [-body]]
-   [cljs.reader :as edn]
+   [cljs.reader :as reader]
    [ajax.interceptors :refer [map->ResponseFormat]]
    [crux.ui.common :as common]
    [day8.re-frame.http-fx]
@@ -12,7 +12,10 @@
 
 (def edn-response-with-readers
   (map->ResponseFormat {:read (fn [xhrio]
-                                (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef}} (-body xhrio)))
+                                (reader/read-string
+                                 {:readers {'crux.http/entity-ref entity-ref/->EntityRef
+                                            'crux/id str}}
+                                 (-body xhrio)))
                         :description "EDN"
                         :content-type ["application/edn"]}))
 
@@ -28,11 +31,14 @@
                      :dispatch [:crux.ui.events/set-query-result-pane-loading false]}
        (:load-from-state? db) {:db (dissoc db :load-from-state?)
                                :dispatch [:crux.ui.events/set-query-result-pane-loading false]}
-       :else (let [query-params (dissoc (get-in db [:current-route :query-params]) :full-results)
+       :else (let [{:keys [query] :as query-params} (get-in db [:current-route :query-params])
+                   now (t/now)
+                   ;; Potential smell here - query params get turned to strings, then read back out here
+                   ;; (to edit contents of query with parameters outside of the displayed URL).
+                   parsed-query (reader/read-string query)
                    ;; Get back one more result than necessary - won't be rendered,
                    ;; but used to check if there are more results in the table
-                   limit (+ 1 (js/parseInt (:limit query-params 100)))
-                   now (t/now)]
+                   limit (+ 1 (:limit parsed-query 100))]
                (when (seq query-params)
                  {:scroll-top nil
                   :db (-> (assoc-in db [:request :start-time] now)
@@ -40,11 +46,10 @@
                   :dispatch-n [[:crux.ui.events/set-query-result-pane-loading true]
                                [:crux.ui.events/query-table-error nil]]
                   :http-xhrio {:method :get
-                               :uri (common/route->url :query
-                                                       {}
-                                                       (assoc query-params
-                                                              :link-entities? true
-                                                              :limit limit))
+                               :uri (common/route->url :query {} (merge
+                                                                  query-params
+                                                                  {:query (assoc parsed-query :limit limit)
+                                                                   :link-entities? true}))
                                :response-format edn-response-with-readers
                                :on-success [::success-fetch-query-table]
                                :on-failure [::fail-fetch-query-table]}}))))))
@@ -64,7 +69,7 @@
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: get query table result: " result)
    {:dispatch [:crux.ui.events/set-query-result-pane-loading false]
-    :db (assoc-in db [:query :error] (get-in result [:response :error]))}))
+    :db (assoc-in db [:query :error] (:response result))}))
 
 (rf/reg-event-fx
  ::fetch-node-status
@@ -96,7 +101,7 @@
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: get node status: " result)
    {:dispatch [:crux.ui.events/set-node-status-loading false]
-    :db (assoc-in db [:status :error] result)}))
+    :db (assoc-in db [:status :error] (:response result))}))
 
 (rf/reg-event-fx
  ::fetch-node-attribute-stats
@@ -121,7 +126,7 @@
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: get node attribute status: " result)
    {:dispatch [:crux.ui.events/set-node-status-loading false]
-    :db (assoc-in db [:status :error] result)}))
+    :db (assoc-in db [:status :error] (:response result))}))
 
 (rf/reg-event-fx
  ::fetch-entity
@@ -160,5 +165,5 @@
  ::fail-fetch-entity
  (fn [{:keys [db]} [_ result]]
    (prn "Failure: fetch entity " result)
-   {:db (assoc-in db [:entity :error] (get-in result [:response :error]))
+   {:db (assoc-in db [:entity :error] (:response result))
     :dispatch [:crux.ui.events/set-entity-result-pane-loading false]}))
