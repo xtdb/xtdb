@@ -54,31 +54,18 @@
            [k (vector v)]
            [k v])) m))
 
-(defn query-params->formatted-edn-string
-  [query-params-map]
-  (when-let [formatted
-             (not-empty
-              (try
-                (->> (dissoc query-params-map
-                             :valid-time :transaction-time)
-                     (vectorize [:where :args :order-by])
-                     (map (fn [[k v]]
-                            (if (vector? v)
-                              [k (mapv #(reader/read-string %) v)]
-                              [k (reader/read-string v)])))
-                     (into {}))
-                (catch :default _ {})))]
-    (with-out-str
-      (pprint/with-pprint-dispatch
-        pprint/code-dispatch
-        (pprint/pprint formatted)))))
+(defn query->formatted-query-string [query]
+  (with-out-str
+    (pprint/with-pprint-dispatch
+      pprint/code-dispatch
+      (pprint/pprint query))))
 
 (defn edn->query-params
   [edn]
   (->> edn
        (map
         (fn [[k v]]
-          [k (if (or (= :where k) (= :args k) (= :order-by k))
+          [k (if (or (= :where k) (= :args k) (= :order-by k) (= :rules k))
                (mapv str v)
                (str v))]))
        (into {})))

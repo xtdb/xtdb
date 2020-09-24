@@ -100,7 +100,7 @@
 
       (t/testing "malformed query"
         (t/is (thrown-with-msg? Exception
-                                #"(status 400|Spec assertion failed)"
+                                #"Spec assertion failed"
                                 (api/q db '{:in [$ e]}))))
 
       (t/testing "query with streaming result"
@@ -166,7 +166,7 @@
 
   (t/testing "SPARQL query"
     (when (bound? #'fh/*api-url*)
-      (let [repo (SPARQLRepository. (str fh/*api-url* "/sparql"))]
+      (let [repo (SPARQLRepository. (str fh/*api-url* "/_crux/sparql"))]
         (try
           (.initialize repo)
           (with-open [conn (.getConnection repo)]

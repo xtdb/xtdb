@@ -37,16 +37,17 @@
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
-   (let [query-params (get-in db [:current-route :query-params])
-         valid-time (str (:valid-time query-params (t/now)))
+   (let [{:keys [valid-time transaction-time query]} (get-in db [:current-route :query-params])
+         query-string (some-> (try
+                                (reader/read-string query)
+                                (catch js/Error e nil))
+                              common/query->formatted-query-string)
+         valid-time (str (or valid-time (t/now)))
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))
-         transaction-time (str (:transaction-time query-params latest-tx-time))]
-     {"q" (if (:find query-params)
-            (common/query-params->formatted-edn-string
-             (dissoc query-params :valid-time :transaction-time))
-            query-root-str)
+         transaction-time (str (or transaction-time latest-tx-time))]
+     {"q" (or query-string query-root-str)
       "valid-time" (js/moment valid-time)
       "transaction-time" (js/moment transaction-time)})))
 
@@ -83,10 +84,9 @@
    (if-let [error (get-in db [:query :error])]
      {:error error}
      (let [query-results (get-in db [:query :http])
-           find-clause (reader/read-string (get-in db [:current-route :query-params :find]))
+           query (reader/read-string (get-in db [:current-route :query-params :query]))
+           find-clause (:find query)
            table-loading? (get-in db [:query :result-pane :loading?])
-           offset (->> (or (get-in db [:current-route :query-params :offset]) "0")
-                       (js/parseInt))
            latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                   (:crux.tx/tx-time)
                                   (t/instant))
@@ -107,7 +107,7 @@
        {:data
         {:columns columns
          :rows rows
-         :offset offset
+         :offset (or (:offset query) 0)
          :loading? (or (nil? table-loading?) table-loading?)
          :filters {:input (into #{} find-clause)}}}))))
 
@@ -175,7 +175,7 @@
  (fn [db [_ link-type]]
    (let [query-params (get-in db [:current-route :query-params])]
      (-> (common/route->url :query {} query-params)
-         (string/replace #"query" (str "query." link-type))))))
+         (string/replace-first #"query" (str "query." link-type))))))
 
 (rf/reg-sub
  ::entity-result-pane-document
@@ -244,8 +244,7 @@
    ;; Get newest first
    (mapv
     (fn [x]
-      {"q" (common/query-params->formatted-edn-string
-            (dissoc x :valid-time :transaction-time))})
+      {"q" (common/query->formatted-query-string (:query x))})
     (:query-history db))))
 
 (rf/reg-sub

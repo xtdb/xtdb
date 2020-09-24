@@ -201,7 +201,7 @@
   (let [{:keys [error data]} @(rf/subscribe [::sub/query-data-table])]
     [:<>
      (cond
-       error [:div.error-box error]
+       error [:div.error-box (str error)]
        (and (empty? (:rows data)) (not (:loading? data))) [:div.no-results "No results found!"]
        :else [:<>
               [:<>
@@ -321,7 +321,7 @@
            [:div.entity-map.entity-map--loading
             [:i.fas.fa-spinner.entity-map__load-icon]]
            (if error
-             [:div.error-box error]
+             [:div.error-box (str error)]
              [:div.entity-map__container
               (if @!raw-edn?
                 [:div.entity-raw-edn
@@ -360,7 +360,7 @@
             [:div.entity-map.entity-map--loading
              [:i.fas.fa-spinner.entity-map__load-icon]]
             (cond
-              entity-error [:div.error-box entity-error]
+              entity-error [:div.error-box (str entity-error)]
               (not diffs?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-result-pane-history])]
                              [:div.entity-histories
                               (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
@@ -439,8 +439,8 @@
         [:tr.table__row.body__row
          [:td.table__cell.body__cell
           [:a
-           {:href (common/route->url :query nil {:find (format "[%s]" (name key))
-                                                 :where (format "[e %s %s]" key (name key))})}
+           {:href (common/route->url :query nil {:query {:find [(symbol (name key))]
+                                                         :where [['e key (symbol (name key))]]}})}
            (common/edn->pretty-string key)]]
          [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 

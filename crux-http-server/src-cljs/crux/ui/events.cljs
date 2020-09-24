@@ -20,6 +20,7 @@
                               (str "meta[title=" title "]"))
                              (.getAttribute "content"))
          edn-content (reader/read-string {:readers {'object pr-str
+                                                    'crux/id str
                                                     'crux.http/entity-ref entity-ref/->EntityRef}} result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
@@ -119,13 +120,11 @@
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
    (let [{:strs [q valid-time transaction-time]} values
-         query-params (->>
-                       (merge
-                        (common/edn->query-params (reader/read-string q))
-                        {:valid-time (some-> valid-time js/moment .toDate t/instant)
-                         :transaction-time (some-> transaction-time js/moment .toDate t/instant)})
-                       (remove #(nil? (second %)))
-                       (into {}))
+         query-params (->> {:query (reader/read-string q)
+                            :valid-time (some-> valid-time js/moment .toDate t/instant)
+                            :transaction-time (some-> transaction-time js/moment .toDate t/instant)}
+                           (remove #(nil? (second %)))
+                           (into {}))
          history-elem (dissoc query-params :valid-time :transaction-time)
          current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
          updated-history (conj (into [] (remove #(= history-elem %) current-storage)) history-elem)]

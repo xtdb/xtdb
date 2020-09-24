@@ -35,13 +35,13 @@
 
 (t/deftest test-ui-routes
   ;; Insert data
-  (let [{:keys [crux.tx/tx-id crux.tx/tx-time] :as tx} (-> (http/post (str *api-url* "/tx-log")
+  (let [{:keys [crux.tx/tx-id crux.tx/tx-time] :as tx} (-> (http/post (str *api-url* "/_crux/submit-tx")
                                                                       {:content-type :edn
                                                                        :body (pr-str '[[:crux.tx/put {:crux.db/id :ivan, :linking :peter}]
                                                                                        [:crux.tx/put {:crux.db/id :peter, :name "Peter"}]])
                                                                        :as :stream})
                                                            (parse-body "application/edn"))]
-    (http/get (str *api-url* "/await-tx?tx-id=" tx-id))
+    (http/get (str *api-url* "/_crux/await-tx?tx-id=" tx-id))
 
     ;; Test redirect on "/" endpoint.
     (t/is (= "/_crux/query" (-> (get-result-from-path "/")
@@ -64,26 +64,50 @@
       (t/is (= {:crux.db/id :ivan, :linking (entity-ref/->EntityRef :peter)}
                (get-linked-entities "application/transit+json"))))
 
-    ;; Testing getting query results
+    ;; Testing getting query results (GET)
     (let [get-query (fn [accept-type]
-                      (set (-> (get-result-from-path "/_crux/query?find=[e]&where=[e+%3Acrux.db%2Fid+_]" accept-type)
+                      (set (-> (get-result-from-path (format "/_crux/query?query=%s" '{:find [e] :where [[e :crux.db/id _]]}) accept-type)
                                (parse-body accept-type))))]
       (t/is (= #{[:ivan] [:peter]} (get-query "application/edn")))
       (t/is (= #{[:ivan] [:peter]} (get-query "application/transit+json")))
       (t/is (= #{[":ivan"] [":peter"] ["e"]} (get-query "text/csv")))
       (t/is (= #{[":ivan"] [":peter"] ["e"]} (get-query "text/tsv"))))
 
-    ;; Testing getting linked entities in query results
-    (let [get-query (fn [accept-type]
-                      (set (-> (get-result-from-path "/_crux/query?find=[e]&where=[e+%3Acrux.db%2Fid+_]&link-entities?=true" accept-type)
-                               (parse-body accept-type))))]
-      (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/edn")))
-      (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/transit+json"))))
+    ;; Testing getting query results (POST)
+    (let [post-query (fn [{:keys [body content-type accept-type]}]
+                       (let [accept-type (or accept-type content-type)]
+                         (set (-> (http/post (str *api-url* "/_crux/query")
+                                             {:accept accept-type
+                                              :content-type content-type
+                                              :as :stream
+                                              :body body})
+                                  (parse-body accept-type)))))]
+      (t/is (= #{[:ivan] [:peter]} (post-query
+                                    {:body (pr-str {:query '{:find [e] :where [[e :crux.db/id _]]}})
+                                     :content-type "application/edn"})))
+      (t/is (= #{[:ivan] [:peter]} (post-query
+                                    {:body "[\"^ \",\"~:query\",[\"^ \",\"~:find\",[\"~$e\"],\"~:where\",[[\"~$e\",\"~:crux.db/id\",\"~$_\"]]]]"
+                                     :content-type "application/transit+json"})))
+      (t/is (= #{[":ivan"] [":peter"] ["e"]} (post-query
+                                              {:body (pr-str {:query '{:find [e] :where [[e :crux.db/id _]]}})
+                                               :content-type "application/edn"
+                                               :accept-type "text/csv"})))
+      (t/is (= #{[":ivan"] [":peter"] ["e"]} (post-query
+                                              {:body (pr-str {:query '{:find [e] :where [[e :crux.db/id _]]}})
+                                               :content-type "application/edn"
+                                               :accept-type "text/tsv"})))))
 
-    ;; Test file-type based negotiation
-    (t/is (= #{[":ivan"] [":peter"] ["e"]}
-             (set (-> (get-result-from-path "/_crux/query.csv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
-                      (parse-body "text/csv")))))
-    (t/is (= #{[":ivan"] [":peter"] ["e"]}
-             (set (-> (get-result-from-path "/_crux/query.tsv?find=[e]&where=[e+%3Acrux.db%2Fid+_]")
-                      (parse-body "text/tsv")))))))
+  ;; Testing getting linked entities in query results
+  (let [get-query (fn [accept-type]
+                    (set (-> (get-result-from-path (format "/_crux/query?query=%s&link-entities?=true" '{:find [e] :where [[e :crux.db/id _]]}) accept-type)
+                             (parse-body accept-type))))]
+    (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/edn")))
+    (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/transit+json"))))
+
+  ;; Test file-type based negotiation
+  (t/is (= #{[":ivan"] [":peter"] ["e"]}
+           (set (-> (get-result-from-path (format "/_crux/query.csv?query=%s" '{:find [e] :where [[e :crux.db/id _]]}))
+                    (parse-body "text/csv")))))
+  (t/is (= #{[":ivan"] [":peter"] ["e"]}
+           (set (-> (get-result-from-path (format "/_crux/query.tsv?query=%s" '{:find [e] :where [[e :crux.db/id _]]}))
+                    (parse-body "text/tsv"))))))
