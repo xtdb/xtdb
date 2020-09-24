@@ -26,7 +26,10 @@ juxt/crux-http-server {:mvn/version "{crux_version}-alpha"}
 
 You can start up a *HTTP server* on a node by including `crux.http-server/server` in your node configuration, optionally passing the server port:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -37,12 +40,14 @@ You can start up a *HTTP server* on a node by including `crux.http-server/server
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.http-server/server {:port 3000
                            ...}
 ----
+====
 
 // TODO Authorization section
 

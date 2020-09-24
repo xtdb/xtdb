@@ -10,14 +10,17 @@ You can then proceed to add further modules (eg for persistence) as required - s
 
 Crux depends on Java 8+.
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-core {:mvn/version "{crux_version}-beta"}
 ----
-
-.pom.xml
-[source,xml, subs=attributes+]
+pom.xml::
++
+[source,xml,subs=attributes+]
 ----
 <dependency>
     <groupId>juxt</groupId>
@@ -25,6 +28,7 @@ juxt/crux-core {:mvn/version "{crux_version}-beta"}
     <version>{crux_version}-beta</version>
 </dependency>
 ----
+====
 
 [#embedded]
 == Within your JVM application
@@ -32,7 +36,10 @@ juxt/crux-core {:mvn/version "{crux_version}-beta"}
 First, add the `crux-core` module as a project dependency.
 We can then start up an in-memory Crux node with:
 
-.Clojure
+[tabs]
+====
+Clojure::
++
 [source,clojure]
 ----
 (require '[crux.api :as crux])
@@ -40,13 +47,16 @@ We can then start up an in-memory Crux node with:
 (crux/start-node {})
 ----
 
-.Java
+Java::
++
 [source,java]
 ----
 include::example$src/docs/Install.java[tags=imports]
 
 include::example$src/docs/Install.java[tags=main,indent=0]
 ----
+====
+
 
 [#uberjar]
 == Using a pre-built Crux JAR

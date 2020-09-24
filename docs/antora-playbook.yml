@@ -29,3 +29,5 @@ ui:
 asciidoc:
   attributes:
     page-pagination: true
+  extensions:
+    - ./crux-site/antora_extensions/extension.js

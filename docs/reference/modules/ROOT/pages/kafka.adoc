@@ -16,13 +16,17 @@ For this reason, unless you want to keep both transactions and documents on Kafk
 
 == Project Dependencies
 
-.deps.edn
+[tabs]
+====
+deps.edn::
++
 [source,clojure, subs=attributes+]
 ----
 juxt/crux-kafka {:mvn/version "{crux_version}-beta"}
 ----
 
-.pom.xml
+pom.xml::
++
 [source,xml, subs=attributes+]
 ----
 <dependency>
@@ -31,12 +35,16 @@ juxt/crux-kafka {:mvn/version "{crux_version}-beta"}
     <version>{crux_version}-beta</version>
 </dependency>
 ----
+====
 
 == Example configuration
 
 === Kafka as a Transaction Log
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -59,7 +67,8 @@ juxt/crux-kafka {:mvn/version "{crux_version}-beta"}
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/tx-log {:crux/module 'crux.kafka/->tx-log
@@ -68,12 +77,16 @@ juxt/crux-kafka {:mvn/version "{crux_version}-beta"}
                :poll-wait-duration "PT1S"}
  ...}
 ----
+====
 
 If you do not want the local node to index transactions, you can use the xref:ingest-only-tx-log[`+crux.kafka/->ingest-only-tx-log+`] module.
 
 === Kafka as a Document Store
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -100,7 +113,8 @@ If you do not want the local node to index transactions, you can use the xref:in
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/document-store {:crux/module 'crux.kafka/->document-store
@@ -113,6 +127,7 @@ If you do not want the local node to index transactions, you can use the xref:in
                        :poll-wait-duration "PT1S"}
  ...}
 ----
+====
 
 If you do not want the local node to index transactions, you can use the xref:ingest-only-doc-store[`+crux.kafka/->ingest-only-document-store+`] module.
 
@@ -120,7 +135,10 @@ If you do not want the local node to index transactions, you can use the xref:in
 
 You can use the same local document store as the query indices, as follows:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -144,7 +162,8 @@ You can use the same local document store as the query indices, as follows:
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {...
@@ -154,12 +173,16 @@ You can use the same local document store as the query indices, as follows:
                        :local-document-store {:kv-store :local-rocksdb}}
  :crux/index-store {:kv-store :local-rocksdb}}
 ----
+====
 
 === Sharing connection config between the transaction log and the document store
 
 If you're using Kafka for both the transaction log and the document store, you can share connection config between them:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -183,7 +206,8 @@ If you're using Kafka for both the transaction log and the document store, you c
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:kafka-config {:crux/module 'crux.kafka/->kafka-config
@@ -196,6 +220,7 @@ If you're using Kafka for both the transaction log and the document store, you c
                        :kafka-config :kafka-config
                        ...}}
 ----
+====
 
 == Parameters
 

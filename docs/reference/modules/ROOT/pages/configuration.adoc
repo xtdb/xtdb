@@ -4,9 +4,17 @@ A Crux node consists of a number of modules, which can be independently configur
 
 Once you have an xref:installation.adoc[in-memory Crux node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programatically:
 
-* On the command line, you can supply a JSON/EDN configuration file using `-f <file>`
-* For a Java in-process node, the modules are configured using the supplied Configurator, a file, or a classpath resource:
+[tabs]
+====
+Command Line::
 +
+On the command line, you can supply a JSON/EDN configuration file using `-f <file>`
+
+Java::
++
+--
+For a Java in-process node, the modules are configured using the supplied Configurator, a file, or a classpath resource:
+
 [source,java]
 ----
 import crux.api.Crux;
@@ -19,8 +27,12 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
    // ...
 });
 ----
-* For a Clojure in-process node, the `start-node` function accepts a module tree, a file, or a resource.
+--
+Clojure::
 +
+--
+For a Clojure in-process node, the `start-node` function accepts a module tree, a file, or a resource.
+
 [source,clojure]
 ----
 (require '[crux.api :as crux]
@@ -30,6 +42,8 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 (crux/start-node (io/file ...))
 (crux/start-node (io/resource ...))
 ----
+--
+====
 
 Without any explicit configuration, Crux will start an in-memory node.
 
@@ -59,7 +73,10 @@ Each module has both an underlying implementation and overridable parameters - f
 
 To add the HTTP server module, and specify its port:
 
-.Java
+[tabs]
+====
+Java::
++
 [source,java]
 ----
 ICruxAPI cruxNode = Crux.startNode(n -> {
@@ -68,7 +85,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
    });
 });
 ----
-.JSON
+
+JSON::
++
 [source,json]
 ----
 {
@@ -77,18 +96,24 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   }
 }
 ----
-.Clojure/EDN
+
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux.http-server/server {:port 3000}}
 ----
+====
 
 === Overriding the module implementation
 
 To override the underlying implementation, specify the factory function of the new implementation.
 For example, using S3's `+crux.s3/->document-store+` factory:
 
-.Java
+[tabs]
+====
+Java::
++
 [source,java]
 ----
 ICruxAPI cruxNode = Crux.startNode(n -> {
@@ -99,7 +124,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
    });
 });
 ----
-.JSON
+
+JSON::
++
 [source,json]
 ----
 {
@@ -110,13 +137,16 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   }
 }
 ----
-.Clojure/EDN
+
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/document-store {:crux/module 'crux.s3/->document-store
                        :bucket "my-bucket"
                        :prefix "my-prefix"}}
 ----
+====
 
 === Nested modules
 
@@ -125,7 +155,10 @@ For example, the default implementations of the three main Crux modules are KV s
 Each of these implementations depends on being given a concrete KV store implementation - by default, an in-memory KV store.
 To override the implementation and parameters of this KV store (for example, to replace it with RocksDB), we override its `kv-store` dependency, replacing the implementation of the nested module:
 
-.Java
+[tabs]
+====
+Java::
++
 [source,java]
 ----
 ICruxAPI cruxNode = Crux.startNode(n -> {
@@ -139,7 +172,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   n.with("crux/index-store", indexStore -> { ... });
 });
 ----
-.JSON
+
+JSON::
++
 [source,json]
 ----
 {
@@ -154,7 +189,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   "crux/index-store": { ... }
 }
 ----
-.Clojure/EDN
+
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
@@ -162,6 +199,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
  :crux/document-store {...}
  :crux/index-store {...}}
 ----
+====
+
+
 
 [IMPORTANT]
 ====
@@ -201,7 +241,11 @@ For example, if we were to write the following, the transaction log and the docu
 We can store both the transaction log and the document store in the same KV store, to save ourselves some hassle.
 We specify a new top-level module, and then refer to it by name where required:
 
-.Java
+
+[tabs]
+====
+Java::
++
 [source,java]
 ----
 ICruxAPI cruxNode = Crux.startNode(n -> {
@@ -217,7 +261,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
    });
 });
 ----
-.JSON
+
+JSON::
++
 [source,json]
 ----
 {
@@ -233,7 +279,9 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   }
 }
 ----
-.Clojure/EDN
+
+Clojure/EDN::
++
 [source,clojure]
 ----
 {:my-rocksdb {:crux/module 'crux.rocksdb/->kv-store
@@ -241,7 +289,7 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
  :crux/tx-log {:kv-store :my-rocksdb}
  :crux/document-store {:kv-store :my-rocksdb}}
 ----
-
+====
 
 == Writing your own module (Clojure)
 
