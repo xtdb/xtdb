@@ -287,7 +287,22 @@
       (t/is (= #{[1]} (api/q (api/db *api*)
                              '{:find [x]
                                :in [$ x]}
-                             1))))))
+                             1))))
+
+    (t/testing "can use both args and in"
+      (t/is (= #{[2]} (api/q (api/db *api*)
+                             '{:find [x]
+                               :in [$ [x ...]]
+                               :args [{:x 1}
+                                      {:x 2}]}
+                             [2 3]))))
+
+    (t/testing "var bindings need to be distinct"
+      (t/is (thrown-with-msg?
+             IllegalArgumentException
+             #"In binding variables not distinct"
+             (api/q (api/db *api*) '{:find [x]
+                                     :in [$ [x x]]} [1 1]))))))
 
 (t/deftest test-multiple-results
   (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "1"}
