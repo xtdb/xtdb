@@ -83,9 +83,9 @@
        nil
 
        (= 400 status)
-       (let [{:crux.error/keys [error-key] :as error-data} (edn/read-string (cond-> body
-                                                                              (= :stream (:as http-opts)) slurp))]
-         (throw (ce/illegal-arg error-key error-data )))
+       (let [{::ce/keys [error-key] :as error-data} (edn/read-string (cond-> body
+                                                                       (= :stream (:as http-opts)) slurp))]
+         (throw (ce/illegal-arg error-key error-data)))
 
        (and (<= 200 status) (< status 400))
        (if (string? body)

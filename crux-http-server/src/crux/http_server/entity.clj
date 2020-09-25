@@ -206,7 +206,7 @@
                              (transit/write w (or (iterator-seq entity-history) '()))
                              (finally
                                (cio/try-close entity-history)))
-            :else (transit/write w res)))))))
+            :else (throw (IllegalStateException.))))))))
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options

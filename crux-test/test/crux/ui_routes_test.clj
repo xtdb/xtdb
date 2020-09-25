@@ -76,12 +76,15 @@
     ;; Testing getting query results (POST)
     (let [post-query (fn [{:keys [body content-type accept-type]}]
                        (let [accept-type (or accept-type content-type)]
-                         (set (-> (http/post (str *api-url* "/_crux/query")
-                                             {:accept accept-type
-                                              :content-type content-type
-                                              :as :stream
-                                              :body body})
-                                  (parse-body accept-type)))))]
+                         (let [{:keys [status body] :as results} (http/post (str *api-url* "/_crux/query")
+                                                                            {:accept accept-type
+                                                                             :content-type content-type
+                                                                             :as :stream
+                                                                             :body body
+                                                                             :throw-exceptions false})]
+
+                           (cond-> (parse-body results accept-type)
+                             (= status 200) set))))]
       (t/is (= #{[:ivan] [:peter]} (post-query
                                     {:body (pr-str {:query '{:find [e] :where [[e :crux.db/id _]]}})
                                      :content-type "application/edn"})))
@@ -95,7 +98,18 @@
       (t/is (= #{[":ivan"] [":peter"] ["e"]} (post-query
                                               {:body (pr-str {:query '{:find [e] :where [[e :crux.db/id _]]}})
                                                :content-type "application/edn"
-                                               :accept-type "text/tsv"})))))
+                                               :accept-type "text/tsv"})))
+
+      ;; Testing POSTing malformed queries
+      (t/is (= {:error "Malformed \"application/edn\" request."}
+               (post-query
+                {:body "{:query {:find [e] :where [[e :crux.db/id _]}"
+                 :content-type "application/edn"})))
+
+      (t/is (= {:error "Malformed \"application/transit+json\" request."}
+               (post-query
+                {:body "[\"^ \",\"~:query\",[\"^ \",\"~:find\",[\"~$e\"],\"~:where\",[[\"~$e\",\"~:crux.db/id\",\"~$_\"]]]"
+                 :content-type "application/transit+json"})))))
 
   ;; Testing getting linked entities in query results
   (let [get-query (fn [accept-type]

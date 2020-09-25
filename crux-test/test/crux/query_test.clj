@@ -1148,11 +1148,10 @@
                                      :where [[#{:ivan :petr} :name name]]}))))
 
   (t/testing "vectors are not supported"
-    (t/is (thrown-with-msg?
-           RuntimeException
-           #"Spec assertion failed"
-           (api/q (api/db *api*) '{:find [e]
-                                   :where [[e :name [:ivan]]]})))))
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Query didn't match expected structure"
+                            (api/q (api/db *api*) '{:find [e]
+                                                    :where [[e :name [:ivan]]]})))))
 
 (t/deftest test-collection-returns
   (t/testing "vectors"
@@ -3359,10 +3358,9 @@
 
 (t/deftest test-nil-query-attribute-453
   (fix/transact! *api* [{:crux.db/id :id :this :that :these :those}])
-  (t/is (thrown-with-msg?
-          RuntimeException
-          #"Spec assertion failed"
-          (= #{[:id]} (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]})))))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Query didn't match expected structure"
+                          (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]}))))
 
 ;; TODO: Unsure why this test has started failing, or how much it
 ;; matters?

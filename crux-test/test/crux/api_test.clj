@@ -99,8 +99,8 @@
                                         :where [e :name "Ivan"]]))))
 
       (t/testing "malformed query"
-        (t/is (thrown-with-msg? Exception
-                                #"Spec assertion failed"
+        (t/is (thrown-with-msg? IllegalArgumentException
+                                #"Query didn't match expected structure"
                                 (api/q db '{:in [$ e]}))))
 
       (t/testing "query with streaming result"

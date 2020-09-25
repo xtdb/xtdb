@@ -235,13 +235,17 @@
                          identity
                          (fn [q]
                            (when-not (s/valid? ::query q)
-                             (throw (ex-info (str "Spec assertion failed\n" (s/explain-str ::query q)) (s/explain-data ::query q))))
+                             (throw (err/illegal-arg :query-spec-failed
+                                                     {::err/message "Query didn't match expected structure"
+                                                      :explain (s/explain-data ::query q)})))
                            (let [q (normalize-query q)]
                              (->ConformedQuery q (s/conform ::query q)))))]
     (if args
       (do
         (when-not (s/valid? ::args args)
-          (throw (ex-info (str "Spec assertion failed\n" (s/explain-str ::args args)) (s/explain-data ::args args))))
+          (throw (err/illegal-arg :args-spec-failed
+                                  {::err/message "Query args didn't match expected structure"
+                                   :explain (s/explain-data ::args args)})))
         (-> conformed-query
             (assoc-in [:q-normalized :args] args)
             (assoc-in [:q-conformed :args] args)))
