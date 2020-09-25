@@ -95,9 +95,12 @@
                                           (cons (assoc (decode-tx-event-key-from k)
                                                        :crux.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
                                                 (tx-log (kv/next iterator))))))]
-                               (->> (tx-log (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)})))
-                                    (take batch-size)
-                                    vec)))]
+                               (let [first-key (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id (or after-tx-id 0)}))]
+                                 (->> (tx-log (if (and after-tx-id (tx-event-key? first-key))
+                                                (kv/next iterator)
+                                                first-key))
+                                      (take batch-size)
+                                      vec))))]
                    (concat txs
                            (when (= batch-size (count txs))
                              (tx-log (::tx/tx-id (last txs))))))))]
