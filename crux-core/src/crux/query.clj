@@ -1726,17 +1726,23 @@
   (query [this query]
     (with-open [res (.openQuery this query)]
       (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)
+            !timed-out? (atom false)
             ^Future
             interrupt-job (when-let [timeout-ms (get query :timeout (:query-timeout this))]
                             (let [caller-thread (Thread/currentThread)]
                               (.schedule interrupt-executor
                                          ^Runnable
                                          (fn []
+                                           (reset! !timed-out? true)
                                            (.interrupt caller-thread))
                                          ^long timeout-ms
                                          TimeUnit/MILLISECONDS)))]
         (try
           (result-coll-fn (iterator-seq res))
+          (catch InterruptedException e
+            (throw (if @!timed-out?
+                     (InterruptedException. "Query timed out.")
+                     e)))
           (finally
             (when interrupt-job
               (.cancel interrupt-job false)))))))
