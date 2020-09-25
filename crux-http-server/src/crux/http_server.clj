@@ -8,14 +8,12 @@
             [crux.http-server.query :as query]
             [crux.http-server.status :as status]
             [crux.http-server.util :as util]
-            [crux.io :as cio]
-            [crux.error :as ce]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [reitit.coercion :as coercion]
             reitit.coercion.spec
             [reitit.ring :as rr]
             [reitit.ring.coercion :as rrc]
+            [reitit.ring.middleware.exception :as re]
             [reitit.ring.middleware.muuntaja :as rm]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
@@ -29,31 +27,6 @@
            java.time.Duration
            org.eclipse.jetty.server.Server))
 
-(defn- exception-response [status error-map]
-  {:status status
-   :body error-map})
-
-(defn- wrap-exception-handling [handler]
-  (fn [request]
-    (try
-      (handler request)
-      (catch Exception e
-        (if (instance? IllegalArgumentException e)
-          (exception-response 400 (ex-data e)) ;; Valid edn, invalid content
-          (do (log/error e "Exception while handling request:" (cio/pr-edn-str request))
-              (exception-response 500 {:error (.getMessage e)}))))))) ;;Invalid edn
-
-(defn- wrap-coercion-exception [handler]
-  (fn [request]
-    (try
-      (handler request)
-      (catch Exception e
-        (let [data (ex-data e)]
-          (if (= ::coercion/request-coercion (:type data))
-            (exception-response 400 (ex-data (ce/illegal-arg :spec-failed (merge (coercion/encode-error data)
-                                                                                 {::ce/message "Spec assertion failed"}))))
-            (throw e)))))))
-
 (defn- add-last-modified [response date]
   (cond-> response
     date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
@@ -65,7 +38,7 @@
     (let [{:keys [eid valid-time transaction-time]} (get-in req [:parameters :query])
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
-          {:keys [crux.tx/tx-time] :as entity-tx} (crux/entity-tx db eid)]
+          {::tx/keys [tx-time] :as entity-tx} (crux/entity-tx db eid)]
       (if entity-tx
         (-> {:status 200
              :body entity-tx}
@@ -78,7 +51,7 @@
 (defn- transact [^ICruxAPI crux-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body])
-          {:keys [crux.tx/tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
+          {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
       (->
        {:status 202
         :body submitted-tx}
@@ -131,12 +104,10 @@
 (defn- await-tx-handler [^ICruxAPI crux-node]
   (fn [req]
     (let [{:keys [timeout tx-id]} (get-in req [:parameters :query])
-          timeout (some-> timeout (Duration/ofMillis))]
-      (let [{:keys [crux.tx/tx-time] :as tx} (crux/await-tx crux-node {:crux.tx/tx-id tx-id} timeout)]
-        (->
-         {:status 200
-          :body tx}
-         (add-last-modified tx-time))))))
+          timeout (some-> timeout (Duration/ofMillis))
+          {:keys [crux.tx/tx-time] :as tx} (crux/await-tx crux-node {:crux.tx/tx-id tx-id} timeout)]
+      (-> {:status 200, :body tx}
+          (add-last-modified tx-time)))))
 
 (defn- attribute-stats [^ICruxAPI crux-node]
   (fn [_]
@@ -152,7 +123,7 @@
         {:status 200
          :body {:tx-committed? (crux/tx-committed? crux-node {:crux.tx/tx-id tx-id})}})
       (catch NodeOutOfSyncException e
-        (exception-response 400 e)))))
+        {:status 400, :body e}))))
 
 (defn latest-completed-tx [^ICruxAPI crux-node]
   (fn [_]
@@ -279,6 +250,14 @@
 
       (handler request))))
 
+(defn handle-iae [^crux.IllegalArgumentException ex req]
+  {:status 400
+   :body (ex-data ex)})
+
+(defn handle-muuntaja-decode-error [ex req]
+  {:status 400
+   :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.") }})
+
 (defn ->server {::sys/deps {:crux-node :crux/node}
                 ::sys/args {:port {:spec ::sys/nat-int
                                    :doc "Port to start the HTTP server on"
@@ -299,14 +278,16 @@
                   {:data
                    {:muuntaja util/default-muuntaja
                     :coercion reitit.coercion.spec/coercion
-                    :middleware
-                    (cond->
-                        [rm/format-middleware
-                         wrap-exception-handling
-                         wrap-coercion-exception
-                         p/wrap-params
-                         rrc/coerce-request-middleware]
-                      jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})
+                    :middleware (cond-> [p/wrap-params
+                                         rm/format-negotiate-middleware
+                                         rm/format-response-middleware
+                                         (re/create-exception-middleware
+                                          (merge re/default-handlers
+                                                 {crux.IllegalArgumentException handle-iae
+                                                  :muuntaja/decode handle-muuntaja-decode-error}))
+                                         rm/format-request-middleware
+                                         rrc/coerce-request-middleware]
+                                  jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})
                  (rr/routes
                   (rr/create-resource-handler {:path "/"})
                   (rr/create-default-handler)))

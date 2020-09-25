@@ -1,36 +1,31 @@
 (ns crux.http-server.query
-  (:require [crux.http-server.util :as util]
-            [crux.http-server.entity-ref :as entity-ref]
-            [cognitect.transit :as transit]
-            [clojure.data.csv :as csv]
-            [clojure.edn :as edn]
-            [clojure.instant :as instant]
+  (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as string]
+            [cognitect.transit :as transit]
             [crux.api :as crux]
             [crux.codec :as c]
-            [crux.error :as ce]
+            [crux.error :as err]
+            [crux.http-server.entity-ref :as entity-ref]
+            [crux.http-server.util :as util]
+            [crux.io :as cio]
+            [crux.query :as q]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
-            [crux.io :as cio]
-            [crux.db :as db]
-            [crux.query :as q]
-            [clojure.spec.alpha :as s]
-            [spec-tools.core :as st]
-            [crux.error :as err])
+            [spec-tools.core :as st])
   (:import crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
-           (java.io OutputStream Writer)
+           java.io.OutputStream
            [java.time Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date))
 
 (s/def ::query
   (st/spec
-   {:spec #(s/valid? ::q/query %)
-    :type :map
+   {:spec any? ; checked by crux.query
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
 ;; TODO: Need to ensure all query clasues are present + coerced properly
@@ -40,7 +35,7 @@
 (s/def ::args (s/coll-of any? :kind vector?))
 
 (s/def ::body-params
-  (s/keys :req-un [::q/query]
+  (s/keys :req-un [::query]
           :opt-un [::args]))
 
 (def query-root-str
@@ -264,13 +259,13 @@
 
 (defmethod transform-query-resp "text/csv" [{:keys [no-query?] :as res} _]
   (cond
-    no-query? (throw (ce/illegal-arg :no-query {::ce/message "No query provided"}))
+    no-query? (throw (err/illegal-arg :no-query {::err/message "No query provided"}))
     :else (-> {:status 200, :body res}
               (with-download-header res "csv"))))
 
 (defmethod transform-query-resp "text/tsv" [{:keys [no-query?] :as res} _]
   (cond
-    no-query? (throw (ce/illegal-arg :no-query {::ce/message "No query provided"}))
+    no-query? (throw (err/illegal-arg :no-query {::err/message "No query provided"}))
     :else (-> {:status 200, :body res}
               (with-download-header res "tsv"))))
 
@@ -279,7 +274,7 @@
 
 (defmethod transform-query-resp :default [{:keys [no-query?] :as res} _]
   (cond
-    no-query? (throw (ce/illegal-arg :no-query {::ce/message "No query provided"}))
+    no-query? (throw (err/illegal-arg :no-query {::err/message "No query provided"}))
     :else {:status 200, :body res}))
 
 (defn data-browser-query [options]
