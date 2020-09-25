@@ -226,27 +226,31 @@
                      result))
             (t/is (realized? result)))))
 
-      (t/testing "from tx id"
+      (t/testing "from tx id - doesnt't include itself"
         (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
-          (t/is (empty? (iterator-seq tx-log-iterator))))))
+          (t/is (empty? (iterator-seq tx-log-iterator)))))
 
-    (t/testing "tx log skips failed transactions"
-      (let [tx2 (fix/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan2"}]
-                                       [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
-        (t/is (false? (api/tx-committed? *api* tx2)))
+      (t/testing "tx log skips failed transactions"
+        (let [tx2 (fix/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan2"}]
+                                        [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
+          (t/is (false? (api/tx-committed? *api* tx2)))
 
-        (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
-          (let [result (iterator-seq tx-log-iterator)]
-            (t/is (= [(assoc tx1
-                        :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
-                     result))))
-
-        (let [tx3 (fix/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan"}]
-                                         [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
-          (t/is (true? (api/tx-committed? *api* tx3)))
           (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
             (let [result (iterator-seq tx-log-iterator)]
-              (t/is (= 2 (count result))))))))))
+              (t/is (= [(assoc tx1
+                               :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                       result))))
+
+          (let [tx3 (fix/submit+await-tx [[:crux.tx/match :ivan {:crux.db/id :ivan :name "Ivan"}]
+                                          [:crux.tx/put {:crux.db/id :ivan :name "Ivan3"}]])]
+            (t/is (true? (api/tx-committed? *api* tx3)))
+            (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
+              (let [result (iterator-seq tx-log-iterator)]
+                (t/is (= 2 (count result))))))))
+
+      (t/testing "from tx id - doesnt't include items <= `after-tx-id`"
+        (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
+          (t/is (= 1 (count (iterator-seq tx-log-iterator)))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
