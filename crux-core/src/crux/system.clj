@@ -104,7 +104,10 @@
           module-var (or (try
                            (requiring-resolve (:sym this))
                            (catch Exception e
-                             (throw (ex-info "Error locating module" {:module sym} e))))
+                             (throw (err/illegal-arg :error-locating-module
+                                                     {::err/message "Error locating module"
+                                                      :module sym}
+                                                     e))))
                          (throw (ex-info "Error locating module" {:module sym})))
           {::keys [deps args before]} (meta module-var)]
       (prepare-dep (->Module (deref module-var) before deps args) k-path opts))))

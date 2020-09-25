@@ -8,8 +8,8 @@ public class IllegalArgumentException extends java.lang.IllegalArgumentException
 
     private final IPersistentMap data;
 
-    public IllegalArgumentException(String message, IPersistentMap data) {
-        super(message);
+    public IllegalArgumentException(String message, IPersistentMap data, Throwable cause) {
+        super(message, cause);
         this.data = data;
     }
 
