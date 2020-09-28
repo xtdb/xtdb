@@ -1,0 +1,55 @@
+= JetBrains Xodus
+
+Our friends over at https://www.avisi.nl/en/home[Avisi] have released support for https://github.com/JetBrains/xodus[Xodus] as a KV store for Crux's indices
+
+For more details, see the https://github.com/avisi-apps/crux-xodus[crux-xodus] GitHub repo.
+
+== Project Dependency
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+avisi-apps/crux-xodus {:mvn/version "1.0.0"}
+----
+====
+
+== Using Xodus
+
+Replace the implementation of the kv-store with `+avisi.crux.xodus/->kv-store+`
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "crux/index-store": {
+    "kv-store": {
+      "crux/module": "avisi.crux.xodus/->kv-store",
+      "db-dir": "/tmp/xodus"
+    }
+  },
+
+  "crux/document-store": { ... },
+  "crux/tx-log": { ... }
+}
+----
+
+Clojure/EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module 'avisi.crux.xodus/->kv-store
+                               :db-dir (io/file "/tmp/xodus")}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+====
+
+== Parameters
+
+* `db-dir` (required, string/`File`/`Path`): path to Xodus data directory

@@ -65,7 +65,10 @@ All three are backed by local KV stores by default, but they can be independentl
 | In-memory KV | ✓ | ✓ | ✓
 | xref:lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
 | xref:rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
+| xref:xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
 |===
+
+
 
 For specific details and examples of how to configure each of these modules, see their individual sections.
 
