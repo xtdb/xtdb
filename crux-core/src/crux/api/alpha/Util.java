@@ -3,6 +3,7 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.Symbol;
 
+@Deprecated
 public class Util {
     private Util() {}
 

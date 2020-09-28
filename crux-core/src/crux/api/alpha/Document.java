@@ -11,6 +11,7 @@ import java.util.Map;
 import static crux.api.alpha.CruxId.cruxId;
 import static crux.api.alpha.Util.keyword;
 
+@Deprecated
 public class Document {
     private final Map<Keyword, Object> document;
 

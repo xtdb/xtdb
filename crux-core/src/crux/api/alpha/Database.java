@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 
 import static crux.api.alpha.ResultTuple.resultTuple;
 
+@Deprecated
 public class Database {
     private final ICruxDatasource db;
 

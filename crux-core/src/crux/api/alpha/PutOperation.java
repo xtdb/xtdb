@@ -7,6 +7,7 @@ import java.util.Date;
 
 import static crux.api.alpha.Util.keyword;
 
+@Deprecated
 public class PutOperation extends TransactionOperation {
     private static final Keyword TX_PUT = keyword("crux.tx/put");
 

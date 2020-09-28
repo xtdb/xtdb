@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Deprecated
 public class ResultTuple {
     private Map<Symbol, Object> results;
     private List<?> resultArray;

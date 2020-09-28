@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import static crux.api.alpha.Util.keyword;
 
+@Deprecated
 public class CruxId {
     private final Object id;
 

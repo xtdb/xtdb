@@ -21,6 +21,7 @@ import static crux.api.alpha.Database.database;
 import static crux.api.alpha.TxResult.txResult;
 import static crux.api.alpha.Util.keyword;
 
+@Deprecated
 public class CruxNode implements AutoCloseable {
     private static final Keyword TX_TIME = keyword("crux.tx/tx-time");
     private static final Keyword TX_ID = keyword("crux.tx/tx-id");

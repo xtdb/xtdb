@@ -9,6 +9,7 @@ import static crux.api.alpha.Util.keyword;
 
 // Version of Query which reads strings.
 
+@Deprecated
 public class Query {
     private static final Keyword FIND = keyword("find");
     private static final Keyword WHERE = keyword("where");
