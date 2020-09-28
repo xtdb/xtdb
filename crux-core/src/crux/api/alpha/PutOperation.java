@@ -5,10 +5,10 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
-import static crux.api.alpha.Util.keyword;
-
+@Deprecated
 public class PutOperation extends TransactionOperation {
-    private static final Keyword TX_PUT = keyword("crux.tx/put");
+    @Deprecated
+    private static final Keyword TX_PUT =  crux.api.alpha.Util.keyword("crux.tx/put");
 
     private final Document doc;
     private final Date validTime;

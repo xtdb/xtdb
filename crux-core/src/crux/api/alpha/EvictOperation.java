@@ -3,10 +3,9 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 
-import static crux.api.alpha.Util.keyword;
-
+@Deprecated
 public class EvictOperation extends TransactionOperation {
-    private static final Keyword TX_EVICT = keyword("crux.tx/evict");
+    private static final Keyword TX_EVICT = crux.api.alpha.Util.keyword("crux.tx/evict");
 
     private final CruxId evictId;
 

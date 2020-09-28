@@ -8,9 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-import static crux.api.alpha.CruxId.cruxId;
-import static crux.api.alpha.Util.keyword;
-
+@Deprecated
 public class Document {
     private final Map<Keyword, Object> document;
 
@@ -33,7 +31,7 @@ public class Document {
      * @return Value at key
      */
     public Object get(String attr) {
-        return document.get(keyword(attr));
+        return document.get(crux.api.alpha.Util.keyword(attr));
     }
 
     /**
@@ -41,7 +39,7 @@ public class Document {
      * @return CruxId from the Document.
      */
     public CruxId getId() {
-        return cruxId(document.get(keyword("crux.db/id")));
+        return crux.api.alpha.CruxId.cruxId(document.get(crux.api.alpha.Util.keyword("crux.db/id")));
     }
 
     /**
@@ -50,7 +48,7 @@ public class Document {
      * @return An instance of Document
      */
     public static Document document(CruxId id) {
-        Map<Keyword, Object> initialDoc = Collections.singletonMap(keyword("crux.db/id"), id.toEdn());
+        Map<Keyword, Object> initialDoc = Collections.singletonMap(crux.api.alpha.Util.keyword("crux.db/id"), id.toEdn());
         return new Document(initialDoc);
     }
 
@@ -96,7 +94,7 @@ public class Document {
      * @return Document containing the previous contents of the document and the new key-value pair
      */
     public Document with(String attr, Object value) {
-        return with(keyword(attr), value);
+        return with(crux.api.alpha.Util.keyword(attr), value);
     }
 
     @Override

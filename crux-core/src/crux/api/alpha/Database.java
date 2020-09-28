@@ -8,8 +8,7 @@ import clojure.lang.Keyword;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static crux.api.alpha.ResultTuple.resultTuple;
-
+@Deprecated
 public class Database {
     private final ICruxDatasource db;
 
@@ -39,7 +38,7 @@ public class Database {
         Collection<List<?>> queryResult = db.query(query.toEdn());
         List<Symbol> symbols = query.findSymbols();
 
-        return queryResult.stream().map(tuple -> resultTuple(symbols, tuple)).collect(Collectors.toList());
+        return queryResult.stream().map(tuple -> crux.api.alpha.ResultTuple.resultTuple(symbols, tuple)).collect(Collectors.toList());
     }
 
     public Collection<List<?>> query(String query) {

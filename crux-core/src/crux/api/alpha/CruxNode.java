@@ -17,13 +17,10 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import static crux.api.alpha.Database.database;
-import static crux.api.alpha.TxResult.txResult;
-import static crux.api.alpha.Util.keyword;
-
+@Deprecated
 public class CruxNode implements AutoCloseable {
-    private static final Keyword TX_TIME = keyword("crux.tx/tx-time");
-    private static final Keyword TX_ID = keyword("crux.tx/tx-id");
+    private static final Keyword TX_TIME = crux.api.alpha.Util.keyword("crux.tx/tx-time");
+    private static final Keyword TX_ID = crux.api.alpha.Util.keyword("crux.tx/tx-id");
 
     private final ICruxAPI node;
 
@@ -57,7 +54,7 @@ public class CruxNode implements AutoCloseable {
         Map<Keyword,Object> result = node.submitTx(txVector);
         Date txTime = (Date) result.get(TX_TIME);
         long txId = (Long) result.get(TX_ID);
-        return txResult(txTime, txId);
+        return crux.api.alpha.TxResult.txResult(txTime, txId);
     }
 
     /**
@@ -77,7 +74,7 @@ public class CruxNode implements AutoCloseable {
      * @see Database
      */
     public Database db() {
-        return database(node);
+        return crux.api.alpha.Database.database(node);
     }
 
     /**
@@ -88,7 +85,7 @@ public class CruxNode implements AutoCloseable {
      * @see Database
      */
     public Database db(Date validTime) {
-        return database(node, validTime);
+        return crux.api.alpha.Database.database(node, validTime);
     }
 
     /**
@@ -99,7 +96,7 @@ public class CruxNode implements AutoCloseable {
      * @see Database
      */
     public Database db(Date validTime, Date transactionTime) {
-        return database(node, validTime, transactionTime);
+        return crux.api.alpha.Database.database(node, validTime, transactionTime);
     }
 
     /**
