@@ -61,7 +61,7 @@
 (def q2 '{:find [s_acctbal
                  s_name
                  n_name
-                 p_partkey
+                 p
                  p_mfgr
                  s_address
                  s_phone
@@ -70,7 +70,7 @@
                   [p :p_size 15]
                   [p :p_type p_type]
                   [(re-find #"^.*BRASS$" p_type)]
-                  [ps :ps_partkey p_partkey]
+                  [ps :ps_partkey p]
                   [ps :ps_supplycost ps_supplycost]
                   [(q {:find [(min ps_supplycost)]
                        :in [$ p]
@@ -93,7 +93,7 @@
           :order-by [[s_acctbal :desc]
                      [n_name :asc]
                      [s_name :asc]
-                     [p_partkey :asc]]
+                     [p :asc]]
           :limit 100})
 
 ;; "Elapsed time: 5786.047011 msecs"
