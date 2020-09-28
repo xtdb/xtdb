@@ -449,10 +449,8 @@
     (and found-k
          (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
-(defn- maybe-value-buffer->id-buffer [index-snapshot ^DirectBuffer value-or-id-buffer]
-  (if (c/id-buffer? value-or-id-buffer)
-    value-or-id-buffer
-    (c/->id-buffer (db/decode-value index-snapshot value-or-id-buffer))))
+(defn- value-buffer->id-buffer [index-snapshot ^DirectBuffer value-buffer]
+  (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
 
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
@@ -502,7 +500,8 @@
                ((fn step [^DirectBuffer k]
                   (when k
                     (let [eid-value-buffer (key-suffix k (.capacity prefix))
-                          head (when-let [content-hash-buffer (entity-resolver-fn eid-value-buffer)]
+                          eid-buffer (value-buffer->id-buffer this eid-value-buffer)
+                          head (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
                                  (let [version-k (encode-ecav-key-to (.get seek-buffer-tl)
                                                                      eid-value-buffer
                                                                      content-hash-buffer
@@ -525,15 +524,17 @@
                (kv/seek i)
                ((fn step [^DirectBuffer k]
                   (when k
-                    (let [eid-value-buffer (key-suffix k (.capacity prefix))]
-                      (if (entity-resolver-fn eid-value-buffer)
+                    (let [eid-value-buffer (key-suffix k (.capacity prefix))
+                          eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+                      (if (entity-resolver-fn eid-buffer)
                         (cons eid-value-buffer (lazy-seq (step (kv/next i))))
                         (lazy-seq (step (kv/next i)))))))))))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          eid-value-buffer (buffer-or-value-buffer e)]
-      (when-let [content-hash-buffer (entity-resolver-fn eid-value-buffer)]
+          eid-value-buffer (buffer-or-value-buffer e)
+          eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+      (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
         (let [prefix (encode-ecav-key-to nil eid-value-buffer content-hash-buffer attr-buffer)
               i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
           (some->> (encode-ecav-key-to
@@ -551,9 +552,7 @@
   (entity-as-of-resolver [this eid valid-time transact-time]
     (let [i @entity-as-of-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
-          eid-buffer (if (instance? DirectBuffer eid)
-                       (maybe-value-buffer->id-buffer this eid)
-                       (c/->id-buffer eid))
+          eid-buffer (c/->id-buffer eid)
           seek-k (encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)
                                                    eid-buffer
                                                    valid-time
@@ -767,13 +766,14 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
+(def ^:const default-value-cache-size (* 128 1024))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}
                                     :value-cache-size {:doc "Value Cache Size"
-                                                       :default 100000
+                                                       :default default-value-cache-size
                                                        :spec ::sys/nat-int}}}
   [{:keys [kv-store value-cache-size] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store (lru/new-cache (or value-cache-size 100000))))
+  (->KvIndexStore kv-store (lru/new-cache (or value-cache-size default-value-cache-size))))
