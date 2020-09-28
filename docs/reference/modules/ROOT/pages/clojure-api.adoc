@@ -151,6 +151,22 @@ with few lifecycle members added.
   Returns a cursor over the TxLog.")
 ----
 
+=== latest-completed-tx
+
+[source,clojure]
+----
+  (latest-completed-tx [node]
+    "Returns the latest transaction to have been indexed by this node.")
+----
+
+=== latest-submitted-tx
+
+[source,clojure]
+----
+  (latest-submitted-tx [node]
+    "Returns the latest transaction to have been submitted to this cluster")
+----
+
 === attribute-stats
 
 [source,clojure]
