@@ -3,6 +3,7 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.status :as status]
             [crux.morton :as morton]
@@ -459,6 +460,7 @@
                             decode-value-iterator-delay
                             nested-index-snapshot-state
                             ^Map temp-hash-cache
+                            value-cache
                             ^AtomicBoolean closed?]
   Closeable
   (close [_]
@@ -602,10 +604,15 @@
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (or (.get temp-hash-cache value-buffer)
-          (let [i @decode-value-iterator-delay]
-            (when (advance-iterator-to-hash-cache-value i value-buffer)
-              (some-> (kv/value i) (mem/<-nippy-buffer)))))))
+      (lru/compute-if-absent
+       value-cache
+       value-buffer
+       mem/copy-to-unpooled-buffer
+       (fn [value-buffer]
+         (or (.get temp-hash-cache value-buffer)
+             (let [i @decode-value-iterator-delay]
+               (when (advance-iterator-to-hash-cache-value i value-buffer)
+                 (some-> (kv/value i) (mem/<-nippy-buffer)))))))))
 
   (encode-value [this value]
     (let [value-buffer (c/->value-buffer value)]
@@ -615,7 +622,7 @@
       value-buffer))
 
   (open-nested-index-snapshot [this]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache false)]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache value-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot)))
 
@@ -641,7 +648,7 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-snapshot [snapshot temp-hash-cache close-snapshot?]
+(defn- new-kv-index-snapshot [snapshot temp-hash-cache value-cache close-snapshot?]
   (->KvIndexSnapshot snapshot
                      close-snapshot?
                      (delay (kv/new-iterator snapshot))
@@ -650,9 +657,10 @@
                      (delay (kv/new-iterator snapshot))
                      (atom [])
                      temp-hash-cache
+                     value-cache
                      (AtomicBoolean.)))
 
-(defrecord KvIndexStore [kv-store]
+(defrecord KvIndexStore [kv-store value-cache]
   db/IndexStore
   (index-docs [this docs]
     (let [crux-db-id (c/->id-buffer :crux.db/id)
@@ -693,6 +701,8 @@
                                                                             (take 2)
                                                                             count)
                                                                        1)]
+                                                     (when-not (c/can-decode-value-buffer? value-buffer)
+                                                       (lru/evict value-cache value-buffer))
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
                                                                                                             :crux.db/evicted? true})
@@ -748,7 +758,7 @@
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-snapshot [this]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) true))
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) value-cache true))
 
   status/Status
   (status-map [this]
@@ -756,9 +766,14 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
+(def ^:const default-value-cache-size (* 128 1024))
+
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
-                                                              :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
-  [{:keys [kv-store] :as opts}]
+                                                              :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}
+                                    :value-cache-size {:doc "Value Cache Size"
+                                                       :default default-value-cache-size
+                                                       :spec ::sys/nat-int}}}
+  [{:keys [kv-store value-cache-size] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store))
+  (->KvIndexStore kv-store (lru/new-cache (or value-cache-size default-value-cache-size))))
