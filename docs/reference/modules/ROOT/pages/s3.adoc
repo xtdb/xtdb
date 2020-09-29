@@ -63,6 +63,19 @@ Clojure/EDN::
 * `prefix` (string): S3 key prefix
 * `doc-cache-size` (int): size of in-memory document cache
 
+[#checkpoint-store]
+== Checkpoint store
+
+S3 can be used as a query index xref:checkpointing.adoc[checkpoint store].
+
+Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
+
+=== Parameters
+
+* `configurator` (xref:#configurator[`S3Configurator`])
+* `bucket` (string, required)
+* `prefix` (string): S3 key prefix
+
 [#configurator]
 == Configuring S3 requests
 

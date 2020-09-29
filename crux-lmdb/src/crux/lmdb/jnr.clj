@@ -6,7 +6,10 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.checkpoint :as cp]
+            [crux.kv.index-store :as kvi]
+            [crux.codec :as c])
   (:import java.io.Closeable
            java.nio.file.Path
            java.util.concurrent.locks.StampedLock
@@ -31,7 +34,7 @@
   (close [_]
     (.close cursor)))
 
-(defrecord LMDBJNRSnapshot [^Dbi dbi ^Txn tx close-fn]
+(defrecord LMDBJNRSnapshot [^Env env ^Dbi dbi ^Txn tx close-fn]
   kv/KvSnapshot
   (new-iterator [_]
     (->LMDBJNRIterator tx (.openCursor dbi tx) (ExpandableDirectByteBuffer.)))
@@ -62,12 +65,12 @@
       (log/debug "Increasing mapsize to:" new-mapsize)
       (.setMapSize env new-mapsize))))
 
-(defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi ^StampedLock mapsize-lock]
+(defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi ^StampedLock mapsize-lock, cp-job]
   kv/KvStore
   (new-snapshot [_]
     (let [txn-stamp (.readLock mapsize-lock)]
       (try
-        (->LMDBJNRSnapshot dbi (.txnRead env) #(.unlock mapsize-lock txn-stamp))
+        (->LMDBJNRSnapshot env dbi (.txnRead env) #(.unlock mapsize-lock txn-stamp))
         (catch Throwable t
           (.unlock mapsize-lock txn-stamp)
           (throw t)))))
@@ -119,19 +122,36 @@
   (kv-name [this]
     (.getName (class this)))
 
+  cp/CheckpointSource
+  (save-checkpoint [this dir]
+    (let [tx (kvi/latest-completed-tx this)
+          file (io/file dir)]
+      (when (.exists file)
+        (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
+      (.mkdirs file)
+      (.copy env file (make-array CopyFlags 0))
+      {:tx tx}))
+
   Closeable
   (close [_]
     (cio/with-write-lock mapsize-lock
-      (.close env))))
+      (.close env))
+    (cio/try-close cp-job)))
 
-(defn ->kv-store {::sys/args (-> (merge (-> kv/args
-                                            (update :db-dir assoc :required? true, :default "data"))
-                                        {:env-flags {:doc "LMDB Flags"
-                                                     :spec ::sys/nat-int}
-                                         :env-mapsize {:doc "LMDB Map size"
-                                                       :spec ::sys/nat-int}}))}
-  [{:keys [db-dir sync? env-flags env-mapsize]}]
-  (let [db-dir (.toFile ^Path db-dir)
+(def ^:private cp-format
+  {:index-version c/index-version
+   ::version "3"})
+
+(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}
+                  ::sys/args (merge (-> kv/args
+                                        (update :db-dir assoc :required? true, :default "data"))
+                                    {:env-flags {:doc "LMDB Flags"
+                                                 :spec ::sys/nat-int}
+                                     :env-mapsize {:doc "LMDB Map size"
+                                                   :spec ::sys/nat-int}})}
+  [{:keys [^Path db-dir checkpointer sync? env-flags env-mapsize]}]
+  (let [db-dir (.toFile db-dir)
+        _ (some-> checkpointer (cp/try-restore db-dir cp-format))
         env (.open (Env/create DirectBufferProxy/PROXY_DB)
                    (doto db-dir (.mkdirs))
                    (into-array EnvFlags (cond-> default-env-flags
@@ -140,10 +160,12 @@
     (try
       (when env-mapsize
         (.setMapSize env env-mapsize))
-      (-> (map->LMDBJNRKv {:db-dir db-dir
-                           :env env
-                           :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))
-                           :mapsize-lock (StampedLock.)}))
+      (let [kv-store (map->LMDBJNRKv {:db-dir db-dir
+                                      :env env
+                                      :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))
+                                      :mapsize-lock (StampedLock.)})]
+        (cond-> kv-store
+          checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
       (catch Throwable t
         (.close env)
         (throw t)))))

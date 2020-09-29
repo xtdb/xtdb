@@ -50,20 +50,20 @@ Resources:
         - Key: juxt:team
           Value: crux-core
 
-  # ECSService:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-service.yml
-  #     Parameters:
-  #       VPCId:
-  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
-  #       PublicSubnetOne:
-  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetOne']]
-  #       PublicSubnetTwo:
-  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetTwo']]
-  #       LoadBalancerHTTPSListener:
-  #         Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
-  #       FargateContainerSecurityGroup: !GetAtt 'ECSCluster.Outputs.FargateContainerSecurityGroup'
-  #     Tags:
-  #       - Key: juxt:team
-  #         Value: crux-core
+  ECSService:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-service.yml
+      Parameters:
+        VPCId:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+        PublicSubnetOne:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetOne']]
+        PublicSubnetTwo:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetTwo']]
+        LoadBalancerHTTPSListener:
+          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
+        FargateContainerSecurityGroup: !GetAtt 'ECSCluster.Outputs.FargateContainerSecurityGroup'
+      Tags:
+        - Key: juxt:team
+          Value: crux-core

@@ -9,38 +9,41 @@
             [clojure.tools.logging :as log]
             [crux.system :as sys])
   (:import (crux.s3 S3Configurator)
+           (clojure.lang MapEntry)
+           (java.io Closeable)
            (java.util.concurrent CompletableFuture)
            (java.util.function BiFunction)
            (software.amazon.awssdk.core ResponseBytes)
            (software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer)
            (software.amazon.awssdk.services.s3 S3AsyncClient)
-           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest NoSuchKeyException)))
+           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest
+                                                     ListObjectsV2Request ListObjectsV2Response
+                                                     CommonPrefix S3Object
+                                                     NoSuchKeyException)))
 
-(defrecord S3DocumentStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
-  db/DocumentStore
-  (submit-docs [_ docs]
-    (->> (for [[id doc] docs]
-           (.putObject client
-                       (-> (PutObjectRequest/builder)
-                           (.bucket bucket)
-                           (.key (str prefix id))
-                           (->> (.configurePut configurator))
-                           ^PutObjectRequest (.build))
-                       (AsyncRequestBody/fromBytes (.freeze configurator doc))))
-         vec
-         (run! (fn [^CompletableFuture req]
-                 (.get req)))))
+(defn ^:no-doc put-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]} objs]
+  (->> (for [[path ^AsyncRequestBody request-body] objs]
+         (.putObject client
+                     (-> (PutObjectRequest/builder)
+                         (.bucket bucket)
+                         (.key (str prefix path))
+                         (->> (.configurePut configurator))
+                         ^PutObjectRequest (.build))
+                     request-body))
+       vec
+       (run! (fn [^CompletableFuture req]
+               (.get req)))))
 
-  (fetch-docs [_ ids]
-    (->> (for [id ids]
-           (let [s3-key (str prefix id)]
-             [id (-> (.getObject client
+(defn ^:no-doc get-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]} reqs]
+  (->> (for [[path ^AsyncResponseTransformer response-transformer] reqs]
+         (let [s3-key (str prefix path)]
+           [path (-> (.getObject client
                                  (-> (GetObjectRequest/builder)
                                      (.bucket bucket)
                                      (.key s3-key)
                                      (->> (.configureGet configurator))
                                      ^GetObjectRequest (.build))
-                                 (AsyncResponseTransformer/toBytes))
+                                 response-transformer)
 
                      (.handle (reify BiFunction
                                 (apply [_ resp e]
@@ -50,18 +53,63 @@
                                       (catch NoSuchKeyException e
                                         (log/warn "S3 key not found: " s3-key))
                                       (catch Exception e
-                                        (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix id))))
+                                        (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix path))))
 
-                                    (-> (.asByteArray ^ResponseBytes resp)
-                                        (->> (.thaw configurator))))))))]))
+                                    resp)))))]))
 
          (into {})
-         (into {} (keep (fn [[id ^CompletableFuture resp]]
-                          (when-let [doc (.get resp)]
-                            [id doc])))))))
+         (into {} (keep (fn [[path ^CompletableFuture fut]]
+                          (when-let [resp (.get fut)]
+                            [path resp]))))))
+
+(defn ^:no-doc list-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]}
+                             {:keys [path recursive?]}]
+  (letfn [(list-objects* [continuation-token]
+            (lazy-seq
+             (let [^ListObjectsV2Request
+                   req (-> (ListObjectsV2Request/builder)
+                           (.bucket bucket)
+                           (.prefix (str prefix path))
+                           (cond-> (not recursive?) (.delimiter "/"))
+                           (cond-> continuation-token (.continuationToken continuation-token))
+                           (.build))
+
+                   ^ListObjectsV2Response
+                   resp (.get (.listObjectsV2 client req))]
+
+               (concat (for [^S3Object object (.contents resp)]
+                         [:object (subs (.key object) (count prefix))])
+                       (for [^CommonPrefix common-prefix (.commonPrefixes resp)]
+                         [:common-prefix (subs (.prefix common-prefix) (count prefix))])
+                       (when (.isTruncated resp)
+                         (list-objects* (.nextContinuationToken resp)))))))]
+    (list-objects* nil)))
+
+(defrecord S3DocumentStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
+  db/DocumentStore
+  (submit-docs [this docs]
+    (put-objects this (for [[id doc] docs]
+                        (MapEntry/create id (AsyncRequestBody/fromBytes (.freeze configurator doc))))))
+
+  (fetch-docs [this ids]
+    (->> (get-objects this (for [id ids]
+                             (MapEntry/create id (AsyncResponseTransformer/toBytes))))
+
+         (into {} (map (fn [[id ^ResponseBytes resp]]
+                         [id (-> (.asByteArray ^ResponseBytes resp)
+                                 (->> (.thaw configurator)))])))))
+
+  Closeable
+  (close [_]
+    (.close client)))
 
 (s/def ::bucket string?)
-(s/def ::prefix string?)
+(s/def ::prefix (s/and string?
+                       (s/conformer (fn [prefix]
+                                      (cond
+                                        (string/blank? prefix) ""
+                                        (string/ends-with? prefix "/") prefix
+                                        :else (str prefix "/"))))))
 
 (defn ->configurator [_]
   (reify S3Configurator))
@@ -80,7 +128,4 @@
                             (->S3DocumentStore configurator
                                                (.makeClient configurator)
                                                bucket
-                                               (cond
-                                                 (string/blank? prefix) ""
-                                                 (string/ends-with? prefix "/") prefix
-                                                 :else (str prefix "/")))))
+                                               prefix)))

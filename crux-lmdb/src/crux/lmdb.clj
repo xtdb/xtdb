@@ -2,20 +2,21 @@
   "LMDB KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]
-            [crux.io :as cio]
+            [crux.checkpoint :as cp]
+            [crux.codec :as c]
+            [crux.error :as err]
             [crux.kv :as kv]
+            [crux.kv.index-store :as kvi]
             [crux.memory :as mem]
-            [crux.system :as sys]
-            [crux.error :as err])
+            [crux.system :as sys])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
+           [java.nio.file Files Path]
+           java.nio.file.attribute.FileAttribute
            java.util.concurrent.locks.StampedLock
            java.util.concurrent.TimeUnit
-           [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           (java.nio.file Files Path)
-           java.nio.file.attribute.FileAttribute
+           org.agrona.ExpandableDirectByteBuffer
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]))
 
@@ -269,6 +270,12 @@
   (kv-name [this]
     (.getName (class this)))
 
+  cp/CheckpointSource
+  (save-checkpoint [this dir]
+    (let [tx (kvi/latest-completed-tx this)]
+      (env-copy env dir)
+      {:tx tx}))
+
   Closeable
   (close [_]
     (let [stamp (acquire-write-lock mapsize-lock)]
@@ -277,7 +284,12 @@
         (finally
           (.unlock mapsize-lock stamp))))))
 
-(defn ->kv-store {::sys/args (-> {:db-dir {:doc "Directory to store K/V files"
+(def ^:private cp-format
+  {:index-version c/index-version
+   ::version "3"})
+
+(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}
+                  ::sys/args (-> {:db-dir {:doc "Directory to store K/V files"
                                            :required? true
                                            :spec ::sys/path}
                                   :sync? {:doc "Sync the KV store to disk after every write."
@@ -287,7 +299,10 @@
                                               :spec ::sys/nat-int}
                                   :env-mapsize {:doc "LMDB Map size"
                                                 :spec ::sys/nat-int}})}
-  [{:keys [db-dir sync? env-flags env-mapsize]}]
+  [{:keys [^Path db-dir checkpointer sync? env-flags env-mapsize]}]
+
+  (some-> checkpointer (cp/try-restore (.toFile db-dir) cp-format))
+
   (let [env-flags (or env-flags
                       (bit-or default-env-flags
                               (if sync?
@@ -299,11 +314,13 @@
       (env-open env db-dir env-flags)
       (when env-mapsize
         (env-set-mapsize env env-mapsize))
-      (-> (map->LMDBKv {:db-dir db-dir
-                        :env env
-                        :env-flags env-flags
-                        :dbi (dbi-open mapsize-lock env)
-                        :mapsize-lock mapsize-lock}))
+      (let [kv-store (map->LMDBKv {:db-dir db-dir
+                                   :env env
+                                   :env-flags env-flags
+                                   :dbi (dbi-open mapsize-lock env)
+                                   :mapsize-lock mapsize-lock})]
+        (cond-> kv-store
+          checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
       (catch Throwable t
         (env-close env)
         (throw t)))))

@@ -3,7 +3,7 @@
                  [org.clojure/tools.logging "1.1.0"]
 
                  [juxt/crux-core "crux-git-version-beta"]
-                 [software.amazon.awssdk/s3 "2.10.61"]
+                 [software.amazon.awssdk/s3 "2.10.91"]
 
                  ;; dependency resolution
                  [io.netty/netty-codec "4.1.45.Final"]

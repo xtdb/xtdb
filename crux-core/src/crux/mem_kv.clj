@@ -5,7 +5,11 @@
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.system :as sys]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.checkpoint :as cp]
+            [crux.codec :as c]
+            [crux.io :as cio]
+            [crux.kv.index-store :as kvi])
   (:import [clojure.lang Box MapEntry]
            java.io.Closeable
            java.nio.file.Path))
@@ -13,7 +17,7 @@
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
     (.mkdirs file)
-    (->> (for [[k v] @db]
+    (->> (for [[k v] db]
            [(mem/->on-heap k)
             (mem/->on-heap v)])
          (into {})
@@ -64,19 +68,19 @@
   Closeable
   (close [_]))
 
-(defrecord MemKv [db db-dir]
+(defrecord MemKv [!db cp-job]
   kv/KvStore
   (new-snapshot [_]
-    (->MemKvSnapshot @db))
+    (->MemKvSnapshot @!db))
 
   (store [_ kvs]
-    (swap! db into (for [[k v] kvs]
+    (swap! !db into (for [[k v] kvs]
                      (MapEntry/create (mem/copy-to-unpooled-buffer (mem/as-buffer k))
                                       (mem/copy-to-unpooled-buffer (mem/as-buffer v)))))
     nil)
 
   (delete [_ ks]
-    (swap! db #(apply dissoc % (map mem/->off-heap ks)))
+    (swap! !db #(apply dissoc % (map mem/->off-heap ks)))
     nil)
 
   (compact [_])
@@ -85,31 +89,44 @@
     (log/debug "Using fsync on MemKv has no effect."))
 
   (count-keys [_]
-    (count @db))
+    (count @!db))
 
-  (db-dir [_]
-    (str db-dir))
+  (db-dir [_] nil)
 
   (kv-name [this]
     (.getName (class this)))
 
+  cp/CheckpointSource
+  (save-checkpoint [this dir]
+    (persist-db dir @!db)
+    {:tx (kvi/latest-completed-tx this)})
+
   Closeable
   (close [_]
-    (when db-dir
-      (persist-db db-dir db))))
+    (cio/try-close cp-job)))
 
-(defn ->kv-store {::sys/args {:db-dir {:required? false
-                                       :doc "Directory to (optionally) store K/V files"
-                                       :spec ::sys/path}
-                              :persist-on-close? {:required? true
-                                                  :default false
-                                                  :spec ::sys/boolean}}}
+(def ^:private cp-format
+  {:index-version c/index-version
+   ::version "1"})
+
+(defn- try-restore-from-checkpoint [checkpointer]
+  (let [db-dir (cio/create-tmpdir "memkv-cp")]
+    (try
+      (when (cp/try-restore checkpointer db-dir cp-format)
+        (restore-db db-dir))
+      (finally
+        (cio/delete-dir db-dir)))))
+
+(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}}
   ([] (->kv-store {}))
 
-  ([{:keys [^Path db-dir persist-on-close?]}]
-   (let [db-dir (some-> db-dir (.toFile))]
-     (map->MemKv {:db-dir (when persist-on-close?
-                            db-dir)
-                  :db (atom (if (.isFile (io/file db-dir "memkv"))
-                              (restore-db db-dir)
-                              (sorted-map-by mem/buffer-comparator)))}))))
+  ([{:keys [checkpointer db-dir]}]
+   (let [db (or (when db-dir
+                  ;; for crux.kv-test/test-checkpoint-and-restore-db
+                  (restore-db db-dir))
+                (when checkpointer
+                  (try-restore-from-checkpoint checkpointer))
+                (sorted-map-by mem/buffer-comparator))
+         kv-store (map->MemKv {:!db (atom db)})]
+     (cond-> kv-store
+       checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))))

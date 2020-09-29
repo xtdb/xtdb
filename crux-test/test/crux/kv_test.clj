@@ -9,7 +9,8 @@
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.fixtures :as fix])
+            [crux.fixtures :as fix]
+            [crux.checkpoint :as cp])
   (:import java.nio.ByteOrder
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -143,6 +144,22 @@
       (t/is (nil? (value kv-store (long->bytes 1))))
       (t/testing "deleting non existing key is noop"
         (kv/delete kv-store [(long->bytes 1)])))))
+
+(t/deftest test-checkpoint-and-restore-db
+  (fkv/with-kv-store [kv-store]
+    (fix/with-tmp-dir "kv-store-backup" [backup-dir]
+      (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
+      (cio/delete-dir backup-dir)
+      (cp/save-checkpoint kv-store backup-dir)
+      (binding [fkv/*kv-opts* (merge fkv/*kv-opts* {:db-dir backup-dir})]
+        (fkv/with-kv-store [restored-kv]
+          (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
+
+          (t/testing "backup and original are different"
+            (kv/store kv-store [[(long->bytes 1) (.getBytes "Original")]])
+            (kv/store restored-kv [[(long->bytes 1) (.getBytes "Backup")]])
+            (t/is (= "Original" (String. ^bytes (value kv-store (long->bytes 1)))))
+            (t/is (= "Backup" (String. ^bytes (value restored-kv (long->bytes 1)))))))))))
 
 (t/deftest test-compact []
   (fkv/with-kv-store [kv-store]

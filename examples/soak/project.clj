@@ -5,11 +5,12 @@
                  [juxt/crux-kafka "crux-git-version-beta"]
                  [juxt/crux-rocksdb "crux-git-version-beta"]
                  [juxt/crux-metrics "crux-git-version-alpha"]
+                 [juxt/crux-s3 "crux-git-version-beta"]
 
                  [bidi "2.1.6"]
                  [hiccup "2.0.0-alpha2"]
                  [cheshire "5.10.0"]
-                 [clj-http "3.10.0"]
+                 [clj-http "3.10.1"]
                  [ring "1.8.0"]
 
                  [software.amazon.awssdk/secretsmanager "2.10.91"]
