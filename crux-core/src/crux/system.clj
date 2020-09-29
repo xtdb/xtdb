@@ -5,6 +5,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clojure.pprint :as pp]
             [com.stuartsierra.dependency :as dep]
             [crux.io :as cio]
             [crux.error :as err])
@@ -169,6 +170,9 @@
 
 (defmethod print-method StartedSystem [it ^Writer w]
   (.write w (format "#<System %s>" (set (keys it)))))
+
+(defmethod pp/simple-dispatch StartedSystem [it]
+  (print-method it *out*))
 
 (defn ->dep-graph [prepped-system]
   (reduce-kv (fn [g k {:keys [before refs]}]

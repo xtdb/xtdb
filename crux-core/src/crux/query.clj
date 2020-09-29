@@ -20,7 +20,8 @@
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
             [clojure.string :as string]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [clojure.pprint :as pp])
   (:import [clojure.lang Box ExceptionInfo MapEntry]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
@@ -1867,6 +1868,9 @@
 
 (defmethod print-method QueryDatasource [{:keys [valid-time transact-time]} ^Writer w]
   (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
+
+(defmethod pp/simple-dispatch QueryDatasource [it]
+  (print-method it *out*))
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus
