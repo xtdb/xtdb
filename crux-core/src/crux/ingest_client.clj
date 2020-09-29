@@ -1,7 +1,8 @@
 (ns crux.ingest-client
   (:require [crux.db :as db]
             [crux.system :as sys]
-            [crux.tx.conform :as txc])
+            [crux.tx.conform :as txc]
+            [clojure.pprint :as pp])
   (:import crux.api.ICruxAsyncIngestAPI
            [java.io Closeable Writer]
            java.lang.AutoCloseable))
@@ -26,6 +27,7 @@
     (when close-fn (close-fn))))
 
 (defmethod print-method CruxIngestClient [_ ^Writer w] (.write w "#<CruxIngestClient>"))
+(defmethod pp/simple-dispatch CruxIngestClient [it] (print-method it *out*))
 
 (defn ->ingest-client {::sys/deps {:tx-log :crux/tx-log
                                    :document-store :crux/document-store}}

@@ -16,7 +16,8 @@
             [crux.tx :as tx]
             [crux.tx.event :as txe]
             [crux.bus :as bus]
-            [crux.tx.conform :as txc])
+            [crux.tx.conform :as txc]
+            [clojure.pprint :as pp])
   (:import (crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor
                      QueryState QueryState$QueryStatus QueryState$QueryError)
            (java.io Closeable Writer)
@@ -224,6 +225,7 @@
           (bus/send bus {:crux/event-type ::node-closed}))))))
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
+(defmethod pp/simple-dispatch CruxNode [it] (print-method it *out*))
 
 (defn- swap-finished-query! [!running-queries {:keys [query-id] :as query} {:keys [bus] :as  node-opts}]
   (loop []
