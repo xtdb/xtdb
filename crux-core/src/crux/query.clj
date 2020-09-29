@@ -27,7 +27,7 @@
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
-           (java.util Comparator Date List UUID)
+           (java.util Collection Comparator Date List UUID)
            [java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
@@ -895,27 +895,29 @@
         e-result-index (.result-index ^VarBinding e-var)]
     (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
       (let [e (.get join-keys e-result-index)
-            vs (db/aev index-snapshot attr e nil entity-resolver-fn)]
-        (if (and (seq vs) (= :collection return-type))
+            vs (db/aev index-snapshot attr e nil entity-resolver-fn)
+            is-empty? (or (nil? vs) (.isEmpty ^Collection vs))]
+        (if (and (= :collection return-type)
+                 (not is-empty?))
           (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs identity true)
               true)
-          (let [values (if (and (empty? vs) not-found?)
+          (let [values (if (and is-empty? not-found?)
                            [not-found]
                            (mapv #(db/decode-value index-snapshot %) vs))]
             (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
 
-(defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules
-                                                                   return-type tuple-idxs-in-join-order]
-                                                            :as pred-ctx}]
-  (let [query (normalize-query (second arg-bindings))
-        parent-rules (:rules (meta rule-name->rules))]
+(defmethod pred-constraint 'q [_ {:keys [encode-value-fn idx-id arg-bindings rule-name->rules
+                                         return-type tuple-idxs-in-join-order]
+                                  :as pred-ctx}]
+  (let [parent-rules (:rules (meta rule-name->rules))
+        query (cond-> (normalize-query (second arg-bindings))
+                (nil? return-type) (assoc :limit 1)
+                (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
     (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
       (let [[_ _ & args] (for [arg-binding arg-bindings]
-                              (if (instance? VarBinding arg-binding)
-                                (bound-result-for-var index-snapshot arg-binding join-keys)
-                                arg-binding))
-            query (cond-> query
-                    (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
+                           (if (instance? VarBinding arg-binding)
+                             (bound-result-for-var index-snapshot arg-binding join-keys)
+                             arg-binding))]
         (with-open [pred-result (.openQuery ^ICruxDatasource db query (object-array args))]
           (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
@@ -1007,7 +1009,7 @@
 ;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-triple-fast-path [index-snapshot {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} eid]
   (let [v (db/encode-value index-snapshot v)
-        [found-v] (db/aev index-snapshot a eid v entity-resolver-fn)]
+        found-v (first (db/aev index-snapshot a eid v entity-resolver-fn))]
     (when (and found-v (mem/buffers=? v found-v))
       [])))
 

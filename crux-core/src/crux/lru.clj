@@ -5,9 +5,8 @@
   (:import [clojure.lang Counted ILookup]
            java.io.Closeable
            java.util.concurrent.locks.StampedLock
-           java.util.concurrent.atomic.AtomicBoolean
            java.util.function.Function
-           java.util.LinkedHashMap))
+           [java.util LinkedHashMap Map]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -19,7 +18,7 @@
 (defn new-cache [^long size]
   (let [cache (proxy [LinkedHashMap] [size 0.75 true]
                 (removeEldestEntry [_]
-                  (> (count this) size)))
+                  (> (.size ^Map this) size)))
         lock (StampedLock.)]
     (reify
       Object
