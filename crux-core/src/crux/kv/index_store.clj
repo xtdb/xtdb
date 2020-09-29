@@ -460,8 +460,8 @@
 (defn- value-buffer->id-buffer [index-snapshot ^DirectBuffer value-buffer]
   (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
 
-(defn- ecav-cache-lookup ^java.util.Map [ecav-cache ecav-i ^DirectBuffer eid-value-buffer ^DirectBuffer content-hash-buffer]
-  (lru/compute-if-absent ecav-cache
+(defn- cav-cache-lookup ^java.util.Map [cav-cache ecav-i ^DirectBuffer eid-value-buffer ^DirectBuffer content-hash-buffer]
+  (lru/compute-if-absent cav-cache
                          content-hash-buffer
                          mem/copy-to-unpooled-buffer
                          (fn [content-hash-buffer]
@@ -523,7 +523,7 @@
                             nested-index-snapshot-state
                             ^Map temp-hash-cache
                             value-cache
-                            ecav-cache
+                            cav-cache
                             ^AtomicBoolean closed?]
   Closeable
   (close [_]
@@ -558,7 +558,7 @@
                (chunk-stepper i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
                                        eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
                                    (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-                                     (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
+                                     (let [a->vs (cav-cache-lookup cav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
                                        (when-let [vs ^Set (.get a->vs attr-buffer)]
                                          (when (.contains vs value-buffer)
                                            eid-value-buffer)))))))))
@@ -580,7 +580,7 @@
           eid-value-buffer (buffer-or-value-buffer e)
           eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-        (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
+        (let [a->vs (cav-cache-lookup cav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
           (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
             (seq (.tailSet vs (buffer-or-value-buffer min-v))))))))
 
@@ -657,7 +657,7 @@
       value-buffer))
 
   (open-nested-index-snapshot [this]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache value-cache ecav-cache false)]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache value-cache cav-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot)))
 
@@ -683,7 +683,7 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-snapshot [snapshot temp-hash-cache value-cache ecav-cache close-snapshot?]
+(defn- new-kv-index-snapshot [snapshot temp-hash-cache value-cache cav-cache close-snapshot?]
   (->KvIndexSnapshot snapshot
                      close-snapshot?
                      (delay (kv/new-iterator snapshot))
@@ -694,10 +694,10 @@
                      (atom [])
                      temp-hash-cache
                      value-cache
-                     ecav-cache
+                     cav-cache
                      (AtomicBoolean.)))
 
-(defrecord KvIndexStore [kv-store value-cache ecav-cache]
+(defrecord KvIndexStore [kv-store value-cache cav-cache]
   db/IndexStore
   (index-docs [this docs]
     (let [crux-db-id (c/->id-buffer :crux.db/id)
@@ -740,7 +740,7 @@
                                                                        1)]
                                                      (when-not (c/can-decode-value-buffer? value-buffer)
                                                        (lru/evict value-cache value-buffer))
-                                                     (lru/evict ecav-cache (.content-hash quad))
+                                                     (lru/evict cav-cache (.content-hash quad))
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
                                                                                                             :crux.db/evicted? true})
@@ -796,7 +796,7 @@
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-snapshot [this]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) value-cache ecav-cache true))
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) value-cache cav-cache true))
 
   status/Status
   (status-map [this]
@@ -812,9 +812,9 @@
                                     :value-cache-size {:doc "Value Cache Size"
                                                        :default default-cache-size
                                                        :spec ::sys/nat-int}
-                                    :ecav-cache-size {:doc "EAV Cache Size"
-                                                      :default default-cache-size
-                                                      :spec ::sys/nat-int}}}
-  [{:keys [kv-store value-cache-size ecav-cache-size] :as opts}]
+                                    :cav-cache-size {:doc "CAV Cache Size"
+                                                     :default default-cache-size
+                                                     :spec ::sys/nat-int}}}
+  [{:keys [kv-store value-cache-size cav-cache-size] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store (lru/new-cache (or value-cache-size default-cache-size)) (lru/new-cache (or ecav-cache-size default-cache-size))))
+  (->KvIndexStore kv-store (lru/new-cache (or value-cache-size default-cache-size)) (lru/new-cache (or cav-cache-size default-cache-size))))
