@@ -150,7 +150,31 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
     @SuppressWarnings("unused")
-    public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
+    public static ICruxAsyncIngestAPI newIngestClient(Map<?,?> options) {
         return (ICruxAsyncIngestAPI) resolve("crux.ingest-client/open-ingest-client").invoke(options);
+    }
+
+    /**
+     * Starts an ingest-only client for transacting into Crux without
+     * running a full local node with index.
+     * <p>
+     * <pre>
+     * ICruxAPI ingestClient = Crux.newIngestClient(n -> {
+     *   // ...
+     * });
+     * </pre>
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param options node configuration options.
+     * @return        the started ingest client node.
+     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    @SuppressWarnings("unused")
+    public static ICruxAsyncIngestAPI newIngestClient(Consumer<NodeConfigurator> f) {
+        NodeConfigurator c = new NodeConfigurator();
+        f.accept(c);
+        return newIngestClient(c.modules);
     }
 }
