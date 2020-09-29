@@ -13,7 +13,7 @@
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
            java.nio.ByteOrder
-           [java.util Date HashMap List Map NavigableSet Set TreeSet]
+           [java.util Date HashMap Map NavigableSet Set TreeSet]
            [java.util.function Function Supplier]
            java.util.concurrent.atomic.AtomicBoolean
            (clojure.lang MapEntry)
@@ -559,7 +559,7 @@
                                        eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
                                    (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
                                      (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
-                                       (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
+                                       (when-let [vs ^Set (.get a->vs attr-buffer)]
                                          (when (.contains vs value-buffer)
                                            eid-value-buffer)))))))))
 
