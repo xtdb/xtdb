@@ -3625,3 +3625,16 @@
                    :type :person}]}
                (api/q db '{:find [(eql/project ?dc [*])]
                            :where [[?dc :person/name "Daniel Craig"]]}))))))
+
+(t/deftest resurrecting-doc-1127
+  (let [query {:find '[n]
+               :where '[[n :name "hello"]
+                        [n :age 17]]}]
+
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :my-id, :name "hello", :age 17}]])
+
+    (t/is (= #{[:my-id]} (api/q (api/db *api*) query)))
+
+    (fix/submit+await-tx [[:crux.tx/delete :my-id]])
+
+    (t/is (= #{} (api/q (api/db *api*) query)))))
