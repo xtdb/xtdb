@@ -5,7 +5,7 @@ This module offers an HTTP server that allows you to send transactions and run q
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-http-server {:mvn/version "20.09-1.12.0-alpha"}
+juxt/crux-http-server {:mvn/version "20.09-1.12.1-alpha"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ juxt/crux-http-server {:mvn/version "20.09-1.12.0-alpha"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-http-server</artifactId>
-    <version>20.09-1.12.0-alpha</version>
+    <version>20.09-1.12.1-alpha</version>
 </dependency>
 ----
 
