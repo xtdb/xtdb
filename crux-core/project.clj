@@ -12,7 +12,7 @@
                  [org.clojure/tools.reader "1.3.2"]
                  [org.clojure/data.json "1.0.0"]
                  [org.clojure/tools.cli "1.0.194"]
-                 [org.agrona/agrona "1.0.7"]
+                 [org.agrona/agrona "1.7.2"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
                  [edn-query-language/eql "1.0.0"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
