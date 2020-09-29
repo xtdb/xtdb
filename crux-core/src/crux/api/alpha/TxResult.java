@@ -2,6 +2,7 @@ package crux.api.alpha;
 
 import java.util.Date;
 
+@Deprecated
 public class TxResult {
     public final Date txTime;
     public final long txId;

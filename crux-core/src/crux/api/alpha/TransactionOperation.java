@@ -2,6 +2,7 @@ package crux.api.alpha;
 
 import clojure.lang.PersistentVector;
 
+@Deprecated
 public abstract class TransactionOperation {
     TransactionOperation() {
     }

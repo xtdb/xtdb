@@ -4,8 +4,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
 
-import static crux.api.alpha.Util.keyword;
-
+@Deprecated
 public class CruxId {
     private final Object id;
 
@@ -14,7 +13,7 @@ public class CruxId {
     }
 
     public static CruxId cruxId(String name) {
-        return new CruxId(keyword(name));
+        return new CruxId(crux.api.alpha.Util.keyword(name));
     }
 
     public static CruxId cruxId(UUID uuid) {

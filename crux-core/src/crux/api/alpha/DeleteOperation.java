@@ -5,10 +5,9 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
-import static crux.api.alpha.Util.keyword;
-
+@Deprecated
 public class DeleteOperation extends TransactionOperation {
-    private static final Keyword TX_DELETE = keyword("crux.tx/delete");
+    private static final Keyword TX_DELETE = crux.api.alpha.Util.keyword("crux.tx/delete");
 
     private final Date validTime;
     private final CruxId deleteId;
