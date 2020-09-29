@@ -1765,7 +1765,7 @@
           (result-coll-fn (iterator-seq res))
           (catch InterruptedException e
             (throw (if @!timed-out?
-                     (InterruptedException. "Query timed out.")
+                     (TimeoutException. "Query timed out.")
                      e)))
           (finally
             (when interrupt-job
