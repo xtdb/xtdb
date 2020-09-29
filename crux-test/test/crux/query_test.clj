@@ -11,7 +11,8 @@
             [crux.index :as idx]
             [clojure.java.io :as io]
             [edn-query-language.core :as eql])
-  (:import java.util.UUID))
+  (:import java.util.UUID
+           java.util.concurrent.TimeoutException))
 
 (t/use-fixtures :each fix/with-node)
 
@@ -3288,7 +3289,7 @@
                                          (lazy-seq
                                           (Thread/sleep 500)
                                           (apply f args))))]
-    (t/is (thrown? InterruptedException
+    (t/is (thrown? TimeoutException
                    (api/q (api/db *api*) '{:find [e]
                                            :where [[e :crux.db/id _]]
                                            :timeout 100})))))
