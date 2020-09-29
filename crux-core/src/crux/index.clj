@@ -142,7 +142,7 @@
   (max-depth [_] 1))
 
 (defn- new-unary-join-iterator-state [idx value]
-  (UnaryJoinIteratorState. idx (or value mem/empty-buffer)))
+  (UnaryJoinIteratorState. idx value))
 
 (defn- long-mod ^long [^long num ^long div]
   (let [m (rem num div)]
@@ -153,12 +153,15 @@
 (defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
   db/Index
   (seek-values [this k]
-    (->> #(let [iterators (->> (for [idx indexes]
-                                 (new-unary-join-iterator-state idx (db/seek-values idx k)))
-                               (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
-                               (to-array))]
-            (UnaryJoinIteratorsThunkState. iterators 0))
-         (set! (.thunk state)))
+    (set! (.thunk state)
+          (fn []
+            (let [iterators (for [idx indexes]
+                              (new-unary-join-iterator-state idx (db/seek-values idx k)))]
+              (when (every? #(.key ^UnaryJoinIteratorState %) iterators)
+                (UnaryJoinIteratorsThunkState. (->> iterators
+                                                    (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
+                                                    (to-array))
+                                               0)))))
     (db/next-values this))
 
   (next-values [this]
@@ -171,14 +174,15 @@
               max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
               match? (mem/buffers=? (.key iterator-state) max-k)
               idx (.idx iterator-state)]
-          (->> #(let [v (if match?
-                          (db/next-values idx)
-                          (db/seek-values idx max-k))]
-                  (when v
-                    (set! (.-key iterator-state) v)
-                    (set! (.index iterators-thunk) (long-mod (inc index) (alength iterators)))
-                    iterators-thunk))
-               (set! (.thunk state)))
+          (set! (.thunk state)
+                (fn []
+                  (let [v (if match?
+                            (db/next-values idx)
+                            (db/seek-values idx max-k))]
+                    (when v
+                      (set! (.-key iterator-state) v)
+                      (set! (.index iterators-thunk) (long-mod (inc index) (alength iterators)))
+                      iterators-thunk))))
           (if match?
             max-k
             (recur))))))

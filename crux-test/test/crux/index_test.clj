@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.fixtures :as f]
             [crux.index :as idx])
   (:import clojure.lang.Box))
 
@@ -206,6 +205,11 @@
                  (set (for [join-keys (-> (idx/new-n-ary-join-layered-virtual-index [unary-and-idx])
                                           (idx/layered-idx->seq))]
                         (mapv c/decode-value-buffer join-keys)))))))))
+
+(t/deftest test-empty-unary-join
+  (let [p-idx (idx/new-relation-virtual-index [] 1 c/->value-buffer)
+        q-idx (idx/new-relation-virtual-index [] 1 c/->value-buffer)]
+    (t/is (empty? (idx/idx->seq (idx/new-unary-join-virtual-index [p-idx q-idx]))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
   (let [p-idx (idx/new-relation-virtual-index [[1 3]
