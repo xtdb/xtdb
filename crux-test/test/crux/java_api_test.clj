@@ -3,7 +3,7 @@
             [clojure.test :as t]
             [crux.fixtures :as fix]
             [crux.kv :as kv])
-  (:import [crux.api Crux ICruxAPI ModuleConfigurator NodeConfigurator]
+  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator]
            [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
            java.util.function.Consumer))
 
@@ -41,6 +41,19 @@
                              (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "indexes"))))))))))))
 
+(defn start-rocks-ingest-node ^ICruxAsyncIngestAPI [data-dir]
+  (Crux/newIngestClient
+   (consume [c]
+     (doto ^NodeConfigurator c
+       (.with "crux/document-store"
+              (consume [c]
+                (doto ^ModuleConfigurator c
+                  (.with "kv-store"
+                         (consume [c]
+                           (doto ^ModuleConfigurator c
+                             (.module "crux.rocksdb/->kv-store")
+                             (.set "db-dir" (io/file data-dir "docs"))))))))))))
+
 (t/deftest test-configure-rocks
   (fix/with-tmp-dir "data" [data-dir]
     (with-open [node (start-rocks-node data-dir)]
@@ -50,6 +63,12 @@
                (kv/kv-name (get-in node [:index-store :kv-store]))))
       (t/is (= (.toPath (io/file data-dir "txs"))
                (get-in node [:tx-log :kv-store :db-dir]))))))
+
+(t/deftest test-configure-rocks-ingest
+  (fix/with-tmp-dir "data" [data-dir]
+    (with-open [node (start-rocks-ingest-node data-dir)]
+      (t/is (= "crux.rocksdb.RocksKv"
+               (kv/kv-name (get-in node [:document-store :document-store :kv])))))))
 
 (t/deftest test-java-api
   (t/testing "Can create node, transact to node, and query node"
