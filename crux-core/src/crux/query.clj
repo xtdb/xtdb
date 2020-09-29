@@ -905,16 +905,17 @@
                            (mapv #(db/decode-value index-snapshot %) vs))]
             (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
 
-(defmethod pred-constraint 'q [{:keys [return] :as clause} {:keys [encode-value-fn idx-id arg-bindings rule-name->rules
-                                                                   return-type tuple-idxs-in-join-order]
-                                                            :as pred-ctx}]
-  (let [query (normalize-query (second arg-bindings))
+(defmethod pred-constraint 'q [_ {:keys [encode-value-fn idx-id arg-bindings rule-name->rules
+                                         return-type tuple-idxs-in-join-order]
+                                  :as pred-ctx}]
+  (let [query (cond-> (normalize-query (second arg-bindings))
+                (nil? return-type) (assoc :limit 1))
         parent-rules (:rules (meta rule-name->rules))]
     (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
       (let [[_ _ & args] (for [arg-binding arg-bindings]
-                              (if (instance? VarBinding arg-binding)
-                                (bound-result-for-var index-snapshot arg-binding join-keys)
-                                arg-binding))
+                           (if (instance? VarBinding arg-binding)
+                             (bound-result-for-var index-snapshot arg-binding join-keys)
+                             arg-binding))
             query (cond-> query
                     (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
         (with-open [pred-result (.openQuery ^ICruxDatasource db query (object-array args))]
