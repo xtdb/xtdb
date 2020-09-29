@@ -140,7 +140,8 @@
           (conj tx-op tx-time))
         :crux.tx/cas
         (when (= 3 (count tx-op))
-          (conj tx-op tx-time)))
+          (conj tx-op tx-time))
+        nil)
       tx-op))
 
 (defn- tx-log-entry->tx-source-records [source-partition topic formatter {:keys [crux.api/tx-ops

@@ -61,6 +61,9 @@
                                    [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [net.minidev/json-smart]]
                                    [net.minidev/json-smart "2.3"]
 
+                                   ;; Kafka connect tests
+                                   [org.apache.kafka/connect-api "2.3.0"]
+
                                    ;; dependency conflict resolution
                                    [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                                    [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
