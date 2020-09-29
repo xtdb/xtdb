@@ -18,7 +18,8 @@
             [spec-tools.core :as st])
   (:import crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
-           java.io.OutputStream
+           [java.io Closeable]
+           (java.io OutputStream Writer)
            [java.time Instant ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date))
@@ -51,47 +52,6 @@
                 " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
                 "}"]))
 
-(defn- query-root-html [{:keys [crux-node]}]
-  [:div.query-root
-   [:h1.query-root__title
-    "Query"]
-   [:div.query-root__contents
-    [:p "Enter a "
-     [:a {:href "https://opencrux.com/reference/queries.html#basic-query" :target "_blank"} "Datalog"]
-     " query below to retrieve a set of facts from your database. Datalog queries must contain a `:find` key and a `:where` key."]
-    [:div.query-editor__title
-      "Datalog query editor"]
-    [:div.query-editor__contents
-     [:form
-      {:action "/_crux/query"}
-      [:textarea.textarea
-       {:name "query"
-        :rows 10
-        :cols 40}
-       query-root-str]
-      [:div.query-editor-datetime
-       [:div.query-editor-datetime-input
-        [:b "Valid Time"]
-        [:input.input.input-time
-         {:type "datetime-local"
-          :name "valid-time"
-          :step "0.01"
-          :value (.format util/default-date-formatter (ZonedDateTime/now (ZoneId/of "Z")))}]]
-       [:div.query-editor-datetime-input
-        [:b "Transaction Time"]
-        [:input.input.input-time
-         {:type "datetime-local"
-          :name "transaction-time"
-          :step "0.01"
-          :value (some-> (crux/latest-completed-tx crux-node)
-                         :crux.tx/tx-time
-                         ((fn [tx-time] (.toInstant ^Date tx-time)))
-                         (ZonedDateTime/ofInstant (ZoneId/of "Z"))
-                         (->> (.format util/default-date-formatter )))}]]]
-      [:button.button
-       {:type "submit"}
-       "Submit Query"]]]]])
-
 (defn with-entity-refs
   [results db]
   (let [entity-links (->> (apply concat results)
@@ -103,31 +63,6 @@
                      (mapv (fn [el]
                              (cond-> el
                                (get entity-links el) (entity-ref/->EntityRef))))))))))
-
-(defn query->html [{:keys [results query] :as res}]
-  (let [headers (:find query)]
-    [:body
-     [:div.uikit-table
-      [:div.table__main
-       [:table.table
-        [:thead.table__head
-         [:tr
-          (for [header headers]
-            [:th.table__cell.head__cell.no-js-head__cell
-             header])]]
-        (if (seq results)
-          [:tbody.table__body
-           (for [row results]
-             [:tr.table__row.body__row
-              (for [[header cell-value] (map vector headers row)]
-                [:td.table__cell.body__cell
-                 (if (instance? EntityRef cell-value)
-                   [:a {:href (entity-ref/EntityRef->url cell-value res)} (str (:eid cell-value))]
-                   (str cell-value))])])]
-          [:tbody.table__body.table__no-data
-           [:tr [:td.td__no-data
-                 "Nothing to show"]]])]]
-      [:table.table__foot]]]))
 
 (defn run-query [{:keys [link-entities? query]} {:keys [crux-node valid-time transaction-time]}]
   (let [db (util/db-for-request crux-node {:valid-time valid-time
@@ -154,22 +89,18 @@
 
 (defn ->html-encoder [opts]
   (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [no-query? results] :as res} charset]
+    (encode-to-bytes [_ {:keys [no-query? cause ^Closeable results] :as res} charset]
       (try
-        (let [^String resp (cond
-                             no-query? (util/raw-html {:body (query-root-html opts)
-                                                       :title "/_crux/query"
-                                                       :options opts})
-                             results (let [results (iterator-seq results)]
-                                       (util/raw-html {:body (query->html (assoc res :results results))
-                                                       :title "/_crux/query"
-                                                       :options opts
-                                                       :results {:query-results results}}))
-                             :else (util/raw-html {:title "/_crux/query"
-                                                   :body [:div.error-box (str res)]
-                                                   :options opts
-                                                   :results {:query-results
-                                                             {"error" res}}}) )]
+        (let [^String resp (util/raw-html {:title "/_crux/query"
+                                           :options opts
+                                           :results (cond
+                                                      no-query? nil
+                                                      results (try
+                                                              {:query-results (iterator-seq results)}
+                                                              (finally
+                                                                (.close results)))
+                                                      :else {:query-results
+                                                             {"error" res}})})]
           (.getBytes resp ^String charset))
         (finally
           (cio/try-close results))))))

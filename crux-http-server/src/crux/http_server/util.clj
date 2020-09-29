@@ -1,5 +1,6 @@
 (ns crux.http-server.util
   (:require [clojure.edn :as edn]
+            [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
             [crux.api :as api]
@@ -85,7 +86,7 @@
     :else
     (.db crux-node)))
 
-(defn raw-html [{:keys [body title options results]}]
+(defn raw-html [{:keys [title options results]}]
   (let [latest-completed-tx (api/latest-completed-tx (:crux-node options))]
     (str (hiccup2/html
           [:html
@@ -127,7 +128,8 @@
                 [:a "Placeholder"]]]]]
             [:div.console
              [:div#app
-              [:div.container.page-pane body]]]
+              [:noscript
+               [:pre.noscript-content (with-out-str (pp/pprint results))]]]]
             [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]]))))
 
 (defn entity-link [eid {:keys [valid-time transaction-time]}]

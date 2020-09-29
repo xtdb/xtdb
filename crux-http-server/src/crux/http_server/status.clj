@@ -6,57 +6,10 @@
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]))
 
-(defn sort-map [map]
-  (->> map
-       (walk/postwalk
-        (fn [map] (cond->> map
-                  (map? map) (into (sorted-map)))))))
-
-(defn attribute-stats->html-elements [stats-map]
-  [:div.node-info__content
-   [:table.table
-    [:thead.table__head
-     [:tr
-      [:th "Attribute"]
-      [:th "Count (across all versions)"]]]
-    (into
-     [:tbody.table__body]
-     (for [[key value] (sort-by (juxt val key) #(compare %2 %1) stats-map)]
-       (when value
-         [:tr.table__row.body__row
-          [:td.table__cell.body__cell
-           [:a
-            {:href (format "/_crux/query?query=%s" (pr-str {:find [(symbol (name key))]
-                                                      :where [['e key (symbol (name key))]]}))}
-            (with-out-str (pp/pprint key))]]
-          [:td.table__cell.body__cell (with-out-str (pp/pprint value))]])))]])
-
-(defn status-map->html-elements [status-map]
-  (into
-   [:div.node-info__content
-    (for [[key value] (sort-map status-map)]
-      (when value
-        [:p
-         [:span.node-info__key (with-out-str (pp/pprint key))]
-         [:span.node-info__value (with-out-str (pp/pprint value))]]))]))
-
 (defn ->status-html-encoder [opts]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [status-map attribute-stats node-options] :as res} charset]
-      (let [^String resp (util/raw-html {:body
-                                         [:div.status
-                                          [:h1 "Status"]
-                                          [:div.node-info__container
-                                           [:div.node-info
-                                            [:h2.node-info__title "Overview"]
-                                            (status-map->html-elements status-map)]
-                                           [:div.node-info
-                                            [:h2.node-info__title "Current Configuration"]
-                                            (status-map->html-elements node-options)]]
-                                          [:div.node-attributes
-                                           [:h2.node-info__title "Attribute Cardinalities"]
-                                           (attribute-stats->html-elements attribute-stats)]]
-                                         :title "/_status"
+      (let [^String resp (util/raw-html {:title "/_status"
                                          :options opts
                                          :results {:status-results {:status-map status-map
                                                                     :attribute-stats attribute-stats}}})]
