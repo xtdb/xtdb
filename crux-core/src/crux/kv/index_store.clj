@@ -730,6 +730,7 @@
                                                                        1)]
                                                      (when-not (c/can-decode-value-buffer? value-buffer)
                                                        (lru/evict value-cache value-buffer))
+                                                     (lru/evict ecav-cache (.content-hash quad))
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
                                                                                                             :crux.db/evicted? true})
