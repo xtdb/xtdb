@@ -176,18 +176,10 @@
         (->Quad attr entity content-hash value)))))
 
 (defn- decode-ecav-key-as-v-from [^DirectBuffer k ^long eid-size]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size eid-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/ecav-index-id index-id))
-      (key-suffix k (+ c/index-id-size eid-size c/id-size c/id-size)))))
+  (key-suffix k (+ c/index-id-size eid-size c/id-size c/id-size)))
 
 (defn- decode-ecav-key-as-a-from [^DirectBuffer k ^long eid-size]
-  (let [length (long (.capacity k))]
-    (assert (<= (+ c/index-id-size eid-size c/id-size c/id-size) length) (mem/buffer->hex k))
-    (let [index-id (.getByte k 0)]
-      (assert (= c/ecav-index-id index-id))
-      (mem/slice-buffer k (+ c/index-id-size eid-size c/id-size) c/id-size))))
+  (mem/slice-buffer k (+ c/index-id-size eid-size c/id-size) c/id-size))
 
 (defn- encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b value]
@@ -474,19 +466,23 @@
                          mem/copy-to-unpooled-buffer
                          (fn [content-hash-buffer]
                            (let [eid-size (mem/capacity eid-value-buffer)
-                                 a->vs (HashMap.)]
-                             (doseq [k (all-keys-in-prefix ecav-i
-                                                           (encode-ecav-key-to (.get seek-buffer-tl)
-                                                                               eid-value-buffer
-                                                                               content-hash-buffer))]
-                               (let [a (decode-ecav-key-as-a-from k eid-size)
-                                     v (decode-ecav-key-as-v-from k eid-size)
-                                     vs (.computeIfAbsent a->vs
-                                                          a
-                                                          (reify Function
-                                                            (apply [_ k]
-                                                              (TreeSet. mem/buffer-comparator))))]
-                                 (.add ^Set vs v)))
+                                 a->vs (HashMap.)
+                                 prefix (encode-ecav-key-to (.get seek-buffer-tl)
+                                                              eid-value-buffer
+                                                              content-hash-buffer)
+                                 i (new-prefix-kv-iterator ecav-i prefix)]
+                             (loop [k (kv/seek i prefix)]
+                               (when k
+                                 (let [k (mem/copy-to-unpooled-buffer k)
+                                       a (decode-ecav-key-as-a-from k eid-size)
+                                       v (decode-ecav-key-as-v-from k eid-size)
+                                       vs (.computeIfAbsent a->vs
+                                                            a
+                                                            (reify Function
+                                                              (apply [_ k]
+                                                                (TreeSet. mem/buffer-comparator))))]
+                                   (.add ^Set vs v)
+                                   (recur (kv/next i)))))
                              a->vs))))
 
 (defrecord KvIndexSnapshot [snapshot
