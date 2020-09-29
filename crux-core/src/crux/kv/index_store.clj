@@ -570,8 +570,7 @@
           eid-value-buffer (buffer-or-value-buffer e)
           eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-        (let [prefix (encode-ecav-key-to nil eid-value-buffer content-hash-buffer attr-buffer)
-              a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)
+        (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)
               vs ^NavigableSet (.get a->vs attr-buffer)]
           (seq (.tailSet vs (buffer-or-value-buffer min-v)))))))
 
