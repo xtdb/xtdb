@@ -573,7 +573,7 @@
         (let [prefix (encode-ecav-key-to nil eid-value-buffer content-hash-buffer attr-buffer)
               a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)
               vs ^NavigableSet (.get a->vs attr-buffer)]
-          (seq (.tailSet ^NavigableSet (.get a->vs attr-buffer) (buffer-or-value-buffer min-v)))))))
+          (seq (.tailSet vs (buffer-or-value-buffer min-v)))))))
 
   (entity-as-of-resolver [this eid valid-time transact-time]
     (let [i @entity-as-of-iterator-delay
