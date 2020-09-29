@@ -582,7 +582,7 @@
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
         (let [a->vs (cav-cache-lookup cav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
           (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
-            (seq (.tailSet vs (buffer-or-value-buffer min-v))))))))
+            (.tailSet vs (buffer-or-value-buffer min-v)))))))
 
   (entity-as-of-resolver [this eid valid-time transact-time]
     (let [i @entity-as-of-iterator-delay

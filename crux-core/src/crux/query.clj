@@ -26,7 +26,7 @@
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
-           (java.util Comparator Date List UUID)
+           (java.util Collection Comparator Date List UUID)
            [java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit]))
 
 (defn- logic-var? [x]
@@ -894,11 +894,13 @@
         e-result-index (.result-index ^VarBinding e-var)]
     (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx ^List join-keys]
       (let [e (.get join-keys e-result-index)
-            vs (db/aev index-snapshot attr e nil entity-resolver-fn)]
-        (if (and (seq vs) (= :collection return-type))
+            vs (db/aev index-snapshot attr e nil entity-resolver-fn)
+            is-empty? (or (nil? vs) (.isEmpty ^Collection vs))]
+        (if (and (= :collection return-type)
+                 (not is-empty?))
           (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs identity true)
               true)
-          (let [values (if (and (empty? vs) not-found?)
+          (let [values (if (and is-empty? not-found?)
                            [not-found]
                            (mapv #(db/decode-value index-snapshot %) vs))]
             (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
@@ -1006,7 +1008,7 @@
 ;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-triple-fast-path [index-snapshot {:keys [entity-resolver-fn] :as db} {:keys [e a v] :as clause} eid]
   (let [v (db/encode-value index-snapshot v)
-        [found-v] (db/aev index-snapshot a eid v entity-resolver-fn)]
+        found-v (first (db/aev index-snapshot a eid v entity-resolver-fn))]
     (when (and found-v (mem/buffers=? v found-v))
       [])))
 
