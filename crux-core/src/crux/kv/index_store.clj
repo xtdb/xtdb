@@ -485,6 +485,34 @@
                                    (recur (kv/next i)))))
                              a->vs))))
 
+(def ^:dynamic *chunk-size* 8)
+
+(defn- stepper [i k-fn seek-k]
+  ((fn step [^DirectBuffer k]
+     (when k
+       (if-let [k (k-fn k)]
+         (cons k (lazy-seq (step (kv/next i))))
+         (lazy-seq (step (kv/next i))))))
+   (kv/seek i seek-k)))
+
+(defn- chunk-stepper [i k-fn seek-k]
+  (let [chunk-size *chunk-size*]
+    (if (= 1 chunk-size)
+      (stepper i k-fn seek-k)
+      ((fn step [cb ^DirectBuffer k]
+         (if k
+           (if (= (count cb) chunk-size)
+             (chunk-cons (chunk cb)
+                         (lazy-seq (step (chunk-buffer chunk-size) k)))
+             (recur (if-let [k (k-fn k)]
+                      (doto cb
+                        (chunk-append k))
+                      cb)
+                    (kv/next i)))
+           (chunk-cons (chunk cb) nil)))
+       (chunk-buffer chunk-size)
+       (kv/seek i seek-k)))))
+
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
                             level-1-iterator-delay
@@ -516,11 +544,7 @@
       (some->> (encode-av-key-to (.get seek-buffer-tl)
                                  attr-buffer
                                  (buffer-or-value-buffer min-v))
-               (kv/seek i)
-               ((fn step [^DirectBuffer k]
-                  (when k
-                    (cons (key-suffix k (.capacity prefix))
-                          (lazy-seq (step (kv/next i))))))))))
+               (chunk-stepper i #(key-suffix % (.capacity prefix))))))
 
   (ave [this a v min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
@@ -531,19 +555,13 @@
                                   attr-buffer
                                   value-buffer
                                   (buffer-or-value-buffer min-e))
-               (kv/seek i)
-               ((fn step [^DirectBuffer k]
-                  (when k
-                    (let [eid-value-buffer (key-suffix k (.capacity prefix))
-                          eid-buffer (value-buffer->id-buffer this eid-value-buffer)
-                          head (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-                                 (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
-                                   (when (.contains ^Set (.get a->vs attr-buffer) value-buffer)
-                                     eid-value-buffer)))]
-
-                      (if head
-                        (cons head (lazy-seq (step (kv/next i))))
-                        (recur (kv/next i))))))))))
+               (chunk-stepper i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
+                                       eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+                                   (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+                                     (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
+                                       (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
+                                         (when (.contains vs value-buffer)
+                                           eid-value-buffer)))))))))
 
   (ae [this a min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
@@ -552,23 +570,19 @@
       (some->> (encode-ae-key-to (.get seek-buffer-tl)
                                  attr-buffer
                                  (buffer-or-value-buffer min-e))
-               (kv/seek i)
-               ((fn step [^DirectBuffer k]
-                  (when k
-                    (let [eid-value-buffer (key-suffix k (.capacity prefix))
-                          eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-                      (if (entity-resolver-fn eid-buffer)
-                        (cons eid-value-buffer (lazy-seq (step (kv/next i))))
-                        (recur (kv/next i))))))))))
+               (chunk-stepper i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
+                                       eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+                                   (when (entity-resolver-fn eid-buffer)
+                                     eid-value-buffer))))))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
           eid-value-buffer (buffer-or-value-buffer e)
           eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-        (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)
-              vs ^NavigableSet (.get a->vs attr-buffer)]
-          (seq (.tailSet vs (buffer-or-value-buffer min-v)))))))
+        (let [a->vs (ecav-cache-lookup ecav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
+          (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
+            (seq (.tailSet vs (buffer-or-value-buffer min-v))))))))
 
   (entity-as-of-resolver [this eid valid-time transact-time]
     (let [i @entity-as-of-iterator-delay
