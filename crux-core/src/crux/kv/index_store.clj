@@ -492,7 +492,7 @@
      (when k
        (if-let [k (k-fn k)]
          (cons k (lazy-seq (step (kv/next i))))
-         (lazy-seq (step (kv/next i))))))
+         (recur (kv/next i)))))
    (kv/seek i seek-k)))
 
 (defn- chunk-stepper [i k-fn seek-k]
