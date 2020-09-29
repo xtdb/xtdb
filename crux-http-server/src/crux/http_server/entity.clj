@@ -40,37 +40,6 @@
                    ::with-docs
                    ::util/link-entities?]))
 
-(defn- entity-root-html []
-  [:div.entity-root
-   [:h1.entity-root__title
-    "Browse Documents"]
-   [:p "Fetch a specific entity by ID and browse its document history"]
-   [:div.entity-root__contents
-    [:div.entity-editor__title
-     "Entity ID"]
-    [:div.entity-editor__contents
-     [:form
-      {:action "/_crux/entity"}
-      [:textarea.textarea
-       {:name "eid"
-        :placeholder "Enter an entity ID, found under the `:crux.db/id` key inside your documents"
-        :rows 1}]
-      [:div.entity-editor-datetime
-       [:b "Valid Time"]
-       [:input.input.input-time
-        {:type "datetime-local"
-         :name "valid-time"
-         :step "0.01"
-         :value (.format util/default-date-formatter (ZonedDateTime/now))}]
-       [:b "Transaction Time"]
-       [:input.input.input-time
-        {:type "datetime-local"
-         :name "transaction-time"
-         :step "0.01"}]]
-      [:button.button
-       {:type "submit"}
-       "Fetch Documents"]]]]])
-
 (defn entity-links
   [db result]
   (letfn [(recur-on-result [result & key]
@@ -82,101 +51,20 @@
                 :else result)))]
     (into {} (recur-on-result result))))
 
-(defn resolve-entity-map [res entity-map]
-  (if (instance? EntityRef entity-map)
-    [:a {:href (entity-ref/EntityRef->url entity-map res)} (str (:eid entity-map))]
-    (cond
-      (map? entity-map) (for [[k v] entity-map]
-                          ^{:key (str (gensym))}
-                          [:div.entity-group
-                           [:div.entity-group__key
-                            (resolve-entity-map res k)]
-                           [:div.entity-group__value
-                            (resolve-entity-map res v)]])
-
-      (sequential? entity-map) [:ol.entity-group__value
-                                (for [v entity-map]
-                                  ^{:key (str (gensym))}
-                                  [:li (resolve-entity-map res v)])]
-      (set? entity-map) [:ul.entity-group__value
-                         (for [v entity-map]
-                           ^{:key v}
-                           [:li (resolve-entity-map res v)])]
-      :else (str entity-map))))
-
-(def ^DateTimeFormatter iso-format (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"))
-
-(defn vt-tt-entity-box
-  [vt tt]
-  [:div.entity-vt-tt
-   [:div.entity-vt-tt__title
-    "Valid Time"]
-   [:div.entity-vt-tt__value
-    (->> (or ^Date vt (java.util.Date.))
-         (.toInstant)
-         ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
-         (.format iso-format)
-         (str))]
-   [:div.entity-vt-tt__title
-    "Transaction Time"]
-   [:div.entity-vt-tt__value
-    (or (some-> ^Date tt
-                (.toInstant)
-                ^ZonedDateTime ((fn [^Instant inst] (.atZone inst (ZoneId/of "Z"))))
-                (.format iso-format)
-                (str))
-        "Using Latest")]])
-
-(defn- entity->html [{:keys [eid linked-entities entity valid-time transaction-time] :as res}]
-  [:div.entity-map__container
-   [:div.entity-map
-    [:div.entity-group
-     [:div.entity-group__key
-      ":crux.db/id"]
-     [:div.entity-group__value
-      (str (:crux.db/id entity))]]
-    [:hr.entity-group__separator]
-    (resolve-entity-map linked-entities (dissoc entity :crux.db/id))]
-   (vt-tt-entity-box valid-time transaction-time)])
-
-(defn- entity-history->html [{:keys [eid entity-history]}]
-  [:div.entity-histories__container
-   [:div.entity-histories
-    (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]} entity-history]
-      [:div.entity-history__container
-       [:div.entity-map
-        (resolve-entity-map {} doc)]
-       (vt-tt-entity-box valid-time tx-time)])]])
-
 (defn ->entity-html-encoder [opts]
   (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [eid no-entity? not-found? entity ^Closeable entity-history] :as res} charset]
-      (let [^String resp (cond
-                           no-entity? (util/raw-html {:body (entity-root-html)
-                                                      :title "/_crux/entity"
-                                                      :options opts})
-                           not-found? (let [not-found-message (str eid " entity not found")]
-                                        (util/raw-html {:title "/_crux/entity"
-                                                        :body [:div.error-box not-found-message]
-                                                        :options opts
-                                                        :results {:entity-results
-                                                                  {"error" not-found-message}}}))
-                           entity-history (try
-                                            (util/raw-html {:body (entity-history->html res)
-                                                            :title "/_crux/entity?history=true"
-                                                            :options opts
-                                                            :results {:entity-results (iterator-seq entity-history)}})
-                                            (finally
-                                              (.close entity-history)))
-                           entity (util/raw-html {:body (entity->html res)
-                                                  :title "/_crux/entity"
-                                                  :options opts
-                                                  :results {:entity-results entity}})
-                           :else (util/raw-html {:title "/_crux/entity"
-                                                 :body [:div.error-box (str res)]
-                                                 :options opts
-                                                 :results {:entity-results
-                                                           {"error" res}}}))]
+    (encode-to-bytes [_ {:keys [eid no-entity? not-found? cause entity ^Closeable entity-history] :as res} charset]
+      (let [^String resp (util/raw-html {:title "/_crux/entity"
+                                         :options opts
+                                         :results (cond
+                                                    no-entity? nil
+                                                    not-found? {:entity-results {"error" (str eid " entity not found")}}
+                                                    entity-history (try
+                                                                     {:entity-results (iterator-seq entity-history)}
+                                                                     (finally
+                                                                       (.close entity-history)))
+                                                    entity {:entity-results entity}
+                                                    :else  {:entity-results {"error" res}})})]
         (.getBytes resp ^String charset)))))
 
 (defn ->edn-encoder [_]

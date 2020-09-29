@@ -25,6 +25,11 @@ html, body {
     box-sizing: border-box;
 }
 
+.noscript-content {
+    background-color: white;
+    padding: 1rem;
+}
+
 .header {
     background: #1e1e1e;
     width: 100%;
