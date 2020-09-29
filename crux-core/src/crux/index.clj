@@ -368,7 +368,7 @@
                       (new-sorted-virtual-index (if (instance? NavigableSet tuples)
                                                   tuples
                                                   (doto (TreeSet. mem/buffer-comparator)
-                                                    (.addAll tuples))))
+                                                    (.addAll (mapv encode-value-fn tuples)))))
                       (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))
          state ^RelationVirtualIndexState (.state relation)]
      (set! (.tree state) tree)
