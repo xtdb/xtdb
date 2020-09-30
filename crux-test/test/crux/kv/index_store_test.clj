@@ -22,7 +22,8 @@
      (binding [*index-store* (kvi/->KvIndexStore kv-store#
                                                  (lru/new-cache kvi/default-cache-size)
                                                  (lru/new-cache kvi/default-cache-size)
-                                                 (lru/new-cache kvi/default-ae-cache-size))]
+                                                 (lru/new-cache kvi/default-index-cache-size)
+                                                 (lru/new-cache kvi/default-index-cache-size))]
        ~@body)))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own
