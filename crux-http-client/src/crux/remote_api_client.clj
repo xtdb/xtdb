@@ -211,7 +211,7 @@
   (submitTx [_ tx-ops]
     (try
       (api-request-sync (str url "/_crux/submit-tx")
-                        {:body tx-ops
+                        {:body {:tx-ops tx-ops}
                          :->jwt-token ->jwt-token})
       (catch Exception e
         (let [data (ex-data e)]

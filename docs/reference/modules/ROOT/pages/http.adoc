@@ -320,11 +320,18 @@ Takes a vector of transactions (any combination of `:put`, `:delete`, `:match`, 
 ----
 curl -X POST \
      -H "Content-Type: application/edn" \
-     -d '[[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
-          [:crux.tx/put {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
-          [:crux.tx/delete :maria  #inst "2012-05-07T14:57:08.462-00:00"]]' \
+     -d '{:tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
+          	  [:crux.tx/put {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
+          	  [:crux.tx/delete :maria  #inst "2012-05-07T14:57:08.462-00:00"]]}' \
      $CRUX_URL/_crux/submit-tx
 ----
+
+==== Parameters
+
+===== Body Parameters
+
+.*Required Parameters*
+* `tx-ops` (List of transaction ops to send)
 
 === GET `/_crux/tx-committed`
 
