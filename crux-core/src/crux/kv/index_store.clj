@@ -768,19 +768,19 @@
                                                                                       eid-value))))))
                       not-empty))
           content-idx-kvs (->content-idx-kvs docs)]
-      (some->> (seq content-idx-kvs) (kv/store kv-store))
       (locking ae-cache
-        (doseq [[a ids] (:ae-cache-update (meta content-idx-kvs))
-                :let [^Set es-cache (get ae-cache a)]
-                :when es-cache
-                id ids]
-          (.add es-cache id)))
-      (locking av-cache
-        (doseq [[a vs] (:av-cache-update (meta content-idx-kvs))
-                :let [^Set vs-cache (get av-cache a)]
-                :when vs-cache
-                v vs]
-          (.add vs-cache v)))
+        (locking av-cache
+          (some->> (seq content-idx-kvs) (kv/store kv-store))
+          (doseq [[a ids] (:ae-cache-update (meta content-idx-kvs))
+                  :let [^Set es-cache (get ae-cache a)]
+                  :when es-cache
+                  id ids]
+            (.add es-cache id))
+          (doseq [[a vs] (:av-cache-update (meta content-idx-kvs))
+                  :let [^Set vs-cache (get av-cache a)]
+                  :when vs-cache
+                  v vs]
+            (.add vs-cache v))))
       {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
        :indexed-docs docs}))
 
