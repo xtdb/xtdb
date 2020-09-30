@@ -494,11 +494,11 @@
                              a->vs))))
 
 (defn- ae-cache-lookup ^java.util.NavigableSet [{:keys [ae-cache kv-store] :as kv-index-store} ^DirectBuffer attr-buffer]
-  (lru/compute-if-absent ae-cache
-                         attr-buffer
-                         mem/copy-to-unpooled-buffer
-                         (fn [attr-buffer]
-                           (locking ae-cache
+  (locking ae-cache
+    (lru/compute-if-absent ae-cache
+                           attr-buffer
+                           mem/copy-to-unpooled-buffer
+                           (fn [attr-buffer]
                              (with-open [snapshot (kv/new-snapshot kv-store)
                                          cache-i (kv/new-iterator snapshot)
                                          index-snapshot (db/open-index-snapshot kv-index-store)]
@@ -513,11 +513,11 @@
                                  es))))))
 
 (defn- av-cache-lookup ^java.util.NavigableSet [{:keys [av-cache kv-store]} ^DirectBuffer attr-buffer]
-  (lru/compute-if-absent av-cache
-                         attr-buffer
-                         mem/copy-to-unpooled-buffer
-                         (fn [attr-buffer]
-                           (locking av-cache
+  (locking av-cache
+    (lru/compute-if-absent av-cache
+                           attr-buffer
+                           mem/copy-to-unpooled-buffer
+                           (fn [attr-buffer]
                              (with-open [snapshot (kv/new-snapshot kv-store)
                                          cache-i (kv/new-iterator snapshot)]
                                (let [vs (ConcurrentSkipListSet. mem/buffer-comparator)
