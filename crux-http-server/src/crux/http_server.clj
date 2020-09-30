@@ -175,7 +175,7 @@
     (-> (handler (assoc-in req [:muuntaja/response :format] format))
         (assoc :muuntaja/content-type format))))
 
-(defn- handler [{:keys [crux-node ::read-only?] :as options}]
+(defn handler [{:keys [crux-node node-options] :as options}]
   (let [query-handler {:muuntaja (query/->query-muuntaja options)
                        :get {:handler (query/data-browser-query options)
                              :parameters {:query ::query/query-params}}
@@ -203,7 +203,7 @@
      ["/_crux/tx-log" {:get (tx-log crux-node)
                        :muuntaja util/output-stream-muuntaja
                        :parameters {:query ::tx-log-spec}}]
-     ["/_crux/submit-tx" {:post (if read-only?
+     ["/_crux/submit-tx" {:post (if (:read-only? node-options)
                                   (fn [_] {:status 403
                                            :body "forbidden: read-only HTTP node"})
                                   (transact crux-node))
@@ -260,6 +260,28 @@
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.") }})
 
+(defn crux-handler [crux-node {:keys [^String jwks] :as options}]
+  (rr/ring-handler
+   (rr/router
+    (handler {:node-options (dissoc options :jwks)
+              :crux-node crux-node})
+    {:data
+     {:muuntaja util/default-muuntaja
+      :coercion reitit.coercion.spec/coercion
+      :middleware (cond-> [p/wrap-params
+                           rm/format-negotiate-middleware
+                           rm/format-response-middleware
+                           (re/create-exception-middleware
+                            (merge re/default-handlers
+                                   {crux.IllegalArgumentException handle-iae
+                                    :muuntaja/decode handle-muuntaja-decode-error}))
+                           rm/format-request-middleware
+                           rrc/coerce-request-middleware]
+                    jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})
+   (rr/routes
+    (rr/create-resource-handler {:path "/"})
+    (rr/create-default-handler))))
+
 (defn ->server {::sys/deps {:crux-node :crux/node}
                 ::sys/args {:port {:spec ::sys/nat-int
                                    :doc "Port to start the HTTP server on"
@@ -270,29 +292,9 @@
                             :jwks {:spec ::sys/string
                                    :doc "JWKS string to validate against"}
                             :server-label {:spec ::sys/string}}}
-  [{:keys [crux-node port read-only? ^String jwks] :as options}]
+  [{:keys [crux-node port] :as options}]
   (let [server (j/run-jetty
-                (rr/ring-handler
-                 (rr/router
-                  (handler {:node-options (dissoc options :jwks :crux-node)
-                            :crux-node crux-node
-                            ::read-only? read-only?})
-                  {:data
-                   {:muuntaja util/default-muuntaja
-                    :coercion reitit.coercion.spec/coercion
-                    :middleware (cond-> [p/wrap-params
-                                         rm/format-negotiate-middleware
-                                         rm/format-response-middleware
-                                         (re/create-exception-middleware
-                                          (merge re/default-handlers
-                                                 {crux.IllegalArgumentException handle-iae
-                                                  :muuntaja/decode handle-muuntaja-decode-error}))
-                                         rm/format-request-middleware
-                                         rrc/coerce-request-middleware]
-                                  jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})
-                 (rr/routes
-                  (rr/create-resource-handler {:path "/"})
-                  (rr/create-default-handler)))
+                (crux-handler crux-node (dissoc options :crux-node))
                 {:port port
                  :join? false})]
     (log/info "HTTP server started on port: " port)
