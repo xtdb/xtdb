@@ -496,16 +496,14 @@
                            identity
                            (fn [a]
                              (with-open [snapshot (kv/new-snapshot kv-store)
-                                         cache-i (kv/new-iterator snapshot)
-                                         index-snapshot (db/open-index-snapshot kv-index-store)]
+                                         cache-i (kv/new-iterator snapshot)]
                                (let [es (ConcurrentSkipListSet. mem/buffer-comparator)
                                      prefix (encode-ae-key-to nil (c/->id-buffer a))
                                      i (new-prefix-kv-iterator cache-i prefix)]
                                  (loop [k (kv/seek i prefix)]
                                    (when k
-                                     (let [eid-value-buffer (key-suffix k (.capacity prefix))]
-                                       (.add es eid-value-buffer)
-                                       (recur (kv/next i)))))
+                                     (.add es (key-suffix k (.capacity prefix)))
+                                     (recur (kv/next i))))
                                  es))))))
 
 (defn- av-cache-lookup ^java.util.NavigableSet [{:keys [av-cache kv-store]} a]
@@ -521,9 +519,8 @@
                                      i (new-prefix-kv-iterator cache-i prefix)]
                                  (loop [k (kv/seek i prefix)]
                                    (when k
-                                     (let [value-buffer (key-suffix k (.capacity prefix))]
-                                       (.add vs value-buffer)
-                                       (recur (kv/next i)))))
+                                     (.add vs (key-suffix k (.capacity prefix)))
+                                     (recur (kv/next i))))
                                  vs))))))
 
 (def ^:private ^:const chunk-size 1)
@@ -551,9 +548,9 @@
    (chunk-buffer chunk-size)
    (kv/seek i seek-k)))
 
-(def step-fn (if (= 1 chunk-size)
-               stepper
-               chunk-stepper))
+(def ^:private step-fn (if (= 1 chunk-size)
+                         stepper
+                         chunk-stepper))
 
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
