@@ -805,6 +805,8 @@
                                                                             (take 2)
                                                                             count)
                                                                        1)]
+                                                     ;; TODO: eviction of caches isn't safe as they're shared across snapshots
+                                                     ;; Alternatively, one could leave them and let them expire naturally.
                                                      (when-not (c/can-decode-value-buffer? value-buffer)
                                                        (lru/evict value-cache value-buffer))
                                                      (lru/evict cav-cache (.content-hash quad))
