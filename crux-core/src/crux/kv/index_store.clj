@@ -18,7 +18,7 @@
            [java.util Date HashMap Map NavigableMap NavigableSet Set TreeSet]
            [java.util.function Function Supplier]
            java.util.concurrent.atomic.AtomicBoolean
-           [java.util.concurrent ConcurrentSkipListMap ConcurrentSkipListSet]
+           java.util.concurrent.ConcurrentSkipListSet
            (clojure.lang MapEntry)
            (org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer)))
 
@@ -493,7 +493,7 @@
                                    (recur (kv/next i)))))
                              a->vs))))
 
-(defn- ae-cache-lookup ^java.util.NavigableMap [{:keys [ae-cache kv-store] :as kv-index-store} ^DirectBuffer attr-buffer]
+(defn- ae-cache-lookup ^java.util.NavigableSet [{:keys [ae-cache kv-store] :as kv-index-store} ^DirectBuffer attr-buffer]
   (lru/compute-if-absent ae-cache
                          attr-buffer
                          mem/copy-to-unpooled-buffer
@@ -502,16 +502,15 @@
                              (with-open [snapshot (kv/new-snapshot kv-store)
                                          cache-i (kv/new-iterator snapshot)
                                          index-snapshot (db/open-index-snapshot kv-index-store)]
-                               (let [e->eid (ConcurrentSkipListMap. mem/buffer-comparator)
+                               (let [es (ConcurrentSkipListSet. mem/buffer-comparator)
                                      prefix (encode-ae-key-to nil attr-buffer)
                                      i (new-prefix-kv-iterator cache-i prefix)]
                                  (loop [k (kv/seek i prefix)]
                                    (when k
-                                     (let [eid-value-buffer (key-suffix k (.capacity prefix))
-                                           eid-buffer (value-buffer->id-buffer index-snapshot eid-value-buffer)]
-                                       (.putIfAbsent e->eid eid-value-buffer eid-buffer)
+                                     (let [eid-value-buffer (key-suffix k (.capacity prefix))]
+                                       (.add es eid-value-buffer)
                                        (recur (kv/next i)))))
-                                 e->eid))))))
+                                 es))))))
 
 (defn- av-cache-lookup ^java.util.NavigableSet [{:keys [av-cache kv-store]} ^DirectBuffer attr-buffer]
   (lru/compute-if-absent av-cache
@@ -606,8 +605,9 @@
 
   (ae [this a min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          e->eid (ae-cache-lookup kv-index-store attr-buffer)]
-      (for [[eid-value-buffer eid-buffer] (.tailMap e->eid (buffer-or-value-buffer min-e))
+          es (ae-cache-lookup kv-index-store attr-buffer)]
+      (for [eid-value-buffer (.tailSet es (buffer-or-value-buffer min-e))
+            :let [eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
             :when (entity-resolver-fn eid-buffer)]
         eid-value-buffer)))
 
@@ -723,7 +723,7 @@
        (->> (for [[_ doc] docs
                   :let [id (:crux.db/id doc)]
                   a (keys doc)]
-              {(get attr-bufs a) #{id}})
+              {(get attr-bufs a) #{(c/->value-buffer id)}})
             (apply merge-with into))
        :av-cache-update
        (->> (for [[_ doc] docs
@@ -771,10 +771,10 @@
       (some->> (seq content-idx-kvs) (kv/store kv-store))
       (locking ae-cache
         (doseq [[a ids] (:ae-cache-update (meta content-idx-kvs))
-                :let [^Map e->eid-cache (get ae-cache a)]
-                :when e->eid-cache
+                :let [^Set es-cache (get ae-cache a)]
+                :when es-cache
                 id ids]
-          (.putIfAbsent e->eid-cache (c/->value-buffer id) (c/->id-buffer id))))
+          (.add es-cache id)))
       (locking av-cache
         (doseq [[a vs] (:av-cache-update (meta content-idx-kvs))
                 :let [^Set vs-cache (get av-cache a)]
