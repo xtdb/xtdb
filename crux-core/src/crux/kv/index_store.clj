@@ -468,42 +468,38 @@
 (defn- value-buffer->id-buffer [index-snapshot ^DirectBuffer value-buffer]
   (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
 
-(defn- cav-cache-lookup ^java.util.Map [{:keys [cav-cache]} cache-i ^DirectBuffer eid-value-buffer ^DirectBuffer content-hash-buffer]
+(defn- cav-cache-lookup ^java.util.NavigableSet [{:keys [cav-cache]} cache-i ^DirectBuffer eid-value-buffer
+                                                 ^DirectBuffer content-hash-buffer ^DirectBuffer attr-buffer]
   (lru/compute-if-absent cav-cache
-                         content-hash-buffer
-                         mem/copy-to-unpooled-buffer
-                         (fn [content-hash-buffer]
+                         [content-hash-buffer attr-buffer]
+                         #(mapv mem/copy-to-unpooled-buffer %)
+                         (fn [[content-hash-buffer attr-buffer]]
                            (let [eid-size (mem/capacity eid-value-buffer)
-                                 a->vs (HashMap.)
-                                 prefix (encode-ecav-key-to (.get seek-buffer-tl)
-                                                              eid-value-buffer
-                                                              content-hash-buffer)
+                                 vs (TreeSet. mem/buffer-comparator)
+                                 prefix (encode-ecav-key-to nil
+                                                            eid-value-buffer
+                                                            content-hash-buffer
+                                                            attr-buffer)
                                  i (new-prefix-kv-iterator cache-i prefix)]
                              (loop [k (kv/seek i prefix)]
                                (when k
                                  (let [k (mem/copy-to-unpooled-buffer k)
-                                       a (decode-ecav-key-as-a-from k eid-size)
-                                       v (decode-ecav-key-as-v-from k eid-size)
-                                       vs (.computeIfAbsent a->vs
-                                                            a
-                                                            (reify Function
-                                                              (apply [_ k]
-                                                                (TreeSet. mem/buffer-comparator))))]
+                                       v (decode-ecav-key-as-v-from k eid-size)]
                                    (.add ^Set vs v)
                                    (recur (kv/next i)))))
-                             a->vs))))
+                             vs))))
 
-(defn- ae-cache-lookup ^java.util.NavigableSet [{:keys [ae-cache kv-store] :as kv-index-store} ^DirectBuffer attr-buffer]
+(defn- ae-cache-lookup ^java.util.NavigableSet [{:keys [ae-cache kv-store] :as kv-index-store} a]
   (locking ae-cache
     (lru/compute-if-absent ae-cache
-                           attr-buffer
-                           mem/copy-to-unpooled-buffer
-                           (fn [attr-buffer]
+                           a
+                           identity
+                           (fn [a]
                              (with-open [snapshot (kv/new-snapshot kv-store)
                                          cache-i (kv/new-iterator snapshot)
                                          index-snapshot (db/open-index-snapshot kv-index-store)]
                                (let [es (ConcurrentSkipListSet. mem/buffer-comparator)
-                                     prefix (encode-ae-key-to nil attr-buffer)
+                                     prefix (encode-ae-key-to nil (c/->id-buffer a))
                                      i (new-prefix-kv-iterator cache-i prefix)]
                                  (loop [k (kv/seek i prefix)]
                                    (when k
@@ -512,16 +508,16 @@
                                        (recur (kv/next i)))))
                                  es))))))
 
-(defn- av-cache-lookup ^java.util.NavigableSet [{:keys [av-cache kv-store]} ^DirectBuffer attr-buffer]
+(defn- av-cache-lookup ^java.util.NavigableSet [{:keys [av-cache kv-store]} a]
   (locking av-cache
     (lru/compute-if-absent av-cache
-                           attr-buffer
-                           mem/copy-to-unpooled-buffer
-                           (fn [attr-buffer]
+                           a
+                           identity
+                           (fn [a]
                              (with-open [snapshot (kv/new-snapshot kv-store)
                                          cache-i (kv/new-iterator snapshot)]
                                (let [vs (ConcurrentSkipListSet. mem/buffer-comparator)
-                                     prefix (encode-av-key-to nil attr-buffer)
+                                     prefix (encode-av-key-to nil (c/->id-buffer a))
                                      i (new-prefix-kv-iterator cache-i prefix)]
                                  (loop [k (kv/seek i prefix)]
                                    (when k
@@ -530,7 +526,7 @@
                                        (recur (kv/next i)))))
                                  vs))))))
 
-(def ^:dynamic *chunk-size* 8)
+(def ^:private ^:const chunk-size 1)
 
 (defn- stepper [i k-fn seek-k]
   ((fn step [^DirectBuffer k]
@@ -541,22 +537,23 @@
    (kv/seek i seek-k)))
 
 (defn- chunk-stepper [i k-fn seek-k]
-  (let [chunk-size *chunk-size*]
-    (if (= 1 chunk-size)
-      (stepper i k-fn seek-k)
-      ((fn step [cb ^DirectBuffer k]
-         (if k
-           (if (= (count cb) chunk-size)
-             (chunk-cons (chunk cb)
-                         (lazy-seq (step (chunk-buffer chunk-size) k)))
-             (recur (if-let [k (k-fn k)]
-                      (doto cb
-                        (chunk-append k))
-                      cb)
-                    (kv/next i)))
-           (chunk-cons (chunk cb) nil)))
-       (chunk-buffer chunk-size)
-       (kv/seek i seek-k)))))
+  ((fn step [cb ^DirectBuffer k]
+     (if k
+       (if (= (count cb) chunk-size)
+         (chunk-cons (chunk cb)
+                     (lazy-seq (step (chunk-buffer chunk-size) k)))
+         (recur (if-let [k (k-fn k)]
+                  (doto cb
+                    (chunk-append k))
+                  cb)
+                (kv/next i)))
+       (chunk-cons (chunk cb) nil)))
+   (chunk-buffer chunk-size)
+   (kv/seek i seek-k)))
+
+(def step-fn (if (= 1 chunk-size)
+               stepper
+               chunk-stepper))
 
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
@@ -583,8 +580,43 @@
   db/IndexSnapshot
   (av [this a min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          vs (av-cache-lookup kv-index-store attr-buffer)]
-      (.tailSet vs (buffer-or-value-buffer min-v))))
+          prefix (encode-av-key-to nil attr-buffer)
+          i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
+      (some->> (encode-av-key-to (.get seek-buffer-tl)
+                                 attr-buffer
+                                 (buffer-or-value-buffer min-v))
+               (step-fn i #(key-suffix % (.capacity prefix))))))
+
+  #_(av [this a min-v entity-resolver-fn]
+      (let [vs (av-cache-lookup kv-index-store a)]
+        (.tailSet vs (buffer-or-value-buffer min-v))))
+
+  #_(ave [this a v min-e entity-resolver-fn]
+      (let [attr-buffer (c/->id-buffer a)
+            value-buffer (buffer-or-value-buffer v)
+            prefix (encode-ave-key-to nil attr-buffer value-buffer)
+            i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
+        (some->> (encode-ave-key-to (.get seek-buffer-tl)
+                                    attr-buffer
+                                    value-buffer
+                                    (buffer-or-value-buffer min-e))
+                 (kv/seek i)
+                 ((fn step [^DirectBuffer k]
+                    (when k
+                      (let [eid-value-buffer (key-suffix k (.capacity prefix))
+                            eid-buffer (value-buffer->id-buffer this eid-value-buffer)
+                            head (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+                                   (let [version-k (encode-ecav-key-to (.get seek-buffer-tl)
+                                                                       eid-value-buffer
+                                                                       content-hash-buffer
+                                                                       attr-buffer
+                                                                       value-buffer)]
+                                     (when (kv/get-value snapshot version-k)
+                                       eid-value-buffer)))]
+
+                        (if head
+                          (cons head (lazy-seq (step (kv/next i))))
+                          (lazy-seq (step (kv/next i)))))))))))
 
   (ave [this a v min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
@@ -595,30 +627,58 @@
                                   attr-buffer
                                   value-buffer
                                   (buffer-or-value-buffer min-e))
-               (chunk-stepper i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
-                                       eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-                                   (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-                                     (let [a->vs (cav-cache-lookup kv-index-store @cache-iterator-delay eid-value-buffer content-hash-buffer)]
-                                       (when-let [vs ^Set (.get a->vs attr-buffer)]
-                                         (when (.contains vs value-buffer)
-                                           eid-value-buffer)))))))))
+               (step-fn i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
+                                 eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+                             (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+                               (when-let [vs (cav-cache-lookup kv-index-store @cache-iterator-delay eid-value-buffer content-hash-buffer attr-buffer)]
+                                 (when (.contains vs value-buffer)
+                                   eid-value-buffer))))))))
 
   (ae [this a min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          es (ae-cache-lookup kv-index-store attr-buffer)]
-      (for [eid-value-buffer (.tailSet es (buffer-or-value-buffer min-e))
-            :let [eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-            :when (entity-resolver-fn eid-buffer)]
-        eid-value-buffer)))
+          prefix (encode-ae-key-to nil attr-buffer)
+          i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
+      (some->> (encode-ae-key-to (.get seek-buffer-tl)
+                                 attr-buffer
+                                 (buffer-or-value-buffer min-e))
+               (step-fn i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
+                                 eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+                             (when (entity-resolver-fn eid-buffer)
+                               eid-value-buffer))))))
+
+  #_(ae [this a min-e entity-resolver-fn]
+      (let [es (ae-cache-lookup kv-index-store a)]
+        (for [eid-value-buffer (.tailSet es (buffer-or-value-buffer min-e))
+              :let [eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+              :when (entity-resolver-fn eid-buffer)]
+          eid-value-buffer)))
+
+  #_(aev [this a e min-v entity-resolver-fn]
+      (let [attr-buffer (c/->id-buffer a)
+            eid-value-buffer (buffer-or-value-buffer e)
+            eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+        (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+          (let [prefix (encode-ecav-key-to nil eid-value-buffer content-hash-buffer attr-buffer)
+                i (new-prefix-kv-iterator @level-2-iterator-delay prefix)]
+            (some->> (encode-ecav-key-to
+                      (.get seek-buffer-tl)
+                      eid-value-buffer
+                      content-hash-buffer
+                      attr-buffer
+                      (buffer-or-value-buffer min-v))
+                     (kv/seek i)
+                     ((fn step [^DirectBuffer k]
+                        (when k
+                          (cons (key-suffix k (.capacity prefix))
+                                (lazy-seq (step (kv/next i))))))))))))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
           eid-value-buffer (buffer-or-value-buffer e)
           eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-        (let [a->vs (cav-cache-lookup kv-index-store @cache-iterator-delay eid-value-buffer content-hash-buffer)]
-          (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
-            (.tailSet vs (buffer-or-value-buffer min-v)))))))
+        (when-let [vs (cav-cache-lookup kv-index-store @cache-iterator-delay eid-value-buffer content-hash-buffer attr-buffer)]
+          (.tailSet vs (buffer-or-value-buffer min-v))))))
 
   (entity-as-of-resolver [this eid valid-time transact-time]
     (let [i @entity-as-of-iterator-delay
@@ -876,17 +936,18 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(def ^:const default-cache-size (* 128 1024))
+(def ^:const default-value-cache-size (* 1024 1024))
+(def ^:const default-cav-cache-size (* 1024 1024))
 (def ^:const default-index-cache-size 128)
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}
                                     :value-cache-size {:doc "Value Cache Size"
-                                                       :default default-cache-size
+                                                       :default default-value-cache-size
                                                        :spec ::sys/nat-int}
                                     :cav-cache-size {:doc "CAV Cache Size"
-                                                     :default default-cache-size
+                                                     :default default-cav-cache-size
                                                      :spec ::sys/nat-int}
                                     :ae-cache-size {:doc "AE Cache Size"
                                                     :default default-index-cache-size
@@ -897,7 +958,7 @@
   [{:keys [kv-store value-cache-size cav-cache-size ae-cache-size av-cache-size] :as opts}]
   (check-and-store-index-version opts)
   (->KvIndexStore kv-store
-                  (lru/new-cache (or value-cache-size default-cache-size))
-                  (lru/new-cache (or cav-cache-size default-cache-size))
+                  (lru/new-cache (or value-cache-size default-value-cache-size))
+                  (lru/new-cache (or cav-cache-size default-cav-cache-size))
                   (lru/new-cache (or ae-cache-size default-index-cache-size))
                   (lru/new-cache (or av-cache-size default-index-cache-size))))

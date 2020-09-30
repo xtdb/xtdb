@@ -20,8 +20,8 @@
 (defmacro with-fresh-index-store [& body]
   `(fkv/with-kv-store [kv-store#]
      (binding [*index-store* (kvi/->KvIndexStore kv-store#
-                                                 (lru/new-cache kvi/default-cache-size)
-                                                 (lru/new-cache kvi/default-cache-size)
+                                                 (lru/new-cache kvi/default-value-cache-size)
+                                                 (lru/new-cache kvi/default-cav-cache-size)
                                                  (lru/new-cache kvi/default-index-cache-size)
                                                  (lru/new-cache kvi/default-index-cache-size))]
        ~@body)))
