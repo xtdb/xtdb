@@ -600,23 +600,16 @@
                                     attr-buffer
                                     value-buffer
                                     (buffer-or-value-buffer min-e))
-                 (kv/seek i)
-                 ((fn step [^DirectBuffer k]
-                    (when k
-                      (let [eid-value-buffer (key-suffix k (.capacity prefix))
-                            eid-buffer (value-buffer->id-buffer this eid-value-buffer)
-                            head (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-                                   (let [version-k (encode-ecav-key-to (.get seek-buffer-tl)
-                                                                       eid-value-buffer
-                                                                       content-hash-buffer
-                                                                       attr-buffer
-                                                                       value-buffer)]
-                                     (when (kv/get-value snapshot version-k)
-                                       eid-value-buffer)))]
-
-                        (if head
-                          (cons head (lazy-seq (step (kv/next i))))
-                          (lazy-seq (step (kv/next i)))))))))))
+                 (step-fn i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
+                                   eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
+                               (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+                                 (let [version-k (encode-ecav-key-to (.get seek-buffer-tl)
+                                                                     eid-value-buffer
+                                                                     content-hash-buffer
+                                                                     attr-buffer
+                                                                     value-buffer)]
+                                   (when (kv/get-value snapshot version-k)
+                                     eid-value-buffer))))))))
 
   (ave [this a v min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
@@ -666,11 +659,7 @@
                       content-hash-buffer
                       attr-buffer
                       (buffer-or-value-buffer min-v))
-                     (kv/seek i)
-                     ((fn step [^DirectBuffer k]
-                        (when k
-                          (cons (key-suffix k (.capacity prefix))
-                                (lazy-seq (step (kv/next i))))))))))))
+                     (step-fn i #(key-suffix % (.capacity prefix))))))))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
