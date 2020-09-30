@@ -15,9 +15,10 @@
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
            java.nio.ByteOrder
-           [java.util Date HashMap Map NavigableSet Set TreeSet]
+           [java.util Date HashMap Map NavigableMap NavigableSet Set TreeSet]
            [java.util.function Function Supplier]
            java.util.concurrent.atomic.AtomicBoolean
+           java.util.concurrent.ConcurrentSkipListMap
            (clojure.lang MapEntry)
            (org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer)))
 
@@ -467,7 +468,7 @@
 (defn- value-buffer->id-buffer [index-snapshot ^DirectBuffer value-buffer]
   (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
 
-(defn- cav-cache-lookup ^java.util.Map [cav-cache ecav-i ^DirectBuffer eid-value-buffer ^DirectBuffer content-hash-buffer]
+(defn- cav-cache-lookup ^java.util.Map [cav-cache cache-i ^DirectBuffer eid-value-buffer ^DirectBuffer content-hash-buffer]
   (lru/compute-if-absent cav-cache
                          content-hash-buffer
                          mem/copy-to-unpooled-buffer
@@ -477,7 +478,7 @@
                                  prefix (encode-ecav-key-to (.get seek-buffer-tl)
                                                               eid-value-buffer
                                                               content-hash-buffer)
-                                 i (new-prefix-kv-iterator ecav-i prefix)]
+                                 i (new-prefix-kv-iterator cache-i prefix)]
                              (loop [k (kv/seek i prefix)]
                                (when k
                                  (let [k (mem/copy-to-unpooled-buffer k)
@@ -491,6 +492,22 @@
                                    (.add ^Set vs v)
                                    (recur (kv/next i)))))
                              a->vs))))
+
+(defn- ae-cache-lookup ^java.util.NavigableMap [index-snapshot ae-cache cache-i ^DirectBuffer attr-buffer]
+  (lru/compute-if-absent ae-cache
+                         attr-buffer
+                         mem/copy-to-unpooled-buffer
+                         (fn [attr-buffer]
+                           (let [e->eid (ConcurrentSkipListMap. mem/buffer-comparator)
+                                 prefix (encode-ae-key-to nil attr-buffer)
+                                 i (new-prefix-kv-iterator cache-i prefix)]
+                             (loop [k (kv/seek i prefix)]
+                               (when k
+                                 (let [eid-value-buffer (key-suffix k (.capacity prefix))
+                                       eid-buffer (value-buffer->id-buffer index-snapshot eid-value-buffer)]
+                                   (.putIfAbsent e->eid eid-value-buffer eid-buffer)
+                                   (recur (kv/next i)))))
+                             e->eid))))
 
 (def ^:dynamic *chunk-size* 8)
 
@@ -526,18 +543,19 @@
                             level-2-iterator-delay
                             entity-as-of-iterator-delay
                             decode-value-iterator-delay
-                            ecav-iterator-delay
+                            cache-iterator-delay
                             nested-index-snapshot-state
                             ^Map temp-hash-cache
                             value-cache
                             cav-cache
+                            ae-cache
                             ^AtomicBoolean closed?]
   Closeable
   (close [_]
     (when (.compareAndSet closed? false true)
       (doseq [nested-index-snapshot @nested-index-snapshot-state]
         (cio/try-close nested-index-snapshot))
-      (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay ecav-iterator-delay]
+      (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay cache-iterator-delay]
               :when (realized? i)]
         (cio/try-close @i))
       (when close-snapshot?
@@ -565,29 +583,24 @@
                (chunk-stepper i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
                                        eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
                                    (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-                                     (let [a->vs (cav-cache-lookup cav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
+                                     (let [a->vs (cav-cache-lookup cav-cache @cache-iterator-delay eid-value-buffer content-hash-buffer)]
                                        (when-let [vs ^Set (.get a->vs attr-buffer)]
                                          (when (.contains vs value-buffer)
                                            eid-value-buffer)))))))))
 
   (ae [this a min-e entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          prefix (encode-ae-key-to nil attr-buffer)
-          i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
-      (some->> (encode-ae-key-to (.get seek-buffer-tl)
-                                 attr-buffer
-                                 (buffer-or-value-buffer min-e))
-               (chunk-stepper i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
-                                       eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-                                   (when (entity-resolver-fn eid-buffer)
-                                     eid-value-buffer))))))
+          e->eid (ae-cache-lookup this ae-cache @cache-iterator-delay attr-buffer)]
+      (for [[eid-value-buffer eid-buffer] (.tailMap e->eid (buffer-or-value-buffer min-e))
+            :when (entity-resolver-fn eid-buffer)]
+        eid-value-buffer)))
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
           eid-value-buffer (buffer-or-value-buffer e)
           eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
       (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
-        (let [a->vs (cav-cache-lookup cav-cache @ecav-iterator-delay eid-value-buffer content-hash-buffer)]
+        (let [a->vs (cav-cache-lookup cav-cache @cache-iterator-delay eid-value-buffer content-hash-buffer)]
           (when-let [vs ^NavigableSet (.get a->vs attr-buffer)]
             (.tailSet vs (buffer-or-value-buffer min-v)))))))
 
@@ -664,7 +677,7 @@
       value-buffer))
 
   (open-nested-index-snapshot [this]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache value-cache cav-cache false)]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache value-cache cav-cache ae-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot)))
 
@@ -673,24 +686,32 @@
 (defn- ->content-idx-kvs [docs]
   (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
                        (into {} (map (juxt identity c/->id-buffer))))]
-    (->> (for [[content-hash doc] docs
-               :let [id (:crux.db/id doc)
-                     eid-value-buffer (c/->value-buffer id)
-                     content-hash (c/->id-buffer content-hash)]
-               [a v] doc
-               :let [a (get attr-bufs a)]
-               v (c/vectorize-value v)
-               :let [value-buffer (c/->value-buffer v)]
-               :when (pos? (.capacity value-buffer))]
-           (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) mem/empty-buffer)]
-             (not (c/can-decode-value-buffer? value-buffer))
-             (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
-         (apply concat))))
+    (with-meta
+      (->> (for [[content-hash doc] docs
+                 :let [id (:crux.db/id doc)
+                       eid-value-buffer (c/->value-buffer id)
+                       content-hash (c/->id-buffer content-hash)]
+                 [a v] doc
+                 :let [a (get attr-bufs a)]
+                 v (c/vectorize-value v)
+                 :let [value-buffer (c/->value-buffer v)]
+                 :when (pos? (.capacity value-buffer))]
+             (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
+                      (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
+                      (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
+                      (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) mem/empty-buffer)]
+               (not (c/can-decode-value-buffer? value-buffer))
+               (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
+           (apply concat))
+      {:ae-cache-update
+       (->> (for [[_ doc] docs
+                  :let [id (:crux.db/id doc)]
+                  a (keys doc)]
+              {(get attr-bufs a) #{id}})
+            (apply merge-with into))}
+)))
 
-(defn- new-kv-index-snapshot [snapshot temp-hash-cache value-cache cav-cache close-snapshot?]
+(defn- new-kv-index-snapshot [snapshot temp-hash-cache value-cache cav-cache ae-cache close-snapshot?]
   (->KvIndexSnapshot snapshot
                      close-snapshot?
                      (delay (kv/new-iterator snapshot))
@@ -702,13 +723,14 @@
                      temp-hash-cache
                      value-cache
                      cav-cache
+                     ae-cache
                      (AtomicBoolean.)))
 
 (defn latest-completed-tx [kv-store]
   ;; TODO at next version bump, let's make the kw here unrelated to the (old) namespace name
   (read-meta kv-store :crux.kv-indexer/latest-completed-tx))
 
-(defrecord KvIndexStore [kv-store value-cache cav-cache]
+(defrecord KvIndexStore [kv-store value-cache cav-cache ae-cache]
   db/IndexStore
   (index-docs [this docs]
     (let [crux-db-id (c/->id-buffer :crux.db/id)
@@ -725,6 +747,11 @@
                       not-empty))
           content-idx-kvs (->content-idx-kvs docs)]
       (some->> (seq content-idx-kvs) (kv/store kv-store))
+      (doseq [[a ids] (:ae-cache-update (meta content-idx-kvs))
+              :let [^Map e->eid (get ae-cache a)]
+              :when e->eid
+              id ids]
+        (.putIfAbsent e->eid (c/->value-buffer id) (c/->id-buffer id)))
       {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
        :indexed-docs docs}))
 
@@ -752,6 +779,7 @@
                                                      (when-not (c/can-decode-value-buffer? value-buffer)
                                                        (lru/evict value-cache value-buffer))
                                                      (lru/evict cav-cache (.content-hash quad))
+                                                     (some-> ^Map (get ae-cache attr-buffer) (.remove eid-value-buffer))
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
                                                                                                             :crux.db/evicted? true})
@@ -807,7 +835,7 @@
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-snapshot [this]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) value-cache cav-cache true))
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) value-cache cav-cache ae-cache true))
 
   status/Status
   (status-map [this]
@@ -816,6 +844,7 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (def ^:const default-cache-size (* 128 1024))
+(def ^:const default-ae-cache-size 128)
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
@@ -825,7 +854,13 @@
                                                        :spec ::sys/nat-int}
                                     :cav-cache-size {:doc "CAV Cache Size"
                                                      :default default-cache-size
-                                                     :spec ::sys/nat-int}}}
-  [{:keys [kv-store value-cache-size cav-cache-size] :as opts}]
+                                                     :spec ::sys/nat-int}
+                                    :ae-cache-size {:doc "AE Cache Size"
+                                                    :default default-ae-cache-size
+                                                    :spec ::sys/nat-int}}}
+  [{:keys [kv-store value-cache-size cav-cache-size ae-cache-size] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store (lru/new-cache (or value-cache-size default-cache-size)) (lru/new-cache (or cav-cache-size default-cache-size))))
+  (->KvIndexStore kv-store
+                  (lru/new-cache (or value-cache-size default-cache-size))
+                  (lru/new-cache (or cav-cache-size default-cache-size))
+                  (lru/new-cache (or ae-cache-size default-ae-cache-size))))
