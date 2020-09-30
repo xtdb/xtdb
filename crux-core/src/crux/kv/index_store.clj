@@ -473,7 +473,7 @@
   (lru/compute-if-absent cav-cache
                          [content-hash-buffer attr-buffer]
                          #(mapv mem/copy-to-unpooled-buffer %)
-                         (fn [[content-hash-buffer attr-buffer]]
+                         (fn [_]
                            (let [eid-size (mem/capacity eid-value-buffer)
                                  vs (TreeSet. mem/buffer-comparator)
                                  prefix (encode-ecav-key-to nil
