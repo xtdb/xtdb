@@ -48,11 +48,12 @@
         {:status 404
          :body {:error (str eid " entity-tx not found") }}))))
 
-(s/def ::transact-spec vector?)
+(s/def ::tx-ops vector?)
+(s/def ::transact-spec (s/keys :req-un [::tx-ops]))
 
 (defn- transact [^ICruxAPI crux-node]
   (fn [req]
-    (let [tx-ops (get-in req [:parameters :body])
+    (let [tx-ops (get-in req [:parameters :body :tx-ops])
           {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
       (->
        {:status 202
