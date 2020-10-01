@@ -2,18 +2,12 @@
   (:require [clojure.test :as t]
             [crux.api :as c]
             [crux.db :as db]
-            [crux.fixtures :as fix :refer [*api* submit+await-tx with-tmp-dir]]
+            [crux.fixtures :as fix :refer [*api* submit+await-tx]]
+            [crux.fixtures.lucene :as lf]
             [crux.lucene :as l])
   (:import org.apache.lucene.document.Document))
 
-(defn with-lucene-module [f]
-  (with-tmp-dir "lucene" [db-dir]
-    (fix/with-opts {::l/node {:db-dir (.toPath ^java.io.File db-dir)}
-                    :crux/indexer {:crux/module 'crux.lucene/->indexer
-                                   :indexer 'crux.kv.indexer/->kv-indexer}}
-      f)))
-
-(t/use-fixtures :each with-lucene-module fix/with-node)
+(t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
 (t/deftest test-can-search-string
   (let [doc {:crux.db/id :ivan :name "Ivan"}]

@@ -63,7 +63,7 @@
         q (.build
            (doto (BooleanQuery$Builder.)
              (.add (.parse qp v) BooleanClause$Occur/MUST)))
-        score-docs (.-scoreDocs (.search index-searcher q 10))]
+        score-docs (.-scoreDocs (.search index-searcher q 1000))]
 ;    (println (.explain index-searcher q( .-doc (first score-docs))))
     (cio/->cursor (fn []
                     (.close directory-reader))
