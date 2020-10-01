@@ -133,11 +133,3 @@
               [:noscript
                [:pre.noscript-content (with-out-str (pp/pprint results))]]]]
             [:script {:src "/cljs-out/dev-main.js" :type "text/javascript"}]]]))))
-
-(defn entity-link [eid {:keys [valid-time transaction-time]}]
-  (let [encoded-eid (URLEncoder/encode (pr-str eid) "UTF-8")
-        query-params (format "?eid=%s&valid-time=%s&transaction-time=%s"
-                             encoded-eid
-                             (.toInstant ^Date valid-time)
-                             (.toInstant ^Date transaction-time))]
-    (str "/entity" query-params)))
