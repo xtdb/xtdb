@@ -79,7 +79,7 @@
         directory-reader (DirectoryReader/open directory)]
     (.numDocs directory-reader)))
 
-(defn- write-docs! [^IndexWriter index-writer docs]
+(defn write-docs! [^IndexWriter index-writer docs]
   (doseq [d docs t (crux-doc->triples d)]
     (.updateDocument index-writer (triple->term t) (triple->doc t))))
 

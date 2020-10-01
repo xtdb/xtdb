@@ -11,12 +11,17 @@
            [org.apache.lucene.index IndexWriter IndexWriterConfig]
            org.apache.lucene.store.FSDirectory))
 
+;; Testing with 1k docs (TPCH Customers)
+;; 50000 docs (a/e) 4500 ms
+;; Search term: ~10 ms
+
 (declare node)
 
 (defn customers [n]
-  (take n (tf/tpch-table->docs (first (TpchTable/getTables)))))
+  (take n (tf/tpch-table->docs (first (TpchTable/getTables)) {:scale-factor 0.5})))
 
 (comment
+
   (def dir (.toFile (Files/createTempDirectory "microbench" (make-array FileAttribute 0))))
 
   (def node (c/start-node {}))
@@ -33,18 +38,20 @@
 
   (.close node)
 
-  ;; 2 millis extra per 100, ~200 millis for 10K very small docs
+  ;; 1k ingest
 
   (let [tmp-dir (Files/createTempDirectory "lucene-temp" (make-array FileAttribute 0))]
+    (println (count (customers 50000)))
     (try
       (with-open [directory (FSDirectory/open tmp-dir)]
         (let [analyzer (StandardAnalyzer.)]
           (time
            (let [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
-             (l/write-docs! index-writer (customers 1000))
+             (l/write-docs! index-writer (customers 50000))
              (.close index-writer)))
 
-          (count (iterator-seq (l/search {:directory directory :analyzer analyzer} "c_comment" "ironic")))))
+          (time
+           (count (iterator-seq (l/search {:directory directory :analyzer analyzer} "c_comment" "some awful"))))))
       (finally
         (cio/delete-dir tmp-dir)))))
 
