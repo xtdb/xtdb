@@ -24,7 +24,9 @@
     (catch Exception e
       ::s/invalid)))
 
-(s/def ::eid
+(s/def ::eid (and string? c/valid-id?))
+
+(s/def ::eid-edn
   (st/spec
    {:spec c/valid-id?
     :decode/string (fn [_ eid] (try-decode-edn eid))}))

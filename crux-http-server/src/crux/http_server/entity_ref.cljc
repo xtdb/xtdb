@@ -16,7 +16,7 @@
               :cljs (some-> valid-time tick/instant))
         tt #?(:clj (some-> ^Date transaction-time .toInstant)
               :cljs (some-> transaction-time tick/instant))
-        query-params (cond-> (str "?eid=" encoded-eid)
+        query-params (cond-> (str "?eid-edn=" encoded-eid)
                        vt (str "&valid-time=" vt)
                        tt (str "&transaction-time=" tt))]
     (str "/_crux/entity" query-params)))

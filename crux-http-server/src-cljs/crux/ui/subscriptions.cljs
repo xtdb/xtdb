@@ -73,7 +73,7 @@
                                 (:crux.tx/tx-time)
                                 (t/instant))
          transaction-time (str (:transaction-time query-params latest-tx-time))]
-     {"eid" (:eid query-params)
+     {"eid" (:eid-edn query-params)
       "valid-time" (js/moment valid-time)
       "transaction-time" (js/moment transaction-time)})))
 
@@ -141,7 +141,7 @@
 (rf/reg-sub
  ::eid-submitted?
  (fn [db _]
-   (some? (get-in db [:current-route :query-params :eid]))))
+   (some? (get-in db [:current-route :query-params :eid-edn]))))
 
 (rf/reg-sub
  ::entity-pane-tab
@@ -183,7 +183,7 @@
    (if-let [error (get-in db [:entity :error])]
      {:error error}
      (let [query-params (get-in db [:current-route :query-params])]
-       {:eid (:eid query-params)
+       {:eid (:eid-edn query-params)
         :vt (common/iso-format-datetime (or (:valid-time query-params) (t/now)))
         :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
         :document (get-in db [:entity :http :document])}))))
@@ -205,7 +205,7 @@
 (rf/reg-sub
  ::entity-result-pane-history
  (fn [db _]
-   (let [eid (get-in db [:current-route :query-params :eid])
+   (let [eid (get-in db [:current-route :query-params :eid-edn])
          history (-> (get-in db [:entity :http :history])
                      format-history-times)]
      {:eid eid
@@ -225,7 +225,7 @@
 (rf/reg-sub
  ::entity-result-pane-history-diffs
  (fn [db _]
-   (let [eid (get-in db [:current-route :query-params :eid])
+   (let [eid (get-in db [:current-route :query-params :eid-edn])
          history (-> (get-in db [:entity :http :history])
                      format-history-times)
          entity-history (history-docs->diffs history)]

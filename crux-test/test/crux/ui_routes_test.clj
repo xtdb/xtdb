@@ -1,5 +1,5 @@
 (ns crux.ui-routes-test
-  (:require [crux.fixtures :as fix]
+  (:require [crux.fixtures :as fix :refer [*api*]]
             [clojure.edn :as edn]
             [clojure.test :as t]
             [crux.api :as crux]
@@ -18,7 +18,8 @@
 (defn- parse-body [{:keys [^InputStream body]} content-type]
   (case content-type
     "application/transit+json" (transit/read (transit/reader body :json {:handlers {"crux.http/entity-ref" entity-ref/ref-read-handler}}))
-    "application/edn" (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef}} (slurp body))
+    "application/edn" (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef
+                                                  'crux/id str}} (slurp body))
     "text/csv" (with-open [rdr (io/reader body)]
                  (doall (csv/read-csv rdr)))
     "text/tsv" (with-open [rdr (io/reader body)]
@@ -48,7 +49,7 @@
                                 (get-in [:headers "Location"]))))
 
     ;; Test getting the entity with different types
-    (let [get-entity (fn [accept-type] (-> (get-result-from-path "/_crux/entity?eid=:peter" accept-type)
+    (let [get-entity (fn [accept-type] (-> (get-result-from-path "/_crux/entity?eid-edn=:peter" accept-type)
                                            (parse-body accept-type)))]
       (t/is (= {:crux.db/id :peter, :name "Peter"}
                (get-entity "application/edn")))
@@ -57,7 +58,7 @@
 
     ;; Test getting linked entities
     (let [get-linked-entities (fn [accept-type]
-                                (-> (get-result-from-path "/_crux/entity?eid=:ivan&link-entities?=true" accept-type)
+                                (-> (get-result-from-path "/_crux/entity?eid-edn=:ivan&link-entities?=true" accept-type)
                                     (parse-body accept-type)))]
       (t/is (= {:crux.db/id :ivan, :linking (entity-ref/->EntityRef :peter)}
                (get-linked-entities "application/edn")))
@@ -125,3 +126,13 @@
   (t/is (= #{[":ivan"] [":peter"] ["e"]}
            (set (-> (get-result-from-path (format "/_crux/query.tsv?query=%s" '{:find [e] :where [[e :crux.db/id _]]}))
                     (parse-body "text/tsv"))))))
+
+(t/deftest test-string-eid-routes
+  (let [{:keys [crux.tx/tx-id] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id "string-id"}]])]
+    (t/is (= {:crux.db/id "string-id"}
+             (-> (get-result-from-path "/_crux/entity?eid=string-id" "application/edn")
+                 (parse-body "application/edn"))))
+    (t/is (= tx-id
+             (-> (get-result-from-path "/_crux/entity-tx?eid=string-id" "application/edn")
+                 (parse-body "application/edn")
+                 :crux.tx/tx-id)))))

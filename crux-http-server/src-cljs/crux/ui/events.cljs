@@ -185,7 +185,7 @@
    (let [query-params (->>
                        {:valid-time (some-> valid-time js/moment .toDate t/instant)
                         :transaction-time (some-> transaction-time js/moment .toDate t/instant)
-                        :eid eid}
+                        :eid-edn eid}
                        (remove #(nil? (second %)))
                        (into {}))]
      {:db db

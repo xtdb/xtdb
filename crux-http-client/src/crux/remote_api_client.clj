@@ -118,14 +118,14 @@
     (api-request-sync (str url "/_crux/entity")
                       {:->jwt-token ->jwt-token
                        :http-opts {:method :get
-                                   :query-params {:eid (pr-str eid)
+                                   :query-params {:eid-edn (pr-str eid)
                                                   :valid-time (some-> valid-time (cio/format-rfc3339-date))
                                                   :transact-time (some->  transact-time (cio/format-rfc3339-date))}}}))
 
   (entityTx [this eid]
     (api-request-sync (str url "/_crux/entity-tx")
                       {:http-opts {:method :get
-                                   :query-params {:eid (pr-str eid)
+                                   :query-params {:eid-edn (pr-str eid)
                                                   :valid-time (some-> valid-time (cio/format-rfc3339-date))
                                                   :transact-time (some->  transact-time (cio/format-rfc3339-date))}}
                        :->jwt-token ->jwt-token}))
@@ -152,7 +152,7 @@
       (vec (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (let [qps {:eid (pr-str eid)
+    (let [qps {:eid-edn (pr-str eid)
                :history true
                :sort-order (condp = (.sortOrder opts)
                              HistoryOptions$SortOrder/ASC (name :asc)
