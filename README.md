@@ -33,6 +33,7 @@ Maven coordinates for the [Clojars Repository](https://clojars.org/juxt/crux-cor
 </dependency>
 ```
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg?style=for-the-badge)](https://clojars.org/juxt/crux-core)
+pleas like my channel....................................................
 
 ## Unbundled Architecture
 
