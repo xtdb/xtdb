@@ -25,7 +25,7 @@
    (rfe/href k params query)))
 
 (defn url->route
-  "url: abosolute string path i.e. '/_entity?eid=...'"
+  "url: abosolute string path i.e. '/_crux/entity?eid-edn=...'"
   [url]
   (reitit/match-by-path (navigation/router) url))
 
@@ -92,6 +92,6 @@
                     (map? map) (into (sorted-map)))))))
 
 (defn entity-link [eid valid-time transaction-time]
-  (route->url :entity {} {:eid (pr-str eid)
+  (route->url :entity {} {:eid-edn (pr-str eid)
                           :valid-time valid-time
                           :transaction-time transaction-time}))

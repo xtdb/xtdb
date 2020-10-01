@@ -105,13 +105,15 @@ Returns the document map for a particular entity.
 ----
 curl -X GET \
      -H "Content-Type: application/edn" \
-     $CRUX_URL/_crux/entity?eid=:tommy
+     $CRUX_URL/_crux/entity?eid-edn=:tommy
 ----
 
 ==== Query Parameters
 
 .*Required Parameters*
-* `eid` (Crux ID)
+* One of the following:
+** `eid-edn` (EDN formatted Crux ID)
+** `eid` (String IDs)
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
@@ -125,13 +127,15 @@ Returns the history of a particular entity.
 ----
 curl -X GET \
      -H "Content-Type: application/edn" \
-     $CRUX_URL/_crux/entity?eid=:tommy&history=true&sort-order=asc
+     $CRUX_URL/_crux/entity?eid-edn=:tommy&history=true&sort-order=asc
 ----
 
 ==== Query Parameters
 
 .*Required Parameters*
-* `eid` (Crux ID)
+* One of the following:
+** `eid-edn` (EDN formatted Crux ID)
+** `eid` (String IDs)
 * `sort-order` (either `asc` or `desc`)
 
 .*Optional Parameters*
@@ -149,13 +153,15 @@ Returns the transaction details for an entity - returns a map containing the tx-
 ----
 curl -X GET \
      -H "Content-Type: application/edn" \
-     $CRUX_URL/_crux/entity-tx?eid=:tommy
+     $CRUX_URL/_crux/entity-tx?eid-edn=:tommy
 ----
 
 ==== Query Parameters
 
 .*Required Parameters*
-* `eid` (Crux ID)
+* One of the following:
+** `eid-edn` (EDN formatted Crux ID)
+** `eid` (String IDs)
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
