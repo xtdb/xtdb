@@ -90,8 +90,3 @@
        (walk/postwalk
         (fn [map] (cond->> map
                     (map? map) (into (sorted-map)))))))
-
-(defn entity-link [eid valid-time transaction-time]
-  (route->url :entity {} {:eid-edn (pr-str eid)
-                          :valid-time valid-time
-                          :transaction-time transaction-time}))
