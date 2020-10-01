@@ -12,8 +12,12 @@
            org.apache.lucene.store.FSDirectory))
 
 ;; Testing with 1k docs (TPCH Customers)
-;; 50000 docs (a/e) 4500 ms
+;; 50000 docs (a/e/v) 5000 ms
 ;; Search term: ~10 ms
+;; 50000 docs (a/v) 7000 ms
+;; Search term: ~10 ms
+
+;; Search goes up to 20 ms when we limit to 1000 hits
 
 (declare node)
 
@@ -38,8 +42,6 @@
 
   (.close node)
 
-  ;; 1k ingest
-
   (let [tmp-dir (Files/createTempDirectory "lucene-temp" (make-array FileAttribute 0))]
     (println (count (customers 50000)))
     (try
@@ -51,13 +53,11 @@
              (.close index-writer)))
 
           (time
-           (count (iterator-seq (l/search {:directory directory :analyzer analyzer} "c_comment" "some awful"))))))
+           (count (iterator-seq (l/search {:directory directory :analyzer analyzer} "c_comment" "ironic"))))))
       (finally
-        (cio/delete-dir tmp-dir)))))
+        (cio/delete-dir tmp-dir))))
 
+  )
 
-;; Hard to reason about reusing docs - we can't reuse them in a transaction. Need to take out a pool of them
-;; See https://cwiki.apache.org/confluence/display/lucene/ImproveIndexingSpeed
-
-;; try next querying, have a play with the AV lookup
-;;; Do a roundtrup ingest then n queries - compare AV vs EAV
+;; Todos:
+;; Compare Lucene Query + Crux Query
