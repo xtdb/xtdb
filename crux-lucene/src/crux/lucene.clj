@@ -109,7 +109,7 @@
   (set (for [^EntityTx entity-tx txes]
          (.content-hash entity-tx))))
 
-(defrecord CompactingIndexer [indexer document-store lucene-node]
+(defrecord LuceneDecoratingIndexer [indexer document-store lucene-node]
   db/Indexer
   (index-docs [this docs]
     (db/index-docs indexer docs))
@@ -163,4 +163,4 @@
                :document-store :crux/document-store
                :lucene-node ::node}}
   [{:keys [indexer document-store lucene-node]}]
-  (CompactingIndexer. indexer document-store lucene-node))
+  (LuceneDecoratingIndexer. indexer document-store lucene-node))
