@@ -481,7 +481,7 @@
                                (when k
                                  (let [k (mem/copy-to-unpooled-buffer k)
                                        v (decode-ecav-key-as-v-from k eid-size)]
-                                   (.add ^Set vs v)
+                                   (.add vs v)
                                    (recur (kv/next i)))))
                              vs))))
 
