@@ -290,16 +290,17 @@
   ;; NOTE: Assumes locations are stable over time.
 
   (bench/run-bench :hourly-average-min-max-temperatures-for-field-locations
-    (let [result (let [condition-ids (->> (api/q (api/db node)
+    (let [result (let [db (api/db node)
+                       condition-ids (->> (api/q db
                                                  '{:find [c]
                                                    :where [[c :condition/device-id device-id]
                                                            [device-id :location/location location]
                                                            [(crux.bench.ts-weather/kw-starts-with? location "field-")]]
                                                    :timeout 120000})
                                           (reduce into []))
-                       db (api/db node #inst "1970")
                        histories (for [c condition-ids]
-                                   (api/open-entity-history db c :asc {:with-docs? true}))]
+                                   (api/open-entity-history db c :asc {:with-docs? true
+                                                                       :start {:crux.db/valid-time  #inst "1970"}}))]
                    (try
                      (->> (for [history histories]
                             (for [entity-tx (iterator-seq history)]
