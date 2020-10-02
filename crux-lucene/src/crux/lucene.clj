@@ -3,7 +3,6 @@
             [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
-            [crux.lucene :as l]
             [crux.memory :as mem]
             [crux.query :as q]
             [crux.system :as sys])
@@ -37,23 +36,19 @@
        (mapcat (fn [[k v]]
                  (for [v (if (coll? v) v [v])
                        :when (string? v)]
-                   [(:crux.db/id crux-doc) (name k) v])))))
+                   [(name k) v])))))
 
-(defrecord DocumentId [eid a v])
+(defrecord DocumentId [a v])
 
-(defn- ^Document triple->doc [[eid k ^String v]]
+(defn- ^Document triple->doc [[k ^String v]]
   (doto (Document.)
     ;; To search for triples by eid-a-v for deduping
-    (.add (StringField. "id", (eid->str (DocumentId. eid k v)), Field$Store/NO))
-    ;; To use for entity resolution / bitemp filtering - stored, not searchable
-    (.add (StoredField. "eid", ^bytes (id->stored-bytes eid)))
-    ;; To search for triples by eid for eviction:
-    (.add (StringField. "eid", (eid->str eid), Field$Store/NO))
+    (.add (StringField. "id", (eid->str (DocumentId. k v)), Field$Store/NO))
     ;; The actual term, which will be tokenized
     (.add (TextField. (name k), v, Field$Store/YES))))
 
-(defn- ^Term triple->term [[eid k ^String v]]
-  (Term. "id" (eid->str (DocumentId. eid k v))))
+(defn- ^Term triple->term [[k ^String v]]
+  (Term. "id" (eid->str (DocumentId. k v))))
 
 (defn search [node, k, v]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
@@ -78,23 +73,30 @@
   (doseq [d docs t (crux-doc->triples d)]
     (.updateDocument index-writer (triple->term t) (triple->doc t))))
 
-(defn delete! [node, eids]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        qs (map #(TermQuery. (Term. "eid" (eid->str %))) eids)]
-    (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
-      (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
+(defn evict! [indexer, node, eids]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} node                                        ;
+        attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
+                            keys
+                            (map #(vector (mem/buffer->hex (cc/->id-buffer %)) %))
+                            (into {}))]
+    (with-open [index-store (db/open-index-store indexer)
+                index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
+      (let [qs (for [[a v] (db/exclusive-avs indexer eids)
+                     :let [a (attrs-id->attr (mem/buffer->hex a))
+                           v (db/decode-value index-store v)]
+                     :when (not= :crux.db/id a)]
+                 (TermQuery. (Term. "id" (eid->str (DocumentId. (name a) v)))))]
+        (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn full-text [node db attr arg-v]
   (with-open [search-results ^crux.api.ICursor (search node (name attr) arg-v)]
     (let [{:keys [index-store entity-resolver-fn]} db]
       (->> (iterator-seq search-results)
-           (keep (fn [[^Document doc score]]
-                   (let [eid (mem/->off-heap (.-bytes (.getBinaryValue doc "eid")))
-                         v (.get ^Document doc (name attr))
-                         encoded-v (db/encode-value index-store v)
-                         vs-in-crux (db/aev index-store attr eid encoded-v entity-resolver-fn)]
-                     (when (boolean (not-empty (filter (partial mem/buffers=? encoded-v) vs-in-crux)))
-                       [(db/decode-value index-store eid) v score]))))
+           (mapcat (fn [[^Document doc score]]
+                     (let [v (.get ^Document doc (name attr))
+                           encoded-v (db/encode-value index-store v)]
+                       (for [eid (db/ave index-store attr v nil entity-resolver-fn)]
+                         [(db/decode-value index-store eid) v score]))))
            (into [])))))
 
 (defmethod q/pred-args-spec 'text-search [_]
@@ -115,7 +117,7 @@
     (db/index-docs indexer docs))
   (unindex-eids [this eids]
     (try
-      (delete! lucene-node eids)
+      (evict! indexer lucene-node eids)
       (catch Throwable t
         (clojure.tools.logging/error t)
         (throw t)))

@@ -17,6 +17,7 @@
 (defprotocol IndexStore
   (index-docs [this docs])
   (unindex-eids [this eids])
+  (exclusive-avs [this eids])
   (index-entity-txs [this tx entity-txs])
   (mark-tx-as-failed [this tx])
   (store-index-meta [this k v])
