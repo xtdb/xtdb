@@ -9,13 +9,17 @@
             [hiccup2.core :as hiccup2]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
-            [spec-tools.core :as st])
+            [spec-tools.core :as st]
+            [jsonista.core :as j]
+            [camel-snake-kebab.core :as csk])
   (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
            [java.io ByteArrayOutputStream OutputStream]
            [java.net URLDecoder URLEncoder]
            java.time.format.DateTimeFormatter
-           java.util.Date))
+           java.util.Date
+           com.fasterxml.jackson.databind.ObjectMapper
+           com.fasterxml.jackson.core.JsonGenerator))
 
 (defn try-decode-edn [edn]
   (try
@@ -59,12 +63,34 @@
            (transit/writer output-stream :json options) data)
           (.flush output-stream))))))
 
+(def default-mapper-options
+  {:encode-key-fn (fn [key]
+                    (cond
+                      (= :crux.db/id key) "_id"
+                      :else (some-> key name csk/->camelCase)))
+   :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))}})
+
+(defn ->json-encoder [options]
+  (let [object-mapper (j/object-mapper default-mapper-options)]
+    (reify
+      mfc/EncodeToBytes
+      (encode-to-bytes [_ data _]
+        (j/write-value-as-bytes data object-mapper))
+      mfc/EncodeToOutputStream
+      (encode-to-output-stream [_ data _]
+        (fn [^OutputStream output-stream]
+          (j/write-value output-stream data object-mapper))))))
+
+
 (def default-muuntaja-options
   (-> m/default-options
       (update :formats select-keys ["application/edn"])
       (assoc :default-format "application/edn")
+      ;; TODO: Add transit decoder
       (m/install {:name "application/transit+json"
-                  :encoder [->tj-encoder]})))
+                  :encoder [->tj-encoder]})
+      (m/install {:name "application/json"
+                  :encoder [->json-encoder]})))
 
 (def default-muuntaja
   (m/create default-muuntaja-options))

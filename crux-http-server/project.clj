@@ -16,7 +16,7 @@
                  [com.cognitect/transit-clj "1.0.324"]
                  [com.nimbusds/nimbus-jose-jwt "8.2.1" :exclusions [net.minidev/json-smart]]
                  [net.minidev/json-smart "2.3"]
-
+                 [camel-snake-kebab "0.4.1"]
                  ;; Dependency resolution
                  [borkdude/edamame "0.0.7"]]
   :clean-targets ^{:protect false} ["target"]
