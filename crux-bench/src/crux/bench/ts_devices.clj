@@ -216,15 +216,16 @@
   ;; (12 rows)
 
   (bench/run-bench :min-max-battery-level-per-hour
-    (let [result (let [reading-ids (->> (crux/q (crux/db node)
+    (let [result (let [db (crux/db node)
+                       reading-ids (->> (crux/q db
                                                 '{:find [r]
                                                   :where [[r :reading/device-id device-id]
                                                           (or [device-id :device-info/model "pinto"]
                                                               [device-id :device-info/model "focus"])]})
                                         (reduce into []))
-                       db (crux/db node #inst "1970")
                        histories (for [r reading-ids]
-                                   (crux/open-entity-history db r :asc {:with-docs? true}))]
+                                   (crux/open-entity-history db r :asc {:with-docs? true
+                                                                        :start {:crux.db/valid-time  #inst "1970"}}))]
                    (try
                      (->> (for [history histories]
                             (for [entity-tx (iterator-seq history)]
