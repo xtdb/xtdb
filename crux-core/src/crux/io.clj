@@ -135,7 +135,7 @@
         pq-comp (reify Comparator
                   (compare [_ [a] [b]]
                     (comp a b)))]
-    (doto (PriorityQueue. (count sorted-seqs) pq-comp)
+    (doto (PriorityQueue. (max 1 (count sorted-seqs)) pq-comp)
       (.addAll sorted-seqs))))
 
 (defn- merge-sort-priority-queue->seq [^PriorityQueue pq]

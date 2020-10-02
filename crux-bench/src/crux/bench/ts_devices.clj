@@ -224,10 +224,10 @@
                                         (reduce into []))
                        db (crux/db node #inst "1970")
                        histories (for [r reading-ids]
-                                   (crux/open-entity-history db r :asc))]
+                                   (crux/open-entity-history db r :asc {:with-docs? true}))]
                    (try
                      (->> (for [history histories]
-                            (for [entity-tx history]
+                            (for [entity-tx (iterator-seq history)]
                               (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                           (cio/merge-sort (fn [a b]
                                             (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
