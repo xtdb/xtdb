@@ -4,7 +4,8 @@
                         [goog.string :as string]]))
   #?(:clj (:import java.net.URLEncoder
                    java.util.Date
-                   java.io.Writer)))
+                   java.io.Writer
+                   com.fasterxml.jackson.core.JsonGenerator)))
 
 (defrecord EntityRef [eid])
 
@@ -33,3 +34,8 @@
 #? (:clj
     (def ref-read-handler
       (transit/read-handler ->EntityRef)))
+
+#? (:clj
+    (defn ref-json-encoder [^EntityRef entity-ref ^JsonGenerator gen]
+      (.writeString gen "entityRef")
+      (.writeString gen (str (:eid entity-ref)))))

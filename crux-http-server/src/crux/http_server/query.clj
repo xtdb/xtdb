@@ -15,9 +15,11 @@
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
-            [spec-tools.core :as st])
+            [spec-tools.core :as st]
+            [jsonista.core :as j])
   (:import crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
+           crux.codec.Id
            [java.io Closeable]
            (java.io OutputStream Writer)
            [java.time Instant ZonedDateTime ZoneId]
@@ -125,12 +127,27 @@
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
       (fn [^OutputStream output-stream]
-        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
+        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler
+                                                                Id util/crux-id-write-handler}})]
           (try
             (cond
               (and results (.hasNext results)) (transit/write w (iterator-seq results))
               results (transit/write w '())
               :else (transit/write w res))
+            (finally
+              (cio/try-close results))))))))
+
+(defn- ->json-encoder [_]
+  (let [object-mapper (j/object-mapper util/default-mapper-options)]
+    (reify
+      mfc/EncodeToOutputStream
+      (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
+        (fn [^OutputStream output-stream]
+          (try
+            (cond
+              (and results (.hasNext results)) (j/write-value output-stream (iterator-seq results) object-mapper)
+              results (j/write-value output-stream '() object-mapper)
+              :else (j/write-value output-stream res object-mapper))
             (finally
               (cio/try-close results))))))))
 
@@ -151,7 +168,9 @@
                             :decoder [mfe/decoder]})
                 (m/install {:name "application/transit+json"
                             :encoder [->tj-encoder]
-                            :decoder [(partial mft/decoder :json)]}))))
+                            :decoder [(partial mft/decoder :json)]})
+                (m/install {:name "application/json"
+                            :encoder [->json-encoder]}))))
 
 (defmulti transform-req
   (fn [query req]

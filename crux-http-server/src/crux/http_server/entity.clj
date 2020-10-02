@@ -9,7 +9,8 @@
             [crux.http-server.util :as util]
             [crux.io :as cio]
             [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc])
+            [muuntaja.format.core :as mfc]
+            [jsonista.core :as j])
   (:import crux.codec.Id
            crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
@@ -98,6 +99,20 @@
                                (cio/try-close entity-history)))
             :else (transit/write w res)))))))
 
+(defn- ->json-encoder [_]
+  (let [object-mapper (j/object-mapper util/default-mapper-options)]
+    (reify
+      mfc/EncodeToOutputStream
+      (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
+        (fn [^OutputStream output-stream]
+          (cond
+            entity (j/write-value output-stream entity object-mapper)
+            entity-history (try
+                             (j/write-value output-stream (or (iterator-seq entity-history) '()) object-mapper)
+                             (finally
+                               (cio/try-close entity-history)))
+            :else (j/write-value output-stream res object-mapper)))))))
+
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
                 (dissoc :formats)
@@ -109,7 +124,9 @@
                 (m/install {:name "application/transit+json"
                             :encoder [->tj-encoder]})
                 (m/install {:name "application/edn"
-                            :encoder [->edn-encoder]}))))
+                            :encoder [->edn-encoder]})
+                (m/install {:name "application/json"
+                            :encoder [->json-encoder]}))))
 
 (defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transaction-time sort-order with-corrections with-docs
                                                          start-valid-time start-transaction-time end-valid-time end-transaction-time]}]

@@ -11,9 +11,11 @@
             [muuntaja.format.core :as mfc]
             [spec-tools.core :as st]
             [jsonista.core :as j]
-            [camel-snake-kebab.core :as csk])
+            [camel-snake-kebab.core :as csk]
+            [crux.http-server.entity-ref :as entity-ref])
   (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
+           crux.http_server.entity_ref.EntityRef
            [java.io ByteArrayOutputStream OutputStream]
            [java.net URLDecoder URLEncoder]
            java.time.format.DateTimeFormatter
@@ -68,7 +70,8 @@
                     (cond
                       (= :crux.db/id key) "_id"
                       :else (some-> key name csk/->camelCase)))
-   :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))}})
+   :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))
+              EntityRef entity-ref/ref-json-encoder}})
 
 (defn ->json-encoder [options]
   (let [object-mapper (j/object-mapper default-mapper-options)]
