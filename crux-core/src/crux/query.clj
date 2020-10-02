@@ -1821,7 +1821,7 @@
                          HistoryOptions$SortOrder/ASC :asc
                          HistoryOptions$SortOrder/DESC :desc)
             with-docs? (.withDocs opts)
-            index-snapshot (db/open-index-snapshot index-store)
+            index-snapshot (open-index-snapshot this)
 
             opts (cond-> {:with-corrections? (.withCorrections opts)
                           :with-docs? with-docs?

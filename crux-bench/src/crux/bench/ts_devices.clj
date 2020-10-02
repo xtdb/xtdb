@@ -216,44 +216,44 @@
   ;; (12 rows)
 
   (bench/run-bench :min-max-battery-level-per-hour
-    (let [result (let [db (crux/db node)
-                       reading-ids (->> (crux/q db
-                                                '{:find [r]
-                                                  :where [[r :reading/device-id device-id]
-                                                          (or [device-id :device-info/model "pinto"]
-                                                              [device-id :device-info/model "focus"])]})
-                                        (reduce into []))
-                       histories (for [r reading-ids]
-                                   (crux/open-entity-history db r :asc {:with-docs? true
-                                                                        :start {:crux.db/valid-time  #inst "1970"}}))]
-                   (try
-                     (->> (for [history histories]
-                            (for [entity-tx (iterator-seq history)]
-                              (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
-                          (cio/merge-sort (fn [a b]
-                                            (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
-                          (partition-by :crux.db/valid-time)
-                          (take 12)
-                          (mapv (fn [group]
-                                  (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
-                                    [(:crux.db/valid-time (first group))
-                                     (first battery-levels)
-                                     (last battery-levels)]))))
-                     (finally
-                       (run! cio/try-close histories))))
+    (with-open [db (crux/open-db node)]
+      (let [result (let [reading-ids (->> (crux/q db
+                                                  '{:find [r]
+                                                    :where [[r :reading/device-id device-id]
+                                                            (or [device-id :device-info/model "pinto"]
+                                                                [device-id :device-info/model "focus"])]})
+                                          (reduce into []))
+                         histories (for [r reading-ids]
+                                     (crux/open-entity-history db r :asc {:with-docs? true
+                                                                          :start {:crux.db/valid-time  #inst "1970"}}))]
+                     (try
+                       (->> (for [history histories]
+                              (for [entity-tx (iterator-seq history)]
+                                (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                            (cio/merge-sort (fn [a b]
+                                              (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
+                            (partition-by :crux.db/valid-time)
+                            (take 12)
+                            (mapv (fn [group]
+                                    (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
+                                      [(:crux.db/valid-time (first group))
+                                       (first battery-levels)
+                                       (last battery-levels)]))))
+                       (finally
+                         (run! cio/try-close histories))))
 
-          successful? (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
-                          [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
-                          [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
-                          [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
-                          [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
-                          [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
-                          [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
-                          [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
-                          [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
-                         result)]
+            successful? (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
+                            [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
+                            [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
+                            [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
+                            [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
+                            [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
+                            [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
+                            [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
+                            [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
+                           result)]
 
-      {:successful? successful?})))
+        {:successful? successful?}))))
 
 (defn run-devices-bench [node]
   (bench/with-bench-ns :ts-devices

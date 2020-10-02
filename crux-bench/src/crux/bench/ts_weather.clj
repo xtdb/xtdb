@@ -290,61 +290,61 @@
   ;; NOTE: Assumes locations are stable over time.
 
   (bench/run-bench :hourly-average-min-max-temperatures-for-field-locations
-    (let [result (let [db (api/db node)
-                       condition-ids (->> (api/q db
-                                                 '{:find [c]
-                                                   :where [[c :condition/device-id device-id]
-                                                           [device-id :location/location location]
-                                                           [(crux.bench.ts-weather/kw-starts-with? location "field-")]]
-                                                   :timeout 120000})
-                                          (reduce into []))
-                       histories (for [c condition-ids]
-                                   (api/open-entity-history db c :asc {:with-docs? true
-                                                                       :start {:crux.db/valid-time  #inst "1970"}}))]
-                   (try
-                     (->> (for [history histories]
-                            (for [entity-tx (iterator-seq history)]
-                              (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
-                          (cio/merge-sort (fn [a b]
-                                            (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
-                          (partition-by :crux.db/valid-time)
-                          (take 24)
-                          (mapv (fn [group]
-                                  (let [temperatures (sort (mapv (comp :condition/temperature :crux.db/doc) group))]
-                                    [(:crux.db/valid-time (first group))
-                                     (trunc (/ (reduce + temperatures) (count group)) 2)
-                                     (trunc (first temperatures) 2)
-                                     (trunc (last temperatures) 2)]))))
-                     (finally
-                       (run! cio/try-close histories))))
+    (with-open [db (api/db node)]
+      (let [result (let [condition-ids (->> (api/q db
+                                                   '{:find [c]
+                                                     :where [[c :condition/device-id device-id]
+                                                             [device-id :location/location location]
+                                                             [(crux.bench.ts-weather/kw-starts-with? location "field-")]]
+                                                     :timeout 120000})
+                                            (reduce into []))
+                         histories (for [c condition-ids]
+                                     (api/open-entity-history db c :asc {:with-docs? true
+                                                                         :start {:crux.db/valid-time  #inst "1970"}}))]
+                     (try
+                       (->> (for [history histories]
+                              (for [entity-tx (iterator-seq history)]
+                                (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                            (cio/merge-sort (fn [a b]
+                                              (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
+                            (partition-by :crux.db/valid-time)
+                            (take 24)
+                            (mapv (fn [group]
+                                    (let [temperatures (sort (mapv (comp :condition/temperature :crux.db/doc) group))]
+                                      [(:crux.db/valid-time (first group))
+                                       (trunc (/ (reduce + temperatures) (count group)) 2)
+                                       (trunc (first temperatures) 2)
+                                       (trunc (last temperatures) 2)]))))
+                       (finally
+                         (run! cio/try-close histories))))
 
-          successful? (= result
-                         [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
-                          [#inst "2016-11-15T13:00:00.000-00:00" 74.43 68.7 80.4]
-                          [#inst "2016-11-15T14:00:00.000-00:00" 75.44 69.5 81.4]
-                          [#inst "2016-11-15T15:00:00.000-00:00" 76.47 70.5 82.7]
-                          [#inst "2016-11-15T16:00:00.000-00:00" 77.48 71.5 83.4]
-                          [#inst "2016-11-15T17:00:00.000-00:00" 78.46 72.5 84.6]
-                          [#inst "2016-11-15T18:00:00.000-00:00" 79.45 73.5 85.5]
-                          [#inst "2016-11-15T19:00:00.000-00:00" 80.42 74.8 86.5]
-                          [#inst "2016-11-15T20:00:00.000-00:00" 81.41 75.6 87.4]
-                          [#inst "2016-11-15T21:00:00.000-00:00" 82.42 76.1 88.4]
-                          [#inst "2016-11-15T22:00:00.000-00:00" 83.4 77.0 89.5]
-                          [#inst "2016-11-15T23:00:00.000-00:00" 84.38 78.3 90.0]
-                          [#inst "2016-11-16T00:00:00.000-00:00" 85.35 79.3 90.0]
-                          [#inst "2016-11-16T01:00:00.000-00:00" 85.27 78.8 90.0]
-                          [#inst "2016-11-16T02:00:00.000-00:00" 84.26 77.7 89.4]
-                          [#inst "2016-11-16T03:00:00.000-00:00" 83.25 76.5 88.5]
-                          [#inst "2016-11-16T04:00:00.000-00:00" 82.24 75.3 87.9]
-                          [#inst "2016-11-16T05:00:00.000-00:00" 81.23 74.1 87.2]
-                          [#inst "2016-11-16T06:00:00.000-00:00" 80.21 72.6 86.3]
-                          [#inst "2016-11-16T07:00:00.000-00:00" 79.19 71.5 84.9]
-                          [#inst "2016-11-16T08:00:00.000-00:00" 78.17 71.1 84.2]
-                          [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
-                          [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
-                          [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]])]
+            successful? (= result
+                           [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
+                            [#inst "2016-11-15T13:00:00.000-00:00" 74.43 68.7 80.4]
+                            [#inst "2016-11-15T14:00:00.000-00:00" 75.44 69.5 81.4]
+                            [#inst "2016-11-15T15:00:00.000-00:00" 76.47 70.5 82.7]
+                            [#inst "2016-11-15T16:00:00.000-00:00" 77.48 71.5 83.4]
+                            [#inst "2016-11-15T17:00:00.000-00:00" 78.46 72.5 84.6]
+                            [#inst "2016-11-15T18:00:00.000-00:00" 79.45 73.5 85.5]
+                            [#inst "2016-11-15T19:00:00.000-00:00" 80.42 74.8 86.5]
+                            [#inst "2016-11-15T20:00:00.000-00:00" 81.41 75.6 87.4]
+                            [#inst "2016-11-15T21:00:00.000-00:00" 82.42 76.1 88.4]
+                            [#inst "2016-11-15T22:00:00.000-00:00" 83.4 77.0 89.5]
+                            [#inst "2016-11-15T23:00:00.000-00:00" 84.38 78.3 90.0]
+                            [#inst "2016-11-16T00:00:00.000-00:00" 85.35 79.3 90.0]
+                            [#inst "2016-11-16T01:00:00.000-00:00" 85.27 78.8 90.0]
+                            [#inst "2016-11-16T02:00:00.000-00:00" 84.26 77.7 89.4]
+                            [#inst "2016-11-16T03:00:00.000-00:00" 83.25 76.5 88.5]
+                            [#inst "2016-11-16T04:00:00.000-00:00" 82.24 75.3 87.9]
+                            [#inst "2016-11-16T05:00:00.000-00:00" 81.23 74.1 87.2]
+                            [#inst "2016-11-16T06:00:00.000-00:00" 80.21 72.6 86.3]
+                            [#inst "2016-11-16T07:00:00.000-00:00" 79.19 71.5 84.9]
+                            [#inst "2016-11-16T08:00:00.000-00:00" 78.17 71.1 84.2]
+                            [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
+                            [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
+                            [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]])]
 
-      {:successful? successful?})))
+        {:successful? successful?}))))
 
 (defn run-weather-bench [node]
   (bench/with-bench-ns :ts-weather
