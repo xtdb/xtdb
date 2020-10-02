@@ -97,7 +97,7 @@
                                            (System/exit 1))
                                        (update :selected-nodes disj "h2-rocksdb" "sqlite-rocksdb")))]
 
-    (bench/post-to-slack (format "Finished Benchmark*, Crux Version: %s, Commit Hash: %s\n"
+    (bench/post-to-slack (format "*Finished Benchmark*, Crux Version: %s, Commit Hash: %s\n"
                                  bench/crux-version bench/commit-hash))
     (bench/send-email-via-ses (bench/results->email bench-results)))
 
