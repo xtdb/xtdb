@@ -30,6 +30,7 @@
 (s/def ::query-params
   (s/keys :opt-un [::util/eid
                    ::util/eid-edn
+                   ::util/eid-json
                    ::history
                    ::sort-order
                    ::util/valid-time
@@ -157,12 +158,12 @@
       {:error e})))
 
 (defn transform-query-params [req]
-  (let [{:keys [eid eid-edn] :as query-params} (get-in req [:parameters :query])]
+  (let [{:keys [eid eid-edn eid-json] :as query-params} (get-in req [:parameters :query])]
     (->
      (if (= "text/html" (get-in req [:muuntaja/response :format]))
        (assoc query-params :with-docs true :link-entities? true)
        query-params)
-     (assoc :eid (or eid-edn eid)))))
+     (assoc :eid (or eid-edn eid-json eid)))))
 
 (defmulti transform-query-resp
   (fn [resp req]

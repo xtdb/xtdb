@@ -31,12 +31,24 @@
     (catch Exception e
       ::s/invalid)))
 
+(defn try-decode-json [json]
+  (try
+    (cond->> json
+      (string? json) j/read-value)
+    (catch Exception e
+      ::s/invalid)))
+
 (s/def ::eid (and string? c/valid-id?))
 
 (s/def ::eid-edn
   (st/spec
    {:spec c/valid-id?
     :decode/string (fn [_ eid] (try-decode-edn eid))}))
+
+(s/def ::eid-json
+  (st/spec
+   {:spec c/valid-id?
+    :decode/string (fn [_ json] (try-decode-json json))}))
 
 (s/def ::link-entities? boolean?)
 (s/def ::valid-time inst?)

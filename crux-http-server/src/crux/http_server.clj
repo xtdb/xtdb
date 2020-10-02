@@ -38,13 +38,13 @@
   (cond-> response
     date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
-(s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid)]
+(s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/transaction-time]))
 
 (defn- entity-tx [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [eid eid-edn valid-time transaction-time]} (get-in req [:parameters :query])
-          eid (or eid-edn eid)
+    (let [{:keys [eid eid-edn eid-json valid-time transaction-time]} (get-in req [:parameters :query])
+          eid (or eid-edn eid-json eid)
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
           {::tx/keys [tx-time] :as entity-tx} (crux/entity-tx db eid)]
