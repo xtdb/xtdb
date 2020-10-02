@@ -255,6 +255,11 @@
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.") }})
 
+(defn wrap-camel-case-params [handler]
+  (fn [{:keys [query-params] :as request}]
+    (let [kebab-qps (into {} (map (fn [[k v]] [(csk/->kebab-case k) v])) query-params)]
+      (handler (assoc request :query-params kebab-qps)))))
+
 (defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
                        :keys [crux-node], :as opts}]
   (let [opts (-> opts (update :http-options dissoc :jwks))
@@ -305,6 +310,7 @@
                  {:muuntaja util/default-muuntaja
                   :coercion reitit.coercion.spec/coercion
                   :middleware (cond-> [p/wrap-params
+                                       wrap-camel-case-params
                                        rm/format-negotiate-middleware
                                        rm/format-response-middleware
                                        (re/create-exception-middleware
