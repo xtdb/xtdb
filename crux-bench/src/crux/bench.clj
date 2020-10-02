@@ -59,7 +59,8 @@
         ret (try
               (f)
               (catch Exception e
-                {:error (.getMessage e)}))]
+                (log/errorf e "caught exception during '%s':" *bench-ns*)
+                {:error (str e)}))]
     (merge (when (map? ret) ret)
            {:time-taken-ms (- (System/currentTimeMillis) start-time-ms)})))
 
