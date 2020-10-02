@@ -3,7 +3,9 @@
   The optional SPARQL handler requires juxt.crux/rdf."
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [clojure.instant :as instant]
             [crux.api :as crux]
+            [crux.codec :as c]
             [crux.http-server.entity :as entity]
             [crux.http-server.query :as query]
             [crux.http-server.status :as status]
@@ -18,7 +20,12 @@
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.response :as resp]
-            [ring.util.time :as rt])
+            [ring.util.time :as rt]
+            [jsonista.core :as json]
+            [muuntaja.core :as m]
+            [muuntaja.format.core :as mfc]
+            [camel-snake-kebab.core :as csk]
+            [clojure.edn :as edn])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
@@ -48,10 +55,40 @@
         {:status 404
          :body {:error (str eid " entity-tx not found") }}))))
 
-(s/def ::tx-ops vector?)
-(s/def ::transact-spec (s/keys :req-un [::tx-ops]))
+(defn- ->submit-json-decoder [_]
+  (let [mapper (json/object-mapper {:decode-key-fn (fn [k]
+                                                     (if (= k "_id")
+                                                       :crux.db/id
+                                                       (keyword k)))})]
+    (reify
+      mfc/Decode
+      (decode [_ data _]
+        (let [decoded-data (json/read-value data mapper)]
+          (update decoded-data :tx-ops (fn [tx-ops]
+                                         (mapv
+                                          (fn [transaction]
+                                            (let [tx (update transaction 0 (fn [op] (keyword "crux.tx" op)))]
+                                              (case (first tx)
+                                                :crux.tx/put (cond-> tx
+                                                               (get-in tx [1 :crux.db/fn]) (update-in [1 :crux.db/fn] edn/read-string)
+                                                               (get tx 2) (update 2 instant/read-instant-date)
+                                                               (get tx 3) (update 3 instant/read-instant-date))
+                                                :crux.tx/delete (cond-> tx
+                                                                  (get tx 2) (update 2 instant/read-instant-date)
+                                                                  (get tx 3) (update 3 instant/read-instant-date))
+                                                :crux.tx/match (cond-> tx
+                                                                 (get tx 3) (update 3 instant/read-instant-date))
+                                                tx)))
+                                          tx-ops))))))))
 
-(defn- transact [^ICruxAPI crux-node]
+(def ->submit-tx-muuntaja
+  (m/create
+   (assoc-in util/default-muuntaja-options [:formats "application/json" :decoder] [->submit-json-decoder])))
+
+(s/def ::tx-ops vector?)
+(s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
+
+(defn- submit-tx [^ICruxAPI crux-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
           {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
@@ -248,11 +285,12 @@
                  ["/_crux/tx-log" {:get (tx-log crux-node)
                                    :muuntaja util/output-stream-muuntaja
                                    :parameters {:query ::tx-log-spec}}]
-                 ["/_crux/submit-tx" {:post (if read-only?
+                 ["/_crux/submit-tx" {:muuntaja ->submit-tx-muuntaja
+                                      :post (if read-only?
                                               (fn [_] {:status 403
                                                        :body "forbidden: read-only HTTP node"})
-                                              (transact crux-node))
-                                      :parameters {:body ::transact-spec}}]
+                                              (submit-tx crux-node))
+                                      :parameters {:body ::submit-tx-spec}}]
                  ["/_crux/tx-committed" {:get (tx-committed? crux-node)
                                          :parameters {:query ::tx-committed-spec}}]
                  ["/_crux/latest-completed-tx" {:get (latest-completed-tx crux-node)}]

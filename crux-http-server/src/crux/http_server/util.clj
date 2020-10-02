@@ -9,6 +9,7 @@
             [hiccup2.core :as hiccup2]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
+            [muuntaja.format.transit :as mft]
             [spec-tools.core :as st]
             [jsonista.core :as j]
             [camel-snake-kebab.core :as csk]
@@ -84,14 +85,13 @@
         (fn [^OutputStream output-stream]
           (j/write-value output-stream data object-mapper))))))
 
-
 (def default-muuntaja-options
   (-> m/default-options
       (update :formats select-keys ["application/edn"])
       (assoc :default-format "application/edn")
-      ;; TODO: Add transit decoder
       (m/install {:name "application/transit+json"
-                  :encoder [->tj-encoder]})
+                  :encoder [->tj-encoder]
+                  :decoder [(partial mft/decoder :json)]})
       (m/install {:name "application/json"
                   :encoder [->json-encoder]})))
 
