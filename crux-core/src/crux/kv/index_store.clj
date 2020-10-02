@@ -767,6 +767,24 @@
       {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
        :indexed-docs docs}))
 
+  (exclusive-avs [this eids]
+    (with-open [snapshot (kv/new-snapshot kv-store)
+                ecav-i (kv/new-iterator snapshot)
+                av-i (kv/new-iterator snapshot)]
+      (->> (for [eid eids
+                 :let [eid-value-buffer (c/->value-buffer eid)]
+                 ecav-key (all-keys-in-prefix ecav-i (encode-ecav-key-to nil eid-value-buffer))
+                 :let [quad ^Quad (decode-ecav-key-from ecav-key (.capacity eid-value-buffer))
+                       attr-buffer (c/->id-buffer (.attr quad))
+                       value-buffer (.value quad)]
+                 :when (= (->> (all-keys-in-prefix av-i (encode-ave-key-to nil
+                                                                           attr-buffer
+                                                                           value-buffer))
+                               (take 2)
+                               count)
+                          1)]
+             [attr-buffer value-buffer]))))
+
   (unindex-eids [this eids]
     (let [{:keys [tombstones ks]} (with-open [snapshot (kv/new-snapshot kv-store)
                                               bitemp-i (kv/new-iterator snapshot)
