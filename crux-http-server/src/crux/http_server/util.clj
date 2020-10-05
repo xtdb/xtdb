@@ -78,16 +78,20 @@
            (transit/writer output-stream :json options) data)
           (.flush output-stream))))))
 
-(def default-mapper-options
-  {:encode-key-fn (fn [key]
-                    (cond
-                      (= :crux.db/id key) "_id"
-                      :else (some-> key name csk/->camelCase)))
-   :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))
-              EntityRef entity-ref/ref-json-encoder}})
+(defn crux-object-mapper [{:keys [camel-case? mapper-options] :as options}]
+  (j/object-mapper
+   (merge
+    {:encode-key-fn (fn [key]
+                      (cond
+                        (= :crux.db/id key) "_id"
+                        :else (cond-> (name key)
+                                camel-case? csk/->camelCase)))
+     :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))
+                EntityRef entity-ref/ref-json-encoder}}
+    mapper-options)))
 
 (defn ->json-encoder [options]
-  (let [object-mapper (j/object-mapper default-mapper-options)]
+  (let [object-mapper (crux-object-mapper {:camel-case? true})]
     (reify
       mfc/EncodeToBytes
       (encode-to-bytes [_ data _]

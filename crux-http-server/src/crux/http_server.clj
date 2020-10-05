@@ -56,10 +56,11 @@
          :body {:error (str eid " entity-tx not found") }}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [mapper (json/object-mapper {:decode-key-fn (fn [k]
-                                                     (if (= k "_id")
-                                                       :crux.db/id
-                                                       (keyword k)))})]
+  (let [mapper (util/crux-object-mapper {:camel-case? true
+                                         :mapper-options {:decode-key-fn (fn [k]
+                                                                           (if (= k "_id")
+                                                                             :crux.db/id
+                                                                             (keyword k)))}})]
     (reify
       mfc/Decode
       (decode [_ data _]
