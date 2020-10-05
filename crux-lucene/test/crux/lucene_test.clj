@@ -19,13 +19,6 @@
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (ffirst docs) "val"))))))
 
-    (t/testing "using predicate function"
-      (with-open [db (c/open-db *api*)]
-        (t/is (= #{[:ivan]} (c/q db {:find '[?e]
-                                     :where '[[(crux.lucene/full-text node db :name "Ivan") [[?e]]]
-                                              [?e :crux.db/id]]
-                                     :args [{:db db :node (:crux.lucene/node @(:!system *api*))}]})))))
-
     (t/testing "using in-built function"
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]

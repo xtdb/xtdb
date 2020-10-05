@@ -69,11 +69,11 @@
                             keys
                             (map #(vector (mem/buffer->hex (cc/->id-buffer %)) %))
                             (into {}))]
-    (with-open [index-store (db/open-index-store indexer)
+    (with-open [index-snapshot (db/open-index-snapshot indexer)
                 index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (let [qs (for [[a v] (db/exclusive-avs indexer eids)
                      :let [a (attrs-id->attr (mem/buffer->hex a))
-                           v (db/decode-value index-store v)]
+                           v (db/decode-value index-snapshot v)]
                      :when (not= :crux.db/id a)]
                  (TermQuery. (Term. "id" (eid->str (DocumentId. (name a) v)))))]
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
@@ -101,41 +101,40 @@
                   (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d))
                                                  (if k (- (.-score d) 1) (.-score d)))) score-docs))))
 
-(defn full-text [node db attr arg-v]
+(defn- full-text [node index-snapshot entity-resolver-fn attr arg-v]
   (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
-    (let [{:keys [index-store entity-resolver-fn]} db]
-      (->> (iterator-seq search-results)
-           (mapcat (fn [[^Document doc score]]
-                     (let [v (.get ^Document doc "val")
-                           a (or attr (keyword (.get ^Document doc "attr")))
-                           encoded-v (db/encode-value index-store v)]
-                       (for [eid (db/ave index-store a v nil entity-resolver-fn)]
-                         [(db/decode-value index-store eid) v a score]))))
-           (into [])))))
+    (->> (iterator-seq search-results)
+         (mapcat (fn [[^Document doc score]]
+                   (let [v (.get ^Document doc "val")
+                         a (or attr (keyword (.get ^Document doc "attr")))
+                         encoded-v (db/encode-value index-snapshot v)]
+                     (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
+                       [(db/decode-value index-snapshot eid) v a score]))))
+         (into []))))
 
 (defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr (s/? keyword?))) :return (s/? ::q/pred-return)))
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr (s/? keyword?))) :return (s/? :crux.query/binding)))
 
-(defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
+(defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings rule-name->rules return-type tuple-idxs-in-join-order] :as pred-ctx}]
   (let [[vval attr] (rest arg-bindings)]
-    (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-      (q/bind-pred-result pred-ctx (get idx-id->idx idx-id) (full-text *node* db attr vval)))))
+    (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
+      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *node* index-snapshot entity-resolver-fn attr vval)))))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
          (.content-hash entity-tx))))
 
-(defrecord LuceneDecoratingIndexer [indexer document-store lucene-node]
-  db/Indexer
+(defrecord LuceneDecoratingIndexStore [index-store document-store lucene-node]
+  db/IndexStore
   (index-docs [this docs]
-    (db/index-docs indexer docs))
+    (db/index-docs index-store docs))
   (unindex-eids [this eids]
     (try
-      (evict! indexer lucene-node eids)
+      (evict! index-store lucene-node eids)
       (catch Throwable t
         (clojure.tools.logging/error t)
         (throw t)))
-    (db/unindex-eids indexer eids))
+    (db/unindex-eids index-store eids))
   (index-entity-txs [this tx entity-txs]
     (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
           index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
@@ -143,26 +142,26 @@
         (let [content-hashes (entity-txes->content-hashes entity-txs)
               docs (vals (db/fetch-docs document-store content-hashes))]
           (write-docs! index-writer docs)
-          (db/index-entity-txs indexer tx entity-txs)
+          (db/index-entity-txs index-store tx entity-txs)
           (.close index-writer))
         (catch Throwable t
           (clojure.tools.logging/error t)
           (.rollback index-writer)
           (throw t)))))
   (mark-tx-as-failed [this tx]
-    (db/mark-tx-as-failed indexer tx))
+    (db/mark-tx-as-failed index-store tx))
   (store-index-meta [this k v]
-    (db/store-index-meta indexer k v))
+    (db/store-index-meta index-store k v))
   (read-index-meta [this k]
-    (db/read-index-meta indexer k))
+    (db/read-index-meta index-store k))
   (read-index-meta [this k not-found]
-    (db/read-index-meta indexer k not-found))
+    (db/read-index-meta index-store k not-found))
   (latest-completed-tx [this]
-    (db/latest-completed-tx indexer))
+    (db/latest-completed-tx index-store))
   (tx-failed? [this tx-id]
-    (db/tx-failed? indexer tx-id))
-  (open-index-store ^java.io.Closeable [this]
-    (db/open-index-store indexer)))
+    (db/tx-failed? index-store tx-id))
+  (open-index-snapshot ^java.io.Closeable [this]
+    (db/open-index-snapshot index-store)))
 
 (defn ->node
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
@@ -174,9 +173,9 @@
         node (LuceneNode. directory analyzer)]
     (alter-var-root #'*node* (constantly node))))
 
-(defn ->indexer
-  {::sys/deps {:indexer :crux/indexer
+(defn ->index-store
+  {::sys/deps {:index-store :crux/index-store
                :document-store :crux/document-store
                :lucene-node ::node}}
-  [{:keys [indexer document-store lucene-node]}]
-  (LuceneDecoratingIndexer. indexer document-store lucene-node))
+  [{:keys [index-store document-store lucene-node]}]
+  (LuceneDecoratingIndexStore. index-store document-store lucene-node))
