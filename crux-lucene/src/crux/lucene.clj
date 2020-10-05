@@ -44,25 +44,13 @@
   (doto (Document.)
     ;; To search for triples by eid-a-v for deduping
     (.add (StringField. "id", (eid->str (DocumentId. k v)), Field$Store/NO))
+    ;; The Attr
+    (.add (StringField. "attr", (name k), Field$Store/YES))
     ;; The actual term, which will be tokenized
-    (.add (TextField. (name k), v, Field$Store/YES))))
+    (.add (TextField. "val", v, Field$Store/YES))))
 
 (defn- ^Term triple->term [[k ^String v]]
   (Term. "id" (eid->str (DocumentId. k v))))
-
-(defn search [node, k, v]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        directory-reader (DirectoryReader/open directory)
-        index-searcher (IndexSearcher. directory-reader)
-        qp (QueryParser. k analyzer)
-        q (.build
-           (doto (BooleanQuery$Builder.)
-             (.add (.parse qp v) BooleanClause$Occur/MUST)))
-        score-docs (.-scoreDocs (.search index-searcher q 1000))]
-;    (println (.explain index-searcher q( .-doc (first score-docs))))
-    (cio/->cursor (fn []
-                    (.close directory-reader))
-                  (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d)) (.-score d))) score-docs))))
 
 (defn doc-count []
   (let [{:keys [^Directory directory]} *node*
@@ -74,7 +62,7 @@
     (.updateDocument index-writer (triple->term t) (triple->doc t))))
 
 (defn evict! [indexer, node, eids]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} node                                        ;
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
                             keys
                             (map #(vector (mem/buffer->hex (cc/->id-buffer %)) %))
@@ -88,22 +76,38 @@
                  (TermQuery. (Term. "id" (eid->str (DocumentId. (name a) v)))))]
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
+(defn search [node, k, v]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
+        directory-reader (DirectoryReader/open directory)
+        index-searcher (IndexSearcher. directory-reader)
+        qp (QueryParser. "val" analyzer)
+        b (doto (BooleanQuery$Builder.)
+            (.add (.parse qp v) BooleanClause$Occur/MUST))
+        _ (when k
+            (.add b (TermQuery. (Term. "attr" (name k))) BooleanClause$Occur/MUST))
+        q (.build b)
+        score-docs (.-scoreDocs (.search index-searcher q 1000))]
+    (cio/->cursor (fn []
+                    (.close directory-reader))
+                  (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d)) (.-score d))) score-docs))))
+
 (defn full-text [node db attr arg-v]
-  (with-open [search-results ^crux.api.ICursor (search node (name attr) arg-v)]
+  (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
     (let [{:keys [index-store entity-resolver-fn]} db]
       (->> (iterator-seq search-results)
            (mapcat (fn [[^Document doc score]]
-                     (let [v (.get ^Document doc (name attr))
+                     (let [v (.get ^Document doc "val")
+                           a (or attr (keyword (.get ^Document doc "attr")))
                            encoded-v (db/encode-value index-store v)]
-                       (for [eid (db/ave index-store attr v nil entity-resolver-fn)]
-                         [(db/decode-value index-store eid) v score]))))
+                       (for [eid (db/ave index-store a v nil entity-resolver-fn)]
+                         [(db/decode-value index-store eid) v a score]))))
            (into [])))))
 
 (defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr q/literal? :v string?)) :return (s/? ::q/pred-return)))
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr (s/? keyword?))) :return (s/? ::q/pred-return)))
 
 (defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings return-type] :as pred-ctx}]
-  (let [[attr vval] (rest arg-bindings)]
+  (let [[vval attr] (rest arg-bindings)]
     (fn pred-get-attr-constraint [index-store {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
       (q/bind-pred-result pred-ctx (get idx-id->idx idx-id) (full-text *node* db attr vval)))))
 

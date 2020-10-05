@@ -22,6 +22,12 @@
 ;; Crux Ingest: 25000 ms
 ;; Crux Search: ~60 ms
 
+;; a/v (pred limit 1000)
+;; Lucene Ingest: 4500 ms
+;; Lucene Search: ~10 ms
+;; Crux Ingest: 25000 ms
+;; Crux Search: ~60 ms
+
 (defn customers [n]
   (take n (tf/tpch-table->docs (first (TpchTable/getTables)) {:scale-factor 0.5})))
 
@@ -52,6 +58,3 @@
 
      (time (count (c/q (c/db *api*) {:find '[?e]
                                      :where '[[(text-search :c_comment "ironic") [[?e]]]]}))))))
-
-;; Todos:
-;; Remove the limit
