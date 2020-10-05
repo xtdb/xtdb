@@ -5,7 +5,8 @@
             [crux.io :as cio]
             [crux.memory :as mem]
             [crux.query :as q]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [clojure.tools.logging :as log])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.nio.file.Path
@@ -91,6 +92,10 @@
         q (.build b)
         q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
         score-docs (.-scoreDocs (.search index-searcher q 1000))]
+
+    (when (seq score-docs)
+      (log/debug (.explain index-searcher q (.-doc ^ScoreDoc (first score-docs)))))
+
     (cio/->cursor (fn []
                     (.close directory-reader))
                   (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d))

@@ -4,9 +4,8 @@
       <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
     </encoder>
   </appender>
-  <root level="WARN">
+  <root level="DEBUG">
     <appender-ref ref="STDOUT" />
   </root>
   <logger name="crux" level="INFO" />
-  <logger name="crux.kv.memdb" level="ERROR" />
 </configuration>
