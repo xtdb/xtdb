@@ -785,8 +785,8 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(def ^:const default-value-cache-size (* 256 1024))
-(def ^:const default-cav-cache-size (* 256 1024))
+(def ^:const default-value-cache-size (* 64 1024))
+(def ^:const default-cav-cache-size (* 64 1024))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
