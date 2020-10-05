@@ -206,3 +206,8 @@
     (with-open [before-db (c/open-db *api*)]
       (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
       (t/is (empty? (c/q before-db q))))))
+
+(comment
+  (import '[ch.qos.logback.classic Level Logger]
+          'org.slf4j.LoggerFactory)
+  (.setLevel ^Logger (LoggerFactory/getLogger "crux.lucene") (Level/valueOf "DEBUG")))
