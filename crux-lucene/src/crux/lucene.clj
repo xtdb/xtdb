@@ -11,10 +11,11 @@
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.document Document Field Field$Store StringField TextField]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
+           org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder IndexSearcher Query ScoreDoc TermQuery]
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery]
            [org.apache.lucene.store Directory FSDirectory]))
 
 (def ^:dynamic *node*)
@@ -80,16 +81,20 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
+        _ (.setSimilarity index-searcher (proxy [org.apache.lucene.search.similarities.ClassicSimilarity] []
+                                           (idf [n n] 1)))
         qp (QueryParser. "val" analyzer)
         b (doto (BooleanQuery$Builder.)
             (.add (.parse qp v) BooleanClause$Occur/MUST))
         _ (when k
             (.add b (TermQuery. (Term. "attr" (name k))) BooleanClause$Occur/MUST))
         q (.build b)
+        q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
         score-docs (.-scoreDocs (.search index-searcher q 1000))]
     (cio/->cursor (fn []
                     (.close directory-reader))
-                  (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d)) (.-score d))) score-docs))))
+                  (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d))
+                                                 (if k (- (.-score d) 1) (.-score d)))) score-docs))))
 
 (defn full-text [node db attr arg-v]
   (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]

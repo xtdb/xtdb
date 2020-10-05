@@ -169,7 +169,7 @@
 (t/deftest test-structural-sharing
   (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
   (let [q {:find '[?e ?v ?s]
-           :where '[[(text-search :name "Ivan") [[?e ?v ?s]]]
+           :where '[[(text-search "Ivan" :name) [[?e ?v ?s]]]
                     [?e :crux.db/id]]}
         prior-score (with-open [db (c/open-db *api*)]
                       (c/q db q))]
@@ -186,7 +186,7 @@
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan-2 :name "Ivan Bob"}]])
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db {:find '[?e ?v]
-                        :where '[[(text-search :name "Ivan") [[?e ?v]]]
+                        :where '[[(text-search "Ivan" :name) [[?e ?v]]]
                                  [?e :crux.db/id]]})))))
 
 (t/deftest test-past-fuzzy-results-excluded
@@ -195,13 +195,13 @@
   (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan1" :name "Ivana"}]])
 
   (let [q {:find '[?e ?v ?s]
-           :where '[[(text-search :name "Ivan*") [[?e ?v ?s]]]
+           :where '[[(text-search  "Ivan*" :name) [[?e ?v ?s]]]
                     [?e :crux.db/id]]}]
     (with-open [db (c/open-db *api*)]
       (t/is (= ["ivan1"] (map first (c/q db q)))))))
 
 (t/deftest test-exlude-future-results
-  (let [q {:find '[?e] :where '[[(text-search :name "Ivan") [[?e]]] [?e :crux.db/id]]}]
+  (let [q {:find '[?e] :where '[[(text-search "Ivan" :name) [[?e]]] [?e :crux.db/id]]}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivanka"}]])
     (with-open [before-db (c/open-db *api*)]
       (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
