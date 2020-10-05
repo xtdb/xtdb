@@ -5,6 +5,6 @@
 (defn with-lucene-module [f]
   (with-tmp-dir "lucene" [db-dir]
     (fix/with-opts {::l/node {:db-dir (.toPath ^java.io.File db-dir)}
-                    :crux/indexer {:crux/module 'crux.lucene/->indexer
-                                   :indexer 'crux.kv.indexer/->kv-indexer}}
+                    :crux/index-store {:crux/module 'crux.lucene/->index-store
+                                       :index-store 'crux.kv.index-store/->kv-index-store}}
       f)))
