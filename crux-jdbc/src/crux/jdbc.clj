@@ -5,7 +5,6 @@
             [crux.db :as db]
             [crux.document-store :as ds]
             [crux.io :as cio]
-            [crux.lru :as lru]
             [crux.system :as sys]
             [crux.tx :as tx]
             [next.jdbc :as jdbc]

@@ -1,7 +1,6 @@
 (ns crux.s3
   (:require [crux.db :as db]
             [crux.document-store :as ds]
-            [crux.lru :as lru]
             [crux.node :as n]
             [clojure.spec.alpha :as s]
             [taoensso.nippy :as nippy]

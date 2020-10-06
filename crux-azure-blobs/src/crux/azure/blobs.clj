@@ -3,8 +3,7 @@
             [taoensso.nippy :as nippy]
             [crux.db :as db]
             [crux.system :as sys]
-            [crux.document-store :as ds]
-            [crux.lru :as lru]))
+            [crux.document-store :as ds]))
 
 (defn- get-blob [sas-token storage-account container blob-name]
   ;; TODO : ETag
