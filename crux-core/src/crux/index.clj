@@ -280,10 +280,7 @@
                                         (step (pop max-ks) (dec depth) false))))
                        open-level (fn [v]
                                     (db/open-level idx)
-                                    (let [max-ks (conj max-ks v)]
-                                      (step max-ks (inc depth) true)
-                                      (do (db/close-level idx)
-                                          (step max-ks depth false))))]
+                                    (step (conj max-ks v) (inc depth) true))]
                    (if (= depth (dec max-depth))
                      (concat (for [v (idx->seq idx)]
                                (conj max-ks v))
