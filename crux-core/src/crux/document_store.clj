@@ -75,7 +75,7 @@
 
 (defn ->cached-document-store
   {::sys/deps {:document-store :crux/document-store
-               :document-cache :crux/document-cache}}
+               :document-cache 'crux.cache/->cache}}
   [{:keys [document-cache document-store]}]
   (->CachedDocumentStore document-cache document-store))
 
