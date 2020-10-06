@@ -50,8 +50,7 @@
                                                       :doc "Azure Storage Account Name"}
                                     :container {:required? true,
                                                 :spec ::sys/string
-                                                :doc "Azure Blob Storage Container"}
-                                    :doc-cache-size ds/doc-cache-size-opt}}
+                                                :doc "Azure Blob Storage Container"}}}
   [{:keys [sas-token storage-account container document-cache] :as opts}]
   (ds/->cached-document-store
    (assoc opts
