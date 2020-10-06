@@ -120,7 +120,7 @@
                                              :spec ::prefix
                                              :doc "S3 prefix"}}
                         ::sys/deps {:configurator `->configurator
-                                    :document-cache :crux/document-cache}}
+                                    :document-cache 'crux.cache/->cache}}
 
   [{:keys [bucket prefix ^S3Configurator configurator document-cache] :as opts}]
   (ds/->cached-document-store

@@ -40,7 +40,6 @@
   (let [system (-> (sys/prep-system (into [{:crux/ingest-client `->ingest-client
                                             :crux/bus 'crux.bus/->bus
                                             :crux/document-store 'crux.kv.document-store/->document-store
-                                            :crux/document-cache 'crux.cache.lru/->lru-cache
                                             :crux/tx-log 'crux.kv.tx-log/->ingest-only-tx-log}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]

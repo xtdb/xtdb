@@ -786,8 +786,8 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
-                                    :value-cache 'crux.cache.lru/->lru-cache
-                                    :cav-cache 'crux.cache.lru/->lru-cache}
+                                    :value-cache 'crux.cache/->cache
+                                    :cav-cache 'crux.cache/->cache}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store value-cache cav-cache] :as opts}]

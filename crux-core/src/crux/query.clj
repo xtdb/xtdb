@@ -1437,9 +1437,8 @@
     (fn [k]
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
-(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot entity-cache?] :as db}]
-  (cond-> #(db/entity-as-of-resolver index-snapshot % valid-time transact-time)
-    entity-cache? (with-entity-resolver-cache db)))
+(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot] :as db}]
+  (with-entity-resolver-cache #(db/entity-as-of-resolver index-snapshot % valid-time transact-time) db))
 
 (defn- validate-args [args]
   (let [ks (keys (first args))]
@@ -1921,20 +1920,14 @@
 
 (defn ->query-engine {::sys/deps {:index-store :crux/index-store
                                   :bus :crux/bus
-                                  :document-store :crux/document-store}
-                      ::sys/args {:query-cache-size {:doc "Compiled Query Cache Size"
-                                                     :default 10240
-                                                     :spec ::sys/nat-int}
-                                  :conform-cache-size {:doc "Conformed Query Cache Size"
-                                                       :default 10240
-                                                       :spec ::sys/nat-int}
-                                  :projection-cache-size {:doc "Projection Cache Size"
-                                                          :default 10240
-                                                          :spec ::sys/nat-int}
-                                  :entity-cache? {:doc "Enable Query Entity Cache"
-                                                  :default true
-                                                  :spec ::sys/boolean}
-                                  :entity-cache-size {:doc "Query Entity Cache Size"
+                                  :document-store :crux/document-store
+                                  :query-cache {:crux/module 'crux.cache/->cache
+                                                :cache-size 10240}
+                                  :conform-cache {:crux/module 'crux.cache/->cache
+                                                  :cache-size 10240}
+                                  :projection-cache {:crux/module 'crux.cache/->cache
+                                                     :cache-size 10240}}
+                      ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
                                                       :default 10240
                                                       :spec ::sys/nat-int}
                                   :query-timeout {:doc "Query Timeout ms"
@@ -1944,8 +1937,5 @@
                                                :default 100
                                                :required? true
                                                :spec ::sys/pos-int}}}
-  [{:keys [query-cache-size conform-cache-size projection-cache-size] :as opts}]
-  (map->QueryEngine (merge opts {:conform-cache (cache/->cache {:cache-size conform-cache-size})
-                                 :query-cache (cache/->cache {:cache-size query-cache-size})
-                                 :projection-cache (cache/->cache {:cache-size projection-cache-size})
-                                 :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))})))
+  [opts]
+  (map->QueryEngine (assoc opts :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter")))))

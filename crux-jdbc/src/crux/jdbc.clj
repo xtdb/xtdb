@@ -111,7 +111,7 @@
          (into {}))))
 
 (defn ->document-store {::sys/deps {:connection-pool `->connection-pool
-                                    :document-cache :crux/document-cache}}
+                                    :document-cache 'crux.cache/->cache}}
   [{{:keys [pool dialect]} :connection-pool, :keys [document-cache] :as opts}]
   (ds/->cached-document-store
    (assoc opts

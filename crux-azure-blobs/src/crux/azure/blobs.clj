@@ -41,7 +41,7 @@
      {}
      docs)))
 
-(defn ->document-store {::sys/deps {:document-cache :crux/document-cache}
+(defn ->document-store {::sys/deps {:document-cache 'crux.cache/->cache}
                         ::sys/args {:sas-token {:required? true
                                                 :spec ::sys/string
                                                 :doc "Azure Blob Storage SAS Token"}

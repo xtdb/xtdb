@@ -394,7 +394,6 @@
                                             :crux/bus 'crux.bus/->bus
                                             :crux/tx-ingester 'crux.tx/->tx-ingester
                                             :crux/document-store 'crux.kv.document-store/->document-store
-                                            :crux/document-cache 'crux.cache.lru/->lru-cache
                                             :crux/tx-log 'crux.kv.tx-log/->tx-log
                                             :crux/query-engine 'crux.query/->query-engine}]
                                           (cond-> options (not (vector? options)) vector)))
