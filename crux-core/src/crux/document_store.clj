@@ -73,24 +73,20 @@
   Closeable
   (close [_]))
 
-(def ^:const default-doc-cache-size (* 128 1024))
-
-(def doc-cache-size-opt
-  {:doc "Cache size to use for document store."
-   :default default-doc-cache-size
-   :spec ::sys/nat-int})
-
 (defn ->cached-document-store
-  {::sys/deps {:document-store :crux/document-store}
-   ::sys/args {:doc-cache-size doc-cache-size-opt}}
-  [{:keys [doc-cache-size document-store]}]
-  (->CachedDocumentStore (cache/new-cache doc-cache-size) document-store))
+  {::sys/deps {:document-store :crux/document-store
+               :document-cache :crux/document-cache}}
+  [{:keys [document-cache document-store]}]
+  (->CachedDocumentStore document-cache document-store))
 
-(defn ->file-document-store {::sys/args {:dir {:doc "Directory to store documents"
-                                                :required? true
-                                                :spec ::sys/path}
-                                         :doc-cache-size doc-cache-size-opt}}
-  [{:keys [^Path dir doc-cache-size] :as opts}]
+(defn ->file-document-store {::sys/deps {:document-cache :crux/document-cache}
+                             ::sys/args {:dir {:doc "Directory to store documents"
+                                               :required? true
+                                               :spec ::sys/path}}}
+  [{:keys [^Path dir document-cache] :as opts}]
   (let [dir (.toFile dir)]
     (.mkdirs dir)
-    (->cached-document-store (assoc opts :document-store (->FileDocumentStore dir)))))
+    (->cached-document-store
+     (assoc opts
+            :document-cache document-cache
+            :document-store (->FileDocumentStore dir)))))

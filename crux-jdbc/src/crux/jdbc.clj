@@ -110,10 +110,13 @@
          (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(-> (:v %) (<-blob dialect))))
          (into {}))))
 
-(defn ->document-store {::sys/deps {:connection-pool `->connection-pool}
-                        ::sys/args {:doc-cache-size ds/doc-cache-size-opt}}
-  [{{:keys [pool dialect]} :connection-pool, :keys [doc-cache-size] :as opts}]
-  (ds/->cached-document-store (assoc opts :document-store (->JdbcDocumentStore pool dialect))))
+(defn ->document-store {::sys/deps {:connection-pool `->connection-pool
+                                    :document-cache :crux/document-cache}}
+  [{{:keys [pool dialect]} :connection-pool, :keys [document-cache] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store (->JdbcDocumentStore pool dialect))))
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog

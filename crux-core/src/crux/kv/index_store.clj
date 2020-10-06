@@ -785,20 +785,11 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(def ^:const default-value-cache-size (* 16 1024))
-(def ^:const default-cav-cache-size (* 16 1024))
-
-(defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
+(defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
+                                    :value-cache :crux/value-cache
+                                    :cav-cache :crux/cav-cache}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
-                                                              :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}
-                                    :value-cache-size {:doc "Value Cache Size"
-                                                       :default default-value-cache-size
-                                                       :spec ::sys/nat-int}
-                                    :cav-cache-size {:doc "CAV Cache Size"
-                                                     :default default-cav-cache-size
-                                                     :spec ::sys/nat-int}}}
-  [{:keys [kv-store value-cache-size cav-cache-size] :as opts}]
+                                                              :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
+  [{:keys [kv-store value-cache cav-cache] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store
-                  (cache/new-cache (or value-cache-size default-value-cache-size))
-                  (cache/new-cache (or cav-cache-size default-cav-cache-size))))
+  (->KvIndexStore kv-store value-cache cav-cache))

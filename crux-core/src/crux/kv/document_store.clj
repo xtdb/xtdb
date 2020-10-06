@@ -55,7 +55,10 @@
   Closeable
   (close [_]))
 
-(defn ->document-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
-                        ::sys/args {:doc-cache-size ds/doc-cache-size-opt}}
-  [{:keys [kv-store doc-cache-size] :as opts}]
-  (ds/->cached-document-store (assoc opts :document-store (->KvDocumentStore kv-store))))
+(defn ->document-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
+                                    :document-cache :crux/document-cache}}
+  [{:keys [kv-store document-cache] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store (->KvDocumentStore kv-store))))

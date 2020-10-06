@@ -391,9 +391,12 @@
   ^crux.api.ICruxAPI [options]
   (let [system (-> (sys/prep-system (into [{:crux/node 'crux.node/->node
                                             :crux/index-store 'crux.kv.index-store/->kv-index-store
+                                            :crux/value-cache 'crux.cache.lru/->lru-cache
+                                            :crux/cav-cache 'crux.cache.lru/->lru-cache
                                             :crux/bus 'crux.bus/->bus
                                             :crux/tx-ingester 'crux.tx/->tx-ingester
                                             :crux/document-store 'crux.kv.document-store/->document-store
+                                            :crux/document-cache 'crux.cache.lru/->lru-cache
                                             :crux/tx-log 'crux.kv.tx-log/->tx-log
                                             :crux/query-engine 'crux.query/->query-engine}]
                                           (cond-> options (not (vector? options)) vector)))

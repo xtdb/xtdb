@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [crux.error :as err]
             [crux.bus :as bus]
+            [crux.cache :as cache]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -364,13 +365,19 @@
                    :committed? false
                    ::txe/tx-events @!tx-events})))
 
+(def ^:private forked-cache-size 1024)
+
 (defrecord TxIngester [!error index-store document-store bus query-engine ^ExecutorService stats-executor]
   db/TxIngester
   (begin-tx [_ {:keys [fork-at], ::keys [tx-time] :as tx}]
     (log/debug "Indexing tx-id:" (::tx-id tx))
     (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
-    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)})
+    (let [value-cache (or (:value-cache index-store) (cache/new-cache forked-cache-size))
+          cav-cache (or (:cav-cache index-store) (cache/new-cache forked-cache-size))
+          forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)
+                                                                                           :value-cache value-cache
+                                                                                           :cav-cache cav-cache})
                                                         (::db/valid-time fork-at)
                                                         (::tx-time fork-at))
           forked-document-store (fork/->forked-document-store document-store)]

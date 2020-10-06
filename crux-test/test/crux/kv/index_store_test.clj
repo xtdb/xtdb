@@ -19,7 +19,7 @@
 
 (defmacro with-fresh-index-store [& body]
   `(fkv/with-kv-store [kv-store#]
-     (binding [*index-store* (kvi/->KvIndexStore kv-store# (cache/new-cache kvi/default-value-cache-size) (cache/new-cache kvi/default-cav-cache-size))]
+     (binding [*index-store* (kvi/->KvIndexStore kv-store# (cache/new-cache 1024) (cache/new-cache 1024))]
        ~@body)))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own

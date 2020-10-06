@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.cache.lru
-  (:require [crux.io :as cio])
+  (:require [crux.io :as cio]
+            [crux.system :as sys])
   (:import crux.cache.ICache
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
@@ -45,4 +46,13 @@
       (count [_]
         (.size cache))
 
-      (close [_]))))
+      (close [_]
+        (cio/with-write-lock lock
+          (.clear cache))))))
+
+(defn ->lru-cache
+  {::sys/args {:cache-size {:doc "Cache size"
+                            :default (* 128 1024)
+                            :spec ::sys/nat-int}}}
+  [{:keys [cache-size]}]
+  (new-lru-cache cache-size))
