@@ -58,9 +58,10 @@
 (defn- ->submit-json-decoder [_]
   (let [mapper (util/crux-object-mapper {:camel-case? true
                                          :mapper-options {:decode-key-fn (fn [k]
-                                                                           (if (= k "_id")
-                                                                             :crux.db/id
-                                                                             (keyword k)))}})]
+                                                                           (cond
+                                                                             (= k "_id") :crux.db/id
+                                                                             (= k "_fn") :crux.db/fn
+                                                                             :else (keyword k)))}})]
     (reify
       mfc/Decode
       (decode [_ data _]

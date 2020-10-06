@@ -81,15 +81,17 @@
 
 (defn crux-stringify-keywords
   [m]
-  (let [f (fn [[k v]] (cond
-                        (= :crux.db/id k) ["_id" v]
-                        (keyword? k) [(name k) v]
-                        :else [k v]))
+  (let [f (fn [[k v]]
+            (cond
+              (= :crux.db/id k) ["_id" v]
+              (= :crux.db/fn k) ["_fn" (pr-str v)]
+              (keyword? k) [(name k) v]
+              :else [k v]))
         g (fn [k] (cond
                     (= :crux.db/id k) "_id"
                     (keyword? k) (name k)
                     :else k))]
-    (walk/postwalk (fn [x]
+    (walk/prewalk (fn [x]
                      (cond
                        (map? x) (into {} (map f x))
                        (vector? x) (mapv g x)
@@ -102,6 +104,7 @@
     {:encode-key-fn (fn [key]
                       (cond
                         (= :crux.db/id key) "_id"
+                        (= :crux.db/fn key) "_fn"
                         :else (cond-> (name key)
                                 camel-case? csk/->camelCase)))
      :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))

@@ -107,7 +107,7 @@
       (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
         (fn [^OutputStream output-stream]
           (cond
-            entity (j/write-value output-stream entity (util/crux-object-mapper {}))
+            entity (j/write-value output-stream (util/crux-stringify-keywords entity) object-mapper)
             entity-history (let [history-result-set (iterator-seq entity-history)
                                  history-results (cond->> history-result-set
                                                    (contains? (first history-result-set) :crux.db/doc)
