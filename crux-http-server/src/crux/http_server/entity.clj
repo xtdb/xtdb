@@ -186,7 +186,7 @@
 (defmethod transform-query-resp :default [{:keys [error no-entity? eid not-found?] :as res} _]
   (cond
     no-entity? (throw (ce/illegal-arg :missing-eid {::ce/message "Missing eid"}))
-    not-found? {:status 404, :body (str eid " entity not found")}
+    not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error (throw error)
     :else {:status 200, :body res}))
 
