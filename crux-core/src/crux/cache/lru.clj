@@ -2,16 +2,14 @@
   (:require [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv])
-  (:import [clojure.lang Counted ILookup]
-           crux.cache.ICache
-           java.io.Closeable
+  (:import crux.cache.ICache
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
            [java.util LinkedHashMap Map]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn new-cache [^long size]
+(defn new-lru-cache [^long size]
   (let [cache (proxy [LinkedHashMap] [size 0.75 true]
                 (removeEldestEntry [_]
                   (> (.size ^Map this) size)))
@@ -47,4 +45,6 @@
           (.getOrDefault cache k default)))
 
       (count [_]
-        (.size cache)))))
+        (.size cache))
+
+      (close [_]))))

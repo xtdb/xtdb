@@ -8,4 +8,4 @@
 (defn evict [^ICache cache k]
   (.evict cache k))
 
-(def new-cache lru/new-cache)
+(def new-cache lru/new-lru-cache)
