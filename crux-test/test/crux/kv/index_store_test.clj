@@ -3,7 +3,7 @@
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [crux.cache :as cache]
+            [crux.cache.nop :as nop-cache]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as f]
@@ -19,7 +19,7 @@
 
 (defmacro with-fresh-index-store [& body]
   `(fkv/with-kv-store [kv-store#]
-     (binding [*index-store* (kvi/->KvIndexStore kv-store# (cache/new-cache 1024) (cache/new-cache 1024))]
+     (binding [*index-store* (kvi/->KvIndexStore kv-store# (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))]
        ~@body)))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own

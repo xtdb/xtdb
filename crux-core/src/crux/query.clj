@@ -1433,7 +1433,7 @@
     (db/open-index-snapshot index-store)))
 
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
-  (let [entity-cache (cache/new-cache entity-cache-size)]
+  (let [entity-cache (cache/->cache {:cache-size entity-cache-size})]
     (fn [k]
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
@@ -1935,7 +1935,7 @@
                                                   :default true
                                                   :spec ::sys/boolean}
                                   :entity-cache-size {:doc "Query Entity Cache Size"
-                                                      :default 10000
+                                                      :default 10240
                                                       :spec ::sys/nat-int}
                                   :query-timeout {:doc "Query Timeout ms"
                                                   :default 30000
@@ -1945,7 +1945,7 @@
                                                :required? true
                                                :spec ::sys/pos-int}}}
   [{:keys [query-cache-size conform-cache-size projection-cache-size] :as opts}]
-  (map->QueryEngine (merge opts {:conform-cache (cache/new-cache conform-cache-size)
-                                 :query-cache (cache/new-cache query-cache-size)
-                                 :projection-cache (cache/new-cache projection-cache-size)
+  (map->QueryEngine (merge opts {:conform-cache (cache/->cache {:cache-size conform-cache-size})
+                                 :query-cache (cache/->cache {:cache-size query-cache-size})
+                                 :projection-cache (cache/->cache {:cache-size projection-cache-size})
                                  :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))})))
