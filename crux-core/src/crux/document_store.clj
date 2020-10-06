@@ -81,7 +81,8 @@
    :spec ::sys/nat-int})
 
 (defn ->cached-document-store
-  {::sys/args {:doc-cache-size doc-cache-size-opt}}
+  {::sys/deps {:document-store :crux/document-store}
+   ::sys/args {:doc-cache-size doc-cache-size-opt}}
   [{:keys [doc-cache-size document-store]}]
   (->CachedDocumentStore (cache/new-cache doc-cache-size) document-store))
 
