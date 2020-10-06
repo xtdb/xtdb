@@ -479,8 +479,8 @@
                                  i (new-prefix-kv-iterator cache-i prefix)]
                              (loop [k (kv/seek i prefix)]
                                (when k
-                                 (let [k (mem/copy-to-unpooled-buffer k)
-                                       v (decode-ecav-key-as-v-from k eid-size)]
+                                 (let [v (decode-ecav-key-as-v-from k eid-size)
+                                       v (mem/copy-to-unpooled-buffer v)]
                                    (.add vs v)
                                    (recur (kv/next i)))))
                              vs))))
@@ -616,12 +616,12 @@
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (lru/compute-if-absent
-       value-cache
-       value-buffer
-       mem/copy-to-unpooled-buffer
-       (fn [value-buffer]
-         (or (.get temp-hash-cache value-buffer)
+      (or (.get temp-hash-cache value-buffer)
+          (lru/compute-if-absent
+           value-cache
+           value-buffer
+           mem/copy-to-unpooled-buffer
+           (fn [value-buffer]
              (let [i @decode-value-iterator-delay]
                (when (advance-iterator-to-hash-cache-value i value-buffer)
                  (some-> (kv/value i) (mem/<-nippy-buffer)))))))))
@@ -785,8 +785,8 @@
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(def ^:const default-value-cache-size (* 64 1024))
-(def ^:const default-cav-cache-size (* 64 1024))
+(def ^:const default-value-cache-size (* 16 1024))
+(def ^:const default-cav-cache-size (* 16 1024))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
