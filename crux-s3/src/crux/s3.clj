@@ -123,9 +123,11 @@
                                     :doc-cache-size ds/doc-cache-size-opt}
                         ::sys/deps {:configurator `->configurator}}
 
-  [{:keys [bucket prefix ^S3Configurator configurator doc-cache-size]}]
-  (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
-                            (->S3DocumentStore configurator
-                                               (.makeClient configurator)
-                                               bucket
-                                               prefix)))
+  [{:keys [bucket prefix ^S3Configurator configurator doc-cache-size] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-store
+          (->S3DocumentStore configurator
+                             (.makeClient configurator)
+                             bucket
+                             prefix))))

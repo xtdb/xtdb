@@ -1,19 +1,15 @@
-(ns ^:no-doc crux.lru
+(ns ^:no-doc crux.cache.lru
   (:require [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv])
   (:import [clojure.lang Counted ILookup]
+           crux.cache.ICache
            java.io.Closeable
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
            [java.util LinkedHashMap Map]))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defprotocol LRUCache
-  (compute-if-absent [this k stored-key-fn f])
-  ; key-fn sometimes used to copy the key to prevent memory leaks
-  (evict [this k]))
 
 (defn new-cache [^long size]
   (let [cache (proxy [LinkedHashMap] [size 0.75 true]
@@ -25,8 +21,8 @@
       (toString [this]
         (.toString cache))
 
-      LRUCache
-      (compute-if-absent [this k stored-key-fn f]
+      ICache
+      (computeIfAbsent [this k stored-key-fn f]
         (let [v (.valAt this k ::not-found)] ; use ::not-found as values can be falsy
           (if (= ::not-found v)
             (let [k (stored-key-fn k)
@@ -42,7 +38,6 @@
         (cio/with-write-lock lock
           (.remove cache k)))
 
-      ILookup
       (valAt [this k]
         (cio/with-write-lock lock
           (.get cache k)))
@@ -51,6 +46,5 @@
         (cio/with-write-lock lock
           (.getOrDefault cache k default)))
 
-      Counted
       (count [_]
         (.size cache)))))

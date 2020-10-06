@@ -1,9 +1,9 @@
 (ns ^:no-doc crux.kv.index-store
-  (:require [crux.codec :as c]
+  (:require [crux.cache :as cache]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.status :as status]
             [crux.morton :as morton]
@@ -443,9 +443,9 @@
                              {:entries? true})
          (->> (map ->entity-tx))
          (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
-                                         (pos? (compare (.vt entity-tx) end-vt))))
+                                       (pos? (compare (.vt entity-tx) end-vt))))
                   start-tt (remove (fn [^EntityTx entity-tx]
-                                    (pos? (compare (.tt entity-tx) start-tt))))
+                                     (pos? (compare (.tt entity-tx) start-tt))))
                   end-tt (filter (fn [^EntityTx entity-tx]
                                    (pos? (compare (.tt entity-tx) end-tt)))))
          (cond-> (not with-corrections?) (->> (partition-by :vt)
@@ -466,24 +466,24 @@
 
 (defn- cav-cache-lookup ^java.util.NavigableSet [cav-cache cache-i ^DirectBuffer eid-value-buffer
                                                  ^DirectBuffer content-hash-buffer ^DirectBuffer attr-buffer]
-  (lru/compute-if-absent cav-cache
-                         [content-hash-buffer attr-buffer]
-                         #(mapv mem/copy-to-unpooled-buffer %)
-                         (fn [_]
-                           (let [eid-size (mem/capacity eid-value-buffer)
-                                 vs (TreeSet. mem/buffer-comparator)
-                                 prefix (encode-ecav-key-to nil
-                                                            eid-value-buffer
-                                                            content-hash-buffer
-                                                            attr-buffer)
-                                 i (new-prefix-kv-iterator cache-i prefix)]
-                             (loop [k (kv/seek i prefix)]
-                               (when k
-                                 (let [v (decode-ecav-key-as-v-from k eid-size)
-                                       v (mem/copy-to-unpooled-buffer v)]
-                                   (.add vs v)
-                                   (recur (kv/next i)))))
-                             vs))))
+  (cache/compute-if-absent cav-cache
+                           [content-hash-buffer attr-buffer]
+                           #(mapv mem/copy-to-unpooled-buffer %)
+                           (fn [_]
+                             (let [eid-size (mem/capacity eid-value-buffer)
+                                   vs (TreeSet. mem/buffer-comparator)
+                                   prefix (encode-ecav-key-to nil
+                                                              eid-value-buffer
+                                                              content-hash-buffer
+                                                              attr-buffer)
+                                   i (new-prefix-kv-iterator cache-i prefix)]
+                               (loop [k (kv/seek i prefix)]
+                                 (when k
+                                   (let [v (decode-ecav-key-as-v-from k eid-size)
+                                         v (mem/copy-to-unpooled-buffer v)]
+                                     (.add vs v)
+                                     (recur (kv/next i)))))
+                               vs))))
 
 (defn- step-fn [i k-fn seek-k]
   ((fn step [^DirectBuffer k]
@@ -617,7 +617,7 @@
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
       (or (.get temp-hash-cache value-buffer)
-          (lru/compute-if-absent
+          (cache/compute-if-absent
            value-cache
            value-buffer
            mem/copy-to-unpooled-buffer
@@ -720,8 +720,8 @@
                                                                             count)
                                                                        1)]
                                                      (when-not (c/can-decode-value-buffer? value-buffer)
-                                                       (lru/evict value-cache value-buffer))
-                                                     (lru/evict cav-cache (.content-hash quad))
+                                                       (cache/evict value-cache value-buffer))
+                                                     (cache/evict cav-cache (.content-hash quad))
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
                                                                                                             :crux.db/evicted? true})
@@ -800,5 +800,5 @@
   [{:keys [kv-store value-cache-size cav-cache-size] :as opts}]
   (check-and-store-index-version opts)
   (->KvIndexStore kv-store
-                  (lru/new-cache (or value-cache-size default-value-cache-size))
-                  (lru/new-cache (or cav-cache-size default-cav-cache-size))))
+                  (cache/new-cache (or value-cache-size default-value-cache-size))
+                  (cache/new-cache (or cav-cache-size default-cav-cache-size))))

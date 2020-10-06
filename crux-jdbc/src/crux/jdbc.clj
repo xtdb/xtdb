@@ -113,9 +113,8 @@
 
 (defn ->document-store {::sys/deps {:connection-pool `->connection-pool}
                         ::sys/args {:doc-cache-size ds/doc-cache-size-opt}}
-  [{{:keys [pool dialect]} :connection-pool, :keys [doc-cache-size]}]
-  (->> (->JdbcDocumentStore pool dialect)
-       (ds/->CachedDocumentStore (lru/new-cache doc-cache-size))))
+  [{{:keys [pool dialect]} :connection-pool, :keys [doc-cache-size] :as opts}]
+  (ds/->cached-document-store (assoc opts :document-store (->JdbcDocumentStore pool dialect))))
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog

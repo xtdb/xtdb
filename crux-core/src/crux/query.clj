@@ -4,13 +4,13 @@
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
             [com.stuartsierra.dependency :as dep]
+            [crux.cache :as cache]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fork :as fork]
             [crux.mem-kv :as mem-kv]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.bus :as bus]
             [crux.api :as api]
@@ -227,7 +227,7 @@
                                (normalize-query q)
                                (catch Exception e
                                  q))
-        conformed-query (lru/compute-if-absent
+        conformed-query (cache/compute-if-absent
                          conform-cache
                          (if (map? q)
                            (dissoc q :args)
@@ -647,12 +647,12 @@
    (fn [[acc var->joins] in]
      (let [bind-vars (find-binding-vars in)
            idx-id (gensym "in")
-        join {:id idx-id
-              :idx-fn
-              (fn [_ index-store _]
-                (idx/new-relation-virtual-index []
-                                                (count bind-vars)
-                                                (partial db/encode-value index-store)))}]
+           join {:id idx-id
+                 :idx-fn
+                 (fn [_ index-store _]
+                   (idx/new-relation-virtual-index []
+                                                   (count bind-vars)
+                                                   (partial db/encode-value index-store)))}]
        [(conj acc idx-id)
         (->> bind-vars
              (reduce
@@ -906,8 +906,8 @@
           (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs identity true)
               true)
           (let [values (if (and is-empty? not-found?)
-                           [not-found]
-                           (mapv #(db/decode-value index-snapshot %) vs))]
+                         [not-found]
+                         (mapv #(db/decode-value index-snapshot %) vs))]
             (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
 
 (defmethod pred-constraint 'q [_ {:keys [encode-value-fn idx-id arg-bindings rule-name->rules
@@ -1103,7 +1103,7 @@
              (let [db (assoc db :index-snapshot index-snapshot)
                    in-args (when (seq not-vars)
                              [(vec (for [var-binding not-var-bindings]
-                                      (bound-result-for-var index-snapshot var-binding join-keys)))])
+                                     (bound-result-for-var index-snapshot var-binding join-keys)))])
                    {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
@@ -1396,7 +1396,7 @@
                 var->bindings
                 in-bindings
                 attr-stats]
-         :as compiled-query} (-> (lru/compute-if-absent
+         :as compiled-query} (-> (cache/compute-if-absent
                                   query-cache
                                   [where in rule-name->rules]
                                   identity
@@ -1433,9 +1433,9 @@
     (db/open-index-snapshot index-store)))
 
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
-  (let [entity-cache (lru/new-cache entity-cache-size)]
+  (let [entity-cache (cache/new-cache entity-cache-size)]
     (fn [k]
-      (lru/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
+      (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
 (defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot entity-cache?] :as db}]
   (cond-> #(db/entity-as-of-resolver index-snapshot % valid-time transact-time)
@@ -1595,10 +1595,10 @@
       :project {:logic-var (:logic-var arg)
                 :var-type :project
                 :var-binding (var->bindings (:logic-var arg))
-                :->result (lru/compute-if-absent projection-cache (:project-spec arg)
-                                                 identity
-                                                 (fn [spec]
-                                                   (compile-project-spec (s/unform ::eql/query spec))))}
+                :->result (cache/compute-if-absent projection-cache (:project-spec arg)
+                                                   identity
+                                                   (fn [spec]
+                                                     (compile-project-spec (s/unform ::eql/query spec))))}
       :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
                      {:logic-var (:logic-var arg)
                       :var-type :aggregate
@@ -1642,8 +1642,8 @@
 
 (defn- arg-for-var [arg var]
   (second
-    (or (find arg (symbol (name var)))
-        (find arg (keyword (name var))))))
+   (or (find arg (symbol (name var)))
+       (find arg (keyword (name var))))))
 
 (defn- find-arg-vars [args]
   (let [ks (keys (first args))]
@@ -1945,7 +1945,7 @@
                                                :required? true
                                                :spec ::sys/pos-int}}}
   [{:keys [query-cache-size conform-cache-size projection-cache-size] :as opts}]
-  (map->QueryEngine (merge opts {:conform-cache (lru/new-cache conform-cache-size)
-                                 :query-cache (lru/new-cache query-cache-size)
-                                 :projection-cache (lru/new-cache projection-cache-size)
+  (map->QueryEngine (merge opts {:conform-cache (cache/new-cache conform-cache-size)
+                                 :query-cache (cache/new-cache query-cache-size)
+                                 :projection-cache (cache/new-cache projection-cache-size)
                                  :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))})))

@@ -3,7 +3,7 @@
             [clojure.set :as set]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.lru :as lru]
+            [crux.cache :as cache]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy]
             [crux.system :as sys])
@@ -53,7 +53,7 @@
       (persistent!
        (reduce-kv
         (fn [acc id doc]
-          (assoc! acc id (lru/compute-if-absent
+          (assoc! acc id (cache/compute-if-absent
                           cache
                           (c/->id-buffer id)
                           mem/copy-to-unpooled-buffer
@@ -67,7 +67,7 @@
      document-store
      (vec (for [[id doc] id-and-docs]
             (do
-              (lru/evict cache (c/->id-buffer id))
+              (cache/evict cache (c/->id-buffer id))
               (MapEntry/create id doc))))))
 
   Closeable
@@ -80,12 +80,16 @@
    :default default-doc-cache-size
    :spec ::sys/nat-int})
 
+(defn ->cached-document-store
+  {::sys/args {:doc-cache-size doc-cache-size-opt}}
+  [{:keys [doc-cache-size document-store]}]
+  (->CachedDocumentStore (cache/new-cache doc-cache-size) document-store))
+
 (defn ->file-document-store {::sys/args {:dir {:doc "Directory to store documents"
                                                 :required? true
                                                 :spec ::sys/path}
-                                          :doc-cache-size doc-cache-size-opt}}
-  [{:keys [^Path dir doc-cache-size]}]
+                                         :doc-cache-size doc-cache-size-opt}}
+  [{:keys [^Path dir doc-cache-size] :as opts}]
   (let [dir (.toFile dir)]
     (.mkdirs dir)
-    (->CachedDocumentStore (lru/new-cache doc-cache-size)
-                           (->FileDocumentStore dir))))
+    (->cached-document-store (assoc opts :document-store (->FileDocumentStore dir)))))

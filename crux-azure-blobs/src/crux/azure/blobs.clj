@@ -52,10 +52,10 @@
                                                 :spec ::sys/string
                                                 :doc "Azure Blob Storage Container"}
                                     :doc-cache-size ds/doc-cache-size-opt}}
-  [{:keys [sas-token storage-account container doc-cache-size]}]
-  (ds/->CachedDocumentStore
-   (lru/new-cache doc-cache-size)
-   (->AzureBlobsDocumentStore sas-token
-                              storage-account
-                              container)))
-
+  [{:keys [sas-token storage-account container doc-cache-size] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-store
+          (->AzureBlobsDocumentStore sas-token
+                                     storage-account
+                                     container))))
