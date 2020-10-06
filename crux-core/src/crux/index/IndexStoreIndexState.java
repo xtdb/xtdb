@@ -1,11 +1,11 @@
 package crux.index;
 
 public class IndexStoreIndexState {
-    public Object iterator;
+    public Object seq;
     public Object key;
 
-    public IndexStoreIndexState(Object iterator, Object key) {
-        this.iterator = iterator;
+    public IndexStoreIndexState(Object seq, Object key) {
+        this.seq = seq;
         this.key = key;
     }
 }

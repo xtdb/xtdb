@@ -15,15 +15,16 @@
 (defrecord IndexStoreIndex [seek-fn ^IndexStoreIndexState state]
   db/Index
   (seek-values [this k]
-    (set! (.-iterator state) (some-> ^Collection (seek-fn k) (.iterator)))
-    (db/next-values this))
+    (let [[v & vs] (seq (seek-fn k))]
+      (set! (.-seq state) vs)
+      (set! (.-key state) v)
+      v))
 
   (next-values [this]
-    (when-let [^Iterator i (.-iterator state)]
-      (let [v (when (.hasNext i)
-                (.next i))]
-        (set! (.-key state) v)
-        v))))
+    (when-let [[v & vs] (.-seq state)]
+      (set! (.-seq state) vs)
+      (set! (.-key state) v)
+      v))))
 
 (defn new-index-store-index ^crux.index.IndexStoreIndex [seek-fn]
   (->IndexStoreIndex seek-fn (IndexStoreIndexState. nil nil)))
