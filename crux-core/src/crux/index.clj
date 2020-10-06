@@ -267,27 +267,35 @@
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
   (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (NAryWalkState. [] nil)))
 
+
+
+
 (defn layered-idx->seq [idx]
   (when idx
     (let [max-depth (long (db/max-depth idx))
           step (fn step [max-ks ^long depth needs-seek?]
                  (when (Thread/interrupted)
                    (throw (InterruptedException.)))
-                 (if (= depth (dec max-depth))
-                   (concat (for [v (idx->seq idx)]
-                             (conj max-ks v))
-                           (when (pos? depth)
-                             (lazy-seq
-                              (db/close-level idx)
-                              (step (pop max-ks) (dec depth) false))))
-                   (if-let [v (if needs-seek?
-                                (db/seek-values idx nil)
-                                (db/next-values idx))]
-                     (do (db/open-level idx)
-                         (recur (conj max-ks v) (inc depth) true))
-                     (when (pos? depth)
-                       (db/close-level idx)
-                       (recur (pop max-ks) (dec depth) false)))))]
+                 (let [close-level (fn []
+                                     (when (pos? depth)
+                                       (lazy-seq
+                                        (db/close-level idx)
+                                        (step (pop max-ks) (dec depth) false))))
+                       open-level (fn [v]
+                                    (db/open-level idx)
+                                    (let [max-ks (conj max-ks v)]
+                                      (step max-ks (inc depth) true)
+                                      (do (db/close-level idx)
+                                          (step max-ks depth false))))]
+                   (if (= depth (dec max-depth))
+                     (concat (for [v (idx->seq idx)]
+                               (conj max-ks v))
+                             (close-level))
+                     (if-let [v (if needs-seek?
+                                  (db/seek-values idx nil)
+                                  (db/next-values idx))]
+                       (open-level v)
+                       (close-level)))))]
       (when (pos? max-depth)
         (step [] 0 true)))))
 
