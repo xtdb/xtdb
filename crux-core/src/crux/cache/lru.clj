@@ -1,7 +1,5 @@
 (ns ^:no-doc crux.cache.lru
-  (:require [crux.db :as db]
-            [crux.io :as cio]
-            [crux.kv :as kv])
+  (:require [crux.io :as cio])
   (:import crux.cache.ICache
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
@@ -16,7 +14,7 @@
         lock (StampedLock.)]
     (reify
       Object
-      (toString [this]
+      (toString [_]
         (.toString cache))
 
       ICache
@@ -36,11 +34,11 @@
         (cio/with-write-lock lock
           (.remove cache k)))
 
-      (valAt [this k]
+      (valAt [_ k]
         (cio/with-write-lock lock
           (.get cache k)))
 
-      (valAt [this k default]
+      (valAt [_ k default]
         (cio/with-write-lock lock
           (.getOrDefault cache k default)))
 
