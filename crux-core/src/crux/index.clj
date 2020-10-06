@@ -267,9 +267,6 @@
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
   (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (NAryWalkState. [] nil)))
 
-
-
-
 (defn layered-idx->seq [idx]
   (when idx
     (let [max-depth (long (db/max-depth idx))
