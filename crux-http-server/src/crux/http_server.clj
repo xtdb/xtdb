@@ -198,6 +198,18 @@
       {:status 404
        :body {:error "No latest-submitted-tx found."}})))
 
+(defn- ->query-list-json-encoder [_]
+  (let [mapper (util/crux-object-mapper {:camel-case? true})]
+    (reify
+      mfc/EncodeToBytes
+      (encode-to-bytes [_ data _]
+        (json/write-value-as-bytes (map #(update % :query pr-str) data) mapper)))))
+
+(def ->query-list-muuntaja
+  (m/create
+   (-> util/default-muuntaja-options
+       (assoc-in [:formats "application/json" :encoder] [->query-list-json-encoder]))))
+
 (defn active-queries [^ICruxAPI crux-node]
   (fn [_]
     {:status 200
@@ -318,9 +330,12 @@
                                          :parameters {:query ::tx-committed-spec}}]
                  ["/_crux/latest-completed-tx" {:get (latest-completed-tx crux-node)}]
                  ["/_crux/latest-submitted-tx" {:get (latest-submitted-tx crux-node)}]
-                 ["/_crux/active-queries" {:get (active-queries crux-node)}]
-                 ["/_crux/recent-queries" {:get (recent-queries crux-node)}]
-                 ["/_crux/slowest-queries" {:get (slowest-queries crux-node)}]
+                 ["/_crux/active-queries" {:get (active-queries crux-node)
+                                           :muuntaja ->query-list-muuntaja}]
+                 ["/_crux/recent-queries" {:get (recent-queries crux-node)
+                                           :muuntaja ->query-list-muuntaja}]
+                 ["/_crux/slowest-queries" {:get (slowest-queries crux-node)
+                                            :muuntaja ->query-list-muuntaja}]
                  ["/_crux/sparql" {:get (sparqql crux-node)
                                    :post (sparqql crux-node)}]]
 
