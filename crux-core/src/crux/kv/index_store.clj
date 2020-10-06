@@ -616,12 +616,12 @@
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (or (.get temp-hash-cache value-buffer)
-          (cache/compute-if-absent
-           value-cache
-           value-buffer
-           mem/copy-to-unpooled-buffer
-           (fn [value-buffer]
+      (cache/compute-if-absent
+       value-cache
+       value-buffer
+       mem/copy-to-unpooled-buffer
+       (fn [value-buffer]
+         (or (.get temp-hash-cache value-buffer)
              (let [i @decode-value-iterator-delay]
                (when (advance-iterator-to-hash-cache-value i value-buffer)
                  (some-> (kv/value i) (mem/<-nippy-buffer)))))))))
@@ -786,8 +786,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
-                                    :value-cache 'crux.cache/->cache
-                                    :cav-cache 'crux.cache/->cache}
+                                    :value-cache {:crux/module 'crux.cache/->cache
+                                                  :cache-size (* 32 1024)}
+                                    :cav-cache {:crux/module 'crux.cache/->cache
+                                                :cache-size (* 32 1024)}}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store value-cache cav-cache] :as opts}]
