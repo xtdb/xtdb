@@ -30,7 +30,7 @@
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
            [crux.api ICruxAPI NodeOutOfSyncException]
-           [java.io Closeable IOException]
+           [java.io Closeable IOException OutputStream]
            java.time.Duration
            org.eclipse.jetty.server.Server))
 
@@ -101,6 +101,22 @@
 (s/def ::with-ops? boolean?)
 (s/def ::after-tx-id int?)
 (s/def ::tx-log-spec (s/keys :opt-un [::with-ops? ::after-tx-id]))
+
+(defn- ->tx-log-json-encoder [_]
+  (let [mapper (util/crux-object-mapper {:camel-case? true})]
+    (reify
+      mfc/EncodeToOutputStream
+      (encode-to-output-stream [_ data _]
+        (fn [^OutputStream output-stream]
+          (let [tx-ops? (contains? (first data) :crux.api/tx-ops)
+                encode-tx-ops (fn [tx] (update tx :crux.api/tx-ops util/crux-stringify-keywords))]
+            (json/write-value output-stream (if tx-ops? (map encode-tx-ops data) data) mapper)))))))
+
+(def ->tx-log-muuntaja
+  (m/create
+   (-> util/default-muuntaja-options
+       (assoc-in [:formats "application/json" :encoder] [->tx-log-json-encoder])
+       (assoc :return :output-stream))))
 
 ;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxAPI crux-node]
@@ -261,6 +277,7 @@
     (let [kebab-qps (into {} (map (fn [[k v]] [(csk/->kebab-case k) v])) query-params)]
       (handler (assoc request :query-params kebab-qps)))))
 
+
 (defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
                        :keys [crux-node], :as opts}]
   (let [opts (-> opts (update :http-options dissoc :jwks))
@@ -289,7 +306,7 @@
                  ["/_crux/await-tx-time" {:get (await-tx-time-handler crux-node)
                                           :parameters {:query ::await-tx-time-spec}}]
                  ["/_crux/tx-log" {:get (tx-log crux-node)
-                                   :muuntaja util/output-stream-muuntaja
+                                   :muuntaja ->tx-log-muuntaja
                                    :parameters {:query ::tx-log-spec}}]
                  ["/_crux/submit-tx" {:muuntaja ->submit-tx-muuntaja
                                       :post (if read-only?

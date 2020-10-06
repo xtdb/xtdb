@@ -2,6 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
+            [clojure.walk :as walk]
             [cognitect.transit :as transit]
             [crux.api :as api]
             [crux.codec :as c]
@@ -77,6 +78,23 @@
           (transit/write
            (transit/writer output-stream :json options) data)
           (.flush output-stream))))))
+
+(defn crux-stringify-keywords
+  [m]
+  (let [f (fn [[k v]] (cond
+                        (= :crux.db/id k) ["_id" v]
+                        (keyword? k) [(name k) v]
+                        :else [k v]))
+        g (fn [k] (cond
+                    (= :crux.db/id k) "_id"
+                    (keyword? k) (name k)
+                    :else k))]
+    (walk/postwalk (fn [x]
+                     (cond
+                       (map? x) (into {} (map f x))
+                       (vector? x) (mapv g x)
+                       :else x))
+                   m)))
 
 (defn crux-object-mapper [{:keys [camel-case? mapper-options] :as options}]
   (j/object-mapper
