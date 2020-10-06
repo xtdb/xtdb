@@ -24,7 +24,7 @@
     (when-let [[v & vs] (.-seq state)]
       (set! (.-seq state) vs)
       (set! (.-key state) v)
-      v))))
+      v)))
 
 (defn new-index-store-index ^crux.index.IndexStoreIndex [seek-fn]
   (->IndexStoreIndex seek-fn (IndexStoreIndexState. nil nil)))
