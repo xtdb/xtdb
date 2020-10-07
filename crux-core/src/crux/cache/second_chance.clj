@@ -1,7 +1,6 @@
 (ns crux.cache.second-chance
   (:import crux.cache.ICache
            crux.cache.second_chance.ValuePointer
-           java.lang.reflect.Field
            java.util.function.Function
            [java.util Map$Entry Queue]
            [java.util.concurrent ArrayBlockingQueue ConcurrentHashMap])
@@ -9,13 +8,9 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private ^Field concurrent-map-table-field
-  (doto (.getDeclaredField ConcurrentHashMap "table")
-    (.setAccessible true)))
-
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
   (when-not (.isEmpty m)
-    (let [table ^objects (.get concurrent-map-table-field m)]
+    (let [table (ValuePointer/getConcurrentHashMapTable m)]
       (loop [i (long (rand-int (alength table)))]
         (if-let [^Map$Entry e (aget table i)]
           e
