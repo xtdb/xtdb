@@ -157,8 +157,8 @@ Resources:
       TaskRoleArn:
         Fn::GetAtt: ["ECSTaskRole", "Arn"]
       RequiresCompatibilities:
-        - 'FARGATE'
-      NetworkMode: 'awsvpc'
+        - 'EC2'
+      NetworkMode: 'host'
       ContainerDefinitions:
         - Name: 'zookeeper-container'
           Cpu: 1024
@@ -207,6 +207,45 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ec2.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ['ecs:CreateCluster', 'ecs:DeregisterContainerInstance', 'ecs:DiscoverPollEndpoint',
+              'ecs:Poll', 'ecs:RegisterContainerInstance', 'ecs:StartTelemetrySession',
+              'ecs:Submit*', 'logs:CreateLogStream', 'logs:PutLogEvents']
+            Resource: '*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']
+
+  ECSInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: 'ami-037dd70536680c11f'
+      InstanceType: 'm5.xlarge'
+      SubnetId: 'subnet-5f840136'
+      SecurityGroupIds:
+        - 'sg-0255e869'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo ECS_CLUSTER= ${ECSCluster} >> /etc/ecs/ecs.config
+      IamInstanceProfile: !Ref EC2InstanceProfile
 
   TaskSchedulerRole:
      Type: AWS::IAM::Role
@@ -245,6 +284,9 @@ Resources:
 
   TaskSchedule:
     Type: AWS::Events::Rule
+    DependsOn:
+      - ECSInstance
+      - BenchTask
     Properties:
       Name: "crux-bench-scheduler"
       ScheduleExpression: "cron(0 0 ? * MON-FRI *)"
@@ -254,14 +296,7 @@ Resources:
           RoleArn:
             Fn::GetAtt: ["TaskSchedulerRole", "Arn"]
           EcsParameters:
-            LaunchType: "FARGATE"
-            NetworkConfiguration:
-              AwsVpcConfiguration:
-                AssignPublicIp: "ENABLED"
-                SecurityGroups:
-                  - "sg-0255e869"
-                Subnets:
-                  - "subnet-5140ba2b"
+            LaunchType: "EC2"
             TaskDefinitionArn:
               Ref: "BenchTask"
             TaskCount: 1
