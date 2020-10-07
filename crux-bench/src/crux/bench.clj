@@ -126,11 +126,20 @@
 
     (println "Would post to Slack:\n" message)))
 
+;; From https://rosettacode.org/wiki/Sparkline_in_unicode#Clojure
+(defn sparkline [nums]
+  (let [sparks   "▁▂▃▄▅▆▇█"
+        high     (apply max nums)
+        low      (apply min nums)
+        spread   (- high low)
+        quantize #(Math/round (* 7.0 (/ (- % low) spread)))]
+        (apply str (map #(nth sparks (quantize %)) nums))))
+
 (defn- result->slack-message [{:keys [time-taken-ms error bench-type percentage-difference-since-last-run
-                                      minimum-time-taken-this-week maximum-time-taken-this-week
+                                      minimum-time-taken-this-week maximum-time-taken-this-week times-taken
                                       doc-count av-count bytes-indexed]
                                :as bench-map}]
-  (->> (concat [(format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s): `%s`"
+  (->> (concat [(format "*%s* (%s, *%s%%*. 7D Min: %s, 7D Max: %s, Trend: %s): `%s`"
                         (name bench-type)
                         (Duration/ofMillis time-taken-ms)
                         (if (neg? percentage-difference-since-last-run)
@@ -138,6 +147,7 @@
                           (format "+%.2f" percentage-difference-since-last-run))
                         (Duration/ofMillis minimum-time-taken-this-week)
                         (Duration/ofMillis maximum-time-taken-this-week)
+                        (sparkline times-taken)
                         (let [time-taken-seconds (/ time-taken-ms 1000)]
                           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
                                           :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))]
@@ -158,9 +168,9 @@
                (string/join "\n"))))
 
 (defn- result->html [{:keys [time-taken-ms bench-type percentage-difference-since-last-run
-                             minimum-time-taken-this-week maximum-time-taken-this-week
+                             minimum-time-taken-this-week maximum-time-taken-this-week times-taken
                              doc-count av-count bytes-indexed] :as bench-map}]
-  (->> (concat [(format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s): <code>%s</code></p>"
+  (->> (concat [(format "<p> <b>%s</b> (%s, %s. 7D Min: %s, 7D Max: %s, Trend: %s): <code>%s</code></p>"
                         (name bench-type)
                         (Duration/ofMillis time-taken-ms)
                         (if (neg? percentage-difference-since-last-run)
@@ -168,6 +178,7 @@
                           (format "<b style=\"color: red\">+%.2f%%</b>" percentage-difference-since-last-run))
                         (Duration/ofMillis minimum-time-taken-this-week)
                         (Duration/ofMillis maximum-time-taken-this-week)
+                        (sparkline times-taken)
                         (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
                                         :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)))]
                (when (= bench-type :ingest)
@@ -419,7 +430,8 @@
               result
               :percentage-difference-since-last-run (float 0)
               :minimum-time-taken-this-week 0
-              :maximum-time-taken-this-week 0)
+              :maximum-time-taken-this-week 0
+              :times-taken [time-taken-ms])
              (assoc
               result
               :percentage-difference-since-last-run (-> time-taken-ms
@@ -428,7 +440,8 @@
                                                         (* 100)
                                                         (float))
               :minimum-time-taken-this-week (apply min times-taken)
-              :maximum-time-taken-this-week (apply max times-taken))))
+              :maximum-time-taken-this-week (apply max times-taken)
+              :times-taken (conj (vec (reverse times-taken)) time-taken-ms))))
          results
          comparison-times)))
 
