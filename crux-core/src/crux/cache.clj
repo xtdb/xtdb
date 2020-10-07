@@ -1,5 +1,5 @@
 (ns ^:no-doc crux.cache
-  (:require [crux.cache.lru :as lru]
+  (:require [crux.cache.second-chance]
             [crux.system :as sys])
   (:import crux.cache.ICache))
 
@@ -14,4 +14,4 @@
                             :default (* 128 1024)
                             :spec ::sys/nat-int}}}
   [opts]
-  (lru/->lru-cache opts))
+  (crux.cache.second-chance/->second-chance-cache opts))
