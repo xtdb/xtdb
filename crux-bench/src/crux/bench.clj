@@ -150,7 +150,7 @@
                         (sparkline times-taken)
                         (let [time-taken-seconds (/ time-taken-ms 1000)]
                           (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
-                                          :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week))))]
+                                          :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken))))]
                (when (and (= bench-type :ingest) doc-count av-count bytes-indexed)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
                         {:docs-per-second (int (/ doc-count time-taken-seconds))
@@ -180,7 +180,7 @@
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
                         (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
-                                        :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week)))]
+                                        :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken)))]
                (when (= bench-type :ingest)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
                         {:docs-per-second (int (/ doc-count time-taken-seconds))
