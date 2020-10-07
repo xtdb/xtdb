@@ -8,7 +8,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype LRUCache [^LinkedHashMap cache ^StampedLock lock]
+(deftype LRUCache [^LinkedHashMap cache ^StampedLock lock ^long size]
   Object
   (toString [_]
     (.toString cache))
@@ -54,4 +54,4 @@
                 (removeEldestEntry [_]
                   (> (.size ^Map this) cache-size)))
         lock (StampedLock.)]
-    (->LRUCache cache lock)))
+    (->LRUCache cache lock cache-size)))

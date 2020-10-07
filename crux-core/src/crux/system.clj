@@ -253,6 +253,12 @@
 (s/def ::nat-int (s/and ::int nat-int?))
 (s/def ::pos-int (s/and ::int pos-int?))
 
+(s/def ::double
+  (s/and (s/conformer (fn [x] (cond (float? x) x, (string? x) (Double/parseDouble x), :else x)))
+         float?))
+
+(s/def ::pos-double (s/and ::double pos?))
+
 (s/def ::string-map (s/map-of string? string?))
 (s/def ::string-list (s/coll-of string?))
 
