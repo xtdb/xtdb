@@ -5,7 +5,6 @@
             [crux.db :as db]
             [crux.document-store :as ds]
             [crux.io :as cio]
-            [crux.lru :as lru]
             [crux.system :as sys]
             [crux.tx :as tx]
             [next.jdbc :as jdbc]
@@ -111,11 +110,13 @@
          (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(-> (:v %) (<-blob dialect))))
          (into {}))))
 
-(defn ->document-store {::sys/deps {:connection-pool `->connection-pool}
-                        ::sys/args {:doc-cache-size ds/doc-cache-size-opt}}
-  [{{:keys [pool dialect]} :connection-pool, :keys [doc-cache-size]}]
-  (->> (->JdbcDocumentStore pool dialect)
-       (ds/->CachedDocumentStore (lru/new-cache doc-cache-size))))
+(defn ->document-store {::sys/deps {:connection-pool `->connection-pool
+                                    :document-cache 'crux.cache/->cache}}
+  [{{:keys [pool dialect]} :connection-pool, :keys [document-cache] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store (->JdbcDocumentStore pool dialect))))
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog

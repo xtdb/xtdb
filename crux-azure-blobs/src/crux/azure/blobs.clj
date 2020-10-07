@@ -3,8 +3,7 @@
             [taoensso.nippy :as nippy]
             [crux.db :as db]
             [crux.system :as sys]
-            [crux.document-store :as ds]
-            [crux.lru :as lru]))
+            [crux.document-store :as ds]))
 
 (defn- get-blob [sas-token storage-account container blob-name]
   ;; TODO : ETag
@@ -42,7 +41,8 @@
      {}
      docs)))
 
-(defn ->document-store {::sys/args {:sas-token {:required? true
+(defn ->document-store {::sys/deps {:document-cache 'crux.cache/->cache}
+                        ::sys/args {:sas-token {:required? true
                                                 :spec ::sys/string
                                                 :doc "Azure Blob Storage SAS Token"}
                                     :storage-account {:required? true
@@ -50,12 +50,12 @@
                                                       :doc "Azure Storage Account Name"}
                                     :container {:required? true,
                                                 :spec ::sys/string
-                                                :doc "Azure Blob Storage Container"}
-                                    :doc-cache-size ds/doc-cache-size-opt}}
-  [{:keys [sas-token storage-account container doc-cache-size]}]
-  (ds/->CachedDocumentStore
-   (lru/new-cache doc-cache-size)
-   (->AzureBlobsDocumentStore sas-token
-                              storage-account
-                              container)))
-
+                                                :doc "Azure Blob Storage Container"}}}
+  [{:keys [sas-token storage-account container document-cache] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store
+          (->AzureBlobsDocumentStore sas-token
+                                     storage-account
+                                     container))))

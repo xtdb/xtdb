@@ -8,7 +8,6 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.query :as q]
             [crux.status :as status]
             [crux.query-state :as qs]

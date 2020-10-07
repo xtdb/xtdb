@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [crux.error :as err]
             [crux.bus :as bus]
+            [crux.cache.nop :as nop-cache]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -370,7 +371,9 @@
     (log/debug "Indexing tx-id:" (::tx-id tx))
     (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
-    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)})
+    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)
+                                                                                           :value-cache (nop-cache/->nop-cache {})
+                                                                                           :cav-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
                                                         (::tx-time fork-at))
           forked-document-store (fork/->forked-document-store document-store)]

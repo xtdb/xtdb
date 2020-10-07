@@ -4,7 +4,7 @@
             [crux.document-store :as ds]
             [crux.memory :as mem]
             [crux.kv :as kv]
-            [crux.lru :as lru]
+            [crux.cache :as cache]
             [crux.system :as sys])
   (:import java.util.function.Supplier
            org.agrona.ExpandableDirectByteBuffer
@@ -55,7 +55,10 @@
   Closeable
   (close [_]))
 
-(defn ->document-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}
-                        ::sys/args {:doc-cache-size ds/doc-cache-size-opt}}
-  [{:keys [kv-store doc-cache-size]}]
-  (ds/->CachedDocumentStore (lru/new-cache doc-cache-size) (->KvDocumentStore kv-store)))
+(defn ->document-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
+                                    :document-cache 'crux.cache/->cache}}
+  [{:keys [kv-store document-cache] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store (->KvDocumentStore kv-store))))

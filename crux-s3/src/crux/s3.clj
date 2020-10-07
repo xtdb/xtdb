@@ -1,7 +1,6 @@
 (ns crux.s3
   (:require [crux.db :as db]
             [crux.document-store :as ds]
-            [crux.lru :as lru]
             [crux.node :as n]
             [clojure.spec.alpha :as s]
             [taoensso.nippy :as nippy]
@@ -119,13 +118,16 @@
                                              :doc "S3 bucket"}
                                     :prefix {:required? false,
                                              :spec ::prefix
-                                             :doc "S3 prefix"}
-                                    :doc-cache-size ds/doc-cache-size-opt}
-                        ::sys/deps {:configurator `->configurator}}
+                                             :doc "S3 prefix"}}
+                        ::sys/deps {:configurator `->configurator
+                                    :document-cache 'crux.cache/->cache}}
 
-  [{:keys [bucket prefix ^S3Configurator configurator doc-cache-size]}]
-  (ds/->CachedDocumentStore (lru/new-cache doc-cache-size)
-                            (->S3DocumentStore configurator
-                                               (.makeClient configurator)
-                                               bucket
-                                               prefix)))
+  [{:keys [bucket prefix ^S3Configurator configurator document-cache] :as opts}]
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store
+          (->S3DocumentStore configurator
+                             (.makeClient configurator)
+                             bucket
+                             prefix))))

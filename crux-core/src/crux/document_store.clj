@@ -3,7 +3,7 @@
             [clojure.set :as set]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.lru :as lru]
+            [crux.cache :as cache]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy]
             [crux.system :as sys])
@@ -53,7 +53,7 @@
       (persistent!
        (reduce-kv
         (fn [acc id doc]
-          (assoc! acc id (lru/compute-if-absent
+          (assoc! acc id (cache/compute-if-absent
                           cache
                           (c/->id-buffer id)
                           mem/copy-to-unpooled-buffer
@@ -67,25 +67,26 @@
      document-store
      (vec (for [[id doc] id-and-docs]
             (do
-              (lru/evict cache (c/->id-buffer id))
+              (cache/evict cache (c/->id-buffer id))
               (MapEntry/create id doc))))))
 
   Closeable
   (close [_]))
 
-(def ^:const default-doc-cache-size (* 128 1024))
+(defn ->cached-document-store
+  {::sys/deps {:document-store :crux/document-store
+               :document-cache 'crux.cache/->cache}}
+  [{:keys [document-cache document-store]}]
+  (->CachedDocumentStore document-cache document-store))
 
-(def doc-cache-size-opt
-  {:doc "Cache size to use for document store."
-   :default default-doc-cache-size
-   :spec ::sys/nat-int})
-
-(defn ->file-document-store {::sys/args {:dir {:doc "Directory to store documents"
-                                                :required? true
-                                                :spec ::sys/path}
-                                          :doc-cache-size doc-cache-size-opt}}
-  [{:keys [^Path dir doc-cache-size]}]
+(defn ->file-document-store {::sys/deps {:document-cache 'crux.cache/->cache}
+                             ::sys/args {:dir {:doc "Directory to store documents"
+                                               :required? true
+                                               :spec ::sys/path}}}
+  [{:keys [^Path dir document-cache] :as opts}]
   (let [dir (.toFile dir)]
     (.mkdirs dir)
-    (->CachedDocumentStore (lru/new-cache doc-cache-size)
-                           (->FileDocumentStore dir))))
+    (->cached-document-store
+     (assoc opts
+            :document-cache document-cache
+            :document-store (->FileDocumentStore dir)))))
