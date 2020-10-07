@@ -787,9 +787,9 @@
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
                                     :value-cache {:crux/module 'crux.cache/->cache
-                                                  :cache-size (* 256 1024)}
+                                                  :cache-size (* 1024 1024)}
                                     :cav-cache {:crux/module 'crux.cache/->cache
-                                                :cache-size (* 256 1024)}}
+                                                :cache-size (* 1024 1024)}}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store value-cache cav-cache] :as opts}]
