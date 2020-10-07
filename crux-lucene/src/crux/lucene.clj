@@ -46,10 +46,12 @@
   (doto (Document.)
     ;; To search for triples by eid-a-v for deduping
     (.add (StringField. "id", (eid->str (DocumentId. k v)), Field$Store/NO))
-    ;; The Attr
-    (.add (StringField. "attr", (name k), Field$Store/YES))
     ;; The actual term, which will be tokenized
-    (.add (TextField. "val", v, Field$Store/YES))))
+    (.add (TextField. (name k), v, Field$Store/YES))
+    ;; Uses for wildcard searches
+    (.add (TextField. "_val", v, Field$Store/YES))
+    ;; The Attr (storage only, for temporal resolution)
+    (.add (StringField. "_attr", (name k), Field$Store/YES))))
 
 (defn- ^Term triple->term [[k ^String v]]
   (Term. "id" (eid->str (DocumentId. k v))))
@@ -82,13 +84,11 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
-        _ (.setSimilarity index-searcher (proxy [org.apache.lucene.search.similarities.ClassicSimilarity] []
-                                           (idf [n n] 1)))
-        qp (QueryParser. "val" analyzer)
+        qp (if k
+             (QueryParser. (name k) analyzer)
+             (QueryParser. "_val" analyzer))
         b (doto (BooleanQuery$Builder.)
             (.add (.parse qp v) BooleanClause$Occur/MUST))
-        _ (when k
-            (.add b (TermQuery. (Term. "attr" (name k))) BooleanClause$Occur/MUST))
         q (.build b)
         q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
         score-docs (.-scoreDocs (.search index-searcher q 1000))]
@@ -99,17 +99,23 @@
     (cio/->cursor (fn []
                     (.close directory-reader))
                   (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d))
-                                                 (if k (- (.-score d) 1) (.-score d)))) score-docs))))
+                                                 (.-score d))) score-docs))))
+(defn- normalise-scores [tuples]
+  (when (seq tuples)
+    (let [max-score (bigdec (last (first tuples)))]
+      (for [[e v a s] tuples]
+        [e v a (double (with-precision 2 (/ (bigdec s) max-score)))]))))
 
 (defn- full-text [node index-snapshot entity-resolver-fn attr arg-v]
   (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
     (->> (iterator-seq search-results)
          (mapcat (fn [[^Document doc score]]
-                   (let [v (.get ^Document doc "val")
-                         a (or attr (keyword (.get ^Document doc "attr")))
+                   (let [v (.get ^Document doc "_val")
+                         a (keyword (.get ^Document doc "_attr"))
                          encoded-v (db/encode-value index-snapshot v)]
                      (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
                        [(db/decode-value index-snapshot eid) v a score]))))
+         (normalise-scores)
          (into []))))
 
 (defmethod q/pred-args-spec 'text-search [_]
