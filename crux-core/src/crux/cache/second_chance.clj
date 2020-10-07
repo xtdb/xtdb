@@ -1,5 +1,6 @@
 (ns crux.cache.second-chance
   (:import crux.cache.ICache
+           crux.cache.second_chance.ValuePointer
            java.lang.reflect.Field
            java.util.function.Function
            [java.util Map$Entry Queue]
@@ -29,32 +30,32 @@
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
-    (let [^objects vp (or (.get hot k)
-                          (let [k (stored-key-fn k)
-                                v (f k)]
-                            (.computeIfAbsent hot k (reify Function
-                                                      (apply [_ k]
-                                                        (doto (object-array 2)
-                                                          (aset 0 v)))))))]
+    (let [^ValuePointer vp (or (.get hot k)
+                               (let [k (stored-key-fn k)
+                                     v (f k)]
+                                 (.computeIfAbsent hot k (reify Function
+                                                           (apply [_ k]
+                                                             (ValuePointer. v))))))]
       (resize-cache this)
-      (aset vp 1 nil)
-      (aget vp 0)))
+      (set! (.coldKey vp) nil)
+      (.value vp)))
 
   (evict [_ k]
-    (when-let [vp ^objects (.remove hot k)]
-      (aset vp 1 nil)))
+    (when-let [vp ^ValuePointer (.remove hot k)]
+      (set! (.coldKey vp) nil)))
 
   (valAt [_ k]
-    (when-let [vp ^objects (.get hot k)]
-      (aset vp 1 nil)
-      (aget vp 0)))
+    (when-let [vp ^ValuePointer (.get hot k)]
+      (set! (.coldKey vp) nil)
+      (.value vp)))
 
   (valAt [_ k default]
     (let [vp (.getOrDefault hot k default)]
       (if (= default vp)
         default
-        (do (aset ^objects vp 1 nil)
-            (aget ^objects vp 0)))))
+        (let [vp ^ValuePointer vp]
+          (set! (.coldKey vp) nil)
+          (.value vp)))))
 
   (count [_]
     (.size hot))
@@ -69,18 +70,18 @@
         cold-target-size (long (Math/ceil (* (.cold-factor cache) (.size hot))))]
     (while (< (.size cold) cold-target-size)
       (let [e (random-entry (.hot cache))]
-        (when-let [vp ^objects (.getValue e)]
-          (when (nil? (aget vp 1))
+        (when-let [vp ^ValuePointer (.getValue e)]
+          (when (nil? (.coldKey vp))
             (when (.offer cold vp)
-              (aset vp 1 (.getKey e)))))))))
+              (set! (.coldKey vp) (.getKey e)))))))))
 
 (defn- resize-cache [^SecondChanceCache cache]
   (let [hot ^ConcurrentHashMap (.hot cache)
         cold ^Queue (.cold cache)]
     (move-to-cold cache)
     (while (> (.size hot) (.size cache))
-      (when-let [vp ^objects (.poll cold)]
-        (when-let [k (aget vp 1)]
+      (when-let [vp ^ValuePointer (.poll cold)]
+        (when-some [k (.coldKey vp)]
           (.remove hot k)))
       (move-to-cold cache))))
 
