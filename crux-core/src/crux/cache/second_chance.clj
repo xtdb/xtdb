@@ -27,11 +27,12 @@
   (computeIfAbsent [this k stored-key-fn f]
     (let [^ValuePointer vp (or (.get hot k)
                                (let [k (stored-key-fn k)
-                                     v (f k)]
-                                 (.computeIfAbsent hot k (reify Function
-                                                           (apply [_ k]
-                                                             (ValuePointer. v))))))]
-      (resize-cache this)
+                                     v (f k)
+                                     vp (.computeIfAbsent hot k (reify Function
+                                                                  (apply [_ k]
+                                                                    (ValuePointer. v))))]
+                                 (resize-cache this)
+                                 vp))]
       (set! (.coldKey vp) nil)
       (.value vp)))
 
