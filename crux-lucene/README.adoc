@@ -29,6 +29,4 @@ scores.
 
 Please note that although data is evicted from the Lucene index during
 the `crux.tx/evict` transaction operation, data is not removed during
-a normal `crux.tx/delete`. Therefore deleted content present in the
-Lucene impact will have a subtle impact on the returned scores (for
-example, scores are boosted for rare matches of terms in documents).
+a normal `crux.tx/delete`.
