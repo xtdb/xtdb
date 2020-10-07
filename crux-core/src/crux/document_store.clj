@@ -79,7 +79,7 @@
   [{:keys [document-cache document-store]}]
   (->CachedDocumentStore document-cache document-store))
 
-(defn ->file-document-store {::sys/deps {:document-cache :crux/document-cache}
+(defn ->file-document-store {::sys/deps {:document-cache 'crux.cache/->cache}
                              ::sys/args {:dir {:doc "Directory to store documents"
                                                :required? true
                                                :spec ::sys/path}}}

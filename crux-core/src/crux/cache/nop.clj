@@ -1,6 +1,5 @@
 (ns ^:no-doc crux.cache.nop
-  (:require [crux.io :as cio]
-            [crux.system :as sys])
+  (:require [crux.system :as sys])
   (:import crux.cache.ICache))
 
 (defn new-nop-cache
