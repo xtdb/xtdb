@@ -282,6 +282,82 @@ Resources:
                  Resource: "*"
            PolicyName: "TaskSchedulerPolicy"
 
+  EC2LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [lambda.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ["ec2:Start*", "ec2:Stop*"]
+            Resource: '*'
+
+  EC2StartLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Stops the Bench EC2 instance"
+      Runtime: 'python3.7'
+      Handler: 'index.lambda_handler'
+      Role:
+        Fn::GetAtt: ["EC2LambdaRole", "Arn"]
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          region = 'eu-west-2'
+          instances = ['${ECSInstance}']
+          ec2 = boto3.client('ec2', region_name=region)
+          def lambda_handler(event, context):
+            ec2.start_instances(InstanceIds=instances)
+
+  EC2StopLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Stops the Bench EC2 instance"
+      Handler: 'index.lambda_handler'
+      Runtime: 'python3.7'
+      Role:
+        Fn::GetAtt: ["EC2LambdaRole", "Arn"]
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          region = 'eu-west-2'
+          instances = ['${ECSInstance}']
+          ec2 = boto3.client('ec2', region_name=region)
+          def lambda_handler(event, context):
+            ec2.stop_instances(InstanceIds=instances)
+
+  ScheduleStartInstance:
+    Type: AWS::Events::Rule
+    DependsOn:
+      - ECSInstance
+      - EC2StartLambda
+    Properties:
+      Name: "start-bench-instance-scheduler"
+      ScheduleExpression: "cron(55 23 ? * MON-FRI *)"
+      State: "ENABLED"
+      Targets:
+        - Id: "startEC2Instances"
+          Arn:
+            Fn::GetAtt: ["EC2StartLambda", "Arn"]
+
+  InvokeStartPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt: ["EC2StartLambda", "Arn"]
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt: ["ScheduleStartInstance", "Arn"]
+
   TaskSchedule:
     Type: AWS::Events::Rule
     DependsOn:
@@ -303,6 +379,29 @@ Resources:
           Arn:
             Fn::GetAtt: ["ECSCluster", "Arn"]
 
+  ScheduleStopInstance:
+    Type: AWS::Events::Rule
+    DependsOn:
+      - ECSInstance
+      - EC2StopLambda
+    Properties:
+      Name: "stop-bench-instance-scheduler"
+      ScheduleExpression: "cron(0 3 ? * MON-FRI *)"
+      State: "ENABLED"
+      Targets:
+        - Id: "stopEC2Instances"
+          Arn:
+            Fn::GetAtt: ["EC2StopLambda", "Arn"]
+
+  InvokeStopPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt: ["EC2StopLambda", "Arn"]
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt: ["ScheduleStopInstance", "Arn"]
 
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific
