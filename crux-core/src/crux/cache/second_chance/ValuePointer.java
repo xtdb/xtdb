@@ -13,7 +13,8 @@ public final class ValuePointer<K, V> {
         try {
             Field tableField = ConcurrentHashMap.class.getDeclaredField("table");
             tableField.setAccessible(true);
-            TABLE_FIELD_METHOD_HANDLE = MethodHandles.lookup().unreflectGetter(tableField);
+            MethodHandle mh = MethodHandles.lookup().unreflectGetter(tableField);
+            TABLE_FIELD_METHOD_HANDLE = mh.asType(mh.type().changeReturnType(Object[].class));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -21,7 +22,7 @@ public final class ValuePointer<K, V> {
 
     public static final <K, V> Object[] getConcurrentHashMapTable(final ConcurrentHashMap<K, V> map) {
         try {
-            return (Object[]) TABLE_FIELD_METHOD_HANDLE.invoke(map);
+            return (Object[]) TABLE_FIELD_METHOD_HANDLE.invokeExact(map);
         } catch (Throwable t) {
             throw new RuntimeException(t);
         }
