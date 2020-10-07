@@ -206,30 +206,18 @@ public class ByteUtils {
     private static final int SHA1_BLOCK_BYTES = 512 / Byte.SIZE;
     private static final int SHA1_HASH_SIZE = 160 / Byte.SIZE;
 
-    private static final class SHAState {
-        private final int[] w = new int[80];
-        private final byte[] pad = new byte[SHA1_BLOCK_BYTES];
-    }
-
-    private static final ThreadLocal<SHAState> wTl = new ThreadLocal<SHAState>() {
-            public SHAState initialValue() {
-                return new SHAState();
-            }
-        };
-
     public static DirectBuffer sha1(final MutableDirectBuffer to, final DirectBuffer from) {
         to.boundsCheck(0, SHA1_HASH_SIZE);
         final int size = from.capacity();
         final int blocks = size / SHA1_BLOCK_BYTES;
         final int bytesInLastBlock = size % SHA1_BLOCK_BYTES;
         final int offsetOfLastBlock = blocks * SHA1_BLOCK_BYTES;
-        final SHAState s =  wTl.get();
-        final int[] w = s.w;
-        Arrays.fill(s.pad, (byte) 0);
-        final UnsafeBuffer pad = new UnsafeBuffer(s.pad);
+        final int[] w = new int[80];
+        final int padBlocks = (bytesInLastBlock > (SHA1_BLOCK_BYTES - Byte.BYTES - Long.BYTES) ? 2 : 1);
+        final UnsafeBuffer pad = new UnsafeBuffer(new byte[SHA1_BLOCK_BYTES * padBlocks]);
         pad.putBytes(0, from, offsetOfLastBlock, bytesInLastBlock);
         pad.putByte(bytesInLastBlock, (byte) 0x80);
-        pad.putLong(SHA1_BLOCK_BYTES - Long.BYTES, Byte.SIZE * size, ByteOrder.BIG_ENDIAN);
+        pad.putLong(pad.capacity() - Long.BYTES, Byte.SIZE * size, ByteOrder.BIG_ENDIAN);
 
         int h0 = 0x67452301;
         int h1 = 0xEFCDAB89;
@@ -237,8 +225,13 @@ public class ByteUtils {
         int h3 = 0x10325476;
         int h4 = 0xC3D2E1F0;
 
-        for (int i = 0; i <= blocks; i++) {
-            final DirectBuffer block = i == blocks ? pad : new UnsafeBuffer(from, SHA1_BLOCK_BYTES * i, SHA1_BLOCK_BYTES);
+        for (int i = 0; i < blocks + padBlocks; i++) {
+            final DirectBuffer block =
+                i == blocks
+                ? new UnsafeBuffer(pad, 0, SHA1_BLOCK_BYTES)
+                : i == blocks + 1
+                ? new UnsafeBuffer(pad, SHA1_BLOCK_BYTES, SHA1_BLOCK_BYTES)
+                : new UnsafeBuffer(from, SHA1_BLOCK_BYTES * i, SHA1_BLOCK_BYTES);
 
             int a = h0;
             int b = h1;
@@ -331,6 +324,6 @@ public class ByteUtils {
         to.putInt(3 * Integer.BYTES, h3, ByteOrder.BIG_ENDIAN);
         to.putInt(4 * Integer.BYTES, h4, ByteOrder.BIG_ENDIAN);
 
-        return to;
+        return new UnsafeBuffer(to, 0, SHA1_HASH_SIZE);
     }
 }
