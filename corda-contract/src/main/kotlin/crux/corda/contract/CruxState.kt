@@ -2,5 +2,6 @@ package crux.corda.contract
 
 @Suppress("unused")
 interface CruxState {
-    val cruxDoc: CruxDoc
+    val cruxId: Any
+    val cruxDoc: Map<String, Any>
 }

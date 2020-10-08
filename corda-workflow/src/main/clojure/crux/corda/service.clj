@@ -9,7 +9,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [taoensso.nippy :as nippy])
-  (:import (crux.corda.contract CruxState CruxDoc)
+  (:import (crux.corda.contract CruxState)
            (net.corda.core.node AppServiceHub)
            (net.corda.core.transactions SignedTransaction)
            (net.corda.core.contracts TransactionState StateAndRef)
@@ -102,13 +102,12 @@
             (tx-row->tx))))
 
 (defn- ->crux-doc [^TransactionState tx-state]
-  (when-let [^CruxDoc
-             crux-doc (some-> (let [data (.getData tx-state)]
-                                (when (instance? CruxState data)
-                                  data))
-                              (.getCruxDoc))]
-    (merge {:crux.db/id (.getId crux-doc)}
-           (->> (.getDoc crux-doc)
+  (when-let [^CruxState
+             crux-state (let [data (.getData tx-state)]
+                          (when (instance? CruxState data)
+                            data))]
+    (merge {:crux.db/id (.getCruxId crux-state)}
+           (->> (.getCruxDoc crux-state)
                 (into {} (map (juxt (comp keyword key) val)))))))
 
 (defn- transform-corda-tx [^SignedTransaction corda-tx service-hub]
