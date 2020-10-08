@@ -8,6 +8,9 @@ content:
       start_path: docs/main
       branches: HEAD
     - url: ../
+      start_path: docs/training
+      branches: HEAD
+    - url: ../
       start_path: docs/about
       branches: HEAD
     - url: ../
