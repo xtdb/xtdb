@@ -35,6 +35,7 @@
    [juxt/crux-http-server "crux-git-version-alpha"]
    [juxt/crux-rdf "crux-git-version-alpha"]
    [juxt/crux-sql "crux-git-version-alpha"]
+   [juxt/crux-azure-blobs "crux-git-version-alpha"]
    [juxt/crux-test "crux-git-version"]
    [juxt/crux-bench "crux-git-version"]
 
