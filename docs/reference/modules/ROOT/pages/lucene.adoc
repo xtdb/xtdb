@@ -1,7 +1,4 @@
 = Lucene
-:toc: macro
-
-toc::[]
 
 Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 
@@ -11,25 +8,34 @@ Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 
 First, add the `crux-lucene` dependency to your project:
 
-.pom.xml
-[source,xml]
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+juxt/crux-lucene {:mvn/version "{crux_version}-alpha"}
+----
+
+pom.xml::
++
+[source,xml, subs=attributes+]
 ----
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-lucene</artifactId>
-    <version>20.09-1.11.0-alpha</version>
+    <version>{crux_version}-alpha</version>
 </dependency>
 ----
+====
 
-.deps.edn
-[source,clojure]
-----
-juxt/crux-lucene {:mvn/version "20.09-1.11.0-alpha"}
-----
 
 Add the following to your node configuration:
 
-.JSON
+[tabs]
+====
+JSON::
++
 [source,json]
 ----
 {
@@ -43,7 +49,8 @@ Add the following to your node configuration:
 }
 ----
 
-.Clojure/EDN
+Clojure/EDN::
++
 [source,clojure]
 ----
 {...
@@ -51,7 +58,7 @@ Add the following to your node configuration:
                     :crux/indexer {:crux/module 'crux.lucene/->indexer
                                    :indexer 'crux.kv.indexer/->kv-indexer}}
 ----
-
+====
 
 == Querying
 
@@ -61,7 +68,18 @@ then you use the in-built `text-search` fn in your datalog:
 [source,clojure]
 ----
 {:find '[?e]
- :where '[[(text-search :name "Ivan") [[?e]]]
+ :where '[[(text-search "Ivan" :name) [[?e]]]
+ [?e :crux.db/id]]}
+----
+
+The destructuring available is `entity-id`, `matched-value`,
+`attribute` and `score`. For example, to return the full search
+results tuple:
+
+[source,clojure]
+----
+{:find '[?e ?v ?a ?s]
+ :where '[[(text-search "Ivan" :name) [[?e ?v ?a ?s]]]
  [?e :crux.db/id]]}
 ----
 
@@ -70,9 +88,21 @@ You can use standard Lucene search capabilities:
 [source,clojure]
 ----
 {:find '[?e]
- :where '[[(text-search :name "Iva*") [[?e]]]
+ :where '[[(text-search "Iva*" :name) [[?e]]]
  [?e :crux.db/id]]}
 ----
 
 Will return all entities that with a `:name` that starts with
 "Iva". See the Lucene documentation for more information.
+
+You can search across all attributes:
+
+[source,clojure]
+----
+{:find '[?e ?v ?a ?s]
+ :where '[[(text-search "Iva*") [[?e ?v ?a ?s]]]
+ [?e :crux.db/id]]}
+----
+
+Will return all entities that have an attribute with a value that
+matches "Iva".

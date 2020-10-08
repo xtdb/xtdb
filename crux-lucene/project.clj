@@ -11,7 +11,7 @@
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                   [juxt/crux-test "crux-git-version"]]}}
   :middleware [leiningen.project-version/middleware]
-  :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
+  :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
   :global-vars {*warn-on-reflection* true}
