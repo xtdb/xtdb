@@ -132,7 +132,7 @@
         high     (apply max nums)
         low      (apply min nums)
         spread   (- high low)
-        quantize #(Math/round (* 7.0 (/ (- % low) spread)))]
+        quantize #(Math/round (* 7.0 (/ (- % low) (max spread 1))))]
         (apply str (map #(nth sparks (quantize %)) nums))))
 
 (defn- result->slack-message [{:keys [time-taken-ms error bench-type percentage-difference-since-last-run
