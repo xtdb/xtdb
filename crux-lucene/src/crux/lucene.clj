@@ -38,7 +38,7 @@
        (mapcat (fn [[k v]]
                  (for [v (cc/vectorize-value v)
                        :when (string? v)]
-                   [(name k) v])))))
+                   [k v])))))
 
 (defrecord DocumentId [a v])
 
@@ -69,15 +69,15 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
                             keys
-                            (map #(vector (mem/buffer->hex (cc/->id-buffer %)) %))
+                            (map #(vector (eid->str %) %))
                             (into {}))]
     (with-open [index-snapshot (db/open-index-snapshot indexer)
                 index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (let [qs (for [[a v] (db/exclusive-avs indexer eids)
-                     :let [a (attrs-id->attr (mem/buffer->hex a))
+                     :let [a (attrs-id->attr (eid->str a))
                            v (db/decode-value index-snapshot v)]
                      :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. "id" (eid->str (DocumentId. (name a) v)))))]
+                 (TermQuery. (Term. "id" (eid->str (DocumentId. a v)))))]
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn search [node, k, v]
@@ -101,22 +101,15 @@
                   (map (fn [^ScoreDoc d]
                          (vector (.doc index-searcher (.-doc d))
                                  (.-score d))) score-docs))))
-(defn- normalise-scores [tuples]
-  (when (seq tuples)
-    (let [max-score (bigdec (last (first tuples)))]
-      (for [[e v a s] tuples]
-        [e v a (double (with-precision 2 (/ (bigdec s) max-score)))]))))
 
 (defn- full-text [node index-snapshot entity-resolver-fn attr arg-v]
   (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
     (->> (iterator-seq search-results)
          (mapcat (fn [[^Document doc score]]
                    (let [v (.get ^Document doc "_val")
-                         a (keyword (.get ^Document doc "_attr"))
-                         encoded-v (db/encode-value index-snapshot v)]
+                         a (keyword (.get ^Document doc "_attr"))]
                      (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
                        [(db/decode-value index-snapshot eid) v a score]))))
-         (normalise-scores)
          (into []))))
 
 (defmethod q/pred-args-spec 'text-search [_]
@@ -134,22 +127,26 @@
 (defrecord LuceneDecoratingIndexStore [index-store document-store lucene-node]
   db/IndexStore
   (index-docs [this docs]
-    (db/index-docs index-store docs))
-  (unindex-eids [this eids]
-    (evict! index-store lucene-node eids)
-    (db/unindex-eids index-store eids))
-  (index-entity-txs [this tx entity-txs]
     (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
           index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (try
-        (let [content-hashes (entity-txes->content-hashes entity-txs)
-              docs (vals (db/fetch-docs document-store content-hashes))]
-          (write-docs! index-writer docs)
-          (db/index-entity-txs index-store tx entity-txs)
-          (.close index-writer))
+        (write-docs! index-writer (vals docs))
+        (db/index-docs index-store docs)
         (catch Throwable t
           (.rollback index-writer)
-          (throw t)))))
+          (throw t))
+        (finally
+          (.close index-writer)))))
+  (unindex-eids [this eids]
+    (try
+      (evict! index-store lucene-node eids)
+      (db/unindex-eids index-store eids)
+      (catch Throwable t
+        ;; TODO should be able to remove, but exception is lost otherwise
+        (log/error t)
+        (throw t))))
+  (index-entity-txs [this tx entity-txs]
+    (db/index-entity-txs index-store tx entity-txs))
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed index-store tx))
   (store-index-meta [this k v]
@@ -163,9 +160,10 @@
   (tx-failed? [this tx-id]
     (db/tx-failed? index-store tx-id))
   (open-index-snapshot ^java.io.Closeable [this]
+    ;; TODO, considering tying the index-writer to this index store snapshot
     (db/open-index-snapshot index-store)))
 
-(defn ->node
+(defn ->lucene-node
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
                         :spec ::sys/path}}}
@@ -178,6 +176,6 @@
 (defn ->index-store
   {::sys/deps {:index-store :crux/index-store
                :document-store :crux/document-store
-               :lucene-node ::node}}
+               :lucene-node ::lucene-node}}
   [{:keys [index-store document-store lucene-node]}]
   (LuceneDecoratingIndexStore. index-store document-store lucene-node))

@@ -39,7 +39,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.lucene/node": {
+  "crux.lucene/lucene-node": {
         "db-dir": "lucene",
         "crux/indexer": {
             "crux/module": "crux.lucene/->indexer",
@@ -54,9 +54,9 @@ Clojure/EDN::
 [source,clojure]
 ----
 {...
- :crux.lucene/node {:db-dir "lucene-dir"
-                    :crux/indexer {:crux/module 'crux.lucene/->indexer
-                                   :indexer 'crux.kv.indexer/->kv-indexer}}
+ :crux.lucene/lucene-node {:db-dir "lucene-dir"
+                           :crux/indexer {:crux/module 'crux.lucene/->indexer
+                                          :indexer 'crux.kv.indexer/->kv-indexer}}
 ----
 ====
 

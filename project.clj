@@ -72,6 +72,7 @@
    [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
    [org.tukaani/xz "1.8"]
    [com.github.spotbugs/spotbugs-annotations "3.1.9"]
+   [org.apache.lucene/lucene-codecs "8.6.1"]
 
    ;; crux metrics dependencies
    ;; JMX Deps
