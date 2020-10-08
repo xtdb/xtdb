@@ -38,23 +38,23 @@
     (t/testing "`put` on documents"
       (t/testing "put with key contained in document"
         (.put sink-task [(new-sink-record {:value {:crux.db/id :foo}})])
-        (t/is (api/await-tx *api* {:crux.tx/id 0}))
+        (t/is (api/await-tx *api* {:crux.tx/tx-id 0}))
         (t/is (= {:crux.db/id (c/new-id :foo)} (api/entity (api/db *api*) :foo))))
       (t/testing "put with key contained in sink record"
         (.put sink-task [(new-sink-record {:key :bar
                                            :value {:hello "world"}})])
-        (t/is (api/await-tx *api* {:crux.tx/id 1}))
+        (t/is (api/await-tx *api* {:crux.tx/tx-id 1}))
         (t/is (= {:crux.db/id (c/new-id :bar) :hello "world"} (api/entity (api/db *api*) :bar)))))
     (t/testing "`delete` on documents - (key with an empty document)"
       (.put sink-task [(new-sink-record {:key :foo})])
-      (t/is (api/await-tx *api* {:crux.tx/id 2}))
+      (t/is (api/await-tx *api* {:crux.tx/tx-id 2}))
       (t/is (nil? (api/entity (api/db *api*) :foo))))
     (.stop sink-task))
   (t/testing "testing sinktask with custom id.key config"
     (let [sink-task (doto (CruxSinkTask.) (.start {"url" *api-url*
                                                    "id.key" "kafka/id"}))]
       (.put sink-task [(new-sink-record {:value {:kafka/id :kafka-id}})])
-      (t/is (api/await-tx *api* {:crux.tx/id 3}))
+      (t/is (api/await-tx *api* {:crux.tx/tx-id 3}))
       (t/is (= {:kafka/id :kafka-id
                 :crux.db/id (c/new-id :kafka-id)} (api/entity (api/db *api*) :kafka-id)))
       (.stop sink-task))))
