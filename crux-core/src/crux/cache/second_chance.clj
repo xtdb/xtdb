@@ -1,4 +1,4 @@
-(ns crux.cache.second-chance
+(ns ^:no-doc crux.cache.second-chance
   (:import crux.cache.ICache
            [crux.cache.second_chance ConcurrentHashMapTableAccess ValuePointer]
            java.util.function.Function
