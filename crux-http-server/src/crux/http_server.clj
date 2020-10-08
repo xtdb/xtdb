@@ -217,10 +217,9 @@
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.") }})
 
-(defn- ->crux-router [{{:keys [^String jwks]} :node-options
-                       :keys [crux-node node-options]
-                       :as opts}]
-  (let [opts (-> opts (update :node-options dissoc :jwks))
+(defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
+                       :keys [crux-node], :as opts}]
+  (let [opts (-> opts (update :http-options dissoc :jwks))
         query-handler {:muuntaja (query/->query-muuntaja opts)
                         :get {:handler (query/data-browser-query opts)
                               :parameters {:query ::query/query-params}}
@@ -248,7 +247,7 @@
                  ["/_crux/tx-log" {:get (tx-log crux-node)
                                    :muuntaja util/output-stream-muuntaja
                                    :parameters {:query ::tx-log-spec}}]
-                 ["/_crux/submit-tx" {:post (if (:read-only? node-options)
+                 ["/_crux/submit-tx" {:post (if read-only?
                                               (fn [_] {:status 403
                                                        :body "forbidden: read-only HTTP node"})
                                               (transact crux-node))
@@ -278,11 +277,13 @@
                                 jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})))
 
 ;; entry point for users including our handler in their own server
-(defn ->crux-handler [crux-node node-options]
+(defn ->crux-handler [crux-node http-options]
   (rr/routes
    (rr/ring-handler (->crux-router {:crux-node crux-node
-                                    :node-options node-options}))
+                                    :http-options http-options}))
    (rr/create-resource-handler {:path "/"})))
+
+(alter-meta! #'->crux-handler assoc :arglists '([crux-node {:keys [jwks read-only? server-label]}]))
 
 (defn ->server {::sys/deps {:crux-node :crux/node}
                 ::sys/args {:port {:spec ::sys/nat-int
@@ -297,7 +298,7 @@
   [{:keys [crux-node port] :as options}]
   (let [server (j/run-jetty
                 (rr/ring-handler (->crux-router {:crux-node crux-node
-                                                 :node-options (dissoc options :crux-node)})
+                                                 :http-options (dissoc options :crux-node)})
                                  (rr/routes
                                   (rr/create-resource-handler {:path "/"})
                                   (rr/create-default-handler)))

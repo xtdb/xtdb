@@ -88,8 +88,8 @@
     :else
     (.db crux-node)))
 
-(defn raw-html [{:keys [title options results]}]
-  (let [latest-completed-tx (api/latest-completed-tx (:crux-node options))]
+(defn raw-html [{:keys [title crux-node http-options results]}]
+  (let [latest-completed-tx (api/latest-completed-tx crux-node)]
     (str (hiccup2/html
           [:html
            {:lang "en"}
@@ -100,9 +100,11 @@
              {:name "viewport"
               :content "width=device-width, initial-scale=1.0, maximum-scale=1.0"}]
             [:link {:rel "icon" :href "/favicon.ico" :type "image/x-icon"}]
-            (when options [:meta {:title "options" :content (pr-str {:node-options (:node-options options)
-                                                                     :latest-completed-tx latest-completed-tx})}])
-            (when results [:meta {:title "results" :content (str results)}])
+            [:meta {:title "options"
+                    :content (pr-str {:http-options http-options
+                                      :latest-completed-tx latest-completed-tx})}]
+            (when results
+              [:meta {:title "results", :content (pr-str results)}])
             [:link {:rel "stylesheet" :href "/css/all.css"}]
             [:link {:rel "stylesheet" :href "/latofonts.css"}]
             [:link {:rel "stylesheet" :href "/css/table.css"}]
@@ -117,17 +119,11 @@
               [:a {:href "/_crux/query"}
                [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
              [:span.mobile-hidden
-              [:b (when-let [label (get-in options [:node-options :server-label])] label)]]
+              [:b (:server-label http-options)]]
              [:div.header__links
               [:a.header__link {:href "https://opencrux.com/reference/get-started.html" :target "_blank"} "Documentation"]
               [:a.header__link {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip Chat"]
-              [:a.header__link {:href "mailto:crux@juxt.pro" :target "_blank"} "Email Support"]
-              #_[:div.header-dropdown
-               [:button.header-dropdown__button
-                "Placeholder"
-                [:i.fa.fa-caret-down]]
-               [:div.header-dropdown__links
-                [:a "Placeholder"]]]]]
+              [:a.header__link {:href "mailto:crux@juxt.pro" :target "_blank"} "Email Support"]]]
             [:div.console
              [:div#app
               [:noscript

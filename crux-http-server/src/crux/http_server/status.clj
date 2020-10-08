@@ -1,16 +1,15 @@
 (ns crux.http-server.status
-  (:require [clojure.pprint :as pp]
-            [clojure.walk :as walk]
-            [crux.api :as api]
+  (:require [crux.api :as api]
             [crux.http-server.util :as util]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]))
 
-(defn ->status-html-encoder [opts]
+(defn ->status-html-encoder [{:keys [crux-node http-options]}]
   (reify mfc/EncodeToBytes
-    (encode-to-bytes [_ {:keys [status-map attribute-stats node-options] :as res} charset]
+    (encode-to-bytes [_ {:keys [status-map attribute-stats] :as res} charset]
       (let [^String resp (util/raw-html {:title "/_status"
-                                         :options opts
+                                         :crux-node crux-node
+                                         :http-options http-options
                                          :results {:status-results {:status-map status-map
                                                                     :attribute-stats attribute-stats}}})]
         (.getBytes resp ^String charset)))))
@@ -27,16 +26,16 @@
   (fn [resp req]
     (get-in req [:muuntaja/response :format])))
 
-(defmethod transform-query-resp "text/html" [{:keys [status-map crux-node node-options] :as res} _]
+(defmethod transform-query-resp "text/html" [{:keys [status-map crux-node http-options] :as res} _]
   {:status (if (or (not (contains? status-map :crux.zk/zk-active?))
                    (:crux.zk/zk-active? status-map))
              200
              500)
    :body (merge res
                 {:attribute-stats (api/attribute-stats crux-node)
-                 :node-options node-options})})
+                 :http-options http-options})})
 
-(defmethod transform-query-resp :default [{:keys [status-map] :as res} _]
+(defmethod transform-query-resp :default [{:keys [status-map]} _]
   {:status (if (or (not (contains? status-map :crux.zk/zk-active?))
                    (:crux.zk/zk-active? status-map))
              200
