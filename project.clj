@@ -106,8 +106,8 @@
                "crux-metrics/test"
                "crux-s3/test"
                "crux-azure-blobs/test"
-               "crux-sql/crux-sql"
-               "crux-lucene/crux-lucene"
+               "crux-sql/test"
+               "crux-lucene/test"
                "crux-bench/test"
                "crux-test/test"]
 
