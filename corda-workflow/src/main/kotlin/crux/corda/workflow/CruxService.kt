@@ -1,6 +1,7 @@
 package crux.corda.workflow
 
 import clojure.java.api.Clojure
+import clojure.lang.Keyword
 import crux.api.ICruxAPI
 import net.corda.core.node.AppServiceHub
 import net.corda.core.node.services.CordaService
@@ -44,9 +45,9 @@ class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsT
     }
 
     init {
-        cruxNode = startCruxNode(serviceHub) as ICruxAPI
-
         setupCruxTables()
+
+        cruxNode = startCruxNode(serviceHub) as ICruxAPI
 
         try {
             serviceHub.validatedTransactions.updates.subscribe { tx ->
