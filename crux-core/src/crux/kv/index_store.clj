@@ -517,7 +517,7 @@
         (cio/try-close snapshot))))
 
   db/IndexSnapshot
-  (av [this a min-v entity-resolver-fn]
+  (av [this a min-v]
     (let [attr-buffer (c/->id-buffer a)
           prefix (encode-av-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
@@ -542,17 +542,15 @@
                                  (when (.contains vs value-buffer)
                                    eid-value-buffer))))))))
 
-  (ae [this a min-e entity-resolver-fn]
+  (ae [this a min-e]
     (let [attr-buffer (c/->id-buffer a)
           prefix (encode-ae-key-to nil attr-buffer)
           i (new-prefix-kv-iterator @level-1-iterator-delay prefix)]
       (some->> (encode-ae-key-to (.get seek-buffer-tl)
                                  attr-buffer
                                  (buffer-or-value-buffer min-e))
-               (step-fn i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
-                                 eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-                             (when (entity-resolver-fn eid-buffer)
-                               eid-value-buffer))))))
+               (step-fn i #(key-suffix % (.capacity prefix))))))
+
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
           eid-value-buffer (buffer-or-value-buffer e)

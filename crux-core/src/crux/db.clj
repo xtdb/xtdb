@@ -28,9 +28,9 @@
 
 ;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot
-  (av [this a min-v entity-resolver-fn])
+  (av [this a min-v])
   (ave [this a v min-e entity-resolver-fn])
-  (ae [this a min-e entity-resolver-fn])
+  (ae [this a min-e])
   (aev [this a e min-v entity-resolver-fn])
   (entity-as-of-resolver [this eid valid-time transact-time])
   (entity-as-of ^crux.codec.EntityTx [this eid valid-time transact-time])

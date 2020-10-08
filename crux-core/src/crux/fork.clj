@@ -37,17 +37,17 @@
                                 evicted-eids
                                 capped-valid-time capped-transact-time]
   db/IndexSnapshot
-  (av [this a min-v entity-resolver-fn]
-    (merge-seqs (db/av inner-index-snapshot a min-v entity-resolver-fn)
-                (db/av mem-index-snapshot a min-v entity-resolver-fn)))
+  (av [this a min-v]
+    (merge-seqs (db/av inner-index-snapshot a min-v)
+                (db/av mem-index-snapshot a min-v)))
 
   (ave [this a v min-e entity-resolver-fn]
     (merge-seqs (db/ave inner-index-snapshot a v min-e entity-resolver-fn)
                 (db/ave mem-index-snapshot a v min-e entity-resolver-fn)))
 
-  (ae [this a min-e entity-resolver-fn]
-    (merge-seqs (db/ae inner-index-snapshot a min-e entity-resolver-fn)
-                (db/ae mem-index-snapshot a min-e entity-resolver-fn)))
+  (ae [this a min-e]
+    (merge-seqs (db/ae inner-index-snapshot a min-e)
+                (db/ae mem-index-snapshot a min-e)))
 
   (aev [this a e min-v entity-resolver-fn]
     (merge-seqs (db/aev inner-index-snapshot a e min-v entity-resolver-fn)

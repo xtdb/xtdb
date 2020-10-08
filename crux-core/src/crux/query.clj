@@ -546,7 +546,7 @@
     (if (= v (first order))
       (let [v-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/av nested-index-snapshot a k entity-resolver-fn)))
+                     (db/av nested-index-snapshot a k)))
             e-idx (idx/new-index-store-index
                    (fn [k]
                      (db/ave nested-index-snapshot a (.key ^IndexStoreIndexState (.state v-idx)) k entity-resolver-fn)))]
@@ -554,7 +554,7 @@
         (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
       (let [e-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/ae nested-index-snapshot a k entity-resolver-fn)))
+                     (db/ae nested-index-snapshot a k)))
             v-idx (idx/new-index-store-index
                    (fn [k]
                      (db/aev nested-index-snapshot a (.key ^IndexStoreIndexState (.state e-idx)) k entity-resolver-fn)))]
