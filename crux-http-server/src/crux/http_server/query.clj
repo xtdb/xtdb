@@ -87,12 +87,13 @@
             (finally
               (cio/try-close results))))))))
 
-(defn ->html-encoder [opts]
+(defn ->html-encoder [{:keys [crux-node http-options]}]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [no-query? cause ^Closeable results] :as res} charset]
       (try
         (let [^String resp (util/raw-html {:title "/_crux/query"
-                                           :options opts
+                                           :crux-node crux-node
+                                           :http-options http-options
                                            :results (cond
                                                       no-query? nil
                                                       results (try

@@ -52,11 +52,12 @@
                 :else result)))]
     (into {} (recur-on-result result))))
 
-(defn ->entity-html-encoder [opts]
+(defn ->entity-html-encoder [{:keys [crux-node http-options]}]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [eid no-entity? not-found? cause entity ^Closeable entity-history] :as res} charset]
       (let [^String resp (util/raw-html {:title "/_crux/entity"
-                                         :options opts
+                                         :crux-node crux-node
+                                         :http-options http-options
                                          :results (cond
                                                     no-entity? nil
                                                     not-found? {:entity-results {"error" (str eid " entity not found")}}

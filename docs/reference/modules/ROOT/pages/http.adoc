@@ -57,6 +57,15 @@ Clojure/EDN::
 * `read-only?` (boolean, default false): start the HTTP server in read-only mode
 * `jwks` (string): https://jwt.io/[JSON Web Token] (JWT) key set to authorise requests against - `{"keys": [...]}`
 
+=== Ring Handler
+
+Crux also exposes a https://github.com/ring-clojure/ring[Ring] handler that you can include within your own Ring-compatible server, with parameters as above:
+
+[source,clojure]
+----
+(crux.http-server/->crux-handler crux-node {...})
+----
+
 [#start-remote-client]
 == Using a Remote API Client
 
