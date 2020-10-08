@@ -1929,7 +1929,7 @@
                                   :projection-cache {:crux/module 'crux.cache/->cache
                                                      :cache-size 10240}}
                       ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
-                                                      :default 10240
+                                                      :default (* 128 1024)
                                                       :spec ::sys/nat-int}
                                   :query-timeout {:doc "Query Timeout ms"
                                                   :default 30000
