@@ -1,12 +1,12 @@
 (ns crux.lucene
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.memory :as mem]
             [crux.query :as q]
-            [crux.system :as sys]
-            [clojure.tools.logging :as log])
+            [crux.system :as sys])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.nio.file.Path
@@ -25,18 +25,18 @@
   java.io.Closeable
   (close [this]
     (doseq [^Closeable c [directory]]
-      (.close c))))
+      (cio/try-close c))))
 
 (defn- id->stored-bytes [eid]
   (mem/->on-heap (cc/->value-buffer eid)))
 
 (defn- ^String eid->str [eid]
-  (mem/buffer->hex (cc/->id-buffer eid)))
+  (str (cc/new-id eid)))
 
 (defn- crux-doc->triples [crux-doc]
   (->> (dissoc crux-doc :crux.db/id)
        (mapcat (fn [[k v]]
-                 (for [v (if (coll? v) v [v])
+                 (for [v (cc/vectorize-value v)
                        :when (string? v)]
                    [(name k) v])))))
 
@@ -98,8 +98,9 @@
 
     (cio/->cursor (fn []
                     (.close directory-reader))
-                  (map (fn [^ScoreDoc d] (vector (.doc index-searcher (.-doc d))
-                                                 (.-score d))) score-docs))))
+                  (map (fn [^ScoreDoc d]
+                         (vector (.doc index-searcher (.-doc d))
+                                 (.-score d))) score-docs))))
 (defn- normalise-scores [tuples]
   (when (seq tuples)
     (let [max-score (bigdec (last (first tuples)))]
@@ -135,11 +136,7 @@
   (index-docs [this docs]
     (db/index-docs index-store docs))
   (unindex-eids [this eids]
-    (try
-      (evict! index-store lucene-node eids)
-      (catch Throwable t
-        (clojure.tools.logging/error t)
-        (throw t)))
+    (evict! index-store lucene-node eids)
     (db/unindex-eids index-store eids))
   (index-entity-txs [this tx entity-txs]
     (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
@@ -151,7 +148,6 @@
           (db/index-entity-txs index-store tx entity-txs)
           (.close index-writer))
         (catch Throwable t
-          (clojure.tools.logging/error t)
           (.rollback index-writer)
           (throw t)))))
   (mark-tx-as-failed [this tx]

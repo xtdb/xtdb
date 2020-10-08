@@ -109,7 +109,6 @@
                         :where '[[(text-search "Ivan" :non-field) [[?e ?v]]]
                                  [?e :crux.db/id]]})))))
 
-
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :surname "Ivan"}]])
 
   (t/testing "can find multiple a/vs"
