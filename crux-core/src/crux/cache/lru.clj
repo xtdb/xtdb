@@ -4,7 +4,7 @@
   (:import crux.cache.ICache
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
-           [java.util LinkedHashMap Map]))
+           [java.util Collections LinkedHashMap Map]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -30,6 +30,10 @@
     (cio/with-write-lock lock
       (.remove cache k)))
 
+  (keySet [_]
+    (cio/with-write-lock lock
+      (Collections/unmodifiableSet (.keySet cache))))
+
   (valAt [_ k]
     (cio/with-write-lock lock
       (.get cache k)))
@@ -49,7 +53,7 @@
   {::sys/args {:cache-size {:doc "Cache size"
                             :default (* 128 1024)
                             :spec ::sys/nat-int}}}
-  [{:keys [^long cache-size]}]
+  ^crux.cache.ICache [{:keys [^long cache-size]}]
   (let [cache (proxy [LinkedHashMap] [cache-size 0.75 true]
                 (removeEldestEntry [_]
                   (> (.size ^Map this) cache-size)))

@@ -13,5 +13,5 @@
   {::sys/args {:cache-size {:doc "Cache size"
                             :default (* 128 1024)
                             :spec ::sys/nat-int}}}
-  [opts]
+  ^crux.cache.ICache [opts]
   (crux.cache.second-chance/->second-chance-cache opts))

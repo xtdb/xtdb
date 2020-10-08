@@ -2,7 +2,7 @@
   (:import crux.cache.ICache
            [crux.cache.second_chance ConcurrentHashMapTableAccess ValuePointer]
            java.util.function.Function
-           [java.util Map$Entry Queue]
+           [java.util Collections Map$Entry Queue]
            [java.util.concurrent ArrayBlockingQueue ConcurrentHashMap])
   (:require [crux.system :as sys]))
 
@@ -40,6 +40,9 @@
   (evict [_ k]
     (when-let [vp ^ValuePointer (.remove hot k)]
       (.swizzle vp)))
+
+  (keySet [_]
+    (Collections/unmodifiableSet (.keySet hot)))
 
   (valAt [_ k]
     (when-let [vp ^ValuePointer (.get hot k)]
@@ -85,7 +88,7 @@
                :cooling-factor {:doc "Cooling factor"
                                 :default 0.1
                                 :spec ::sys/pos-double}}}
-  [{:keys [^long cache-size ^double cooling-factor]}]
+  ^crux.cache.ICache [{:keys [^long cache-size ^double cooling-factor]}]
   (let [hot (ConcurrentHashMap. cache-size)
         cooling-factor (or cooling-factor 0.1)
         cooling (ArrayBlockingQueue. (inc (long (Math/ceil (* cooling-factor cache-size)))))]
