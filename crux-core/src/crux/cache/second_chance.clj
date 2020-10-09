@@ -75,17 +75,20 @@
                      (.offer cooling vp))
             (.unswizzle vp (.getKey e))))))))
 
-(defn- resize-cache [^SecondChanceCache cache]
+(defn- move-to-cold-state [^SecondChanceCache cache]
   (let [hot ^ConcurrentHashMap (.hot cache)
         cooling ^Queue (.cooling cache)
         cold ^ICache (.cold cache)]
-    (move-to-cooling-state cache)
     (while (> (.size hot) (.size cache))
       (when-let [vp ^ValuePointer (.poll cooling)]
         (when-some [k (.getKey vp)]
           (.remove hot k)
-          (.computeIfAbsent cold k identity (constantly (.swizzle vp)))))
+          (.computeIfAbsent cold k identity (constantly (.getValue vp)))))
       (move-to-cooling-state cache))))
+
+(defn- resize-cache [^SecondChanceCache cache]
+  (move-to-cooling-state cache)
+  (move-to-cold-state cache))
 
 (defn ->second-chance-cache
   {::sys/deps {:cold-cache 'crux.cache.nop/->nop-cache}

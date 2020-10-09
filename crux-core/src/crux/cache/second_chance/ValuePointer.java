@@ -12,6 +12,10 @@ public final class ValuePointer<K, V> {
         return this.coolingKey;
     }
 
+    public final V getValue() {
+        return this.value;
+    }
+
     public final V swizzle() {
         this.coolingKey = null;
         return this.value;
