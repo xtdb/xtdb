@@ -109,16 +109,27 @@
                    (let [v (.get ^Document doc "_val")
                          a (keyword (.get ^Document doc "_attr"))]
                      (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
-                       [(db/decode-value index-snapshot eid) v a score]))))
+                       (if attr
+                         [(db/decode-value index-snapshot eid) v score]
+                         [(db/decode-value index-snapshot eid) v a score])))))
          (into []))))
 
-(defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr (s/? keyword?))) :return (s/? :crux.query/binding)))
-
-(defmethod q/pred-constraint 'text-search [_ {:keys [encode-value-fn idx-id arg-bindings rule-name->rules return-type tuple-idxs-in-join-order] :as pred-ctx}]
+(defn- pred-constraint [{:keys [encode-value-fn idx-id arg-bindings return-type tuple-idxs-in-join-order]}]
   (let [[vval attr] (rest arg-bindings)]
     (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
       (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *node* index-snapshot entity-resolver-fn attr vval)))))
+
+(defmethod q/pred-args-spec 'text-search [_]
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr keyword?)) :return (s/? :crux.query/binding)))
+
+(defmethod q/pred-constraint 'text-search [_ pred-ctx]
+  (pred-constraint pred-ctx))
+
+(defmethod q/pred-args-spec 'wildcard-text-search [_]
+  (s/cat :pred-fn  #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
+
+(defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
+  (pred-constraint pred-ctx))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
