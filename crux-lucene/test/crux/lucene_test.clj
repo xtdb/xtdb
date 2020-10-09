@@ -74,7 +74,7 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
                  (c/q db {:find '[?e ?v ?score]
-                          :where '[[(text-search "ivan*" :name) [[?e ?v _ ?score]]]
+                          :where '[[(text-search "ivan*" :name) [[?e ?v ?score]]]
                                    [?e :crux.db/id]]})))))
 
     (t/testing "cardinality many"
@@ -100,7 +100,7 @@
     (t/testing "dont specify A"
       (t/is (= #{[:ivan "Ivan" :name]}
                (c/q db {:find '[?e ?v ?a]
-                        :where '[[(text-search "Ivan") [[?e ?v ?a]]]
+                        :where '[[(wildcard-text-search "Ivan") [[?e ?v ?a]]]
                                  [?e :crux.db/id]]}))))
 
     (t/testing "no match against a non-existant field"
@@ -116,7 +116,7 @@
       (t/is (= #{[:ivan "Ivan" :name]
                  [:ivan "Ivan" :surname]}
                (c/q db {:find '[?e ?v ?a]
-                        :where '[[(text-search "Ivan") [[?e ?v ?a _]]]
+                        :where '[[(wildcard-text-search "Ivan") [[?e ?v ?a _]]]
                                  [?e :crux.db/id]]}))))))
 
 #_(t/deftest test-scoring-shouldnt-be-impacted-by-non-matched-past-docs

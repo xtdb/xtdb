@@ -2,6 +2,8 @@
 
 Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 
+Note: This module is in alpha and likely to change.
+
 == Setup
 
 `crux-lucene` runs in-process as part of the Crux node as a Crux module.
@@ -72,14 +74,13 @@ then you use the in-built `text-search` fn in your datalog:
  [?e :crux.db/id]]}
 ----
 
-The destructuring available is `entity-id`, `matched-value`,
-`attribute` and `score`. For example, to return the full search
-results tuple:
+The destructuring available is `entity-id`, `matched-value` and
+`score`. For example, to return the full search results tuple:
 
 [source,clojure]
 ----
-{:find '[?e ?v ?a ?s]
- :where '[[(text-search "Ivan" :name) [[?e ?v ?a ?s]]]
+{:find '[?e ?v ?s]
+ :where '[[(text-search "Ivan" :name) [[?e ?v ?s]]]
  [?e :crux.db/id]]}
 ----
 
@@ -100,9 +101,10 @@ You can search across all attributes:
 [source,clojure]
 ----
 {:find '[?e ?v ?a ?s]
- :where '[[(text-search "Iva*") [[?e ?v ?a ?s]]]
+ :where '[[(wildcard-text-search "Iva*") [[?e ?v ?a ?s]]]
  [?e :crux.db/id]]}
 ----
 
 Will return all entities that have an attribute with a value that
-matches "Iva".
+matches "Iva". The destructured binding also contains `a` which is the
+attribute.
