@@ -1,7 +1,6 @@
 package crux.cache;
 
 import java.io.Closeable;
-import java.util.Set;
 import clojure.lang.Counted;
 import clojure.lang.IFn;
 import clojure.lang.ILookup;
