@@ -16,7 +16,7 @@
       (do (.remove cache (.key v-ref) v-ref)
           nil))))
 
-(deftype SoftReferenceCache [^Map cache ^ReferenceQueue reference-queue]
+(deftype SoftValuesCache [^Map cache ^ReferenceQueue reference-queue]
   Object
   (toString [_]
     (str cache))
@@ -50,7 +50,7 @@
   (close [_]
     (.clear cache)))
 
-(defn- cleanup-cache [^SoftReferenceCache cache]
+(defn- cleanup-cache [^SoftValuesCache cache]
   (when-let [v-ref (.poll ^ReferenceQueue (.reference_queue cache))]
     (.remove ^Map (.cache cache) (.key ^SoftReferenceWithKey v-ref) v-ref)
     (recur cache)))
@@ -60,4 +60,4 @@
                             :default (* 128 1024)
                             :spec ::sys/nat-int}}}
   ^crux.cache.ICache [{:keys [^long cache-size cleanup-frequency]}]
-  (->SoftReferenceCache (ConcurrentHashMap. cache-size) (ReferenceQueue.)))
+  (->SoftValuesCache (ConcurrentHashMap. cache-size) (ReferenceQueue.)))
