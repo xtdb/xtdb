@@ -13,7 +13,7 @@
   (when v-ref
     (if-some [v (.get ^Reference v-ref)]
       v
-      (do (.remove cache (.key v-ref))
+      (do (.remove cache (.key v-ref) v-ref)
           nil))))
 
 (deftype SoftReferenceCache [^Map cache ^ReferenceQueue reference-queue]
@@ -55,7 +55,7 @@
 
 (defn- cleanup-cache [^SoftReferenceCache cache]
   (when-let [v-ref (.poll ^ReferenceQueue (.reference_queue cache))]
-    (.remove ^Map (.cache cache) (.key ^SoftReferenceWithKey v-ref))
+    (.remove ^Map (.cache cache) (.key ^SoftReferenceWithKey v-ref) v-ref)
     (recur cache)))
 
 (defn ->soft-values-cache

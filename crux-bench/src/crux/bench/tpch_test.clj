@@ -583,4 +583,11 @@
   ;; SQL:
   (slurp (clojure.java.io/resource "io/airlift/tpch/queries/q1.sql"))
   ;; Results:
-  (slurp (clojure.java.io/resource "io/airlift/tpch/queries/q1.result")))
+  (slurp (clojure.java.io/resource "io/airlift/tpch/queries/q1.result"))
+
+  (let [node (user/crux-node)]
+    (time
+     (doseq [n (range 1 23)]
+       (time
+        (let [actual (crux.bench.tpch-test/run-tpch-query node n)]
+          (prn n (every? true? (crux.bench.tpch-test/validate-tpch-query actual (crux.bench.tpch-test/parse-tpch-result n))))))))))

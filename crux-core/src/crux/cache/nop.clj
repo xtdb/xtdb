@@ -3,30 +3,32 @@
   (:import crux.cache.ICache
            java.util.Collections))
 
-(defn new-nop-cache
-  ([] (new-nop-cache 0))
-  ([size]
-   (reify
-     ICache
-     (computeIfAbsent [this k stored-key-fn f]
-       (f k))
+(deftype NopCache []
+  Object
+  (toString [_]
+    (str (Collections/emptyMap)))
 
-     (evict [_ k])
+  ICache
+  (computeIfAbsent [this k stored-key-fn f]
+    (f k))
 
-     (keySet [_]
-       (Collections/emptySet))
+  (evict [_ k])
 
-     (valAt [_ k])
+  (keySet [_]
+    (Collections/emptySet))
 
-     (valAt [_ k default] default)
+  (valAt [_ k])
 
-     (count [_] 0)
+  (valAt [_ k default]
+    default)
 
-     (close [_]))))
+  (count [_] 0)
+
+  (close [_]))
 
 (defn ->nop-cache
   {::sys/args {:cache-size {:doc "Cache size"
                             :default 0
                             :spec ::sys/nat-int}}}
   ^crux.cache.ICache [{:keys [cache-size]}]
-  (new-nop-cache))
+  (->NopCache))

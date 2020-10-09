@@ -784,10 +784,12 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
-                                    :value-cache {:crux/module 'crux.cache/->cache
-                                                  :cache-size (* 256 1024)}
-                                    :cav-cache {:crux/module 'crux.cache/->cache
-                                                :cache-size (* 1024 1024)}}
+                                    :value-cache {:crux/module 'crux.cache.second-chance/->second-chance-cache
+                                                  :cache-size (* 128 1024)
+                                                  :cold-cache 'crux.cache.soft-values/->soft-values-cache}
+                                    :cav-cache {:crux/module 'crux.cache.second-chance/->second-chance-cache
+                                                :cache-size (* 128 1024)
+                                                :cold-cache 'crux.cache.soft-values/->soft-values-cache}}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store value-cache cav-cache] :as opts}]
