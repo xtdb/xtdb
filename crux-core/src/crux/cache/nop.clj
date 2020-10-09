@@ -14,9 +14,6 @@
 
   (evict [_ k])
 
-  (keySet [_]
-    (Collections/emptySet))
-
   (valAt [_ k])
 
   (valAt [_ k default]

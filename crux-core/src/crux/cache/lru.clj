@@ -4,7 +4,7 @@
   (:import crux.cache.ICache
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
-           [java.util Collections LinkedHashMap Map]))
+           [java.util LinkedHashMap Map]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -29,10 +29,6 @@
   (evict [_ k]
     (cio/with-write-lock lock
       (.remove cache k)))
-
-  (keySet [_]
-    (cio/with-write-lock lock
-      (Collections/unmodifiableSet (.keySet cache))))
 
   (valAt [_ k]
     (cio/with-write-lock lock

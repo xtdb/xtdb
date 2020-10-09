@@ -2,7 +2,7 @@
   (:import crux.cache.ICache
            [crux.cache.second_chance ConcurrentHashMapTableAccess ValuePointer]
            java.util.function.Function
-           [java.util Collections Map$Entry Queue]
+           [java.util Map$Entry Queue]
            [java.util.concurrent ArrayBlockingQueue ConcurrentHashMap])
   (:require [crux.system :as sys]
             [crux.cache.nop]))
@@ -44,9 +44,6 @@
     (.evict cold k)
     (when-let [vp ^ValuePointer (.remove hot k)]
       (.swizzle vp)))
-
-  (keySet [_]
-    (Collections/unmodifiableSet (.keySet hot)))
 
   (valAt [_ k]
     (when-let [vp ^ValuePointer (.get hot k)]

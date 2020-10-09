@@ -4,7 +4,7 @@
            crux.cache.soft_values.SoftReferenceWithKey
            [java.lang.ref Reference ReferenceQueue]
            java.util.function.Function
-           [java.util Collections Map]
+           java.util.Map
            java.util.concurrent.ConcurrentHashMap))
 
 (declare cleanup-cache)
@@ -34,9 +34,6 @@
 
   (evict [_ k]
     (.remove cache k))
-
-  (keySet [_]
-    (Collections/unmodifiableSet (.keySet cache)))
 
   (valAt [_ k]
     (get-or-remove-reference cache (.get cache k)))
