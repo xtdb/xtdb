@@ -65,7 +65,7 @@
       (render-duration :datomic-time-taken-ms :datomic-time-taken)))
 
 ; Defining slow crux queries as taking this many times as long as comparison dbs
-(def slow-query-threshold 3)
+(def slow-query-threshold 10)
 
 (defn summarise-query-results [watdiv-query-results]
   (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
