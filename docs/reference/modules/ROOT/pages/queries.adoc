@@ -364,11 +364,11 @@ To specify what data you'd like about each entity, include a `(eql/project ?logi
 {:find [?uid ?name ?profession]
  :where [[?user :user/id ?uid]
          [?user :user/name ?name]
-         [?user :user/profession ?profession]}
+         [?user :user/profession ?profession]]}
 ;; => [[1 "Ivan" :doctor] [2 "Sergei" :lawyer], [3 "Petr" :doctor]]
 
 ;; using `eql/project`:
-{:find [(eql/project ?user [:user/name :user/profession]
+{:find [(eql/project ?user [:user/name :user/profession]]
  :where [[?user :user/id ?uid]]}
 
 ;; => [{:user/id 1, :user/name "Ivan", :user/profession :doctor},
@@ -386,7 +386,7 @@ Joins are specified in `{}` braces in the projection-spec - each one maps one jo
  :where [[?user :user/id ?uid]
          [?user :user/name ?name]
          [?user :user/profession ?profession]
-         [?profession :profession/name ?profession-name]}
+         [?profession :profession/name ?profession-name]]}
 ;; => [[1 "Ivan" "Doctor"] [2 "Sergei" "Lawyer"], [3 "Petr" "Doctor"]]
 
 {:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}]
@@ -401,7 +401,7 @@ We can also navigate in the reverse direction, looking for entities that refer t
 
 [source,clojure]
 ----
-{:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}]
+{:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
  :where [[?profession :profession/name]]}
 
 ;; => [{:profession/name "Doctor",
