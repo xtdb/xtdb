@@ -49,7 +49,8 @@
   {::sys/args {:cache-size {:doc "Cache size"
                             :default (* 128 1024)
                             :spec ::sys/nat-int}}}
-  ^crux.cache.ICache [{:keys [^long cache-size]}]
+  ^crux.cache.ICache [{:keys [^long cache-size]
+                       :or {cache-size (* 128 1024)}}]
   (let [cache (proxy [LinkedHashMap] [cache-size 0.75 true]
                 (removeEldestEntry [_]
                   (> (.size ^Map this) cache-size)))

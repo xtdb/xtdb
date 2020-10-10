@@ -126,12 +126,15 @@
                                            :default 0.95
                                            :spec ::sys/pos-double}}}
   ^crux.cache.ICache [{:keys [^long cache-size ^double cooling-factor cold-cache
-                              adaptive-sizing? adaptive-break-even-level] :as opts}]
+                              adaptive-sizing? adaptive-break-even-level]
+                       :or {cache-size  (* 128 1024)
+                            adaptive-sizing? true
+                            cooling-factor 0.1
+                            adaptive-break-even-level 0.95}
+                       :as opts}]
   (let [hot (ConcurrentHashMap. cache-size)
-        cooling-factor (or cooling-factor 0.1)
         cooling (LinkedBlockingQueue.)
-        cold (or cold-cache (crux.cache.nop/->nop-cache opts))
-        adaptive-break-even-level (or adaptive-break-even-level 0.95)]
+        cold (or cold-cache (crux.cache.nop/->nop-cache opts))]
     (when adaptive-sizing?
       (locking free-memory-thread
         (when-not (.isAlive free-memory-thread)

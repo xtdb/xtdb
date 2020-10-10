@@ -59,5 +59,6 @@
   {::sys/args {:cache-size {:doc "Initial cache size"
                             :default (* 128 1024)
                             :spec ::sys/nat-int}}}
-  ^crux.cache.ICache [{:keys [^long cache-size cleanup-frequency]}]
+  ^crux.cache.ICache [{:keys [^long cache-size]
+                       :or {cache-size (* 128 1024)}}]
   (->SoftValuesCache (ConcurrentHashMap. cache-size) (ReferenceQueue.)))
