@@ -4,7 +4,7 @@
            java.util.function.Function
            [java.util Map$Entry Queue]
            [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
-           java.util.concurrent.atomic.AtomicLong)
+           java.util.concurrent.atomic.AtomicReference)
   (:require [crux.system :as sys]
             [crux.cache.nop]))
 
@@ -75,13 +75,13 @@
                      (.offer cooling vp))
             (.unswizzle vp (.getKey e))))))))
 
-(def ^:private ^:const max-memory (.maxMemory (Runtime/getRuntime)))
-(def ^:private ^AtomicLong free-memory (AtomicLong. (.freeMemory (Runtime/getRuntime))))
+(def ^:private ^AtomicReference free-memory-ratio (AtomicReference. 1.0))
 
 (defn- free-memory-loop []
   (try
     (while true
-      (.set free-memory (.freeMemory (Runtime/getRuntime)))
+      (.set free-memory-ratio (double (/ (.freeMemory (Runtime/getRuntime))
+                                         (.totalMemory (Runtime/getRuntime)))))
       (Thread/sleep 5000))
     (catch InterruptedException _)))
 
@@ -98,7 +98,7 @@
         hot-target-size (if (.adaptive-sizing? cache)
                           (long (Math/pow (.size cache)
                                           (+ (.adaptive-break-even-level cache)
-                                             (double (/ (.get free-memory) max-memory)))))
+                                             (double (.get free-memory-ratio)))))
                           (.size cache))]
     (while (> (.size hot) hot-target-size)
       (when-let [vp ^ValuePointer (.poll cooling)]
