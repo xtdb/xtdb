@@ -23,17 +23,19 @@
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
-    (or (get-or-remove-reference cache (.get cache k))
-        (let [k (stored-key-fn k)
-              v (f k)
-              v-ref (.computeIfAbsent cache k (reify Function
-                                                (apply [_ k]
-                                                  (SoftReferenceWithKey. k v reference-queue))))]
-          (cleanup-cache this)
-          v)))
+    (let [v (or (get-or-remove-reference cache (.get cache k))
+                (let [k (stored-key-fn k)
+                      v (f k)
+                      v-ref (.computeIfAbsent cache k (reify Function
+                                                        (apply [_ k]
+                                                          (SoftReferenceWithKey. k v reference-queue))))]
+                  v))]
+      (cleanup-cache this)
+      v))
 
-  (evict [_ k]
-    (.remove cache k))
+  (evict [this k]
+    (.remove cache k)
+    (cleanup-cache this))
 
   (valAt [_ k]
     (get-or-remove-reference cache (.get cache k)))
