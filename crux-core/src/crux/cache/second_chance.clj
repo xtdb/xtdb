@@ -34,18 +34,19 @@
                                (let [k (stored-key-fn k)
                                      v (if-some [v (.valAt cold k)]
                                          v
-                                         (f k))
-                                     vp (.computeIfAbsent hot k (reify Function
-                                                                  (apply [_ k]
-                                                                    (ValuePointer. v))))]
-                                 (resize-cache this)
-                                 vp))]
-      (.swizzle vp)))
+                                         (f k))]
+                                 (.computeIfAbsent hot k (reify Function
+                                                           (apply [_ k]
+                                                             (ValuePointer. v))))))
+          v (.swizzle vp)]
+      (resize-cache this)
+      v))
 
-  (evict [_ k]
+  (evict [this k]
     (.evict cold k)
     (when-let [vp ^ValuePointer (.remove hot k)]
-      (.swizzle vp)))
+      (.swizzle vp))
+    (resize-cache this))
 
   (valAt [_ k]
     (when-let [vp ^ValuePointer (.get hot k)]
