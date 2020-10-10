@@ -80,8 +80,11 @@
 (defn- free-memory-loop []
   (try
     (while true
-      (.set free-memory-ratio (double (/ (.freeMemory (Runtime/getRuntime))
-                                         (.totalMemory (Runtime/getRuntime)))))
+      (let [max-memory (.maxMemory (Runtime/getRuntime))
+            used-memory (- (.totalMemory (Runtime/getRuntime))
+                           (.freeMemory (Runtime/getRuntime)))
+            free-memory (- max-memory used-memory)]
+        (.set free-memory-ratio (double (/ free-memory max-memory))))
       (Thread/sleep 5000))
     (catch InterruptedException _)))
 
