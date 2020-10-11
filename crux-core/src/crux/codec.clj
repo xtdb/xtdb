@@ -55,7 +55,7 @@
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
 
-(def ^:const ^:private max-string-index-length 128)
+(def ^:const ^:private max-value-index-length 128)
 
 (defprotocol IdOrBuffer
   (new-id ^crux.codec.Id [id])
@@ -77,6 +77,7 @@
 (def ^:private date-value-type-id 7)
 (def ^:private string-value-type-id 8)
 (def ^:private char-value-type-id 9)
+(def ^:private nippy-value-type-id 10)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -149,10 +150,6 @@
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
-  (class (byte-array 0))
-  (value->buffer [this to]
-    (throw (UnsupportedOperationException. "Byte arrays as values is not supported.")))
-
   Boolean
   (value->buffer [this ^MutableDirectBuffer to]
     (mem/limit-buffer
@@ -212,7 +209,7 @@
 
   String
   (value->buffer [this ^MutableDirectBuffer to]
-    (if (< max-string-index-length (count this))
+    (if (< max-value-index-length (count this))
       (doto (id->buffer this to)
         (.putByte 0 clob-value-type-id))
       (let [terminate-mark (byte 1)
@@ -229,11 +226,23 @@
               (.putByte to (inc idx) (byte (+ offset b)))
               (recur (inc idx))))))))
 
+  Class
+  (value->buffer [this ^MutableDirectBuffer to]
+    (doto (id-function to (nippy/fast-freeze this))
+      (.putByte 0 object-value-type-id)))
+
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (doto (id-function to (binding [*sort-unordered-colls* true]
-                            (nippy/fast-freeze this)))
-      (.putByte 0 object-value-type-id)))
+    (let [^bytes nippy-bytes (binding [*sort-unordered-colls* true]
+                               (nippy/fast-freeze this))]
+      (if (< max-value-index-length (alength nippy-bytes))
+        (doto (id-function to nippy-bytes)
+          (.putByte 0 object-value-type-id))
+        (mem/limit-buffer
+         (doto to
+           (.putByte 0 nippy-value-type-id)
+           (.putBytes value-type-id-size nippy-bytes))
+         (+ value-type-id-size (alength nippy-bytes))))))
 
   nil
   (value->buffer [this ^MutableDirectBuffer to]
@@ -274,10 +283,13 @@
 (defn- decode-char ^Character [^DirectBuffer buffer]
   (.getChar buffer value-type-id-size ByteOrder/BIG_ENDIAN))
 
+(defn- decode-nippy [^DirectBuffer buffer]
+  (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
+
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (3 4 5 6 7 8 9) true
+      (3 4 5 6 7 8 9 10) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
@@ -290,6 +302,7 @@
       7 (Date. (decode-long buffer)) ;; date-value-type-id
       8 (decode-string buffer) ;; string-value-type-id
       9 (decode-char buffer) ;; char-value-type-id
+      10 (decode-nippy buffer) ;; nippy-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 
@@ -322,7 +335,8 @@
 (extend-protocol IdToBuffer
   (class (byte-array 0))
   (id->buffer [this ^MutableDirectBuffer to]
-    (if (= id-size (alength ^bytes this))
+    (if (and (= id-size (alength ^bytes this))
+             (= id-value-type-id (aget ^bytes this 0)))
       (mem/limit-buffer
        (doto to
          (.putBytes 0 this))

@@ -9,7 +9,7 @@
             [crux.api :as crux]
             [taoensso.nippy :as nippy])
   (:import crux.codec.Id
-           java.util.Date
+           [java.util Arrays Date]
            java.net.URL))
 
 (t/use-fixtures :each fix/with-silent-test-check)
@@ -80,16 +80,30 @@
                                 (gen/fmap #(Date. (long %)) gen/large-integer)
                                 gen/string
                                 gen/char
-                                gen/boolean])]
+                                gen/boolean
+                                gen/keyword
+                                gen/uuid
+                                gen/bytes])]
                 (let [buffer (c/->value-buffer v)]
                   (if (c/can-decode-value-buffer? buffer)
-                    (if (and (double? v) (Double/isNaN v))
+                    (cond
+                      (and (double? v) (Double/isNaN v))
                       (Double/isNaN (c/decode-value-buffer buffer))
+
+                      (bytes? v)
+                      (Arrays/equals ^bytes v ^bytes (c/decode-value-buffer buffer))
+
+                      :else
                       (= v (c/decode-value-buffer buffer)))
-                    (and (string? v)
-                         (> (count v) @#'c/max-string-index-length)
-                         (= @#'c/clob-value-type-id
-                            (.getByte (c/value-buffer-type-id buffer) 0)))))))
+                    (if (and (or (string? v) (bytes? v))
+                             (>= (+ @#'c/value-type-id-size (count v))
+                                 @#'c/max-value-index-length))
+                      (if (string? v)
+                        (= @#'c/clob-value-type-id
+                           (.getByte (c/value-buffer-type-id buffer) 0))
+                        (= @#'c/object-value-type-id
+                           (.getByte (c/value-buffer-type-id buffer) 0)))
+                      false)))))
 
 (t/deftest test-unordered-coll-hashing-1001
   (let [foo-a {{:foo 1} :foo1
