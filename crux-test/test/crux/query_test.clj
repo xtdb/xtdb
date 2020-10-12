@@ -3608,10 +3608,10 @@
       (let [!lookup-counts (atom [])]
         (with-redefs [q/lookup-docs (->lookup-docs !lookup-counts)]
           (t/is (= #{[{:person/name "Daniel Craig",
-                       :film/_bond [{:film/name "Quantum of Solace", :film/year "2008"}
-                                    {:film/name "Spectre", :film/year "2015"}
-                                    {:film/name "Skyfall", :film/year "2012"}
-                                    {:film/name "Casino Royale", :film/year "2006"}]}]}
+                       :film/_bond [#:film{:name "Skyfall", :year "2012"}
+                                    #:film{:name "Spectre", :year "2015"}
+                                    #:film{:name "Casino Royale", :year "2006"}
+                                    #:film{:name "Quantum of Solace", :year "2008"}]}]}
                    (api/q db '{:find [(eql/project ?dc [:person/name
                                                         {:film/_bond [:film/name :film/year]}])]
                                :where [[?dc :person/name "Daniel Craig"]]})))
