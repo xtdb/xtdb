@@ -157,8 +157,8 @@ Resources:
       TaskRoleArn:
         Fn::GetAtt: ["ECSTaskRole", "Arn"]
       RequiresCompatibilities:
-        - 'FARGATE'
-      NetworkMode: 'awsvpc'
+        - 'EC2'
+      NetworkMode: 'host'
       ContainerDefinitions:
         - Name: 'zookeeper-container'
           Cpu: 1024
@@ -207,72 +207,45 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
-  BenchTaskLatest:
-    Type: AWS::ECS::TaskDefinition
-    DependsOn:
-      - ECRRepository
-      - LogGroup
+  EC2Role:
+    Type: AWS::IAM::Role
     Properties:
-      Cpu: '4 vCPU'
-      Memory: '12GB'
-      Family: 'crux-bench-latest'
-      ExecutionRoleArn:
-        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
-      TaskRoleArn:
-        Fn::GetAtt: ["ECSTaskRole", "Arn"]
-      RequiresCompatibilities:
-        - 'FARGATE'
-      NetworkMode: 'awsvpc'
-      ContainerDefinitions:
-        - Name: 'zookeeper-container'
-          Cpu: 1024
-          Memory: 2048
-          Image: confluentinc/cp-zookeeper:5.3.1
-          Essential: true
-          Environment:
-            - Name: 'ZOOKEEPER_CLIENT_PORT'
-              Value: '2181'
-            - Name: 'ZOOKEEPER_TICK_TIME'
-              Value: '2000'
-          PortMappings:
-            - ContainerPort: 2181
-        - Name: 'broker-container'
-          Cpu: 1024
-          Memory: 2048
-          Image: confluentinc/cp-enterprise-kafka:5.3.1
-          DependsOn:
-            - Condition: 'START'
-              ContainerName: 'zookeeper-container'
-          Essential: true
-          Environment:
-            - Name: 'KAFKA_BROKER_ID'
-              Value: '1'
-            - Name: 'KAFKA_ZOOKEEPER_CONNECT'
-              Value: 'localhost:2181'
-            - Name: 'KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR'
-              Value: 1
-            - Name: 'KAFKA_ADVERTISED_LISTENERS'
-              Value: PLAINTEXT://localhost:9092
-          PortMappings:
-            - ContainerPort: 9092
-        - Name: 'bench-container'
-          Cpu: 2048
-          Memory: 8146
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:latest'
-          DependsOn:
-            - Condition: 'START'
-              ContainerName: 'broker-container'
-          Essential: true
-          Secrets:
-            - Name: "SLACK_URL"
-              ValueFrom:
-                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-region: 'eu-west-2'
-              awslogs-group: !Ref LogGroup
-              awslogs-stream-prefix: ecs
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ec2.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ['ecs:CreateCluster', 'ecs:DeregisterContainerInstance', 'ecs:DiscoverPollEndpoint',
+              'ecs:Poll', 'ecs:RegisterContainerInstance', 'ecs:StartTelemetrySession',
+              'ecs:Submit*', 'logs:CreateLogStream', 'logs:PutLogEvents']
+            Resource: '*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']
+
+  ECSInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: 'ami-037dd70536680c11f'
+      InstanceType: 'm5.xlarge'
+      SubnetId: 'subnet-5f840136'
+      SecurityGroupIds:
+        - 'sg-0255e869'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo ECS_CLUSTER= ${ECSCluster} >> /etc/ecs/ecs.config
+      IamInstanceProfile: !Ref EC2InstanceProfile
 
   TaskSchedulerRole:
      Type: AWS::IAM::Role
@@ -309,8 +282,87 @@ Resources:
                  Resource: "*"
            PolicyName: "TaskSchedulerPolicy"
 
+  EC2LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [lambda.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ["ec2:Start*", "ec2:Stop*"]
+            Resource: '*'
+
+  EC2StartLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Stops the Bench EC2 instance"
+      Runtime: 'python3.7'
+      Handler: 'index.lambda_handler'
+      Role:
+        Fn::GetAtt: ["EC2LambdaRole", "Arn"]
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          region = 'eu-west-2'
+          instances = ['${ECSInstance}']
+          ec2 = boto3.client('ec2', region_name=region)
+          def lambda_handler(event, context):
+            ec2.start_instances(InstanceIds=instances)
+
+  EC2StopLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Stops the Bench EC2 instance"
+      Handler: 'index.lambda_handler'
+      Runtime: 'python3.7'
+      Role:
+        Fn::GetAtt: ["EC2LambdaRole", "Arn"]
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          region = 'eu-west-2'
+          instances = ['${ECSInstance}']
+          ec2 = boto3.client('ec2', region_name=region)
+          def lambda_handler(event, context):
+            ec2.stop_instances(InstanceIds=instances)
+
+  ScheduleStartInstance:
+    Type: AWS::Events::Rule
+    DependsOn:
+      - ECSInstance
+      - EC2StartLambda
+    Properties:
+      Name: "start-bench-instance-scheduler"
+      ScheduleExpression: "cron(55 23 ? * MON-FRI *)"
+      State: "ENABLED"
+      Targets:
+        - Id: "startEC2Instances"
+          Arn:
+            Fn::GetAtt: ["EC2StartLambda", "Arn"]
+
+  InvokeStartPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt: ["EC2StartLambda", "Arn"]
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt: ["ScheduleStartInstance", "Arn"]
+
   TaskSchedule:
     Type: AWS::Events::Rule
+    DependsOn:
+      - ECSInstance
+      - BenchTask
     Properties:
       Name: "crux-bench-scheduler"
       ScheduleExpression: "cron(0 0 ? * MON-FRI *)"
@@ -320,20 +372,36 @@ Resources:
           RoleArn:
             Fn::GetAtt: ["TaskSchedulerRole", "Arn"]
           EcsParameters:
-            LaunchType: "FARGATE"
-            NetworkConfiguration:
-              AwsVpcConfiguration:
-                AssignPublicIp: "ENABLED"
-                SecurityGroups:
-                  - "sg-0255e869"
-                Subnets:
-                  - "subnet-5140ba2b"
+            LaunchType: "EC2"
             TaskDefinitionArn:
               Ref: "BenchTask"
             TaskCount: 1
           Arn:
             Fn::GetAtt: ["ECSCluster", "Arn"]
 
+  ScheduleStopInstance:
+    Type: AWS::Events::Rule
+    DependsOn:
+      - ECSInstance
+      - EC2StopLambda
+    Properties:
+      Name: "stop-bench-instance-scheduler"
+      ScheduleExpression: "cron(0 3 ? * MON-FRI *)"
+      State: "ENABLED"
+      Targets:
+        - Id: "stopEC2Instances"
+          Arn:
+            Fn::GetAtt: ["EC2StopLambda", "Arn"]
+
+  InvokeStopPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt: ["EC2StopLambda", "Arn"]
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt: ["ScheduleStopInstance", "Arn"]
 
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific
