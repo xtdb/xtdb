@@ -22,9 +22,9 @@
 
 (def parsed-db-results
   (delay
-    {:rdf4j (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20200406-170508Z.edn") parse-results)
-     :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20200406-171121Z.edn") parse-results)
-     :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20200406-170841Z.edn") parse-results)}))
+    {:rdf4j (some-> (bench/load-from-s3 "rdf4j-3.0.0/rdf4j-20201012-093142Z.edn") parse-results)
+     :neo4j (some-> (bench/load-from-s3 "neo4j-4.0.0/neo4j-20201012-095004Z.edn") parse-results)
+     :datomic (some-> (bench/load-from-s3 "datomic-0.9.5697/datomic-20201012-092109Z.edn") parse-results)}))
 
 (defn ingest-crux
   [node]
