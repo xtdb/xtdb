@@ -177,6 +177,14 @@
       (into [op]
             (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
                       [(c/new-id id)])
+                    (case op
+                      :crux.tx/fn
+                      (for [arg args]
+                        (if-let [{:keys [:crux.db.fn/tx-events] :as tx-log-entry} (get docs arg)]
+                          (-> tx-log-entry
+                              (dissoc :crux.db/id :crux.db.fn/tx-events)
+                              (assoc :crux.api/tx-ops (tx-events->tx-ops document-store tx-events)))
+                          arg))
 
-                    (for [arg args]
-                      (get docs arg arg)))))))
+                      (for [arg args]
+                        (get docs arg arg))))))))

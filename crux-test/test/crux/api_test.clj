@@ -213,7 +213,7 @@
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (not (realized? result)))
           (t/is (= [(assoc tx1
-                      :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                           :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                    result))
           (t/is (realized? result))))
 
@@ -222,7 +222,7 @@
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
-                        :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+                             :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
                      result))
             (t/is (realized? result)))))
 
@@ -250,7 +250,28 @@
 
       (t/testing "from tx id - doesnt't include items <= `after-tx-id`"
         (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
-          (t/is (= 1 (count (iterator-seq tx-log-iterator)))))))))
+          (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
+
+      (t/testing "tx fns return with-ops? correctly"
+        (let [tx4 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :jack :age 21}]
+                                        [:crux.tx/put {:crux.db/id :increment-age
+                                                       :crux.db/fn '(fn [ctx eid]
+                                                                      (let [db (crux.api/db ctx)
+                                                                            entity (crux.api/entity db eid)]
+                                                                        [[:crux.tx/put (update entity :age inc)]]))}]
+                                        [:crux.tx/put {:crux.db/id :increment-age-2
+                                                       :crux.db/fn '(fn [ctx eid]
+                                                                      [[:crux.tx/fn :increment-age eid]])}]
+                                        [:crux.tx/fn :increment-age-2 :jack]])]
+          (t/is (true? (api/tx-committed? *api* tx4)))
+          (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
+            (let [tx-ops (-> tx-log-iterator iterator-seq last :crux.api/tx-ops)]
+              (t/is (= [:crux.tx/fn
+                        (c/new-id :increment-age-2)
+                        {:crux.api/tx-ops [[:crux.tx/fn
+                                            (c/new-id :increment-age)
+                                            {:crux.api/tx-ops [[:crux.tx/put {:crux.db/id :jack, :age 22}]]}]]}]
+                       (last tx-ops))))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
