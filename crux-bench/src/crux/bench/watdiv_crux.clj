@@ -64,6 +64,9 @@
       (render-duration :rdf4j-time-taken-ms :rdf4j-time-taken)
       (render-duration :datomic-time-taken-ms :datomic-time-taken)))
 
+; Defining slow crux queries as taking this many times as long as comparison dbs
+(def slow-query-threshold 10)
+
 (defn summarise-query-results [watdiv-query-results]
   (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
         query-summary (merge base-map
@@ -77,11 +80,13 @@
                                                               (merge query-result (get query-result db-name)))
                                      both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
                                      crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
+                                     slow-queries (filter #(>= (:time-taken-ms %) (* slow-query-threshold (:db-time-taken-ms %))) crux-correct)
                                      correct-idxs (into #{} (map :query-idx) crux-correct)]
                                  (-> (merge base-map
                                             {:bench-type (str "queries-" (name db-name))
                                              :crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
                                              :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
+                                             :slow-queries (->> slow-queries (map :query-idx) sort vec)
                                              :time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
                                              :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))})
                                      (render-duration :db-time-taken-ms :db-time-taken))))
