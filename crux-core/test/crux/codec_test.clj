@@ -95,14 +95,20 @@
 
                       :else
                       (= v (c/decode-value-buffer buffer)))
-                    (if (and (or (string? v) (bytes? v))
-                             (>= (+ @#'c/value-type-id-size (count v))
-                                 @#'c/max-value-index-length))
-                      (if (string? v)
-                        (= @#'c/clob-value-type-id
-                           (.getByte (c/value-buffer-type-id buffer) 0))
-                        (= @#'c/object-value-type-id
-                           (.getByte (c/value-buffer-type-id buffer) 0)))
+                    (cond
+                      (and (string? v)
+                           (> (+ c/value-type-id-size (alength (.getBytes ^String v "UTF-8")))
+                              @#'c/max-value-index-length))
+                      (= @#'c/clob-value-type-id
+                         (.getByte (c/value-buffer-type-id buffer) 0))
+
+                      (and (bytes? v)
+                           (> (+ @#'c/value-type-id-size (alength ^bytes v))
+                              @#'c/max-value-index-length))
+                      (= @#'c/blob-value-type-id
+                         (.getByte (c/value-buffer-type-id buffer) 0))
+
+                      :else
                       false)))))
 
 (t/deftest test-unordered-coll-hashing-1001

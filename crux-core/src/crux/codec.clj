@@ -78,6 +78,8 @@
 (def ^:private string-value-type-id 8)
 (def ^:private char-value-type-id 9)
 (def ^:private nippy-value-type-id 10)
+(def ^:private bytes-value-type-id 11)
+(def ^:private blob-value-type-id 12)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -150,6 +152,17 @@
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
+  (class (byte-array 0))
+  (value->buffer [this ^MutableDirectBuffer to]
+    (if (< max-value-index-length (alength ^bytes this))
+      (doto (id-function to this)
+        (.putByte 0 blob-value-type-id))
+      (mem/limit-buffer
+       (doto to
+         (.putByte 0 bytes-value-type-id)
+         (.putBytes value-type-id-size this))
+       (+ value-type-id-size (alength ^bytes this)))))
+
   Boolean
   (value->buffer [this ^MutableDirectBuffer to]
     (mem/limit-buffer
@@ -286,10 +299,14 @@
 (defn- decode-nippy [^DirectBuffer buffer]
   (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
 
+(defn- decode-bytes [^DirectBuffer buffer]
+  (doto (byte-array (- (.capacity buffer) value-type-id-size))
+    (->> (.getBytes buffer value-type-id-size))))
+
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (3 4 5 6 7 8 9 10) true
+      (3 4 5 6 7 8 9 10 11) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
@@ -303,6 +320,7 @@
       8 (decode-string buffer) ;; string-value-type-id
       9 (decode-char buffer) ;; char-value-type-id
       10 (decode-nippy buffer) ;; nippy-value-type-id
+      11 (decode-bytes buffer) ;; bytes-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 
