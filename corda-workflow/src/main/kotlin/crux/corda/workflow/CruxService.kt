@@ -17,15 +17,16 @@ class CruxService(serviceHub: AppServiceHub) : SingletonSerializeAsToken() {
         }
 
         private val startCruxNode = Clojure.`var`("crux.corda.service/start-node")
-        private val processTx = Clojure.`var`("crux.corda.service/process-tx")
+        private val syncTxs = Clojure.`var`("crux.corda.service/sync-txs")
     }
 
     init {
         cruxNode = startCruxNode(serviceHub) as ICruxAPI
+        syncTxs(cruxNode)
 
         try {
-            serviceHub.validatedTransactions.updates.subscribe { tx ->
-                processTx(cruxNode, tx)
+            serviceHub.validatedTransactions.updates.subscribe {
+                syncTxs(cruxNode)
             }
 
             serviceHub.registerUnloadHandler {
