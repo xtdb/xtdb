@@ -246,7 +246,9 @@
 
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (let [^bytes nippy-bytes (binding [*sort-unordered-colls* true]
+    (let [^bytes nippy-bytes (if (coll? this)
+                               (binding [*sort-unordered-colls* true]
+                                 (nippy/fast-freeze this))
                                (nippy/fast-freeze this))]
       (if (< max-value-index-length (alength nippy-bytes))
         (doto (id-function to nippy-bytes)
