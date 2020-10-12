@@ -510,7 +510,6 @@
                             cache-iterator-delay
                             nested-index-snapshot-state
                             ^Map temp-hash-cache
-                            value-cache
                             cav-cache
                             canonical-buffer-cache
                             ^AtomicBoolean closed?]
@@ -625,15 +624,10 @@
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (cache/compute-if-absent
-       value-cache
-       value-buffer
-       #(canonical-buffer-lookup canonical-buffer-cache %)
-       (fn [value-buffer]
-         (or (.get temp-hash-cache value-buffer)
-             (let [i @decode-value-iterator-delay]
-               (when (advance-iterator-to-hash-cache-value i value-buffer)
-                 (some-> (kv/value i) (mem/<-nippy-buffer)))))))))
+      (or (.get temp-hash-cache value-buffer)
+          (let [i @decode-value-iterator-delay]
+            (when (advance-iterator-to-hash-cache-value i value-buffer)
+              (some-> (kv/value i) (mem/<-nippy-buffer)))))))
 
   (encode-value [this value]
     (let [value-buffer (c/->value-buffer value)]
@@ -643,7 +637,7 @@
       value-buffer))
 
   (open-nested-index-snapshot [this]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache value-cache cav-cache canonical-buffer-cache false)]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache cav-cache canonical-buffer-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot)))
 
@@ -669,7 +663,7 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- new-kv-index-snapshot [snapshot temp-hash-cache value-cache cav-cache canonical-buffer-cache close-snapshot?]
+(defn- new-kv-index-snapshot [snapshot temp-hash-cache cav-cache canonical-buffer-cache close-snapshot?]
   (->KvIndexSnapshot snapshot
                      close-snapshot?
                      (delay (kv/new-iterator snapshot))
@@ -679,7 +673,6 @@
                      (delay (kv/new-iterator snapshot))
                      (atom [])
                      temp-hash-cache
-                     value-cache
                      cav-cache
                      canonical-buffer-cache
                      (AtomicBoolean.)))
@@ -688,7 +681,7 @@
   ;; TODO at next version bump, let's make the kw here unrelated to the (old) namespace name
   (read-meta kv-store :crux.kv-indexer/latest-completed-tx))
 
-(defrecord KvIndexStore [kv-store value-cache cav-cache canonical-buffer-cache]
+(defrecord KvIndexStore [kv-store cav-cache canonical-buffer-cache]
   db/IndexStore
   (index-docs [this docs]
     (let [crux-db-id (c/->id-buffer :crux.db/id)
@@ -729,8 +722,6 @@
                                                                             (take 2)
                                                                             count)
                                                                        1)]
-                                                     (when-not (c/can-decode-value-buffer? value-buffer)
-                                                       (cache/evict value-cache value-buffer))
                                                      (cache/evict cav-cache (.content-hash quad))
                                                      (cond-> acc
                                                        true (update :tombstones assoc (.content-hash quad) {:crux.db/id (c/new-id eid)
@@ -787,7 +778,7 @@
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   (open-index-snapshot [this]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) value-cache cav-cache canonical-buffer-cache true))
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) cav-cache canonical-buffer-cache true))
 
   status/Status
   (status-map [this]
@@ -796,11 +787,10 @@
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
-                                    :value-cache 'crux.cache/->cache
                                     :cav-cache 'crux.cache/->cache
                                     :canonical-buffer-cache 'crux.cache/->cache}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
-  [{:keys [kv-store value-cache cav-cache canonical-buffer-cache] :as opts}]
+  [{:keys [kv-store cav-cache canonical-buffer-cache] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store value-cache cav-cache canonical-buffer-cache))
+  (->KvIndexStore kv-store cav-cache canonical-buffer-cache))

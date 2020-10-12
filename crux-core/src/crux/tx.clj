@@ -387,7 +387,6 @@
     (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
 
     (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)
-                                                                                           :value-cache (nop-cache/->nop-cache {})
                                                                                            :cav-cache (nop-cache/->nop-cache {})
                                                                                            :canonical-buffer-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
