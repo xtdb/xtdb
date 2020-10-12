@@ -584,7 +584,7 @@
 
 (comment
   ;; SF 0.01
-  (tpch/load-docs! node 0.01 tpch/tpch-entity->pkey-doc)
+  (crux.fixtures.tpch/load-docs! (user/crux-node) 0.01 crux.fixtures.tpch/tpch-entity->pkey-doc)
 
   ;; SQL:
   (slurp (clojure.java.io/resource "io/airlift/tpch/queries/q1.sql"))
