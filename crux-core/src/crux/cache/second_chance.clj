@@ -76,6 +76,7 @@
             (.unswizzle vp (.getKey e))))))))
 
 (def ^:private ^AtomicReference free-memory-ratio (AtomicReference. 1.0))
+(def ^:private ^:const free-memory-check-interval-ms 1000)
 
 (defn- free-memory-loop []
   (try
@@ -85,7 +86,7 @@
                            (.freeMemory (Runtime/getRuntime)))
             free-memory (- max-memory used-memory)]
         (.set free-memory-ratio (double (/ free-memory max-memory))))
-      (Thread/sleep 5000))
+      (Thread/sleep free-memory-check-interval-ms))
     (catch InterruptedException _)))
 
 (def ^:private ^Thread free-memory-thread
@@ -126,14 +127,14 @@
                                   :default true
                                   :spec ::sys/boolean}
                :adaptive-break-even-level {:doc "Adaptive break even memory usage level"
-                                           :default 0.95
+                                           :default 0.8
                                            :spec ::sys/pos-double}}}
   ^crux.cache.ICache [{:keys [^long cache-size ^double cooling-factor cold-cache
                               adaptive-sizing? adaptive-break-even-level]
                        :or {cache-size  (* 128 1024)
                             adaptive-sizing? true
                             cooling-factor 0.1
-                            adaptive-break-even-level 0.95}
+                            adaptive-break-even-level 0.8}
                        :as opts}]
   (let [hot (ConcurrentHashMap. cache-size)
         cooling (LinkedBlockingQueue.)
