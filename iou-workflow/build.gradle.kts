@@ -30,6 +30,9 @@ dependencies {
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)
     testImplementation("org.clojure", "clojure", "1.10.0")
     testImplementation("juxt", "crux-core", "20.09-1.11.1-beta-SNAPSHOT")
+
+    testImplementation("com.h2database", "h2", "1.4.199")
+    testImplementation("org.postgresql", "postgresql", "42.2.17")
 }
 
 tasks.withType(Test::class) {

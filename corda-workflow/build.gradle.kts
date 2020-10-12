@@ -18,8 +18,10 @@ cordapp {
 dependencies {
     implementation("org.clojure", "clojure", "1.10.0")
     implementation("juxt", "crux-core", "20.09-1.11.1-beta-SNAPSHOT")
-    implementation("com.h2database", "h2", "1.4.199")
     implementation("seancorfield", "next.jdbc", "1.1.588")
+
+    compileOnly("com.h2database", "h2", "1.4.199")
+    compileOnly("org.postgresql", "postgresql", "42.2.17")
 
     cordaCompile(cordaGroup, "corda-core", cordaVersion)
     cordaCompile(cordaGroup, "corda-jackson", cordaVersion)
