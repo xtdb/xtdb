@@ -301,7 +301,7 @@
 (defn- decode-nippy [^DirectBuffer buffer]
   (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
 
-(defn- decode-bytes [^DirectBuffer buffer]
+(defn- decode-bytes ^bytes [^DirectBuffer buffer]
   (doto (byte-array (- (.capacity buffer) value-type-id-size))
     (->> (.getBytes buffer value-type-id-size))))
 
