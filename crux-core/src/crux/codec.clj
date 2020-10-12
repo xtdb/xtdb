@@ -250,7 +250,8 @@
                                (binding [*sort-unordered-colls* true]
                                  (nippy/fast-freeze this))
                                (nippy/fast-freeze this))]
-      (if (< max-value-index-length (alength nippy-bytes))
+      (if (or (< max-value-index-length (alength nippy-bytes))
+              (not (nippy/freezable? this)))
         (doto (id-function to nippy-bytes)
           (.putByte 0 object-value-type-id))
         (mem/limit-buffer
