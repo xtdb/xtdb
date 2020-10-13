@@ -37,5 +37,4 @@
 
 #? (:clj
     (defn ref-json-encoder [^EntityRef entity-ref ^JsonGenerator gen]
-      (.writeString gen "entityRef")
       (.writeString gen (str (:eid entity-ref)))))
