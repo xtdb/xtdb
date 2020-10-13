@@ -62,6 +62,14 @@
     (db-type dialect))
   :default ::default)
 
+(defn ->crux-tx [^SecureHash corda-tx-id {{:keys [dialect ^AppServiceHub service-hub]} :tx-log}]
+  (some-> (jdbc/execute-one! (.jdbcSession service-hub)
+                             ["SELECT * FROM crux_txs WHERE corda_tx_id = ?"
+                              (str corda-tx-id)]
+                             {:builder-fn jdbcr/as-unqualified-lower-maps})
+          (tx-row->tx dialect)
+          (select-keys [::tx/tx-id ::tx/tx-time])))
+
 (defn- ->corda-tx [corda-tx-id ^AppServiceHub service-hub]
   (.getTransaction (.getValidatedTransactions service-hub)
                    (SecureHash/parse corda-tx-id)))
@@ -119,7 +127,8 @@
 
   (latest-submitted-tx [this]
     (some-> (jdbc/execute-one! (.jdbcSession service-hub)
-                               ["SELECT * FROM crux_txs ORDER BY crux_tx_id DESC LIMIT 1"])
+                               ["SELECT * FROM crux_txs ORDER BY crux_tx_id DESC LIMIT 1"]
+                               {:builder-fn jdbcr/as-unqualified-lower-maps})
             (tx-row->tx dialect)
             (select-keys [::tx/tx-id ::tx/tx-time]))))
 

@@ -71,7 +71,10 @@ class IOUFlowTests {
 
         // We check Crux gets a transaction
         for (node in nodes) {
-            val cruxNode = node.services.cordaService(CruxService::class.java).cruxNode
+            val cruxService = node.services.cordaService(CruxService::class.java)
+            val cruxNode = cruxService.cruxNode
+
+            assertEquals(1L, cruxService.cruxTx(signedTx.id)!![txIdKey])
             assertEquals(1L, cruxNode.latestCompletedTx()[txIdKey])
 
             assertEquals(
