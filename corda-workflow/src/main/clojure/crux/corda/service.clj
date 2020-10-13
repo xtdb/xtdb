@@ -4,11 +4,8 @@
             [crux.db :as db]
             [crux.codec :as c]
             [next.jdbc :as jdbc]
-            [next.jdbc.prepare :as jdbc-prep]
             [next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
-            [clojure.string :as str]
-            [taoensso.nippy :as nippy]
             [crux.io :as cio])
   (:import (crux.corda.contract CruxState)
            (net.corda.core.crypto SecureHash)
@@ -56,25 +53,6 @@
                                    (SecureHash/parse corda-tx-id))]
 
     ))
-
-(defrecord CordaDocStore [^AppServiceHub service-hub]
-  db/DocumentStore
-  (submit-docs [_ id+docs]
-    (with-open [stmt (jdbc/prepare (.jdbcSession service-hub)
-                                   ["MERGE INTO crux_docs (id, doc) KEY (id) VALUES (?, ?)"])]
-      (jdbc-prep/execute-batch! stmt (->> id+docs
-                                          (map (juxt (comp str key)
-                                                     (comp nippy/freeze val)))))))
-
-  (fetch-docs [_ ids]
-    (when (seq ids)
-      (->> (jdbc/execute! (.jdbcSession service-hub)
-                          (into [(format "SELECT * FROM crux_docs WHERE id IN (%s)"
-                                         (->> (repeat (count ids) "?") (str/join ", ")))]
-                                (map str ids))
-                          {:builder-fn jdbcr/as-unqualified-lower-maps})
-           (into {} (map (juxt (comp c/new-id :id)
-                               (comp nippy/thaw :doc))))))))
 
 (defn- tx-row->tx [tx-row]
   (let [^TimestampWithTimeZone
@@ -182,7 +160,5 @@
 
 (defn start-node [service-hub]
   (doto (crux/start-node {:crux/tx-log {:crux/module (fn [_]
-                                                       (->CordaTxLog service-hub))}
-                          :crux/document-store {:crux/module (fn [_]
-                                                               (->CordaDocStore service-hub))}})
+                                                       (->CordaTxLog service-hub))}})
     (sync-node service-hub)))
