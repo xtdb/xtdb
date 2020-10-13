@@ -19,3 +19,10 @@ juxt/crux-http-server {:mvn/version "20.09-1.12.0-alpha"}
 ----
 
 For more details, see the https://opencrux.com/reference/http.html[HTTP documentation].
+
+== Development
+
+- start crux node by following readme in juxt/crux
+- start cljs repl to enable hot reloading (for emacs users visit crux-http-server/project.clj and run `cider-jack-in-cljs` - choose the default options for all prompts.
+- Run `lein sass watch` to get hot reloading scss files
+- Console should be available at http://localhost:3000

@@ -1,1 +1,2 @@
-{:target-dir "cljs-target"}
+{:target-dir "cljs-target"
+ :css-dirs ["cljs-target/public/css"]}
