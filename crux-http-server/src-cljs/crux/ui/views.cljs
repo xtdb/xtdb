@@ -10,7 +10,7 @@
             [crux.ui.uikit.table :as table]
             [crux.ui.tab-bar :as tab]
             [crux.ui.collapsible :refer [collapsible]]
-            [fork.core :as fork]
+            [fork.re-frame :as fork]
             [reagent.core :as r]
             [re-frame.core :as rf]
             [tick.alpha.api :as t]
@@ -486,6 +486,5 @@
      :status [status-pane])])
 
 (defn view []
-  (let [{{:keys [name]} :data} @(rf/subscribe [::sub/current-route])]
-    [:div.container.page-pane
-     [console-pane]]))
+  [:div.container.page-pane
+   [console-pane]])
