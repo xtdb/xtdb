@@ -554,23 +554,27 @@
                     (symbol? x) (str))))))))
 
 (defn validate-tpch-query [actual expected]
-  (vec (for [[expected-row actual-row] (map vector expected actual)
+  (vec (for [[expected-row actual-row] (map vector expected (if (empty? actual)
+                                                              [["null"]]
+                                                              actual))
              :let [msg (pr-str [expected-row actual-row])]]
-         (every? true?
-                 (mapv
-                  (fn [x y]
-                    (cond
-                      (and (number? x) (string? y))
-                      (t/is (str/ends-with? y (str x)) msg)
+         (and (t/is (= (count expected-row)
+                       (count actual-row)))
+              (every? true?
+                      (mapv
+                       (fn [x y]
+                         (cond
+                           (and (number? x) (string? y))
+                           (t/is (str/ends-with? y (str x)) msg)
 
-                      (and (number? x) (number? y))
-                      (let [epsilon 0.01
-                            diff (Math/abs (- (double x) (double y)))]
-                        (t/is (<= diff epsilon)))
-                      :else
-                      (t/is (= x y) msg)))
-                  expected-row
-                  actual-row)))))
+                           (and (number? x) (number? y))
+                           (let [epsilon 0.01
+                                 diff (Math/abs (- (double x) (double y)))]
+                             (t/is (<= diff epsilon)))
+                           :else
+                           (t/is (= x y) msg)))
+                       expected-row
+                       actual-row))))))
 
 (comment
   ;; SF 0.01
