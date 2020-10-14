@@ -64,8 +64,22 @@
       (render-duration :rdf4j-time-taken-ms :rdf4j-time-taken)
       (render-duration :datomic-time-taken-ms :datomic-time-taken)))
 
-; Defining slow crux queries as taking this many times as long as comparison dbs
+;; Defining slow crux queries as taking this many times as long as comparison dbs
 (def slow-query-threshold 10)
+
+;;; Watdiv numbers:
+
+;; We've run 100 queries on each of the comparison DBs and saved the results - time taken, whether it timed out, and result count.
+;; Every night, we run those same queries, once, against Crux master.
+
+;; `queries` - Crux time taken to run all 100 queries (including queries that timed out).
+
+;; In the subsequent rows, we compare that same run against each of the comparison databases
+;; - We find the set of queries for which neither database timed out, and where both databases agree on the result count ('correct' queries).
+;;   The time Crux took for these 'correct' queries are the headline times, with `:db-time-taken` being the equivalent time taken by the comparison database.
+;; - `crux-failures` are the query indices where the databases disagreed on the result count (i.e. potential bugs).
+;; - `crux-errors` are the query indices where Crux failed/timed out but the comparison database didn't (i.e. the ones we should arguably be able to execute)
+;; - Queries where both databases timed out are excluded.
 
 (defn summarise-query-results [watdiv-query-results]
   (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
