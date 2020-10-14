@@ -1,20 +1,20 @@
-(ns crux.cache.second-chance
+(ns ^:no-doc crux.cache.second-chance
   (:import crux.cache.ICache
-           java.lang.reflect.Field
+           [crux.cache.second_chance ConcurrentHashMapTableAccess ValuePointer]
            java.util.function.Function
            [java.util Map$Entry Queue]
-           [java.util.concurrent ArrayBlockingQueue ConcurrentHashMap])
-  (:require [crux.system :as sys]))
+           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
+           java.util.concurrent.atomic.AtomicReference)
+  (:require [crux.system :as sys]
+            [crux.cache.nop]))
+
+;; Adapted from https://db.in.tum.de/~leis/papers/leanstore.pdf
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private ^Field concurrent-map-table-field
-  (doto (.getDeclaredField ConcurrentHashMap "table")
-    (.setAccessible true)))
-
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
   (when-not (.isEmpty m)
-    (let [table ^objects (.get concurrent-map-table-field m)]
+    (let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
       (loop [i (long (rand-int (alength table)))]
         (if-let [^Map$Entry e (aget table i)]
           e
@@ -22,77 +22,125 @@
 
 (declare resize-cache)
 
-(deftype SecondChanceCache [^ConcurrentHashMap hot ^Queue cold ^double cold-factor ^long size]
+(deftype SecondChanceCache [^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
+                            ^long size adaptive-sizing? ^double adaptive-break-even-level]
   Object
   (toString [_]
-    (str hot " " cold))
+    (str hot))
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
-    (let [^objects vp (or (.get hot k)
-                          (let [k (stored-key-fn k)
-                                v (f k)]
-                            (.computeIfAbsent hot k (reify Function
-                                                      (apply [_ k]
-                                                        (doto (object-array 2)
-                                                          (aset 0 v)))))))]
+    (let [^ValuePointer vp (or (.get hot k)
+                               (let [k (stored-key-fn k)
+                                     v (if-some [v (.valAt cold k)]
+                                         v
+                                         (f k))]
+                                 (.computeIfAbsent hot k (reify Function
+                                                           (apply [_ k]
+                                                             (ValuePointer. v))))))
+          v (.swizzle vp)]
       (resize-cache this)
-      (aset vp 1 nil)
-      (aget vp 0)))
+      v))
 
-  (evict [_ k]
-    (when-let [vp ^objects (.remove hot k)]
-      (aset vp 1 nil)))
+  (evict [this k]
+    (.evict cold k)
+    (when-let [vp ^ValuePointer (.remove hot k)]
+      (.swizzle vp))
+    (resize-cache this))
 
   (valAt [_ k]
-    (when-let [vp ^objects (.get hot k)]
-      (aset vp 1 nil)
-      (aget vp 0)))
+    (when-let [vp ^ValuePointer (.get hot k)]
+      (.swizzle vp)))
 
   (valAt [_ k default]
-    (let [vp (.getOrDefault hot k default)]
-      (if (= default vp)
-        default
-        (do (aset ^objects vp 1 nil)
-            (aget ^objects vp 0)))))
+    (if-let [vp (.get hot k)]
+      (.swizzle ^ValuePointer vp)
+      default))
 
   (count [_]
     (.size hot))
 
   (close [_]
     (.clear hot)
-    (.clear cold)))
+    (.clear cooling)))
 
-(defn move-to-cold [^SecondChanceCache cache]
+(defn move-to-cooling-state [^SecondChanceCache cache]
   (let [hot ^ConcurrentHashMap (.hot cache)
-        cold ^Queue (.cold cache)
-        cold-target-size (long (Math/ceil (* (.cold-factor cache) (.size hot))))]
-    (while (< (.size cold) cold-target-size)
+        cooling ^Queue (.cooling cache)
+        cooling-target-size (long (Math/ceil (* (.cooling-factor cache) (.size hot))))]
+    (while (< (.size cooling) cooling-target-size)
       (let [e (random-entry (.hot cache))]
-        (when-let [vp ^objects (.getValue e)]
-          (when (nil? (aget vp 1))
-            (when (.offer cold vp)
-              (aset vp 1 (.getKey e)))))))))
+        (when-let [vp ^ValuePointer (.getValue e)]
+          (when (and (.isSwizzled vp)
+                     (.offer cooling vp))
+            (.unswizzle vp (.getKey e))))))))
+
+(def ^:private ^AtomicReference free-memory-ratio (AtomicReference. 1.0))
+(def ^:private ^:const free-memory-check-interval-ms 1000)
+
+(defn- free-memory-loop []
+  (try
+    (while true
+      (let [max-memory (.maxMemory (Runtime/getRuntime))
+            used-memory (- (.totalMemory (Runtime/getRuntime))
+                           (.freeMemory (Runtime/getRuntime)))
+            free-memory (- max-memory used-memory)]
+        (.set free-memory-ratio (double (/ free-memory max-memory))))
+      (Thread/sleep free-memory-check-interval-ms))
+    (catch InterruptedException _)))
+
+(def ^:private ^Thread free-memory-thread
+  (do (when (and (bound? #'free-memory-thread) free-memory-thread)
+        (.interrupt ^Thread free-memory-thread))
+      (doto (Thread. ^Runnable free-memory-loop "crux.cache.second-chance.free-memory-thread")
+        (.setDaemon true))))
+
+(defn- move-to-cold-state [^SecondChanceCache cache]
+  (let [hot ^ConcurrentHashMap (.hot cache)
+        cooling ^Queue (.cooling cache)
+        cold ^ICache (.cold cache)
+        hot-target-size (if (.adaptive-sizing? cache)
+                          (long (Math/pow (.size cache)
+                                          (+ (.adaptive-break-even-level cache)
+                                             (double (.get free-memory-ratio)))))
+                          (.size cache))]
+    (while (> (.size hot) hot-target-size)
+      (when-let [vp ^ValuePointer (.poll cooling)]
+        (when-some [k (.getKey vp)]
+          (.remove hot k)
+          (.computeIfAbsent cold k identity (constantly (.getValue vp)))))
+      (move-to-cooling-state cache))))
 
 (defn- resize-cache [^SecondChanceCache cache]
-  (let [hot ^ConcurrentHashMap (.hot cache)
-        cold ^Queue (.cold cache)]
-    (move-to-cold cache)
-    (while (> (.size hot) (.size cache))
-      (when-let [vp ^objects (.poll cold)]
-        (when-let [k (aget vp 1)]
-          (.remove hot k)))
-      (move-to-cold cache))))
+  (move-to-cooling-state cache)
+  (move-to-cold-state cache))
 
 (defn ->second-chance-cache
-  {::sys/args {:cache-size {:doc "Cache size"
+  {::sys/deps {:cold-cache 'crux.cache.nop/->nop-cache}
+   ::sys/args {:cache-size {:doc "Cache size"
                             :default (* 128 1024)
                             :spec ::sys/nat-int}
-               :cold-factor {:doc "Cold factor"
-                             :default 0.1
-                             :spec ::sys/pos-double}}}
-  [{:keys [^long cache-size ^double cold-factor]}]
+               :cooling-factor {:doc "Cooling factor"
+                                :default 0.1
+                                :spec ::sys/pos-double}
+               :adaptive-sizing? {:doc "Adapt cache size to available memory"
+                                  :default true
+                                  :spec ::sys/boolean}
+               :adaptive-break-even-level {:doc "Adaptive break even memory usage level"
+                                           :default 0.8
+                                           :spec ::sys/pos-double}}}
+  ^crux.cache.ICache [{:keys [^long cache-size ^double cooling-factor cold-cache
+                              adaptive-sizing? adaptive-break-even-level]
+                       :or {cache-size  (* 128 1024)
+                            adaptive-sizing? true
+                            cooling-factor 0.1
+                            adaptive-break-even-level 0.8}
+                       :as opts}]
   (let [hot (ConcurrentHashMap. cache-size)
-        cold-factor (or cold-factor 0.1)
-        cold (ArrayBlockingQueue. (inc (long (Math/ceil (* cold-factor cache-size)))))]
-    (->SecondChanceCache hot cold cold-factor cache-size)))
+        cooling (LinkedBlockingQueue.)
+        cold (or cold-cache (crux.cache.nop/->nop-cache opts))]
+    (when adaptive-sizing?
+      (locking free-memory-thread
+        (when-not (.isAlive free-memory-thread)
+          (.start free-memory-thread))))
+    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level)))
