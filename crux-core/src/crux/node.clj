@@ -158,7 +158,6 @@
                                        (update :crux.tx.event/tx-events
                                                (fn [evts]
                                                  (->> evts (mapv #(update % 1 c/new-id))))))))))]
-
           (cio/->cursor (fn []
                           (.close tx-log-iterator))
                         tx-log)))))
