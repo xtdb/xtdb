@@ -301,8 +301,8 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
-    (db/index-docs (:index-store *api*) {(c/new-id ivan1) ivan1
-                                     (c/new-id ivan2) ivan2})
+    (db/submit-docs (:document-store *api*) {(c/new-id ivan1) ivan1
+                                             (c/new-id ivan2) ivan2})
 
     (index-tx {:crux.tx/tx-time t, :crux.tx/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
@@ -326,8 +326,8 @@
         ivan2 (assoc ivan :value 2)
         t1 #inst "2020-05-01"
         t2 #inst "2020-05-02"]
-    (db/index-docs (:index-store *api*) {(c/new-id ivan1) ivan1
-                                         (c/new-id ivan2) ivan2})
+    (db/submit-docs (:document-store *api*) {(c/new-id ivan1) ivan1
+                                             (c/new-id ivan2) ivan2})
 
     (index-tx {:crux.tx/tx-time t1, :crux.tx/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
