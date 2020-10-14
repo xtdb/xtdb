@@ -1,7 +1,5 @@
 <img alt="Crux" role="img" aria-label="Crux" src="./docs/reference/modules/ROOT/images/crux-logo-banner.svg">
 
-[![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
-
 [Crux](https://opencrux.com) is a general purpose database with graph-oriented bitemporal indexes.
 Datalog, SQL & EQL queries are supported, and Java, HTTP & Clojure APIs are
 provided.
@@ -17,22 +15,30 @@ query, and schema capabilities. In addition to SQL, Crux supplies a
 [Datalog](https://en.wikipedia.org/wiki/Datalog) query interface that can be
 used to express complex joins and recursive graph traversals.
 
-## CircleCI Build
+## Quick Links
 
-[![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
+* [Documentation](https://opencrux.com)
+* [Maven releases - Clojars](https://clojars.org/juxt/crux-core)
+  ```xml
+  <dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-core</artifactId>
+    <version>20.09-1.12.1-beta</version>
+  </dependency>
+  ```
 
-## Latest Release
+  ```clojure
+  [juxt/crux-core "20.09-1.12.1-beta"]
+  ```
 
-Maven coordinates for the [Clojars Repository](https://clojars.org/juxt/crux-core):
-
-```xml
-<dependency>
-  <groupId>juxt</groupId>
-  <artifactId>crux-core</artifactId>
-  <version>20.09-1.12.0-beta</version>
-</dependency>
-```
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg?style=for-the-badge)](https://clojars.org/juxt/crux-core)
+  ```clojure
+  juxt/crux-core {:mvn/version "20.09-1.12.1-beta"}
+  ```
+* [Release notes](https://github.com/juxt/crux/releases)
+* Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/juxt/crux/discussions) | crux@juxt.pro
+* Development:
+  * [Kanban board](https://github.com/juxt/crux/projects/1)
+  * CircleCI build: [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
 
 ## Unbundled Architecture
 
@@ -52,18 +58,6 @@ information privacy regulations.
 This design makes it feasible and desirable to embed Crux nodes directly within
 your application processes, which reduces deployment complexity and eliminates
 round-trip overheads when running complex application queries.
-
-## Documentation
-
-Please visit [the docs](https://opencrux.com) to get started with Crux.
-
-## Community & Contact
-
-We use Zulip for our main community chat:
-
-[![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
-
-Feel free to say hello: crux@juxt.pro
 
 ## Repo Layout
 
