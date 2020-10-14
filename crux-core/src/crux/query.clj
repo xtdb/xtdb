@@ -1671,6 +1671,11 @@
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
         stats (db/read-index-meta index-store :crux/attribute-stats)
         [in in-args] (add-legacy-args q-conformed in-args)]
+    (when full-results?
+      (defonce -full-results-deprecation-log
+        (log/warn "`full-results?` is deprecated and will be removed in a future Crux release. "
+                  "Use `(eql/project ?e [*])` instead - see https://opencrux.com/reference/queries.html#eql-projection")))
+
     (log/debug :query (cio/pr-edn-str (-> q
                                           (assoc :in in)
                                           (dissoc :args))))
