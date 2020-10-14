@@ -798,7 +798,7 @@
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
                                     :value-cache 'crux.cache/->cache
                                     :cav-cache 'crux.cache/->cache
-                                    :canonical-buffer-cache 'crux.cache.soft-values/->soft-values-cache}
+                                    :canonical-buffer-cache 'crux.cache/->cache}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store value-cache cav-cache canonical-buffer-cache] :as opts}]
