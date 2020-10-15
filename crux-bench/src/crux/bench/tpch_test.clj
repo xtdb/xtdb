@@ -14,22 +14,28 @@
 (defn run-tpch-query [node n]
   (crux/q (crux/db node) (assoc (get tpch-queries (dec n)) :timeout 120000)))
 
-(defn run-tpch-test [node {:keys [scale-factor] :as opts}]
+(defn run-tpch-queries [node {:keys [scale-factor] :as opts}]
   (let [scale-factor (or scale-factor 0.01)]
-    (bench/with-bench-ns :tpch-test
-      (bench/with-crux-dimensions
-        (bench/run-bench :ingest
-          (bench/with-additional-index-metrics node
-            (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)))
+    (every? true? (for [n (range 1 23)]
+                    (let [actual (run-tpch-query node n)]
+                      (if (= 0.01 scale-factor)
+                        (every? true? (validate-tpch-query actual (parse-tpch-result n)))
+                        (boolean actual)))))))
 
-        ;; TODO we may want to split this up, à la WatDiv, so that we can see if
-        ;; specific queries are slower than our comparison databases
-        (bench/run-bench :queries
-          {:success? (every? true? (for [n (range 1 23)]
-                                     (let [actual (run-tpch-query node n)]
-                                       (if (= 0.01 scale-factor)
-                                         (every? true? (validate-tpch-query actual (parse-tpch-result n)))
-                                         (boolean actual)))))})))))
+(defn run-tpch-test [node {:keys [scale-factor] :as opts}]
+  (bench/with-bench-ns :tpch-test
+    (bench/with-crux-dimensions
+      (bench/run-bench :ingest
+        (bench/with-additional-index-metrics node
+          (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)))
+
+      ;; TODO we may want to split this up, à la WatDiv, so that we can see if
+      ;; specific queries are slower than our comparison databases
+      (bench/run-bench :queries
+        {:success? (run-tpch-queries node opts)})
+
+      (bench/run-bench :queries-warm
+        {:success? (run-tpch-queries node opts)}))))
 
 ;; "Elapsed time: 21994.835831 msecs"
 (def q1 '{:find [l_returnflag
