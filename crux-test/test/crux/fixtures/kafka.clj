@@ -43,10 +43,20 @@
                                                   :properties-map (merge {"group.id" (str (UUID/randomUUID))}
                                                                          *consumer-options*)})}))
 
+(def ^:dynamic *kafka-config* {})
+
+(defn with-kafka-config
+  ([opts] (fn [f] (with-kafka-config opts f)))
+  ([opts f]
+   (binding [*kafka-config* (merge *kafka-config* opts)]
+     (f))))
+
 (defn with-cluster-tx-log-opts [f]
   (let [test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)]
-      (fix/with-opts {::k/kafka-config {:bootstrap-servers *kafka-bootstrap-servers*}
+      (fix/with-opts {::k/kafka-config (merge
+                                        {:bootstrap-servers *kafka-bootstrap-servers*}
+                                        *kafka-config*)
                       ::tx-topic-opts {:crux/module `k/->topic-opts, :topic-name *tx-topic*}
                       :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config, :tx-topic-opts ::tx-topic-opts}}
         f))))
@@ -55,7 +65,9 @@
   (assert (bound? #'*kafka-bootstrap-servers*))
   (let [test-id (UUID/randomUUID)]
     (binding [*doc-topic* (str "doc-topic-" test-id)]
-      (fix/with-opts {::k/kafka-config {:bootstrap-servers *kafka-bootstrap-servers*}
+      (fix/with-opts {::k/kafka-config (merge
+                                        {:bootstrap-servers *kafka-bootstrap-servers*}
+                                        *kafka-config*)
                       ::doc-topic-opts {:crux/module `k/->topic-opts, :topic-name *doc-topic*}
                       :crux/document-store {:crux/module `k/->document-store, :kafka-config ::k/kafka-config, :doc-topic-opts ::doc-topic-opts}}
         f))))
