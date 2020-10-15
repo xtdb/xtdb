@@ -130,14 +130,13 @@
 (defn- sync-handler [^ICruxAPI crux-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
-          timeout (some-> timeout (Duration/ofMillis))]
-      (let [last-modified (if tx-time
-                            (crux/await-tx-time crux-node tx-time timeout)
-                            (crux/sync crux-node timeout))]
-        (->
-         {:status 200
-          :body {:crux.tx/tx-time last-modified}}
-         (add-last-modified last-modified))))))
+          timeout (some-> timeout (Duration/ofMillis))
+          last-modified (if tx-time
+                          (crux/await-tx-time crux-node tx-time timeout)
+                          (crux/sync crux-node timeout))]
+      (-> {:status 200
+           :body {:crux.tx/tx-time last-modified}}
+          (add-last-modified last-modified)))))
 
 (s/def ::await-tx-time-spec (s/keys :req-un [::tx-time] :opt-un [::util/timeout]))
 
@@ -275,6 +274,11 @@
   {:status 400
    :body (ex-data ex)})
 
+(defn handle-noose [^crux.api.NodeOutOfSyncException ex req]
+  ;; TODO NOOSE needs ex-data
+  {:status 409
+   :body {:error (str ex)}})
+
 (defn handle-muuntaja-decode-error [ex req]
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.") }})
@@ -283,7 +287,6 @@
   (fn [{:keys [query-params] :as request}]
     (let [kebab-qps (into {} (map (fn [[k v]] [(csk/->kebab-case k) v])) query-params)]
       (handler (assoc request :query-params kebab-qps)))))
-
 
 (defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
                        :keys [crux-node], :as opts}]
@@ -344,6 +347,7 @@
                                        (re/create-exception-middleware
                                         (merge re/default-handlers
                                                {crux.IllegalArgumentException handle-iae
+                                                crux.api.NodeOutOfSyncException handle-noose
                                                 :muuntaja/decode handle-muuntaja-decode-error}))
                                        rm/format-request-middleware
                                        rrc/coerce-request-middleware]
@@ -369,13 +373,12 @@
                                    :doc "JWKS string to validate against"}
                             :server-label {:spec ::sys/string}}}
   [{:keys [crux-node port] :as options}]
-  (let [server (j/run-jetty
-                (rr/ring-handler (->crux-router {:crux-node crux-node
-                                                 :http-options (dissoc options :crux-node)})
-                                 (rr/routes
-                                  (rr/create-resource-handler {:path "/"})
-                                  (rr/create-default-handler)))
-                {:port port
-                 :join? false})]
+  (let [server (j/run-jetty (rr/ring-handler (->crux-router {:crux-node crux-node
+                                                             :http-options (dissoc options :crux-node)})
+                                             (rr/routes
+                                              (rr/create-resource-handler {:path "/"})
+                                              (rr/create-default-handler)))
+                            {:port port
+                             :join? false})]
     (log/info "HTTP server started on port: " port)
     (->HTTPServer server options)))
