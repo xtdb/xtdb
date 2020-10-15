@@ -1,23 +1,34 @@
 (ns ^:no-doc crux.tx.conform
   (:require [crux.codec :as c]
             [crux.error :as err]
-            [crux.db :as db])
+            [crux.db :as db]
+            [clojure.instant :as inst])
   (:import (java.util UUID)))
 
 (defn- check-eid [eid op]
   (when-not (and (some? eid) (c/valid-id? eid))
-    (throw (ex-info "invalid entity id" {:eid eid, :op op}))))
+    (throw (ex-info "invalid entity id" {:eid eid, :op op})))
+  eid)
+
+(def ^:dynamic *xform-doc* identity)
 
 (defn- check-doc [doc op]
-  (when-not (and (map? doc)
-                 (every? keyword? (keys doc)))
-    (throw (ex-info "invalid doc" {:op op, :doc doc})))
+  (let [doc (*xform-doc* doc)]
+    (when-not (and (map? doc)
+                   (every? keyword? (keys doc)))
+      (throw (ex-info "invalid doc" {:op op, :doc doc})))
 
-  (check-eid (:crux.db/id doc) op))
+    (-> doc
+        (update :crux.db/id check-eid op))))
 
 (defn- check-valid-time [valid-time op]
-  (when-not (inst? valid-time)
-    (throw (ex-info "invalid valid-time" {:valid-time valid-time, :op op}))))
+  (or (when (inst? valid-time)
+        valid-time)
+      (when (string? valid-time)
+        (try
+          (inst/read-instant-date valid-time)
+          (catch Exception _e)))
+      (throw (ex-info "invalid valid-time" {:valid-time valid-time, :op op}))))
 
 (defmulti ^:private conform-tx-op-type first
   :default ::default)
@@ -26,70 +37,56 @@
   (throw (ex-info "Invalid tx op" {:op op})))
 
 (defmethod conform-tx-op-type :crux.tx/put [[_ doc start-valid-time end-valid-time :as op]]
-  (check-doc doc op)
-  (some-> start-valid-time (check-valid-time op))
-  (some-> end-valid-time (check-valid-time op))
-
-  (let [doc-id (c/new-id doc)]
+  (let [doc (check-doc doc op)
+        doc-id (c/new-id doc)]
     {:op :crux.tx/put
      :eid (:crux.db/id doc)
      :doc-id doc-id
      :docs {doc-id doc}
-     :start-valid-time start-valid-time
-     :end-valid-time end-valid-time}))
+     :start-valid-time (some-> start-valid-time (check-valid-time op))
+     :end-valid-time (some-> end-valid-time (check-valid-time op))}))
 
 (defmethod conform-tx-op-type :crux.tx/delete [[_ eid start-valid-time end-valid-time :as op]]
-  (check-eid eid op)
-  (some-> start-valid-time (check-valid-time op))
-  (some-> end-valid-time (check-valid-time op))
-
   {:op :crux.tx/delete
-   :eid eid
-   :start-valid-time start-valid-time
-   :end-valid-time end-valid-time})
+   :eid (check-eid eid op)
+   :start-valid-time (some-> start-valid-time (check-valid-time op))
+   :end-valid-time (some-> end-valid-time (check-valid-time op))})
 
 (defmethod conform-tx-op-type :crux.tx/cas [[_ old-doc new-doc at-valid-time :as op]]
-  (some-> old-doc (check-doc op))
-  (some-> new-doc (check-doc op))
-  (some-> at-valid-time (check-valid-time op))
-  (when-not (or (nil? (:crux.db/id old-doc))
-                (nil? (:crux.db/id new-doc))
-                (= (:crux.db/id old-doc) (:crux.db/id new-doc)))
-    (throw (ex-info "CaS document IDs don't match" {:old-doc old-doc, :new-doc new-doc, :op op})))
-
-  (let [old-doc-id (some-> old-doc c/new-id)
+  (let [old-doc (some-> old-doc (check-doc op))
+        new-doc (some-> new-doc (check-doc op))
+        old-doc-id (some-> old-doc c/new-id)
         new-doc-id (some-> new-doc c/new-id)]
+    (when-not (or (nil? (:crux.db/id old-doc))
+                  (nil? (:crux.db/id new-doc))
+                  (= (:crux.db/id old-doc) (:crux.db/id new-doc)))
+      (throw (ex-info "CaS document IDs don't match" {:old-doc old-doc, :new-doc new-doc, :op op})))
+
     {:op :crux.tx/cas
      :eid (or (:crux.db/id old-doc) (:crux.db/id new-doc))
      :old-doc-id old-doc-id
      :new-doc-id new-doc-id
      :docs (into {} (filter val) {old-doc-id old-doc, new-doc-id new-doc})
-     :at-valid-time at-valid-time}))
+     :at-valid-time (some-> at-valid-time (check-valid-time op))}))
 
 
 (defmethod conform-tx-op-type :crux.tx/match [[_ eid doc at-valid-time :as op]]
-  (check-eid eid op)
-  (some-> doc (check-doc op))
-  (some-> at-valid-time (check-valid-time op))
-
-  (let [doc-id (c/new-id doc)]
+  (let [doc (some-> doc (check-doc op))
+        doc-id (c/new-id doc)]
     {:op :crux.tx/match
-     :eid eid
-     :at-valid-time at-valid-time
+     :eid (check-eid eid op)
+     :at-valid-time (some-> at-valid-time (check-valid-time op))
      :doc-id doc-id
      :docs (when doc
              {doc-id doc})}))
 
 (defmethod conform-tx-op-type :crux.tx/evict [[_ eid :as op]]
-  (check-eid eid op)
   {:op :crux.tx/evict
-   :eid eid})
+   :eid (check-eid eid op)})
 
 (defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid & args :as op]]
-  (check-eid fn-eid op)
-
   (merge {:op :crux.tx/fn
-          :fn-eid fn-eid}
+          :fn-eid (check-eid fn-eid op)}
          (when (seq args)
            (let [arg-doc {:crux.db/id (UUID/randomUUID)
                           :crux.db.fn/args args}
@@ -106,6 +103,37 @@
     (catch Exception e
       (throw (err/illegal-arg :invalid-tx-op
                               {::err/message (str "invalid tx-op: " (.getMessage e))})))))
+
+(defmulti ->tx-op :op :default ::default)
+
+(defmethod ->tx-op :crux.tx/put [{:keys [op doc-id start-valid-time end-valid-time docs]}]
+  (cond-> [op (get docs doc-id)]
+    start-valid-time (conj start-valid-time)
+    end-valid-time (conj end-valid-time)))
+
+(defmethod ->tx-op :crux.tx/delete [{:keys [op eid start-valid-time end-valid-time]}]
+  (cond-> [op eid]
+    start-valid-time (conj start-valid-time)
+    end-valid-time (conj end-valid-time)))
+
+(defmethod ->tx-op :crux.tx/match [{:keys [op eid docs doc-id at-valid-time]}]
+  (cond-> [op eid (get docs doc-id)]
+    at-valid-time (conj at-valid-time)))
+
+(defmethod ->tx-op :crux.tx/cas [{:keys [op docs old-doc-id new-doc-id at-valid-time]}]
+  (cond-> [op (get docs old-doc-id) (get docs new-doc-id)]
+    at-valid-time (conj at-valid-time)))
+
+(defmethod ->tx-op :crux.tx/evict [{:keys [op eid]}]
+  [op eid])
+
+(defmethod ->tx-op :crux.tx/fn [{:keys [op fn-eid docs arg-doc-id]}]
+  (cond-> [op fn-eid]
+    arg-doc-id (into (get-in docs [arg-doc-id :crux.db.fn/args]))))
+
+(defmethod ->tx-op ::default [tx-op]
+  (throw (err/illegal-arg :invalid-op
+                          {::err/message (str "invalid op: " (pr-str tx-op))})))
 
 (defmulti ->tx-event :op :default ::default)
 

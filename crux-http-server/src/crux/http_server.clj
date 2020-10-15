@@ -25,7 +25,10 @@
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [camel-snake-kebab.core :as csk]
-            [clojure.edn :as edn])
+            [clojure.edn :as edn]
+            [crux.tx.conform :as txc]
+            [clojure.set :as set]
+            [crux.io :as cio])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
@@ -56,32 +59,23 @@
          :body {:error (str eid " entity-tx not found") }}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [mapper (util/crux-object-mapper {:camel-case? true
-                                         :mapper-options {:decode-key-fn (fn [k]
-                                                                           (cond
-                                                                             (= k "_id") :crux.db/id
-                                                                             (= k "_fn") :crux.db/fn
-                                                                             :else (keyword k)))}})]
+  (let [mapper (util/crux-object-mapper {:mapper-options {:decode-key-fn true}})]
     (reify
       mfc/Decode
       (decode [_ data _]
-        (let [decoded-data (json/read-value data mapper)]
-          (update decoded-data :tx-ops (fn [tx-ops]
-                                         (mapv
-                                          (fn [transaction]
-                                            (let [tx (update transaction 0 (fn [op] (keyword "crux.tx" op)))]
-                                              (case (first tx)
-                                                :crux.tx/put (cond-> tx
-                                                               (get-in tx [1 :crux.db/fn]) (update-in [1 :crux.db/fn] edn/read-string)
-                                                               (get tx 2) (update 2 instant/read-instant-date)
-                                                               (get tx 3) (update 3 instant/read-instant-date))
-                                                :crux.tx/delete (cond-> tx
-                                                                  (get tx 2) (update 2 instant/read-instant-date)
-                                                                  (get tx 3) (update 3 instant/read-instant-date))
-                                                :crux.tx/match (cond-> tx
-                                                                 (get tx 3) (update 3 instant/read-instant-date))
-                                                tx)))
-                                          tx-ops))))))))
+        (binding [txc/*xform-doc* (fn [doc]
+                                    (-> doc
+                                        (set/rename-keys {:_id :crux.db/id
+                                                          :_fn :crux.db/fn})
+                                        (cio/update-if :crux.db/fn edn/read-string)))]
+          (-> (json/read-value data mapper)
+              (update :tx-ops (fn [tx-ops]
+                                (->> tx-ops
+                                     (mapv (fn [tx-op]
+                                             (-> tx-op
+                                                 (update 0 (fn [op] (keyword "crux.tx" op)))
+                                                 (txc/conform-tx-op)
+                                                 (txc/->tx-op)))))))))))))
 
 (def ->submit-tx-muuntaja
   (m/create
