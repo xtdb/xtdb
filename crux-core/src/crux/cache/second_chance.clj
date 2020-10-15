@@ -13,12 +13,14 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
-  (when-not (.isEmpty m)
-    (let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
-      (loop [i (long (rand-int (alength table)))]
+  (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
+    (let [start (long (rand-int (alength table)))]
+      (loop [i start]
         (if-let [^Map$Entry e (aget table i)]
           e
-          (recur (rem (inc i) (alength table))))))))
+          (let [next (rem (inc i) (alength table))]
+            (when-not (= next start)
+              (recur next))))))))
 
 (declare resize-cache)
 
@@ -66,10 +68,10 @@
 
 (defn move-to-cooling-state [^SecondChanceCache cache]
   (let [hot ^ConcurrentHashMap (.hot cache)
-        cooling ^Queue (.cooling cache)
-        cooling-target-size (long (Math/ceil (* (.cooling-factor cache) (.size hot))))]
-    (while (< (.size cooling) cooling-target-size)
-      (let [e (random-entry (.hot cache))]
+        cooling ^Queue (.cooling cache)]
+    (while (< (.size cooling)
+              (long (Math/ceil (* (.cooling-factor cache) (.size hot)))))
+      (when-let [e (random-entry (.hot cache))]
         (when-let [vp ^ValuePointer (.getValue e)]
           (when (and (.isSwizzled vp)
                      (.offer cooling vp))
