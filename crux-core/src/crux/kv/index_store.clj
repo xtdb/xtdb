@@ -473,10 +473,10 @@
 (defn- cav-cache-lookup ^java.util.NavigableSet [cav-cache canonical-buffer-cache cache-i ^DirectBuffer eid-value-buffer
                                                  ^DirectBuffer content-hash-buffer ^DirectBuffer attr-buffer]
   (cache/compute-if-absent cav-cache
-                           [content-hash-buffer attr-buffer]
+                           (MapEntry/create content-hash-buffer attr-buffer)
                            (fn [_]
-                             [(canonical-buffer-lookup canonical-buffer-cache content-hash-buffer)
-                              (canonical-buffer-lookup canonical-buffer-cache attr-buffer)])
+                             (MapEntry/create (canonical-buffer-lookup canonical-buffer-cache content-hash-buffer)
+                                              (canonical-buffer-lookup canonical-buffer-cache attr-buffer)))
                            (fn [_]
                              (let [eid-size (mem/capacity eid-value-buffer)
                                    vs (TreeSet. mem/buffer-comparator)
