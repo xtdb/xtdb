@@ -177,9 +177,6 @@
             value (key-suffix k (+ c/index-id-size eid-size c/id-size c/id-size))]
         (->Quad attr entity content-hash value)))))
 
-(defn- decode-ecav-key-as-v-from [^DirectBuffer k ^long eid-size]
-  (key-suffix k (+ c/index-id-size eid-size c/id-size c/id-size)))
-
 (defn- encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b value]
    (encode-hash-cache-key-to b value mem/empty-buffer))
@@ -478,8 +475,7 @@
                              (MapEntry/create (canonical-buffer-lookup canonical-buffer-cache content-hash-buffer)
                                               (canonical-buffer-lookup canonical-buffer-cache attr-buffer)))
                            (fn [_]
-                             (let [eid-size (mem/capacity eid-value-buffer)
-                                   vs (TreeSet. mem/buffer-comparator)
+                             (let [vs (TreeSet. mem/buffer-comparator)
                                    prefix (encode-ecav-key-to nil
                                                               eid-value-buffer
                                                               content-hash-buffer
@@ -487,7 +483,7 @@
                                    i (new-prefix-kv-iterator cache-i prefix)]
                                (loop [k (kv/seek i prefix)]
                                  (when k
-                                   (let [v (decode-ecav-key-as-v-from k eid-size)
+                                   (let [v (key-suffix k (.capacity prefix))
                                          v (canonical-buffer-lookup canonical-buffer-cache v)]
                                      (.add vs v)
                                      (recur (kv/next i)))))
