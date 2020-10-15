@@ -40,7 +40,26 @@
              :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
                                      :target "crux-http-server/cljs-target/public/css/"}}
 
-             :test {:dependencies []}}
+             :test {:dependencies [[clj-http "3.10.1"]
+                                   [juxt/crux-test "crux-git-version"]
+                                   [org.clojure/test.check "0.10.0"]
+
+                                   ;; dependency resolution
+                                   [tigris "0.1.2"]
+                                   [com.fasterxml.jackson.dataformat/jackson-dataformat-cbor "2.10.2"]
+                                   [com.fasterxml.jackson.dataformat/jackson-dataformat-smile "2.10.2"]
+                                   [cheshire "5.10.0"]
+                                   [com.google.protobuf/protobuf-java "3.6.1"]
+                                   [com.fasterxml.jackson.core/jackson-core "2.10.2"]
+                                   [commons-codec "1.12"]
+                                   [javax.servlet/javax.servlet-api "4.0.1"]
+                                   [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-security "9.4.30.v20200611"]
+                                   [com.google.errorprone/error_prone_annotations "2.1.3"]
+                                   [com.google.guava/guava "26.0-jre"]
+]}}
 
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"

@@ -7,6 +7,7 @@
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-jdbc "crux-git-version-beta"]
                  [juxt/crux-sql "crux-git-version-alpha"]
+                 [juxt/crux-http-server "crux-git-version-alpha"]
 
                  ;; JDBC
                  [com.h2database/h2 "1.4.200"]
@@ -25,7 +26,8 @@
                  [com.google.code.findbugs/jsr305 "3.0.2"]
                  [commons-codec "1.12"]
                  [org.tukaani/xz "1.8"]
-                 [org.apache.commons/commons-lang3 "3.9"]]
+                 [org.apache.commons/commons-lang3 "3.9"]
+                 [org.eclipse.jetty/jetty-server "9.4.22.v20191022"]]
 
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]
@@ -40,7 +42,6 @@
                                    [juxt/crux-kafka-embedded "crux-git-version-beta"]
                                    [juxt/crux-jdbc "crux-git-version-beta"]
                                    [juxt/crux-http-client "crux-git-version-beta"]
-                                   [juxt/crux-http-server "crux-git-version-alpha"]
                                    [juxt/crux-metrics "crux-git-version-alpha"]
                                    [juxt/crux-rdf "crux-git-version-alpha"]
 
