@@ -13,7 +13,7 @@
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
            java.nio.charset.StandardCharsets
-           [java.util Arrays Collection Date Map UUID Set]
+           [java.util Arrays Base64 Collection Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -552,8 +552,12 @@
              (new-id id))
            id))
 
+(defn base64-reader ^bytes [s]
+  (.decode (Base64/getDecoder) (str s)))
+
 (defn read-edn-string-with-readers [s]
-  (edn/read-string {:readers {'crux/id id-edn-reader}} s))
+  (edn/read-string {:readers {'crux/id id-edn-reader
+                              'crux/base64 base64-reader}} s))
 
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
@@ -565,6 +569,18 @@
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
   (.write w (cio/pr-edn-str (edn-id->original-id id))))
+
+(def ^:const ^:private base64-print-method-enabled?
+  (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_BASE64_PRINT_METHOD")))
+
+(when base64-print-method-enabled?
+  (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]
+    (.write w "#crux/base64 ")
+    (.write w (cio/pr-edn-str (.encodeToString (Base64/getEncoder) b))))
+
+  (defmethod print-dup (class (byte-array 0)) [^bytes b ^Writer w]
+    (.write w "#crux/base64 ")
+    (.write w (cio/pr-edn-str (.encodeToString (Base64/getEncoder) b)))))
 
 (nippy/extend-freeze
  EDNId

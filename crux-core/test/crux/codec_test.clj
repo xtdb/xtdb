@@ -73,6 +73,10 @@
     (t/is (not= (c/new-id "http://xmlns.com/foaf/0.1/firstName")
                 #crux/id ":http://xmlns.com/foaf/0.1/firstName"))))
 
+(t/deftest test-base64-reader
+  (t/is (Arrays/equals (byte-array [1 2 3])
+                       ^bytes (c/read-edn-string-with-readers "#crux/base64 \"AQID\""))))
+
 (tcct/defspec test-generative-primitive-value-decoder 1000
   (prop/for-all [v (gen/one-of [(gen/return nil)
                                 gen/large-integer
