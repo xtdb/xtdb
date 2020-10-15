@@ -120,15 +120,15 @@
        (assoc :return :output-stream))))
 
 ;; TODO: Could add from date parameter.
+;; TODO: this needs to stream the result
 (defn- tx-log [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])
-          result (crux/open-tx-log crux-node after-tx-id with-ops?)]
-      (->
-       {:status 200
-        :body (iterator-seq result)
-        :return :output-stream}
-       (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
+    (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])]
+      (-> {:status 200
+           :body (with-open [tx-log (crux/open-tx-log crux-node after-tx-id with-ops?)]
+                   (vec (iterator-seq tx-log)))
+           :return :output-stream}
+          (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
 
 (s/def ::tx-time ::util/transaction-time)
 (s/def ::sync-spec (s/keys :opt-un [::tx-time ::util/timeout]))
