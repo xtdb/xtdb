@@ -126,12 +126,22 @@
 
 ;; Utils
 
+(def ^:private chunk-size 8)
+
 (defn idx->seq
   [idx]
   (when-let [result (db/seek-values idx nil)]
-    (->> (repeatedly #(db/next-values idx))
-         (take-while identity)
-         (cons result))))
+    ((fn step [cb v]
+       (if v
+         (do (chunk-append cb v)
+             (if (= (count cb) chunk-size)
+               (chunk-cons (chunk cb)
+                           (lazy-seq
+                            (step (chunk-buffer chunk-size)
+                                  (db/next-values idx))))
+               (recur cb (db/next-values idx))))
+         (chunk-cons (chunk cb) nil)))
+     (chunk-buffer chunk-size) result)))
 
 ;; Join
 
