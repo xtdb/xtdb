@@ -55,7 +55,8 @@
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
 
-(def ^:const ^:private max-value-index-length 128)
+;; LMDB #MDB_MAXKEYSIZE 511 (>= 511 (+ value-type-id-size (* 2 (+ value-type-id-size 224)) id-size id-size))
+(def ^:const ^:private max-value-index-length 224)
 
 (defprotocol IdOrBuffer
   (new-id ^crux.codec.Id [id])
@@ -222,22 +223,15 @@
 
   String
   (value->buffer [this ^MutableDirectBuffer to]
-    (if (< max-value-index-length (count this))
-      (doto (id->buffer this to)
-        (.putByte 0 clob-value-type-id))
-      (let [terminate-mark (byte 1)
-            terminate-mark-size Byte/BYTES
-            offset (byte 2)
-            ub-in (mem/on-heap-buffer (.getBytes this StandardCharsets/UTF_8))
-            length (.capacity ub-in)]
-        (.putByte to 0 string-value-type-id)
-        (loop [idx 0]
-          (if (= idx length)
-            (do (.putByte to (inc idx) terminate-mark)
-                (mem/limit-buffer to (+ length value-type-id-size terminate-mark-size)))
-            (let [b (.getByte ub-in idx)]
-              (.putByte to (inc idx) (byte (+ offset b)))
-              (recur (inc idx))))))))
+    (let [bs (.getBytes this StandardCharsets/UTF_8)]
+      (if (< max-value-index-length (alength bs))
+        (doto (id->buffer this to)
+          (.putByte 0 clob-value-type-id))
+        (mem/limit-buffer
+         (doto to
+           (.putByte 0 string-value-type-id)
+           (.putBytes value-type-id-size bs))
+         (+ value-type-id-size (alength bs))))))
 
   Class
   (value->buffer [this ^MutableDirectBuffer to]
@@ -282,16 +276,9 @@
     (Double/longBitsToDouble l)))
 
 (defn- decode-string ^String [^DirectBuffer buffer]
-  (let [terminate-mark-size Byte/BYTES
-        offset (byte 2)
-        length (- (.capacity buffer) terminate-mark-size)
-        bs (byte-array (- length value-type-id-size))]
-    (loop [idx value-type-id-size]
-      (if (= idx length)
-        (String. bs StandardCharsets/UTF_8)
-        (let [b (.getByte buffer idx)]
-          (aset bs (dec idx) (unchecked-byte (- b offset)))
-          (recur (inc idx)))))))
+  (String. (doto (byte-array (- (.capacity buffer) value-type-id-size))
+             (->> (.getBytes buffer value-type-id-size)))
+           StandardCharsets/UTF_8))
 
 (defn- decode-boolean ^Boolean [^DirectBuffer buffer]
   (= 1 (.getByte buffer value-type-id-size)))

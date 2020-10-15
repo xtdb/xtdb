@@ -101,7 +101,7 @@
                       (= v (c/decode-value-buffer buffer)))
                     (cond
                       (and (string? v)
-                           (< @#'c/max-value-index-length (count v)))
+                           (< @#'c/max-value-index-length (alength (.getBytes ^String v "UTF-8"))))
                       (= @#'c/clob-value-type-id
                          (.getByte (c/value-buffer-type-id buffer) 0))
 
