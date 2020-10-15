@@ -39,25 +39,25 @@
       (db/commit in-flight-tx)
       (db/abort in-flight-tx))))
 
-(defn- submit-tx [{:keys [!submitted-tx tx-events]}
+(defn- submit-tx [tx-events
                   {:keys [^ExecutorService tx-submit-executor
                           ^ExecutorService tx-ingest-executor
                           kv-store tx-ingester]}]
-  (when (.isShutdown tx-submit-executor)
-    (deliver !submitted-tx ::closed))
+  (if (.isShutdown tx-submit-executor)
+    ::closed
 
-  (let [tx-time (Date.)
-        tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
-        next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
-    (kv/store kv-store [[(encode-tx-event-key-to nil next-tx)
-                         (mem/->nippy-buffer tx-events)]
-                        (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)])
+    (let [tx-time (Date.)
+          tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
+          next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
+      (kv/store kv-store [[(encode-tx-event-key-to nil next-tx)
+                           (mem/->nippy-buffer tx-events)]
+                          (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)])
 
-    (deliver !submitted-tx next-tx)
+      (when (and tx-ingest-executor tx-ingester)
+        (.submit tx-ingest-executor
+                 ^Runnable #(ingest-tx tx-ingester next-tx tx-events)))
 
-    (when (and tx-ingest-executor tx-ingester)
-      (.submit tx-ingest-executor
-               ^Runnable #(ingest-tx tx-ingester next-tx tx-events)))))
+      next-tx)))
 
 (defrecord KvTxLog [^ExecutorService tx-submit-executor
                     ^ExecutorService tx-ingest-executor
@@ -67,17 +67,13 @@
     (when (.isShutdown tx-submit-executor)
       (throw (IllegalStateException. "TxLog is closed.")))
 
-    (let [!submitted-tx (promise)]
-      (.submit tx-submit-executor
-               ^Runnable #(submit-tx {:!submitted-tx !submitted-tx
-                                      :tx-events tx-events}
-                                     this))
+    (let [!submitted-tx (.submit tx-submit-executor ^Callable #(submit-tx tx-events this))]
       (delay
-       (let [submitted-tx @!submitted-tx]
-         (when (= ::closed submitted-tx)
-           (throw (IllegalStateException. "TxLog is closed.")))
+        (let [submitted-tx @!submitted-tx]
+          (when (= ::closed submitted-tx)
+            (throw (IllegalStateException. "TxLog is closed.")))
 
-         submitted-tx))))
+          submitted-tx))))
 
   (latest-submitted-tx [this]
     (when-let [tx-id (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id)]
