@@ -4,6 +4,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.instant :as instant]
+            [clojure.java.io :as io]
             [crux.api :as crux]
             [crux.codec :as c]
             [crux.http-server.entity :as entity]
@@ -28,11 +29,13 @@
             [clojure.edn :as edn]
             [crux.tx.conform :as txc]
             [clojure.set :as set]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [cognitect.transit :as transit])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
            [crux.api ICruxAPI NodeOutOfSyncException]
+           crux.codec.Id
            [java.io Closeable IOException OutputStream]
            java.time.Duration
            org.eclipse.jetty.server.Server))
@@ -97,30 +100,61 @@
 (s/def ::after-tx-id int?)
 (s/def ::tx-log-spec (s/keys :opt-un [::with-ops? ::after-tx-id]))
 
+(defn ->tx-log-edn-encoder [_]
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
+      (fn [^OutputStream output-stream]
+        (with-open [w (io/writer output-stream)]
+          (try
+            (if results
+              (print-method (or (iterator-seq results) '()) w)
+              (.write w ^String (pr-str res)))
+            (finally
+              (cio/try-close results))))))))
+
+(defn- ->tx-log-tj-encoder [_]
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
+      (fn [^OutputStream output-stream]
+        (let [w (transit/writer output-stream :json {:handlers {Id util/crux-id-write-handler}})]
+          (try
+            (if results
+              (transit/write w (or (iterator-seq results) '()))
+              (transit/write w res))
+            (finally
+              (cio/try-close results))))))))
+
 (defn- ->tx-log-json-encoder [_]
   (let [mapper (util/crux-object-mapper {:camel-case? true})]
     (reify
       mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ data _]
+      (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
         (fn [^OutputStream output-stream]
-          (let [tx-ops? (contains? (first data) :crux.api/tx-ops)
-                encode-tx-ops (fn [tx] (update tx :crux.api/tx-ops util/crux-stringify-keywords))]
-            (json/write-value output-stream (if tx-ops? (map encode-tx-ops data) data) mapper)))))))
+          (try
+            (if results
+              (let [data (iterator-seq results)
+                    tx-ops? (contains? (first data) :crux.api/tx-ops)
+                    encode-tx-ops (fn [tx] (update tx :crux.api/tx-ops util/crux-stringify-keywords))]
+                (json/write-value output-stream (or (if tx-ops? (map encode-tx-ops data) data) '()) mapper))
+              (json/write-value output-stream res mapper))
+            (finally
+              (cio/try-close results))))))))
 
 (def ->tx-log-muuntaja
   (m/create
    (-> util/default-muuntaja-options
+       (assoc-in [:formats "application/edn" :encoder] [->tx-log-edn-encoder])
+       (assoc-in [:formats "application/transit+json" :encoder] [->tx-log-tj-encoder])
        (assoc-in [:formats "application/json" :encoder] [->tx-log-json-encoder])
        (assoc :return :output-stream))))
 
-;; TODO: Could add from date parameter.
-;; TODO: this needs to stream the result
 (defn- tx-log [^ICruxAPI crux-node]
   (fn [req]
     (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])]
       (-> {:status 200
-           :body (with-open [tx-log (crux/open-tx-log crux-node after-tx-id with-ops?)]
-                   (vec (iterator-seq tx-log)))
+           :body {:results (crux/open-tx-log crux-node after-tx-id with-ops?)}
            :return :output-stream}
           (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
 
