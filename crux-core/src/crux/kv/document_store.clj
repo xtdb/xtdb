@@ -34,10 +34,10 @@
     (assert (= c/content-hash->doc-index-id index-id))
     (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)))
 
-(defrecord KvDocumentStore [kv]
+(defrecord KvDocumentStore [kv-store]
   db/DocumentStore
   (fetch-docs [this ids]
-    (with-open [snapshot (kv/new-snapshot kv)]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
       (persistent!
        (reduce
         (fn [acc id]
@@ -48,9 +48,9 @@
         (transient {}) ids))))
 
   (submit-docs [this id-and-docs]
-    (kv/store kv (for [[id doc] id-and-docs]
-                   (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
-                                    (mem/->nippy-buffer doc)))))
+    (kv/store kv-store (for [[id doc] id-and-docs]
+                         (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
+                                          (mem/->nippy-buffer doc)))))
 
   Closeable
   (close [_]))

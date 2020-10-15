@@ -75,7 +75,7 @@
                                         (.put "db-dir" (io/file data-dir "indexes"))))))))]
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
-               (kv/kv-name (get-in node [:document-store :document-store :kv]))
+               (kv/kv-name (get-in node [:document-store :document-store :kv-store]))
                (kv/kv-name (get-in node [:index-store :kv-store]))))
       (t/is (= (.toPath (io/file data-dir "txs"))
                (get-in node [:tx-log :kv-store :db-dir]))))))

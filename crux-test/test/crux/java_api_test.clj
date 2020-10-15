@@ -59,7 +59,7 @@
     (with-open [node (start-rocks-node data-dir)]
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
-               (kv/kv-name (get-in node [:document-store :document-store :kv]))
+               (kv/kv-name (get-in node [:document-store :document-store :kv-store]))
                (kv/kv-name (get-in node [:index-store :kv-store]))))
       (t/is (= (.toPath (io/file data-dir "txs"))
                (get-in node [:tx-log :kv-store :db-dir]))))))
@@ -68,7 +68,7 @@
   (fix/with-tmp-dir "data" [data-dir]
     (with-open [node (start-rocks-ingest-node data-dir)]
       (t/is (= "crux.rocksdb.RocksKv"
-               (kv/kv-name (get-in node [:document-store :document-store :kv])))))))
+               (kv/kv-name (get-in node [:document-store :document-store :kv-store])))))))
 
 (t/deftest test-java-api
   (t/testing "Can create node, transact to node, and query node"
