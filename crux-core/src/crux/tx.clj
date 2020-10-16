@@ -18,7 +18,7 @@
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
-           [java.util.concurrent Executors ExecutorService TimeoutException TimeUnit]
+           [java.util.concurrent Executors ExecutorService TimeUnit]
            java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -43,6 +43,18 @@
 
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
+
+(defn- fetch-docs [document-store ids]
+  (let [ids (set ids)]
+    (loop [indexed {}]
+      (let [missing-ids (set/difference ids (set (keys indexed)))
+            indexed (merge indexed (when (seq missing-ids)
+                                     (db/fetch-docs document-store missing-ids)))]
+        (if (= (count indexed) (count ids))
+          indexed
+          (do
+            (Thread/sleep 100)
+            (recur indexed)))))))
 
 (defmulti index-tx-event
   (fn [[op :as tx-event] tx tx-ingester]
@@ -175,7 +187,7 @@
         {:keys [tx-events docs failed?]}
         (cond
           tx-events {:tx-events tx-events
-                     :docs (txc/tx-events->docs document-store tx-events)}
+                     :docs (fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
 
           failed? (do
                     (log/warn "Transaction function failed when originally evaluated:"
@@ -232,24 +244,25 @@
          [k (count (c/vectorize-value v))])
        (into {})))
 
-(defn index-docs [{:keys [bus index-store] :as tx-ingester} docs]
+(defn- index-docs [{:keys [bus index-store] :as tx-ingester} docs]
   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
     (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                           :docs missing-ids})))
 
   (when (seq docs)
-    (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids (set (keys docs))})
+    (let [doc-ids (into #{} (map c/new-id) (keys docs))]
+      (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids doc-ids})
 
-    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store docs)]
-      (update-stats tx-ingester (->> (vals indexed-docs)
-                                     (map doc-predicate-stats)))
+      (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store docs)]
+        (update-stats tx-ingester (->> (vals indexed-docs)
+                                       (map doc-predicate-stats)))
 
-      (bus/send bus {:crux/event-type ::indexed-docs,
-                     :doc-ids (set (keys docs))
-                     :av-count (->> (vals indexed-docs) (apply concat) (count))
-                     :bytes-indexed bytes-indexed}))))
+        (bus/send bus {:crux/event-type ::indexed-docs,
+                       :doc-ids doc-ids
+                       :av-count (->> (vals indexed-docs) (apply concat) (count))
+                       :bytes-indexed bytes-indexed})))))
 
-(defn with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
+(defn- with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
   (case op
     :crux.tx/fn (let [[fn-eid arg-doc-id] args]
                   (cond-> [op fn-eid]
@@ -284,7 +297,7 @@
     (swap! !tx-events into tx-events)
 
     (try
-      (index-docs this (txc/tx-events->docs forked-document-store tx-events))
+      (index-docs this (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
       (let [forked-deps {:index-store forked-index-store
                          :document-store forked-document-store
                          :query-engine (assoc query-engine :index-store forked-index-store)}
@@ -296,8 +309,7 @@
                                      (index-tx-event (-> tx-event
                                                          (with-tx-fn-args forked-deps))
                                                      tx
-                                                     (-> forked-deps
-                                                         (assoc :index-snapshot index-snapshot)))]
+                                                     (assoc forked-deps :index-snapshot index-snapshot))]
                                  (db/submit-docs forked-document-store docs)
 
                                  (if (and pre-commit-fn (not (pre-commit-fn)))
@@ -337,7 +349,10 @@
       (db/index-docs index-store new-docs)
       (update-stats this (map doc-predicate-stats (vals new-docs)))
 
-      (db/submit-docs document-store new-docs))
+      (db/submit-docs document-store new-docs)
+
+      ;; ensure the docs are available before we commit the tx, see #1175
+      (fetch-docs document-store (keys new-docs)))
 
     (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
 

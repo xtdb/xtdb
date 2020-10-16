@@ -164,15 +164,14 @@
 (defmethod <-tx-event :crux.tx/fn [evt]
   (zipmap [:op :fn-eid :args-content-hash] evt))
 
-(defn tx-events->docs [document-store tx-events]
+(defn tx-events->doc-hashes [tx-events]
   (->> tx-events
        (map <-tx-event)
        (mapcat #(keep % [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
-       (remove #{c/nil-id-buffer})
-       (db/fetch-docs document-store)))
+       (remove #{c/nil-id-buffer})))
 
 (defn tx-events->tx-ops [document-store tx-events]
-  (let [docs (tx-events->docs document-store tx-events)]
+  (let [docs (db/fetch-docs document-store (tx-events->doc-hashes tx-events))]
     (for [[op id & args] tx-events]
       (into [op]
             (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
