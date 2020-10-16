@@ -43,5 +43,9 @@
       (binding [dst/*doc-store* (::s3/document-store sys)]
         (f)))))
 
+;; required for CIDER to run the tests in this namespace
+;; see https://github.com/clojure-emacs/cider-nrepl/issues/680
+(t/deftest _)
+
 (defn test-ns-hook []
   (dst/test-doc-store (find-ns 'crux.s3-test)))
