@@ -77,3 +77,21 @@
                    :type :person}]}
                (crux/q db '{:find [(eql/project ?dc [*])]
                             :where [[?dc :person/name "Daniel Craig"]]}))))))
+
+(t/deftest test-union
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo
+                                       :type :a
+                                       :x 2
+                                       :y "this"
+                                       :z :not-this}]
+                        [:crux.tx/put {:crux.db/id :bar
+                                       :type :b
+                                       :y "not this"
+                                       :z 5}]])
+
+  (t/is (= #{[{:crux.db/id :foo, :x 2, :y "this"}]
+             [{:crux.db/id :bar, :z 5}]}
+           (crux/q (crux/db *api*)
+                   '{:find [(eql/project ?it [{:type {:a [:x :y], :b [:z]}}
+                                              :crux.db/id])]
+                     :where [[?it :crux.db/id]]}))))
