@@ -3,6 +3,7 @@
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.walk :as walk]
+            [clojure.java.io :as io]
             [cognitect.transit :as transit]
             [crux.api :as api]
             [crux.codec :as c]
@@ -11,10 +12,13 @@
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [muuntaja.format.transit :as mft]
+            [muuntaja.format.edn :as mfe]
             [spec-tools.core :as st]
             [jsonista.core :as j]
             [camel-snake-kebab.core :as csk]
-            [crux.http-server.entity-ref :as entity-ref])
+            [crux.http-server.entity-ref :as entity-ref]
+            [clojure.set :as set]
+            [crux.tx.conform :as txc])
   (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
            crux.http_server.entity_ref.EntityRef
@@ -60,6 +64,22 @@
 (def ^DateTimeFormatter default-date-formatter
   (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
+(defn ->edn-encoder [_]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ data _]
+      (.getBytes (pr-str data) "UTF-8"))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
+      (fn [^OutputStream output-stream]
+        (with-open [w (io/writer output-stream)]
+          (try
+            (if results
+              (print-method (or (iterator-seq results) '()) w)
+              (.write w ^String (pr-str data)))
+            (finally
+              (cio/try-close results))))))))
+
 (def crux-id-write-handler
   (transit/write-handler "crux.codec/id" #(str %)))
 
@@ -73,70 +93,71 @@
           (transit/write writer data)
           (.toByteArray baos)))
       mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ data _]
+      (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
         (fn [^OutputStream output-stream]
-          (transit/write
-           (transit/writer output-stream :json options) data)
-          (.flush output-stream))))))
+          (let [writer (transit/writer output-stream :json options)]
+            (try
+              (if results
+                (transit/write writer (or (iterator-seq results) '()))
+                (transit/write writer data))
+              (finally
+                (cio/try-close results)))))))))
 
-(defn crux-stringify-keywords
-  [m]
-  (let [f (fn [[k v]]
-            (cond
-              (= :crux.db/id k) ["_id" v]
-              (= :crux.db/fn k) ["_fn" (pr-str v)]
-              (keyword? k) [(name k) v]
-              :else [k v]))
-        g (fn [k] (cond
-                    (= :crux.db/id k) "_id"
-                    (keyword? k) (name k)
-                    :else k))]
-    (walk/prewalk (fn [x]
-                     (cond
-                       (map? x) (into {} (map f x))
-                       (vector? x) (mapv g x)
-                       :else x))
-                   m)))
-
-(defn crux-object-mapper [{:keys [camel-case? mapper-options] :as options}]
+(def crux-object-mapper
   (j/object-mapper
-   (merge
-    {:encode-key-fn (fn [key]
-                      (cond
-                        (= :crux.db/id key) "_id"
-                        (= :crux.db/fn key) "_fn"
-                        :else (cond-> (name key)
-                                camel-case? csk/->camelCase)))
-     :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))
-                EntityRef entity-ref/ref-json-encoder}}
-    mapper-options)))
+   {:encode-key-fn (fn [k]
+                     (cond
+                       (= k :crux.db/id) "_id"
+                       (= k :crux.db/fn) "_fn"
+                       :else (str (symbol k))))
+    :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))
+               EntityRef entity-ref/ref-json-encoder}}))
 
-(defn ->json-encoder [options]
-  (let [object-mapper (crux-object-mapper {:camel-case? true})]
+(defn camel-case-keys [m]
+  (into {} (map (fn [[k v]] [(csk/->camelCaseKeyword k) v]) m)))
+
+(defn transform-doc [doc]
+  (cio/update-if doc :crux.db/fn pr-str))
+
+(defn transform-tx-op [tx-op]
+  (binding [txc/*xform-doc* transform-doc]
+    (-> tx-op
+        (txc/conform-tx-op)
+        (txc/->tx-op)
+        (update 0 name))))
+
+(defn ->json-encoder [transform-fn options]
+  (let [object-mapper crux-object-mapper]
     (reify
       mfc/EncodeToBytes
       (encode-to-bytes [_ data _]
-        (j/write-value-as-bytes data object-mapper))
+        (j/write-value-as-bytes (transform-fn data) object-mapper))
       mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ data _]
+      (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
         (fn [^OutputStream output-stream]
-          (j/write-value output-stream data object-mapper))))))
+          (try
+            (if results
+              (let [results-seq (iterator-seq results)]
+                (j/write-value output-stream (or (some-> results-seq transform-fn) '()) object-mapper))
+              (j/write-value output-stream data object-mapper))
+            (finally
+              (cio/try-close results))))))))
 
-(def default-muuntaja-options
-  (-> m/default-options
-      (update :formats select-keys ["application/edn"])
-      (assoc :default-format "application/edn")
-      (m/install {:name "application/transit+json"
-                  :encoder [->tj-encoder]
-                  :decoder [(partial mft/decoder :json)]})
-      (m/install {:name "application/json"
-                  :encoder [->json-encoder]})))
-
-(def default-muuntaja
-  (m/create default-muuntaja-options))
-
-(def output-stream-muuntaja
-  (m/create (assoc default-muuntaja-options :return :output-stream)))
+(defn ->default-muuntaja
+  ([]
+   (->default-muuntaja camel-case-keys))
+  ([transform-fn]
+   (-> m/default-options
+       (dissoc :formats)
+       (assoc :default-format "application/edn")
+       (m/install {:name "application/transit+json"
+                   :encoder [->tj-encoder]
+                   :decoder [(partial mft/decoder :json)]})
+       (m/install {:name "application/edn"
+                   :encoder [->edn-encoder]
+                   :decoder [mfe/decoder]})
+       (m/install {:name "application/json"
+                   :encoder [(partial ->json-encoder transform-fn)]}))))
 
 (defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond

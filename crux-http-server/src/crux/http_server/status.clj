@@ -15,7 +15,7 @@
         (.getBytes resp ^String charset)))))
 
 (defn ->status-muuntaja [opts]
-  (m/create (-> util/default-muuntaja-options
+  (m/create (-> (util/->default-muuntaja)
                 (m/install {:name "text/html"
                             :encoder [->status-html-encoder opts]
                             :return :bytes}))))

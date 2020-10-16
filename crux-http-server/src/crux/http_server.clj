@@ -30,7 +30,8 @@
             [crux.tx.conform :as txc]
             [clojure.set :as set]
             [crux.io :as cio]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [jsonista.core :as json])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
@@ -62,7 +63,7 @@
          :body {:error (str eid " entity-tx not found") }}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [mapper (util/crux-object-mapper {:mapper-options {:decode-key-fn true}})]
+  (let [mapper (json/object-mapper {:decode-key-fn true})]
     (reify
       mfc/Decode
       (decode [_ data _]
@@ -82,7 +83,10 @@
 
 (def ->submit-tx-muuntaja
   (m/create
-   (assoc-in util/default-muuntaja-options [:formats "application/json" :decoder] [->submit-json-decoder])))
+   (assoc-in
+    (util/->default-muuntaja util/camel-case-keys)
+    [:formats "application/json" :decoder]
+    [->submit-json-decoder])))
 
 (s/def ::tx-ops vector?)
 (s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
@@ -100,54 +104,16 @@
 (s/def ::after-tx-id int?)
 (s/def ::tx-log-spec (s/keys :opt-un [::with-ops? ::after-tx-id]))
 
-(defn ->tx-log-edn-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (with-open [w (io/writer output-stream)]
-          (try
-            (if results
-              (print-method (or (iterator-seq results) '()) w)
-              (.write w ^String (pr-str res)))
-            (finally
-              (cio/try-close results))))))))
-
-(defn- ->tx-log-tj-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (let [w (transit/writer output-stream :json {:handlers {Id util/crux-id-write-handler}})]
-          (try
-            (if results
-              (transit/write w (or (iterator-seq results) '()))
-              (transit/write w res))
-            (finally
-              (cio/try-close results))))))))
-
-(defn- ->tx-log-json-encoder [_]
-  (let [mapper (util/crux-object-mapper {:camel-case? true})]
-    (reify
-      mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-        (fn [^OutputStream output-stream]
-          (try
-            (if results
-              (let [data (iterator-seq results)
-                    tx-ops? (contains? (first data) :crux.api/tx-ops)
-                    encode-tx-ops (fn [tx] (update tx :crux.api/tx-ops util/crux-stringify-keywords))]
-                (json/write-value output-stream (or (if tx-ops? (map encode-tx-ops data) data) '()) mapper))
-              (json/write-value output-stream res mapper))
-            (finally
-              (cio/try-close results))))))))
-
 (def ->tx-log-muuntaja
   (m/create
-   (-> util/default-muuntaja-options
-       (assoc-in [:formats "application/edn" :encoder] [->tx-log-edn-encoder])
-       (assoc-in [:formats "application/transit+json" :encoder] [->tx-log-tj-encoder])
-       (assoc-in [:formats "application/json" :encoder] [->tx-log-json-encoder])
+   (-> (util/->default-muuntaja (fn [tx-log]
+                                  (->> tx-log
+                                       (map
+                                        (fn [tx]
+                                          (-> tx
+                                              (cio/update-if :crux.api/tx-ops #(mapv util/transform-tx-op %))
+                                              (cio/update-if :crux.tx.event/tx-events (fn [tx-events] (mapv #(update % 0 name) tx-events)))
+                                              (util/camel-case-keys)))))))
        (assoc :return :output-stream))))
 
 (defn- tx-log [^ICruxAPI crux-node]
@@ -226,17 +192,12 @@
       {:status 404
        :body {:error "No latest-submitted-tx found."}})))
 
-(defn- ->query-list-json-encoder [_]
-  (let [mapper (util/crux-object-mapper {:camel-case? true})]
-    (reify
-      mfc/EncodeToBytes
-      (encode-to-bytes [_ data _]
-        (json/write-value-as-bytes (map #(update % :query pr-str) data) mapper)))))
-
-(def ->query-list-muuntaja
-  (m/create
-   (-> util/default-muuntaja-options
-       (assoc-in [:formats "application/json" :encoder] [->query-list-json-encoder]))))
+(defn query-state-transform [query-states]
+  (map
+   (fn [qs] (-> qs
+                (update :query pr-str)
+                util/camel-case-keys))
+   query-states))
 
 (defn active-queries [^ICruxAPI crux-node]
   (fn [_]
@@ -330,7 +291,8 @@
                               :parameters {:query ::query/query-params}}
                         :post {:handler (query/data-browser-query opts)
                                :parameters {:query ::query/query-params
-                                            :body ::query/body-params}}}]
+                                            :body ::query/body-params}}}
+        query-list-muuntaja (m/create (util/->default-muuntaja query-state-transform))]
      (rr/router [["/" {:get (fn [_] (resp/redirect "/_crux/query"))}]
                  ["/_crux/status" {:muuntaja (status/->status-muuntaja opts)
                                    :get (status/status opts)}]
@@ -342,7 +304,8 @@
                  ["/_crux/query.tsv" (assoc query-handler :middleware [[add-response-format "text/tsv"]])]
                  ["/_crux/entity-tx" {:get (entity-tx crux-node)
                                       :parameters {:query ::entity-tx-spec}}]
-                 ["/_crux/attribute-stats" {:get (attribute-stats crux-node)}]
+                 ["/_crux/attribute-stats" {:get (attribute-stats crux-node)
+                                            :muuntaja (m/create (util/->default-muuntaja identity))}]
                  ["/_crux/sync" {:get (sync-handler crux-node)
                                  :parameters {:query ::sync-spec}}]
                  ["/_crux/await-tx" {:get (await-tx-handler crux-node)
@@ -363,16 +326,16 @@
                  ["/_crux/latest-completed-tx" {:get (latest-completed-tx crux-node)}]
                  ["/_crux/latest-submitted-tx" {:get (latest-submitted-tx crux-node)}]
                  ["/_crux/active-queries" {:get (active-queries crux-node)
-                                           :muuntaja ->query-list-muuntaja}]
+                                           :muuntaja query-list-muuntaja}]
                  ["/_crux/recent-queries" {:get (recent-queries crux-node)
-                                           :muuntaja ->query-list-muuntaja}]
+                                           :muuntaja query-list-muuntaja}]
                  ["/_crux/slowest-queries" {:get (slowest-queries crux-node)
-                                            :muuntaja ->query-list-muuntaja}]
+                                            :muuntaja query-list-muuntaja}]
                  ["/_crux/sparql" {:get (sparqql crux-node)
                                    :post (sparqql crux-node)}]]
 
                 {:data
-                 {:muuntaja util/default-muuntaja
+                 {:muuntaja (m/create (util/->default-muuntaja))
                   :coercion reitit.coercion.spec/coercion
                   :middleware (cond-> [p/wrap-params
                                        wrap-camel-case-params

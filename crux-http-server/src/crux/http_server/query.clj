@@ -138,7 +138,7 @@
               (cio/try-close results))))))))
 
 (defn- ->json-encoder [_]
-  (let [object-mapper (util/crux-object-mapper {})]
+  (let [object-mapper util/crux-object-mapper]
     (reify
       mfc/EncodeToOutputStream
       (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]

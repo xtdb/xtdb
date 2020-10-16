@@ -1,6 +1,7 @@
 (ns crux.http-server.entity
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.set :as set]
             [cognitect.transit :as transit]
             [crux.api :as crux]
             [crux.codec :as c]
@@ -101,19 +102,22 @@
             :else (transit/write w res)))))))
 
 (defn- ->json-encoder [_]
-  (let [object-mapper (util/crux-object-mapper {:camel-case? true})]
+  (let [object-mapper util/crux-object-mapper]
     (reify
       mfc/EncodeToOutputStream
       (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
         (fn [^OutputStream output-stream]
           (cond
-            entity (j/write-value output-stream (util/crux-stringify-keywords entity) object-mapper)
-            entity-history (let [history-result-set (iterator-seq entity-history)
-                                 history-results (cond->> history-result-set
-                                                   (contains? (first history-result-set) :crux.db/doc)
-                                                   (map #(update % :crux.db/doc util/crux-stringify-keywords)))]
+            entity (j/write-value output-stream (util/transform-doc entity) object-mapper)
+            entity-history (let [history-results (iterator-seq entity-history)
+                                 transformed-history (some->>
+                                                      history-results
+                                                      (map (fn [history-result]
+                                                             (-> history-result
+                                                                 (cio/update-if :crux.db/doc util/transform-doc)
+                                                                 util/camel-case-keys))))]
                              (try
-                               (j/write-value output-stream (or history-results '()) object-mapper)
+                               (j/write-value output-stream (or transformed-history '()) object-mapper)
                                (finally
                                  (cio/try-close entity-history))))
             :else (j/write-value output-stream res object-mapper)))))))
