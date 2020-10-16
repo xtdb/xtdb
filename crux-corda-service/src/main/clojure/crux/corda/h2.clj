@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS crux_txs (
 CREATE TRIGGER IF NOT EXISTS crux_tx_trigger
   AFTER INSERT, UPDATE ON node_transactions
   FOR EACH ROW
-  CALL \"crux.corda.workflow.NodeTransactionTrigger\""]))))
+  CALL \"crux.corda.service.NodeTransactionTrigger\""]))))
 
 (defmethod crux-corda/tx-row->tx :h2 [tx-row _]
   (let [^TimestampWithTimeZone h2-tx-time (:crux_tx_time tx-row)]

@@ -1,4 +1,4 @@
-package crux.corda.workflow
+package crux.corda.service
 
 import clojure.java.api.Clojure
 import clojure.lang.Keyword

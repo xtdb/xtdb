@@ -1,2 +1,2 @@
 rootProject.name = "crux-corda"
-include("corda-contract", "corda-workflow", "iou-contract", "iou-workflow")
+include("crux-corda-state", "crux-corda-service", "iou-contract", "iou-workflow")

@@ -23,8 +23,8 @@ dependencies {
     cordaCompile(cordaGroup, "corda-rpc", cordaVersion)
     cordaRuntime(cordaGroup, "corda", cordaVersion)
     cordapp(project(":iou-contract"))
-    cordapp(project(":corda-contract"))
-    cordapp(project(":corda-workflow"))
+    cordapp(project(":crux-corda-state"))
+    cordapp(project(":crux-corda-service"))
 
     testImplementation("junit", "junit", "4.12")
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)

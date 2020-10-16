@@ -1,4 +1,4 @@
-package crux.corda.workflow
+package crux.corda.service
 
 import org.h2.api.Trigger
 import java.sql.Connection

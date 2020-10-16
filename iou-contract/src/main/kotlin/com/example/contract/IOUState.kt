@@ -1,6 +1,6 @@
 package com.example.contract
 
-import crux.corda.contract.CruxState
+import crux.corda.CruxState
 import net.corda.core.contracts.BelongsToContract
 import net.corda.core.contracts.ContractState
 import net.corda.core.contracts.LinearState

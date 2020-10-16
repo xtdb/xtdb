@@ -27,5 +27,5 @@ dependencies {
     cordaCompile(cordaGroup, "corda-jackson", cordaVersion)
     cordaCompile(cordaGroup, "corda-rpc", cordaVersion)
     cordaRuntime(cordaGroup, "corda", cordaVersion)
-    cordapp(project(":corda-contract"))
+    cordapp(project(":crux-corda-state"))
 }

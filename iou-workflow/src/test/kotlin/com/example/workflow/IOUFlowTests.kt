@@ -2,7 +2,7 @@ package com.example.workflow
 
 import clojure.lang.Keyword
 import com.example.contract.IOUState
-import crux.corda.workflow.CruxService
+import crux.corda.service.CruxService
 import net.corda.core.node.services.queryBy
 import net.corda.core.utilities.getOrThrow
 import net.corda.testing.core.singleIdentity
@@ -25,8 +25,7 @@ class IOUFlowTests {
         network = MockNetwork(MockNetworkParameters(cordappsForAllNodes = listOf(
             TestCordapp.findCordapp("com.example.contract"),
             TestCordapp.findCordapp("com.example.workflow"),
-            TestCordapp.findCordapp("crux.corda.contract"),
-            TestCordapp.findCordapp("crux.corda.workflow"))))
+            TestCordapp.findCordapp("crux.corda.service"))))
         a = network.createPartyNode()
         b = network.createPartyNode()
         // For real nodes this happens automatically, but we have to manually register the flow for tests.

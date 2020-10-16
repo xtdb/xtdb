@@ -15,6 +15,5 @@ cordapp {
 
 dependencies {
     cordaCompile(cordaGroup, "corda-core", cordaVersion)
-    cordapp(project(":corda-contract"))
+    implementation(project(":crux-corda-state"))
 }
-

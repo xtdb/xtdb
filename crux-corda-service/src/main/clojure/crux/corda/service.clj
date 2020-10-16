@@ -8,7 +8,7 @@
             [next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
             [crux.io :as cio])
-  (:import (crux.corda.contract CruxState)
+  (:import (crux.corda CruxState)
            (crux.api ICursor)
            (net.corda.core.crypto SecureHash)
            (net.corda.core.node AppServiceHub)
@@ -28,8 +28,7 @@
 
   (do
     (defonce ^MockNetwork network
-      (MockNetwork. (MockNetworkParameters. [(TestCordapp/findCordapp "crux.corda.contract")
-                                             (TestCordapp/findCordapp "crux.corda.workflow")
+      (MockNetwork. (MockNetworkParameters. [(TestCordapp/findCordapp "crux.corda.service")
                                              (TestCordapp/findCordapp "com.example.contract")
                                              (TestCordapp/findCordapp "com.example.workflow")])))
     (defonce node-a

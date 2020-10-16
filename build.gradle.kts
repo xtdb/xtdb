@@ -1,6 +1,8 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 allprojects {
     group = "juxt"
-    version = "20.09-1.12.0-SNAPSHOT"
+    version = "0.1.0-SNAPSHOT"
 
     repositories {
         mavenCentral()
@@ -10,7 +12,7 @@ allprojects {
         maven { url = uri("https://repo.gradle.org/gradle/libs-releases") }
     }
 
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).all {
+    tasks.withType(KotlinCompile::class.java).all {
         kotlinOptions {
             jvmTarget = "1.8"
         }
