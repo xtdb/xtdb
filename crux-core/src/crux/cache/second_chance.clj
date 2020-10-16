@@ -3,7 +3,7 @@
            [crux.cache.second_chance ConcurrentHashMapTableAccess ValuePointer]
            java.util.function.Function
            [java.util Map$Entry Queue]
-           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
+           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue Semaphore]
            java.util.concurrent.atomic.AtomicReference)
   (:require [crux.system :as sys]
             [crux.cache.nop]))
@@ -25,7 +25,8 @@
 (declare resize-cache)
 
 (deftype SecondChanceCache [^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
-                            ^long size adaptive-sizing? ^double adaptive-break-even-level]
+                            ^long size adaptive-sizing? ^double adaptive-break-even-level
+                            ^Semaphore resize-semaphore]
   Object
   (toString [_]
     (str hot))
@@ -114,8 +115,13 @@
       (move-to-cooling-state cache))))
 
 (defn- resize-cache [^SecondChanceCache cache]
-  (move-to-cooling-state cache)
-  (move-to-cold-state cache))
+  (let [resize-semaphore ^Semaphore (.resize-semaphore cache)]
+    (when (.tryAcquire resize-semaphore)
+      (try
+        (move-to-cooling-state cache)
+        (move-to-cold-state cache)
+        (finally
+          (.release resize-semaphore))))))
 
 (defn ->second-chance-cache
   {::sys/deps {:cold-cache 'crux.cache.nop/->nop-cache}
@@ -145,4 +151,4 @@
       (locking free-memory-thread
         (when-not (.isAlive free-memory-thread)
           (.start free-memory-thread))))
-    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level)))
+    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level (Semaphore. 1))))
