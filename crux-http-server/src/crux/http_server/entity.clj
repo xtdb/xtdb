@@ -1,24 +1,21 @@
 (ns crux.http-server.entity
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [clojure.set :as set]
             [cognitect.transit :as transit]
             [crux.api :as crux]
             [crux.codec :as c]
             [crux.error :as ce]
             [crux.http-server.entity-ref :as entity-ref]
+            [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
+            [jsonista.core :as j]
             [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc]
-            [jsonista.core :as j])
+            [muuntaja.format.core :as mfc])
   (:import crux.codec.Id
            crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
-           [java.io Closeable OutputStream]
-           [java.time Instant ZonedDateTime ZoneId]
-           java.time.format.DateTimeFormatter
-           java.util.Date))
+           [java.io Closeable OutputStream]))
 
 (s/def ::sort-order keyword?)
 (s/def ::start-valid-time inst?)
@@ -107,15 +104,15 @@
     (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
       (fn [^OutputStream output-stream]
         (cond
-          entity (j/write-value output-stream entity util/crux-object-mapper)
+          entity (j/write-value output-stream entity http-json/crux-object-mapper)
           entity-history (let [history-results (iterator-seq entity-history)
                                transformed-history (some->> history-results
-                                                            (map util/camel-case-keys))]
+                                                            (map http-json/camel-case-keys))]
                            (try
-                             (j/write-value output-stream (or transformed-history '()) util/crux-object-mapper)
+                             (j/write-value output-stream (or transformed-history '()) http-json/crux-object-mapper)
                              (finally
                                (cio/try-close entity-history))))
-          :else (j/write-value output-stream res util/crux-object-mapper))))))
+          :else (j/write-value output-stream res http-json/crux-object-mapper))))))
 
 
 (defn ->entity-muuntaja [opts]

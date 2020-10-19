@@ -1,18 +1,24 @@
 (ns crux.http-server
   "HTTP API for Crux.
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
+  (:require [camel-snake-kebab.core :as csk]
+            [clojure.edn :as edn]
             [clojure.instant :as instant]
-            [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.api :as crux]
-            [crux.codec :as c]
             [crux.http-server.entity :as entity]
+            [crux.http-server.json :as http-json]
             [crux.http-server.query :as query]
             [crux.http-server.status :as status]
             [crux.http-server.util :as util]
+            [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [jsonista.core :as json]
+            [muuntaja.core :as m]
+            [muuntaja.format.core :as mfc]
             reitit.coercion.spec
             [reitit.ring :as rr]
             [reitit.ring.coercion :as rrc]
@@ -21,23 +27,12 @@
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.response :as resp]
-            [ring.util.time :as rt]
-            [jsonista.core :as json]
-            [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc]
-            [camel-snake-kebab.core :as csk]
-            [clojure.edn :as edn]
-            [crux.tx.conform :as txc]
-            [clojure.set :as set]
-            [crux.io :as cio]
-            [cognitect.transit :as transit]
-            [jsonista.core :as json])
+            [ring.util.time :as rt])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
            [crux.api ICruxAPI NodeOutOfSyncException]
-           crux.codec.Id
-           [java.io Closeable IOException OutputStream]
+           [java.io Closeable IOException]
            java.time.Duration
            org.eclipse.jetty.server.Server))
 
@@ -72,7 +67,7 @@
     (reify
       mfc/Decode
       (decode [_ data _]
-        (-> (json/read-value data util/crux-object-mapper)
+        (-> (json/read-value data http-json/crux-object-mapper)
             (update :tx-ops (fn [tx-ops]
                               (->> tx-ops
                                    (mapv (fn [tx-op]
@@ -83,7 +78,7 @@
 
 (def ->submit-tx-muuntaja
   (m/create
-   (assoc-in (util/->default-muuntaja util/camel-case-keys)
+   (assoc-in (util/->default-muuntaja)
              [:formats "application/json" :decoder]
              [->submit-json-decoder])))
 
@@ -107,13 +102,13 @@
 
 (def ->tx-log-muuntaja
   (m/create
-   (-> (util/->default-muuntaja (fn [tx-log]
-                                  (->> tx-log
-                                       (map (fn [tx]
-                                              (-> tx
-                                                  (cio/update-if :crux.api/tx-ops txs->json)
-                                                  (cio/update-if :crux.tx.event/tx-events txs->json)
-                                                  (util/camel-case-keys)))))))
+   (-> (util/->default-muuntaja {:json-encode-fn (fn [tx-log]
+                                                   (->> tx-log
+                                                        (map (fn [tx]
+                                                               (-> tx
+                                                                   (cio/update-if :crux.api/tx-ops txs->json)
+                                                                   (cio/update-if :crux.tx.event/tx-events txs->json)
+                                                                   (http-json/camel-case-keys))))))})
        (assoc :return :output-stream))))
 
 (defn- tx-log [^ICruxAPI crux-node]
@@ -191,13 +186,6 @@
        :body latest-submitted-tx}
       {:status 404
        :body {:error "No latest-submitted-tx found."}})))
-
-(defn query-state-transform [query-states]
-  (map
-   (fn [qs] (-> qs
-                (update :query pr-str)
-                util/camel-case-keys))
-   query-states))
 
 (defn active-queries [^ICruxAPI crux-node]
   (fn [_]
@@ -283,6 +271,14 @@
     (let [kebab-qps (into {} (map (fn [[k v]] [(csk/->kebab-case k) v])) query-params)]
       (handler (assoc request :query-params kebab-qps)))))
 
+(def ^:private query-list-muuntaja
+  (m/create (util/->default-muuntaja {:json-encode-fn (fn [query-states]
+                                                        (->> query-states
+                                                             (map (fn [qs]
+                                                                    (-> qs
+                                                                        (update :query pr-str)
+                                                                        http-json/camel-case-keys)))))})))
+
 (defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
                        :keys [crux-node], :as opts}]
   (let [opts (-> opts (update :http-options dissoc :jwks))
@@ -291,8 +287,7 @@
                               :parameters {:query ::query/query-params}}
                         :post {:handler (query/data-browser-query opts)
                                :parameters {:query ::query/query-params
-                                            :body ::query/body-params}}}
-        query-list-muuntaja (m/create (util/->default-muuntaja query-state-transform))]
+                                            :body ::query/body-params}}}]
      (rr/router [["/" {:get (fn [_] (resp/redirect "/_crux/query"))}]
                  ["/_crux/status" {:muuntaja (status/->status-muuntaja opts)
                                    :get (status/status opts)}]
@@ -305,7 +300,7 @@
                  ["/_crux/entity-tx" {:get (entity-tx crux-node)
                                       :parameters {:query ::entity-tx-spec}}]
                  ["/_crux/attribute-stats" {:get (attribute-stats crux-node)
-                                            :muuntaja (m/create (util/->default-muuntaja identity))}]
+                                            :muuntaja (m/create (util/->default-muuntaja {:json-encode-fn identity}))}]
                  ["/_crux/sync" {:get (sync-handler crux-node)
                                  :parameters {:query ::sync-spec}}]
                  ["/_crux/await-tx" {:get (await-tx-handler crux-node)

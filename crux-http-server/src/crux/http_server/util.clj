@@ -1,66 +1,24 @@
 (ns crux.http-server.util
-  (:require [camel-snake-kebab.core :as csk]
-            [clojure.edn :as edn]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
             [crux.api :as api]
             [crux.codec :as c]
-            [crux.http-server.entity-ref :as entity-ref]
+            [crux.http-server.json :as http-json]
             [crux.io :as cio]
             [hiccup2.core :as hiccup2]
-            [jsonista.core :as j]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
             [spec-tools.core :as st])
-  (:import (com.fasterxml.jackson.core JsonGenerator JsonParser)
-           com.fasterxml.jackson.databind.DeserializationContext
-           com.fasterxml.jackson.databind.module.SimpleModule
-           com.fasterxml.jackson.databind.deser.std.StdDeserializer
-           [crux.api ICruxAPI ICruxDatasource]
+  (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
-           crux.http_server.entity_ref.EntityRef
-           clojure.lang.IPersistentList
            [java.io ByteArrayOutputStream OutputStream]
-           java.time.format.DateTimeFormatter
-           jsonista.jackson.PersistentHashMapDeserializer))
+           java.time.format.DateTimeFormatter))
 
-(def ^:private crux-jackson-module
-  (doto (SimpleModule. "Crux")
-    (.addDeserializer java.util.Map
-                      (let [jsonista-deser (PersistentHashMapDeserializer.)]
-                        (proxy [StdDeserializer] [java.util.Map]
-                          (deserialize [^JsonParser p ^DeserializationContext ctxt]
-                            (let [res (.deserialize jsonista-deser p ctxt)]
-                              (or (when-let [oid (:$oid res)]
-                                    (c/new-id (c/hex->id-buffer oid)))
-                                  (when-let [b64 (:$base64 res)]
-                                    (c/base64-reader b64))
-                                  res))))))))
-
-(defn emit-list [coll ^JsonGenerator gen]
-  (if (contains? #{'fn* 'fn} (first coll))
-    (.writeString gen (pr-str coll))
-    (do
-      (.writeStartArray gen)
-      (doseq [el coll]
-        (.writeObject gen el))
-      (.writeEndArray gen))))
-
-(def crux-object-mapper
-  (j/object-mapper
-   {:encode-key-fn true
-    :encoders {Id (fn [crux-id ^JsonGenerator gen]
-                    (.writeObject gen {"$oid" (str crux-id)}))
-               (Class/forName "[B") (fn [^bytes bytes ^JsonGenerator gen]
-                                      (.writeObject gen {"$base64" (c/base64-writer bytes)}))
-               EntityRef entity-ref/ref-json-encoder
-               IPersistentList emit-list}
-    :decode-key-fn true
-    :modules [crux-jackson-module]}))
+(s/def ::eid (and string? c/valid-id?))
 
 (defn try-decode-edn [edn]
   (try
@@ -68,15 +26,6 @@
       (string? edn) c/read-edn-string-with-readers)
     (catch Exception _e
       ::s/invalid)))
-
-(defn try-decode-json [json]
-  (try
-    (cond-> json
-      (string? json) (j/read-value crux-object-mapper))
-    (catch Exception _e
-      ::s/invalid)))
-
-(s/def ::eid (and string? c/valid-id?))
 
 (s/def ::eid-edn
   (st/spec
@@ -86,7 +35,7 @@
 (s/def ::eid-json
   (st/spec
    {:spec c/valid-id?
-    :decode/string (fn [_ json] (try-decode-json json))}))
+    :decode/string (fn [_ json] (http-json/try-decode-json json))}))
 
 (s/def ::link-entities? boolean?)
 (s/def ::valid-time inst?)
@@ -136,29 +85,10 @@
               (finally
                 (cio/try-close results)))))))))
 
-(defn camel-case-keys [m]
-  (into {} (map (fn [[k v]] [(csk/->camelCaseKeyword k) v]) m)))
-
-(defn ->json-encoder [json-encode-fn options]
-  (reify
-    mfc/EncodeToBytes
-    (encode-to-bytes [_ data _]
-      (j/write-value-as-bytes (json-encode-fn data) crux-object-mapper))
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
-      (fn [^OutputStream output-stream]
-        (try
-          (if results
-            (let [results-seq (iterator-seq results)]
-              (j/write-value output-stream (or (some-> results-seq json-encode-fn) '()) crux-object-mapper))
-            (j/write-value output-stream data crux-object-mapper))
-          (finally
-            (cio/try-close results)))))))
-
 (defn ->default-muuntaja
-  ([]
-   (->default-muuntaja camel-case-keys))
-  ([json-encode-fn]
+  ([] (->default-muuntaja {}))
+
+  ([opts]
    (-> m/default-options
        (dissoc :formats)
        (assoc :default-format "application/edn")
@@ -169,7 +99,7 @@
                    :encoder [->edn-encoder]
                    :decoder [mfe/decoder]})
        (m/install {:name "application/json"
-                   :encoder [(partial ->json-encoder json-encode-fn)]}))))
+                   :encoder [http-json/->json-encoder opts]}))))
 
 (defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond

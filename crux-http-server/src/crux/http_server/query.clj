@@ -8,21 +8,20 @@
             [crux.codec :as c]
             [crux.error :as err]
             [crux.http-server.entity-ref :as entity-ref]
+            [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
-            [crux.query :as q]
+            [jsonista.core :as j]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
-            [spec-tools.core :as st]
-            [jsonista.core :as j])
-  (:import crux.http_server.entity_ref.EntityRef
+            [spec-tools.core :as st])
+  (:import crux.codec.Id
+           crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
-           crux.codec.Id
-           [java.io Closeable]
-           (java.io OutputStream Writer)
-           [java.time Instant ZonedDateTime ZoneId]
+           [java.io Closeable OutputStream]
+           [java.time Instant ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date))
 
@@ -146,7 +145,7 @@
                          (if results
                            (or (iterator-seq results) '())
                            res)
-                         util/crux-object-mapper)
+                         http-json/crux-object-mapper)
           (finally
             (cio/try-close results)))))))
 
