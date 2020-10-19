@@ -58,6 +58,9 @@
 ;; LMDB #MDB_MAXKEYSIZE 511 (>= 511 (+ value-type-id-size (* 2 (+ value-type-id-size 224)) id-size id-size))
 (def ^:const ^:private max-value-index-length 224)
 
+(def ^:const ^:private string-terminate-mark-size Byte/BYTES)
+(def ^:const ^:private string-terminate-mark (byte 1))
+
 (defprotocol IdOrBuffer
   (new-id ^crux.codec.Id [id])
   (->id-buffer ^org.agrona.DirectBuffer [this]))
@@ -79,8 +82,6 @@
 (def ^:private string-value-type-id 8)
 (def ^:private char-value-type-id 9)
 (def ^:private nippy-value-type-id 10)
-(def ^:private bytes-value-type-id 11)
-(def ^:private blob-value-type-id 12)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -153,17 +154,6 @@
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
-  (class (byte-array 0))
-  (value->buffer [this ^MutableDirectBuffer to]
-    (if (< max-value-index-length (alength ^bytes this))
-      (doto (id-function to this)
-        (.putByte 0 blob-value-type-id))
-      (mem/limit-buffer
-       (doto to
-         (.putByte 0 bytes-value-type-id)
-         (.putBytes value-type-id-size this))
-       (+ value-type-id-size (alength ^bytes this)))))
-
   Boolean
   (value->buffer [this ^MutableDirectBuffer to]
     (mem/limit-buffer
@@ -227,11 +217,17 @@
       (if (< max-value-index-length (alength bs))
         (doto (id->buffer this to)
           (.putByte 0 clob-value-type-id))
-        (mem/limit-buffer
-         (doto to
-           (.putByte 0 string-value-type-id)
-           (.putBytes value-type-id-size bs))
-         (+ value-type-id-size (alength bs))))))
+        (let [offset (byte 2)
+              ub-in (mem/on-heap-buffer bs)
+              length (.capacity ub-in)]
+          (.putByte to 0 string-value-type-id)
+          (loop [idx 0]
+            (if (= idx length)
+              (do (.putByte to (inc idx) string-terminate-mark)
+                  (mem/limit-buffer to (+ length value-type-id-size string-terminate-mark-size)))
+              (let [b (.getByte ub-in idx)]
+                (.putByte to (inc idx) (byte (+ offset b)))
+                (recur (inc idx)))))))))
 
   Class
   (value->buffer [this ^MutableDirectBuffer to]
@@ -276,9 +272,16 @@
     (Double/longBitsToDouble l)))
 
 (defn- decode-string ^String [^DirectBuffer buffer]
-  (String. (doto (byte-array (- (.capacity buffer) value-type-id-size))
-             (->> (.getBytes buffer value-type-id-size)))
-           StandardCharsets/UTF_8))
+  (let [offset (byte 2)
+        length (- (.capacity buffer) string-terminate-mark-size)
+        bs (byte-array (- length value-type-id-size))]
+    (loop [idx value-type-id-size]
+      (if (= idx length)
+        (do (assert (= string-terminate-mark (.getByte buffer idx)) "String not terminated.")
+            (String. bs StandardCharsets/UTF_8))
+        (let [b (.getByte buffer idx)]
+          (aset bs (dec idx) (unchecked-byte (- b offset)))
+          (recur (inc idx)))))))
 
 (defn- decode-boolean ^Boolean [^DirectBuffer buffer]
   (= 1 (.getByte buffer value-type-id-size)))
@@ -289,14 +292,10 @@
 (defn- decode-nippy [^DirectBuffer buffer]
   (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
 
-(defn- decode-bytes ^bytes [^DirectBuffer buffer]
-  (doto (byte-array (- (.capacity buffer) value-type-id-size))
-    (->> (.getBytes buffer value-type-id-size))))
-
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (3 4 5 6 7 8 9 10 11) true
+      (3 4 5 6 7 8 9 10) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
@@ -310,7 +309,6 @@
       8 (decode-string buffer) ;; string-value-type-id
       9 (decode-char buffer) ;; char-value-type-id
       10 (decode-nippy buffer) ;; nippy-value-type-id
-      11 (decode-bytes buffer) ;; bytes-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 

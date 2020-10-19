@@ -43,6 +43,28 @@
       (t/is (= (sort-by first value+buffer)
                (sort-by second mem/buffer-comparator value+buffer))))))
 
+(t/deftest test-string-prefix
+  (t/testing "string encoding size overhead"
+    (t/is (= (+ c/value-type-id-size
+                (alength (.getBytes "Hello" "UTF-8"))
+                @#'c/string-terminate-mark-size)
+             (mem/capacity (c/->value-buffer "Hello")))))
+
+  (t/testing "a short encoded string is not a prefix of a longer string"
+    (let [hello (c/->value-buffer "Hello")
+          hello-world (c/->value-buffer "Hello World")]
+      (t/is (false? (mem/buffers=? hello hello-world (mem/capacity hello))))))
+
+  (t/testing "a short raw string is a prefix of a longer string"
+    (let [hello (mem/as-buffer (.getBytes "Hello" "UTF-8"))
+          hello-world (mem/as-buffer (.getBytes "Hello World" "UTF-8"))]
+      (t/is (true? (mem/buffers=? hello hello-world (mem/capacity hello))))))
+
+  (t/testing "cannot decode non-terminated string"
+    (let [hello (c/->value-buffer "Hello")
+          hello-prefix (mem/slice-buffer hello 0 (- (mem/capacity hello) @#'c/string-terminate-mark-size))]
+      (t/is (thrown-with-msg? AssertionError #"String not terminated." (c/decode-value-buffer hello-prefix))))))
+
 (t/deftest test-id-reader
   (t/testing "can read and convert to real id"
     (t/is (not= (c/new-id "http://google.com") #crux/id "http://google.com"))
@@ -106,8 +128,8 @@
                          (.getByte (c/value-buffer-type-id buffer) 0))
 
                       (and (bytes? v)
-                           (< @#'c/max-value-index-length (alength ^bytes v)))
-                      (= @#'c/blob-value-type-id
+                           (< @#'c/max-value-index-length (alength ^bytes (nippy/fast-freeze v))))
+                      (= @#'c/object-value-type-id
                          (.getByte (c/value-buffer-type-id buffer) 0))
 
                       :else

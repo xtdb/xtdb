@@ -1130,35 +1130,7 @@
                     '{:find [e]
                       :where [[:ivan :photo photo]
                               [e :name "Oleg"]
-                              [e :photo photo]]}))))
-
-  (t/testing "range queries"
-    (t/is (= #{[:ivan]
-               [:petr]
-               [:oleg]}
-             (api/q (api/db *api*)
-                    '{:find [e]
-                      :in [$ photo]
-                      :where [[e :photo p]
-                              [(>= p photo)]]}
-                    (byte-array [0 1]))))
-
-    (t/is (= #{[:petr]}
-             (api/q (api/db *api*)
-                    '{:find [e]
-                      :in [$ photo]
-                      :where [[e :photo p]
-                              [(> p photo)]]}
-                    (byte-array [2]))))
-
-    (t/is (= #{[:ivan]}
-             (api/q (api/db *api*)
-                    '{:find [e]
-                      :in [$ photo]
-                      :where [[e :photo p]
-                              [e :name "Ivan"]
-                              [(< p photo)]]}
-                    (byte-array [3]))))))
+                              [e :photo photo]]})))))
 
 (t/deftest test-multiple-values-literals
   (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}
