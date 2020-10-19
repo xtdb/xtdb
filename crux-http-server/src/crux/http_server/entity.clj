@@ -88,8 +88,7 @@
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
       (fn [^OutputStream output-stream]
-        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler
-                                                                Id util/crux-id-write-handler}})]
+        (let [w (transit/writer output-stream :json {:handlers util/tj-write-handlers})]
           (cond
             entity (transit/write w entity)
             entity-history (try

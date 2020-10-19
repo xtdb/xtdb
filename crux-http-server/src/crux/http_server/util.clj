@@ -63,12 +63,13 @@
               (finally
                 (cio/try-close results)))))))))
 
-(def crux-id-write-handler
-  (transit/write-handler "crux.codec/id" #(str %)))
+(def tj-write-handlers
+  {EntityRef entity-ref/ref-write-handler
+   Id (transit/write-handler "crux/oid" str)
+   (Class/forName "[B") (transit/write-handler "crux/base64" c/base64-writer)})
 
 (defn ->tj-encoder [_]
-  (let [options {:handlers {Id crux-id-write-handler
-                            EntityRef entity-ref/ref-write-handler}}]
+  (let [options {:handlers tj-write-handlers}]
     (reify
       mfc/EncodeToBytes
       (encode-to-bytes [_ data _]

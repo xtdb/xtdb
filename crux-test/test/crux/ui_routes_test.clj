@@ -9,7 +9,8 @@
             [jsonista.core :as json]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
             [crux.http-server.entity-ref :as entity-ref]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.codec :as c])
   (:import (java.io InputStream)))
 
 (t/use-fixtures :each
@@ -18,7 +19,9 @@
 
 (defn- parse-body [{:keys [^InputStream body]} content-type]
   (case content-type
-    "application/transit+json" (transit/read (transit/reader body :json {:handlers {"crux.http/entity-ref" entity-ref/ref-read-handler}}))
+    "application/transit+json" (transit/read (transit/reader body :json {:handlers {"crux.http/entity-ref" entity-ref/ref-read-handler
+                                                                                    "crux/base64" (transit/read-handler c/base64-reader)
+                                                                                    "crux/oid" (transit/read-handler c/id-edn-reader)}}))
     "application/json" (json/read-value body)
     "application/edn" (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef
                                                   'crux/id str}} (slurp body))
@@ -138,3 +141,11 @@
              (-> (get-result-from-path "/_crux/entity-tx?eid=string-id" "application/edn")
                  (parse-body "application/edn")
                  :crux.tx/tx-id)))))
+
+(t/deftest test-b64
+  (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :foo, :bytes (byte-array [1 2 3])}]])
+  (t/is (= {:crux.db/id :foo
+            :bytes [1 2 3]}
+           (-> (get-result-from-path "/_crux/entity?eid-edn=:foo" "application/transit+json")
+               (parse-body "application/transit+json")
+               (update :bytes seq)))))
