@@ -102,21 +102,20 @@
             :else (transit/write w res)))))))
 
 (defn- ->json-encoder [_]
-  (let [object-mapper util/crux-object-mapper]
-    (reify
-      mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
-        (fn [^OutputStream output-stream]
-          (cond
-            entity (j/write-value output-stream entity object-mapper)
-            entity-history (let [history-results (iterator-seq entity-history)
-                                 transformed-history (some->> history-results
-                                                              (map util/camel-case-keys))]
-                             (try
-                               (j/write-value output-stream (or transformed-history '()) object-mapper)
-                               (finally
-                                 (cio/try-close entity-history))))
-            :else (j/write-value output-stream res object-mapper)))))))
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
+      (fn [^OutputStream output-stream]
+        (cond
+          entity (j/write-value output-stream entity util/crux-object-mapper)
+          entity-history (let [history-results (iterator-seq entity-history)
+                               transformed-history (some->> history-results
+                                                            (map util/camel-case-keys))]
+                           (try
+                             (j/write-value output-stream (or transformed-history '()) util/crux-object-mapper)
+                             (finally
+                               (cio/try-close entity-history))))
+          :else (j/write-value output-stream res util/crux-object-mapper))))))
 
 
 (defn ->entity-muuntaja [opts]
