@@ -138,18 +138,17 @@
               (cio/try-close results))))))))
 
 (defn- ->json-encoder [_]
-  (let [object-mapper util/crux-object-mapper]
-    (reify
-      mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-        (fn [^OutputStream output-stream]
-          (try
-            (cond
-              (and results (.hasNext results)) (j/write-value output-stream (iterator-seq results) object-mapper)
-              results (j/write-value output-stream '() object-mapper)
-              :else (j/write-value output-stream res object-mapper))
-            (finally
-              (cio/try-close results))))))))
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
+      (fn [^OutputStream output-stream]
+        (try
+          (cond
+            (and results (.hasNext results)) (j/write-value output-stream (iterator-seq results) util/crux-object-mapper)
+            results (j/write-value output-stream '() util/crux-object-mapper)
+            :else (j/write-value output-stream res util/crux-object-mapper))
+          (finally
+            (cio/try-close results)))))))
 
 (defn ->query-muuntaja [opts]
   (m/create (-> m/default-options

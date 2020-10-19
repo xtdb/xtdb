@@ -63,30 +63,30 @@
          :body {:error (str eid " entity-tx not found") }}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [mapper (json/object-mapper {:decode-key-fn true})]
+  (let [mapper (json/object-mapper {:decode-key-fn true})
+        decoders {::txc/->doc #(cio/update-if % :crux.db/fn edn/read-string)
+                  ::txc/->valid-time (fn [vt-str]
+                                       (try
+                                         (instant/read-instant-date vt-str)
+                                         (catch Exception _e
+                                           vt-str)))}]
     (reify
       mfc/Decode
       (decode [_ data _]
-        (binding [txc/*xform-doc* (fn [doc]
-                                    (-> doc
-                                        (set/rename-keys {:_id :crux.db/id
-                                                          :_fn :crux.db/fn})
-                                        (cio/update-if :crux.db/fn edn/read-string)))]
-          (-> (json/read-value data mapper)
-              (update :tx-ops (fn [tx-ops]
-                                (->> tx-ops
-                                     (mapv (fn [tx-op]
-                                             (-> tx-op
-                                                 (update 0 (fn [op] (keyword "crux.tx" op)))
-                                                 (txc/conform-tx-op)
-                                                 (txc/->tx-op)))))))))))))
+        (-> (json/read-value data mapper)
+            (update :tx-ops (fn [tx-ops]
+                              (->> tx-ops
+                                   (mapv (fn [tx-op]
+                                           (-> tx-op
+                                               (update 0 (fn [op] (keyword "crux.tx" op)))
+                                               (txc/conform-tx-op decoders)
+                                               (txc/->tx-op))))))))))))
 
 (def ->submit-tx-muuntaja
   (m/create
-   (assoc-in
-    (util/->default-muuntaja util/camel-case-keys)
-    [:formats "application/json" :decoder]
-    [->submit-json-decoder])))
+   (assoc-in (util/->default-muuntaja util/camel-case-keys)
+             [:formats "application/json" :decoder]
+             [->submit-json-decoder])))
 
 (s/def ::tx-ops vector?)
 (s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
@@ -95,25 +95,26 @@
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
           {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
-      (->
-       {:status 202
-        :body submitted-tx}
-       (add-last-modified tx-time)))))
+      (-> {:status 202
+           :body submitted-tx}
+          (add-last-modified tx-time)))))
 
 (s/def ::with-ops? boolean?)
 (s/def ::after-tx-id int?)
 (s/def ::tx-log-spec (s/keys :opt-un [::with-ops? ::after-tx-id]))
 
+(defn txs->json [txs]
+  (mapv #(update % 0 name) txs))
+
 (def ->tx-log-muuntaja
   (m/create
    (-> (util/->default-muuntaja (fn [tx-log]
                                   (->> tx-log
-                                       (map
-                                        (fn [tx]
-                                          (-> tx
-                                              (cio/update-if :crux.api/tx-ops #(mapv util/transform-tx-op %))
-                                              (cio/update-if :crux.tx.event/tx-events (fn [tx-events] (mapv #(update % 0 name) tx-events)))
-                                              (util/camel-case-keys)))))))
+                                       (map (fn [tx]
+                                              (-> tx
+                                                  (cio/update-if :crux.api/tx-ops txs->json)
+                                                  (cio/update-if :crux.tx.event/tx-events txs->json)
+                                                  (util/camel-case-keys)))))))
        (assoc :return :output-stream))))
 
 (defn- tx-log [^ICruxAPI crux-node]

@@ -1,33 +1,29 @@
 (ns crux.http-server.util
-  (:require [clojure.edn :as edn]
+  (:require [camel-snake-kebab.core :as csk]
+            [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
-            [clojure.walk :as walk]
-            [clojure.java.io :as io]
             [cognitect.transit :as transit]
             [crux.api :as api]
             [crux.codec :as c]
+            [crux.http-server.entity-ref :as entity-ref]
             [crux.io :as cio]
             [hiccup2.core :as hiccup2]
+            [jsonista.core :as j]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
-            [muuntaja.format.transit :as mft]
             [muuntaja.format.edn :as mfe]
+            [muuntaja.format.transit :as mft]
             [spec-tools.core :as st]
-            [jsonista.core :as j]
-            [camel-snake-kebab.core :as csk]
-            [crux.http-server.entity-ref :as entity-ref]
-            [clojure.set :as set]
-            [crux.tx.conform :as txc])
-  (:import [crux.api ICruxAPI ICruxDatasource]
+            [clojure.set :as set])
+  (:import com.fasterxml.jackson.core.JsonGenerator
+           [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
            crux.http_server.entity_ref.EntityRef
+           clojure.lang.IPersistentList
            [java.io ByteArrayOutputStream OutputStream]
-           [java.net URLDecoder URLEncoder]
-           java.time.format.DateTimeFormatter
-           java.util.Date
-           com.fasterxml.jackson.databind.ObjectMapper
-           com.fasterxml.jackson.core.JsonGenerator))
+           java.time.format.DateTimeFormatter))
 
 (defn try-decode-edn [edn]
   (try
@@ -105,48 +101,34 @@
 
 (def crux-object-mapper
   (j/object-mapper
-   {:encode-key-fn (fn [k]
-                     (cond
-                       (= k :crux.db/id) "_id"
-                       (= k :crux.db/fn) "_fn"
-                       :else (str (symbol k))))
+   {:encode-key-fn true
     :encoders {Id (fn [crux-id ^JsonGenerator gen] (.writeString gen (str crux-id)))
-               EntityRef entity-ref/ref-json-encoder}}))
+               EntityRef entity-ref/ref-json-encoder
+               IPersistentList (fn [pl ^JsonGenerator gen] (.writeString gen (pr-str pl)))}}))
 
 (defn camel-case-keys [m]
   (into {} (map (fn [[k v]] [(csk/->camelCaseKeyword k) v]) m)))
 
-(defn transform-doc [doc]
-  (cio/update-if doc :crux.db/fn pr-str))
-
-(defn transform-tx-op [tx-op]
-  (binding [txc/*xform-doc* transform-doc]
-    (-> tx-op
-        (txc/conform-tx-op)
-        (txc/->tx-op)
-        (update 0 name))))
-
-(defn ->json-encoder [transform-fn options]
-  (let [object-mapper crux-object-mapper]
-    (reify
-      mfc/EncodeToBytes
-      (encode-to-bytes [_ data _]
-        (j/write-value-as-bytes (transform-fn data) object-mapper))
-      mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
-        (fn [^OutputStream output-stream]
-          (try
-            (if results
-              (let [results-seq (iterator-seq results)]
-                (j/write-value output-stream (or (some-> results-seq transform-fn) '()) object-mapper))
-              (j/write-value output-stream data object-mapper))
-            (finally
-              (cio/try-close results))))))))
+(defn ->json-encoder [json-encode-fn options]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ data _]
+      (j/write-value-as-bytes (json-encode-fn data) crux-object-mapper))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
+      (fn [^OutputStream output-stream]
+        (try
+          (if results
+            (let [results-seq (iterator-seq results)]
+              (j/write-value output-stream (or (some-> results-seq json-encode-fn) '()) crux-object-mapper))
+            (j/write-value output-stream data crux-object-mapper))
+          (finally
+            (cio/try-close results)))))))
 
 (defn ->default-muuntaja
   ([]
    (->default-muuntaja camel-case-keys))
-  ([transform-fn]
+  ([json-encode-fn]
    (-> m/default-options
        (dissoc :formats)
        (assoc :default-format "application/edn")
@@ -157,7 +139,7 @@
                    :encoder [->edn-encoder]
                    :decoder [mfe/decoder]})
        (m/install {:name "application/json"
-                   :encoder [(partial ->json-encoder transform-fn)]}))))
+                   :encoder [(partial ->json-encoder json-encode-fn)]}))))
 
 (defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond

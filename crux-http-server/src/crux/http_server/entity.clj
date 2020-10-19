@@ -108,14 +108,10 @@
       (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
         (fn [^OutputStream output-stream]
           (cond
-            entity (j/write-value output-stream (util/transform-doc entity) object-mapper)
+            entity (j/write-value output-stream entity object-mapper)
             entity-history (let [history-results (iterator-seq entity-history)
-                                 transformed-history (some->>
-                                                      history-results
-                                                      (map (fn [history-result]
-                                                             (-> history-result
-                                                                 (cio/update-if :crux.db/doc util/transform-doc)
-                                                                 util/camel-case-keys))))]
+                                 transformed-history (some->> history-results
+                                                              (map util/camel-case-keys))]
                              (try
                                (j/write-value output-stream (or transformed-history '()) object-mapper)
                                (finally

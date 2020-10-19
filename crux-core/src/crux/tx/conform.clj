@@ -1,60 +1,56 @@
 (ns ^:no-doc crux.tx.conform
   (:require [crux.codec :as c]
-            [crux.error :as err]
             [crux.db :as db]
-            [clojure.instant :as inst])
-  (:import (java.util UUID)))
+            [crux.error :as err])
+  (:import java.util.UUID))
 
-(defn- check-eid [eid op]
+(defn- check-eid [eid]
   (when-not (and (some? eid) (c/valid-id? eid))
-    (throw (ex-info "invalid entity id" {:eid eid, :op op})))
+    (throw (ex-info "invalid entity id" {:eid eid})))
   eid)
 
-(def ^:dynamic *xform-doc* identity)
-
-(defn- check-doc [doc op]
-  (let [doc (*xform-doc* doc)]
+(defn- check-doc [doc {::keys [->doc], :or {->doc identity}}]
+  (let [doc (->doc doc)]
     (when-not (and (map? doc)
                    (every? keyword? (keys doc)))
-      (throw (ex-info "invalid doc" {:op op, :doc doc})))
+      (throw (ex-info "invalid doc" {:doc doc})))
 
     (-> doc
-        (update :crux.db/id check-eid op))))
+        (update :crux.db/id check-eid))))
 
-(defn- check-valid-time [valid-time op]
-  (or (when (inst? valid-time)
-        valid-time)
-      (when (string? valid-time)
-        (try
-          (inst/read-instant-date valid-time)
-          (catch Exception _e)))
-      (throw (ex-info "invalid valid-time" {:valid-time valid-time, :op op}))))
+(defn- check-valid-time [valid-time {::keys [->valid-time], :or {->valid-time identity}}]
+  (let [valid-time (->valid-time valid-time)]
+    (when-not (inst? valid-time)
+      (throw (ex-info "invalid valid-time" {:valid-time valid-time})))
+    valid-time))
 
-(defmulti ^:private conform-tx-op-type first
+(defmulti ^:private conform-tx-op-type
+  (fn [op decoders]
+    (first op))
   :default ::default)
 
-(defmethod conform-tx-op-type ::default [op]
+(defmethod conform-tx-op-type ::default [op _decoders]
   (throw (ex-info "Invalid tx op" {:op op})))
 
-(defmethod conform-tx-op-type :crux.tx/put [[_ doc start-valid-time end-valid-time :as op]]
-  (let [doc (check-doc doc op)
+(defmethod conform-tx-op-type :crux.tx/put [[_ doc start-valid-time end-valid-time :as _op] decoders]
+  (let [doc (check-doc doc decoders)
         doc-id (c/new-id doc)]
     {:op :crux.tx/put
      :eid (:crux.db/id doc)
      :doc-id doc-id
      :docs {doc-id doc}
-     :start-valid-time (some-> start-valid-time (check-valid-time op))
-     :end-valid-time (some-> end-valid-time (check-valid-time op))}))
+     :start-valid-time (some-> start-valid-time (check-valid-time decoders))
+     :end-valid-time (some-> end-valid-time (check-valid-time decoders))}))
 
-(defmethod conform-tx-op-type :crux.tx/delete [[_ eid start-valid-time end-valid-time :as op]]
+(defmethod conform-tx-op-type :crux.tx/delete [[_ eid start-valid-time end-valid-time :as _op] decoders]
   {:op :crux.tx/delete
-   :eid (check-eid eid op)
-   :start-valid-time (some-> start-valid-time (check-valid-time op))
-   :end-valid-time (some-> end-valid-time (check-valid-time op))})
+   :eid (check-eid eid)
+   :start-valid-time (some-> start-valid-time (check-valid-time decoders))
+   :end-valid-time (some-> end-valid-time (check-valid-time decoders))})
 
-(defmethod conform-tx-op-type :crux.tx/cas [[_ old-doc new-doc at-valid-time :as op]]
-  (let [old-doc (some-> old-doc (check-doc op))
-        new-doc (some-> new-doc (check-doc op))
+(defmethod conform-tx-op-type :crux.tx/cas [[_ old-doc new-doc at-valid-time :as op] decoders]
+  (let [old-doc (some-> old-doc (check-doc decoders))
+        new-doc (some-> new-doc (check-doc decoders))
         old-doc-id (some-> old-doc c/new-id)
         new-doc-id (some-> new-doc c/new-id)]
     (when-not (or (nil? (:crux.db/id old-doc))
@@ -67,26 +63,25 @@
      :old-doc-id old-doc-id
      :new-doc-id new-doc-id
      :docs (into {} (filter val) {old-doc-id old-doc, new-doc-id new-doc})
-     :at-valid-time (some-> at-valid-time (check-valid-time op))}))
+     :at-valid-time (some-> at-valid-time (check-valid-time decoders))}))
 
-
-(defmethod conform-tx-op-type :crux.tx/match [[_ eid doc at-valid-time :as op]]
-  (let [doc (some-> doc (check-doc op))
+(defmethod conform-tx-op-type :crux.tx/match [[_ eid doc at-valid-time :as op] decoders]
+  (let [doc (some-> doc (check-doc decoders))
         doc-id (c/new-id doc)]
     {:op :crux.tx/match
-     :eid (check-eid eid op)
-     :at-valid-time (some-> at-valid-time (check-valid-time op))
+     :eid (check-eid eid)
+     :at-valid-time (some-> at-valid-time (check-valid-time decoders))
      :doc-id doc-id
      :docs (when doc
              {doc-id doc})}))
 
-(defmethod conform-tx-op-type :crux.tx/evict [[_ eid :as op]]
+(defmethod conform-tx-op-type :crux.tx/evict [[_ eid :as _op] _decoders]
   {:op :crux.tx/evict
-   :eid (check-eid eid op)})
+   :eid (check-eid eid)})
 
-(defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid & args :as op]]
+(defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid & args :as _op] _decoders]
   (merge {:op :crux.tx/fn
-          :fn-eid (check-eid fn-eid op)}
+          :fn-eid (check-eid fn-eid)}
          (when (seq args)
            (let [arg-doc {:crux.db/id (UUID/randomUUID)
                           :crux.db.fn/args args}
@@ -94,15 +89,19 @@
              {:arg-doc-id arg-doc-id
               :docs {arg-doc-id arg-doc}}))))
 
-(defn conform-tx-op [op]
-  (try
-    (when-not (vector? op)
-      (throw (ex-info "tx-op must be a vector" {:op op})))
+(defn conform-tx-op
+  ([op] (conform-tx-op op {}))
+  ([op decoders]
+   (try
+     (when-not (vector? op)
+       (throw (ex-info "tx-op must be a vector" {:op op})))
 
-    (conform-tx-op-type op)
-    (catch Exception e
-      (throw (err/illegal-arg :invalid-tx-op
-                              {::err/message (str "invalid tx-op: " (.getMessage e))})))))
+     (conform-tx-op-type op decoders)
+     (catch Exception e
+       (throw (err/illegal-arg :invalid-tx-op
+                               {::err/message (str "invalid tx-op: " (.getMessage e))
+                                :op op}
+                               e))))))
 
 (defmulti ->tx-op :op :default ::default)
 
