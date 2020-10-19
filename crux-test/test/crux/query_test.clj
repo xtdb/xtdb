@@ -11,7 +11,7 @@
             [crux.index :as idx]
             [clojure.java.io :as io]
             [edn-query-language.core :as eql])
-  (:import java.util.UUID
+  (:import [java.util Arrays UUID]
            java.util.concurrent.TimeoutException))
 
 (t/use-fixtures :each fix/with-node)
@@ -1105,6 +1105,32 @@
              (api/q (api/db *api*) '{:find [e email]
                                      :where [[e :name "Ivan"]
                                              [(get-attr e :email nil) [email ...]]]})))))
+
+(t/deftest test-byte-array-values
+  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :photo (byte-array [0 1 2])}
+                                    {:crux.db/id :petr :name "Petr" :photo (byte-array [3 4 5])}
+                                    {:crux.db/id :oleg :name "Oleg" :photo (byte-array [0 1 2])}]))
+
+  (t/is (Arrays/equals (byte-array [0 1 2])
+                       ^bytes (ffirst
+                               (api/q (api/db *api*) '{:find [photo]
+                                                       :where [[:ivan :photo photo]]}))))
+
+  (t/testing "joins"
+    (t/is (= #{[:ivan]
+               [:oleg]}
+             (api/q (api/db *api*)
+                    '{:find [e]
+                      :in [$ photo]
+                      :where [[e :photo photo]]}
+                    (byte-array [0 1 2]))))
+
+    (t/is (= #{[:oleg]}
+             (api/q (api/db *api*)
+                    '{:find [e]
+                      :where [[:ivan :photo photo]
+                              [e :name "Oleg"]
+                              [e :photo photo]]})))))
 
 (t/deftest test-multiple-values-literals
   (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}
@@ -3608,10 +3634,10 @@
       (let [!lookup-counts (atom [])]
         (with-redefs [q/lookup-docs (->lookup-docs !lookup-counts)]
           (t/is (= #{[{:person/name "Daniel Craig",
-                       :film/_bond [{:film/name "Quantum of Solace", :film/year "2008"}
-                                    {:film/name "Spectre", :film/year "2015"}
-                                    {:film/name "Skyfall", :film/year "2012"}
-                                    {:film/name "Casino Royale", :film/year "2006"}]}]}
+                       :film/_bond [#:film{:name "Skyfall", :year "2012"}
+                                    #:film{:name "Spectre", :year "2015"}
+                                    #:film{:name "Casino Royale", :year "2006"}
+                                    #:film{:name "Quantum of Solace", :year "2008"}]}]}
                    (api/q db '{:find [(eql/project ?dc [:person/name
                                                         {:film/_bond [:film/name :film/year]}])]
                                :where [[?dc :person/name "Daniel Craig"]]})))

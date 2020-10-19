@@ -13,7 +13,7 @@
            [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
            java.nio.charset.StandardCharsets
-           [java.util Arrays Collection Date Map UUID Set]
+           [java.util Arrays Base64 Collection Date Map UUID Set]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -22,7 +22,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def index-version 13)
+(def index-version 14)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -55,7 +55,11 @@
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
 
-(def ^:const ^:private max-string-index-length 128)
+;; LMDB #MDB_MAXKEYSIZE 511 (>= 511 (+ value-type-id-size (* 2 (+ value-type-id-size 224)) id-size id-size))
+(def ^:const ^:private max-value-index-length 224)
+
+(def ^:const ^:private string-terminate-mark-size Byte/BYTES)
+(def ^:const ^:private string-terminate-mark (byte 1))
 
 (defprotocol IdOrBuffer
   (new-id ^crux.codec.Id [id])
@@ -77,6 +81,7 @@
 (def ^:private date-value-type-id 7)
 (def ^:private string-value-type-id 8)
 (def ^:private char-value-type-id 9)
+(def ^:private nippy-value-type-id 10)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -149,10 +154,6 @@
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
-  (class (byte-array 0))
-  (value->buffer [this to]
-    (throw (UnsupportedOperationException. "Byte arrays as values is not supported.")))
-
   Boolean
   (value->buffer [this ^MutableDirectBuffer to]
     (mem/limit-buffer
@@ -212,28 +213,42 @@
 
   String
   (value->buffer [this ^MutableDirectBuffer to]
-    (if (< max-string-index-length (count this))
-      (doto (id->buffer this to)
-        (.putByte 0 clob-value-type-id))
-      (let [terminate-mark (byte 1)
-            terminate-mark-size Byte/BYTES
-            offset (byte 2)
-            ub-in (mem/on-heap-buffer (.getBytes this StandardCharsets/UTF_8))
-            length (.capacity ub-in)]
-        (.putByte to 0 string-value-type-id)
-        (loop [idx 0]
-          (if (= idx length)
-            (do (.putByte to (inc idx) terminate-mark)
-                (mem/limit-buffer to (+ length value-type-id-size terminate-mark-size)))
-            (let [b (.getByte ub-in idx)]
-              (.putByte to (inc idx) (byte (+ offset b)))
-              (recur (inc idx))))))))
+    (let [bs (.getBytes this StandardCharsets/UTF_8)]
+      (if (< max-value-index-length (alength bs))
+        (doto (id->buffer this to)
+          (.putByte 0 clob-value-type-id))
+        (let [offset (byte 2)
+              ub-in (mem/on-heap-buffer bs)
+              length (.capacity ub-in)]
+          (.putByte to 0 string-value-type-id)
+          (loop [idx 0]
+            (if (= idx length)
+              (do (.putByte to (inc idx) string-terminate-mark)
+                  (mem/limit-buffer to (+ length value-type-id-size string-terminate-mark-size)))
+              (let [b (.getByte ub-in idx)]
+                (.putByte to (inc idx) (byte (+ offset b)))
+                (recur (inc idx)))))))))
+
+  Class
+  (value->buffer [this ^MutableDirectBuffer to]
+    (doto (id-function to (nippy/fast-freeze this))
+      (.putByte 0 object-value-type-id)))
 
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (doto (id-function to (binding [*sort-unordered-colls* true]
-                            (nippy/fast-freeze this)))
-      (.putByte 0 object-value-type-id)))
+    (let [^bytes nippy-bytes (if (coll? this)
+                               (binding [*sort-unordered-colls* true]
+                                 (nippy/fast-freeze this))
+                               (nippy/fast-freeze this))]
+      (if (or (< max-value-index-length (alength nippy-bytes))
+              (not (nippy/freezable? this)))
+        (doto (id-function to nippy-bytes)
+          (.putByte 0 object-value-type-id))
+        (mem/limit-buffer
+         (doto to
+           (.putByte 0 nippy-value-type-id)
+           (.putBytes value-type-id-size nippy-bytes))
+         (+ value-type-id-size (alength nippy-bytes))))))
 
   nil
   (value->buffer [this ^MutableDirectBuffer to]
@@ -257,13 +272,13 @@
     (Double/longBitsToDouble l)))
 
 (defn- decode-string ^String [^DirectBuffer buffer]
-  (let [terminate-mark-size Byte/BYTES
-        offset (byte 2)
-        length (- (.capacity buffer) terminate-mark-size)
+  (let [offset (byte 2)
+        length (- (.capacity buffer) string-terminate-mark-size)
         bs (byte-array (- length value-type-id-size))]
     (loop [idx value-type-id-size]
       (if (= idx length)
-        (String. bs StandardCharsets/UTF_8)
+        (do (assert (= string-terminate-mark (.getByte buffer idx)) "String not terminated.")
+            (String. bs StandardCharsets/UTF_8))
         (let [b (.getByte buffer idx)]
           (aset bs (dec idx) (unchecked-byte (- b offset)))
           (recur (inc idx)))))))
@@ -274,10 +289,13 @@
 (defn- decode-char ^Character [^DirectBuffer buffer]
   (.getChar buffer value-type-id-size ByteOrder/BIG_ENDIAN))
 
+(defn- decode-nippy [^DirectBuffer buffer]
+  (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
+
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (3 4 5 6 7 8 9) true
+      (3 4 5 6 7 8 9 10) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
@@ -290,6 +308,7 @@
       7 (Date. (decode-long buffer)) ;; date-value-type-id
       8 (decode-string buffer) ;; string-value-type-id
       9 (decode-char buffer) ;; char-value-type-id
+      10 (decode-nippy buffer) ;; nippy-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 
@@ -322,7 +341,8 @@
 (extend-protocol IdToBuffer
   (class (byte-array 0))
   (id->buffer [this ^MutableDirectBuffer to]
-    (if (= id-size (alength ^bytes this))
+    (if (and (= id-size (alength ^bytes this))
+             (= id-value-type-id (aget ^bytes this 0)))
       (mem/limit-buffer
        (doto to
          (.putBytes 0 this))
@@ -517,8 +537,12 @@
              (new-id id))
            id))
 
+(defn base64-reader ^bytes [s]
+  (.decode (Base64/getDecoder) (str s)))
+
 (defn read-edn-string-with-readers [s]
-  (edn/read-string {:readers {'crux/id id-edn-reader}} s))
+  (edn/read-string {:readers {'crux/id id-edn-reader
+                              'crux/base64 base64-reader}} s))
 
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
@@ -530,6 +554,18 @@
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
   (.write w (cio/pr-edn-str (edn-id->original-id id))))
+
+(def ^:const ^:private base64-print-method-enabled?
+  (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_BASE64_PRINT_METHOD")))
+
+(when base64-print-method-enabled?
+  (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]
+    (.write w "#crux/base64 ")
+    (.write w (cio/pr-edn-str (.encodeToString (Base64/getEncoder) b))))
+
+  (defmethod print-dup (class (byte-array 0)) [^bytes b ^Writer w]
+    (.write w "#crux/base64 ")
+    (.write w (cio/pr-edn-str (.encodeToString (Base64/getEncoder) b)))))
 
 (nippy/extend-freeze
  EDNId

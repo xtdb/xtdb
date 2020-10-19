@@ -9,7 +9,7 @@
             [crux.api :as crux]
             [taoensso.nippy :as nippy])
   (:import crux.codec.Id
-           java.util.Date
+           [java.util Arrays Date]
            java.net.URL))
 
 (t/use-fixtures :each fix/with-silent-test-check)
@@ -43,6 +43,28 @@
       (t/is (= (sort-by first value+buffer)
                (sort-by second mem/buffer-comparator value+buffer))))))
 
+(t/deftest test-string-prefix
+  (t/testing "string encoding size overhead"
+    (t/is (= (+ c/value-type-id-size
+                (alength (.getBytes "Hello" "UTF-8"))
+                @#'c/string-terminate-mark-size)
+             (mem/capacity (c/->value-buffer "Hello")))))
+
+  (t/testing "a short encoded string is not a prefix of a longer string"
+    (let [hello (c/->value-buffer "Hello")
+          hello-world (c/->value-buffer "Hello World")]
+      (t/is (false? (mem/buffers=? hello hello-world (mem/capacity hello))))))
+
+  (t/testing "a short raw string is a prefix of a longer string"
+    (let [hello (mem/as-buffer (.getBytes "Hello" "UTF-8"))
+          hello-world (mem/as-buffer (.getBytes "Hello World" "UTF-8"))]
+      (t/is (true? (mem/buffers=? hello hello-world (mem/capacity hello))))))
+
+  (t/testing "cannot decode non-terminated string"
+    (let [hello (c/->value-buffer "Hello")
+          hello-prefix (mem/slice-buffer hello 0 (- (mem/capacity hello) @#'c/string-terminate-mark-size))]
+      (t/is (thrown-with-msg? AssertionError #"String not terminated." (c/decode-value-buffer hello-prefix))))))
+
 (t/deftest test-id-reader
   (t/testing "can read and convert to real id"
     (t/is (not= (c/new-id "http://google.com") #crux/id "http://google.com"))
@@ -73,6 +95,10 @@
     (t/is (not= (c/new-id "http://xmlns.com/foaf/0.1/firstName")
                 #crux/id ":http://xmlns.com/foaf/0.1/firstName"))))
 
+(t/deftest test-base64-reader
+  (t/is (Arrays/equals (byte-array [1 2 3])
+                       ^bytes (c/read-edn-string-with-readers "#crux/base64 \"AQID\""))))
+
 (tcct/defspec test-generative-primitive-value-decoder 1000
   (prop/for-all [v (gen/one-of [(gen/return nil)
                                 gen/large-integer
@@ -80,16 +106,34 @@
                                 (gen/fmap #(Date. (long %)) gen/large-integer)
                                 gen/string
                                 gen/char
-                                gen/boolean])]
+                                gen/boolean
+                                gen/keyword
+                                gen/uuid
+                                gen/bytes])]
                 (let [buffer (c/->value-buffer v)]
                   (if (c/can-decode-value-buffer? buffer)
-                    (if (and (double? v) (Double/isNaN v))
+                    (cond
+                      (and (double? v) (Double/isNaN v))
                       (Double/isNaN (c/decode-value-buffer buffer))
+
+                      (bytes? v)
+                      (Arrays/equals ^bytes v ^bytes (c/decode-value-buffer buffer))
+
+                      :else
                       (= v (c/decode-value-buffer buffer)))
-                    (and (string? v)
-                         (> (count v) @#'c/max-string-index-length)
-                         (= @#'c/clob-value-type-id
-                            (.getByte (c/value-buffer-type-id buffer) 0)))))))
+                    (cond
+                      (and (string? v)
+                           (< @#'c/max-value-index-length (alength (.getBytes ^String v "UTF-8"))))
+                      (= @#'c/clob-value-type-id
+                         (.getByte (c/value-buffer-type-id buffer) 0))
+
+                      (and (bytes? v)
+                           (< @#'c/max-value-index-length (alength ^bytes (nippy/fast-freeze v))))
+                      (= @#'c/object-value-type-id
+                         (.getByte (c/value-buffer-type-id buffer) 0))
+
+                      :else
+                      false)))))
 
 (t/deftest test-unordered-coll-hashing-1001
   (let [foo-a {{:foo 1} :foo1
