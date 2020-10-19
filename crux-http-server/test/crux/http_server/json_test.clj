@@ -1,9 +1,12 @@
 (ns crux.http-server.json-test
   (:require [clj-http.client :as http]
             [clojure.test :as t]
-            [crux.fixtures :as fix]
+            [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
-            [jsonista.core :as json]))
+            [jsonista.core :as json]
+            [crux.codec :as c]
+            [crux.api :as crux]
+            [crux.tx :as tx]))
 
 (t/use-fixtures :each fh/with-http-server fix/with-node)
 
@@ -202,3 +205,19 @@
     (t/is (= {"crux.db/id" "ivan" "age" 22}
              (json-get {:url "/_crux/entity"
                         :qps {"eidJson" (pr-str "ivan")}})))))
+
+(t/deftest test-object-mapping
+  (let [{:strs [txId]} (submit-tx [["put" {"crux.db/id" "foo",
+                                           "bytes" {"$base64" "AQID"},
+                                           "crux-id" {"$oid" (str (c/new-id :foo))}}]])]
+    (crux/await-tx *api* {::tx/tx-id txId})
+    (t/is (= {:crux.db/id "foo"
+              :bytes [1 2 3]
+              :crux-id (c/new-id :foo)}
+             (-> (crux/entity (crux/db *api*) "foo")
+                 (update :bytes seq))))
+    (t/is (= {"crux.db/id" "foo"
+              "bytes" {"$base64" "AQID"}
+              "crux-id" {"$oid" (str (c/new-id :foo))}}
+             (json-get {:url "/_crux/entity"
+                        :qps {"eid" "foo"}})))))

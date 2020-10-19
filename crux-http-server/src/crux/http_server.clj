@@ -63,8 +63,7 @@
          :body {:error (str eid " entity-tx not found") }}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [mapper (json/object-mapper {:decode-key-fn true})
-        decoders {::txc/->doc #(cio/update-if % :crux.db/fn edn/read-string)
+  (let [decoders {::txc/->doc #(cio/update-if % :crux.db/fn edn/read-string)
                   ::txc/->valid-time (fn [vt-str]
                                        (try
                                          (instant/read-instant-date vt-str)
@@ -73,7 +72,7 @@
     (reify
       mfc/Decode
       (decode [_ data _]
-        (-> (json/read-value data mapper)
+        (-> (json/read-value data util/crux-object-mapper)
             (update :tx-ops (fn [tx-ops]
                               (->> tx-ops
                                    (mapv (fn [tx-op]
