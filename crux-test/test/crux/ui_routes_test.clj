@@ -69,7 +69,7 @@
 
     ;; Testing getting query results (GET)
     (let [get-query (fn [accept-type]
-                      (set (-> (get-result-from-path (format "/_crux/query?query=%s" '{:find [e] :where [[e :crux.db/id _]]}) accept-type)
+                      (set (-> (get-result-from-path (format "/_crux/query?query-edn=%s" '{:find [e] :where [[e :crux.db/id _]]}) accept-type)
                                (parse-body accept-type))))]
       (t/is (= #{[:ivan] [:peter]} (get-query "application/edn")))
       (t/is (= #{[:ivan] [:peter]} (get-query "application/transit+json")))
@@ -116,17 +116,17 @@
 
   ;; Testing getting linked entities in query results
   (let [get-query (fn [accept-type]
-                    (set (-> (get-result-from-path (format "/_crux/query?query=%s&link-entities?=true" '{:find [e] :where [[e :crux.db/id _]]}) accept-type)
+                    (set (-> (get-result-from-path (format "/_crux/query?query-edn=%s&link-entities?=true" '{:find [e] :where [[e :crux.db/id _]]}) accept-type)
                              (parse-body accept-type))))]
     (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/edn")))
     (t/is (= #{[(entity-ref/->EntityRef :ivan)] [(entity-ref/->EntityRef :peter)]} (get-query "application/transit+json"))))
 
   ;; Test file-type based negotiation
   (t/is (= #{[":ivan"] [":peter"] ["e"]}
-           (set (-> (get-result-from-path (format "/_crux/query.csv?query=%s" '{:find [e] :where [[e :crux.db/id _]]}))
+           (set (-> (get-result-from-path (format "/_crux/query.csv?query-edn=%s" '{:find [e] :where [[e :crux.db/id _]]}))
                     (parse-body "text/csv")))))
   (t/is (= #{[":ivan"] [":peter"] ["e"]}
-           (set (-> (get-result-from-path (format "/_crux/query.tsv?query=%s" '{:find [e] :where [[e :crux.db/id _]]}))
+           (set (-> (get-result-from-path (format "/_crux/query.tsv?query-edn=%s" '{:find [e] :where [[e :crux.db/id _]]}))
                     (parse-body "text/tsv"))))))
 
 (t/deftest test-string-eid-routes

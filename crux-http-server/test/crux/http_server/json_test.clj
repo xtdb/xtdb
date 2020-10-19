@@ -69,47 +69,47 @@
 
     (t/is (= #{["sal"] ["jed"] ["colin"]}
              (set (json-get {:url "/_crux/query"
-                             :qps {"query" (pr-str '{:find [e]
-                                                     :where [[e :crux.db/id]]})}}))))
+                             :qps {"query-edn" (pr-str '{:find [e]
+                                                         :where [[e :crux.db/id]]})}}))))
     (t/is (= (pr-str '{:find [e]
                        :where [[e :crux.db/id]]})
              (-> (json-get {:url "/_crux/recent-queries"})
                  (get-in [0 "query"]))))
     (t/is (json-get
            {:url "/_crux/query"
-            :qps {"query" (pr-str '{:find [e]
-                                    :where [[e :crux.db/id]]})}}))
+            :qps {"query-edn" (pr-str '{:find [e]
+                                        :where [[e :crux.db/id]]})}}))
     (t/is (= #{["Sally"] ["Colin"]}
              (set
               (json-get
                {:url "/_crux/query"
-                :qps {"query" (pr-str '{:find [first-name]
-                                        :where [[e :firstName first-name]
-                                                [e :lastName "Example"]]})}}))))
+                :qps {"query-edn" (pr-str '{:find [first-name]
+                                            :where [[e :firstName first-name]
+                                                    [e :lastName "Example"]]})}}))))
     (t/is (= [[{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]]
              (json-get
               {:url "/_crux/query"
-               :qps {"query" (pr-str '{:find [e]
-                                       :where [[e :firstName "Sally"]]
-                                       :full-results? true})}})))
+               :qps {"query-edn" (pr-str '{:find [e]
+                                           :where [[e :firstName "Sally"]]
+                                           :full-results? true})}})))
 
     (t/testing "eql project"
       (let [{:strs [txId] :as tx} (submit-tx [["put" {"crux.db/id" "link", "linking" "jed"}]])]
         (t/is (= tx
                  (json-get {:url "/_crux/await-tx"
-                            :qps {"txId" txId}})))q
+                            :qps {"txId" txId}})))
         (t/is (= [[{"crux.db/id" "sal" "firstName" "Sally", "lastName" "Example"}]]
                  (json-get {:url "/_crux/query"
-                            :qps {"query" (pr-str '{:find [(eql/project e [*])]
-                                                    :where [[e :firstName "Sally"]]})}})))
+                            :qps {"query-edn" (pr-str '{:find [(eql/project e [*])]
+                                                        :where [[e :firstName "Sally"]]})}})))
         (t/is (= [[{"firstName" "Jed", "lastName" "Test"}]]
                  (json-get {:url "/_crux/query"
-                            :qps {"query" (pr-str '{:find [(eql/project e [:firstName :lastName])]
-                                                    :where [[e :firstName "Jed"]]})}})))
+                            :qps {"query-edn" (pr-str '{:find [(eql/project e [:firstName :lastName])]
+                                                        :where [[e :firstName "Jed"]]})}})))
         (t/is (= [[{"linking" {"firstName" "Jed", "lastName" "Test"}}]]
                  (json-get {:url "/_crux/query"
-                            :qps {"query" (pr-str '{:find [(eql/project e [{:linking [:firstName :lastName]}])]
-                                                    :where [[e :linking linking]]})}})))))))
+                            :qps {"query-edn" (pr-str '{:find [(eql/project e [{:linking [:firstName :lastName]}])]
+                                                        :where [[e :linking linking]]})}})))))))
 
 (t/deftest test-history
   (let [{:strs [txTime] :as tx} (submit-tx [["put" {"crux.db/id" "test-person", "first-name" "George"}]])

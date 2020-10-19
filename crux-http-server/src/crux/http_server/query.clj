@@ -26,14 +26,14 @@
            java.time.format.DateTimeFormatter
            java.util.Date))
 
-(s/def ::query
+(s/def ::query-edn
   (st/spec
    {:spec any? ; checked by crux.query
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
 ;; TODO: Need to ensure all query clasues are present + coerced properly
 (s/def ::query-params
-  (s/keys :opt-un [::util/valid-time ::util/transaction-time ::util/link-entities? ::query]))
+  (s/keys :opt-un [::util/valid-time ::util/transaction-time ::util/link-entities? ::query-edn]))
 
 (s/def ::args (s/coll-of any? :kind vector?))
 
@@ -230,8 +230,8 @@
 (defn data-browser-query [options]
   (fn [req]
     (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time transaction-time query]} query-params
-          query (or query (get body-params :query))]
+          {:keys [valid-time transaction-time query-edn]} query-params
+          query (or query-edn (get body-params :query))]
       (-> (if (nil? query)
             (assoc options :no-query? true)
             (run-query (transform-req query req)
