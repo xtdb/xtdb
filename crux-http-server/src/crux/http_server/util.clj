@@ -23,7 +23,7 @@
            [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
            crux.http_server.entity_ref.EntityRef
-           clojure.lang.PersistentList
+           clojure.lang.IPersistentList
            [java.io ByteArrayOutputStream OutputStream]
            java.time.format.DateTimeFormatter
            jsonista.jackson.PersistentHashMapDeserializer))
@@ -41,6 +41,15 @@
                                     (c/base64-reader b64))
                                   res))))))))
 
+(defn emit-list [coll ^JsonGenerator gen]
+  (if (contains? #{'fn* 'fn} (first coll))
+    (.writeString gen (pr-str coll))
+    (do
+      (.writeStartArray gen)
+      (doseq [el coll]
+        (.writeObject gen el))
+      (.writeEndArray gen))))
+
 (def crux-object-mapper
   (j/object-mapper
    {:encode-key-fn true
@@ -49,8 +58,7 @@
                (Class/forName "[B") (fn [^bytes bytes ^JsonGenerator gen]
                                       (.writeObject gen {"$base64" (c/base64-writer bytes)}))
                EntityRef entity-ref/ref-json-encoder
-               PersistentList (fn [pl ^JsonGenerator gen]
-                                (.writeString gen (pr-str pl)))}
+               IPersistentList emit-list}
     :decode-key-fn true
     :modules [crux-jackson-module]}))
 
