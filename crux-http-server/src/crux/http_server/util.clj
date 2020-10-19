@@ -12,9 +12,11 @@
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
-            [spec-tools.core :as st])
+            [spec-tools.core :as st]
+            [crux.http-server.entity-ref :as entity-ref])
   (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
+           crux.http_server.entity_ref.EntityRef
            [java.io ByteArrayOutputStream OutputStream]))
 
 (s/def ::eid (and string? c/valid-id?))
@@ -64,8 +66,9 @@
 (def crux-id-write-handler
   (transit/write-handler "crux.codec/id" #(str %)))
 
-(defn- ->tj-encoder [_]
-  (let [options {:handlers {Id crux-id-write-handler}}]
+(defn ->tj-encoder [_]
+  (let [options {:handlers {Id crux-id-write-handler
+                            EntityRef entity-ref/ref-write-handler}}]
     (reify
       mfc/EncodeToBytes
       (encode-to-bytes [_ data _]

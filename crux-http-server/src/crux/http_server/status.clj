@@ -1,5 +1,6 @@
 (ns crux.http-server.status
   (:require [crux.api :as api]
+            [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]))
@@ -15,7 +16,7 @@
         (.getBytes resp ^String charset)))))
 
 (defn ->status-muuntaja [opts]
-  (m/create (-> (util/->default-muuntaja)
+  (m/create (-> (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys})
                 (m/install {:name "text/html"
                             :encoder [->status-html-encoder opts]
                             :return :bytes}))))

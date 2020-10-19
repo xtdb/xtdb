@@ -105,15 +105,14 @@
       (fn [^OutputStream output-stream]
         (cond
           entity (j/write-value output-stream entity http-json/crux-object-mapper)
-          entity-history (let [history-results (iterator-seq entity-history)
-                               transformed-history (some->> history-results
-                                                            (map http-json/camel-case-keys))]
-                           (try
-                             (j/write-value output-stream (or transformed-history '()) http-json/crux-object-mapper)
-                             (finally
-                               (cio/try-close entity-history))))
+          entity-history (try
+                           (j/write-value output-stream
+                                          (->> (iterator-seq entity-history)
+                                               (map http-json/camel-case-keys))
+                                          http-json/crux-object-mapper)
+                           (finally
+                             (cio/try-close entity-history)))
           :else (j/write-value output-stream res http-json/crux-object-mapper))))))
-
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options

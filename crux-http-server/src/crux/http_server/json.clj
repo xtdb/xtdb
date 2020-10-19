@@ -58,10 +58,10 @@
       ::s/invalid)))
 
 (defn camel-case-keys [m]
-  (->> m
-       (into {} (map (juxt (comp csk/->camelCaseKeyword key) val)))))
+  (cond->> m
+    (map? m) (into {} (map (juxt (comp csk/->camelCaseKeyword key) val)))))
 
-(defn ->json-encoder [{:keys [json-encode-fn], :or {json-encode-fn camel-case-keys}}]
+(defn ->json-encoder [{:keys [json-encode-fn], :or {json-encode-fn identity}}]
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data _]
@@ -70,9 +70,10 @@
     (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
       (fn [^OutputStream output-stream]
         (try
-          (if results
-            (let [results-seq (iterator-seq results)]
-              (j/write-value output-stream (or (some-> results-seq json-encode-fn) '()) crux-object-mapper))
-            (j/write-value output-stream data crux-object-mapper))
+          (j/write-value output-stream
+                         (if results
+                           (map json-encode-fn (iterator-seq results))
+                           (json-encode-fn data))
+                         crux-object-mapper)
           (finally
             (cio/try-close results)))))))

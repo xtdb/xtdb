@@ -78,7 +78,7 @@
 
 (def ->submit-tx-muuntaja
   (m/create
-   (assoc-in (util/->default-muuntaja)
+   (assoc-in (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys})
              [:formats "application/json" :decoder]
              [->submit-json-decoder])))
 
@@ -102,13 +102,11 @@
 
 (def ->tx-log-muuntaja
   (m/create
-   (-> (util/->default-muuntaja {:json-encode-fn (fn [tx-log]
-                                                   (->> tx-log
-                                                        (map (fn [tx]
-                                                               (-> tx
-                                                                   (cio/update-if :crux.api/tx-ops txs->json)
-                                                                   (cio/update-if :crux.tx.event/tx-events txs->json)
-                                                                   (http-json/camel-case-keys))))))})
+   (-> (util/->default-muuntaja {:json-encode-fn (fn [tx]
+                                                   (-> tx
+                                                       (cio/update-if :crux.api/tx-ops txs->json)
+                                                       (cio/update-if :crux.tx.event/tx-events txs->json)
+                                                       (http-json/camel-case-keys)))})
        (assoc :return :output-stream))))
 
 (defn- tx-log [^ICruxAPI crux-node]
@@ -330,7 +328,7 @@
                                    :post (sparqql crux-node)}]]
 
                 {:data
-                 {:muuntaja (m/create (util/->default-muuntaja))
+                 {:muuntaja (m/create (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys}))
                   :coercion reitit.coercion.spec/coercion
                   :middleware (cond-> [p/wrap-params
                                        wrap-camel-case-params

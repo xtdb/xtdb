@@ -3,7 +3,6 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [cognitect.transit :as transit]
             [crux.api :as crux]
             [crux.codec :as c]
             [crux.error :as err]
@@ -11,16 +10,12 @@
             [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
-            [jsonista.core :as j]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
             [spec-tools.core :as st])
-  (:import crux.codec.Id
-           crux.http_server.entity_ref.EntityRef
-           crux.io.Cursor
-           [java.io Closeable OutputStream]
+  (:import [java.io Closeable OutputStream]
            [java.time Instant ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date))
@@ -30,7 +25,7 @@
    {:spec any? ; checked by crux.query
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
-;; TODO: Need to ensure all query clasues are present + coerced properly
+;; TODO: Need to ensure all query clauses are present + coerced properly
 (s/def ::query-params
   (s/keys :opt-un [::util/valid-time ::util/transaction-time ::util/link-entities? ::query-edn]))
 
@@ -107,48 +102,6 @@
         (finally
           (cio/try-close results))))))
 
-(defn ->edn-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (with-open [w (io/writer output-stream)]
-          (try
-            (print-method (if results
-                            (or (iterator-seq results) '())
-                            res)
-                          w)
-            (finally
-              (cio/try-close results))))))))
-
-(defn- ->tj-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler
-                                                                Id util/crux-id-write-handler}})]
-          (try
-            (transit/write w (if results
-                               (or (iterator-seq results) '())
-                               res))
-            (finally
-              (cio/try-close results))))))))
-
-(defn- ->json-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (try
-          (j/write-value output-stream
-                         (if results
-                           (or (iterator-seq results) '())
-                           res)
-                         http-json/crux-object-mapper)
-          (finally
-            (cio/try-close results)))))))
-
 (defn ->query-muuntaja [opts]
   (m/create (-> m/default-options
                 (dissoc :formats)
@@ -162,13 +115,13 @@
                             :encoder [->html-encoder opts]
                             :return :bytes})
                 (m/install {:name "application/edn"
-                            :encoder [->edn-encoder]
+                            :encoder [util/->edn-encoder]
                             :decoder [mfe/decoder]})
                 (m/install {:name "application/transit+json"
-                            :encoder [->tj-encoder]
+                            :encoder [util/->tj-encoder]
                             :decoder [(partial mft/decoder :json)]})
                 (m/install {:name "application/json"
-                            :encoder [->json-encoder]}))))
+                            :encoder [http-json/->json-encoder]}))))
 
 (defmulti transform-req
   (fn [query req]
