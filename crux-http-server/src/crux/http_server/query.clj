@@ -115,10 +115,10 @@
       (fn [^OutputStream output-stream]
         (with-open [w (io/writer output-stream)]
           (try
-            (cond
-              (and results (.hasNext results)) (print-method (iterator-seq results) w)
-              results (.write w ^String (pr-str '()))
-              :else (.write w ^String (pr-str res)))
+            (print-method (if results
+                            (or (iterator-seq results) '())
+                            res)
+                          w)
             (finally
               (cio/try-close results))))))))
 
@@ -130,10 +130,9 @@
         (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler
                                                                 Id util/crux-id-write-handler}})]
           (try
-            (cond
-              (and results (.hasNext results)) (transit/write w (iterator-seq results))
-              results (transit/write w '())
-              :else (transit/write w res))
+            (transit/write w (if results
+                               (or (iterator-seq results) '())
+                               res))
             (finally
               (cio/try-close results))))))))
 
@@ -143,10 +142,11 @@
     (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
       (fn [^OutputStream output-stream]
         (try
-          (cond
-            (and results (.hasNext results)) (j/write-value output-stream (iterator-seq results) util/crux-object-mapper)
-            results (j/write-value output-stream '() util/crux-object-mapper)
-            :else (j/write-value output-stream res util/crux-object-mapper))
+          (j/write-value output-stream
+                         (if results
+                           (or (iterator-seq results) '())
+                           res)
+                         util/crux-object-mapper)
           (finally
             (cio/try-close results)))))))
 
