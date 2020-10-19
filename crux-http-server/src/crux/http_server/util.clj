@@ -15,8 +15,7 @@
             [spec-tools.core :as st])
   (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
-           [java.io ByteArrayOutputStream OutputStream]
-           java.time.format.DateTimeFormatter))
+           [java.io ByteArrayOutputStream OutputStream]))
 
 (s/def ::eid (and string? c/valid-id?))
 
@@ -42,9 +41,6 @@
 (s/def ::transaction-time inst?)
 (s/def ::timeout int?)
 (s/def ::tx-id int?)
-
-(def ^DateTimeFormatter default-date-formatter
-  (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
 (defn ->edn-encoder [_]
   (reify
