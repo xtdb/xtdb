@@ -50,17 +50,20 @@
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data _]
-      (.getBytes (pr-str data) "UTF-8"))
+      (binding [*print-length* nil, *print-level* nil]
+        (.getBytes (pr-str data) "UTF-8")))
+
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
       (fn [^OutputStream output-stream]
-        (with-open [w (io/writer output-stream)]
-          (try
-            (if results
-              (print-method (or (iterator-seq results) '()) w)
-              (.write w ^String (pr-str data)))
-            (finally
-              (cio/try-close results))))))))
+        (binding [*print-length* nil, *print-level* nil]
+          (with-open [w (io/writer output-stream)]
+            (try
+              (if results
+                (print-method (or (iterator-seq results) '()) w)
+                (.write w ^String (pr-str data)))
+              (finally
+                (cio/try-close results)))))))))
 
 (def crux-id-write-handler
   (transit/write-handler "crux.codec/id" #(str %)))
