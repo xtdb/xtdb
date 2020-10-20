@@ -18,6 +18,10 @@
                             (f v db))))
         db (crux/db *api*)]
 
+    (t/is (= #{[{}]}
+             (crux/q db '{:find [(eql/project ?v [])]
+                          :where [[?v :vehicle/brand "Aston Martin"]]})))
+
     (t/testing "simple props"
       (let [expected #{[{:vehicle/brand "Aston Martin", :vehicle/model "DB5"}]
                        [{:vehicle/brand "Aston Martin", :vehicle/model "DB10"}]

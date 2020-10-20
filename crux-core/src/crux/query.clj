@@ -1522,7 +1522,7 @@
            raise-doc-lookup-out-of-coll))
     coll))
 
-(defn- project-child [v child-fns db]
+(defn- project-child [v db child-fns]
   (->> (mapv (fn [f]
                (f v db))
              child-fns)
@@ -1530,76 +1530,88 @@
        (after-doc-lookup (fn [res]
                            (into {} (mapcat identity) res)))))
 
-(defn- project-child-fns [{:keys [children] :as project-spec}]
-  (let [{special :special, props :prop, joins :join, unions :union}
-        (->> (:children project-spec)
-             (group-by (some-fn recognise-union
-                                :type
-                                (constantly :special))))
+(declare project-child-fns)
+
+(defn- forward-joins-child-fn [{:keys [props special forward-joins unions]}]
+  (when-not (every? empty? [props special forward-joins unions])
+    (let [forward-join-child-fns (for [{:keys [dispatch-key] :as join} forward-joins]
+                                   (let [child-fns (project-child-fns join)]
+                                     (fn [doc db]
+                                       (let [v (get doc dispatch-key)]
+                                         (->> (if (c/multiple-values? v)
+                                                (->> (into [] (map #(project-child % db child-fns)) v)
+                                                     (raise-doc-lookup-out-of-coll))
+                                                (project-child v db child-fns))
+                                              (after-doc-lookup (fn [res]
+                                                                  (MapEntry/create dispatch-key res))))))))
+          union-child-fns (for [{:keys [dispatch-key children]} unions
+                                {:keys [union-key] :as child} (get-in children [0 :children])]
+                            (let [child-fns (project-child-fns child)]
+                              (fn [value doc db]
+                                (->> (c/vectorize-value (get doc dispatch-key))
+                                     (keep (fn [v]
+                                             (when (= v union-key)
+                                               (project-child value db child-fns))))))))
+          prop-dispatch-keys (into #{} (map :dispatch-key) props)
+          project-star? (contains? (into #{} (map :dispatch-key) special) '*)]
+
+      (fn [value {:keys [entity-resolver-fn] :as db}]
+        (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
+          (let-docs [docs #{content-hash}]
+            (let [doc (get docs (c/new-id content-hash))]
+              (->> (concat (->> forward-join-child-fns (map (fn [f] (f doc db))))
+                           (->> union-child-fns (mapcat (fn [f] (f value doc db)))))
+                   (raise-doc-lookup-out-of-coll)
+                   (after-doc-lookup (fn [res]
+                                       ;; TODO do we need a deeper merge here?
+                                       (into (if project-star?
+                                               doc
+                                               (select-keys doc prop-dispatch-keys))
+                                             res)))))))))))
+
+(defn- reverse-joins-child-fn [reverse-joins]
+  (when-not (empty? reverse-joins)
+    (let [reverse-join-child-fns (for [{:keys [dispatch-key] :as join} reverse-joins]
+                                   (let [child-fns (project-child-fns join)
+                                         forward-key (keyword (namespace dispatch-key)
+                                                              (subs (name dispatch-key) 1))
+                                         one? (= :one (get-in join [:params :crux/cardinality]))]
+                                     (fn [value-buffer {:keys [index-snapshot entity-resolver-fn] :as db}]
+                                       (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) value-buffer nil entity-resolver-fn)
+                                                           one? (take 1)
+                                                           :always vec)]
+                                                   (project-child (db/decode-value index-snapshot v) db child-fns)))
+                                            (raise-doc-lookup-out-of-coll)
+                                            (after-doc-lookup (fn [res]
+                                                                (MapEntry/create dispatch-key
+                                                                                 (cond->> res
+                                                                                   one? first))))))))]
+      (fn [value db]
+        (let [value-buffer (c/->value-buffer value)]
+          (->> (for [f reverse-join-child-fns]
+                 (f value-buffer db))
+               (raise-doc-lookup-out-of-coll)))))))
+
+(defn- project-child-fns [project-spec]
+  (let [{special :special,
+         props :prop,
+         joins :join,
+         unions :union} (->> (:children project-spec)
+                             (group-by (some-fn recognise-union
+                                                :type
+                                                (constantly :special))))
 
         {forward-joins false, reverse-joins true}
         (group-by (comp #(string/starts-with? % "_") name :dispatch-key) joins)]
-    (into [(let [join-child-fns (into {} (map (juxt :dispatch-key project-child-fns)) forward-joins)
-                 prop-dispatch-keys (into #{} (map :dispatch-key) props)
-                 special-dispatch-keys (into #{} (map :dispatch-key) special)
-                 union-child-fns (vec (for [{:keys [dispatch-key children]} unions
-                                            {:keys [union-key] :as child} (get-in children [0 :children])]
-                                        {:dispatch-key dispatch-key
-                                         :match-v union-key
-                                         :child-fns (project-child-fns child)}))]
-             (fn [value {:keys [document-store index-snapshot entity-resolver-fn] :as db}]
-               (when-not (and (empty? prop-dispatch-keys)
-                              (empty? special-dispatch-keys)
-                              (empty? join-child-fns)
-                              (empty? union-child-fns))
-                 (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
-                   (let-docs [docs #{content-hash}]
-                     (let [doc (get docs (c/new-id content-hash))]
-                       (->> (into (->> join-child-fns
-                                       (mapv (fn [[dispatch-key child-fns]]
-                                               (let [v (get doc dispatch-key)]
-                                                 (->> (if (or (vector? v) (set? v))
-                                                        (->> (into [] (map #(project-child % child-fns db)) v)
-                                                             (raise-doc-lookup-out-of-coll))
-                                                        (project-child v child-fns db))
-                                                      (after-doc-lookup (fn [res]
-                                                                          (MapEntry/create dispatch-key res))))))))
 
-                                  (->> union-child-fns
-                                       (mapcat (fn [{:keys [dispatch-key match-v child-fns]}]
-                                                 (->> (c/vectorize-value (get doc dispatch-key))
-                                                      (keep (fn [v]
-                                                              (when (= v match-v)
-                                                                (project-child value child-fns db))))
-                                                      vec)))))
-                            (raise-doc-lookup-out-of-coll)
-                            (after-doc-lookup (fn [res]
-                                                ;; TODO do we need a deeper merge here?
-                                                (into (if (contains? special-dispatch-keys '*)
-                                                        doc
-                                                        (select-keys doc prop-dispatch-keys))
-                                                      res))))))))))]
-
-          (for [{:keys [dispatch-key] :as join} reverse-joins]
-              (let [child-fns (project-child-fns join)
-                    forward-key (keyword (namespace dispatch-key)
-                                         (subs (name dispatch-key) 1))
-                    one? (= :one (get-in join [:params :crux/cardinality]))]
-                (fn [value {:keys [document-store index-snapshot entity-resolver-fn] :as db}]
-                  (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) (c/->value-buffer value) nil entity-resolver-fn)
-                                      one? (take 1)
-                                      :always vec)]
-                              (project-child (db/decode-value index-snapshot v) child-fns db)))
-                       (raise-doc-lookup-out-of-coll)
-                       (after-doc-lookup (fn [res]
-                                           [(MapEntry/create dispatch-key
-                                                             (cond->> res
-                                                               one? first))])))))))))
+    (->> [(forward-joins-child-fn {:special special, :props props, :forward-joins forward-joins, :unions unions})
+          (reverse-joins-child-fn reverse-joins)]
+         (remove nil?))))
 
 (defn- compile-project-spec [project-spec]
   (let [root-fns (project-child-fns (eql/query->ast project-spec))]
     (fn [value db]
-      (project-child value root-fns db))))
+      (project-child value db root-fns))))
 
 (defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [projection-cache]}]
   (for [[var-type arg] conformed-find]
