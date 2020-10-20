@@ -436,7 +436,7 @@
               result
               :percentage-difference-since-last-run (-> time-taken-ms
                                                         (- (first times-taken))
-                                                        (/ (first times-taken))
+                                                        (/ (double (first times-taken)))
                                                         (* 100)
                                                         (float))
               :minimum-time-taken-this-week (apply min times-taken)
