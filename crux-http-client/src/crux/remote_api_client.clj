@@ -4,8 +4,7 @@
             [crux.codec :as c]
             [crux.error :as ce]
             [crux.io :as cio]
-            [crux.query-state :as qs]
-            [crux.error :as ce])
+            [crux.query-state :as qs])
   (:import com.nimbusds.jwt.SignedJWT
            [crux.api HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxDatasource NodeOutOfSyncException RemoteClientOptions]
            [java.io Closeable InputStreamReader IOException PushbackReader]

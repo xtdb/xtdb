@@ -1,35 +1,42 @@
 (ns crux.http-server.util
-  (:require [clojure.edn :as edn]
+  (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
             [crux.api :as api]
             [crux.codec :as c]
+            [crux.http-server.json :as http-json]
             [crux.io :as cio]
             [hiccup2.core :as hiccup2]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
-            [spec-tools.core :as st])
+            [muuntaja.format.edn :as mfe]
+            [muuntaja.format.transit :as mft]
+            [spec-tools.core :as st]
+            [crux.http-server.entity-ref :as entity-ref])
   (:import [crux.api ICruxAPI ICruxDatasource]
            crux.codec.Id
-           [java.io ByteArrayOutputStream OutputStream]
-           [java.net URLDecoder URLEncoder]
-           java.time.format.DateTimeFormatter
-           java.util.Date))
+           crux.http_server.entity_ref.EntityRef
+           [java.io ByteArrayOutputStream OutputStream]))
+
+(s/def ::eid (and string? c/valid-id?))
 
 (defn try-decode-edn [edn]
   (try
-    (cond->> edn
-      (string? edn) (edn/read-string {:readers {'crux/id c/id-edn-reader}}))
-    (catch Exception e
+    (cond-> edn
+      (string? edn) c/read-edn-string-with-readers)
+    (catch Exception _e
       ::s/invalid)))
-
-(s/def ::eid (and string? c/valid-id?))
 
 (s/def ::eid-edn
   (st/spec
    {:spec c/valid-id?
     :decode/string (fn [_ eid] (try-decode-edn eid))}))
+
+(s/def ::eid-json
+  (st/spec
+   {:spec c/valid-id?
+    :decode/string (fn [_ json] (http-json/try-decode-json json))}))
 
 (s/def ::link-entities? boolean?)
 (s/def ::valid-time inst?)
@@ -37,14 +44,32 @@
 (s/def ::timeout int?)
 (s/def ::tx-id int?)
 
-(def ^DateTimeFormatter default-date-formatter
-  (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
+(defn ->edn-encoder [_]
+  (reify
+    mfc/EncodeToBytes
+    (encode-to-bytes [_ data _]
+      (binding [*print-length* nil, *print-level* nil]
+        (.getBytes (pr-str data) "UTF-8")))
 
-(def crux-id-write-handler
-  (transit/write-handler "crux.codec/id" #(str %)))
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
+      (fn [^OutputStream output-stream]
+        (binding [*print-length* nil, *print-level* nil]
+          (with-open [w (io/writer output-stream)]
+            (try
+              (if results
+                (print-method (or (iterator-seq results) '()) w)
+                (.write w ^String (pr-str data)))
+              (finally
+                (cio/try-close results)))))))))
 
-(defn- ->tj-encoder [_]
-  (let [options {:handlers {Id crux-id-write-handler}}]
+(def tj-write-handlers
+  {EntityRef entity-ref/ref-write-handler
+   Id (transit/write-handler "crux/oid" str)
+   (Class/forName "[B") (transit/write-handler "crux/base64" c/base64-writer)})
+
+(defn ->tj-encoder [_]
+  (let [options {:handlers tj-write-handlers}]
     (reify
       mfc/EncodeToBytes
       (encode-to-bytes [_ data _]
@@ -53,24 +78,31 @@
           (transit/write writer data)
           (.toByteArray baos)))
       mfc/EncodeToOutputStream
-      (encode-to-output-stream [_ data _]
+      (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
         (fn [^OutputStream output-stream]
-          (transit/write
-           (transit/writer output-stream :json options) data)
-          (.flush output-stream))))))
+          (let [writer (transit/writer output-stream :json options)]
+            (try
+              (if results
+                (transit/write writer (or (iterator-seq results) '()))
+                (transit/write writer data))
+              (finally
+                (cio/try-close results)))))))))
 
-(def default-muuntaja-options
-  (-> m/default-options
-      (update :formats select-keys ["application/edn"])
-      (assoc :default-format "application/edn")
-      (m/install {:name "application/transit+json"
-                  :encoder [->tj-encoder]})))
+(defn ->default-muuntaja
+  ([] (->default-muuntaja {}))
 
-(def default-muuntaja
-  (m/create default-muuntaja-options))
-
-(def output-stream-muuntaja
-  (m/create (assoc default-muuntaja-options :return :output-stream)))
+  ([opts]
+   (-> m/default-options
+       (dissoc :formats)
+       (assoc :default-format "application/edn")
+       (m/install {:name "application/transit+json"
+                   :encoder [->tj-encoder]
+                   :decoder [(partial mft/decoder :json)]})
+       (m/install {:name "application/edn"
+                   :encoder [->edn-encoder]
+                   :decoder [mfe/decoder]})
+       (m/install {:name "application/json"
+                   :encoder [http-json/->json-encoder opts]}))))
 
 (defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond

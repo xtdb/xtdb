@@ -90,134 +90,389 @@ include::example$src/docs/examples.clj[tags=start-http-client]
 [#rest-api]
 == Using the REST API
 
-All of the REST endpoints return both `application/edn` and https://github.com/cognitect/transit-clj[`application/transit+json`].
+All of the REST endpoints return `application/edn`, `application/json` and https://github.com/cognitect/transit-clj[`application/transit+json`].
 Individual endpoints may return additional types - see their docs below.
+
+[NOTE]
+All endpoints with query-parameters accept them in both a kebab-case and camel cased format, (ie: if `valid-time` is taken, `validTime` will also be taken)
 
 [#status]
 === GET `/_crux/status`
 
 Returns the current status information of the node.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/status
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/status
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "version": "20.09-1.11.1-beta-SNAPSHOT",
+    "revision": null,
+    "indexVersion": 13,
+    "consumerState": null,
+    "kvStore": "crux.rocksdb.RocksKv",
+    "estimateNumKeys": 3,
+    "size": 1326658
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.version/version "20.09-1.11.1-beta-SNAPSHOT",
+ :crux.version/revision nil, :crux.index/index-version 13,
+ :crux.doc-log/consumer-state nil,
+ :crux.tx-log/consumer-state nil,
+ :crux.kv/kv-store "crux.rocksdb.RocksKv",
+ :crux.kv/estimate-num-keys 3,
+ :crux.kv/size 132665
+----
+====
 
 [#entity]
 === GET `/_crux/entity`
 
 Returns the document map for a particular entity.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/entity?eid=tommy
+----
+
+EDN::
++
+
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
      $CRUX_URL/_crux/entity?eid-edn=:tommy
 ----
+====
 
 ==== Query Parameters
 
 .*Required Parameters*
 * One of the following:
 ** `eid-edn` (EDN formatted Crux ID)
+** `eid-json` (JSON formatted Crux ID)
 ** `eid` (String IDs)
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `transaction-time` (date, defaulting to latest transaction time)
 
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "crux.db/id": "tommy",
+    "first-name": "Tommy",
+    "last-name": "Tutorial"
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.db/id :tommy,
+ :first-name "Tommy",
+ :last-name "Tutorial"}
+----
+====
+
+[#entity-history]
 === GET `/_crux/entity?history=true`
 
 Returns the history of a particular entity.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/entity?eid=tommy&history=true&sortOrder=asc
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
      $CRUX_URL/_crux/entity?eid-edn=:tommy&history=true&sort-order=asc
 ----
+====
 
 ==== Query Parameters
 
 .*Required Parameters*
 * One of the following:
 ** `eid-edn` (EDN formatted Crux ID)
+** `eid-json` (JSON formatted Crux ID)
 ** `eid` (String IDs)
 * `sort-order` (either `asc` or `desc`)
 
 .*Optional Parameters*
 * `with-corrections` (boolean, default false): includes bitemporal corrections in the response, inline, orted by valid-time then transaction-time
-* `with-docs` (boolean, default false): includes the documents in the response sequence, under the `:crux.db/doc` key
+* `with-docs` (boolean, default false): includes the documents in the response sequence, under the `doc` key
 * `start-valid-time`, `start-transaction-time` (inclusive, default unbounded): bitemporal co-ordinates to start at
 * `end-valid-time`, `end-transaction-time` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "txTime": "2020-10-16T14:24:17Z",
+        "txId": 3,
+        "validTime": "2020-10-16T14:24:17Z",
+        "contentHash": "99747f80357c336ee5efd073c878313bf85b07f9"
+    },
+    {
+        "txTime": "2020-10-16T14:29:31Z",
+        "txId": 4,
+        "validTime": "2020-10-16T14:29:31Z",
+        "contentHash": "88d61c8de82eda2a53784bb0438e1a751cd68f96"
+    },
+    {
+        "txTime": "2020-10-16T14:29:35Z",
+        "txId": 5,
+        "validTime": "2020-10-16T14:29:35Z",
+        "contentHash": "99747f80357c336ee5efd073c878313bf85b07f9"
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:crux.tx/tx-time #inst "2020-10-16T14:24:17.025-00:00",
+  :crux.tx/tx-id 3,
+  :crux.db/valid-time #inst "2020-10-16T14:24:17.025-00:00",
+  :crux.db/content-hash #crux/id "99747f80357c336ee5efd073c878313bf85b07f9"}
+ {:crux.tx/tx-time #inst "2020-10-16T14:29:31.928-00:00",
+  :crux.tx/tx-id 4,
+  :crux.db/valid-time #inst "2020-10-16T14:29:31.928-00:00",
+  :crux.db/content-hash #crux/id "88d61c8de82eda2a53784bb0438e1a751cd68f96"}
+ {:crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00",
+  :crux.tx/tx-id 5,
+  :crux.db/valid-time #inst "2020-10-16T14:29:35.664-00:00",
+  :crux.db/content-hash #crux/id "99747f80357c336ee5efd073c878313bf85b07f9"})
+----
+====
 
 [#entity-tx]
 === GET `/_crux/entity-tx`
 
 Returns the transaction details for an entity - returns a map containing the tx-id and tx-time.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/entity-tx?eid=tommy
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
      $CRUX_URL/_crux/entity-tx?eid-edn=:tommy
 ----
+====
 
 ==== Query Parameters
 
 .*Required Parameters*
 * One of the following:
 ** `eid-edn` (EDN formatted Crux ID)
+** `eid-json` (JSON formatted Crux ID)
 ** `eid` (String IDs)
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `transaction-time` (date, defaulting to latest transaction time)
 
-[#query]
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "id": "5aeebab117b892fa42002146e4c62be676bc4621",
+    "contentHash": "99747f80357c336ee5efd073c878313bf85b07f9",
+    "validTime": "2020-10-16T14:29:35Z",
+    "txTime": "2020-10-16T14:29:35Z",
+    "txId": 5
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.db/id #crux/id "5aeebab117b892fa42002146e4c62be676bc4621",
+ :crux.db/content-hash #crux/id "99747f80357c336ee5efd073c878313bf85b07f9",
+ :crux.db/valid-time #inst "2020-10-16T14:29:35.664-00:00",
+ :crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00",
+ :crux.tx/tx-id 5}
+----
+====
+
+[#get-query]
 === GET `/_crux/query`
 
 Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_crux/query.csv` and `/_crux/query.tsv` endpoints respectively).
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -g \
      -X GET \
-     -H "Content-Type: application/edn" \
-     $CRUX_URL/_crux/query?query={%3Afind+[e]+%3Awhere+[[e+%3Acrux.db/id+_]]}
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Acrux.db/id+_]]}
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -g \
+     -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Acrux.db/id+_]]}
+----
+====
 
 ==== Query Parameters
 
 .*Required Parameters*
-* `query` (URL encoded datalog query)
+* `query-edn` (URL encoded datalog query)
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `transaction-time` (date, defaulting to latest transaction time)
 
-[#query]
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[["tommy"],["james"]]
+----
+
+EDN::
++
+[source,clojure]
+----
+([:tommy] ["james"])
+----
+====
+
+[#post-query]
 === POST `/_crux/query`
 
 Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_crux/query.csv` and `/_crux/query.tsv` endpoints respectively).
 
+==== Request
+
+[tabs]
+====
+EDN::
++
 [source,bash]
 ----
 curl -g \
      -X POST \
+     -H "Accept: application/edn" \
      -H "Content-Type: application/edn" \
-     -d '{:query {:find [e] :where [[e :last-name "Petrov"]]}}' \
-     $CRUX_URL/_crux/query?valid-time=2019-01-08T16:34:47.738-00:00
+     -d '{:query {:find [e first-name] :where [[e :first-name first-name] [e :last-name "Tutorial"]]}}' \
+     $CRUX_URL/_crux/query
 ----
+====
+
+[NOTE]
+You can also accept `application/json` from this endpoint, but currently the only supported `Content-Type` for posting queries is `application/edn`.
 
 ==== Parameters
 
 ===== Body Parameters
 
 .*Required Parameters*
-* `query` (URL encoded datalog query)
+* `query` (EDN encoded datalog query)
 
 ===== Query Parameters
 
@@ -225,47 +480,163 @@ curl -g \
 * `valid-time` (date, defaulting to now)
 * `transaction-time` (date, defaulting to latest transaction time)
 
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[["tommy","Tommy"]]
+----
+
+EDN::
++
+[source,clojure]
+----
+([:tommy "Tommy"])
+----
+====
 
 [#attribute-stats]
 === GET `/_crux/attribute-stats`
 
 Returns frequencies of indexed attributes
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/attribute-stats
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/attribute-stats
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "age": 1,
+    "firstName": 1,
+    "lastName": 1,
+    "crux.db/id": 3,
+    "first-name": 2,
+    "last-name": 2
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:age 1,
+ :firstName 1,
+ :lastName 1,
+ :crux.db/id 3,
+ :first-name 2,
+ :last-name 2}
+----
+====
 
 [#sync]
 === GET `/_crux/sync`
 
 Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write).  Returns the transaction time of the most recent transaction.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/sync?timeout=500
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/sync?timeout=500
+----
+====
 
 ==== Query Parameters
 
 .*Optional Parameters*
-* `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
+* `timeout` (integer): specified in milliseconds
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
 
 [#await-tx]
 === GET `/_crux/await-tx`
 
 Waits until the node has indexed a transaction that is at or past the supplied tx-id. Returns the most recent tx indexed by the node.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/await-tx?txId=1
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
      $CRUX_URL/_crux/await-tx?tx-id=1
 ----
+====
 
 ==== Query Parameters
 
@@ -275,17 +646,52 @@ curl -X GET \
 .*Optional Parameters*
 * `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
 
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":5,"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.tx/tx-id 5, :crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
+
 [#await-tx-time]
 === GET `/_crux/await-tx-time`
 
 Blocks until the node has indexed a transaction that is past the supplied tx-time. The returned date is the latest index time when this node has caught up as of this call.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
-     $CRUX_URL/_crux/await-tx-time?tx-time=2020-09-10T11%3A16%3A10.983Z
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/await-tx-time?tx-time=2020-10-16T14:29:35Z
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/await-tx-time?tx-time=2020-10-16T14:29:35Z
+----
+====
 
 ==== Query Parameters
 
@@ -295,15 +701,52 @@ curl -X GET \
 .*Optional Parameters*
 * `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
 
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
+
 [#tx-log]
 === GET `/_crux/tx-log`
 
 Returns a list of all transactions, from oldest to newest transaction time - optionally including documents.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
-curl -X GET $CRUX_URL/_crux/tx-log
+curl -X GET \
+     -H "Accept: application/json" \
+      $CRUX_URL/_crux/tx-log
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+      $CRUX_URL/_crux/tx-log
+----
+====
 
 ==== Query Parameters
 
@@ -311,96 +754,448 @@ curl -X GET $CRUX_URL/_crux/tx-log
 * `after-tx-id` (integer, default unbounded): transaction id to start after.
 * `with-ops?` (boolean, defaults to false): should the operations with documents be included?
 
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "txId": 0,
+        "txTime": "2020-10-16T09:02:43Z",
+        "txEvents": [
+            [
+                "put",
+                "83bed47ace572cb94c2f137f58bce73b9b7d0039",
+                "f441402b3c5d37365203947aabe85cf471498bf0",
+                "2020-06-20T20:05:50Z"
+            ]
+        ]
+    },
+    {
+        "txId": 1,
+        "txTime": "2020-10-16T09:28:27Z",
+        "txEvents": [
+            [
+                "put",
+                "83bed47ace572cb94c2f137f58bce73b9b7d0039",
+                "f441402b3c5d37365203947aabe85cf471498bf0",
+                "2020-06-20T20:05:50Z"
+            ]
+        ]
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:crux.tx/tx-id 0,
+  :crux.tx/tx-time #inst "2020-10-16T09:02:43.429-00:00",
+  :crux.tx.event/tx-events [[:crux.tx/put
+  			     #crux/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+			     #crux/id "f441402b3c5d37365203947aabe85cf471498bf0"
+			     #inst "2020-06-20T20:05:50.000-00:00"]]}
+ {:crux.tx/tx-id 1,
+  :crux.tx/tx-time #inst "2020-10-16T09:28:27.785-00:00",
+  :crux.tx.event/tx-events [[:crux.tx/put
+  			     #crux/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+			     #crux/id "f441402b3c5d37365203947aabe85cf471498bf0"
+			     #inst "2020-06-20T20:05:50.000-00:00"]]})
+----
+====
+
 [#submit-tx]
 === POST `/_crux/submit-tx`
 
-Takes a vector of transactions (any combination of `:put`, `:delete`, `:match`, and `:evict`) and executes them in order. This is the only "write" endpoint.
+Takes a vector of transactions (any combination of `put`, `delete`, `match`, `evict` and `fn`) and executes them in order. This is the only "write" endpoint.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
+--
+[source,bash]
+----
+curl -X POST \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json" \
+     -d '{"tx-ops": [["put", {"crux.db/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
+          	    ["put", {"crux.db/id": "boris", "name": "Boris", "last-name": "Petrov"}],
+          	    ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
+     $CRUX_URL/_crux/submit-tx
+----
+
+Note: xref:transactions#transaction-functions[Transaction functions] should be submitted as strings containing clojure code, and read in as EDN.
+--
+
+EDN::
++
 [source,bash]
 ----
 curl -X POST \
      -H "Content-Type: application/edn" \
+     -H "Accept: application/edn" \
      -d '{:tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
           	  [:crux.tx/put {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
           	  [:crux.tx/delete :maria  #inst "2012-05-07T14:57:08.462-00:00"]]}' \
      $CRUX_URL/_crux/submit-tx
 ----
+====
 
 ==== Parameters
 
 ===== Body Parameters
 
 .*Required Parameters*
-* `tx-ops` (List of transaction ops to send)
+* `tx-ops` (Content-type formatted list of transaction ops to send)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":6,"txTime":"2020-10-19T09:21:29Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.tx/tx-id 6, :crux.tx/tx-time #inst "2020-10-19T09:21:29Z"}
+----
+====
 
 === GET `/_crux/tx-committed`
 
 Checks if a submitted tx was successfully committed, returning a map with tx-committed and either `true` or `false` (or a `NodeOutOfSyncException` exception response if the node has not yet indexed the transaction).
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
+     $CRUX_URL/_crux/tx-committed?txId=1
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
      $CRUX_URL/_crux/tx-committed?tx-id=1
 ----
+====
 
 ==== Query Parameters
 
 .*Required Parameters*
 * `tx-id` (integer): tx-id of transaction to check
 
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txCommitted?":true}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:tx-committed? true}
+----
+====
+
 
 === GET `/_crux/latest-completed-tx`
 
 Returns the latest transaction to have been indexed by this node.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/latest-completed-tx
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/latest-completed-tx
+----
+
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":5,"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.tx/tx-id 5, :crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
 
 === GET `/_crux/latest-submitted-tx`
 
 Returns the latest transaction to have been submitted to this cluster.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/latest-submitted-tx
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/latest-submitted-tx
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":5}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.tx/tx-id 5}
+----
+====
 
 === GET `/_crux/active-queries`
 
 Returns a list of currently running queries.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/active-queries
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/active-queries
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "status": "in-progress",
+        "queryId": "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+        "query": "{:find [e first-name], :where [[e :first-name first-name] [e :last-name \"Tutorial\"]]}",
+        "startedAt": "2020-10-16T15:48:52Z",
+        "finishedAt": null,
+        "error": null
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:status :in-progress
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at nil
+  :error nil})
+----
+====
 
 === GET `/_crux/recent-queries`
 
 Returns a list of recently completed/failed queries.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/recent-queries
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/recent-queries
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "status": "completed",
+        "queryId": "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+        "query": "{:find [e first-name], :where [[e :first-name first-name] [e :last-name \"Tutorial\"]]}",
+        "startedAt": "2020-10-16T15:48:52Z",
+        "finishedAt": "2020-10-16T15:48:52Z",
+        "error": null
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:status :completed,
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at #inst "2020-10-16T15:48:52.835-00:00",
+  :error nil})
+----
+====
 
 === GET `/_crux/slowest-queries`
 
 Returns a list of slowest completed/failed queries ran on the node.
 
+==== Request
+
+[tabs]
+====
+JSON::
++
 [source,bash]
 ----
 curl -X GET \
-     -H "Content-Type: application/edn" \
+     -H "Accept: application/json" \
      $CRUX_URL/_crux/slowest-queries
 ----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $CRUX_URL/_crux/slowest-queries
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "status": "completed",
+        "queryId": "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+        "query": "{:find [e first-name], :where [[e :first-name first-name] [e :last-name \"Tutorial\"]]}",
+        "startedAt": "2020-10-16T15:48:52Z",
+        "finishedAt": "2020-10-16T15:48:52Z",
+        "error": null
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:status :completed,
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at #inst "2020-10-16T15:48:52.835-00:00",
+  :error nil})
+----
+====

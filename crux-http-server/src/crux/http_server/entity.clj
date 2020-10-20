@@ -6,17 +6,16 @@
             [crux.codec :as c]
             [crux.error :as ce]
             [crux.http-server.entity-ref :as entity-ref]
+            [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
+            [jsonista.core :as j]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc])
   (:import crux.codec.Id
            crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
-           [java.io Closeable OutputStream]
-           [java.time Instant ZonedDateTime ZoneId]
-           java.time.format.DateTimeFormatter
-           java.util.Date))
+           [java.io Closeable OutputStream]))
 
 (s/def ::sort-order keyword?)
 (s/def ::start-valid-time inst?)
@@ -29,6 +28,7 @@
 (s/def ::query-params
   (s/keys :opt-un [::util/eid
                    ::util/eid-edn
+                   ::util/eid-json
                    ::history
                    ::sort-order
                    ::util/valid-time
@@ -88,8 +88,7 @@
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
       (fn [^OutputStream output-stream]
-        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler
-                                                                Id util/crux-id-write-handler}})]
+        (let [w (transit/writer output-stream :json {:handlers util/tj-write-handlers})]
           (cond
             entity (transit/write w entity)
             entity-history (try
@@ -97,6 +96,22 @@
                              (finally
                                (cio/try-close entity-history)))
             :else (transit/write w res)))))))
+
+(defn- ->json-encoder [_]
+  (reify
+    mfc/EncodeToOutputStream
+    (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
+      (fn [^OutputStream output-stream]
+        (cond
+          entity (j/write-value output-stream entity http-json/crux-object-mapper)
+          entity-history (try
+                           (j/write-value output-stream
+                                          (->> (iterator-seq entity-history)
+                                               (map http-json/camel-case-keys))
+                                          http-json/crux-object-mapper)
+                           (finally
+                             (cio/try-close entity-history)))
+          :else (j/write-value output-stream res http-json/crux-object-mapper))))))
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
@@ -109,7 +124,9 @@
                 (m/install {:name "application/transit+json"
                             :encoder [->tj-encoder]})
                 (m/install {:name "application/edn"
-                            :encoder [->edn-encoder]}))))
+                            :encoder [->edn-encoder]})
+                (m/install {:name "application/json"
+                            :encoder [->json-encoder]}))))
 
 (defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transaction-time sort-order with-corrections with-docs
                                                          start-valid-time start-transaction-time end-valid-time end-transaction-time]}]
@@ -140,12 +157,12 @@
       {:error e})))
 
 (defn transform-query-params [req]
-  (let [{:keys [eid eid-edn] :as query-params} (get-in req [:parameters :query])]
+  (let [{:keys [eid eid-edn eid-json] :as query-params} (get-in req [:parameters :query])]
     (->
      (if (= "text/html" (get-in req [:muuntaja/response :format]))
        (assoc query-params :with-docs true :link-entities? true)
        query-params)
-     (assoc :eid (or eid-edn eid)))))
+     (assoc :eid (or eid-edn eid-json eid)))))
 
 (defmulti transform-query-resp
   (fn [resp req]
@@ -163,7 +180,7 @@
 (defmethod transform-query-resp :default [{:keys [error no-entity? eid not-found?] :as res} _]
   (cond
     no-entity? (throw (ce/illegal-arg :missing-eid {::ce/message "Missing eid"}))
-    not-found? {:status 404, :body (str eid " entity not found")}
+    not-found? {:status 404, :body {:error (str eid " entity not found")}}
     error (throw error)
     :else {:status 200, :body res}))
 

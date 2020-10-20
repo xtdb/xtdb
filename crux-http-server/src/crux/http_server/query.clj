@@ -3,35 +3,31 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [cognitect.transit :as transit]
             [crux.api :as crux]
             [crux.codec :as c]
             [crux.error :as err]
             [crux.http-server.entity-ref :as entity-ref]
+            [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
-            [crux.query :as q]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
             [spec-tools.core :as st])
-  (:import crux.http_server.entity_ref.EntityRef
-           crux.io.Cursor
-           [java.io Closeable]
-           (java.io OutputStream Writer)
-           [java.time Instant ZonedDateTime ZoneId]
+  (:import [java.io Closeable OutputStream]
+           [java.time Instant ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date))
 
-(s/def ::query
+(s/def ::query-edn
   (st/spec
    {:spec any? ; checked by crux.query
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
-;; TODO: Need to ensure all query clasues are present + coerced properly
+;; TODO: Need to ensure all query clauses are present + coerced properly
 (s/def ::query-params
-  (s/keys :opt-un [::util/valid-time ::util/transaction-time ::util/link-entities? ::query]))
+  (s/keys :opt-un [::util/valid-time ::util/transaction-time ::util/link-entities? ::query-edn]))
 
 (s/def ::args (s/coll-of any? :kind vector?))
 
@@ -106,34 +102,6 @@
         (finally
           (cio/try-close results))))))
 
-(defn ->edn-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (with-open [w (io/writer output-stream)]
-          (try
-            (cond
-              (and results (.hasNext results)) (print-method (iterator-seq results) w)
-              results (.write w ^String (pr-str '()))
-              :else (.write w ^String (pr-str res)))
-            (finally
-              (cio/try-close results))))))))
-
-(defn- ->tj-encoder [_]
-  (reify
-    mfc/EncodeToOutputStream
-    (encode-to-output-stream [_ {:keys [^Cursor results] :as res} _]
-      (fn [^OutputStream output-stream]
-        (let [w (transit/writer output-stream :json {:handlers {EntityRef entity-ref/ref-write-handler}})]
-          (try
-            (cond
-              (and results (.hasNext results)) (transit/write w (iterator-seq results))
-              results (transit/write w '())
-              :else (transit/write w res))
-            (finally
-              (cio/try-close results))))))))
-
 (defn ->query-muuntaja [opts]
   (m/create (-> m/default-options
                 (dissoc :formats)
@@ -147,11 +115,13 @@
                             :encoder [->html-encoder opts]
                             :return :bytes})
                 (m/install {:name "application/edn"
-                            :encoder [->edn-encoder]
+                            :encoder [util/->edn-encoder]
                             :decoder [mfe/decoder]})
                 (m/install {:name "application/transit+json"
-                            :encoder [->tj-encoder]
-                            :decoder [(partial mft/decoder :json)]}))))
+                            :encoder [util/->tj-encoder]
+                            :decoder [(partial mft/decoder :json)]})
+                (m/install {:name "application/json"
+                            :encoder [http-json/->json-encoder]}))))
 
 (defmulti transform-req
   (fn [query req]
@@ -212,8 +182,8 @@
 (defn data-browser-query [options]
   (fn [req]
     (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time transaction-time query]} query-params
-          query (or query (get body-params :query))]
+          {:keys [valid-time transaction-time query-edn]} query-params
+          query (or query-edn (get body-params :query))]
       (-> (if (nil? query)
             (assoc options :no-query? true)
             (run-query (transform-req query req)

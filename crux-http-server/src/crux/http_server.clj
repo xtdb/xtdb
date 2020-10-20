@@ -1,15 +1,24 @@
 (ns crux.http-server
   "HTTP API for Crux.
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [clojure.spec.alpha :as s]
+  (:require [camel-snake-kebab.core :as csk]
+            [clojure.edn :as edn]
+            [clojure.instant :as instant]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as crux]
             [crux.http-server.entity :as entity]
+            [crux.http-server.json :as http-json]
             [crux.http-server.query :as query]
             [crux.http-server.status :as status]
             [crux.http-server.util :as util]
+            [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [jsonista.core :as json]
+            [muuntaja.core :as m]
+            [muuntaja.format.core :as mfc]
             reitit.coercion.spec
             [reitit.ring :as rr]
             [reitit.ring.coercion :as rrc]
@@ -31,13 +40,13 @@
   (cond-> response
     date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
-(s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid)]
+(s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/transaction-time]))
 
 (defn- entity-tx [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [eid eid-edn valid-time transaction-time]} (get-in req [:parameters :query])
-          eid (or eid-edn eid)
+    (let [{:keys [eid eid-edn eid-json valid-time transaction-time]} (get-in req [:parameters :query])
+          eid (or eid-edn eid-json eid)
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :transact-time transaction-time})
           {::tx/keys [tx-time] :as entity-tx} (crux/entity-tx db eid)]
@@ -48,32 +57,65 @@
         {:status 404
          :body {:error (str eid " entity-tx not found") }}))))
 
-(s/def ::tx-ops vector?)
-(s/def ::transact-spec (s/keys :req-un [::tx-ops]))
+(defn- ->submit-json-decoder [_]
+  (let [decoders {::txc/->doc #(cio/update-if % :crux.db/fn edn/read-string)
+                  ::txc/->valid-time (fn [vt-str]
+                                       (try
+                                         (instant/read-instant-date vt-str)
+                                         (catch Exception _e
+                                           vt-str)))}]
+    (reify
+      mfc/Decode
+      (decode [_ data _]
+        (-> (json/read-value data http-json/crux-object-mapper)
+            (update :tx-ops (fn [tx-ops]
+                              (->> tx-ops
+                                   (mapv (fn [tx-op]
+                                           (-> tx-op
+                                               (update 0 (fn [op] (keyword "crux.tx" op)))
+                                               (txc/conform-tx-op decoders)
+                                               (txc/->tx-op))))))))))))
 
-(defn- transact [^ICruxAPI crux-node]
+(def ->submit-tx-muuntaja
+  (m/create
+   (assoc-in (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys})
+             [:formats "application/json" :decoder]
+             [->submit-json-decoder])))
+
+(s/def ::tx-ops vector?)
+(s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
+
+(defn- submit-tx [^ICruxAPI crux-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
           {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
-      (->
-       {:status 202
-        :body submitted-tx}
-       (add-last-modified tx-time)))))
+      (-> {:status 202
+           :body submitted-tx}
+          (add-last-modified tx-time)))))
 
 (s/def ::with-ops? boolean?)
 (s/def ::after-tx-id int?)
 (s/def ::tx-log-spec (s/keys :opt-un [::with-ops? ::after-tx-id]))
 
-;; TODO: Could add from date parameter.
+(defn txs->json [txs]
+  (mapv #(update % 0 name) txs))
+
+(def ->tx-log-muuntaja
+  (m/create
+   (-> (util/->default-muuntaja {:json-encode-fn (fn [tx]
+                                                   (-> tx
+                                                       (cio/update-if :crux.api/tx-ops txs->json)
+                                                       (cio/update-if :crux.tx.event/tx-events txs->json)
+                                                       (http-json/camel-case-keys)))})
+       (assoc :return :output-stream))))
+
 (defn- tx-log [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])
-          result (crux/open-tx-log crux-node after-tx-id with-ops?)]
-      (->
-       {:status 200
-        :body (iterator-seq result)
-        :return :output-stream}
-       (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
+    (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])]
+      (-> {:status 200
+           :body {:results (crux/open-tx-log crux-node after-tx-id with-ops?)}
+           :return :output-stream}
+          (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
 
 (s/def ::tx-time ::util/transaction-time)
 (s/def ::sync-spec (s/keys :opt-un [::tx-time ::util/timeout]))
@@ -81,14 +123,13 @@
 (defn- sync-handler [^ICruxAPI crux-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
-          timeout (some-> timeout (Duration/ofMillis))]
-      (let [last-modified (if tx-time
-                            (crux/await-tx-time crux-node tx-time timeout)
-                            (crux/sync crux-node timeout))]
-        (->
-         {:status 200
-          :body {:crux.tx/tx-time last-modified}}
-         (add-last-modified last-modified))))))
+          timeout (some-> timeout (Duration/ofMillis))
+          last-modified (if tx-time
+                          (crux/await-tx-time crux-node tx-time timeout)
+                          (crux/sync crux-node timeout))]
+      (-> {:status 200
+           :body {:crux.tx/tx-time last-modified}}
+          (add-last-modified last-modified)))))
 
 (s/def ::await-tx-time-spec (s/keys :req-un [::tx-time] :opt-un [::util/timeout]))
 
@@ -214,9 +255,27 @@
   {:status 400
    :body (ex-data ex)})
 
+(defn handle-noose [^crux.api.NodeOutOfSyncException ex req]
+  ;; TODO NOOSE needs ex-data
+  {:status 409
+   :body {:error (str ex)}})
+
 (defn handle-muuntaja-decode-error [ex req]
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.") }})
+
+(defn wrap-camel-case-params [handler]
+  (fn [{:keys [query-params] :as request}]
+    (let [kebab-qps (into {} (map (fn [[k v]] [(csk/->kebab-case k) v])) query-params)]
+      (handler (assoc request :query-params kebab-qps)))))
+
+(def ^:private query-list-muuntaja
+  (m/create (util/->default-muuntaja {:json-encode-fn (fn [query-states]
+                                                        (->> query-states
+                                                             (map (fn [qs]
+                                                                    (-> qs
+                                                                        (update :query pr-str)
+                                                                        http-json/camel-case-keys)))))})))
 
 (defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
                        :keys [crux-node], :as opts}]
@@ -238,7 +297,8 @@
                  ["/_crux/query.tsv" (assoc query-handler :middleware [[add-response-format "text/tsv"]])]
                  ["/_crux/entity-tx" {:get (entity-tx crux-node)
                                       :parameters {:query ::entity-tx-spec}}]
-                 ["/_crux/attribute-stats" {:get (attribute-stats crux-node)}]
+                 ["/_crux/attribute-stats" {:get (attribute-stats crux-node)
+                                            :muuntaja (m/create (util/->default-muuntaja {:json-encode-fn identity}))}]
                  ["/_crux/sync" {:get (sync-handler crux-node)
                                  :parameters {:query ::sync-spec}}]
                  ["/_crux/await-tx" {:get (await-tx-handler crux-node)
@@ -246,32 +306,38 @@
                  ["/_crux/await-tx-time" {:get (await-tx-time-handler crux-node)
                                           :parameters {:query ::await-tx-time-spec}}]
                  ["/_crux/tx-log" {:get (tx-log crux-node)
-                                   :muuntaja util/output-stream-muuntaja
+                                   :muuntaja ->tx-log-muuntaja
                                    :parameters {:query ::tx-log-spec}}]
-                 ["/_crux/submit-tx" {:post (if read-only?
+                 ["/_crux/submit-tx" {:muuntaja ->submit-tx-muuntaja
+                                      :post (if read-only?
                                               (fn [_] {:status 403
                                                        :body "forbidden: read-only HTTP node"})
-                                              (transact crux-node))
-                                      :parameters {:body ::transact-spec}}]
+                                              (submit-tx crux-node))
+                                      :parameters {:body ::submit-tx-spec}}]
                  ["/_crux/tx-committed" {:get (tx-committed? crux-node)
                                          :parameters {:query ::tx-committed-spec}}]
                  ["/_crux/latest-completed-tx" {:get (latest-completed-tx crux-node)}]
                  ["/_crux/latest-submitted-tx" {:get (latest-submitted-tx crux-node)}]
-                 ["/_crux/active-queries" {:get (active-queries crux-node)}]
-                 ["/_crux/recent-queries" {:get (recent-queries crux-node)}]
-                 ["/_crux/slowest-queries" {:get (slowest-queries crux-node)}]
+                 ["/_crux/active-queries" {:get (active-queries crux-node)
+                                           :muuntaja query-list-muuntaja}]
+                 ["/_crux/recent-queries" {:get (recent-queries crux-node)
+                                           :muuntaja query-list-muuntaja}]
+                 ["/_crux/slowest-queries" {:get (slowest-queries crux-node)
+                                            :muuntaja query-list-muuntaja}]
                  ["/_crux/sparql" {:get (sparqql crux-node)
                                    :post (sparqql crux-node)}]]
 
                 {:data
-                 {:muuntaja util/default-muuntaja
+                 {:muuntaja (m/create (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys}))
                   :coercion reitit.coercion.spec/coercion
                   :middleware (cond-> [p/wrap-params
+                                       wrap-camel-case-params
                                        rm/format-negotiate-middleware
                                        rm/format-response-middleware
                                        (re/create-exception-middleware
                                         (merge re/default-handlers
                                                {crux.IllegalArgumentException handle-iae
+                                                crux.api.NodeOutOfSyncException handle-noose
                                                 :muuntaja/decode handle-muuntaja-decode-error}))
                                        rm/format-request-middleware
                                        rrc/coerce-request-middleware]
@@ -297,13 +363,12 @@
                                    :doc "JWKS string to validate against"}
                             :server-label {:spec ::sys/string}}}
   [{:keys [crux-node port] :as options}]
-  (let [server (j/run-jetty
-                (rr/ring-handler (->crux-router {:crux-node crux-node
-                                                 :http-options (dissoc options :crux-node)})
-                                 (rr/routes
-                                  (rr/create-resource-handler {:path "/"})
-                                  (rr/create-default-handler)))
-                {:port port
-                 :join? false})]
+  (let [server (j/run-jetty (rr/ring-handler (->crux-router {:crux-node crux-node
+                                                             :http-options (dissoc options :crux-node)})
+                                             (rr/routes
+                                              (rr/create-resource-handler {:path "/"})
+                                              (rr/create-default-handler)))
+                            {:port port
+                             :join? false})]
     (log/info "HTTP server started on port: " port)
     (->HTTPServer server options)))
