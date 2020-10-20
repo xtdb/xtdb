@@ -47,10 +47,10 @@
                           (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
                                                                   :field-count tpch-field-count}))
                         (doto post-to-slack))))
-   :tpch (fn [nodes {:keys [scale-factor] :as opts}]
+   :tpch (fn [nodes {:keys [tpch-scale-factor] :as opts}]
            (bench/with-nodes [node nodes]
              (-> (bench/with-comparison-times
-                   (tpch/run-tpch-test node {:scale-factor scale-factor}))
+                   (tpch/run-tpch-test node {:scale-factor tpch-scale-factor}))
                  (doto post-to-slack))))})
 
 (defn parse-args [args]
@@ -74,7 +74,12 @@
                          [nil "--tpch-field-count 10" "Number of fields to run queries with on TPCH stress"
                           :id :tpch-field-count
                           :default (count tpch-stress/fields)
-                          :parse-fn #(Long/parseLong %)]])]
+                          :parse-fn #(Long/parseLong %)]
+
+                         [nil "--tpch-scale-factor 0.01" "Scale factor for regular TPCH test"
+                          :id :tpch-scale-factor
+                          :default 0.01
+                          :parse-fn #(Double/parseDouble %)]])]
     (if errors
       (binding [*out* *err*]
         (run! println errors)
