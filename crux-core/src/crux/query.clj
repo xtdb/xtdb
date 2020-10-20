@@ -7,11 +7,10 @@
             [crux.cache :as cache]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.fork :as fork]
-            [crux.mem-kv :as mem-kv]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.memory :as mem]
+            [crux.eql-project :as project]
             [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]
@@ -19,16 +18,15 @@
             [crux.tx.conform :as txc]
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
-            [clojure.string :as string]
             [crux.system :as sys]
             [clojure.pprint :as pp])
-  (:import [clojure.lang Box ExceptionInfo MapEntry]
-           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
+  (:import clojure.lang.Box
+           (crux.api ICruxDatasource HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
            (java.util Collection Comparator Date List UUID)
-           [java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit]))
+           (java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit)))
 
 (defn- logic-var? [x]
   (and (symbol? x)
@@ -1484,135 +1482,6 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- recognise-union [child]
-  (when (and (= :join (:type child))
-             (= :union (get-in child [:children 0 :type])))
-    :union))
-
-(defn- replace-docs [v docs]
-  (if (not-empty (::hashes (meta v)))
-    (v docs)
-    v))
-
-(defn- lookup-docs [v {:keys [document-store]}]
-  (when-let [hashes (not-empty (::hashes (meta v)))]
-    (db/fetch-docs document-store hashes)))
-
-(defmacro ^:private let-docs [[binding hashes] & body]
-  `(-> (fn ~'let-docs [~binding]
-         ~@body)
-       (with-meta {::hashes ~hashes})))
-
-(defn- after-doc-lookup [f lookup]
-  (if-let [hashes (::hashes (meta lookup))]
-    (let-docs [docs hashes]
-      (let [res (replace-docs lookup docs)]
-        (if (::hashes (meta res))
-          (after-doc-lookup f res)
-          (f res))))
-    (f lookup)))
-
-(defn- raise-doc-lookup-out-of-coll
-  "turns a vector/set where each of the values could be doc lookups into a single doc lookup returning a vector/set"
-  [coll]
-  (if-let [hashes (not-empty (into #{} (mapcat (comp ::hashes meta)) coll))]
-    (let-docs [docs hashes]
-      (->> coll
-           (into (empty coll) (map #(replace-docs % docs)))
-           raise-doc-lookup-out-of-coll))
-    coll))
-
-(defn- project-child [v db child-fns]
-  (->> (mapv (fn [f]
-               (f v db))
-             child-fns)
-       (raise-doc-lookup-out-of-coll)
-       (after-doc-lookup (fn [res]
-                           (into {} (mapcat identity) res)))))
-
-(declare project-child-fns)
-
-(defn- forward-joins-child-fn [{:keys [props special forward-joins unions]}]
-  (when-not (every? empty? [props special forward-joins unions])
-    (let [forward-join-child-fns (for [{:keys [dispatch-key] :as join} forward-joins]
-                                   (let [child-fns (project-child-fns join)]
-                                     (fn [doc db]
-                                       (let [v (get doc dispatch-key)]
-                                         (->> (if (c/multiple-values? v)
-                                                (->> (into [] (map #(project-child % db child-fns)) v)
-                                                     (raise-doc-lookup-out-of-coll))
-                                                (project-child v db child-fns))
-                                              (after-doc-lookup (fn [res]
-                                                                  (MapEntry/create dispatch-key res))))))))
-          union-child-fns (for [{:keys [dispatch-key children]} unions
-                                {:keys [union-key] :as child} (get-in children [0 :children])]
-                            (let [child-fns (project-child-fns child)]
-                              (fn [value doc db]
-                                (->> (c/vectorize-value (get doc dispatch-key))
-                                     (keep (fn [v]
-                                             (when (= v union-key)
-                                               (project-child value db child-fns))))))))
-          prop-dispatch-keys (into #{} (map :dispatch-key) props)
-          project-star? (contains? (into #{} (map :dispatch-key) special) '*)]
-
-      (fn [value {:keys [entity-resolver-fn] :as db}]
-        (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
-          (let-docs [docs #{content-hash}]
-            (let [doc (get docs (c/new-id content-hash))]
-              (->> (concat (->> forward-join-child-fns (map (fn [f] (f doc db))))
-                           (->> union-child-fns (mapcat (fn [f] (f value doc db)))))
-                   (raise-doc-lookup-out-of-coll)
-                   (after-doc-lookup (fn [res]
-                                       ;; TODO do we need a deeper merge here?
-                                       (into (if project-star?
-                                               doc
-                                               (select-keys doc prop-dispatch-keys))
-                                             res)))))))))))
-
-(defn- reverse-joins-child-fn [reverse-joins]
-  (when-not (empty? reverse-joins)
-    (let [reverse-join-child-fns (for [{:keys [dispatch-key] :as join} reverse-joins]
-                                   (let [child-fns (project-child-fns join)
-                                         forward-key (keyword (namespace dispatch-key)
-                                                              (subs (name dispatch-key) 1))
-                                         one? (= :one (get-in join [:params :crux/cardinality]))]
-                                     (fn [value-buffer {:keys [index-snapshot entity-resolver-fn] :as db}]
-                                       (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) value-buffer nil entity-resolver-fn)
-                                                           one? (take 1)
-                                                           :always vec)]
-                                                   (project-child (db/decode-value index-snapshot v) db child-fns)))
-                                            (raise-doc-lookup-out-of-coll)
-                                            (after-doc-lookup (fn [res]
-                                                                (MapEntry/create dispatch-key
-                                                                                 (cond->> res
-                                                                                   one? first))))))))]
-      (fn [value db]
-        (let [value-buffer (c/->value-buffer value)]
-          (->> (for [f reverse-join-child-fns]
-                 (f value-buffer db))
-               (raise-doc-lookup-out-of-coll)))))))
-
-(defn- project-child-fns [project-spec]
-  (let [{special :special,
-         props :prop,
-         joins :join,
-         unions :union} (->> (:children project-spec)
-                             (group-by (some-fn recognise-union
-                                                :type
-                                                (constantly :special))))
-
-        {forward-joins false, reverse-joins true}
-        (group-by (comp #(string/starts-with? % "_") name :dispatch-key) joins)]
-
-    (->> [(forward-joins-child-fn {:special special, :props props, :forward-joins forward-joins, :unions unions})
-          (reverse-joins-child-fn reverse-joins)]
-         (remove nil?))))
-
-(defn- compile-project-spec [project-spec]
-  (let [root-fns (project-child-fns (eql/query->ast project-spec))]
-    (fn [value db]
-      (project-child value db root-fns))))
-
 (defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [projection-cache]}]
   (for [[var-type arg] conformed-find]
     (case var-type
@@ -1622,7 +1491,7 @@
                   :->result (if full-results?
                               (fn [value {:keys [entity-resolver-fn]}]
                                 (or (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-                                      (let-docs [docs #{hash}]
+                                      (project/let-docs [docs #{hash}]
                                         (get docs (c/new-id hash))))
                                     value))
                               (fn [value _]
@@ -1633,7 +1502,7 @@
                 :->result (cache/compute-if-absent projection-cache (:project-spec arg)
                                                    identity
                                                    (fn [spec]
-                                                     (compile-project-spec (s/unform ::eql/query spec))))}
+                                                     (project/compile-project-spec (s/unform ::eql/query spec))))}
       :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
                      {:logic-var (:logic-var arg)
                       :var-type :aggregate
@@ -1720,14 +1589,12 @@
           entity-resolver-fn (or (:entity-resolver-fn db)
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
-          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query index-snapshot db where in in-args rule-name->rules stats)
+          {:keys [n-ary-join] :as built-query} (build-sub-query index-snapshot db where in in-args rule-name->rules stats)
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
-          find-logic-vars (mapv :logic-var compiled-find)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
           project? (or (contains? var-types :project) full-results?)
-          var-bindings (mapv :var-binding compiled-find)
-          ->result-fns (mapv :->result compiled-find)]
+          var-bindings (mapv :var-binding compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (err/illegal-arg :find-unknown-var
@@ -1747,21 +1614,7 @@
          order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         project? (map (fn [row]
-                         (mapv (fn [value ->result]
-                                 (->result value db))
-                               row ->result-fns)))
-         project? (partition-all (or (:batch-size q-conformed)
-                                     (:batch-size db)
-                                     100))
-         project? (map (fn [results]
-                         (->> results
-                              (mapv raise-doc-lookup-out-of-coll)
-                              raise-doc-lookup-out-of-coll)))
-         project? (mapcat (fn [lookup]
-                            (if (::hashes (meta lookup))
-                              (recur (replace-docs lookup (lookup-docs lookup db)))
-                              lookup))))))))
+         project? (project/->project-result db compiled-find q-conformed))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-snapshot eid]
   (some-> (db/entity-as-of index-snapshot eid valid-time transact-time)
