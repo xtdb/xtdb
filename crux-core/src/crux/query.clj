@@ -571,31 +571,57 @@
       (idx/new-singleton-virtual-index v encode-value-fn))))
 
 (defn- triple-joins [triple-clauses var->joins in-vars range-vars stats]
-  (let [var->frequency (->> (concat (map :e triple-clauses)
-                                    (map :v triple-clauses)
-                                    range-vars)
-                            (filter logic-var?)
-                            (frequencies))
-        triple-clauses (sort-triple-clauses stats triple-clauses)
-        literal-clauses (for [{:keys [e v] :as clause} triple-clauses
-                              :when (or (literal? e)
-                                        (literal? v))]
-                          clause)
-        literal-join-order (concat (for [{:keys [e v]} literal-clauses]
-                                     (if (literal? v)
-                                       v
-                                       e))
-                                   in-vars
-                                   (for [{:keys [e v]} literal-clauses]
-                                     (if (literal? v)
-                                       e
-                                       v)))
-        self-join-clauses (filter (comp :self-join? meta) triple-clauses)
-        self-join-vars (map :v self-join-clauses)
-        join-order (loop [join-order (concat literal-join-order self-join-vars)
-                          clauses (->> triple-clauses
-                                       (remove (set self-join-clauses))
-                                       (remove (set literal-clauses)))]
+  (let [{:keys [unique-avs unique-aes]
+         :or {unique-avs (constantly 0)
+              unique-aes (constantly 0)}} (meta stats)
+        update-cardinality (fn [acc {:keys [e a v] :as clause}]
+                             (let [{:keys [self-join?]} (meta clause)]
+                               (cond-> acc
+                                 (literal? v) (assoc v 0.1)
+                                 (literal? e) (assoc e 0.1)
+                                 (logic-var? v) (update v
+                                                        (fnil min Long/MAX_VALUE)
+                                                        (if (or (contains? in-vars v) self-join?)
+                                                          1.0
+                                                          (cond-> (double (unique-avs a))
+                                                            (literal? e) (/ (double (unique-aes a)))
+                                                            (contains? range-vars v) (/ 2.0))))
+                                 (logic-var? e) (update e
+                                                        (fnil min Long/MAX_VALUE)
+                                                        (if (contains? in-vars e)
+                                                          0.5
+                                                          (cond-> (double (unique-aes a))
+                                                            (literal? v) (/ (double (unique-avs a)))
+                                                            (contains? range-vars e) (/ 2.0)))))))
+        calc-var->cardinality (fn [triple-clauses]
+                                (reductions
+                                 (fn [acc {:keys [e a v] :as clause}]
+                                   (update-cardinality
+                                    (reduce-kv
+                                     (fn [acc k v]
+                                       (if (or (= k e)
+                                               (= k v)
+                                               (literal? v)
+                                               (literal? e)
+                                               (contains? in-vars k))
+                                         acc
+                                         (update acc k * (min (double (unique-avs a)) (double (unique-aes a))))))
+                                     acc
+                                     acc)
+                                    clause))
+                                 {}
+                                 triple-clauses))
+        clause-candidates (distinct (repeatedly (Math/pow (count triple-clauses) 4.0)
+                                                #(shuffle (vec triple-clauses))))
+        [[_ candidate var->cardinality] :as candidates] (->> (for [candidate clause-candidates
+                                                                   :let [var->cardinality-steps (calc-var->cardinality candidate)
+                                                                         vs (mapcat vals var->cardinality-steps)]]
+                                                               [(/ (double (reduce + vs)) (count vs))
+                                                                candidate
+                                                                (last var->cardinality-steps)])
+                                                             (sort-by first))
+        join-order (loop [join-order []
+                          clauses candidate]
                      (let [join-order-set (set join-order)
                            clause (first (or (seq (for [{:keys [e v] :as clause} clauses
                                                         :when (or (contains? join-order-set e)
@@ -603,12 +629,10 @@
                                                     clause))
                                              clauses))]
                        (if-let [{:keys [e a v]} clause]
-                         (recur (->> (sort-by var->frequency [v e])
-                                     (reverse)
+                         (recur (->> (sort-by var->cardinality [v e])
                                      (concat join-order))
                                 (remove #{clause} clauses))
-                         join-order)))]
-    (log/debug :triple-joins-var->frequency var->frequency)
+                         (distinct join-order))))]
     (log/debug :triple-joins-join-order join-order)
     [(->> join-order
           (distinct)
@@ -1570,11 +1594,24 @@
         [in in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
 
-(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
+(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot cardinalities] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
-        stats (db/read-index-meta index-store :crux/attribute-stats)
+        stats (with-meta
+                (or (db/read-index-meta index-store :crux/attribute-stats) {})
+                {:unique-avs (fn [a]
+                               (or (get @cardinalities [:v a])
+                                   (let [c (with-open [is (db/open-index-snapshot index-store)]
+                                             (count (db/av is a nil)))]
+                                     (swap! cardinalities assoc [:v a] c)
+                                     c)))
+                 :unique-aes (fn [a]
+                               (or (get @cardinalities [:e a])
+                                   (let [c (with-open [is (db/open-index-snapshot index-store)]
+                                             (count (db/ae is a nil)))]
+                                     (swap! cardinalities assoc [:e a] c)
+                                     c)))})
         [in in-args] (add-legacy-args q-conformed in-args)]
     (when full-results?
       (defonce -full-results-deprecation-log
@@ -1774,7 +1811,8 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus
-                        query-cache conform-cache projection-cache]
+                        query-cache conform-cache projection-cache
+                        cardinalities]
   api/DBProvider
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
@@ -1795,7 +1833,8 @@
                                                                    :bus bus
                                                                    :query-engine this})
                                    :valid-time valid-time
-                                   :transact-time tx-time))))
+                                   :transact-time tx-time
+                                   :cardinalities cardinalities))))
 
   (open-db [this] (api/open-db this nil nil))
   (open-db [this valid-time] (api/open-db this valid-time nil))
@@ -1833,4 +1872,6 @@
                                                :required? true
                                                :spec ::sys/pos-int}}}
   [opts]
-  (map->QueryEngine (assoc opts :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter")))))
+  (map->QueryEngine (assoc opts
+                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))
+                           :cardinalities (atom {}))))
