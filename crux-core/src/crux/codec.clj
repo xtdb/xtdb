@@ -540,7 +540,7 @@
 (defn base64-reader ^bytes [s]
   (.decode (Base64/getDecoder) (str s)))
 
-(defn base64-writer [^bytes bytes]
+(defn base64-writer ^String [^bytes bytes]
   (.encodeToString (Base64/getEncoder) bytes))
 
 (defn read-edn-string-with-readers [s]

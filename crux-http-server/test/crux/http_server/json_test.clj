@@ -207,17 +207,9 @@
                         :qps {"eidJson" (pr-str "ivan")}})))))
 
 (t/deftest test-object-mapping
-  (let [{:strs [txId]} (submit-tx [["put" {"crux.db/id" "foo",
-                                           "bytes" {"$base64" "AQID"},
-                                           "crux-id" {"$oid" (str (c/new-id :foo))}}]])]
-    (crux/await-tx *api* {::tx/tx-id txId})
-    (t/is (= {:crux.db/id "foo"
-              :bytes [1 2 3]
-              :crux-id (c/new-id :foo)}
-             (-> (crux/entity (crux/db *api*) "foo")
-                 (update :bytes seq))))
-    (t/is (= {"crux.db/id" "foo"
-              "bytes" {"$base64" "AQID"}
-              "crux-id" {"$oid" (str (c/new-id :foo))}}
-             (json-get {:url "/_crux/entity"
-                        :qps {"eid" "foo"}})))))
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id "foo"
+                                       :bytes (byte-array [1 2 3])}]])
+  (t/is (= {"crux.db/id" "foo"
+            "bytes" "AQID"}
+           (json-get {:url "/_crux/entity"
+                      :qps {"eid" "foo"}}))))

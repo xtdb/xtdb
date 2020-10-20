@@ -1,33 +1,16 @@
 (ns crux.http-server.json
-  (:require [clojure.spec.alpha :as s]
+  (:require [camel-snake-kebab.core :as csk]
+            [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.http-server.entity-ref :as entity-ref]
             [crux.io :as cio]
             [jsonista.core :as j]
-            [muuntaja.format.core :as mfc]
-            [camel-snake-kebab.core :as csk])
+            [muuntaja.format.core :as mfc])
   (:import clojure.lang.IPersistentList
-           [com.fasterxml.jackson.core JsonGenerator JsonParser]
-           com.fasterxml.jackson.databind.deser.std.StdDeserializer
-           com.fasterxml.jackson.databind.DeserializationContext
-           com.fasterxml.jackson.databind.module.SimpleModule
+           com.fasterxml.jackson.core.JsonGenerator
            crux.codec.Id
            crux.http_server.entity_ref.EntityRef
-           java.io.OutputStream
-           jsonista.jackson.PersistentHashMapDeserializer))
-
-(def ^:private crux-jackson-module
-  (doto (SimpleModule. "Crux")
-    (.addDeserializer java.util.Map
-                      (let [jsonista-deser (PersistentHashMapDeserializer.)]
-                        (proxy [StdDeserializer] [java.util.Map]
-                          (deserialize [^JsonParser p ^DeserializationContext ctxt]
-                            (let [res (.deserialize jsonista-deser p ctxt)]
-                              (or (when-let [oid (:$oid res)]
-                                    (c/new-id (c/hex->id-buffer oid)))
-                                  (when-let [b64 (:$base64 res)]
-                                    (c/base64-reader b64))
-                                  res))))))))
+           java.io.OutputStream))
 
 (defn- emit-list [coll ^JsonGenerator gen]
   (if (contains? #{'fn* 'fn} (first coll))
@@ -42,13 +25,12 @@
   (j/object-mapper
    {:encode-key-fn true
     :encoders {Id (fn [crux-id ^JsonGenerator gen]
-                    (.writeObject gen {"$oid" (str crux-id)}))
+                    (.writeString gen (str crux-id)))
                (Class/forName "[B") (fn [^bytes bytes ^JsonGenerator gen]
-                                      (.writeObject gen {"$base64" (c/base64-writer bytes)}))
+                                      (.writeString gen (c/base64-writer bytes)))
                EntityRef entity-ref/ref-json-encoder
                IPersistentList emit-list}
-    :decode-key-fn true
-    :modules [crux-jackson-module]}))
+    :decode-key-fn true}))
 
 (defn try-decode-json [json]
   (try
