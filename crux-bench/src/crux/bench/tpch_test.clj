@@ -15,12 +15,11 @@
   (crux/q (crux/db node) (assoc (get tpch-queries (dec n)) :timeout 120000)))
 
 (defn run-tpch-queries [node {:keys [scale-factor] :as opts}]
-  (let [scale-factor (or scale-factor 0.01)]
-    (every? true? (for [n (range 1 23)]
-                    (let [actual (run-tpch-query node n)]
-                      (if (= 0.01 scale-factor)
-                        (every? true? (validate-tpch-query actual (parse-tpch-result n)))
-                        (boolean actual)))))))
+  (every? true? (for [n (range 1 23)]
+                  (let [actual (run-tpch-query node n)]
+                    (if (= 0.01 scale-factor)
+                      (every? true? (validate-tpch-query actual (parse-tpch-result n)))
+                      (boolean actual))))))
 
 (defn run-tpch-test [node {:keys [scale-factor] :as opts}]
   (let [scale-factor (or scale-factor 0.01)]
