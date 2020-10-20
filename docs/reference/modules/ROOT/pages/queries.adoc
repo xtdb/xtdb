@@ -410,7 +410,6 @@ You can quickly grab the whole document by specifying `*` in the projection spec
 
 [source,clojure]
 ----
-;; with just 'query':
 {:find [(eql/project ?user [*])]
  :where [[?user :user/id 1]]}
 
@@ -418,7 +417,7 @@ You can quickly grab the whole document by specifying `*` in the projection spec
 ----
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
-Crux does not (yet) support union queries or recursive queries.
+
 [#ordering-and-pagination]
 == Ordering and Pagination
 

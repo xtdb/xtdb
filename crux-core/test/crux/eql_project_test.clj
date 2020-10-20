@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.api :as crux]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.query :as q]
             [crux.eql-project :as project]
             [clojure.java.io :as io]))
 
@@ -12,7 +11,7 @@
   (fix/submit+await-tx (for [doc (read-string (slurp (io/resource "data/james-bond.edn")))]
                          [:crux.tx/put doc]))
 
-  (let [->lookup-docs (let [f @#'q/lookup-docs]
+  (let [->lookup-docs (let [f @#'project/lookup-docs]
                         (fn [!lookup-counts]
                           (fn [v db]
                             (swap! !lookup-counts conj (count (::project/hashes (meta v))))
@@ -100,3 +99,57 @@
                    '{:find [(eql/project ?it [{:type {:a [:x :y], :b [:z]}}
                                               :crux.db/id])]
                      :where [[?it :crux.db/id]]}))))
+
+(t/deftest test-recursive
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :root}]
+                        [:crux.tx/put {:crux.db/id :a
+                                       :parent :root}]
+                        [:crux.tx/put {:crux.db/id :b
+                                       :parent :root}]
+                        [:crux.tx/put {:crux.db/id :aa
+                                       :parent :a}]
+                        [:crux.tx/put {:crux.db/id :ab
+                                       :parent :a}]
+                        [:crux.tx/put {:crux.db/id :aba
+                                       :parent :ab}]
+                        [:crux.tx/put {:crux.db/id :abb
+                                       :parent :ab}]])
+
+  (t/testing "forward unbounded recursion"
+    (t/is (= {:crux.db/id :aba
+              :parent {:crux.db/id :ab
+                       :parent {:crux.db/id :a
+                                :parent {:crux.db/id :root}}}}
+             (ffirst (crux/q (crux/db *api*)
+                             '{:find [(eql/project ?aba [:crux.db/id {:parent ...}])]
+                               :where [[?aba :crux.db/id :aba]]})))))
+
+  (t/testing "forward bounded recursion"
+    (t/is (= {:crux.db/id :aba
+              :parent {:crux.db/id :ab
+                       :parent {:crux.db/id :a}}}
+             (ffirst (crux/q (crux/db *api*)
+                             '{:find [(eql/project ?aba [:crux.db/id {:parent 2}])]
+                               :where [[?aba :crux.db/id :aba]]})))))
+
+  (t/testing "reverse unbounded recursion"
+    (t/is (= {:crux.db/id :root
+              :_parent [{:crux.db/id :a
+                         :_parent [{:crux.db/id :aa}
+                                   {:crux.db/id :ab
+                                    :_parent [{:crux.db/id :aba}
+                                              {:crux.db/id :abb}]}]}
+                        {:crux.db/id :b}]}
+             (ffirst (crux/q (crux/db *api*)
+                             '{:find [(eql/project ?root [:crux.db/id {:_parent ...}])]
+                               :where [[?root :crux.db/id :root]]})))))
+
+  (t/testing "reverse bounded recursion"
+    (t/is (= {:crux.db/id :root
+              :_parent [{:crux.db/id :a
+                         :_parent [{:crux.db/id :aa}
+                                   {:crux.db/id :ab}]}
+                        {:crux.db/id :b}]}
+             (ffirst (crux/q (crux/db *api*)
+                             '{:find [(eql/project ?root [:crux.db/id {:_parent 2}])]
+                               :where [[?root :crux.db/id :root]]}))))))
