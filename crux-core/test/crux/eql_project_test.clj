@@ -44,6 +44,18 @@
                                   :batch-size 3})))
             (t/is (= [3 3] @!lookup-counts) "batching lookups")))))
 
+    (t/testing "renames"
+      (t/is (= #{[{:brand "Aston Martin", :model "DB5"}]
+                 [{:brand "Aston Martin", :model "DB10"}]
+                 [{:brand "Aston Martin", :model "DBS"}]
+                 [{:brand "Aston Martin", :model "DBS V12"}]
+                 [{:brand "Aston Martin", :model "V8 Vantage Volante"}]
+                 [{:brand "Aston Martin", :model "V12 Vanquish"}]}
+
+               (crux/q db '{:find [(eql/project ?v [(:vehicle/brand {:as :brand})
+                                                    (:vehicle/model {:as :model})])]
+                            :where [[?v :vehicle/brand "Aston Martin"]]}))))
+
     (t/testing "forward joins"
       (let [!lookup-counts (atom [])]
         (with-redefs [project/lookup-docs (->lookup-docs !lookup-counts)]
@@ -74,6 +86,16 @@
                                                          {:film/_bond [:film/name :film/year]}])]
                                 :where [[?dc :person/name "Daniel Craig"]]})))
           (t/is (= [5] @!lookup-counts) "batching lookups"))))
+
+    (t/testing "reverse joins, rename"
+      (t/is (= #{[{:person/name "Daniel Craig",
+                   :films [#:film{:name "Skyfall", :year "2012"}
+                           #:film{:name "Spectre", :year "2015"}
+                           #:film{:name "Casino Royale", :year "2006"}
+                           #:film{:name "Quantum of Solace", :year "2008"}]}]}
+               (crux/q db '{:find [(eql/project ?dc [:person/name
+                                                     {(:film/_bond {:as :films}) [:film/name :film/year]}])]
+                            :where [[?dc :person/name "Daniel Craig"]]}))))
 
     (t/testing "project *"
       (t/is (= #{[{:crux.db/id :daniel-craig

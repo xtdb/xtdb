@@ -2,7 +2,8 @@
   (:require [crux.codec :as c]
             [crux.db :as db]
             [edn-query-language.core :as eql]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [clojure.set :as set])
   (:import clojure.lang.MapEntry))
 
 (defn- recognise-union [child]
@@ -67,7 +68,8 @@
 (defn- forward-joins-child-fn [{:keys [props special forward-joins unions]}]
   (when-not (every? empty? [props special forward-joins unions])
     (let [forward-join-child-fns (for [{:keys [dispatch-key] :as join} forward-joins]
-                                   (let [next-recurse-state (->next-recurse-state-fn join)]
+                                   (let [next-recurse-state (->next-recurse-state-fn join)
+                                         k (or (get-in join [:params :as] dispatch-key))]
                                      (fn [doc db recurse-state]
                                        (when-let [v (get doc dispatch-key)]
                                          (when-let [recurse-state (next-recurse-state recurse-state)]
@@ -76,7 +78,7 @@
                                                        (raise-doc-lookup-out-of-coll))
                                                   (project-child v db recurse-state))
                                                 (after-doc-lookup (fn [res]
-                                                                    (MapEntry/create dispatch-key res)))))))))
+                                                                    (MapEntry/create k res)))))))))
           union-child-fns (for [{:keys [dispatch-key children]} unions
                                 {:keys [union-key] :as child} (get-in children [0 :children])]
                             (let [next-recurse-state (->next-recurse-state-fn child)]
@@ -87,7 +89,16 @@
                                                (when-let [recurse-state (next-recurse-state recurse-state)]
                                                  (project-child value db recurse-state)))))))))
           prop-dispatch-keys (into #{} (map :dispatch-key) props)
-          project-star? (contains? (into #{} (map :dispatch-key) special) '*)]
+          project-star? (contains? (into #{} (map :dispatch-key) special) '*)
+
+          with-renamed-props (if-let [rename-mapping (->> props
+                                                          (into {}
+                                                                (keep (fn [{:keys [dispatch-key] :as prop}]
+                                                                        (when-let [as (get-in prop [:params :as])]
+                                                                          (MapEntry/create dispatch-key as)))))
+                                                          not-empty)]
+                               #(set/rename-keys % rename-mapping)
+                               identity)]
 
       (fn [value {:keys [entity-resolver-fn] :as db} recurse-state]
         (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
@@ -98,10 +109,11 @@
                    (raise-doc-lookup-out-of-coll)
                    (after-doc-lookup (fn [res]
                                        ;; TODO do we need a deeper merge here?
-                                       (into (if project-star?
-                                               doc
-                                               (select-keys doc prop-dispatch-keys))
-                                             res)))))))))))
+                                       (-> (into (if project-star?
+                                                   doc
+                                                   (select-keys doc prop-dispatch-keys))
+                                                 res)
+                                           with-renamed-props)))))))))))
 
 (defn- reverse-joins-child-fn [reverse-joins]
   (when-not (empty? reverse-joins)
@@ -109,7 +121,8 @@
                                    (let [forward-key (keyword (namespace dispatch-key)
                                                               (subs (name dispatch-key) 1))
                                          one? (= :one (get-in join [:params :crux/cardinality]))
-                                         next-recurse-state (->next-recurse-state-fn join)]
+                                         next-recurse-state (->next-recurse-state-fn join)
+                                         k (or (get-in join [:params :as]) dispatch-key)]
                                      (fn [value-buffer {:keys [index-snapshot entity-resolver-fn] :as db} recurse-state]
                                        (when-let [recurse-state (next-recurse-state recurse-state)]
                                          (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) value-buffer nil entity-resolver-fn)
@@ -119,9 +132,8 @@
                                               (raise-doc-lookup-out-of-coll)
                                               (after-doc-lookup (fn [res]
                                                                   (when (seq res)
-                                                                    (MapEntry/create dispatch-key
-                                                                                     (cond->> res
-                                                                                       one? first))))))))))]
+                                                                    (MapEntry/create k (cond->> res
+                                                                                         one? first))))))))))]
       (fn [value db recurse-state]
         (let [value-buffer (c/->value-buffer value)]
           (->> reverse-join-child-fns
