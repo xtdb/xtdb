@@ -575,64 +575,59 @@
          :or {unique-avs (constantly 0)
               unique-aes (constantly 0)}} (meta stats)
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
-                             (let [{:keys [self-join?]} (meta clause)]
-                               (cond-> acc
-                                 (literal? v) (assoc v 0.1)
-                                 (literal? e) (assoc e 0.1)
-                                 (logic-var? v) (update v
-                                                        (fnil min Long/MAX_VALUE)
-                                                        (if (or (contains? in-vars v) self-join?)
-                                                          1.0
-                                                          (cond-> (double (unique-avs a))
-                                                            (literal? e) (/ (double (unique-aes a)))
-                                                            (contains? range-vars v) (/ 2.0))))
-                                 (logic-var? e) (update e
-                                                        (fnil min Long/MAX_VALUE)
-                                                        (if (contains? in-vars e)
-                                                          0.5
-                                                          (cond-> (double (unique-aes a))
-                                                            (literal? v) (/ (double (unique-avs a)))
-                                                            (contains? range-vars e) (/ 2.0)))))))
-        calc-var->cardinality (fn [triple-clauses]
-                                (reductions
-                                 (fn [acc {:keys [e a v] :as clause}]
-                                   (update-cardinality
-                                    (reduce-kv
-                                     (fn [acc k v]
-                                       (if (or (= k e)
-                                               (= k v)
-                                               (literal? v)
-                                               (literal? e)
-                                               (contains? in-vars k))
-                                         acc
-                                         (update acc k * (min (double (unique-avs a)) (double (unique-aes a))))))
-                                     acc
-                                     acc)
-                                    clause))
-                                 {}
-                                 triple-clauses))
-        clause-candidates (distinct (repeatedly (Math/pow (count triple-clauses) 4.0)
-                                                #(shuffle (vec triple-clauses))))
-        [[_ candidate var->cardinality] :as candidates] (->> (for [candidate clause-candidates
-                                                                   :let [var->cardinality-steps (calc-var->cardinality candidate)
-                                                                         vs (mapcat vals var->cardinality-steps)]]
-                                                               [(/ (double (reduce + vs)) (count vs))
-                                                                candidate
-                                                                (last var->cardinality-steps)])
-                                                             (sort-by first))
-        join-order (loop [join-order []
-                          clauses candidate]
-                     (let [join-order-set (set join-order)
-                           clause (first (or (seq (for [{:keys [e v] :as clause} clauses
-                                                        :when (or (contains? join-order-set e)
-                                                                  (contains? join-order-set v))]
-                                                    clause))
-                                             clauses))]
-                       (if-let [{:keys [e a v]} clause]
-                         (recur (->> (sort-by var->cardinality [v e])
-                                     (concat join-order))
-                                (remove #{clause} clauses))
-                         (distinct join-order))))]
+                             (let [{:keys [self-join?]} (meta clause)
+                                   es (if (or (contains? in-vars e) (literal? e) self-join?)
+                                        1.0
+                                        (double (or (get acc e) (unique-aes a))))
+                                   vs (if (or (contains? in-vars v) (literal? v) self-join?)
+                                        1.0
+                                        (double (or (get acc v) (unique-avs a))))
+                                   new-vs (fn [^double es ^double vs]
+                                            (cond-> vs
+                                              (literal? e) (/ es)
+                                              (contains? range-vars v) (Math/sqrt)))
+                                   new-es (fn [^double es ^double vs]
+                                            (cond-> es
+                                              (literal? v) (/ vs)
+                                              (contains? range-vars e) (Math/sqrt)))
+                                   acc (if (< es vs)
+                                         (let [acc (update acc e (fnil min Long/MAX_VALUE) (new-es es vs))]
+                                           (update acc v (fnil min Long/MAX_VALUE) (new-vs (get acc e) vs)))
+                                         (let [acc (update acc v (fnil min Long/MAX_VALUE) (new-vs es vs))]
+                                           (update acc e (fnil min Long/MAX_VALUE) (new-es es (get acc v)))))]
+                               acc))
+        [cost join-order var->cardinality] (loop [var->cardinality {}
+                                                  costs []
+                                                  join-order []
+                                                  triple-clauses triple-clauses]
+                                             (if (seq triple-clauses)
+                                               (let [[average-cost
+                                                      var->cardinality
+                                                      costs
+                                                      join-order
+                                                      triple-clauses]
+                                                     (first (sort-by first (for [{:keys [e v] :as clause} triple-clauses
+                                                                                 :let [var->cardinality (update-cardinality var->cardinality clause)
+                                                                                       cost (double (reduce * (vals var->cardinality)))
+                                                                                       costs (conj costs cost)]]
+                                                                             [(/ (double (reduce + costs))
+                                                                                 (count costs))
+                                                                              var->cardinality
+                                                                              costs
+                                                                              (->> (sort-by var->cardinality [v e])
+                                                                                   (concat join-order))
+                                                                              (remove #{clause} triple-clauses)])))]
+                                                 (recur var->cardinality
+                                                        costs
+                                                        join-order
+                                                        triple-clauses))
+                                               [(/ (double (reduce + costs))
+                                                   (count costs))
+                                                (distinct join-order)
+                                                var->cardinality]))]
+    ;; (prn cost)
+    ;; (prn var->cardinality)
+    ;; (prn join-order)
     (log/debug :triple-joins-join-order join-order)
     [(->> join-order
           (distinct)
