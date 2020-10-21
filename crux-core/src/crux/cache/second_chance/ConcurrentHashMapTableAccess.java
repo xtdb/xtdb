@@ -3,6 +3,7 @@ package crux.cache.second_chance;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -11,6 +12,20 @@ public final class ConcurrentHashMapTableAccess {
 
     static {
         try {
+            try {
+                Method getModule = Class.class.getDeclaredMethod("getModule");
+                Class<?> moduleClass = getModule.getReturnType();
+                Method isNamed = moduleClass.getDeclaredMethod("isNamed");
+                Method addOpens = moduleClass.getDeclaredMethod("addOpens", String.class, moduleClass);
+
+                Object thisModule = getModule.invoke(ConcurrentHashMapTableAccess.class);
+                if (!(boolean) isNamed.invoke(thisModule)) {
+                    Object javaBaseModule = getModule.invoke(ConcurrentHashMap.class);
+                    addOpens.invoke(javaBaseModule, ConcurrentHashMap.class.getPackageName(), thisModule);
+                }
+            } catch (Exception ignore) {
+            }
+
             Field tableField = ConcurrentHashMap.class.getDeclaredField("table");
             tableField.setAccessible(true);
             MethodHandle mh = MethodHandles.lookup().unreflectGetter(tableField);
