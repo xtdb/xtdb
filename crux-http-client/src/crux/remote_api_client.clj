@@ -6,7 +6,7 @@
             [crux.io :as cio]
             [crux.query-state :as qs])
   (:import com.nimbusds.jwt.SignedJWT
-           [crux.api HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxDatasource NodeOutOfSyncException RemoteClientOptions]
+           [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource NodeOutOfSyncException RemoteClientOptions]
            [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Instant
            java.util.function.Supplier))
@@ -52,7 +52,7 @@
               (let [f (requiring-resolve 'clj-http.client/request)]
                 (fn [opts]
                   (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
-              (catch IOException not-found))
+              (catch IOException _e))
             (try
               (let [f (requiring-resolve 'org.httpkit.client/request)]
                 (fn [opts]
@@ -60,14 +60,13 @@
                     (if error
                       (throw error)
                       result))))
-              (catch IOException not-found))
+              (catch IOException _e))
             (fn [_]
               (throw (IllegalStateException. "No supported HTTP client found.")))))))))
 
 (defn- api-request-sync
-  ([url {:keys [body http-opts ->jwt-token] :as opts}]
-   (let [{:keys [body status headers]
-          :as result}
+  ([url {:keys [body http-opts ->jwt-token]}]
+   (let [{:keys [body status] :as result}
          (*internal-http-request-fn* (merge {:url url
                                              :method :post
                                              :headers (merge (when body
@@ -99,14 +98,6 @@
   (close [_]
     (doseq [stream @streams-state]
       (.close ^Closeable stream))))
-
-(defn- register-stream-with-remote-stream! [snapshot in]
-  (swap! (:streams-state snapshot) conj in))
-
-(defn- as-of-map [{:keys [valid-time transact-time] :as datasource}]
-  (cond-> {}
-    valid-time (assoc :valid-time valid-time)
-    transact-time (assoc :transact-time transact-time)))
 
 (defrecord RemoteDatasource [url valid-time transact-time ->jwt-token]
   Closeable
