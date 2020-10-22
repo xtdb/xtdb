@@ -593,10 +593,10 @@
                                         (cond-> es
                                           (contains? range-vars e) (Math/sqrt)
                                           (contains? pred-var-frequencies e) (/ (* 2.0 (double (get pred-var-frequencies e))))
-                                          (literal? v) (/ vs)))
-                                   acc (update acc v (fnil min Double/MAX_VALUE) vs)
-                                   acc (update acc e (fnil min Double/MAX_VALUE) es)]
-                               acc))
+                                          (literal? v) (/ vs)))]
+                               (-> acc
+                                   (update v (fnil min Double/MAX_VALUE) vs)
+                                   (update e (fnil min Double/MAX_VALUE) es))))
         var->cardinality (reduce update-cardinality {} triple-clauses)
         var->clauses (merge-with into
                                  (group-by :v triple-clauses)
@@ -604,18 +604,20 @@
         join-order (loop [vars (map key (sort-by val var->cardinality))
                           join-order []
                           reachable-vars #{}]
-                     (let [join-order-set (set join-order)
-                           var (or (first (filter reachable-vars vars))
-                                   (first vars))
-                           reachable-vars (set/union (conj reachable-vars var)
-                                                     (set (for [{:keys [e v]} (get var->clauses var)
-                                                                var [e v]]
-                                                            var)))]
-                       (if var
-                         (recur (remove #{var} vars) (conj join-order var) reachable-vars)
-                         join-order)))]
-    ;; (prn var->cardinality)
-    ;; (prn join-order)
+                     (if (seq vars)
+                       (let [var (first vars)
+                             var (if (literal? var)
+                                   var
+                                   (or (first (filter reachable-vars vars))
+                                       var))
+                             new-reachable-vars (set (for [{:keys [e v]} (get var->clauses var)
+                                                           var [e v]]
+                                                       var))]
+                         (recur (remove #{var} vars)
+                                (conj join-order var)
+                                (set/union reachable-vars new-reachable-vars)))
+                       join-order))]
+    (log/debug :triple-joins-var->cardinality var->cardinality)
     (log/debug :triple-joins-join-order join-order)
     [(->> join-order
           (distinct)
