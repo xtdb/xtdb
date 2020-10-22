@@ -60,27 +60,27 @@
                         {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
 
   (let [q "SELECT PERSON.NAME FROM PERSON"]
-    (t/is (= [{:name "Ivan"}
-              {:name "Malcolm"}]
-             (query q)))
+    (t/is (= #{{:name "Ivan"}
+               {:name "Malcolm"}}
+             (set (query q))))
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(NAME=[$1])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT PERSON.NAME, PERSON.HOMEWORLD FROM PERSON"]
-    (t/is (= [{:name "Ivan" :homeworld "Earth"}
-              {:name "Malcolm" :homeworld "Mars"}]
-             (query q)))
+    (t/is (= #{{:name "Ivan" :homeworld "Earth"}
+               {:name "Malcolm" :homeworld "Mars"}}
+             (set (query q))))
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(NAME=[$1], HOMEWORLD=[$2])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT PERSON.HOMEWORLD, PERSON.NAME FROM PERSON"]
-    (t/is (= [{:name "Ivan" :homeworld "Earth"}
-              {:name "Malcolm" :homeworld "Mars"}]
-             (query q)))
+    (t/is (= #{{:name "Ivan" :homeworld "Earth"}
+               {:name "Malcolm" :homeworld "Mars"}}
+             (set (query q))))
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(HOMEWORLD=[$2], NAME=[$1])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
@@ -108,8 +108,8 @@
              (explain q))))
 
   (let [q "SELECT PERSON.NAME, (2 * PERSON.AGE) AS DOUBLE_AGE FROM PERSON"]
-    (t/is (= [{:name "Ivan", :double_age 42} {:name "Malcolm", :double_age 50}]
-             (query q)))
+    (t/is (= #{{:name "Ivan", :double_age 42} {:name "Malcolm", :double_age 50}}
+             (set (query q))))
     (t/is (= (str "CruxToEnumerableConverter\n"
                   "  CruxProject(NAME=[$1], DOUBLE_AGE=[*(2, $3)])\n"
                   "    CruxTableScan(table=[[crux, PERSON]])\n")
@@ -146,37 +146,37 @@
                (explain q))))
 
     (t/testing "retrieve data case insensitivity of table schema"
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query "select person.name from person")))))
+      (t/is (= #{{:name "Ivan"}
+                 {:name "Malcolm"}}
+               (set (query "select person.name from person"))))))
 
   (t/testing "retrieve data"
     (let [q "SELECT PERSON.NAME FROM PERSON"]
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query q)))
+      (t/is (= #{{:name "Ivan"}
+                 {:name "Malcolm"}}
+               (set (query q))))
       (t/is (= (str "CruxToEnumerableConverter\n"
                     "  CruxProject(NAME=[$1])\n"
                     "    CruxTableScan(table=[[crux, PERSON]])\n")
                (explain q))))
 
     (t/testing "retrieve data case insensitivity of table schema"
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query "select person.name from person")))))
+      (t/is (= #{{:name "Ivan"}
+                 {:name "Malcolm"}}
+               (set (query "select person.name from person"))))))
 
   (t/testing "order by"
-    (t/is (= [{:name "Ivan"}
-              {:name "Malcolm"}]
-             (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME ASC")))
+    (t/is (= #{{:name "Ivan"}
+               {:name "Malcolm"}}
+             (set (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME ASC"))))
     (t/is (= [{:name "Malcolm"}
               {:name "Ivan"}]
              (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME DESC"))))
 
   (t/testing "multiple columns"
-    (t/is (= [{:name "Ivan" :homeworld "Earth"}
-              {:name "Malcolm" :homeworld "Mars"}]
-             (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
+    (t/is (= #{{:name "Ivan" :homeworld "Earth"}
+               {:name "Malcolm" :homeworld "Mars"}}
+             (set (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON")))))
 
   (t/testing "wildcard columns"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan" :age 21 :alive true}
