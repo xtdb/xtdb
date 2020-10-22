@@ -185,6 +185,55 @@
 #{[21]}
 ;; end::query-with-pred-1-r[]
 
+(defn query-example-subquery-1 [node]
+  (crux/q
+   (crux/db node)
+   ;; tag::sub-query-example-1[]
+   '{:find [x]
+     :where [[(q {:find [y]
+                  :where [[(identity 2) x]
+                          [(+ x 2) y]]})
+              x]]}
+   ;; end::sub-query-example-1[]
+   ))
+
+;; tag::sub-query-example-1-r[]
+#{[[[4]]]}
+;; end::sub-query-example-1-r[]
+
+(defn query-example-subquery-2 [node]
+  (crux/q
+   (crux/db node)
+   ;; tag::sub-query-example-2[]
+   '{:find [x]
+     :where [[(q {:find [y]
+                  :where [[(identity 2) x]
+                          [(+ x 2) y]]})
+              [[x]]]]}
+   ;; end::sub-query-example-2[]
+   ))
+
+;; tag::sub-query-example-2-r[]
+#{[4]}
+;; end::sub-query-example-2-r[]
+
+(defn query-example-subquery-3 [node]
+  (crux/q
+   (crux/db node)
+   ;; tag::sub-query-example-3[]
+   '{:find [x y z]
+     :where [[(q {:find [x y]
+                  :where [[(identity 2) x]
+                          [(+ x 2) y]]})
+              [[x y]]]
+             [(* x y) z]]}
+   ;; end::sub-query-example-3[]
+   ))
+
+;; tag::sub-query-example-3-r[]
+#{[2 4 8]}
+;; end::sub-query-example-3-r[]
+
 (defn query-example-streaming [node prn]
   ;; tag::streaming-query[]
   (with-open [res (crux/open-q (crux/db node)

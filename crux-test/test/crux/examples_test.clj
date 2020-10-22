@@ -28,6 +28,12 @@
       (ex/query-example-streaming node #(swap! !results conj %))
       (t/is (= [[:smith]] @!results)))))
 
+(t/deftest test-example-sub-queries
+  (with-open [node (crux/start-node {})]
+    (t/is (= #{[[[4]]]} (ex/query-example-subquery-1 node)))
+    (t/is (= #{[4]} (ex/query-example-subquery-2 node)))
+    (t/is (= #{[2 4 8]} (ex/query-example-subquery-3 node)))))
+
 (t/deftest test-example-time-queries
   (with-open [node (crux/start-node {})]
     (crux/await-tx node (ex/query-example-at-time-setup node) nil)

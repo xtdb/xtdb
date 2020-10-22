@@ -169,7 +169,7 @@ include::example$src/docs/examples.clj[tags=query-with-arguments5]
 
 In this case, we have a list of ages as our input, and only `22` satisfies the predicate, `(> age 21)`.
 
-Result:
+Result set:
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
@@ -182,7 +182,7 @@ Any fully qualified Clojure function that returns a boolean can be used in place
 include::example$src/docs/examples.clj[tags=query-with-pred-1]
 ----
 
-Result:
+Result set:
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-pred-1-r]
@@ -345,6 +345,57 @@ include::example$src/docs/examples.clj[tags=join2-r]
 ----
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
+
+[#subqueries]
+== Subqueries
+
+Within Crux queries, you can nest a subquery - and bind the results for further use in the query.
+
+=== Binding results as a scalar
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-1]
+----
+
+In the above query, we perform a subquery doing some arithmetic operations and returning the result - and bind the resulting relation as a scalar.
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-1-r]
+----
+
+=== Binding results as a tuple
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-2]
+----
+
+Similar to the previous query, except we bind the resulting relation as a tuple.
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-2-r]
+----
+
+In this example, we bind the results of a subquery and use them to return another result.
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-3]
+----
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-3-r]
+----
 
 [#eql-projection]
 == EQL Projection
