@@ -97,9 +97,9 @@
    (crux/db node)
    ;; tag::query-with-arguments2[]
    ;; Query
-   {:find '[e]
-    :in '[[first-name ...]]
-    :where '[[e :name first-name]]}
+   '{:find [e]
+     :in [[first-name ...]]
+     :where [[e :name first-name]]}
 
    ;; Argument
    ["Ivan" "Petr"]
@@ -115,9 +115,9 @@
    (crux/db node)
    ;; tag::query-with-arguments3[]
    ;; Query
-   {:find '[e]
-    :in '[[first-name last-name]]
-    :where '[[e :name first-name]
+   '{:find [e]
+     :in [[first-name last-name]]
+     :where [[e :name first-name]
              [e :last-name last-name]]}
 
    ;; Argument
@@ -134,9 +134,9 @@
    (crux/db node)
    ;; tag::query-with-arguments4[]
    ;; Query
-   {:find '[e]
-    :in '[[[first-name last-name]]]
-    :where '[[e :name first-name]
+   '{:find [e]
+     :in [[[first-name last-name]]]
+     :where [[e :name first-name]
              [e :last-name last-name]]}
 
    ;; Argument
@@ -154,9 +154,9 @@
    (crux/db node)
    ;; tag::query-with-arguments5[]
    ;; Query
-   {:find '[age]
-    :in '[[age ...]]
-    :where '[[(> age 21)]]}
+   '{:find [age]
+     :in [[age ...]]
+     :where [[(> age 21)]]}
 
    ;; Argument
    [21 22]
@@ -172,9 +172,9 @@
    (crux/db node)
    ;; tag::query-with-pred-1[]
    ;; Query
-   {:find '[age]
-    :in '[[age ...]]
-    :where '[[(odd? age)]]}
+   '{:find [age]
+     :in [[age ...]]
+     :where [[(odd? age)]]}
 
    ;; Argument
    [21 22]
