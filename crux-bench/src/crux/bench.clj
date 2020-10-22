@@ -428,7 +428,7 @@
            (if (empty? times-taken)
              (assoc
               result
-              :percentage-difference-since-last-run (float 0)
+              :percentage-difference-since-last-run 0.0
               :minimum-time-taken-this-week 0
               :maximum-time-taken-this-week 0
               :times-taken [time-taken-ms])
@@ -438,7 +438,7 @@
                                                         (- (first times-taken))
                                                         (/ (double (first times-taken)))
                                                         (* 100)
-                                                        (float))
+                                                        (double))
               :minimum-time-taken-this-week (apply min times-taken)
               :maximum-time-taken-this-week (apply max times-taken)
               :times-taken (conj (vec (reverse times-taken)) time-taken-ms))))
