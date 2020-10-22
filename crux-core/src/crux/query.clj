@@ -1262,7 +1262,7 @@
                           in-vars
                           stats]
   (let [collected-vars (collect-vars type->clauses)
-        invalid-leaf-vars (set (concat in-vars (:e-vars collected-vars)))
+        invalid-leaf-vars (set (concat in-vars (:e-vars collected-vars) (:range-vars collected-vars)))
         non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
