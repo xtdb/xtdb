@@ -19,6 +19,16 @@
                                           fk/with-cluster-doc-store-opts
                                           fix/with-node])
                         (with-meta {::embedded-kafka? true}))
+       :local-kafka-transit (-> (t/join-fixtures [(partial
+                                                   fk/with-kafka-config
+                                                   {:properties-map {"key.serializer" "crux.kafka.transit.TransitSerializer"
+                                                                     "key.deserializer" "crux.kafka.transit.TransitDeserializer"
+                                                                     "value.serializer" "crux.kafka.transit.TransitSerializer"
+                                                                     "value.deserializer" "crux.kafka.transit.TransitDeserializer"}})
+                                                  fk/with-cluster-tx-log-opts
+                                                  fk/with-cluster-doc-store-opts
+                                                  fix/with-node])
+                                (with-meta {::embedded-kafka? true}))
        :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-tx-log-opts fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
       #_(select-keys [:local-standalone])
