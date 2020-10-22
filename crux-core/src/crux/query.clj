@@ -574,7 +574,8 @@
   (let [pred-var-frequencies (frequencies
                               (for [{:keys [pred return]} pred-clauses
                                     :when (not return)
-                                    arg (:args pred)]
+                                    arg (:args pred)
+                                    :when (logic-var? arg)]
                                 arg))
         range-var-frequencies (frequencies
                                (for [{:keys [sym sym-a sym-b]} range-clauses
