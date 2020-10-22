@@ -1280,7 +1280,7 @@
         leaf-triple-clauses (->> (for [[e-var leaf-group] leaf-groups]
                                    (if (contains? existing-e-vars e-var)
                                      leaf-group
-                                     (butlast leaf-group)))
+                                     (next leaf-group)))
                                  (reduce into #{}))
         triple-clauses (remove leaf-triple-clauses triple-clauses)
         leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
