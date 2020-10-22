@@ -95,21 +95,16 @@ include::example$src/docs/examples.clj[tags=basic-query-r]
 [#arguments]
 == Arguments
 
-For the next set of queries we will again use the same set of documents for our database as used in the previous section:
+Crux queries can take a set of additional arguments, binding them to variables under the `:in` key within the query. Below we have some examples of queries with the various kinds of bindings that `:in` supports (ran on the data as entered into the database above).
 
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-input]
-----
-
-=== Query: "Match on entity ID and value"
+=== Scalar binding
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments1]
 ----
 
-Our first query supplies two arguments to the query via a map within the `:args` vector. The effect of this is to make sure that regardless of whether other `:name` values in the database also equal `"Ivan"`, that only the entity with an ID matching our specific `:ivan` ID is considered within the query. Use of arguments means we can avoid hard-coding values directly into the query clauses.
+In the above query, we parameterize the `first-name` symbol, and pass in "Ivan" as our input, binding "Ivan" to `first-name` in the query.
 
 Result Set:
 [source,clj]
@@ -117,14 +112,14 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments1-r]
 ----
 
-=== Query: "Match entities with given values"
+=== Collection binding
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments2]
 ----
 
-This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parameterise the input to a query such that we do not have to rerun a single query multiple times (which would be significantly less efficient!).
+This query shows binding to a collection of inputs - in this case, binding `first-name` to all of the different values in a collection of first-names.
 
 Result Set:
 [source,clj]
@@ -132,14 +127,14 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments2-r]
 ----
 
-=== Query: "Match entities with given value tuples"
+=== Tuple Binding
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments3]
 ----
 
-Here we see how we can extend the parameterisation to match using multiple fields at once.
+In this query we are binding a set of variables to a single value each, passing in a collection as our input. In this case, we are passing a collection with a `first-name` followed by a `last-name`.
 
 Result Set:
 [source,clj]
@@ -147,19 +142,19 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments3-r]
 ----
 
-=== Query: "Use range constraints with arguments"
+=== Relation Binding
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-with-arguments5]
+include::example$src/docs/examples.clj[tags=query-with-arguments4]
 ----
 
-Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database.
+Here we see how we can extend the parameterisation to match using multiple fields at once by passing and destructuring a relation containing multiple tuples.
 
 Result Set:
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments4-r]
 ----
 
 [#predicates]
@@ -169,10 +164,18 @@ Something else we can do with arguments is apply *predicates* to them directly w
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-with-arguments4]
+include::example$src/docs/examples.clj[tags=query-with-arguments5]
 ----
 
-In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I"). Any *fully qualified* Clojure function that returns a boolean can be used in place of `re-find`, for example:
+In this case, we have a list of ages as our input, and only `22` satisfies the predicate, `(> age 21)`.
+
+Result:
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
+----
+
+Any fully qualified Clojure function that returns a boolean can be used in place of `>`, for example:
 
 [source,clj]
 ----

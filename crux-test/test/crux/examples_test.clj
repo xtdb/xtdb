@@ -17,10 +17,10 @@
   (with-open [node (crux/start-node {})]
     (crux/await-tx node (ex/query-example-setup node) nil)
     (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
-    (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
+    (t/is (= #{[:ivan]} (ex/query-example-with-arguments-1 node)))
     (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-2 node)))
-    (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-3 node)))
-    (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-4 node)))
+    (t/is (= #{[:ivan]} (ex/query-example-with-arguments-3 node)))
+    (t/is (= #{[:petr] [:smith]} (ex/query-example-with-arguments-4 node)))
     (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
     (t/is (= #{[21]} (ex/query-example-with-predicate-1 node)))
 

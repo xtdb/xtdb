@@ -75,76 +75,93 @@
 ;; end::basic-query-r[]
 
 (defn query-example-with-arguments-1 [node]
- (crux/q
-  (crux/db node)
- ;; tag::query-with-arguments1[]
- {:find '[n]
-  :where '[[e :name n]]
-  :args [{'e :ivan
-          'n "Ivan"}]}
- ;; end::query-with-arguments1[]
-))
+  (crux/q
+   (crux/db node)
+   ;; tag::query-with-arguments1[]
+   ;; Query
+   '{:find [e]
+     :in [first-name]
+     :where [[e :name first-name]]}
+
+   ;; Argument
+   "Ivan"
+   ;; end::query-with-arguments1[]
+   ))
 
 ;; tag::query-with-arguments1-r[]
-#{["Ivan"]}
+#{[:ivan]}
 ;; end::query-with-arguments1-r[]
 
 (defn query-example-with-arguments-2 [node]
- (crux/q
-  (crux/db node)
-  ;; tag::query-with-arguments2[]
- {:find '[e]
-  :where '[[e :name n]]
-  :args [{'n "Ivan"}
-         {'n "Petr"}]}
-  ;; end::query-with-arguments2[]
-))
+  (crux/q
+   (crux/db node)
+   ;; tag::query-with-arguments2[]
+   ;; Query
+   {:find '[e]
+    :in '[[first-name ...]]
+    :where '[[e :name first-name]]}
+
+   ;; Argument
+   ["Ivan" "Petr"]
+   ;; end::query-with-arguments2[]
+   ))
 
 ;; tag::query-with-arguments2-r[]
-#{[:petr] [:ivan]}
+#{[:ivan] [:petr]}
 ;; end::query-with-arguments2-r[]
 
 (defn query-example-with-arguments-3 [node]
- (crux/q
-  (crux/db node)
-  ;; tag::query-with-arguments3[]
- {:find '[e]
-  :where '[[e :name n]
-           [e :last-name l]]
-  :args [{'n "Ivan" 'l "Ivanov"}
-         {'n "Petr" 'l "Petrov"}]}
- ;; end::query-with-arguments3[]
-))
+  (crux/q
+   (crux/db node)
+   ;; tag::query-with-arguments3[]
+   ;; Query
+   {:find '[e]
+    :in '[[first-name last-name]]
+    :where '[[e :name first-name]
+             [e :last-name last-name]]}
+
+   ;; Argument
+   ["Ivan" "Ivanov"]
+   ;; end::query-with-arguments3[]
+   ))
 
 ;; tag::query-with-arguments3-r[]
-#{[:petr] [:ivan]}
+#{[:ivan]}
 ;; end::query-with-arguments3-r[]
 
 (defn query-example-with-arguments-4 [node]
- (crux/q
-  (crux/db node)
- ;; tag::query-with-arguments4[]
- {:find '[n]
-  :where '[[(re-find #"I" n)]
-           [(= l "Ivanov")]]
-  :args [{'n "Ivan" 'l "Ivanov"}
-         {'n "Petr" 'l "Petrov"}]}
- ;; end::query-with-arguments4[]
- ))
+  (crux/q
+   (crux/db node)
+   ;; tag::query-with-arguments4[]
+   ;; Query
+   {:find '[e]
+    :in '[[[first-name last-name]]]
+    :where '[[e :name first-name]
+             [e :last-name last-name]]}
+
+   ;; Argument
+   [["Petr" "Petrov"]
+    ["Smith" "Smith"]]
+   ;; end::query-with-arguments4[]
+   ))
 
 ;; tag::query-with-arguments4-r[]
-#{["Ivan"]}
+#{[:petr] [:smith]}
 ;; end::query-with-arguments4-r[]
 
 (defn query-example-with-arguments-5 [node]
- (crux/q
-  (crux/db node)
- ;; tag::query-with-arguments5[]
- {:find '[age]
-  :where '[[(>= age 21)]]
-  :args [{'age 22}]}
- ;; end::query-with-arguments5[]
- ))
+  (crux/q
+   (crux/db node)
+   ;; tag::query-with-arguments5[]
+   ;; Query
+   {:find '[age]
+    :in '[[age ...]]
+    :where '[[(> age 21)]]}
+
+   ;; Argument
+   [21 22]
+   ;; end::query-with-arguments5[]
+   ))
 
 ;; tag::query-with-arguments5-r[]
 #{[22]}
@@ -154,11 +171,15 @@
   (crux/q
    (crux/db node)
    ;; tag::query-with-pred-1[]
+   ;; Query
    {:find '[age]
-    :where '[[(odd? age)]]
-    :args [{'age 22} {'age 21}]}
+    :in '[[age ...]]
+    :where '[[(odd? age)]]}
+
+   ;; Argument
+   [21 22]
    ;; end::query-with-pred-1[]
- ))
+   ))
 
 ;; tag::query-with-pred-1-r[]
 #{[21]}
