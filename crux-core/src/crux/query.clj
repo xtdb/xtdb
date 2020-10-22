@@ -588,12 +588,10 @@
                                      sym [sym sym-a sym-b]
                                      :when (logic-var? sym)]
                                  sym))
-        cardinality-for-var (fn [var cardinality self-join?]
+        cardinality-for-var (fn [var cardinality]
                               (cond-> (double (cond
                                                 (literal? var)
                                                 (count (c/vectorize-value var))
-                                                self-join?
-                                                2.0
                                                 (contains? in-vars var)
                                                 0.5
                                                 :else
@@ -601,10 +599,9 @@
                                 (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var))))
                                 (contains? range-var-frequencies var) (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
-                             (let [{:keys [self-join?]} (meta clause)
-                                   cardinality (get stats a 0.0)
-                                   vs (cardinality-for-var v cardinality self-join?)
-                                   es (cardinality-for-var e cardinality false)]
+                             (let [cardinality (get stats a 0.0)
+                                   es (cardinality-for-var e cardinality)
+                                   vs (cardinality-for-var v cardinality)]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
                                    (update e (fnil min Double/MAX_VALUE) es))))
@@ -1270,11 +1267,21 @@
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
         potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
+        existing-e-vars (set (for [{:keys [e v]} triple-clauses
+                                   :when (or (literal? v)
+                                             (contains? invalid-leaf-vars v)
+                                             (contains? non-leaf-v-vars v))]
+                               e))
         leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
-                               :when (> (count leaf-group) 1)]
+                               :when (or (contains? existing-e-vars e-var)
+                                         (> (count leaf-group) 1))]
                            [e-var (sort-triple-clauses stats leaf-group)])
                          (into {}))
-        leaf-triple-clauses (set (mapcat next (vals leaf-groups)))
+        leaf-triple-clauses (->> (for [[e-var leaf-group] leaf-groups]
+                                   (if (contains? existing-e-vars e-var)
+                                     leaf-group
+                                     (butlast leaf-group)))
+                                 (reduce into #{}))
         triple-clauses (remove leaf-triple-clauses triple-clauses)
         leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
                      {:pred {:pred-fn 'get-attr :args [e a]}
