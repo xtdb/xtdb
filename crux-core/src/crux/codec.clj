@@ -3,18 +3,16 @@
   (:require [clojure.edn :as edn]
             [crux.error :as err]
             [crux.hash :as hash]
-            [crux.memory :as mem]
-            [crux.morton :as morton]
-            [taoensso.nippy :as nippy]
             [crux.io :as cio]
-            [clojure.walk :as walk])
-  (:import [clojure.lang IHashEq Keyword APersistentMap APersistentSet]
-           [java.io Closeable Writer]
+            [crux.memory :as mem]
+            [taoensso.nippy :as nippy])
+  (:import [clojure.lang APersistentMap APersistentSet IHashEq Keyword]
+           java.io.Writer
            [java.net MalformedURLException URI URL]
-           [java.nio ByteOrder ByteBuffer]
+           [java.nio ByteBuffer ByteOrder]
            java.nio.charset.StandardCharsets
-           [java.util Arrays Base64 Collection Date Map UUID Set]
-           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [java.util Base64 Date Map Set UUID]
+           [org.agrona DirectBuffer ExpandableArrayBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -231,24 +229,24 @@
 
   Class
   (value->buffer [this ^MutableDirectBuffer to]
-    (doto (id-function to (nippy/fast-freeze this))
+    (doto (id-function to (mem/->nippy-buffer this))
       (.putByte 0 object-value-type-id)))
 
   Object
   (value->buffer [this ^MutableDirectBuffer to]
-    (let [^bytes nippy-bytes (if (coll? this)
-                               (binding [*sort-unordered-colls* true]
-                                 (nippy/fast-freeze this))
-                               (nippy/fast-freeze this))]
-      (if (or (< max-value-index-length (alength nippy-bytes))
+    (let [^DirectBuffer nippy-buffer (if (coll? this)
+                                       (binding [*sort-unordered-colls* true]
+                                         (mem/->nippy-buffer this))
+                                       (mem/->nippy-buffer this))]
+      (if (or (< max-value-index-length (.capacity nippy-buffer))
               (not (nippy/freezable? this)))
-        (doto (id-function to nippy-bytes)
+        (doto (id-function to nippy-buffer)
           (.putByte 0 object-value-type-id))
         (mem/limit-buffer
          (doto to
            (.putByte 0 nippy-value-type-id)
-           (.putBytes value-type-id-size nippy-bytes))
-         (+ value-type-id-size (alength nippy-bytes))))))
+           (.putBytes value-type-id-size nippy-buffer 0 (.capacity nippy-buffer)))
+         (+ value-type-id-size (.capacity nippy-buffer))))))
 
   nil
   (value->buffer [this ^MutableDirectBuffer to]

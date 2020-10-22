@@ -227,7 +227,13 @@
              (.putByte idx (unchecked-byte (inc b))))))))))
 
 (defn <-nippy-buffer [buf]
-  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buf))))
+  (nippy/thaw-from-in! (-> (DirectBufferInputStream. buf)
+                           (DataInputStream.))))
 
 (defn ->nippy-buffer [v]
-  (->off-heap (nippy/fast-freeze v)))
+  (let [to (ExpandableDirectByteBuffer. 64)
+        dos (-> (ExpandableDirectBufferOutputStream. to)
+                (DataOutputStream.))]
+    (nippy/-freeze-without-meta! v dos)
+    (-> to
+        (limit-buffer (.size dos)))))
