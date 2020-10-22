@@ -147,11 +147,6 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments3-r]
 ----
 
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-with-arguments4-r]
-----
-
 === Query: "Use range constraints with arguments"
 
 [source,clj]
