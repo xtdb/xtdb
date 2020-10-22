@@ -570,17 +570,25 @@
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
 
-(defn- triple-joins [triple-clauses var->joins in-vars range-vars pred-clauses stats]
-  (let [pred-var-frequencies (frequencies (for [{:keys [pred return]} pred-clauses
-                                                :when (not return)
-                                                arg (:args pred)]
-                                            arg))
-        cardinality-for-var (fn [var ^double cardinality self-join?]
-                              (if (or (literal? var) (contains? in-vars var) self-join?)
-                                1.0
-                                (cond-> cardinality
-                                  (contains? range-vars var) (Math/sqrt)
-                                  (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var)))))))
+(defn- triple-joins [triple-clauses var->joins in-vars range-clauses pred-clauses stats]
+  (let [pred-var-frequencies (frequencies
+                              (for [{:keys [pred return]} pred-clauses
+                                    :when (not return)
+                                    arg (:args pred)]
+                                arg))
+        range-var-frequencies (frequencies
+                               (for [{:keys [sym sym-a sym-b]} range-clauses
+                                     sym [sym sym-a sym-b]
+                                     :when (logic-var? sym)]
+                                 sym))
+        cardinality-for-var (fn [var cardinality self-join?]
+                              (cond-> (if (or (contains? in-vars var)
+                                              (literal? var)
+                                              self-join?)
+                                        1.0
+                                        (double cardinality))
+                                (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var))))
+                                (contains? range-var-frequencies var) (Math/pow (/ (inc (double (get range-var-frequencies var)))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join?]} (meta clause)
                                    cardinality (get stats a 0.0)
@@ -1290,7 +1298,7 @@
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
                                                     in-vars
-                                                    range-vars
+                                                    range-clauses
                                                     pred-clauses
                                                     stats)
         [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
