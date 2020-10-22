@@ -58,17 +58,8 @@
 (defn- lazy-id-hash [to buffer]
   (locking #'lazy-id-hash
     (when (= id-hash lazy-id-hash)
-      (alter-var-root #'id-hash (fn [_] (let [f (init-id-hash)
-                                              on-heap-f (if (= "SHA1" id-hash-algorithm)
-                                                          byte-utils-id-hash-buffer
-                                                          message-digest-id-hash-buffer)]
-                                          (if (or (= message-digest-id-hash-buffer f)
-                                                  (= byte-utils-id-hash-buffer f))
-                                            f
-                                            (fn [to buffer]
-                                              (if (mem/off-heap? buffer)
-                                                (f to buffer)
-                                                (on-heap-f to buffer))))))))
+      (alter-var-root #'id-hash (fn [_]
+                                  (init-id-hash))))
     (id-hash to buffer)))
 
 (def id-hash lazy-id-hash)
