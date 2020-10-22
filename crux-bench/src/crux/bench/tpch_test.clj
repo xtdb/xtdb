@@ -182,10 +182,10 @@
                   [n1 :n_name supp_nation]
                   [c :c_nationkey n2]
                   [n2 :n_name cust_nation]
-                  (or (and [n1 :n_name "FRANCE"]
-                           [n2 :n_name "GERMANY"])
-                      (and [n1 :n_name "GERMANY"]
-                           [n2 :n_name "FRANCE"]))
+                  (or (and [(= "FRANCE" supp_nation)]
+                           [(= "GERMANY" cust_nation)])
+                      (and [(= "GERMANY" supp_nation)]
+                           [(= "FRANCE" cust_nation)]))
                   [l :l_shipdate l_shipdate]
                   [l :l_discount l_discount]
                   [l :l_extendedprice l_extendedprice]
