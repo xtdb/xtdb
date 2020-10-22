@@ -570,7 +570,13 @@
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
 
-(defn- triple-joins [triple-clauses var->joins in-vars range-clauses pred-clauses stats]
+(defn- triple-joins [triple-clauses
+                     var->joins
+                     {range-clauses :range
+                      pred-clauses :pred
+                      :as type->clauses}
+                     in-vars
+                     stats]
   (let [pred-var-frequencies (frequencies
                               (for [{:keys [pred return]} pred-clauses
                                     :when (not return)
@@ -653,7 +659,8 @@
                                                                    (new-literal-index index-snapshot v))}]})
                                 var->joins)]
                var->joins))
-           var->joins))]))
+           var->joins))
+     var->cardinality]))
 
 (defn- in-joins [in var->joins]
   (reduce
@@ -1300,12 +1307,11 @@
                 pred-vars
                 pred-return-vars]} (collect-vars type->clauses)
         var->joins {}
-        [triple-join-deps var->joins] (triple-joins triple-clauses
-                                                    var->joins
-                                                    in-vars
-                                                    range-clauses
-                                                    pred-clauses
-                                                    stats)
+        [triple-join-deps var->joins var->cardinality] (triple-joins triple-clauses
+                                                                     var->joins
+                                                                     type->clauses
+                                                                     in-vars
+                                                                     stats)
         [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
         [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
         known-vars (set/union e-vars v-vars in-vars)
@@ -1366,6 +1372,7 @@
      :vars-in-join-order vars-in-join-order
      :var->joins var->joins
      :var->bindings var->bindings
+     :var->cardinality var->cardinality
      :in-bindings in-bindings
      :attr-stats (select-keys stats (vals var->attr))}))
 
