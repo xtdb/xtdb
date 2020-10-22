@@ -570,59 +570,50 @@
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
 
-(defn- triple-joins [triple-clauses var->joins in-vars range-vars stats]
-  (let [{:keys [unique-avs unique-aes]
+(defn- triple-joins [triple-clauses var->joins in-vars range-vars pred-clauses stats]
+  (let [pred-var-frequencies (frequencies (for [{:keys [pred return]} pred-clauses
+                                                :when (not return)
+                                                arg (:args pred)]
+                                            arg))
+        {:keys [unique-avs unique-aes]
          :or {unique-avs (constantly 0)
               unique-aes (constantly 0)}} (meta stats)
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join?]} (meta clause)
-                                   es (if (or (contains? in-vars e) (literal? e) self-join?)
-                                        1.0
-                                        (cond-> (double (or (get acc e)
-                                                            (cond-> (unique-aes a)
-                                                              (contains? range-vars e) (Math/sqrt))))
-                                          (literal? v) (/ (double (unique-avs a)))))
+                                   vs (double (unique-avs a))
+                                   es (double (unique-aes a))
                                    vs (if (or (contains? in-vars v) (literal? v) self-join?)
                                         1.0
-                                        (cond-> (double (or (get acc v)
-                                                            (cond-> (unique-avs a)
-                                                              (contains? range-vars v) (Math/sqrt))))
-                                          (literal? e) (/ (double (unique-aes a)))))]
-                               (-> acc
-                                   (update v (fnil min Double/MAX_VALUE) vs)
-                                   (update e (fnil min Double/MAX_VALUE) es))))
-        branching-factor (Math/pow (count triple-clauses) 4.0)
-        {:keys [average-cost join-order var->cardinality]}
-        (loop [jobs [{:average-cost 0.0
-                      :var->cardinality {}
-                      :costs []
-                      :join-order []
-                      :triple-clauses triple-clauses}]
-               done []]
-          (if (seq jobs)
-            (let [{done true jobs false}
-                  (->> (for [{:keys [var->cardinality
-                                     costs
-                                     join-order
-                                     triple-clauses] :as job} jobs
-                             {:keys [e v] :as clause} triple-clauses
-                             :let [var->cardinality (update-cardinality var->cardinality clause)
-                                   cost (double (reduce * (vals var->cardinality)))
-                                   costs (conj costs cost)]]
-                         {:average-cost (/ (double (reduce + costs))
-                                           (count costs))
-                          :var->cardinality var->cardinality
-                          :costs costs
-                          :join-order (->> (sort-by var->cardinality [v e])
-                                           (concat join-order))
-                          :triple-clauses (remove #{clause} triple-clauses)})
-                       (sort-by :average-cost)
-                       (take branching-factor)
-                       (group-by (comp empty? :triple-clauses)))]
-              (recur jobs done))
-            (first (sort-by :average-cost done))))
-        join-order (distinct join-order)]
-    ;; (prn average-cost)
+                                        (cond-> vs
+                                          (contains? range-vars v) (Math/sqrt)
+                                          (contains? pred-var-frequencies v) (/ (* 2.0 (double (get pred-var-frequencies v))))
+                                          (literal? e) (/ es)))
+                                   es (if (or (contains? in-vars e) (literal? e) self-join?)
+                                        1.0
+                                        (cond-> es
+                                          (contains? range-vars e) (Math/sqrt)
+                                          (contains? pred-var-frequencies e) (/ (* 2.0 (double (get pred-var-frequencies e))))
+                                          (literal? v) (/ vs)))
+                                   acc (update acc v (fnil min Double/MAX_VALUE) vs)
+                                   acc (update acc e (fnil min Double/MAX_VALUE) es)]
+                               acc))
+        var->cardinality (reduce update-cardinality {} triple-clauses)
+        var->clauses (merge-with into
+                                 (group-by :v triple-clauses)
+                                 (group-by :e triple-clauses))
+        join-order (loop [vars (map key (sort-by val var->cardinality))
+                          join-order []
+                          reachable-vars #{}]
+                     (let [join-order-set (set join-order)
+                           var (or (first (filter reachable-vars vars))
+                                   (first vars))
+                           reachable-vars (set/union (conj reachable-vars var)
+                                                     (set (for [{:keys [e v]} (get var->clauses var)
+                                                                var [e v]]
+                                                            var)))]
+                       (if var
+                         (recur (remove #{var} vars) (conj join-order var) reachable-vars)
+                         join-order)))]
     ;; (prn var->cardinality)
     ;; (prn join-order)
     (log/debug :triple-joins-join-order join-order)
@@ -1306,6 +1297,7 @@
                                                     var->joins
                                                     in-vars
                                                     range-vars
+                                                    pred-clauses
                                                     stats)
         [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
         [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
