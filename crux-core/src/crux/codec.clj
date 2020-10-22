@@ -226,7 +226,7 @@
               (do (.putByte to (inc idx) string-terminate-mark)
                   (mem/limit-buffer to (+ length value-type-id-size string-terminate-mark-size)))
               (let [b (.getByte ub-in idx)]
-                (.putByte to (inc idx) (byte (+ offset b)))
+                (.putByte to (inc idx) (unchecked-byte (+ offset b)))
                 (recur (inc idx)))))))))
 
   Class
