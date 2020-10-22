@@ -1,4 +1,5 @@
-(ns crux.bench.watdiv-neo4j
+(ns ^#:clojure.tools.namespace.repl{:load false, :unload false}
+    crux.bench.watdiv-neo4j
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [crux.bench :as bench]
