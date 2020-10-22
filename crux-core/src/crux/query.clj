@@ -582,13 +582,15 @@
                                      :when (logic-var? sym)]
                                  sym))
         cardinality-for-var (fn [var cardinality self-join?]
-                              (cond-> (if (or (contains? in-vars var)
-                                              (literal? var)
-                                              self-join?)
-                                        1.0
-                                        (double cardinality))
+                              (cond-> (double (cond
+                                                (literal? var)
+                                                (count (c/vectorize-value var))
+                                                (or (contains? in-vars var) self-join?)
+                                                1.0
+                                                :else
+                                                cardinality))
                                 (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var))))
-                                (contains? range-var-frequencies var) (Math/pow (/ (inc (double (get range-var-frequencies var)))))))
+                                (contains? range-var-frequencies var) (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join?]} (meta clause)
                                    cardinality (get stats a 0.0)
