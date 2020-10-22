@@ -586,8 +586,10 @@
                               (cond-> (double (cond
                                                 (literal? var)
                                                 (count (c/vectorize-value var))
-                                                (or (contains? in-vars var) self-join?)
+                                                self-join?
                                                 1.0
+                                                (contains? in-vars var)
+                                                0.5
                                                 :else
                                                 cardinality))
                                 (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var))))
