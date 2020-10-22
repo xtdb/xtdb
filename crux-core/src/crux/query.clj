@@ -575,25 +575,17 @@
                                                 :when (not return)
                                                 arg (:args pred)]
                                             arg))
-        {:keys [unique-avs unique-aes]
-         :or {unique-avs (constantly 0)
-              unique-aes (constantly 0)}} (meta stats)
+        cardinality-for-var (fn [var ^double cardinality self-join?]
+                              (if (or (literal? var) (contains? in-vars var) self-join?)
+                                1.0
+                                (cond-> cardinality
+                                  (contains? range-vars var) (Math/sqrt)
+                                  (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var)))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join?]} (meta clause)
-                                   vs (double (unique-avs a))
-                                   es (double (unique-aes a))
-                                   vs (if (or (contains? in-vars v) (literal? v) self-join?)
-                                        1.0
-                                        (cond-> vs
-                                          (contains? range-vars v) (Math/sqrt)
-                                          (contains? pred-var-frequencies v) (/ (* 2.0 (double (get pred-var-frequencies v))))
-                                          (literal? e) (/ es)))
-                                   es (if (or (contains? in-vars e) (literal? e) self-join?)
-                                        1.0
-                                        (cond-> es
-                                          (contains? range-vars e) (Math/sqrt)
-                                          (contains? pred-var-frequencies e) (/ (* 2.0 (double (get pred-var-frequencies e))))
-                                          (literal? v) (/ vs)))]
+                                   cardinality (get stats a)
+                                   vs (cardinality-for-var v cardinality self-join?)
+                                   es (cardinality-for-var e cardinality self-join?)]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
                                    (update e (fnil min Double/MAX_VALUE) es))))
@@ -601,15 +593,15 @@
         var->clauses (merge-with into
                                  (group-by :v triple-clauses)
                                  (group-by :e triple-clauses))
+        reachable-vars (set (for [[v c] var->cardinality
+                                  :when (<= (double c) 1.0)]
+                              v))
         join-order (loop [vars (map key (sort-by val var->cardinality))
                           join-order []
-                          reachable-vars #{}]
+                          reachable-vars reachable-vars]
                      (if (seq vars)
-                       (let [var (first vars)
-                             var (if (literal? var)
-                                   var
-                                   (or (first (filter reachable-vars vars))
-                                       var))
+                       (let [var (first (or (not-empty (filter reachable-vars vars))
+                                            vars))
                              new-reachable-vars (set (for [{:keys [e v]} (get var->clauses var)
                                                            var [e v]]
                                                        var))]
@@ -1580,24 +1572,11 @@
         [in in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
 
-(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot cardinalities] :as db} ^ConformedQuery conformed-q in-args]
+(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
-        stats (with-meta
-                (or (db/read-index-meta index-store :crux/attribute-stats) {})
-                {:unique-avs (fn [a]
-                               (or (get @cardinalities [:v a])
-                                   (let [c (with-open [is (db/open-index-snapshot index-store)]
-                                             (count (db/av is a nil)))]
-                                     (swap! cardinalities assoc [:v a] c)
-                                     c)))
-                 :unique-aes (fn [a]
-                               (or (get @cardinalities [:e a])
-                                   (let [c (with-open [is (db/open-index-snapshot index-store)]
-                                             (count (db/ae is a nil)))]
-                                     (swap! cardinalities assoc [:e a] c)
-                                     c)))})
+        stats (or (db/read-index-meta index-store :crux/attribute-stats) {})
         [in in-args] (add-legacy-args q-conformed in-args)]
     (when full-results?
       (defonce -full-results-deprecation-log
@@ -1797,8 +1776,7 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus
-                        query-cache conform-cache projection-cache
-                        cardinalities]
+                        query-cache conform-cache projection-cache]
   api/DBProvider
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
@@ -1819,8 +1797,7 @@
                                                                    :bus bus
                                                                    :query-engine this})
                                    :valid-time valid-time
-                                   :transact-time tx-time
-                                   :cardinalities cardinalities))))
+                                   :transact-time tx-time))))
 
   (open-db [this] (api/open-db this nil nil))
   (open-db [this valid-time] (api/open-db this valid-time nil))
@@ -1858,6 +1835,4 @@
                                                :required? true
                                                :spec ::sys/pos-int}}}
   [opts]
-  (map->QueryEngine (assoc opts
-                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))
-                           :cardinalities (atom {}))))
+  (map->QueryEngine (assoc opts :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter")))))
