@@ -1490,9 +1490,10 @@
                   :var-binding (var->bindings arg)
                   :->result (if full-results?
                               (fn [value {:keys [entity-resolver-fn]}]
-                                (or (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-                                      (project/let-docs [docs #{hash}]
-                                        (get docs (c/new-id hash))))
+                                (or (when (c/valid-id? value)
+                                      (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
+                                        (project/let-docs [docs #{hash}]
+                                          (get docs (c/new-id hash)))))
                                     value))
                               (fn [value _]
                                 value))}
