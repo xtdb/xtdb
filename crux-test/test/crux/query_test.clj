@@ -3607,7 +3607,6 @@
       (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
             slowdown (double (/ (min problematic-ns workedaround-ns)
                                 (max problematic-ns workedaround-ns)))]
-        (prn slowdown acceptable-limit-slowdown problematic-ns workedaround-ns)
         (t/is (>= slowdown acceptable-limit-slowdown))))))
 
 (comment
