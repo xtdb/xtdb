@@ -588,20 +588,29 @@
                                      sym [sym sym-a sym-b]
                                      :when (logic-var? sym)]
                                  sym))
-        cardinality-for-var (fn [var cardinality]
-                              (cond-> (double (cond
-                                                (literal? var)
-                                                (count (c/vectorize-value var))
-                                                (contains? in-vars var)
-                                                0.5
-                                                :else
-                                                cardinality))
-                                (contains? pred-var-frequencies var) (/ (* 2.0 (double (get pred-var-frequencies var))))
-                                (contains? range-var-frequencies var) (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
+        cardinality-for-var (fn [var cardinality self-join?]
+                              (if self-join?
+                                2.0
+                                (cond-> (double (cond
+                                                  (literal? var)
+                                                  (count (c/vectorize-value var))
+
+                                                  (contains? in-vars var)
+                                                  0.5
+
+                                                  :else
+                                                  cardinality))
+
+                                  (contains? pred-var-frequencies var)
+                                  (/ (* 2.0 (double (get pred-var-frequencies var))))
+
+                                  (contains? range-var-frequencies var)
+                                  (Math/pow (/ 0.5 (double (get range-var-frequencies var)))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
-                             (let [cardinality (get stats a 0.0)
-                                   es (cardinality-for-var e cardinality)
-                                   vs (cardinality-for-var v cardinality)]
+                             (let [{:keys [self-join?]} (meta clause)
+                                   cardinality (get stats a 0.0)
+                                   es (cardinality-for-var e cardinality false)
+                                   vs (cardinality-for-var v cardinality self-join?)]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
                                    (update e (fnil min Double/MAX_VALUE) es))))
@@ -616,7 +625,12 @@
                           join-order []
                           reachable-vars reachable-vars]
                      (if (seq vars)
-                       (let [var (first (or (not-empty (filter reachable-vars vars))
+                       (let [var (first (or (->> (filter reachable-vars vars)
+                                                 (partition-by var->cardinality)
+                                                 (first)
+                                                 (sort-by (comp count var->clauses))
+                                                 (reverse)
+                                                 (not-empty))
                                             vars))
                              new-reachable-vars (set (for [{:keys [e v]} (get var->clauses var)
                                                            var [e v]]
