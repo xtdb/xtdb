@@ -33,7 +33,8 @@
       (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream watdiv/watdiv-input-file)]
                                              (rdf/submit-ntriples node in 1000))]
         (crux/await-tx node last-tx)
-        {:entity-count entity-count
+        {:success? true
+         :entity-count entity-count
          :neo4j-time-taken-ms (get-in @parsed-db-results [:neo4j :ingest])
          :rdf4j-time-taken-ms (get-in @parsed-db-results [:rdf4j :ingest])
          :datomic-time-taken-ms (get-in @parsed-db-results [:datomic :ingest])}))))
@@ -84,7 +85,8 @@
 (defn summarise-query-results [watdiv-query-results]
   (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
         query-summary (merge base-map
-                             {:bench-type "queries"
+                             {:success? true
+                              :bench-type :queries
                               :time-taken-ms (->> watdiv-query-results (map :time-taken-ms) (reduce +))})
         summarised-results (concat
                             [query-summary]

@@ -26,8 +26,9 @@
     (bench/with-bench-ns :tpch-test
       (bench/with-crux-dimensions
         (bench/run-bench :ingest
-                         (bench/with-additional-index-metrics node
-                           (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)))
+          (bench/with-additional-index-metrics node
+            (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc))
+          {:success true})
 
         ;; TODO we may want to split this up, à la WatDiv, so that we can see if
         ;; specific queries are slower than our comparison databases
