@@ -128,7 +128,7 @@
                          (.getByte (c/value-buffer-type-id buffer) 0))
 
                       (and (bytes? v)
-                           (< @#'c/max-value-index-length (alength ^bytes (nippy/fast-freeze v))))
+                           (< @#'c/max-value-index-length (alength ^bytes (mem/->on-heap (mem/->nippy-buffer v)))))
                       (= @#'c/object-value-type-id
                          (.getByte (c/value-buffer-type-id buffer) 0))
 

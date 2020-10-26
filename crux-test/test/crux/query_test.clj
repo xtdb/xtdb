@@ -3599,3 +3599,11 @@
     (fix/submit+await-tx [[:crux.tx/delete :my-id]])
 
     (t/is (= #{} (api/q (api/db *api*) query)))))
+
+(t/deftest hashing-quoted-lists-1197
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :a-list '(1 2 3)}]])
+
+  (t/is (= #{[:foo]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :a-list (1 2 3)]]}))))
