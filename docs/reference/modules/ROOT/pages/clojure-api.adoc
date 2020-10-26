@@ -275,8 +275,7 @@ Represents the database as of a specific valid and transaction time.
     * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
     * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
 
-    No matter what `:start` and `:end` parameters you specify, you won't receive
-    results later than the valid-time and transact-time of this DB value.
+    No matter what `:start` and `:end` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
     Each entry in the result contains the following keys:
      * `:crux.db/valid-time`,

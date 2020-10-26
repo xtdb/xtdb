@@ -8,8 +8,7 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.kv :as fkv]
-            [crux.kv.index-store :as kvi]
-            [crux.tx :as tx])
+            [crux.kv.index-store :as kvi])
   (:import crux.codec.EntityTx
            java.util.Date))
 
@@ -54,9 +53,10 @@
                           (c/new-id (keyword (str tx-id)))))])
        (into (sorted-map))))
 
-
 (defn- write-etxs [etxs]
-  (db/index-entity-txs *index-store* {:crux.tx/tx-id Long/MAX_VALUE, :crux.tx/tx-time (Date.)} etxs))
+  (doseq [[[tx-time tx-id] etxs] (->> (group-by (juxt :tt :tx-id) etxs)
+                                      (sort-by (comp second key)))]
+    (db/index-entity-txs *index-store* {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time} etxs)))
 
 (defn- entities-with-range [vt+tt->etx vt-start tt-start vt-end tt-end]
   (->> (subseq vt+tt->etx >= [(c/date->reverse-time-ms vt-start)
@@ -84,12 +84,12 @@
                    queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
                   (with-fresh-index-store
                     (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
-
                       (write-etxs (vals vt+tt->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
                         (->> (for [[vt tt] (concat txs queries)]
-                               (= (entity-as-of vt+tt->etx vt tt)
-                                  (db/entity-as-of index-snapshot eid vt tt)))
+                               (let [tx-id (:crux.tx/tx-id (db/resolve-tx-time *index-store* tt))]
+                                 (= (entity-as-of vt+tt->etx vt tt)
+                                    (db/entity-as-of index-snapshot eid vt tx-id))))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-range-test 50

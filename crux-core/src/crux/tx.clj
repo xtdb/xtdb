@@ -2,19 +2,19 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.error :as err]
+            [crux.api :as api]
             [crux.bus :as bus]
             [crux.cache.nop :as nop-cache]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.io :as cio]
-            [crux.tx.conform :as txc]
-            [crux.tx.event :as txe]
-            [crux.api :as api]
+            [crux.error :as err]
             [crux.fork :as fork]
+            [crux.io :as cio]
             [crux.kv.index-store :as kvi]
             [crux.mem-kv :as mem-kv]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.tx.conform :as txc]
+            [crux.tx.event :as txe])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
@@ -84,7 +84,7 @@
                    (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))])))
 
       (->> (cons start-valid-time
-                 (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-time)
+                 (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-id)
 
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
                    (->> (db/entity-history index-snapshot eid :asc {:start {:crux.db/valid-time start-valid-time}})
@@ -106,7 +106,7 @@
   {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot
                                                                 (c/new-id k)
                                                                 (or at-valid-time valid-time tx-time)
-                                                                tx-time)]
+                                                                tx-id)]
                      (or (= (c/new-id content-hash) (c/new-id v))
                          (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash))))})
 
@@ -116,7 +116,7 @@
   (let [eid (c/new-id k)
         valid-time (or at-valid-time valid-time tx-time)]
 
-    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-time)
+    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)
                            current-id (c/new-id content-hash)
                            expected-id (c/new-id old-v)]
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
@@ -395,7 +395,8 @@
                                                                                            :cav-cache (nop-cache/->nop-cache {})
                                                                                            :canonical-buffer-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
-                                                        (::tx-time fork-at))
+                                                        (get fork-at ::tx-time (::tx-time tx))
+                                                        (get fork-at ::tx-id (::tx-id tx)))
           forked-document-store (fork/->forked-document-store document-store)]
       (->InFlightTx tx (atom :open) (atom []) !error
                     forked-index-store

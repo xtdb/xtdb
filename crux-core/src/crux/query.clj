@@ -1502,8 +1502,8 @@
     (fn [k]
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
-(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot] :as db}]
-  (with-entity-resolver-cache #(when transact-time (db/entity-as-of-resolver index-snapshot % valid-time transact-time)) db))
+(defn- new-entity-resolver-fn [{:keys [valid-time tx-id index-snapshot] :as db}]
+  (with-entity-resolver-cache #(when tx-id (db/entity-as-of-resolver index-snapshot % valid-time tx-id)) db))
 
 (defn- validate-in [in]
   (doseq [binding (:bindings in)
@@ -1676,9 +1676,9 @@
          limit (take limit)
          project? (project/->project-result db compiled-find q-conformed))))))
 
-(defn entity-tx [{:keys [valid-time transact-time] :as db} index-snapshot eid]
-  (when transact-time
-    (some-> (db/entity-as-of index-snapshot eid valid-time transact-time)
+(defn entity-tx [{:keys [valid-time tx-id] :as db} index-snapshot eid]
+  (when tx-id
+    (some-> (db/entity-as-of index-snapshot eid valid-time tx-id)
             (c/entity-tx->edn))))
 
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
@@ -1711,7 +1711,7 @@
                :crux.tx/tx-time (cond-> (.endTransactionTime opts)
                                   asc? (with-upper-bound (inc-date transact-time)))})})))
 (defrecord QueryDatasource [document-store index-store bus tx-ingester
-                            ^Date valid-time ^Date transact-time
+                            ^Date valid-time ^Date tx-time ^Long tx-id
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache projection-cache
                             index-snapshot
@@ -1790,7 +1790,7 @@
       (into [] (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (if-not transact-time
+    (if-not tx-id
       cio/empty-cursor
       (let [index-snapshot (open-index-snapshot this)
             {:keys [sort-order with-docs?] :as opts} (<-history-opts this opts)]
@@ -1805,13 +1805,13 @@
                                                                        (get (.content-hash etx))))))))))))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time)
+  (transactionTime [_] tx-time)
 
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time
-                               ::tx/tx-time transact-time}
+                               ::tx/tx-time tx-time
+                               ::tx/tx-id tx-id}
                      ::db/valid-time valid-time}
-
                     (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
@@ -1826,8 +1826,8 @@
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
         (api/db in-flight-tx valid-time)))))
 
-(defmethod print-method QueryDatasource [{:keys [valid-time transact-time]} ^Writer w]
-  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
+(defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
+  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-id tx-id}))))
 
 (defmethod pp/simple-dispatch QueryDatasource [it]
   (print-method it *out*))
@@ -1840,11 +1840,15 @@
   (db [this valid-time] (api/db this valid-time nil))
   (db [this valid-time tx-time]
     (let [valid-time (or valid-time (Date.))
-          latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
-          tx-time (or tx-time latest-tx-time)]
+          latest-tx (db/latest-completed-tx index-store)
+          tx (if tx-time
+               (db/resolve-tx-time index-store tx-time)
+               latest-tx)]
 
-      (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
+      (when (and tx-time
+                 (or (nil? latest-tx)
+                     (pos? (compare tx-time (:crux.tx/tx-time latest-tx)))))
+        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available latest-tx})))
 
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
@@ -1854,7 +1858,8 @@
                                                                    :bus bus
                                                                    :query-engine this})
                                    :valid-time valid-time
-                                   :transact-time tx-time))))
+                                   :tx-time (:crux.tx/tx-time tx)
+                                   :tx-id (:crux.tx/tx-id tx)))))
 
   (open-db [this] (api/open-db this nil nil))
   (open-db [this valid-time] (api/open-db this valid-time nil))
