@@ -229,23 +229,22 @@
   )
 
 (defn query-example-at-time-setup [node]
- (crux/submit-tx
-  node
-  [[:crux.tx/put
-    ;; tag::query-at-t-d1[]
-    {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
-    #inst "1986-10-22"
-    ;; end::query-at-t-d1[]
-    ]])
+  ;; tag::query-at-t-d1[]
+  (crux/submit-tx
+   node
+   [[:crux.tx/put
+     {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
+     #inst "1986-10-22"]])
+  ;; end::query-at-t-d1[]
 
- (crux/submit-tx
-  node
-  [[:crux.tx/put
-    ;; tag::query-at-t-d2[]
-    {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
-    #inst "1986-10-24"
-    ;; end::query-at-t-d2[]
-    ]]))
+  ;; tag::query-at-t-d2[]
+  (crux/submit-tx
+   node
+   [[:crux.tx/put
+     {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
+     #inst "1986-10-24"]])
+  ;; end::query-at-t-d2[]
+  )
 
 ;; tag::query-at-t-q1[]
 (def q
@@ -428,7 +427,163 @@
 #{[:petr]}
 ;; end::join2-r[]
 
+(defn query-example-aggregates [node]
+  ;; tag::query-aggregates[]
+  (crux/q
+   (crux/db node)
+   '{:find [(sum ?heads)
+            (min ?heads)
+            (max ?heads)
+            (count ?heads)
+            (count-distinct ?heads)]
+     :where [[(identity [["Cerberus" 3]
+                         ["Medusa" 1]
+                         ["Cyclops" 1]
+                         ["Chimera" 1]])
+              [[?monster ?heads]]]]})
+  ;; end::query-aggregates[]
+  )
+
+;; tag::query-aggregates-r[]
+  ;;=> #{[6 1 3 4 2]}
+;; end::query-aggregates-r[]
+
 (comment
+  ;; following queries / result sets are in here but not tested within examples_test
+  ;; tag::eql-query-1[]
+  ;; with just 'query':
+  (crux/q
+   (crux/db node)
+   {:find [?uid ?name ?profession]
+    :where [[?user :user/id ?uid]
+            [?user :user/name ?name]
+            [?user :user/profession ?profession]]})
+  ;; end::eql-query-1[]
+
+  ;; tag::eql-query-1-r[]
+  ;; => [[1 "Ivan" :doctor] [2 "Sergei" :lawyer], [3 "Petr" :doctor]]
+  ;; end::eql-query-1-r[]
+
+  ;; tag::eql-query-2[]
+  ;; using `eql/project`:
+  (crux/q
+   (crux/db node)
+   {:find [(eql/project ?user [:user/name :user/profession])]
+    :where [[?user :user/id ?uid]]})
+  ;; end::eql-query-2[]
+
+  ;; tag::eql-query-2-r[]
+  ;; => [{:user/id 1, :user/name "Ivan", :user/profession :doctor},
+  ;;     {:user/id 2, :user/name "Sergei", :user/profession :lawyer},
+  ;;     {:user/id 3, :user/name "Petr", :user/profession :doctor}]
+  ;; end::eql-query-2-r[]
+
+  ;; tag::eql-query-3[]
+  ;; with just 'query':
+  (crux/q
+   (crux/db node)
+   {:find [?uid ?name ?profession-name]
+    :where [[?user :user/id ?uid]
+            [?user :user/name ?name]
+            [?user :user/profession ?profession]
+            [?profession :profession/name ?profession-name]]})
+  ;; end::eql-query-3[]
+
+  ;; tag::eql-query-3-r[]
+  ;; => [[1 "Ivan" "Doctor"] [2 "Sergei" "Lawyer"], [3 "Petr" "Doctor"]]
+  ;; end::eql-query-3-r[]
+
+  ;; tag::eql-query-4[]
+  ;; using `eql/project`:
+  (crux/q
+   (crux/db node)
+   {:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}])]
+    :where [[?user :user/id ?uid]]})
+  ;; end::eql-query-4[]
+
+  ;; tag::eql-query-4-r[]
+  ;; => [{:user/id 1, :user/name "Ivan", :user/profession {:profession/name "Doctor"}},
+  ;;     {:user/id 2, :user/name "Sergei", :user/profession {:profession/name "Lawyer"}}
+  ;;     {:user/id 3, :user/name "Petr", :user/profession {:profession/name "Doctor"}}]
+  ;; end::eql-query-4-r[]
+
+  ;; tag::eql-query-5[]
+  (crux/q
+   (crux/db node)
+   {:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
+    :where [[?profession :profession/name]]})
+  ;; end::eql-query-5[]
+
+  ;; tag::eql-query-5-r[]
+  ;; => [{:profession/name "Doctor",
+  ;;      :user/_profession [{:user/id 1, :user/name "Ivan"},
+  ;;                         {:user/id 3, :user/name "Petr"}]},
+  ;;     {:profession/name "Lawyer",
+  ;;      :user/_profession [{:user/id 2, :user/name "Sergei"}]}]
+  ;; end::eql-query-5-r[]
+
+  ;; tag::eql-query-6[]
+  (crux/q
+   (crux/db node)
+   {:find [(eql/project ?user [*])]
+    :where [[?user :user/id 1]]})
+  ;; end::eql-query-6[]
+
+  ;; tag::eql-query-6-r[]
+  ;; => [{:user/id 1, :user/name "Ivan", :user/profession :doctor, ...}]
+  ;; end::eql-query-6-r[]
+
+  ;; tag::order-and-pagination-1[]
+  (crux/q
+   (crux/db node)
+   '{:find [time device-id temperature humidity]
+     :where [[c :condition/time time]
+             [c :condition/device-id device-id]
+             [c :condition/temperature temperature]
+             [c :condition/humidity humidity]]
+     :order-by [[time :desc] [device-id :asc]]})
+  ;; end::order-and-pagination-1[]
+
+  ;; tag::order-and-pagination-2[]
+  (crux/q
+   (crux/db node)
+   '{:find [time device-id temperature humidity]
+     :where [[c :condition/time time]
+             [c :condition/device-id device-id]
+             [c :condition/temperature temperature]
+             [c :condition/humidity humidity]]
+     :order-by [[device-id :asc]]
+     :limit 10
+     :offset 90})
+  ;; end::order-and-pagination-2[]
+
+  ;; tag::order-and-pagination-3[]
+  (crux/q
+   (crux/db node)
+   '{:find '[time device-id temperature humidity]
+     :where '[[c :condition/time time]
+              [c :condition/device-id device-id]
+              [(>= device-id my-offset)]
+              [c :condition/temperature temperature]
+              [c :condition/humidity humidity]]
+     :order-by '[[device-id :asc]]
+     :limit 10
+     :args [{'my-offset 990}]})
+  ;; end::order-and-pagination-3[]
+
+  ;; tag::rules[]
+  (crux/q
+   (crux/db node)
+   '{:find [?e2]
+     :where [(follow ?e1 ?e2)]
+     :args [{?e1 :1}]
+     :rules [[(follow ?e1 ?e2)
+              [?e1 :follow ?e2]]
+             [(follow ?e1 ?e2)
+              [?e1 :follow ?t]
+              (follow ?t ?e2)]]})
+  ;; end::rules[]
+
   ;; tag::bitemp0[]
   {:crux.db/id :p2
    :entry-pt :SFO

@@ -34,6 +34,10 @@
     (t/is (= #{[4]} (ex/query-example-subquery-2 node)))
     (t/is (= #{[2 4 8]} (ex/query-example-subquery-3 node)))))
 
+(t/deftest test-example-aggregate-queries
+  (with-open [node (crux/start-node {})]
+    (t/is (= #{[6 1 3 4 2]} (ex/query-example-aggregates node)))))
+
 (t/deftest test-example-time-queries
   (with-open [node (crux/start-node {})]
     (crux/await-tx node (ex/query-example-at-time-setup node) nil)
