@@ -368,12 +368,15 @@
 
 ;;;; tx-id/tx-time mappings
 
-(defn- encode-tx-time-mapping-key-to [to tx-time]
-  (let [^MutableDirectBuffer to (or to (mem/allocate-buffer (+ c/index-id-size Long/BYTES)))]
-    (-> to
-        (doto (.putByte 0 c/tx-time-mapping-id))
-        (doto (.putLong c/index-id-size (c/date->reverse-time-ms tx-time) ByteOrder/BIG_ENDIAN))
-        (mem/limit-buffer (+ c/index-id-size Long/BYTES)))))
+(defn- encode-tx-time-mapping-key-to
+  ([to] (encode-tx-time-mapping-key-to to nil))
+
+  ([to tx-time]
+   (let [^MutableDirectBuffer to (or to (mem/allocate-buffer (+ c/index-id-size (c/maybe-long-size tx-time))))]
+     (-> to
+         (doto (.putByte 0 c/tx-time-mapping-id))
+         (cond-> tx-time (doto (.putLong c/index-id-size (c/date->reverse-time-ms tx-time) ByteOrder/BIG_ENDIAN)))
+         (mem/limit-buffer (+ c/index-id-size (c/maybe-long-size tx-time)))))))
 
 (defn- decode-tx-time-mapping-key-from [^DirectBuffer k]
   (assert (= c/tx-time-mapping-id (.getByte k 0)))
@@ -698,8 +701,11 @@
                      (AtomicBoolean.)))
 
 (defn latest-completed-tx [kv-store]
-  ;; TODO at next version bump, let's make the kw here unrelated to the (old) namespace name
-  (read-meta kv-store :crux.kv-indexer/latest-completed-tx))
+  (with-open [snapshot (kv/new-snapshot kv-store)
+              i (kv/new-iterator snapshot)]
+    (when-let [k (kv/seek i (encode-tx-time-mapping-key-to nil))]
+      {:crux.tx/tx-time (decode-tx-time-mapping-key-from k)
+       :crux.tx/tx-id (decode-tx-time-mapping-value-from (kv/value i))})))
 
 (defrecord KvIndexStore [kv-store cav-cache canonical-buffer-cache]
   db/IndexStore
@@ -773,14 +779,12 @@
       {:tombstones tombstones}))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id tx-time] :as tx}]
-    (kv/store kv-store [(meta-kv :crux.kv-indexer/latest-completed-tx tx)
-                        (MapEntry/create (encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer)
+    (kv/store kv-store [(MapEntry/create (encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer)
                         (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time)
                                          (encode-tx-time-mapping-value tx-id))]))
 
   (index-entity-txs [this {:crux.tx/keys [tx-id tx-time] :as tx} entity-txs]
     (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
-                                  (meta-kv :crux.kv-indexer/latest-completed-tx tx)
                                   (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time)
                                                    (encode-tx-time-mapping-value tx-id)))
                             (into (sorted-map-by mem/buffer-comparator)))))
