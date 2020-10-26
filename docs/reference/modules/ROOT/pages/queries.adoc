@@ -406,11 +406,24 @@ We can also navigate in the reverse direction, looking for entities that refer t
 ;;      :user/_profession [{:user/id 2, :user/name "Sergei"}]}]
 ----
 
+To rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
+
+[source,clojure]
+----
+{:find [(eql/project ?profession [:profession/name {(:user/_profession {:as :users}) [:user/id :user/name]}])]
+ :where [[?profession :profession/name]]}
+
+;; => [{:profession/name "Doctor",
+;;      :users [{:user/id 1, :user/name "Ivan"},
+;;              {:user/id 3, :user/name "Petr"}]},
+;;     {:profession/name "Lawyer",
+;;      :users [{:user/id 2, :user/name "Sergei"}]}]
+----
+
 You can quickly grab the whole document by specifying `*` in the projection spec:
 
 [source,clojure]
 ----
-;; with just 'query':
 {:find [(eql/project ?user [*])]
  :where [[?user :user/id 1]]}
 
@@ -418,7 +431,7 @@ You can quickly grab the whole document by specifying `*` in the projection spec
 ----
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
-Crux does not (yet) support union queries or recursive queries.
+
 [#ordering-and-pagination]
 == Ordering and Pagination
 
