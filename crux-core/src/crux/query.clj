@@ -644,7 +644,7 @@
                                 (set/union reachable-vars new-reachable-vars)))
                        join-order))]
     (log/debug :triple-joins-var->cardinality var->cardinality)
-    (log/debug :triple-joins-join-order join-order)
+    (log/debug :triple-joins-join-order (vec (distinct join-order)))
     [(->> join-order
           (distinct)
           (partition 2 1)
@@ -1293,11 +1293,6 @@
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
         potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
-        existing-e-vars (set (for [{:keys [e v]} triple-clauses
-                                   :when (or (literal? v)
-                                             (contains? invalid-leaf-vars v)
-                                             (contains? non-leaf-v-vars v))]
-                               e))
         leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
                                :when (logic-var? e-var)]
                            [e-var (sort-triple-clauses stats leaf-group)])
@@ -1306,12 +1301,10 @@
                                    leaf-group)
                                  (reduce into #{}))
         triple-clauses (remove leaf-triple-clauses triple-clauses)
-        new-triple-clauses (for [e-var (keys leaf-groups)
-                                 :when (not (contains? existing-e-vars e-var))]
-                             (with-meta
-                               {:e e-var :a :crux.db/id :v (gensym "leaf_")}
-                               {:ignore-v? true}))
-        leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
+        new-triple-clauses (for [[e-var leaf-group] leaf-groups]
+                             (with-meta (first leaf-group) {:ignore-v? true}))
+        leaf-preds (for [[e-var leaf-group] leaf-groups
+                         {:keys [e a v]} (next leaf-group)]
                      {:pred {:pred-fn 'get-attr :args [e a]}
                       :return [:collection v]})]
     [(assoc type->clauses
