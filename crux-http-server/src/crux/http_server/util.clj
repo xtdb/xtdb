@@ -31,11 +31,13 @@
 (s/def ::eid-edn
   (st/spec
    {:spec c/valid-id?
+    :description "EDN formatted entity ID"
     :decode/string (fn [_ eid] (try-decode-edn eid))}))
 
 (s/def ::eid-json
   (st/spec
    {:spec c/valid-id?
+    :description "JSON formatted entity ID"
     :decode/string (fn [_ json] (http-json/try-decode-json json))}))
 
 (s/def ::link-entities? boolean?)

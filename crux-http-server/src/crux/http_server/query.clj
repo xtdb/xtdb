@@ -20,10 +20,15 @@
            java.time.format.DateTimeFormatter
            java.util.Date))
 
-(s/def ::query any?) ; checked by crux.query
+(s/def ::query
+  (st/spec
+   {:spec any? ; checked by crux.query
+    :description "Datalog query"}))
+
 (s/def ::query-edn
   (st/spec
    {:spec ::query
+    :description "EDN formatted Datalog query"
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
 ;; TODO: Need to ensure all query clauses are present + coerced properly

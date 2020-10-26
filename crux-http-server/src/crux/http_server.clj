@@ -20,6 +20,8 @@
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             reitit.coercion.spec
+            [reitit.swagger :as swagger]
+            [reitit.swagger-ui :as swagger-ui]
             [reitit.ring :as rr]
             [reitit.ring.coercion :as rrc]
             [reitit.ring.middleware.exception :as re]
@@ -276,67 +278,108 @@
                        :keys [crux-node], :as opts}]
   (let [opts (-> opts (update :http-options dissoc :jwks))
         query-handler {:muuntaja (query/->query-muuntaja opts)
-                        :get {:handler (query/data-browser-query opts)
-                              :parameters {:query ::query/query-params}}
-                        :post {:handler (query/data-browser-query opts)
-                               :parameters {:query ::query/query-params
-                                            :body ::query/body-params}}}]
-     (rr/router [["/" {:get (fn [_] (resp/redirect "/_crux/query"))}]
-                 ["/_crux/status" {:muuntaja (status/->status-muuntaja opts)
-                                   :get (status/status opts)}]
-                 ["/_crux/entity" {:muuntaja (entity/->entity-muuntaja opts)
-                                   :get (entity/entity-state opts)
-                                   :parameters {:query ::entity/query-params}}]
-                 ["/_crux/query" query-handler]
-                 ["/_crux/query.csv" (assoc query-handler :middleware [[add-response-format "text/csv"]])]
-                 ["/_crux/query.tsv" (assoc query-handler :middleware [[add-response-format "text/tsv"]])]
-                 ["/_crux/entity-tx" {:get (entity-tx crux-node)
-                                      :parameters {:query ::entity-tx-spec}}]
-                 ["/_crux/attribute-stats" {:get (attribute-stats crux-node)
-                                            :muuntaja (m/create (util/->default-muuntaja {:json-encode-fn identity}))}]
-                 ["/_crux/sync" {:get (sync-handler crux-node)
-                                 :parameters {:query ::sync-spec}}]
-                 ["/_crux/await-tx" {:get (await-tx-handler crux-node)
-                                     :parameters {:query ::await-tx-spec}}]
-                 ["/_crux/await-tx-time" {:get (await-tx-time-handler crux-node)
-                                          :parameters {:query ::await-tx-time-spec}}]
-                 ["/_crux/tx-log" {:get (tx-log crux-node)
-                                   :muuntaja ->tx-log-muuntaja
-                                   :parameters {:query ::tx-log-spec}}]
-                 ["/_crux/submit-tx" {:muuntaja ->submit-tx-muuntaja
-                                      :post (if read-only?
-                                              (fn [_] {:status 403
-                                                       :body "forbidden: read-only HTTP node"})
-                                              (submit-tx crux-node))
-                                      :parameters {:body ::submit-tx-spec}}]
-                 ["/_crux/tx-committed" {:get (tx-committed? crux-node)
-                                         :parameters {:query ::tx-committed-spec}}]
-                 ["/_crux/latest-completed-tx" {:get (latest-completed-tx crux-node)}]
-                 ["/_crux/latest-submitted-tx" {:get (latest-submitted-tx crux-node)}]
-                 ["/_crux/active-queries" {:get (active-queries crux-node)
-                                           :muuntaja query-list-muuntaja}]
-                 ["/_crux/recent-queries" {:get (recent-queries crux-node)
-                                           :muuntaja query-list-muuntaja}]
-                 ["/_crux/slowest-queries" {:get (slowest-queries crux-node)
-                                            :muuntaja query-list-muuntaja}]
-                 ["/_crux/sparql" {:get (sparqql crux-node)
-                                   :post (sparqql crux-node)}]]
+                       :summary "Query"
+                       :description "Peform a datalog query"
+                       :get {:handler (query/data-browser-query opts)
+                             :parameters {:query ::query/query-params}}
+                       :post {:handler (query/data-browser-query opts)
+                              :parameters {:query ::query/query-params
+                                           :body ::query/body-params}}}]
+    (rr/router [["/" {:no-doc true
+                      :get (fn [_] (resp/redirect "/_crux/query"))}]
+                ["/_crux"
+                 ["/status" {:muuntaja (status/->status-muuntaja opts)
+                             :summary "Status"
+                             :description "Get status information from the node"
+                             :get (status/status opts)}]
+                 ["/entity" {:muuntaja (entity/->entity-muuntaja opts)
+                             :summary "Entity"
+                             :description "Get information about a particular entity"
+                             :get (entity/entity-state opts)
+                             :parameters {:query ::entity/query-params}}]
+                 ["/query" query-handler]
+                 ["/query.csv" (assoc query-handler :middleware [[add-response-format "text/csv"]] :no-doc true)]
+                 ["/query.tsv" (assoc query-handler :middleware [[add-response-format "text/tsv"]] :no-doc true)]
+                 ["/entity-tx" {:get (entity-tx crux-node)
+                                :summary "Entity Tx"
+                                :description "Get transactional information an particular entity"
+                                :parameters {:query ::entity-tx-spec}}]
+                 ["/attribute-stats" {:get (attribute-stats crux-node)
+                                      :summary "Attribute Stats"
+                                      :description "Get frequencies of indexed attributes"
+                                      :muuntaja (m/create (util/->default-muuntaja {:json-encode-fn identity}))}]
+                 ["/sync" {:get (sync-handler crux-node)
+                           :summary "Sync"
+                           :description "Wait until the Kafka consumer’s lag is back to 0"
+                           :parameters {:query ::sync-spec}}]
+                 ["/await-tx" {:get (await-tx-handler crux-node)
+                               :summary "Await Tx"
+                               :description "Wait until the node has indexed a transaction at or past the supplied tx-id"
+                               :parameters {:query ::await-tx-spec}}]
+                 ["/await-tx-time" {:get (await-tx-time-handler crux-node)
+                                    :summary "Await Tx Time"
+                                    :description "Wait until the node has indexed a transaction that is past the supplied tx-time"
+                                    :parameters {:query ::await-tx-time-spec}}]
+                 ["/tx-log" {:get (tx-log crux-node)
+                             :summary "Tx Log"
+                             :description "Get a list of all transactions"
+                             :muuntaja ->tx-log-muuntaja
+                             :parameters {:query ::tx-log-spec}}]
+                 ["/submit-tx" {:muuntaja ->submit-tx-muuntaja
+                                :summary "Submit Tx"
+                                :description "Takes a vector of transactions - Writes to the node"
+                                :post (if read-only?
+                                        (fn [_] {:status 403
+                                                 :body "forbidden: read-only HTTP node"})
+                                        (submit-tx crux-node))
+                                :parameters {:body ::submit-tx-spec}}]
+                 ["/tx-committed" {:get (tx-committed? crux-node)
+                                   :summary "Tx Committed"
+                                   :description "Checks if a submitted tx was successfully committed"
+                                   :parameters {:query ::tx-committed-spec}}]
+                 ["/latest-completed-tx" {:get (latest-completed-tx crux-node)
+                                          :summary "Latest Completed Tx"
+                                          :description "Get the latest transaction to have been indexed by this node"}]
+                 ["/latest-submitted-tx" {:get (latest-submitted-tx crux-node)
+                                          :summary "Latest Submitted Tx"
+                                          :description "Get the latest transaction to have been submitted to this cluster"}]
+                 ["/active-queries" {:get (active-queries crux-node)
+                                     :summary "Active Queries"
+                                     :description "Get a list of currently running queries"
+                                     :muuntaja query-list-muuntaja}]
+                 ["/recent-queries" {:get (recent-queries crux-node)
+                                     :summary "Recent Queries"
+                                     :description "Get a list of recently completed/failed queries"
+                                     :muuntaja query-list-muuntaja}]
+                 ["/slowest-queries" {:get (slowest-queries crux-node)
+                                      :summary "Slowest Queries"
+                                      :description "Get a list of slowest completed/failed queries ran on the node"
+                                      :muuntaja query-list-muuntaja}]
+                 ["/sparql" {:get (sparqql crux-node)
+                             :post (sparqql crux-node)
+                             :no-doc true}]
 
-                {:data
-                 {:muuntaja (m/create (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys}))
-                  :coercion reitit.coercion.spec/coercion
-                  :middleware (cond-> [p/wrap-params
-                                       wrap-camel-case-params
-                                       rm/format-negotiate-middleware
-                                       rm/format-response-middleware
-                                       (re/create-exception-middleware
-                                        (merge re/default-handlers
-                                               {crux.IllegalArgumentException handle-ex-info
-                                                crux.api.NodeOutOfSyncException handle-ex-info
-                                                :muuntaja/decode handle-muuntaja-decode-error}))
-                                       rm/format-request-middleware
-                                       rrc/coerce-request-middleware]
-                                jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})))
+                 ["/swagger.json"
+                 {:get {:no-doc true
+                        :swagger {:info {:title "Crux API"}}
+                        :handler (swagger/create-swagger-handler)
+                        :muuntaja (m/create (assoc (util/->default-muuntaja {}) :default-format "application/json"))}}]]]
+
+               {:data
+                {:muuntaja (m/create (util/->default-muuntaja {:json-encode-fn http-json/camel-case-keys}))
+                 :coercion reitit.coercion.spec/coercion
+                 :middleware (cond-> [p/wrap-params
+                                      wrap-camel-case-params
+                                      rm/format-negotiate-middleware
+                                      rm/format-response-middleware
+                                      (re/create-exception-middleware
+                                       (merge re/default-handlers
+                                              {crux.IllegalArgumentException handle-ex-info
+                                               crux.api.NodeOutOfSyncException handle-ex-info
+                                               :muuntaja/decode handle-muuntaja-decode-error}))
+                                      rm/format-request-middleware
+                                      rrc/coerce-request-middleware]
+                               jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})))
 
 ;; entry point for users including our handler in their own server
 (defn ->crux-handler [crux-node http-options]
