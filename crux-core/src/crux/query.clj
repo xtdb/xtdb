@@ -406,7 +406,7 @@
   (cond-> clause
     (or (blank-var? v)
         (nil? v))
-    (assoc :v (gensym "_"))
+    (-> (assoc :v (gensym "_")) (with-meta {:ignore-v? true}))
     (blank-var? e)
     (assoc :e (gensym "_"))
     (nil? a)
@@ -588,29 +588,33 @@
                                      sym [sym sym-a sym-b]
                                      :when (logic-var? sym)]
                                  sym))
-        cardinality-for-var (fn [var cardinality self-join?]
-                              (if self-join?
-                                2.0
-                                (cond-> (double (cond
-                                                  (literal? var)
-                                                  (count (c/vectorize-value var))
+        cardinality-for-var (fn [var cardinality]
+                              (cond-> (double (cond
+                                                (literal? var)
+                                                (count (c/vectorize-value var))
 
-                                                  (contains? in-vars var)
-                                                  0.5
+                                                (contains? in-vars var)
+                                                0.5
 
-                                                  :else
-                                                  cardinality))
+                                                :else
+                                                cardinality))
 
-                                  (contains? pred-var-frequencies var)
-                                  (/ (* 2.0 (double (get pred-var-frequencies var))))
+                                (contains? pred-var-frequencies var)
+                                (/ (* 2.0 (double (get pred-var-frequencies var))))
 
-                                  (contains? range-var-frequencies var)
-                                  (Math/pow (/ 0.5 (double (get range-var-frequencies var)))))))
+                                (contains? range-var-frequencies var)
+                                (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
-                             (let [{:keys [self-join?]} (meta clause)
+                             (let [{:keys [self-join? ignore-v?]} (meta clause)
                                    cardinality (get stats a 0.0)
-                                   es (cardinality-for-var e cardinality false)
-                                   vs (cardinality-for-var v cardinality self-join?)]
+                                   es (cardinality-for-var e cardinality)
+                                   vs (cond
+                                        ignore-v?
+                                        Double/MAX_VALUE
+                                        self-join?
+                                        2.0
+                                        :else
+                                        (cardinality-for-var v cardinality))]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
                                    (update e (fnil min Double/MAX_VALUE) es))))
@@ -1173,10 +1177,11 @@
                    g)))
            g
            or-clause+idx-id+or-branches)
-        join-order (dep/topo-sort g)]
+        join-order (dep/topo-sort g)
+        join-order (vec (concat (remove (conj project-only-leaf-vars ::root) join-order)
+                                project-only-leaf-vars))]
     (log/debug :project-only-leaf-vars project-only-leaf-vars)
-    (vec (concat (remove (conj project-only-leaf-vars ::root) join-order)
-                 project-only-leaf-vars))))
+    join-order))
 
 (defn- rule-name->rules [rules]
   (group-by (comp :name :head) rules))
@@ -1294,22 +1299,24 @@
                                              (contains? non-leaf-v-vars v))]
                                e))
         leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
-                               :when (or (contains? existing-e-vars e-var)
-                                         (> (count leaf-group) 1))]
+                               :when (logic-var? e-var)]
                            [e-var (sort-triple-clauses stats leaf-group)])
                          (into {}))
         leaf-triple-clauses (->> (for [[e-var leaf-group] leaf-groups]
-                                   (if (contains? existing-e-vars e-var)
-                                     leaf-group
-                                     (next leaf-group)))
+                                   leaf-group)
                                  (reduce into #{}))
         triple-clauses (remove leaf-triple-clauses triple-clauses)
+        new-triple-clauses (for [e-var (keys leaf-groups)
+                                 :when (not (contains? existing-e-vars e-var))]
+                             (with-meta
+                               {:e e-var :a :crux.db/id :v (gensym "leaf_")}
+                               {:ignore-v? true}))
         leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
                      {:pred {:pred-fn 'get-attr :args [e a]}
                       :return [:collection v]})]
     [(assoc type->clauses
-             :triple triple-clauses
-             :pred (vec (concat pred-clauses leaf-preds)))
+            :triple (vec (concat triple-clauses new-triple-clauses))
+            :pred (vec (concat pred-clauses leaf-preds)))
      (set/difference (set (map :v leaf-triple-clauses))
                      (reduce set/union (vals (dissoc collected-vars :v-vars))))]))
 
