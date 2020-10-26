@@ -17,7 +17,8 @@
   (:import [crux.api ICruxAPI ICruxDatasource]
            [crux.codec EDNId Id]
            crux.http_server.entity_ref.EntityRef
-           [java.io ByteArrayOutputStream OutputStream]))
+           [java.io ByteArrayOutputStream OutputStream]
+           java.util.Date))
 
 (s/def ::eid (and string? c/valid-id?))
 
@@ -115,10 +116,8 @@
     valid-time
     (.db crux-node valid-time)
 
-    ;; TODO: This could also be an error, depending how you see it,
-    ;; not supported via the Java API itself.
     transact-time
-    (.db crux-node (cio/next-monotonic-date) transact-time)
+    (.db crux-node (Date.) transact-time)
 
     :else
     (.db crux-node)))

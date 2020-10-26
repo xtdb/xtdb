@@ -50,17 +50,6 @@
       (.start cleaner-thread)))
   (.put ref->cleanup-action (PhantomReference. object reference-queue) action))
 
-(def ^:private last-monotonic-date (atom (Date.)))
-
-(defn next-monotonic-date ^java.util.Date []
-  (let [date (Date.)
-        old-date @last-monotonic-date]
-    (if (and (pos? (compare date old-date))
-             (compare-and-set! last-monotonic-date old-date date))
-      date
-      (do (Thread/sleep 1)
-          (recur)))))
-
 (defn format-rfc3339-date [^Date d]
   (when d
     (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
