@@ -1143,7 +1143,7 @@
        (every? (fn [f]
                  (f index-snapshot db idx-id->idx join-keys)))))
 
-(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps]
+(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
                (reduce
                 (fn [g v]
@@ -1174,7 +1174,9 @@
            g
            or-clause+idx-id+or-branches)
         join-order (dep/topo-sort g)]
-    (vec (remove #{::root} join-order))))
+    (log/debug :project-only-leaf-vars project-only-leaf-vars)
+    (vec (concat (remove (conj project-only-leaf-vars ::root) join-order)
+                 project-only-leaf-vars))))
 
 (defn- rule-name->rules [rules]
   (group-by (comp :name :head) rules))
@@ -1305,9 +1307,11 @@
         leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
                      {:pred {:pred-fn 'get-attr :args [e a]}
                       :return [:collection v]})]
-    (assoc type->clauses
-           :triple triple-clauses
-           :pred (vec (concat pred-clauses leaf-preds)))))
+    [(assoc type->clauses
+             :triple triple-clauses
+             :pred (vec (concat pred-clauses leaf-preds)))
+     (set/difference (set (map :v leaf-triple-clauses))
+                     (reduce set/union (vals (dissoc collected-vars :v-vars))))]))
 
 (defn- update-depth->constraints [depth->join-depth constraints]
   (reduce
@@ -1319,6 +1323,7 @@
 (defn- compile-sub-query [encode-value-fn where in rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
         in-vars (set (find-binding-vars (:bindings in)))
+        [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars stats)
         {triple-clauses :triple
          range-clauses :range
          pred-clauses :pred
@@ -1326,7 +1331,7 @@
          not-join-clauses :not-join
          or-clauses :or
          or-join-clauses :or-join
-         :as type->clauses} (expand-leaf-preds (normalize-clauses where) in-vars stats)
+         :as type->clauses} type->clauses
         {:keys [e-vars
                 v-vars
                 range-vars
@@ -1355,7 +1360,7 @@
         or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                              or-join-clause+idx-id+or-branches)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars)
         var->values-result-index (zipmap vars-in-join-order (range))
         v-var->e (build-v-var->e triple-clauses var->values-result-index)
         e->v-var (set/map-invert v-var->e)
