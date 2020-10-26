@@ -1,17 +1,14 @@
 (ns crux.query-test
   (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
-            [clojure.walk :as w]
             [clojure.test :as t]
+            [clojure.walk :as w]
             [crux.api :as api]
             [crux.codec :as c]
-            [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.query :as q]
             [crux.index :as idx]
-            [clojure.java.io :as io]
-            [edn-query-language.core :as eql])
-  (:import [java.util Arrays UUID]
+            [crux.query :as q]
+            [taoensso.nippy :as nippy])
+  (:import java.util.Arrays
            java.util.concurrent.TimeoutException))
 
 (t/use-fixtures :each fix/with-node)
@@ -108,6 +105,17 @@
                                       :rules [[(my-rule e first-name)
                                                [e :name first-name]]]
                                       :full-results? true}))))))
+
+(t/deftest test-full-results-with-non-id-element-1200
+  (with-redefs [nippy/*serializable-whitelist* (conj nippy/*serializable-whitelist* "java.time.Instant")]
+    (let [now (java.time.Instant/now)]
+      (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :instant now}]])
+
+      (t/is (= #{[{:crux.db/id :foo, :instant now} now]}
+               (api/q (api/db *api*)
+                      '{:find [?e ?ei]
+                        :where [[?e :instant ?ei]]
+                        :full-results? true}))))))
 
 (t/deftest test-query-with-arguments
   (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
