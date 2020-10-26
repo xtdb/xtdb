@@ -28,7 +28,7 @@ content:
         - docs-20.09-1.11.0
 ui:
   bundle:
-    url: ./crux-site/ui-bundle.zip
+    url: ../../crux-site/ui-bundle.zip
     snapshot: true
 asciidoc:
   attributes:

@@ -3,5 +3,5 @@ set -x
 set -e
 
 cd $(dirname "$0")/..
-antora --clean --pull antora-playbook.yml
+antora --clean --pull antora-playbook-site.yml
 cd -

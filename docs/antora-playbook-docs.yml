@@ -1,0 +1,31 @@
+site:
+  title: Crux
+  start_page: about::index.adoc
+  url: https://opencrux.com
+content:
+  sources:
+    - url: ../
+      start_path: docs/about
+      branches: HEAD
+    - url: ../
+      start_path: docs/tutorials
+      branches: HEAD
+    - url: ../
+      start_path: docs/reference
+      branches:
+        - HEAD
+    - url: https://github.com/juxt/crux
+      start_path: docs/reference
+      branches:
+        - docs-1.12.1
+        - docs-1.12.0
+        - docs-20.09-1.11.0
+ui:
+  bundle:
+    url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip
+    snapshot: true
+asciidoc:
+  attributes:
+    page-pagination: true
+  extensions:
+    - ./antora_extensions/extension.js
