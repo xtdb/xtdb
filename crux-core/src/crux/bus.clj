@@ -1,12 +1,12 @@
 (ns ^:no-doc crux.bus
   (:refer-clojure :exclude [send await])
-  (:require [crux.io :as cio]
-            [crux.system :as sys]
+  (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s])
-  (:import [java.io Closeable]
-           [java.util.concurrent ExecutorService Executors TimeUnit]
-           [java.time Duration]))
+            [crux.io :as cio]
+            [crux.system :as sys])
+  (:import java.io.Closeable
+           java.time.Duration
+           [java.util.concurrent Executor Executors ExecutorService TimeUnit]))
 
 (defprotocol EventSource
   (await [bus opts]
@@ -76,7 +76,8 @@
           executor (or executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener")))
           listener {:executor executor
                     :f f
-                    :crux/event-types event-types}]
+                    :crux/event-types event-types
+                    :close-executor? close-executor?}]
       (swap! !listeners (fn [listeners]
                           (reduce (fn [listeners event-type]
                                     (-> listeners (update event-type (fnil conj #{}) listener)))
@@ -95,19 +96,20 @@
   EventSink
   (send [_ {:crux/keys [event-type] :as event}]
     (s/assert ::event event)
-    (doseq [{:keys [^ExecutorService executor f] :as listener} (get @!listeners event-type)]
+    (doseq [{:keys [^Executor executor f] :as listener} (get @!listeners event-type)]
       (if sync?
         (try
           (f event)
           (catch Exception e))
-        (.submit executor ^Runnable #(f event)))))
+        (.execute executor ^Runnable #(f event)))))
 
   Closeable
   (close [_]
     (close-executor await-solo-pool)
 
-    (doseq [{:keys [executor]} (->> @!listeners (mapcat val))]
-      (close-executor executor))))
+    (doseq [{:keys [executor close-executor?]} (->> @!listeners (mapcat val))]
+      (when close-executor?
+        (close-executor executor)))))
 
 (defn ->bus {::sys/args {:sync? {:doc "Send bus messages on caller thread"
                                  :default false
