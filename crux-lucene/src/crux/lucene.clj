@@ -119,22 +119,23 @@
                          [(db/decode-value index-snapshot eid) v a score])))))
          (into []))))
 
-(defn- pred-constraint [{:keys [encode-value-fn idx-id arg-bindings return-type tuple-idxs-in-join-order]}]
-  (let [[vval attr] (rest arg-bindings)]
-    (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-node* index-snapshot entity-resolver-fn attr vval)))))
+(defn- pred-constraint [attr vval {:keys [encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
+  (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
+    (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-node* index-snapshot entity-resolver-fn attr vval))))
 
 (defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr keyword?)) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v string?)) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
-  (pred-constraint pred-ctx))
+  (let [[attr vval] (rest (:arg-bindings pred-ctx))]
+    (pred-constraint attr vval pred-ctx)))
 
 (defmethod q/pred-args-spec 'wildcard-text-search [_]
   (s/cat :pred-fn  #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
-  (pred-constraint pred-ctx))
+  (let [[vval] (rest (:arg-bindings pred-ctx))]
+    (pred-constraint nil vval pred-ctx)))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]

@@ -22,24 +22,24 @@
     (t/testing "using in-built function"
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]
-                                     :where '[[(text-search "Ivan" :name) [[?e]]]
+                                     :where '[[(text-search :name "Ivan") [[?e]]]
                                               [?e :crux.db/id]]})))
 
         (t/testing "bad spec"
           (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #""
                                   (c/q db {:find '[?e]
-                                           :where '[[(text-search "Ivan" "Wot") [[?e]]]
+                                           :where '[[(text-search "Wot" "Ivan") [[?e]]]
                                                     [?e :crux.db/id]]}))))
 
         (t/testing "fuzzy"
           (t/is (= #{[:ivan]} (c/q db {:find '[?e]
-                                       :where '[[(text-search "Iv*" :name) [[?e]]]
+                                       :where '[[(text-search :name "Iv*") [[?e]]]
                                                 [?e :crux.db/id]]}))))))
 
     (t/testing "Subsequent tx/doc"
       (with-open [before-db (c/open-db *api*)]
         (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan2 :name "Ivbn"}]])
-        (let [q {:find '[?e] :where '[[(text-search "Iv?n" :name) [[?e]]] [?e :crux.db/id]]}]
+        (let [q {:find '[?e] :where '[[(text-search :name "Iv?n") [[?e]]] [?e :crux.db/id]]}]
           (t/is (= #{[:ivan]} (c/q before-db q)))
           (with-open [db (c/open-db *api*)]
             (t/is (= #{[:ivan] [:ivan2]} (c/q db q)))))))
@@ -47,7 +47,7 @@
     (t/testing "Modifying doc"
       (with-open [before-db (c/open-db *api*)]
         (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Derek"}]])
-        (let [q {:find '[?e] :where '[[(text-search "Derek" :name) [[?e]]] [?e :crux.db/id]]}]
+        (let [q {:find '[?e] :where '[[(text-search :name "Derek") [[?e]]] [?e :crux.db/id]]}]
           (t/is (not (seq (c/q before-db q))))
           (with-open [db (c/open-db *api*)]
             (t/is (= #{[:ivan]} (c/q db q)))))))
@@ -58,7 +58,7 @@
       (with-open [db (c/open-db *api*)]
         (t/is (empty? (c/q db {:find '[?e]
                                :where
-                               '[[(text-search "Ivan" :name) [[?e]]]
+                               '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
       (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-node @(:!system *api*)) "name" "Ivan")]
         (t/is (empty? (iterator-seq search-results))))
@@ -74,7 +74,7 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
                  (c/q db {:find '[?e ?v ?score]
-                          :where '[[(text-search "ivan*" :name) [[?e ?v ?score]]]
+                          :where '[[(text-search :name "ivan*") [[?e ?v ?score]]]
                                    [?e :crux.db/id]]})))))
 
     (t/testing "cardinality many"
@@ -83,14 +83,14 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan "atar"]}
                  (c/q db {:find '[?e ?v]
-                          :where '[[(text-search "atar" :foo) [[?e ?v]]]
+                          :where '[[(text-search :foo "atar") [[?e ?v]]]
                                    [?e :crux.db/id]]}))))
 
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan "abar"]
                    [:ivan "atar"]}
                  (c/q db {:find '[?e ?v]
-                          :where '[[(text-search "a?ar" :foo) [[?e ?v]]]
+                          :where '[[(text-search :foo "a?ar") [[?e ?v]]]
                                    [?e :crux.db/id]]})))))))
 
 (t/deftest test-can-search-string-across-attributes
@@ -106,7 +106,7 @@
     (t/testing "no match against a non-existant field"
       (t/is (= #{}
                (c/q db {:find '[?e ?v]
-                        :where '[[(text-search "Ivan" :non-field) [[?e ?v]]]
+                        :where '[[(text-search :non-field "Ivan") [[?e ?v]]]
                                  [?e :crux.db/id]]})))))
 
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :surname "Ivan"}]])
@@ -155,7 +155,7 @@
 (t/deftest test-structural-sharing
   (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
   (let [q {:find '[?e ?v ?s]
-           :where '[[(text-search "Ivan" :name) [[?e ?v ?s]]]
+           :where '[[(text-search :name "Ivan") [[?e ?v ?s]]]
                     [?e :crux.db/id]]}
         prior-score (with-open [db (c/open-db *api*)]
                       (c/q db q))]
@@ -172,7 +172,7 @@
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan-2 :name "Ivan Bob"}]])
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db {:find '[?e ?v]
-                        :where '[[(text-search "Ivan" :name) [[?e ?v]]]
+                        :where '[[(text-search :name "Ivan") [[?e ?v]]]
                                  [?e :crux.db/id]]})))))
 
 (t/deftest test-past-fuzzy-results-excluded
@@ -181,13 +181,13 @@
   (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan1" :name "Ivana"}]])
 
   (let [q {:find '[?e ?v ?s]
-           :where '[[(text-search  "Ivan*" :name) [[?e ?v ?s]]]
+           :where '[[(text-search :name "Ivan*") [[?e ?v ?s]]]
                     [?e :crux.db/id]]}]
     (with-open [db (c/open-db *api*)]
       (t/is (= ["ivan1"] (map first (c/q db q)))))))
 
 (t/deftest test-exclude-future-results
-  (let [q {:find '[?e] :where '[[(text-search "Ivan" :name) [[?e]]] [?e :crux.db/id]]}]
+  (let [q {:find '[?e] :where '[[(text-search :name "Ivan") [[?e]]] [?e :crux.db/id]]}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivanka"}]])
     (with-open [before-db (c/open-db *api*)]
       (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
