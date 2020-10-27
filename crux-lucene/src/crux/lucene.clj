@@ -81,6 +81,7 @@
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn search [node, k, v]
+  (assert node)
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
