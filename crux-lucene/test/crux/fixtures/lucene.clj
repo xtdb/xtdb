@@ -4,7 +4,5 @@
 
 (defn with-lucene-module [f]
   (with-tmp-dir "lucene" [db-dir]
-    (fix/with-opts {::l/lucene-node {:db-dir db-dir}
-                    :crux/index-store {:crux/module 'crux.lucene/->index-store
-                                       :index-store 'crux.kv.index-store/->kv-index-store}}
+    (fix/with-opts {::l/lucene-node {:db-dir db-dir}}
       f)))

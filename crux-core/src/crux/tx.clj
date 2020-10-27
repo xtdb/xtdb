@@ -33,11 +33,13 @@
 (s/def ::av-count nat-int?)
 (s/def ::bytes-indexed nat-int?)
 (s/def ::doc-ids (s/coll-of #(instance? crux.codec.Id %) :kind set?))
+(s/def ::eids (s/coll-of c/valid-id? :kind set?))
 
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
 (defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
+(defmethod bus/event-spec ::unindexing-eids [_] (s/keys :req-un [::eids]))
 
 (s/def ::ingester-error #(instance? Exception %))
 (defmethod bus/event-spec ::ingester-error [_] (s/keys :req [::ingester-error]))
@@ -346,7 +348,15 @@
     (when (:fork-at tx)
       (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (when-let [new-docs (not-empty (fork/new-docs forked-document-store))]
+    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
+      (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
+      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
+        (db/submit-docs document-store tombstones)))
+
+    (when-let [new-docs (fork/new-docs forked-document-store)]
+      (db/index-docs index-store new-docs)
+      (update-stats this (map doc-predicate-stats (vals new-docs)))
+
       (db/submit-docs document-store new-docs)
 
       ;; ensure the docs are available before we commit the tx, see #1175
