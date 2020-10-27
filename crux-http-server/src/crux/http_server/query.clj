@@ -20,9 +20,10 @@
            java.time.format.DateTimeFormatter
            java.util.Date))
 
+(s/def ::query any?) ; checked by crux.query
 (s/def ::query-edn
   (st/spec
-   {:spec any? ; checked by crux.query
+   {:spec ::query
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
 ;; TODO: Need to ensure all query clauses are present + coerced properly
