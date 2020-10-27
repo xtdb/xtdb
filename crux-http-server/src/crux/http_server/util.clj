@@ -15,7 +15,7 @@
             [spec-tools.core :as st]
             [crux.http-server.entity-ref :as entity-ref])
   (:import [crux.api ICruxAPI ICruxDatasource]
-           crux.codec.Id
+           [crux.codec EDNId Id]
            crux.http_server.entity_ref.EntityRef
            [java.io ByteArrayOutputStream OutputStream]))
 
@@ -68,6 +68,7 @@
 (def tj-write-handlers
   {EntityRef entity-ref/ref-write-handler
    Id (transit/write-handler "crux/oid" str)
+   EDNId (transit/write-handler "crux/oid" str)
    (Class/forName "[B") (transit/write-handler "crux/base64" c/base64-writer)})
 
 (defn ->tj-encoder [_]

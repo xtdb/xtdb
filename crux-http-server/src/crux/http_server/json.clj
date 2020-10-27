@@ -8,7 +8,7 @@
             [muuntaja.format.core :as mfc])
   (:import clojure.lang.IPersistentList
            com.fasterxml.jackson.core.JsonGenerator
-           crux.codec.Id
+           [crux.codec EDNId Id]
            crux.http_server.entity_ref.EntityRef
            java.io.OutputStream))
 
@@ -26,6 +26,8 @@
    {:encode-key-fn true
     :encoders {Id (fn [crux-id ^JsonGenerator gen]
                     (.writeString gen (str crux-id)))
+               EDNId (fn [crux-id ^JsonGenerator gen]
+                       (.writeString gen (str crux-id)))
                (Class/forName "[B") (fn [^bytes bytes ^JsonGenerator gen]
                                       (.writeString gen (c/base64-writer bytes)))
                EntityRef entity-ref/ref-json-encoder
