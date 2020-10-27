@@ -64,7 +64,7 @@ then you use the in-built `text-search` fn in your datalog:
 [source,clojure]
 ----
 {:find '[?e]
- :where '[[(text-search "Ivan" :name) [[?e]]]
+ :where '[[(text-search :name "Ivan") [[?e]]]
  [?e :crux.db/id]]}
 ----
 
@@ -74,7 +74,7 @@ The destructuring available is `entity-id`, `matched-value` and
 [source,clojure]
 ----
 {:find '[?e ?v ?s]
- :where '[[(text-search "Ivan" :name) [[?e ?v ?s]]]
+ :where '[[(text-search :name "Ivan") [[?e ?v ?s]]]
  [?e :crux.db/id]]}
 ----
 
@@ -83,7 +83,7 @@ You can use standard Lucene search capabilities:
 [source,clojure]
 ----
 {:find '[?e]
- :where '[[(text-search "Iva*" :name) [[?e]]]
+ :where '[[(text-search :name "Iva*") [[?e]]]
  [?e :crux.db/id]]}
 ----
 
