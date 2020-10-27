@@ -14,3 +14,11 @@
                                              ::message message}
                                             data)
                                      cause))))
+
+(defn node-out-of-sync [{:keys [requested available]}]
+  (let [message (format "Node out of sync - requested '%s', available '%s'" requested available)]
+    (crux.api.NodeOutOfSyncException. message
+                                      {::error-type :node-out-of-sync
+                                       ::message message
+                                       :requested requested
+                                       :available available})))

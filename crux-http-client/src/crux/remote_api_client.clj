@@ -2,7 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
             [crux.codec :as c]
-            [crux.error :as ce]
+            [crux.error :as err]
             [crux.io :as cio]
             [crux.query-state :as qs])
   (:import com.nimbusds.jwt.SignedJWT
@@ -81,9 +81,11 @@
        nil
 
        (= 400 status)
-       (let [{::ce/keys [error-key] :as error-data} (edn/read-string (cond-> body
-                                                                       (= :stream (:as http-opts)) slurp))]
-         (throw (ce/illegal-arg error-key error-data)))
+       (let [error-data (edn/read-string (cond-> body
+                                           (= :stream (:as http-opts)) slurp))]
+         (throw (case (::err/error-type error-data)
+                  :illegal-argument (err/illegal-arg (::err/error-key error-data) error-data)
+                  :node-out-of-sync (err/node-out-of-sync error-data))))
 
        (and (<= 200 status) (< status 400))
        (if (string? body)
@@ -178,9 +180,7 @@
                                                   :->jwt-token ->jwt-token})
                                :crux.tx/tx-time)]
         (when (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time)))
-          (throw (NodeOutOfSyncException.
-                  (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
-                  tx-time latest-tx-time)))))
+          (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))))
 
     (->RemoteDatasource url valid-time tx-time ->jwt-token))
 
