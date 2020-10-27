@@ -7,6 +7,7 @@
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [clear go suspend resume halt reset reset-all]]
             [crux.io :as cio]
+            [crux.lucene]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
             [crux.rocksdb :as rocks]
@@ -50,7 +51,8 @@
                        :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "documents")}}
                        :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "tx-log")}}
                        :crux.metrics.jmx/reporter {}
-                       :crux.http-server/server {}}}})
+                       :crux.http-server/server {}
+                       :crux.lucene/lucene-node {:db-dir (Files/createTempDirectory "lucene" (make-array FileAttribute 0))}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
