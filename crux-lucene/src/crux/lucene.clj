@@ -1,6 +1,7 @@
 (ns crux.lucene
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [crux.bus :as bus]
             [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
@@ -19,7 +20,7 @@
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery]
            [org.apache.lucene.store Directory FSDirectory]))
 
-(def ^:dynamic *node*)
+(def ^:dynamic *lucene-node*)
 
 (defrecord LuceneNode [directory analyzer]
   java.io.Closeable
@@ -57,15 +58,18 @@
   (Term. "id" (eid->str (DocumentId. k v))))
 
 (defn doc-count []
-  (let [{:keys [^Directory directory]} *node*
+  (let [{:keys [^Directory directory]} *lucene-node*
         directory-reader (DirectoryReader/open directory)]
     (.numDocs directory-reader)))
 
-(defn write-docs! [^IndexWriter index-writer docs]
-  (doseq [d docs t (crux-doc->triples d)]
-    (.updateDocument index-writer (triple->term t) (triple->doc t))))
+(defn- index-docs! [document-store lucene-node doc-ids]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
+        docs (vals (db/fetch-docs document-store doc-ids))]
+    (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
+      (doseq [d docs t (crux-doc->triples d)]
+        (.updateDocument index-writer (triple->term t) (triple->doc t))))))
 
-(defn evict! [indexer, node, eids]
+(defn- evict! [indexer, node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
                             keys
@@ -118,7 +122,7 @@
 (defn- pred-constraint [{:keys [encode-value-fn idx-id arg-bindings return-type tuple-idxs-in-join-order]}]
   (let [[vval attr] (rest arg-bindings)]
     (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *node* index-snapshot entity-resolver-fn attr vval)))))
+      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-node* index-snapshot entity-resolver-fn attr vval)))))
 
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :v string? :attr keyword?)) :return (s/? :crux.query/binding)))
@@ -136,58 +140,26 @@
   (set (for [^EntityTx entity-tx txes]
          (.content-hash entity-tx))))
 
-(defrecord LuceneDecoratingIndexStore [index-store document-store lucene-node]
-  db/IndexStore
-  (index-docs [this docs]
-    (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
-          index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
-      (try
-        (write-docs! index-writer (vals docs))
-        (db/index-docs index-store docs)
-        (catch Throwable t
-          (.rollback index-writer)
-          (throw t))
-        (finally
-          (.close index-writer)))))
-  (unindex-eids [this eids]
-    (try
-      (evict! index-store lucene-node eids)
-      (db/unindex-eids index-store eids)
-      (catch Throwable t
-        ;; TODO should be able to remove, but exception is lost otherwise
-        (log/error t)
-        (throw t))))
-  (index-entity-txs [this tx entity-txs]
-    (db/index-entity-txs index-store tx entity-txs))
-  (mark-tx-as-failed [this tx]
-    (db/mark-tx-as-failed index-store tx))
-  (store-index-meta [this k v]
-    (db/store-index-meta index-store k v))
-  (read-index-meta [this k]
-    (db/read-index-meta index-store k))
-  (read-index-meta [this k not-found]
-    (db/read-index-meta index-store k not-found))
-  (latest-completed-tx [this]
-    (db/latest-completed-tx index-store))
-  (tx-failed? [this tx-id]
-    (db/tx-failed? index-store tx-id))
-  (open-index-snapshot ^java.io.Closeable [this]
-    ;; TODO, considering tying the index-writer to this index store snapshot
-    (db/open-index-snapshot index-store)))
-
 (defn ->lucene-node
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
-                        :spec ::sys/path}}}
-  [{:keys [^Path db-dir]}]
+                        :spec ::sys/path}}
+   ::sys/deps {:bus :crux/bus
+               :document-store :crux/document-store
+               :index-store :crux/index-store}}
+  [{:keys [^Path db-dir index-store document-store bus] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
-        node (LuceneNode. directory analyzer)]
-    (alter-var-root #'*node* (constantly node))))
-
-(defn ->index-store
-  {::sys/deps {:index-store :crux/index-store
-               :document-store :crux/document-store
-               :lucene-node ::lucene-node}}
-  [{:keys [index-store document-store lucene-node]}]
-  (LuceneDecoratingIndexStore. index-store document-store lucene-node))
+        lucene-node (LuceneNode. directory analyzer)]
+    (alter-var-root #'*lucene-node* (constantly lucene-node))
+    (bus/listen bus {:crux/event-types #{:crux.tx/indexed-docs :crux.tx/unindexing-eids}
+                     :crux.bus/executor (reify java.util.concurrent.Executor
+                                          (execute [_ f]
+                                            (.run f)))}
+                (fn [ev]
+                  (case (:crux/event-type ev)
+                    :crux.tx/indexed-docs
+                    (index-docs! document-store lucene-node (:doc-ids ev))
+                    :crux.tx/unindexing-eids
+                    (evict! index-store lucene-node (:eids ev)))))
+    lucene-node))
