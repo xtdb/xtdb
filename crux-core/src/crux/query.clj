@@ -1838,17 +1838,22 @@
   api/DBProvider
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
-  (db [this valid-time tx-time]
+  (db [this valid-time tx-or-tx-time]
     (let [valid-time (or valid-time (Date.))
           latest-tx (db/latest-completed-tx index-store)
-          tx (if tx-time
-               (db/resolve-tx-time index-store tx-time)
-               latest-tx)]
+          {:crux.tx/keys [tx-time tx-id] :as tx} (or (when-not tx-or-tx-time
+                                                       latest-tx)
+                                                     (when (:crux.tx/tx-id tx-or-tx-time)
+                                                       ;; TODO (JH) we're trusting the user's tx-time in this case?
+                                                       tx-or-tx-time)
+                                                     (when-let [tx-time (or (when (inst? tx-or-tx-time) tx-or-tx-time)
+                                                                            (:crux.tx/tx-time tx-or-tx-time))]
+                                                       (db/resolve-tx-time index-store tx-time)))]
 
-      (when (and tx-time
+      (when (and tx
                  (or (nil? latest-tx)
-                     (pos? (compare tx-time (:crux.tx/tx-time latest-tx)))))
-        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available latest-tx})))
+                     (> ^long tx-id ^long (:crux.tx/tx-id latest-tx))))
+        (throw (err/node-out-of-sync {:requested tx, :available latest-tx})))
 
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
@@ -1858,8 +1863,8 @@
                                                                    :bus bus
                                                                    :query-engine this})
                                    :valid-time valid-time
-                                   :tx-time (:crux.tx/tx-time tx)
-                                   :tx-id (:crux.tx/tx-id tx)))))
+                                   :tx-time tx-time
+                                   :tx-id tx-id))))
 
   (open-db [this] (api/open-db this nil nil))
   (open-db [this valid-time] (api/open-db this valid-time nil))

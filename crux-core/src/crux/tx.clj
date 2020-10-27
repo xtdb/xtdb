@@ -167,12 +167,12 @@
 
 (defrecord TxFnContext [db-provider indexing-tx]
   api/DBProvider
-  (db [ctx] (api/db db-provider (:crux.tx/tx-time indexing-tx)))
-  (db [ctx valid-time] (api/db db-provider valid-time))
-  (db [ctx valid-time tx-time] (api/db db-provider valid-time tx-time))
-  (open-db [ctx] (api/open-db db-provider (:crux.tx/tx-time indexing-tx)))
-  (open-db [ctx valid-time] (api/open-db db-provider valid-time))
-  (open-db [ctx valid-time tx-time] (api/open-db db-provider valid-time tx-time))
+  (db [ctx] (api/db ctx (:crux.tx/tx-time indexing-tx)))
+  (db [ctx valid-time] (api/db ctx valid-time nil))
+  (db [ctx valid-time tx-or-tx-time] (api/db db-provider valid-time tx-or-tx-time))
+  (open-db [ctx] (api/open-db ctx (:crux.tx/tx-time indexing-tx)))
+  (open-db [ctx valid-time] (api/open-db ctx valid-time nil))
+  (open-db [ctx valid-time tx-or-tx-time] (api/open-db db-provider valid-time tx-or-tx-time))
 
   api/TransactionFnContext
   (indexing-tx [_] indexing-tx))
@@ -282,12 +282,12 @@
     (db/fetch-docs forked-document-store ids))
 
   api/DBProvider
-  (db [ctx] (api/db query-engine (:crux.tx/tx-time tx)))
+  (db [ctx] (api/db query-engine tx))
   (db [ctx valid-time] (api/db query-engine valid-time))
-  (db [ctx valid-time tx-time] (api/db query-engine valid-time tx-time))
-  (open-db [ctx] (api/open-db query-engine (:crux.tx/tx-time tx)))
+  (db [ctx valid-time tx-or-tx-time] (api/db query-engine valid-time tx-or-tx-time))
+  (open-db [ctx] (api/open-db query-engine tx))
   (open-db [ctx valid-time] (api/open-db query-engine valid-time))
-  (open-db [ctx valid-time tx-time] (api/open-db query-engine valid-time tx-time))
+  (open-db [ctx valid-time tx-or-tx-time] (api/open-db query-engine valid-time tx-or-tx-time))
 
   db/InFlightTx
   (index-tx-events [this tx-events]

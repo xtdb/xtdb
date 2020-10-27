@@ -2,18 +2,16 @@
   "Public API of Crux."
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.query-state :as qs]
             [crux.ingest-client :as ic]
-            [crux.system :as sys]
-            [clojure.tools.logging :as log])
-  (:import (crux.api Crux ICruxAPI ICruxIngestAPI
-                     ICruxAsyncIngestAPI ICruxDatasource
-                     HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
+            [crux.query-state :as qs]
+            [crux.system :as sys])
+  (:import [crux.api Crux HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICruxIngestAPI RemoteClientOptions]
            java.lang.AutoCloseable
-           (java.util Date)
            java.time.Duration
-           [java.util.function Supplier Consumer]))
+           [java.util Date Map]
+           [java.util.function Consumer Supplier]))
 
 (s/def :crux.db/id c/valid-id?)
 (s/def :crux.db/evicted? boolean?)
@@ -35,8 +33,8 @@
 (defprotocol DBProvider
   (db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node ^Date valid-time]
-    ^crux.api.ICruxDatasource [node ^Date valid-time ^Date transaction-time]
+    ^crux.api.ICruxDatasource [node valid-time]
+    ^crux.api.ICruxDatasource [node valid-time tx-time-or-tx]
     "When a valid time is specified then returned db value contains only those
   documents whose valid time is before the specified time.
 
@@ -49,8 +47,8 @@
 
   (open-db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node ^Date valid-time]
-    ^crux.api.ICruxDatasource [node ^Date valid-time ^Date transaction-time]
+    ^crux.api.ICruxDatasource [node valid-time]
+    ^crux.api.ICruxDatasource [node valid-time tx-time-or-tx]
     "When a valid time is specified then returned db value contains only those
   documents whose valid time is before the specified time.
 
@@ -64,6 +62,13 @@
   This DB opens up shared resources to make multiple requests faster - it must
   be `.close`d when you've finished using it (for example, in a `with-open`
   block)"))
+
+(let [db-args '(^crux.api.ICruxDatasource [node]
+                ^crux.api.ICruxDatasource [node valid-time]
+                ^crux.api.ICruxDatasource [node valid-time tx-time]
+                ^crux.api.ICruxDatasource [node valid-time tx])]
+  (alter-meta! #'db assoc :arglists db-args)
+  (alter-meta! #'open-db assoc :arglists db-args))
 
 (defprotocol TransactionFnContext
   (indexing-tx [tx-fn-ctx]))
@@ -172,13 +177,19 @@
   ICruxAPI
   (db
     ([this] (.db this))
-    ([this ^Date valid-time] (.db this valid-time))
-    ([this ^Date valid-time ^Date transaction-time] (.db this valid-time transaction-time)))
+    ([this valid-time] (.db this valid-time))
+    ([this ^Date valid-time tx-or-tx-time]
+     (if (inst? tx-or-tx-time)
+       (.db this valid-time ^Date tx-or-tx-time)
+       (.db this valid-time ^Map tx-or-tx-time))))
 
   (open-db
     ([this] (.openDB this))
-    ([this ^Date valid-time] (.openDB this valid-time))
-    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time))))
+    ([this valid-time] (.openDB this valid-time))
+    ([this ^Date valid-time tx-or-tx-time]
+     (if (inst? tx-or-tx-time)
+       (.openDB this valid-time ^Date tx-or-tx-time)
+       (.openDB this valid-time ^Map tx-or-tx-time)))))
 
 (extend-protocol PCruxNode
   ICruxAPI

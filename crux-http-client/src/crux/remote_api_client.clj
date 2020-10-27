@@ -6,10 +6,10 @@
             [crux.io :as cio]
             [crux.query-state :as qs])
   (:import com.nimbusds.jwt.SignedJWT
-           [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource NodeOutOfSyncException RemoteClientOptions]
+           [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
            [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Instant
-           java.util.Date
+           (java.util Date Map)
            java.util.function.Supplier))
 
 (defn- edn-list->lazy-seq [in]
@@ -172,23 +172,31 @@
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
   (db [this] (.db this nil))
-  (db [this valid-time] (.db this valid-time nil))
+  (db [this valid-time]
+    (let [^Map tx nil]
+      (.db this valid-time tx)))
 
-  (db [this valid-time tx-time]
-    (let [valid-time (or valid-time (Date.))
-          latest-tx-time (-> (api-request-sync (str url "/_crux/latest-completed-tx")
-                                               {:http-opts {:method :get}
-                                                :->jwt-token ->jwt-token})
-                             :crux.tx/tx-time)
-          tx-time (or tx-time latest-tx-time)]
-      (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
+  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
+   (let [^Map tx {:crux.tx/tx-time tx-time}]
+     (.db this valid-time tx)))
 
-      (->RemoteDatasource url valid-time tx-time ->jwt-token)))
+  ;; TODO (JH) think we need a DB endpoint?
+  (^ICruxDatasource db [this ^Date valid-time ^Map tx]
+   (throw (UnsupportedOperationException. "TODO"))
+   #_(let [latest-tx-time (-> (api-request-sync (str url "/_crux/latest-completed-tx")
+                                                {:http-opts {:method :get}
+                                                 :->jwt-token ->jwt-token})
+                              :crux.tx/tx-time)
+           tx-time (or tx-time latest-tx-time)]
+       (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
+         (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
+
+       (->RemoteDatasource url (or valid-time (Date.)) tx-time ->jwt-token)))
 
   (openDB [this] (.db this))
   (openDB [this valid-time] (.db this valid-time))
-  (openDB [this valid-time tx-time] (.db this valid-time tx-time))
+  (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Date tx-time] (.db this valid-time tx-time))
+  (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Map tx] (.db this valid-time tx))
 
   (status [_]
     (api-request-sync (str url "/_crux/status")

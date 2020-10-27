@@ -62,11 +62,28 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
+     * Returns a db as of valid time and transaction.
+     *
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transaction`
+     */
+    public ICruxDatasource db(Date validTime, Map<Keyword, ?> transaction) throws NodeOutOfSyncException;
+
+    /**
+     * Returns a db as of valid time and transaction.
+     *
+     * This method returns a DB that opens resources shared between method calls
+     * - it must be `.close`d when you've finished using it.
+     *
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transaction`
+     */
+    public ICruxDatasource openDB(Date validTime, Map<Keyword, ?> transaction) throws NodeOutOfSyncException;
+
+    /**
      * Returns the status of this node as a map.
      *
      * @return the status map.
      */
-    public Map<Keyword,?> status();
+    public Map<Keyword, ?> status();
 
     /**
      * Checks if a submitted tx was successfully committed.
@@ -76,7 +93,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return true if the submitted transaction was committed, false if it was not committed.
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
-    public boolean hasTxCommitted(Map<Keyword,?> submittedTx) throws NodeOutOfSyncException;
+    public boolean hasTxCommitted(Map<Keyword, ?> submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
@@ -110,7 +127,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction.
      */
-    public Map<Keyword, ?> awaitTx(Map<Keyword,?> tx, Duration timeout);
+    public Map<Keyword, ?> awaitTx(Map<Keyword, ?> tx, Duration timeout);
 
     /**
      * Temporary helper value to pass to `listen`, to subscribe to tx-indexed events.
