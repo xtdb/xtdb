@@ -8,6 +8,11 @@
 
 (t/use-fixtures :each fix/with-node)
 
+(t/deftest test-empty-fork
+  (let [db (-> (crux/db *api*)
+               (crux/with-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
+    (t/is (= {:crux.db/id :foo} (crux/entity db :foo)))))
+
 (t/deftest test-simple-fork
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivna"}]])
 
