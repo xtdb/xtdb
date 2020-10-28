@@ -3585,8 +3585,21 @@
                           {:crux.db/id (keyword (str "oleg-" n))
                            :my-name "Oleg"
                            :my-number n})))
-  (let [acceptable-limit-slowdown 0.6 ;; kept low due to caches
-                                      ;; intervening between the runs.
+
+  (t/testing "join order avoids cross product"
+    (t/is (= '["Oleg" "Ivan" e1 n e2]
+             (:vars-in-join-order
+              (q/query-plan-for '{:find [e1]
+                                  :where [[e1 :my-name "Ivan"]
+                                          [e2 :my-name "Oleg"]
+                                          [e1 :my-number n]
+                                          [e2 :my-number n]]}
+                                c/->value-buffer
+                                (api/attribute-stats *api*))))))
+
+  ;; Kept low due to caches intervening between the runs, actual
+  ;; failure is way beyond this limit.
+  (let [acceptable-limit-slowdown 0.25
         problematic-ns-start (System/nanoTime)]
     (t/is (= 1000 (count (api/q (api/db *api*)
                                 '{:find [e1]
@@ -3603,7 +3616,7 @@
                                             [e2 :my-name e2n]
                                             [e1 :my-number n]
                                             [e2 :my-number n]]}
-                                   "Oleg"))))
+                                  "Oleg"))))
       (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
             slowdown (double (/ (min problematic-ns workedaround-ns)
                                 (max problematic-ns workedaround-ns)))]
