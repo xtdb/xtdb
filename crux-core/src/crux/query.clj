@@ -21,7 +21,7 @@
             [crux.system :as sys]
             [clojure.pprint :as pp])
   (:import clojure.lang.Box
-           (crux.api ICruxDatasource HistoryOptions$SortOrder NodeOutOfSyncException)
+           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
@@ -1628,6 +1628,28 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
+(defn- <-history-opts [{:keys [transact-time valid-time]} ^HistoryOptions opts]
+  (letfn [(inc-date [^Date d]
+            (Date. (inc (.getTime d))))
+          (with-upper-bound [^Date d, ^Date upper-bound]
+            (if (and d (neg? (compare d upper-bound))) d upper-bound))]
+    (let [sort-order (condp = (.sortOrder opts)
+                       HistoryOptions$SortOrder/ASC :asc
+                       HistoryOptions$SortOrder/DESC :desc)]
+      {:sort-order sort-order
+       :with-docs? (.withDocs opts)
+       :with-corrections? (.withCorrections opts)
+       :start (let [desc? (= sort-order :desc)]
+                {:crux.db/valid-time (cond-> (.startValidTime opts)
+                                       desc? (with-upper-bound valid-time))
+                 :crux.tx/tx-time (cond-> (.startTransactionTime opts)
+                                    desc? (with-upper-bound transact-time))})
+
+       :end (let [asc? (= sort-order :asc)]
+              {:crux.db/valid-time (cond-> (.endValidTime opts)
+                                     asc? (with-upper-bound (inc-date valid-time)))
+               :crux.tx/tx-time (cond-> (.endTransactionTime opts)
+                                  asc? (with-upper-bound (inc-date transact-time)))})})))
 (defrecord QueryDatasource [document-store index-store bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             ^ScheduledExecutorService interrupt-executor
@@ -1708,42 +1730,17 @@
       (into [] (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (letfn [(inc-date [^Date d] (Date. (inc (.getTime d))))
-            (with-upper-bound [^Date d, ^Date upper-bound]
-              (if (and d (neg? (compare d upper-bound))) d upper-bound))]
-      (let [sort-order (condp = (.sortOrder opts)
-                         HistoryOptions$SortOrder/ASC :asc
-                         HistoryOptions$SortOrder/DESC :desc)
-            with-docs? (.withDocs opts)
-            index-snapshot (open-index-snapshot this)
-
-            opts (cond-> {:with-corrections? (.withCorrections opts)
-                          :with-docs? with-docs?
-                          :start {:crux.db/valid-time (.startValidTime opts)
-                                  :crux.tx/tx-time (.startTransactionTime opts)}
-                          :end {:crux.db/valid-time (.endValidTime opts)
-                                :crux.tx/tx-time (.endTransactionTime opts)}}
-                   (= sort-order :asc)
-                   (-> (update-in [:end :crux.db/valid-time]
-                                  with-upper-bound (inc-date valid-time))
-                       (update-in [:end :crux.tx/tx-time]
-                                  with-upper-bound (inc-date transact-time)))
-
-                   (= sort-order :desc)
-                   (-> (update-in [:start :crux.db/valid-time]
-                                  with-upper-bound valid-time)
-                       (update-in [:start :crux.tx/tx-time]
-                                  with-upper-bound transact-time)))]
-
-        (cio/->cursor #(.close index-snapshot)
-                      (->> (db/entity-history index-snapshot eid sort-order opts)
-                           (map (fn [^EntityTx etx]
-                                  (cond-> {:crux.tx/tx-time (.tt etx)
-                                           :crux.tx/tx-id (.tx-id etx)
-                                           :crux.db/valid-time (.vt etx)
-                                           :crux.db/content-hash (.content-hash etx)}
-                                    with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
-                                                                       (get (.content-hash etx))))))))))))
+    (let [index-snapshot (open-index-snapshot this)
+          {:keys [sort-order with-docs?] :as opts} (<-history-opts this opts)]
+      (cio/->cursor #(.close index-snapshot)
+                    (->> (db/entity-history index-snapshot eid sort-order opts)
+                         (map (fn [^EntityTx etx]
+                                (cond-> {:crux.tx/tx-time (.tt etx)
+                                         :crux.tx/tx-id (.tx-id etx)
+                                         :crux.db/valid-time (.vt etx)
+                                         :crux.db/content-hash (.content-hash etx)}
+                                  with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
+                                                                     (get (.content-hash etx)))))))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time)
