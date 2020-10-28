@@ -1439,13 +1439,6 @@
 (defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot] :as db}]
   (with-entity-resolver-cache #(db/entity-as-of-resolver index-snapshot % valid-time transact-time) db))
 
-(defn- validate-args [args]
-  (let [ks (keys (first args))]
-    (doseq [m args]
-      (when-not (every? #(contains? m %) ks)
-        (throw (err/illegal-arg :arg-maps-need-same-keys-as-first-map
-                                {::err/message (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))}))))))
-
 (defn- validate-in [in]
   (doseq [binding (:bindings in)
           :let [binding-vars (find-binding-vars binding)]]
@@ -1570,7 +1563,7 @@
         [in in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
 
-(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
+(defn query [{:keys [index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
