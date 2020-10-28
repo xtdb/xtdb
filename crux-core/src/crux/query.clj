@@ -655,7 +655,7 @@
                                 (cons (set/difference new-reachable-vars (set new-vars-to-add)) reachable-var-groups)))
                        (vec (distinct join-order))))]
     (log/debug :triple-joins-var->cardinality var->cardinality)
-    (log/debug :triple-joins-join-order (join-order))
+    (log/debug :triple-joins-join-order join-order)
     [(->> join-order
           (distinct)
           (partition 2 1)
