@@ -251,6 +251,9 @@
 (defn ->cursor [close-fn ^Iterable sq]
   (->Cursor close-fn (.iterator (lazy-seq sq))))
 
+(def empty-cursor
+  (->cursor #() []))
+
 (defn update-if [m k f & args]
   (if (contains? m k)
     (apply update m k f args)

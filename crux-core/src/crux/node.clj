@@ -141,7 +141,7 @@
       (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
             (or (nil? latest-submitted-tx-id)
                 (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
-        (cio/->cursor #() [])
+        cio/empty-cursor
 
         (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
               tx-log-iterator (db/open-tx-log tx-log after-tx-id)

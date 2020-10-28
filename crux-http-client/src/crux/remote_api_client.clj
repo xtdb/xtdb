@@ -161,7 +161,7 @@
                                                  :query-params qps}
                                      :->jwt-token ->jwt-token})]
         (cio/->cursor #(.close ^java.io.Closeable in) (edn-list->lazy-seq in))
-        (cio/->cursor #() []))))
+        cio/empty-cursor)))
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time))
