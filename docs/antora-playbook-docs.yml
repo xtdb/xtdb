@@ -28,4 +28,4 @@ asciidoc:
   attributes:
     page-pagination: true
   extensions:
-    - ./antora_extensions/extension.js
+    - ./antora-extensions/code-tabs.js
