@@ -32,7 +32,7 @@
                    ::history
                    ::sort-order
                    ::util/valid-time
-                   ::util/transaction-time
+                   ::util/transact-time
                    ::start-valid-time
                    ::start-transaction-time
                    ::end-valid-time
@@ -128,11 +128,11 @@
                 (m/install {:name "application/json"
                             :encoder [->json-encoder]}))))
 
-(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transaction-time sort-order with-corrections with-docs
+(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transact-time sort-order with-corrections with-docs
                                                          start-valid-time start-transaction-time end-valid-time end-transaction-time]}]
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transaction-time})
+                                             :transact-time transact-time})
           history-opts {:with-corrections? with-corrections
                         :with-docs? with-docs
                         :start {:crux.db/valid-time start-valid-time

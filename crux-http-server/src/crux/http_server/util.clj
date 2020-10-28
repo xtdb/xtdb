@@ -40,7 +40,7 @@
 
 (s/def ::link-entities? boolean?)
 (s/def ::valid-time inst?)
-(s/def ::transaction-time inst?)
+(s/def ::transact-time inst?)
 (s/def ::timeout int?)
 (s/def ::tx-id int?)
 

@@ -28,7 +28,7 @@
 
 ;; TODO: Need to ensure all query clauses are present + coerced properly
 (s/def ::query-params
-  (s/keys :opt-un [::util/valid-time ::util/transaction-time ::util/link-entities? ::query-edn]))
+  (s/keys :opt-un [::util/valid-time ::util/transact-time ::util/link-entities? ::query-edn]))
 
 (s/def ::args (s/coll-of any? :kind vector?))
 

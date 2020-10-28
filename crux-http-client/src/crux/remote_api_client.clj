@@ -154,7 +154,7 @@
                :end-valid-time (some-> (.endValidTime opts) (cio/format-rfc3339-date))
                :end-transaction-time (some-> (.endTransactionTime opts) (cio/format-rfc3339-date))
                :valid-time (cio/format-rfc3339-date valid-time)
-               :transaction-time (cio/format-rfc3339-date transact-time)}]
+               :transact-time (cio/format-rfc3339-date transact-time)}]
       (if-let [in (api-request-sync (str url "/_crux/entity")
                                     {:http-opts {:as :stream
                                                  :method :get

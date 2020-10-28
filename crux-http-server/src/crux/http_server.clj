@@ -41,14 +41,14 @@
     date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
-                                :opt-un [::util/valid-time ::util/transaction-time]))
+                                :opt-un [::util/valid-time ::util/transact-time]))
 
 (defn- entity-tx [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [eid eid-edn eid-json valid-time transaction-time]} (get-in req [:parameters :query])
+    (let [{:keys [eid eid-edn eid-json valid-time transact-time]} (get-in req [:parameters :query])
           eid (or eid-edn eid-json eid)
           db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transaction-time})
+                                             :transact-time transact-time})
           {::tx/keys [tx-time] :as entity-tx} (crux/entity-tx db eid)]
       (if entity-tx
         (-> {:status 200
@@ -117,7 +117,7 @@
            :return :output-stream}
           (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
 
-(s/def ::tx-time ::util/transaction-time)
+(s/def ::tx-time ::util/transact-time)
 (s/def ::sync-spec (s/keys :opt-un [::tx-time ::util/timeout]))
 
 (defn- sync-handler [^ICruxAPI crux-node]
