@@ -2,15 +2,17 @@
 set -x
 set -e
 
-prefix_user=$(whoami)
+(
+    cd $(dirname "$0")/..
 
-if [ "$prefix_user" == "james" ]; then
-    prefix_user=jms
-fi
+    prefix_user=$(whoami)
 
-PREFIX=${1:-"/${OPENCRUX_PREFIX:-_$prefix_user}"}
-echo Deploying to https://opencrux.com$PREFIX
+    if [ "$prefix_user" == "james" ]; then
+        prefix_user=jms
+    fi
 
-cd $(dirname "$0")/..
-aws s3 sync --delete build/site s3://opencrux-docs$PREFIX --cache-control no-cache
-cd -
+    PREFIX=${1:-"/${OPENCRUX_PREFIX:-_$prefix_user}"}
+    echo Deploying to https://opencrux.com$PREFIX
+
+    aws s3 sync --delete build/site s3://opencrux-docs$PREFIX --cache-control no-cache
+)
