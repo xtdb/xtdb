@@ -251,14 +251,9 @@
 
       (handler request))))
 
-(defn handle-iae [^crux.IllegalArgumentException ex req]
+(defn handle-ex-info [ex req]
   {:status 400
    :body (ex-data ex)})
-
-(defn handle-noose [^crux.api.NodeOutOfSyncException ex req]
-  ;; TODO NOOSE needs ex-data
-  {:status 409
-   :body {:error (str ex)}})
 
 (defn handle-muuntaja-decode-error [ex req]
   {:status 400
@@ -336,8 +331,8 @@
                                        rm/format-response-middleware
                                        (re/create-exception-middleware
                                         (merge re/default-handlers
-                                               {crux.IllegalArgumentException handle-iae
-                                                crux.api.NodeOutOfSyncException handle-noose
+                                               {crux.IllegalArgumentException handle-ex-info
+                                                crux.api.NodeOutOfSyncException handle-ex-info
                                                 :muuntaja/decode handle-muuntaja-decode-error}))
                                        rm/format-request-middleware
                                        rrc/coerce-request-middleware]

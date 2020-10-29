@@ -21,7 +21,7 @@
             [crux.system :as sys]
             [clojure.pprint :as pp])
   (:import clojure.lang.Box
-           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder NodeOutOfSyncException)
+           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
@@ -1771,9 +1771,7 @@
   (db [this valid-time tx-time]
     (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
           _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-              (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
-                                                      tx-time latest-tx-time)
-                                              tx-time latest-tx-time)))
+              (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
           valid-time (or valid-time (cio/next-monotonic-date))
           tx-time (or tx-time latest-tx-time valid-time)]
 
