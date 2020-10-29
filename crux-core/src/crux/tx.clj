@@ -367,6 +367,9 @@
                       (throw (IllegalStateException. "Transaction marked as " (name @!state)))
                       :aborted)))
 
+    (when (:fork-at tx)
+      (throw (IllegalStateException. "Can't abort from fork.")))
+
     (log/debug "Transaction aborted:" (pr-str tx))
 
     (db/submit-docs document-store
@@ -383,8 +386,10 @@
 (defrecord TxIngester [!error index-store document-store bus query-engine ^ExecutorService stats-executor]
   db/TxIngester
   (begin-tx [_ {:keys [fork-at], ::keys [tx-time] :as tx}]
-    (log/debug "Indexing tx-id:" (::tx-id tx))
-    (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx})
+    (when-not fork-at
+      (log/debug "Indexing tx-id:" (::tx-id tx))
+
+      (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx}))
 
     (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)
                                                                                            :cav-cache (nop-cache/->nop-cache {})
