@@ -4,7 +4,8 @@
             [crux.codec :as c]
             [crux.error :as err]
             [crux.io :as cio]
-            [crux.query-state :as qs])
+            [crux.query-state :as qs]
+            [crux.tx :as tx])
   (:import com.nimbusds.jwt.SignedJWT
            [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
            [java.io Closeable InputStreamReader IOException PushbackReader]
@@ -150,15 +151,20 @@
     (let [qps (merge (temporal-qps this)
                      {:eid-edn (pr-str eid)
                       :history true
-                      :sort-order (condp = (.sortOrder opts)
-                                    HistoryOptions$SortOrder/ASC (name :asc)
-                                    HistoryOptions$SortOrder/DESC (name :desc))
-                      :with-corrections (.withCorrections opts)
-                      :with-docs (.withDocs opts)
-                      :start-valid-time (some-> (.startValidTime opts) (cio/format-rfc3339-date))
-                      :start-transaction-time (some-> (.startTransactionTime opts) (cio/format-rfc3339-date))
-                      :end-valid-time (some-> (.endValidTime opts) (cio/format-rfc3339-date))
-                      :end-transaction-time (some-> (.endTransactionTime opts) (cio/format-rfc3339-date))})]
+
+                      :sort-order (name (:sort-order opts))
+                      :with-corrections (:with-corrections? opts)
+                      :with-docs (:with-docs? opts)
+
+                      :start-valid-time (some-> (:start-valid-time opts) (cio/format-rfc3339-date))
+                      :start-transaction-time (some-> (get-in opts [:start-tx ::tx/tx-time])
+                                                      (cio/format-rfc3339-date))
+                      :start-transaction-id (get-in opts [:start-tx ::tx/tx-id])
+
+                      :end-valid-time (some-> (:end-valid-time opts) (cio/format-rfc3339-date))
+                      :end-transaction-time (some-> (get-in opts [:end-tx ::tx/tx-time])
+                                                    (cio/format-rfc3339-date))
+                      :end-transaction-id (get-in opts [:end-tx ::tx/tx-id])})]
       (if-let [in (api-request-sync (str url "/_crux/entity")
                                     {:http-opts {:as :stream
                                                  :method :get

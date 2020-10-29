@@ -442,37 +442,33 @@
 
 (defn- entity-history-seq-ascending
   ([i eid] ([i eid] (entity-history-seq-ascending i eid {})))
-  ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
-           {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
-           :keys [with-corrections?]}]
-   (let [seek-k (encode-bitemp-key-to nil (c/->id-buffer eid) start-vt)]
+  ([i eid {:keys [with-corrections? start-valid-time end-valid-time start-tx-id end-tx-id]}]
+   (let [seek-k (encode-bitemp-key-to nil (c/->id-buffer eid) start-valid-time)]
      (-> (all-keys-in-prefix i seek-k (+ c/index-id-size c/id-size)
                              {:reverse? true, :entries? true})
          (->> (map ->entity-tx))
-         (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
-                                       (neg? (compare (.vt entity-tx) end-vt))))
-                  start-tt (remove (fn [^EntityTx entity-tx]
-                                     (neg? (compare (.tt entity-tx) start-tt))))
-                  end-tt (filter (fn [^EntityTx entity-tx]
-                                   (neg? (compare (.tt entity-tx) end-tt)))))
+         (cond->> end-valid-time (take-while (fn [^EntityTx entity-tx]
+                                               (neg? (compare (.vt entity-tx) end-valid-time))))
+                  start-tx-id (remove (fn [^EntityTx entity-tx]
+                                        (< ^long (.tx-id entity-tx) ^long start-tx-id)))
+                  end-tx-id (filter (fn [^EntityTx entity-tx]
+                                      (< ^long (.tx-id entity-tx) ^long end-tx-id))))
          (cond-> (not with-corrections?) (->> (partition-by :vt)
                                               (map last)))))))
 
 (defn- entity-history-seq-descending
   ([i eid] (entity-history-seq-descending i eid {}))
-  ([i eid {{^Date start-vt :crux.db/valid-time, ^Date start-tt :crux.tx/tx-time} :start
-           {^Date end-vt :crux.db/valid-time, ^Date end-tt :crux.tx/tx-time} :end
-           :keys [with-corrections?]}]
-   (let [seek-k (encode-bitemp-key-to nil (c/->id-buffer eid) start-vt)]
+  ([i eid {:keys [with-corrections? start-valid-time start-tx-id end-valid-time end-tx-id]}]
+   (let [seek-k (encode-bitemp-key-to nil (c/->id-buffer eid) start-valid-time)]
      (-> (all-keys-in-prefix i seek-k (+ c/index-id-size c/id-size)
                              {:entries? true})
          (->> (map ->entity-tx))
-         (cond->> end-vt (take-while (fn [^EntityTx entity-tx]
-                                       (pos? (compare (.vt entity-tx) end-vt))))
-                  start-tt (remove (fn [^EntityTx entity-tx]
-                                     (pos? (compare (.tt entity-tx) start-tt))))
-                  end-tt (filter (fn [^EntityTx entity-tx]
-                                   (pos? (compare (.tt entity-tx) end-tt)))))
+         (cond->> end-valid-time (take-while (fn [^EntityTx entity-tx]
+                                               (pos? (compare (.vt entity-tx) end-valid-time))))
+                  start-tx-id (remove (fn [^EntityTx entity-tx]
+                                        (> ^long (.tx-id entity-tx) ^long start-tx-id)))
+                  end-tx-id (filter (fn [^EntityTx entity-tx]
+                                      (> ^long (.tx-id entity-tx) ^long end-tx-id))))
          (cond-> (not with-corrections?) (->> (partition-by :vt)
                                               (map first)))))))
 

@@ -40,7 +40,7 @@
 
 (defrecord ForkedIndexSnapshot [inner-index-snapshot mem-index-snapshot
                                 evicted-eids
-                                capped-valid-time capped-tx-time capped-tx-id]
+                                capped-valid-time capped-tx-id]
   db/IndexSnapshot
   (av [this a min-v]
     (merge-seqs (db/av inner-index-snapshot a min-v)
@@ -80,13 +80,11 @@
                     (db/entity-history inner-index-snapshot eid sort-order
                                        (case sort-order
                                          :asc (-> opts
-                                                  (cond-> capped-valid-time (update-in [:end :crux.db/valid-time] date-min (inc-date capped-valid-time)))
-                                                  (update-in [:end :crux.tx/tx-time] date-min (inc-date capped-tx-time))
-                                                  (update-in [:end :crux.tx/tx-id] long-min (inc capped-tx-id)))
+                                                  (cond-> capped-valid-time (update :end-valid-time date-min (inc-date capped-valid-time)))
+                                                  (update :end-tx-id long-min (inc capped-tx-id)))
                                          :desc (-> opts
-                                                   (cond-> capped-valid-time (update-in [:start :crux.db/valid-time] date-min capped-valid-time))
-                                                   (update-in [:start :crux.tx/tx-time] date-min capped-tx-time)
-                                                   (update-in [:start :crux.tx/tx-id] long-min capped-tx-id))))))
+                                                   (cond-> capped-valid-time (update :start-valid-time date-min capped-valid-time))
+                                                   (update :start-tx-id long-min capped-tx-id))))))
                 (db/entity-history mem-index-snapshot eid sort-order opts)
 
                 (case [sort-order (boolean (:with-corrections? opts))]
@@ -113,7 +111,6 @@
                            (db/open-nested-index-snapshot mem-index-snapshot)
                            evicted-eids
                            capped-valid-time
-                           capped-tx-time
                            capped-tx-id))
 
   java.io.Closeable
@@ -121,7 +118,7 @@
     (cio/try-close mem-index-snapshot)
     (cio/try-close inner-index-snapshot)))
 
-(defrecord ForkedIndexStore [inner-index-store mem-index-store !evicted-eids !etxs capped-valid-time capped-tx-time capped-tx-id]
+(defrecord ForkedIndexStore [inner-index-store mem-index-store !evicted-eids !etxs capped-valid-time capped-tx-id]
   db/IndexStore
   (index-docs [this docs]
     (db/index-docs mem-index-store docs))
@@ -178,7 +175,6 @@
                            (db/open-index-snapshot mem-index-store)
                            @!evicted-eids
                            capped-valid-time
-                           capped-tx-time
                            capped-tx-id)))
 
 (defn newly-evicted-eids [index-store]
@@ -188,10 +184,10 @@
   (vals @(:!etxs index-store)))
 
 (defn ->forked-index-store [inner-index-store mem-index-store
-                            capped-valid-time capped-tx-time capped-tx-id]
+                            capped-valid-time capped-tx-id]
   (->ForkedIndexStore inner-index-store mem-index-store
                       (atom #{}) (atom {})
-                      capped-valid-time capped-tx-time capped-tx-id))
+                      capped-valid-time capped-tx-id))
 
 (defrecord ForkedDocumentStore [doc-store !docs]
   db/DocumentStore

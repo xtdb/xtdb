@@ -1688,28 +1688,25 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-(defn- <-history-opts [{:keys [tx-time valid-time]} ^HistoryOptions opts]
-  (letfn [(inc-date [^Date d]
-            (Date. (inc (.getTime d))))
-          (with-upper-bound [^Date d, ^Date upper-bound]
-            (if (and d (neg? (compare d upper-bound))) d upper-bound))]
-    (let [sort-order (condp = (.sortOrder opts)
-                       HistoryOptions$SortOrder/ASC :asc
-                       HistoryOptions$SortOrder/DESC :desc)]
-      {:sort-order sort-order
-       :with-docs? (.withDocs opts)
-       :with-corrections? (.withCorrections opts)
-       :start (let [desc? (= sort-order :desc)]
-                {:crux.db/valid-time (cond-> (.startValidTime opts)
-                                       desc? (with-upper-bound valid-time))
-                 :crux.tx/tx-time (cond-> (.startTransactionTime opts)
-                                    desc? (with-upper-bound tx-time))})
+(defn- with-history-bounds [{:keys [sort-order start-tx end-tx] :as opts}
+                            {:keys [^long tx-id ^Date valid-time]}
+                            index-snapshot]
+  (letfn [(with-upper-bound [v match-sort-order upper-bound]
+            (if (and (= sort-order match-sort-order)
+                     (or (nil? v) (pos? (compare v upper-bound))))
+              upper-bound
+              v))]
+    (-> opts
+        (update :start-valid-time with-upper-bound :desc valid-time)
+        (assoc :start-tx-id (-> (some->> start-tx (db/resolve-tx index-snapshot))
+                                :crux.tx/tx-id
+                                (with-upper-bound :desc tx-id)))
 
-       :end (let [asc? (= sort-order :asc)]
-              {:crux.db/valid-time (cond-> (.endValidTime opts)
-                                     asc? (with-upper-bound (inc-date valid-time)))
-               :crux.tx/tx-time (cond-> (.endTransactionTime opts)
-                                  asc? (with-upper-bound (inc-date tx-time)))})})))
+        (update :end-valid-time with-upper-bound :asc (Date. (inc (.getTime valid-time))))
+        (assoc :end-tx-id (-> (some->> end-tx (db/resolve-tx index-snapshot))
+                              :crux.tx/tx-id
+                              (with-upper-bound :asc (inc tx-id))))
+        (dissoc :start-tx :end-tx))))
 
 (defrecord QueryDatasource [document-store index-store bus tx-ingester
                             ^Date valid-time ^Date tx-time ^Long tx-id
@@ -1794,7 +1791,7 @@
     (if-not tx-id
       cio/empty-cursor
       (let [index-snapshot (open-index-snapshot this)
-            {:keys [sort-order with-docs?] :as opts} (<-history-opts this opts)]
+            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
         (cio/->cursor #(.close index-snapshot)
                       (->> (db/entity-history index-snapshot eid sort-order opts)
                            (map (fn [^EntityTx etx]

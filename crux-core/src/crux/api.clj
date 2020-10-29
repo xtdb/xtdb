@@ -4,6 +4,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
+            [crux.history-options :as hopts]
             [crux.ingest-client :as ic]
             [crux.query-state :as qs]
             [crux.system :as sys])
@@ -159,19 +160,6 @@
   with-ops?       should the operations with documents be included?
 
   Returns an iterator of the TxLog"))
-
-(defn- ->HistoryOptions [sort-order
-                         {:keys [with-corrections? with-docs? start end]
-                          :or {with-corrections? false, with-docs false}}]
-  (HistoryOptions. (case sort-order
-                     :asc HistoryOptions$SortOrder/ASC
-                     :desc HistoryOptions$SortOrder/DESC)
-                   (boolean with-corrections?)
-                   (boolean with-docs?)
-                   (:crux.db/valid-time start)
-                   (:crux.tx/tx-time start)
-                   (:crux.db/valid-time end)
-                   (:crux.tx/tx-time end)))
 
 (extend-protocol DBProvider
   ICruxAPI
@@ -354,8 +342,12 @@
                  [db eid sort-order]
                  ^crux.api.ICursor
                  [db eid sort-order {:keys [with-docs? with-corrections?]
-                                     {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
-                                     {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}])]
+                                     {start-vt :crux.db/valid-time
+                                      start-tt :crux.tx/tx-time
+                                      start-tx-id :crux.tx/tx-id} :start
+                                     {end-vt :crux.db/valid-time
+                                      end-tt :crux.tx/tx-time
+                                      end-tx-id :crux.tx/tx-id} :end}])]
   (alter-meta! #'entity-history assoc :arglists arglists)
   (alter-meta! #'open-entity-history assoc :arglists arglists))
 
@@ -367,13 +359,15 @@
   (q* [this query args] (.query this query (object-array args)))
   (open-q* [this query args] (.openQuery this query (object-array args)))
 
+  ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
+  ;; as the new Java ones?
   (entity-history
     ([this eid sort-order] (entity-history this eid sort-order {}))
-    ([this eid sort-order opts] (.entityHistory this eid (->HistoryOptions sort-order opts))))
+    ([this eid sort-order opts] (.entityHistory this eid (hopts/->history-options sort-order opts))))
 
   (open-entity-history
     ([this eid sort-order] (open-entity-history this eid sort-order {}))
-    ([this eid sort-order opts] (.openEntityHistory this eid (->HistoryOptions sort-order opts))))
+    ([this eid sort-order opts] (.openEntityHistory this eid (hopts/->history-options sort-order opts))))
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this))

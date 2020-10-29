@@ -315,10 +315,15 @@
                (db/entity-history index-snapshot :ivan :desc {:with-corrections? true})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-               (db/entity-history index-snapshot :ivan :desc {:start {::tx/tx-time t, ::db/valid-time t}})))
+               (db/entity-history index-snapshot :ivan :desc {:start-valid-time t
+                                                              :start-tx-id 2})))
+
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
+               (db/entity-history index-snapshot :ivan :desc {:start-valid-time t
+                                                              :start-tx-id 1})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-               (db/entity-history index-snapshot :ivan :asc {:start {::db/valid-time t}}))))))
+               (db/entity-history index-snapshot :ivan :asc {:start-valid-time t}))))))
 
 (t/deftest test-entity-history-seq-corner-cases
   (let [ivan {:crux.db/id :ivan}
@@ -333,7 +338,7 @@
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
     (index-tx {:crux.tx/tx-time t2, :crux.tx/tx-id 2}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2)) t1]
-                  [:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
+               [:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [etx-v1-t1 (c/->EntityTx (c/new-id :ivan) t1 t1 1 (c/new-id ivan1))
@@ -347,33 +352,31 @@
           (t/testing "start is inclusive"
             (t/is (= [etx-v2-t2
                       etx-v1-t2]
-                     (history-desc {:start {::tx/tx-time t2, ::db/valid-time t2}})))
+                     (history-desc {:start-tx-id 2, :start-valid-time t2})))
 
             (t/is (= [etx-v1-t2]
-                     (history-desc {:start {::db/valid-time t1}})))
+                     (history-desc {:start-valid-time t1})))
 
             (t/is (= [etx-v1-t2 etx-v2-t2]
-                     (history-asc {:start {::tx/tx-time t2}})))
+                     (history-asc {:start-tx-id 2})))
 
             (t/is (= [etx-v1-t1 etx-v1-t2 etx-v2-t2]
-                     (history-asc {:start {::tx/tx-time t1
-                                          ::db/valid-time t1}
+                     (history-asc {:start-tx-id 1, :start-valid-time t1
                                    :with-corrections? true}))))
 
           (t/testing "end is exclusive"
             (t/is (= [etx-v2-t2]
-                     (history-desc {:start {::tx/tx-time t2, ::db/valid-time t2}
-                                    :end {::tx/tx-time t1, ::db/valid-time t1}})))
+                     (history-desc {:start-valid-time t2, :start-tx-id 2
+                                    :end-valid-time t1, :end-tx-id 1})))
 
             (t/is (= []
-                     (history-desc {:end {::db/valid-time t2}})))
+                     (history-desc {:end-valid-time t2})))
 
             (t/is (= [etx-v1-t1]
-                     (history-asc {:end {::tx/tx-time t2}})))
+                     (history-asc {:end-tx-id 2})))
 
             (t/is (= []
-                     (history-asc {:start {::db/valid-time t1},
-                                   :end {::tx/tx-time t1}})))))))))
+                     (history-asc {:start-valid-time t1, :end-tx-id 1})))))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))

@@ -70,7 +70,7 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (let [entity-history (db/entity-history index-snapshot eid :desc {:start {:crux.db/valid-time end-valid-time}})]
+        (let [entity-history (db/entity-history index-snapshot eid :desc {:start-valid-time end-valid-time})]
           (into (->> (cons start-valid-time
                            (->> (map etx->vt entity-history)
                                 (take-while #(neg? (compare start-valid-time %)))))
@@ -87,7 +87,7 @@
                  (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-id)
 
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (->> (db/entity-history index-snapshot eid :asc {:start {:crux.db/valid-time start-valid-time}})
+                   (->> (db/entity-history index-snapshot eid :asc {:start-valid-time start-valid-time})
                         (remove (comp #{start-valid-time} :valid-time))
                         (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
                         (mapv etx->vt))))
@@ -395,7 +395,6 @@
                                                                                            :cav-cache (nop-cache/->nop-cache {})
                                                                                            :canonical-buffer-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
-                                                        (get fork-at ::tx-time (::tx-time tx))
                                                         (get fork-at ::tx-id (::tx-id tx)))
           forked-document-store (fork/->forked-document-store document-store)]
       (->InFlightTx tx (atom :open) (atom []) !error
