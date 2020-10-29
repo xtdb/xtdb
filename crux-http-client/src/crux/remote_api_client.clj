@@ -102,7 +102,12 @@
     (doseq [stream @streams-state]
       (.close ^Closeable stream))))
 
-(defrecord RemoteDatasource [url valid-time transact-time ->jwt-token]
+(defn- temporal-qps [{:keys [valid-time transact-time tx-id] :as db}]
+  {:valid-time (some-> valid-time (cio/format-rfc3339-date))
+   :transact-time (some-> transact-time (cio/format-rfc3339-date))
+   :tx-id tx-id})
+
+(defrecord RemoteDatasource [url valid-time transact-time tx-id ->jwt-token]
   Closeable
   (close [_])
 
@@ -111,16 +116,14 @@
     (api-request-sync (str url "/_crux/entity")
                       {:->jwt-token ->jwt-token
                        :http-opts {:method :get
-                                   :query-params {:eid-edn (pr-str eid)
-                                                  :valid-time (some-> valid-time (cio/format-rfc3339-date))
-                                                  :transact-time (some->  transact-time (cio/format-rfc3339-date))}}}))
+                                   :query-params (merge (temporal-qps this)
+                                                        {:eid-edn (pr-str eid)})}}))
 
   (entityTx [this eid]
     (api-request-sync (str url "/_crux/entity-tx")
                       {:http-opts {:method :get
-                                   :query-params {:eid-edn (pr-str eid)
-                                                  :valid-time (some-> valid-time (cio/format-rfc3339-date))
-                                                  :transact-time (some->  transact-time (cio/format-rfc3339-date))}}
+                                   :query-params (merge (temporal-qps this)
+                                                        {:eid-edn (pr-str eid)})}
                        :->jwt-token ->jwt-token}))
 
   (query [this q args]
@@ -134,8 +137,7 @@
                                {:->jwt-token ->jwt-token
                                 :http-opts {:as :stream
                                             :method :post
-                                            :query-params {:valid-time (some-> valid-time (cio/format-rfc3339-date))
-                                                           :transact-time (some->  transact-time (cio/format-rfc3339-date))}}
+                                            :query-params (temporal-qps this)}
                                 :body {:query (pr-str q)
                                        :args (vec args)}})]
       (cio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
@@ -145,19 +147,18 @@
       (vec (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (let [qps {:eid-edn (pr-str eid)
-               :history true
-               :sort-order (condp = (.sortOrder opts)
-                             HistoryOptions$SortOrder/ASC (name :asc)
-                             HistoryOptions$SortOrder/DESC (name :desc))
-               :with-corrections (.withCorrections opts)
-               :with-docs (.withDocs opts)
-               :start-valid-time (some-> (.startValidTime opts) (cio/format-rfc3339-date))
-               :start-transaction-time (some-> (.startTransactionTime opts) (cio/format-rfc3339-date))
-               :end-valid-time (some-> (.endValidTime opts) (cio/format-rfc3339-date))
-               :end-transaction-time (some-> (.endTransactionTime opts) (cio/format-rfc3339-date))
-               :valid-time (cio/format-rfc3339-date valid-time)
-               :transact-time (cio/format-rfc3339-date transact-time)}]
+    (let [qps (merge (temporal-qps this)
+                     {:eid-edn (pr-str eid)
+                      :history true
+                      :sort-order (condp = (.sortOrder opts)
+                                    HistoryOptions$SortOrder/ASC (name :asc)
+                                    HistoryOptions$SortOrder/DESC (name :desc))
+                      :with-corrections (.withCorrections opts)
+                      :with-docs (.withDocs opts)
+                      :start-valid-time (some-> (.startValidTime opts) (cio/format-rfc3339-date))
+                      :start-transaction-time (some-> (.startTransactionTime opts) (cio/format-rfc3339-date))
+                      :end-valid-time (some-> (.endValidTime opts) (cio/format-rfc3339-date))
+                      :end-transaction-time (some-> (.endTransactionTime opts) (cio/format-rfc3339-date))})]
       (if-let [in (api-request-sync (str url "/_crux/entity")
                                     {:http-opts {:as :stream
                                                  :method :get
@@ -180,18 +181,19 @@
    (let [^Map tx {:crux.tx/tx-time tx-time}]
      (.db this valid-time tx)))
 
-  ;; TODO (JH) think we need a DB endpoint?
   (^ICruxDatasource db [this ^Date valid-time ^Map tx]
-   (throw (UnsupportedOperationException. "TODO"))
-   #_(let [latest-tx-time (-> (api-request-sync (str url "/_crux/latest-completed-tx")
-                                                {:http-opts {:method :get}
-                                                 :->jwt-token ->jwt-token})
-                              :crux.tx/tx-time)
-           tx-time (or tx-time latest-tx-time)]
-       (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-         (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
-
-       (->RemoteDatasource url (or valid-time (Date.)) tx-time ->jwt-token)))
+   (let [qps (temporal-qps {:valid-time valid-time
+                            :transact-time (:crux.tx/tx-time tx)
+                            :tx-id (:crux.tx/tx-id tx)})
+         resolved-tx (api-request-sync (str url "/_crux/db")
+                                       {:http-opts {:method :get
+                                                    :query-params qps}
+                                        :->jwt-token ->jwt-token})]
+     (->RemoteDatasource url
+                         (:crux.db/valid-time resolved-tx)
+                         (:crux.tx/tx-time resolved-tx)
+                         (:crux.tx/tx-id resolved-tx)
+                         ->jwt-token)))
 
   (openDB [this] (.db this))
   (openDB [this valid-time] (.db this valid-time))

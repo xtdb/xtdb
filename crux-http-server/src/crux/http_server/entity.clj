@@ -13,9 +13,7 @@
             [muuntaja.core :as m]
             [muuntaja.format.core :as mfc]
             [spec-tools.core :as st])
-  (:import crux.codec.Id
-           crux.http_server.entity_ref.EntityRef
-           crux.io.Cursor
+  (:import crux.io.Cursor
            [java.io Closeable OutputStream]))
 
 (s/def ::sort-order keyword?)
@@ -34,6 +32,7 @@
                    ::sort-order
                    ::util/valid-time
                    ::util/transact-time
+                   ::util/tx-id
                    ::start-valid-time
                    ::start-transaction-time
                    ::end-valid-time
@@ -133,11 +132,12 @@
                 (m/install {:name "application/json"
                             :encoder [->json-encoder]}))))
 
-(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transact-time sort-order with-corrections with-docs
+(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transact-time tx-id sort-order with-corrections with-docs
                                                          start-valid-time start-transaction-time end-valid-time end-transaction-time]}]
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transact-time})
+                                             :transact-time transact-time
+                                             :tx-id tx-id})
           history-opts {:with-corrections? with-corrections
                         :with-docs? with-docs
                         :start {:crux.db/valid-time start-valid-time

@@ -58,6 +58,7 @@
 
 (t/deftest test-authenticated-client-and-unauthenticated-server
   (with-api {:->jwt-token (constantly valid-jwt)}
+
     (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
       (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
       (t/is (true? (api/tx-committed? *api* submitted-tx))))))
