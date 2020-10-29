@@ -9,6 +9,7 @@
            [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource NodeOutOfSyncException RemoteClientOptions]
            [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Instant
+           java.util.Date
            java.util.function.Supplier))
 
 (defn- edn-list->lazy-seq [in]
@@ -170,19 +171,20 @@
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
-  (db [_] (->RemoteDatasource url nil nil ->jwt-token))
-  (db [_ valid-time] (->RemoteDatasource url valid-time nil ->jwt-token))
+  (db [this] (.db this nil))
+  (db [this valid-time] (.db this valid-time nil))
 
-  (db [_ valid-time tx-time]
-    (when tx-time
-      (let [latest-tx-time (-> (api-request-sync (str url "/_crux/latest-completed-tx")
-                                                 {:http-opts {:method :get}
-                                                  :->jwt-token ->jwt-token})
-                               :crux.tx/tx-time)]
-        (when (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time)))
-          (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))))
+  (db [this valid-time tx-time]
+    (let [valid-time (or valid-time (Date.))
+          latest-tx-time (-> (api-request-sync (str url "/_crux/latest-completed-tx")
+                                               {:http-opts {:method :get}
+                                                :->jwt-token ->jwt-token})
+                             :crux.tx/tx-time)
+          tx-time (or tx-time latest-tx-time)]
+      (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
+        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
 
-    (->RemoteDatasource url valid-time tx-time ->jwt-token))
+      (->RemoteDatasource url valid-time tx-time ->jwt-token)))
 
   (openDB [this] (.db this))
   (openDB [this valid-time] (.db this valid-time))

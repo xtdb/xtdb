@@ -566,6 +566,7 @@
           (.tailSet vs (buffer-or-value-buffer min-v))))))
 
   (entity-as-of-resolver [this eid valid-time transact-time]
+    (assert transact-time)
     (let [i @entity-as-of-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
           eid-buffer (c/->id-buffer eid)
@@ -588,6 +589,7 @@
               (recur (kv/next i))))))))
 
   (entity-as-of [this eid valid-time transact-time]
+    (assert transact-time)
     (let [i @entity-as-of-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
           eid-buffer (c/->id-buffer eid)
