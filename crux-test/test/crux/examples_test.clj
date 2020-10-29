@@ -17,16 +17,26 @@
   (with-open [node (crux/start-node {})]
     (crux/await-tx node (ex/query-example-setup node) nil)
     (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
-    (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-1 node)))
+    (t/is (= #{[:ivan]} (ex/query-example-with-arguments-1 node)))
     (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-2 node)))
-    (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-3 node)))
-    (t/is (= #{["Ivan"]} (ex/query-example-with-arguments-4 node)))
+    (t/is (= #{[:ivan]} (ex/query-example-with-arguments-3 node)))
+    (t/is (= #{[:petr] [:smith]} (ex/query-example-with-arguments-4 node)))
     (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
     (t/is (= #{[21]} (ex/query-example-with-predicate-1 node)))
 
     (let [!results (atom [])]
       (ex/query-example-streaming node #(swap! !results conj %))
       (t/is (= [[:smith]] @!results)))))
+
+(t/deftest test-example-sub-queries
+  (with-open [node (crux/start-node {})]
+    (t/is (= #{[[[4]]]} (ex/query-example-subquery-1 node)))
+    (t/is (= #{[4]} (ex/query-example-subquery-2 node)))
+    (t/is (= #{[2 4 8]} (ex/query-example-subquery-3 node)))))
+
+(t/deftest test-example-aggregate-queries
+  (with-open [node (crux/start-node {})]
+    (t/is (= #{[6 1 3 4 2]} (ex/query-example-aggregates node)))))
 
 (t/deftest test-example-time-queries
   (with-open [node (crux/start-node {})]
