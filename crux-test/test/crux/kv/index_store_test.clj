@@ -8,8 +8,10 @@
             [crux.db :as db]
             [crux.fixtures :as f]
             [crux.fixtures.kv :as fkv]
-            [crux.kv.index-store :as kvi])
+            [crux.kv.index-store :as kvi]
+            [crux.tx :as tx])
   (:import crux.codec.EntityTx
+           crux.api.NodeOutOfSyncException
            java.util.Date))
 
 (def ^:dynamic *index-store*)
@@ -81,15 +83,18 @@
         query-start-date #inst "2018"
         query-end-date #inst "2021"]
     (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
-                   queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
+                   queries (gen/vector (gen-query-vt+tt query-start-date query-end-date) 100)]
                   (with-fresh-index-store
-                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
+                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)
+                          max-tt (->> (map second txs) sort last)]
                       (write-etxs (vals vt+tt->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
-                        (->> (for [[vt tt] (concat txs queries)]
-                               (let [tx-id (:crux.tx/tx-id (db/resolve-tx-time *index-store* tt))]
-                                 (= (entity-as-of vt+tt->etx vt tt)
-                                    (db/entity-as-of index-snapshot eid vt tx-id))))
+                        (->> (for [[vt tt] (concat txs queries)
+                                   :when (not (pos? (compare tt max-tt)))
+                                   :let [tx-id (:crux.tx/tx-id (db/resolve-tx *index-store* {:crux.tx/tx-time tt}))]
+                                   :when tx-id]
+                               (= (entity-as-of vt+tt->etx vt tt)
+                                  (db/entity-as-of index-snapshot eid vt tx-id)))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-range-test 50
@@ -194,3 +199,38 @@
       ;; :bar 0062cdb7020ff920e5aa642c3d4066950dd1f01f4d
       ;; :foo 000beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33
       (t/is (nil? (db/read-index-meta *index-store* :foo))))))
+
+(t/deftest test-resolve-tx
+  (with-fresh-index-store
+    (t/is (nil? (db/resolve-tx *index-store* nil)))
+    (t/is (thrown? NodeOutOfSyncException (db/resolve-tx *index-store* {:crux.tx/tx-time (Date.)})))
+    (t/is (thrown? NodeOutOfSyncException (db/resolve-tx *index-store* {:crux.tx/tx-id 1})))
+
+    (let [tx0 {:crux.tx/tx-time #inst "2020", :crux.tx/tx-id 0}
+          tx1 {:crux.tx/tx-time #inst "2022", :crux.tx/tx-id 1}]
+      (db/index-entity-txs *index-store* tx0 [])
+      (db/index-entity-txs *index-store* tx1 [])
+
+      (t/is (= tx1 (db/latest-completed-tx *index-store*)))
+
+      (t/is (= tx0 (db/resolve-tx *index-store* tx0)))
+      (t/is (= tx1 (db/resolve-tx *index-store* tx1)))
+      (t/is (= tx1 (db/resolve-tx *index-store* nil)))
+
+      (let [tx #::tx{:tx-time #inst "2021", :tx-id 0}]
+        (t/is (= tx (db/resolve-tx *index-store* tx)))
+        (t/is (= tx (db/resolve-tx *index-store* {::tx/tx-time #inst "2021"}))))
+
+      (t/is (thrown? IllegalArgumentException
+                     (db/resolve-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 1})))
+
+      ;; This is an edge case - arguably it should throw IAE,
+      ;;   but instead returns an instant with tx-time "2022", but before tx-id 1 was ingested.
+      ;; The query engine would still behave consistently in this case (with tx-id = 0),
+      ;;   and it's unlikely that a user will hit it unless they explicitly ask for it,
+      ;;   so it's a philosophical question as to whether we should allow it or check for it :)
+      (t/is (= #::tx{:tx-time #inst "2022", :tx-id 0}
+               (db/resolve-tx *index-store* #::tx{:tx-time #inst "2022", :tx-id 0})))
+
+      (t/is (thrown? NodeOutOfSyncException
+                     (db/resolve-tx *index-store* #::tx{:tx-time #inst "2023", :tx-id 1}))))))

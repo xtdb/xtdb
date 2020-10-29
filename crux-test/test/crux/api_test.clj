@@ -42,12 +42,12 @@
     (t/testing "put"
       (let [{::tx/keys [tx-time] :as tx} (fix/submit+await-tx [[:crux.tx/put content-ivan valid-time]])]
         (t/is (= {:crux.db/id :ivan :name "Ivan"}
-                 (api/entity (api/db *api* valid-time tx-time) :ivan)))))
+                 (api/entity (api/db *api* valid-time tx) :ivan)))))
 
     (t/testing "delete"
-      (let [{::tx/keys [tx-time] :as delete-tx} (api/submit-tx *api* [[:crux.tx/delete :ivan valid-time]])]
+      (let [delete-tx (api/submit-tx *api* [[:crux.tx/delete :ivan valid-time]])]
         (api/await-tx *api* delete-tx)
-        (t/is (nil? (api/entity (api/db *api* valid-time tx-time) :ivan)))))))
+        (t/is (nil? (api/entity (api/db *api* valid-time delete-tx) :ivan)))))))
 
 (t/deftest test-empty-db
   (let [empty-db (api/db *api*)]
@@ -125,7 +125,7 @@
 (t/deftest test-history
   (t/testing "transaction"
     (let [valid-time (Date.)
-          {::tx/keys [tx-time tx-id] :as submitted-tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+          submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (api/await-tx *api* submitted-tx)
       (with-dbs [db (*api*)]
         (let [entity-tx (api/entity-tx db :ivan)
@@ -288,7 +288,6 @@
                       :crux.db/content-hash (c/new-id doc)})))]
     (let [v1 (submit-ivan {:version 1} #inst "2019-02-01")
           v2 (submit-ivan {:version 2} #inst "2019-02-02")
-          _ (Thread/sleep 10) ; so that these two are at different tx-times, see below.
           v3 (submit-ivan {:version 3} #inst "2019-02-03")
           v2-corrected (submit-ivan {:version 2, :corrected? true} #inst "2019-02-02")]
 
@@ -333,7 +332,7 @@
         (t/is (empty? (api/entity-history db :ivan :asc)))
         (t/is (empty? (api/entity-history db :ivan :desc))))
 
-      (with-dbs [db (*api* #inst "2019-02-02" (:crux.tx/tx-time v2))]
+      (with-dbs [db (*api* #inst "2019-02-02" v2)]
         (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
                     history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
           (t/is (= [v1 v2]
@@ -341,7 +340,7 @@
           (t/is (= [v2 v1]
                    (iterator-seq history-desc)))))
 
-      (with-dbs [db (*api* #inst "2019-02-03" (:crux.tx/tx-time v2))]
+      (with-dbs [db (*api* #inst "2019-02-03" v2)]
         (t/is (= [v1 v2]
                  (api/entity-history db :ivan :asc {:with-docs? true})))
         (t/is (= [v2 v1]

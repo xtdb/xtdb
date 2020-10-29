@@ -162,6 +162,10 @@
     (or (db/latest-completed-tx mem-index-store)
         (db/latest-completed-tx inner-index-store)))
 
+  (resolve-tx [this tx]
+    (or (db/resolve-tx mem-index-store tx)
+        (db/resolve-tx inner-index-store tx)))
+
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed mem-index-store tx))
 

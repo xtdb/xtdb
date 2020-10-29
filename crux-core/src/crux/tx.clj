@@ -199,7 +199,7 @@
 
           :else (try
                   (let [ctx (->TxFnContext query-engine tx)
-                        db (api/db query-engine tx-time)
+                        db (api/db ctx tx-time)
                         res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
                     (if (false? res)
                       {:failed? true}

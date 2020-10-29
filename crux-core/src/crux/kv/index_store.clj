@@ -10,7 +10,8 @@
             [crux.system :as sys]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.error :as err])
   (:import (crux.codec Id EntityTx)
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
@@ -38,6 +39,11 @@
   kv/KvIterator
   (seek [_ k]
     (when-let [k (kv/seek i k)]
+      (when (mem/buffers=? k prefix (.capacity prefix))
+        k)))
+
+  (prev [_]
+    (when-let [k (kv/prev i)]
       (when (mem/buffers=? k prefix (.capacity prefix))
         k)))
 
@@ -368,27 +374,24 @@
 
 ;;;; tx-id/tx-time mappings
 
-(defn- encode-tx-time-mapping-key-to
-  ([to] (encode-tx-time-mapping-key-to to nil))
+(def tx-time-mapping-prefix
+  (doto ^MutableDirectBuffer (mem/allocate-unpooled-buffer c/index-id-size)
+    (.putByte 0 c/tx-time-mapping-id)))
 
-  ([to tx-time]
-   (let [^MutableDirectBuffer to (or to (mem/allocate-buffer (+ c/index-id-size (c/maybe-long-size tx-time))))]
-     (-> to
-         (doto (.putByte 0 c/tx-time-mapping-id))
-         (cond-> tx-time (doto (.putLong c/index-id-size (c/date->reverse-time-ms tx-time) ByteOrder/BIG_ENDIAN)))
-         (mem/limit-buffer (+ c/index-id-size (c/maybe-long-size tx-time)))))))
+(defn- encode-tx-time-mapping-key-to [to tx-time tx-id]
+  (let [size (+ c/index-id-size (c/maybe-long-size tx-time) (c/maybe-long-size tx-id))
+        ^MutableDirectBuffer to (or to (mem/allocate-buffer size))]
+    (assert (>= (.capacity to) size))
+    (-> to
+        (doto (.putByte 0 c/tx-time-mapping-id))
+        (cond-> tx-time (doto (.putLong c/index-id-size (c/date->reverse-time-ms tx-time) ByteOrder/BIG_ENDIAN)))
+        (cond-> tx-id (doto (.putLong (+ c/index-id-size Long/BYTES) (c/descending-long tx-id) ByteOrder/BIG_ENDIAN)))
+        (mem/limit-buffer size))))
 
 (defn- decode-tx-time-mapping-key-from [^DirectBuffer k]
   (assert (= c/tx-time-mapping-id (.getByte k 0)))
-  (c/reverse-time-ms->date (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN)))
-
-(defn- encode-tx-time-mapping-value [tx-id]
-  (let [^MutableDirectBuffer to (mem/allocate-buffer Long/BYTES)]
-    (-> to
-        (doto (.putLong 0 tx-id ByteOrder/BIG_ENDIAN)))))
-
-(defn- decode-tx-time-mapping-value-from [^DirectBuffer k]
-  (.getLong k 0 ByteOrder/BIG_ENDIAN))
+  {:crux.tx/tx-time (c/reverse-time-ms->date (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN))
+   :crux.tx/tx-id (c/descending-long (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
 ;;;; Entity as-of
 
@@ -700,12 +703,15 @@
                      canonical-buffer-cache
                      (AtomicBoolean.)))
 
+(defn- latest-completed-tx-i [i]
+  (some-> (kv/seek i tx-time-mapping-prefix)
+          decode-tx-time-mapping-key-from))
+
 (defn latest-completed-tx [kv-store]
   (with-open [snapshot (kv/new-snapshot kv-store)
-              i (kv/new-iterator snapshot)]
-    (when-let [k (kv/seek i (encode-tx-time-mapping-key-to nil))]
-      {:crux.tx/tx-time (decode-tx-time-mapping-key-from k)
-       :crux.tx/tx-id (decode-tx-time-mapping-value-from (kv/value i))})))
+              i (-> (kv/new-iterator snapshot)
+                    (new-prefix-kv-iterator tx-time-mapping-prefix))]
+    (latest-completed-tx-i i)))
 
 (defrecord KvIndexStore [kv-store cav-cache canonical-buffer-cache]
   db/IndexStore
@@ -779,15 +785,15 @@
       {:tombstones tombstones}))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id tx-time] :as tx}]
-    (kv/store kv-store [(MapEntry/create (encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer)
-                        (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time)
-                                         (encode-tx-time-mapping-value tx-id))]))
+    (kv/store kv-store
+              [(MapEntry/create (encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer)
+               (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)]))
 
   (index-entity-txs [this {:crux.tx/keys [tx-id tx-time] :as tx} entity-txs]
-    (kv/store kv-store (->> (conj (mapcat etx->kvs entity-txs)
-                                  (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time)
-                                                   (encode-tx-time-mapping-value tx-id)))
-                            (into (sorted-map-by mem/buffer-comparator)))))
+    (kv/store kv-store
+              (->> (conj (mapcat etx->kvs entity-txs)
+                         (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer))
+                   (into (sorted-map-by mem/buffer-comparator)))))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
@@ -801,13 +807,34 @@
   (latest-completed-tx [this]
     (latest-completed-tx kv-store))
 
-  (resolve-tx-time [this tx-time]
-    ;; TODO (JH) opening up a snapshot and iterator just for this?
+  (resolve-tx [this {:crux.tx/keys [tx-time tx-id] :as tx}]
     (with-open [snapshot (kv/new-snapshot kv-store)
-                i (kv/new-iterator snapshot)]
-      (when-let [k (kv/seek i (encode-tx-time-mapping-key-to (.get seek-buffer-tl) tx-time))]
-        {:crux.tx/tx-time (decode-tx-time-mapping-key-from k)
-         :crux.tx/tx-id (decode-tx-time-mapping-value-from (kv/value i))})))
+                i (-> (kv/new-iterator snapshot)
+                      (new-prefix-kv-iterator tx-time-mapping-prefix))]
+      (let [latest-tx (latest-completed-tx-i i)]
+        (cond
+          (= tx latest-tx) tx
+
+          tx-time (if (or (nil? latest-tx) (pos? (compare tx-time (:crux.tx/tx-time latest-tx))))
+                    (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
+
+                    (let [found-tx (some-> (kv/seek i (encode-tx-time-mapping-key-to (.get seek-buffer-tl) tx-time tx-id))
+                                           decode-tx-time-mapping-key-from)]
+                      (if (and tx-id (not= tx-id (:crux.tx/tx-id found-tx)))
+                        (throw (err/illegal-arg :tx-id-mismatch
+                                                {::err/message "Mismatching tx-id for tx-time"
+                                                 :requested tx
+                                                 :available found-tx}))
+
+                        {:crux.tx/tx-time tx-time
+                         :crux.tx/tx-id (:crux.tx/tx-id found-tx)})))
+
+          tx-id (if (or (nil? latest-tx) (> ^long tx-id ^long (:crux.tx/tx-id latest-tx)))
+                  (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
+                  ;; TODO find corresponding tx-time?
+                  tx)
+
+          :else latest-tx))))
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]

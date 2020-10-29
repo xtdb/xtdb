@@ -22,7 +22,7 @@
   (store-index-meta [this k v])
   (read-index-meta [this k] [this k not-found])
   (latest-completed-tx [this])
-  (resolve-tx-time [this tx-time])
+  (resolve-tx [this tx])
   (tx-failed? [this tx-id])
   (open-index-snapshot ^java.io.Closeable [this]))
 ;; end::IndexStore[]
