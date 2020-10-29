@@ -1,0 +1,35 @@
+site:
+  title: Crux
+  start_page: main::index.adoc
+  url: https://opencrux.com
+content:
+  sources:
+    - url: ../
+      start_path: docs/main
+      branches: HEAD
+    - url: ../
+      start_path: docs/training
+      branches: HEAD
+    - url: ../
+      start_path: docs/about
+      branches: HEAD
+    - url: ../
+      start_path: docs/tutorials
+      branches: HEAD
+    - url: ../../crux-site
+      start_path: blog
+      branches: HEAD
+    - url: ../
+      start_path: docs/reference
+      branches:
+        - HEAD
+        - docs-v*
+ui:
+  bundle:
+    url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip
+    snapshot: true
+asciidoc:
+  attributes:
+    page-pagination: true
+  extensions:
+    - ./antora-extensions/code-tabs.js
