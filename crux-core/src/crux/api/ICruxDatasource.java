@@ -100,6 +100,13 @@ public interface ICruxDatasource extends Closeable {
     public Date transactionTime();
 
     /**
+     * @return the latest transaction applied to this db value.
+     * If a transaction was specified when db value was acquired then returns
+     * the specified transaction.
+     */
+    public Map<Keyword, ?> transaction();
+
+    /**
      * Returns a new db value with the txOps speculatively applied.
      * The txOps will only be visible in the value returned from this method - they're not submitted to the cluster, nor are they visible to any other database value in your application.
      *

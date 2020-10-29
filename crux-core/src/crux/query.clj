@@ -1807,6 +1807,7 @@
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
+  (transaction [_] {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id})
 
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time

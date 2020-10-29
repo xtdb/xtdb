@@ -354,8 +354,7 @@
 (t/deftest test-db-is-a-snapshot
   (let [tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 0}]])
         db (api/db *api*)]
-    (t/is (= (:crux.tx/tx-time tx)
-             (api/transaction-time db)))
+    (t/is (= tx (api/transaction db)))
     (t/is (= {:crux.db/id :foo, :count 0}
              (api/entity db :foo)))
 

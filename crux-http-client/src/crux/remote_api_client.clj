@@ -168,7 +168,8 @@
         cio/empty-cursor)))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time))
+  (transactionTime [_] transact-time)
+  (transaction [_] {:crux.tx/tx-time transact-time, :crux.tx/tx-id tx-id}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI

@@ -43,7 +43,7 @@
   specified transaction time.
 
   If the node hasn't yet indexed a transaction at or past the given
-  transaction-time, this throws NodeOutOfSyncException")
+  transaction, this throws NodeOutOfSyncException")
 
   (open-db
     ^crux.api.ICruxDatasource [node]
@@ -57,7 +57,7 @@
   specified transaction time.
 
   If the node hasn't yet indexed a transaction at or past the given
-  transaction-time, this throws NodeOutOfSyncException
+  transaction, this throws NodeOutOfSyncException
 
   This DB opens up shared resources to make multiple requests faster - it must
   be `.close`d when you've finished using it (for example, in a `with-open`
@@ -91,7 +91,7 @@
     "Blocks until the node has caught up indexing to the latest tx available at
   the time this method is called. Will throw an exception on timeout. The
   returned date is the latest transaction time indexed by this node. This can be
-  used as the second parameter in (db valid-time, transaction-time) for
+  used as the second parameter in (db valid-time transaction-time) for
   consistent reads.
 
   timeout – max time to wait, can be nil for the default.
@@ -315,6 +315,11 @@
   If a tx time was specified when db value was acquired then returns
   the specified time.")
 
+  (transaction [db]
+    "returns the latest transaction applied to this db value.
+  If a transaction was specified when db value was acquired then returns
+  the specified transaction.")
+
   (with-tx [db tx-ops]
     "Returns a new db value with the tx-ops speculatively applied.
   The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
@@ -372,6 +377,7 @@
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this))
+  (transaction [this] (.transaction this))
 
   (with-tx [this tx-ops] (.withTx this tx-ops)))
 
