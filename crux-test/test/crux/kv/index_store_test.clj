@@ -91,7 +91,7 @@
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
                         (->> (for [[vt tt] (concat txs queries)
                                    :when (not (pos? (compare tt max-tt)))
-                                   :let [tx-id (:crux.tx/tx-id (db/resolve-tx *index-store* {:crux.tx/tx-time tt}))]
+                                   :let [tx-id (:crux.tx/tx-id (db/resolve-tx index-snapshot {:crux.tx/tx-time tt}))]
                                    :when tx-id]
                                (= (entity-as-of vt+tt->etx vt tt)
                                   (db/entity-as-of index-snapshot eid vt tx-id)))
@@ -202,9 +202,10 @@
 
 (t/deftest test-resolve-tx
   (with-fresh-index-store
-    (t/is (nil? (db/resolve-tx *index-store* nil)))
-    (t/is (thrown? NodeOutOfSyncException (db/resolve-tx *index-store* {:crux.tx/tx-time (Date.)})))
-    (t/is (thrown? NodeOutOfSyncException (db/resolve-tx *index-store* {:crux.tx/tx-id 1})))
+    (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
+      (t/is (nil? (db/resolve-tx index-snapshot nil)))
+      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {:crux.tx/tx-time (Date.)})))
+      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {:crux.tx/tx-id 1}))))
 
     (let [tx0 {:crux.tx/tx-time #inst "2020", :crux.tx/tx-id 0}
           tx1 {:crux.tx/tx-time #inst "2022", :crux.tx/tx-id 1}]
@@ -213,24 +214,25 @@
 
       (t/is (= tx1 (db/latest-completed-tx *index-store*)))
 
-      (t/is (= tx0 (db/resolve-tx *index-store* tx0)))
-      (t/is (= tx1 (db/resolve-tx *index-store* tx1)))
-      (t/is (= tx1 (db/resolve-tx *index-store* nil)))
+      (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
+        (t/is (= tx0 (db/resolve-tx index-snapshot tx0)))
+        (t/is (= tx1 (db/resolve-tx index-snapshot tx1)))
+        (t/is (= tx1 (db/resolve-tx index-snapshot nil)))
 
-      (let [tx #::tx{:tx-time #inst "2021", :tx-id 0}]
-        (t/is (= tx (db/resolve-tx *index-store* tx)))
-        (t/is (= tx (db/resolve-tx *index-store* {::tx/tx-time #inst "2021"}))))
+        (let [tx #::tx{:tx-time #inst "2021", :tx-id 0}]
+          (t/is (= tx (db/resolve-tx index-snapshot tx)))
+          (t/is (= tx (db/resolve-tx index-snapshot {::tx/tx-time #inst "2021"}))))
 
-      (t/is (thrown? IllegalArgumentException
-                     (db/resolve-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 1})))
+        (t/is (thrown? IllegalArgumentException
+                       (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2021", :tx-id 1})))
 
-      ;; This is an edge case - arguably it should throw IAE,
-      ;;   but instead returns an instant with tx-time "2022", but before tx-id 1 was ingested.
-      ;; The query engine would still behave consistently in this case (with tx-id = 0),
-      ;;   and it's unlikely that a user will hit it unless they explicitly ask for it,
-      ;;   so it's a philosophical question as to whether we should allow it or check for it :)
-      (t/is (= #::tx{:tx-time #inst "2022", :tx-id 0}
-               (db/resolve-tx *index-store* #::tx{:tx-time #inst "2022", :tx-id 0})))
+        ;; This is an edge case - arguably it should throw IAE,
+        ;;   but instead returns an instant with tx-time "2022", but before tx-id 1 was ingested.
+        ;; The query engine would still behave consistently in this case (with tx-id = 0),
+        ;;   and it's unlikely that a user will hit it unless they explicitly ask for it,
+        ;;   so it's a philosophical question as to whether we should allow it or check for it :)
+        (t/is (= #::tx{:tx-time #inst "2022", :tx-id 0}
+                 (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2022", :tx-id 0})))
 
-      (t/is (thrown? NodeOutOfSyncException
-                     (db/resolve-tx *index-store* #::tx{:tx-time #inst "2023", :tx-id 1}))))))
+        (t/is (thrown? NodeOutOfSyncException
+                       (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2023", :tx-id 1})))))))

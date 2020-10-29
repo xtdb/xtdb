@@ -1842,9 +1842,11 @@
   (db [this valid-time] (api/db this valid-time nil))
   (db [this valid-time tx-or-tx-time]
     (let [valid-time (or valid-time (Date.))
-          resolved-tx (db/resolve-tx index-store (if (inst? tx-or-tx-time)
-                                                   {:crux.tx/tx-time tx-or-tx-time}
-                                                   tx-or-tx-time))]
+          resolved-tx (with-open [index-snapshot (db/open-index-snapshot index-store)]
+                        (db/resolve-tx index-snapshot
+                                       (if (inst? tx-or-tx-time)
+                                         {:crux.tx/tx-time tx-or-tx-time}
+                                         tx-or-tx-time)))]
 
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency

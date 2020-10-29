@@ -398,8 +398,8 @@
 (defn- find-first-entity-tx-within-range [i min max eid]
   (let [prefix-size (+ c/index-id-size c/id-size)
         seek-k (encode-bitemp-z-key-to (.get seek-buffer-tl)
-                                             eid
-                                             min)]
+                                       eid
+                                       min)]
     (loop [k (kv/seek i seek-k)]
       (when (and k (mem/buffers=? seek-k k prefix-size))
         (let [z (decode-bitemp-z-key-as-z-number-from k)]
@@ -524,6 +524,16 @@
          (cons k (lazy-seq (step (kv/next i))))
          (recur (kv/next i)))))
    (kv/seek i seek-k)))
+
+(defn- latest-completed-tx-i [i]
+  (some-> (kv/seek i tx-time-mapping-prefix)
+          decode-tx-time-mapping-key-from))
+
+(defn latest-completed-tx [kv-store]
+  (with-open [snapshot (kv/new-snapshot kv-store)
+              i (-> (kv/new-iterator snapshot)
+                    (new-prefix-kv-iterator tx-time-mapping-prefix))]
+    (latest-completed-tx-i i)))
 
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
@@ -662,6 +672,34 @@
         (.put temp-hash-cache (canonical-buffer-lookup canonical-buffer-cache value-buffer) value))
       value-buffer))
 
+  (resolve-tx [this {:crux.tx/keys [tx-time tx-id] :as tx}]
+    (with-open [i (-> (kv/new-iterator snapshot)
+                      (new-prefix-kv-iterator tx-time-mapping-prefix))]
+      (let [latest-tx (latest-completed-tx-i i)]
+        (cond
+          (= tx latest-tx) tx
+
+          tx-time (if (or (nil? latest-tx) (pos? (compare tx-time (:crux.tx/tx-time latest-tx))))
+                    (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
+
+                    (let [found-tx (some-> (kv/seek i (encode-tx-time-mapping-key-to (.get seek-buffer-tl) tx-time tx-id))
+                                           decode-tx-time-mapping-key-from)]
+                      (if (and tx-id (not= tx-id (:crux.tx/tx-id found-tx)))
+                        (throw (err/illegal-arg :tx-id-mismatch
+                                                {::err/message "Mismatching tx-id for tx-time"
+                                                 :requested tx
+                                                 :available found-tx}))
+
+                        {:crux.tx/tx-time tx-time
+                         :crux.tx/tx-id (:crux.tx/tx-id found-tx)})))
+
+          tx-id (if (or (nil? latest-tx) (> ^long tx-id ^long (:crux.tx/tx-id latest-tx)))
+                  (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
+                  ;; TODO find corresponding tx-time?
+                  tx)
+
+          :else latest-tx))))
+
   (open-nested-index-snapshot [this]
     (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache cav-cache canonical-buffer-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
@@ -702,16 +740,6 @@
                      cav-cache
                      canonical-buffer-cache
                      (AtomicBoolean.)))
-
-(defn- latest-completed-tx-i [i]
-  (some-> (kv/seek i tx-time-mapping-prefix)
-          decode-tx-time-mapping-key-from))
-
-(defn latest-completed-tx [kv-store]
-  (with-open [snapshot (kv/new-snapshot kv-store)
-              i (-> (kv/new-iterator snapshot)
-                    (new-prefix-kv-iterator tx-time-mapping-prefix))]
-    (latest-completed-tx-i i)))
 
 (defrecord KvIndexStore [kv-store cav-cache canonical-buffer-cache]
   db/IndexStore
@@ -806,35 +834,6 @@
 
   (latest-completed-tx [this]
     (latest-completed-tx kv-store))
-
-  (resolve-tx [this {:crux.tx/keys [tx-time tx-id] :as tx}]
-    (with-open [snapshot (kv/new-snapshot kv-store)
-                i (-> (kv/new-iterator snapshot)
-                      (new-prefix-kv-iterator tx-time-mapping-prefix))]
-      (let [latest-tx (latest-completed-tx-i i)]
-        (cond
-          (= tx latest-tx) tx
-
-          tx-time (if (or (nil? latest-tx) (pos? (compare tx-time (:crux.tx/tx-time latest-tx))))
-                    (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
-
-                    (let [found-tx (some-> (kv/seek i (encode-tx-time-mapping-key-to (.get seek-buffer-tl) tx-time tx-id))
-                                           decode-tx-time-mapping-key-from)]
-                      (if (and tx-id (not= tx-id (:crux.tx/tx-id found-tx)))
-                        (throw (err/illegal-arg :tx-id-mismatch
-                                                {::err/message "Mismatching tx-id for tx-time"
-                                                 :requested tx
-                                                 :available found-tx}))
-
-                        {:crux.tx/tx-time tx-time
-                         :crux.tx/tx-id (:crux.tx/tx-id found-tx)})))
-
-          tx-id (if (or (nil? latest-tx) (> ^long tx-id ^long (:crux.tx/tx-id latest-tx)))
-                  (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
-                  ;; TODO find corresponding tx-time?
-                  tx)
-
-          :else latest-tx))))
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]

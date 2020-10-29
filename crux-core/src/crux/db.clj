@@ -22,7 +22,6 @@
   (store-index-meta [this k v])
   (read-index-meta [this k] [this k not-found])
   (latest-completed-tx [this])
-  (resolve-tx [this tx])
   (tx-failed? [this tx-id])
   (open-index-snapshot ^java.io.Closeable [this]))
 ;; end::IndexStore[]
@@ -38,6 +37,7 @@
   (entity-history [this eid sort-order opts])
   (decode-value [this value-buffer])
   (encode-value [this value])
+  (resolve-tx [this tx])
   (open-nested-index-snapshot ^java.io.Closeable [this]))
 ;; end::IndexSnapshot[]
 

@@ -104,6 +104,10 @@
   (encode-value [this value]
     (db/encode-value mem-index-snapshot value))
 
+  (resolve-tx [this tx]
+    (or (db/resolve-tx mem-index-snapshot tx)
+        (db/resolve-tx inner-index-snapshot tx)))
+
   (open-nested-index-snapshot ^java.io.Closeable [this]
     (->ForkedIndexSnapshot (db/open-nested-index-snapshot inner-index-snapshot)
                            (db/open-nested-index-snapshot mem-index-snapshot)
@@ -161,10 +165,6 @@
   (latest-completed-tx [this]
     (or (db/latest-completed-tx mem-index-store)
         (db/latest-completed-tx inner-index-store)))
-
-  (resolve-tx [this tx]
-    (or (db/resolve-tx mem-index-store tx)
-        (db/resolve-tx inner-index-store tx)))
 
   (mark-tx-as-failed [this tx]
     (db/mark-tx-as-failed mem-index-store tx))
