@@ -272,7 +272,7 @@
   Options:
   * `sort-order` (parameter): `#{:asc :desc}`
   * `:with-docs?`: specifies whether to include documents in the entries
-  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
+  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
   * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
   * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
 

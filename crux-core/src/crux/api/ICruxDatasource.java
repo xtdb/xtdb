@@ -63,7 +63,7 @@ public interface ICruxDatasource extends Closeable {
      *
      * If {@link HistoryOptions#withCorrections(boolean) withCorrections} is set
      * on the options, bitemporal corrections are also included in the sequence,
-     * sorted first by valid-time, then transaction-time.
+     * sorted first by valid-time, then tx-id.
      *
      * No matter what `start` and `end` parameters you specify, you won't receive
      * results later than the valid-time and transact-time of this DB value.

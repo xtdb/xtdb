@@ -31,7 +31,7 @@ public interface HistoryOptions extends ILookup {
      * Specifies whether to return bitemporal corrections in the history response.
      *
      * If this is set to `true`, corrections will be returned within the
-     * sequence, sorted first by valid-time, then transaction-time.
+     * sequence, sorted first by valid-time, then tx-id.
      */
     public HistoryOptions withCorrections(boolean withCorrections);
 

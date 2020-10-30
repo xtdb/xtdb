@@ -13,16 +13,17 @@ with few lifecycle members added.
   (db
     [node]
     [node ^Date valid-time]
-    [node ^Date valid-time ^Date transaction-time]
+    [node ^Date valid-time ^Map transaction]
+    ^:deprecated [node ^Date valid-time ^Date transaction-time]
     "When a valid time is specified then returned db value contains only those
      documents whose valid time is before the specified time.
 
-     When both valid and transaction time are specified returns a db value as of
-     the valid time and the latest transaction time indexed at or before the
-     specified transaction time.
+     When both valid and transaction time/transaction are specified returns a db value as of
+     the valid time and the latest transaction indexed at or before the
+     specified transaction.
 
      If the node hasn't yet indexed a transaction at or past the given
-     transaction-time, this throws NodeOutOfSyncException")
+     transaction, this throws NodeOutOfSyncException")
 ----
 
 === open-db
@@ -32,16 +33,17 @@ with few lifecycle members added.
   (open-db
     [node]
     [node ^Date valid-time]
-    [node ^Date valid-time ^Date transaction-time]
+    [node ^Date valid-time ^Map transaction]
+    ^:deprecated [node ^Date valid-time ^Date transaction-time]
     "When a valid time is specified then returned db value contains only those
      documents whose valid time is before the specified time.
 
-     When both valid and transaction time are specified returns a db value as of
-     the valid time and the latest transaction time indexed at or before the
-     specified transaction time.
+     When both valid time and transaction are specified returns a db value as of
+     the valid time and the latest transaction indexed at or before the
+     specified transaction.
 
      If the node hasn't yet indexed a transaction at or past the given
-     transaction-time, this throws NodeOutOfSyncException
+     transaction, this throws NodeOutOfSyncException
 
      This DB opens up shared resources to make multiple requests faster - it must
      be `.close`d when you've finished using it (for example, in a `with-open`
@@ -264,16 +266,20 @@ Represents the database as of a specific valid and transaction time.
   (entity-history
     [db eid sort-order]
     [db eid sort-order {:keys [with-docs? with-corrections?]
-                        {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
-                        {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}]
+                        {start-vt :crux.db/valid-time,
+                         start-tt :crux.tx/tx-time
+                         start-tid :crux.tx/tx-id} :start
+                        {end-vt :crux.db/valid-time,
+                         end-tt :crux.tx/tx-time
+                         end-tid :crux.tx/tx-id} :end}]
     "Eagerly retrieves entity history for the given entity.
 
     Options:
     * `sort-order`: `#{:asc :desc}`
     * `:with-docs?`: specifies whether to include documents in the entries
-    * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
-    * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
-    * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
+    * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
+    * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time`, `:crux.tx/tx-time` and `:crux.tx/tx-id` to start at.
+    * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time`, `:crux.tx/tx-time` and `:crux.tx/tx-id` to stop at.
 
     No matter what `:start` and `:end` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
@@ -307,6 +313,16 @@ Represents the database as of a specific valid and transaction time.
     "returns the valid time of the db.
     If valid time wasn't specified at the moment of the db value retrieval
     then valid time will be time of the latest transaction.")
+----
+
+=== transaction
+
+[source,clojure]
+----
+  (transaction [db]
+    "returns the latest transaction applied to this db value.
+    If a transaction was specified when db value was acquired then returns
+    the specified transaction."))
 ----
 
 === transaction-time
