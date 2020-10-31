@@ -32,7 +32,7 @@
    "supplier" [:s_suppkey]
    "partsupp" [:ps_partkey :ps_suppkey]
    "customer" [:c_custkey]
-   "lineitem" [:l_orderkey :l_partkey]
+   "lineitem" [:l_orderkey :l_linenumber]
    "orders" [:o_orderkey]
    "nation" [:n_nationkey]
    "region" [:r_regionkey]})
@@ -72,7 +72,7 @@
         pkey (mapv doc pkey-columns)]
     (assoc doc :crux.db/id (if (= 1 (count pkey))
                              (first pkey)
-                             (UUID/randomUUID)))))
+                             (zipmap pkey-columns pkey)))))
 
 (def default-scale-factor 0.05)
 

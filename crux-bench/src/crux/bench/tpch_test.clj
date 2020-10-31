@@ -584,14 +584,14 @@
 
 (comment
   ;; SF 0.01
-  (crux.fixtures.tpch/load-docs! (user/crux-node) 0.01 crux.fixtures.tpch/tpch-entity->pkey-doc)
+  (crux.fixtures.tpch/load-docs! (dev/crux-node) 0.01 crux.fixtures.tpch/tpch-entity->pkey-doc)
 
   ;; SQL:
   (slurp (clojure.java.io/resource "io/airlift/tpch/queries/q1.sql"))
   ;; Results:
   (slurp (clojure.java.io/resource "io/airlift/tpch/queries/q1.result"))
 
-  (let [node (user/crux-node)]
+  (let [node (dev/crux-node)]
     (time
      (doseq [n (range 1 23)]
        (time
