@@ -70,9 +70,7 @@
                  (into {}))
         pkey-columns (get table->pkey (.getTableName t))
         pkey (mapv doc pkey-columns)]
-    (assoc doc :crux.db/id (if (= 1 (count pkey))
-                             (first pkey)
-                             (zipmap pkey-columns pkey)))))
+    (assoc doc :crux.db/id (str/join "___" pkey))))
 
 (def default-scale-factor 0.05)
 
