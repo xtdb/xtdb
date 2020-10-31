@@ -600,11 +600,12 @@
                                                 :else
                                                 cardinality))
 
-                                (contains? (:not-vars collected-vars) var)
+                                (or (contains? (:not-vars collected-vars) var)
+                                    (contains? (:pred-return-vars collected-vars) var))
                                 (Math/pow 0.25)
 
                                 (contains? pred-var-frequencies var)
-                                (/ (* 2.0 (double (get pred-var-frequencies var))))
+                                (Math/pow (/ 0.25 (double (get pred-var-frequencies var))))
 
                                 (contains? range-var-frequencies var)
                                 (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
