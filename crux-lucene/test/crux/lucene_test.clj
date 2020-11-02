@@ -14,7 +14,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
 
     (t/testing "using Lucene directly"
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-node @(:!system *api*)) "name" "Ivan")]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) "name" "Ivan")]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (ffirst docs) "_val"))))))
@@ -60,9 +60,9 @@
                                :where
                                '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-node @(:!system *api*)) "name" "Ivan")]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) "name" "Ivan")]
         (t/is (empty? (iterator-seq search-results))))
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-node @(:!system *api*)) "name" "Derek")]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) "name" "Derek")]
         (t/is (seq (iterator-seq search-results)))))
 
     (t/testing "Scores"
@@ -119,6 +119,7 @@
                         :where '[[(wildcard-text-search "Ivan") [[?e ?v ?a _]]]
                                  [?e :crux.db/id]]}))))))
 
+;; Leaving to document when score is impacted by accumulated temporal data
 #_(t/deftest test-scoring-shouldnt-be-impacted-by-non-matched-past-docs
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan :name "Ivan Bob"}]])
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan-dave :name "Ivan Dave Ivan"}]])
@@ -137,6 +138,7 @@
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
 
+;; Leaving to document when score is impacted by accumulated temporal data
 #_(t/deftest test-scoring-shouldnt-be-impacted-by-matched-past-docs
   (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan Bob Bob"}]])
 

@@ -4,5 +4,5 @@
 
 (defn with-lucene-module [f]
   (with-tmp-dir "lucene" [db-dir]
-    (fix/with-opts {::l/lucene-node {:db-dir db-dir}}
+    (fix/with-opts {::l/lucene-store {:db-dir db-dir}}
       f)))
