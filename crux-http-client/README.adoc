@@ -14,7 +14,7 @@ juxt/crux-http-client {:mvn/version "20.09-1.12.0-beta"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-http-client</artifactId>
-    <version>20.09-1.12.0-beta</version>
+    <version>20.09-1.12.1-beta</version>
 </dependency>
 ----
 
