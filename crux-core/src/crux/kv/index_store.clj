@@ -767,6 +767,7 @@
       {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
        :indexed-docs docs}))
 
+    ;; TODO, make use of this fn in unindex-eids
   (exclusive-avs [this eids]
     (with-open [snapshot (kv/new-snapshot kv-store)
                 ecav-i (kv/new-iterator snapshot)

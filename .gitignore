@@ -16,4 +16,3 @@ target/
 /.testing-oracle.edn
 /.testing-mysql.edn
 docs/build/
-crux-lucene/lucene

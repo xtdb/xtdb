@@ -41,7 +41,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.lucene/lucene-node": {
+  "crux.lucene/lucene-store": {
         "db-dir": "lucene",
   }
 }
@@ -52,7 +52,7 @@ Clojure/EDN::
 [source,clojure]
 ----
 {...
- :crux.lucene/lucene-node {:db-dir "lucene-dir"}}
+ :crux.lucene/lucene-store {:db-dir "lucene-dir"}}
 ----
 ====
 

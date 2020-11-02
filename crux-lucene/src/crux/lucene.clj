@@ -20,18 +20,17 @@
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery]
            [org.apache.lucene.store Directory FSDirectory]))
 
-(def ^:dynamic *lucene-node*)
+(def ^:dynamic *lucene-store*)
 
 (defrecord LuceneNode [directory analyzer]
   java.io.Closeable
   (close [this]
-    (doseq [^Closeable c [directory]]
-      (cio/try-close c))))
+    (cio/try-close directory)))
 
 (defn- id->stored-bytes [eid]
   (mem/->on-heap (cc/->value-buffer eid)))
 
-(defn- ^String eid->str [eid]
+(defn- ^String ->hash-str [eid]
   (str (cc/new-id eid)))
 
 (defn- crux-doc->triples [crux-doc]
@@ -45,8 +44,8 @@
 
 (defn- ^Document triple->doc [[k ^String v]]
   (doto (Document.)
-    ;; To search for triples by eid-a-v for deduping
-    (.add (StringField. "id", (eid->str (DocumentId. k v)), Field$Store/NO))
+    ;; To search for triples by a-v for deduping
+    (.add (StringField. "id", (->hash-str (DocumentId. k v)), Field$Store/NO))
     ;; The actual term, which will be tokenized
     (.add (TextField. (name k), v, Field$Store/YES))
     ;; Uses for wildcard searches
@@ -55,15 +54,15 @@
     (.add (StringField. "_attr", (name k), Field$Store/YES))))
 
 (defn- ^Term triple->term [[k ^String v]]
-  (Term. "id" (eid->str (DocumentId. k v))))
+  (Term. "id" (->hash-str (DocumentId. k v))))
 
 (defn doc-count []
-  (let [{:keys [^Directory directory]} *lucene-node*
+  (let [{:keys [^Directory directory]} *lucene-store*
         directory-reader (DirectoryReader/open directory)]
     (.numDocs directory-reader)))
 
-(defn- index-docs! [document-store lucene-node doc-ids]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-node
+(defn- index-docs! [document-store lucene-store doc-ids]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
         docs (vals (db/fetch-docs document-store doc-ids))]
     (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (doseq [d docs t (crux-doc->triples d)]
@@ -73,15 +72,15 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
         attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
                             keys
-                            (map #(vector (eid->str %) %))
+                            (map #(vector (->hash-str %) %))
                             (into {}))]
     (with-open [index-snapshot (db/open-index-snapshot indexer)
                 index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
       (let [qs (for [[a v] (db/exclusive-avs indexer eids)
-                     :let [a (attrs-id->attr (eid->str a))
+                     :let [a (attrs-id->attr (->hash-str a))
                            v (db/decode-value index-snapshot v)]
                      :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. "id" (eid->str (DocumentId. a v)))))]
+                 (TermQuery. (Term. "id" (->hash-str (DocumentId. a v)))))]
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn search [node, k, v]
@@ -121,7 +120,7 @@
 
 (defn- pred-constraint [attr vval {:keys [encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
   (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-    (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-node* index-snapshot entity-resolver-fn attr vval))))
+    (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn attr vval))))
 
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v string?)) :return (s/? :crux.query/binding)))
@@ -141,7 +140,7 @@
   (set (for [^EntityTx entity-tx txes]
          (.content-hash entity-tx))))
 
-(defn ->lucene-node
+(defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
                         :spec ::sys/path}}
@@ -151,8 +150,8 @@
   [{:keys [^Path db-dir index-store document-store bus] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
-        lucene-node (LuceneNode. directory analyzer)]
-    (alter-var-root #'*lucene-node* (constantly lucene-node))
+        lucene-store (LuceneNode. directory analyzer)]
+    (alter-var-root #'*lucene-store* (constantly lucene-store))
     (bus/listen bus {:crux/event-types #{:crux.tx/indexed-docs :crux.tx/unindexing-eids}
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
@@ -160,7 +159,7 @@
                 (fn [ev]
                   (case (:crux/event-type ev)
                     :crux.tx/indexed-docs
-                    (index-docs! document-store lucene-node (:doc-ids ev))
+                    (index-docs! document-store lucene-store (:doc-ids ev))
                     :crux.tx/unindexing-eids
-                    (evict! index-store lucene-node (:eids ev)))))
-    lucene-node))
+                    (evict! index-store lucene-store (:eids ev)))))
+    lucene-store))
