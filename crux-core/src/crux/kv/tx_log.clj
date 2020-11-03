@@ -46,6 +46,7 @@
   (if (.isShutdown tx-submit-executor)
     ::closed
 
+    ;; this needs to remain `:crux.kv-tx-log/latest-submitted-tx-id` because we're a TxLog
     (let [tx-time (Date.)
           tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
           next-tx {:crux.tx/tx-id tx-id, :crux.tx/tx-time tx-time}]
