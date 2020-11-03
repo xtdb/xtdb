@@ -686,8 +686,18 @@
                                                  :requested tx
                                                  :available found-tx}))
 
-                        {:crux.tx/tx-time tx-time
-                         :crux.tx/tx-id (:crux.tx/tx-id found-tx)})))
+                        (do
+                          (when (and found-tx (not= tx-time (:crux.tx/tx-time found-tx)))
+                            (let [next-tx (some-> (kv/prev i)
+                                                  decode-tx-time-mapping-key-from)]
+                              (when (= tx-time (:crux.tx/tx-time next-tx))
+                                (throw (err/illegal-arg :tx-id-mismatch
+                                                        {::err/message "Mismatching tx-id for tx-time"
+                                                         :requested tx
+                                                         :available next-tx})))))
+
+                          {:crux.tx/tx-time tx-time
+                           :crux.tx/tx-id (:crux.tx/tx-id found-tx)}))))
 
           tx-id (if (or (nil? latest-tx) (> ^long tx-id ^long (:crux.tx/tx-id latest-tx)))
                   (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))

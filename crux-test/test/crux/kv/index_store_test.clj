@@ -207,13 +207,8 @@
         (t/is (thrown? IllegalArgumentException
                        (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2021", :tx-id 1})))
 
-        ;; This is an edge case - arguably it should throw IAE,
-        ;;   but instead returns an instant with tx-time "2022", but before tx-id 1 was ingested.
-        ;; The query engine would still behave consistently in this case (with tx-id = 0),
-        ;;   and it's unlikely that a user will hit it unless they explicitly ask for it,
-        ;;   so it's a philosophical question as to whether we should allow it or check for it :)
-        (t/is (= #::tx{:tx-time #inst "2022", :tx-id 0}
-                 (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2022", :tx-id 0})))
+        (t/is (thrown? IllegalArgumentException
+                       (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2022", :tx-id 0})))
 
         (t/is (thrown? NodeOutOfSyncException
                        (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2023", :tx-id 1})))))))
