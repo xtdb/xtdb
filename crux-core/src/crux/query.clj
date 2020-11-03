@@ -646,8 +646,9 @@
                                                            var [e v]
                                                            :when (logic-var? var)]
                                                        var))
-                             new-vars-to-add (->> (for [var new-reachable-vars
-                                                        :when (= 1 (count (get var->clauses var)))]
+                             new-vars-to-add (->> (for [{:keys [v]} (get var->clauses var)
+                                                        :when (and (logic-var? v)
+                                                                   (= 1 (count (get var->clauses v))))]
                                                     var)
                                                   (sort-by var->cardinality)
                                                   (cons var))]
