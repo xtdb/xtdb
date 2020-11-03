@@ -1,35 +1,33 @@
 (ns crux.bench
-  (:require [crux.io :as cio]
-            [crux.kafka.embedded :as ek]
-            [crux.rocksdb :as rocks]
-            [crux.lmdb :as lmdb]
-            [crux.jdbc :as jdbc]
-            [crux.api :as api]
+  (:require [clj-http.client :as client]
             [clojure.data.json :as json]
-            [clojure.tools.logging :as log]
             [clojure.java.io :as io]
             [clojure.string :as string]
-            [clj-http.client :as client]
-            [crux.fixtures :as f]
+            [clojure.tools.logging :as log]
+            [crux.api :as api]
+            [crux.bench.cloudwatch :as cw]
             [crux.bus :as bus]
-            [crux.kv :as kv]
+            [crux.fixtures :as f]
+            [crux.io :as cio]
+            [crux.jdbc :as j]
             [crux.kafka :as k]
-            [crux.jdbc :as j])
-  (:import (java.util.concurrent Executors ExecutorService)
-           (java.util UUID Date List)
-           (java.time Duration Instant)
-           (java.io Closeable File)
-           (software.amazon.awssdk.services.s3 S3Client)
-           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
-           (software.amazon.awssdk.core.sync RequestBody)
-           (software.amazon.awssdk.core.exception SdkClientException)
-           software.amazon.awssdk.regions.Region
-           (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
-           (com.amazonaws.services.logs.model StartQueryRequest StartQueryResult GetQueryResultsRequest GetQueryResultsResult ResultField)
-           (com.amazonaws.services.simpleemail AmazonSimpleEmailService AmazonSimpleEmailServiceClient AmazonSimpleEmailServiceClientBuilder)
+            [crux.kafka.embedded :as ek]
+            [crux.kv :as kv]
+            [crux.lmdb :as lmdb]
+            [crux.rocksdb :as rocks])
+  (:import (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
+           (com.amazonaws.services.logs.model GetQueryResultsRequest ResultField StartQueryRequest)
+           (com.amazonaws.services.simpleemail AmazonSimpleEmailServiceClient AmazonSimpleEmailServiceClientBuilder)
            (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)
-           (crux.bus EventBus)))
-
+           java.io.File
+           java.time.Duration
+           (java.util Date List UUID)
+           (java.util.concurrent Executors ExecutorService)
+           software.amazon.awssdk.core.exception.SdkClientException
+           software.amazon.awssdk.core.sync.RequestBody
+           software.amazon.awssdk.regions.Region
+           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
+           software.amazon.awssdk.services.s3.S3Client))
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -213,9 +211,9 @@
 
     (log/infof "finished bench-ns '%s'." bench-ns)
 
-    (let [results @*!bench-results*]
-      (run! (comp println json/write-str) results)
-      results)))
+    (doto @*!bench-results*
+      (->> (run! (comp println json/write-str)))
+      (cw/put-cw-metrics!))))
 
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))

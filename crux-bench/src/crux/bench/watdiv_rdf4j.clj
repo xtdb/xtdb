@@ -26,7 +26,8 @@
 (defn load-rdf-into-sail [^RepositoryConnection conn]
   (bench/run-bench :ingest-rdf
     (with-open [in (io/input-stream watdiv/watdiv-input-file)]
-      {:entity-count
+      {:success? true
+       :entity-count
        (->> (partition-all rdf/*ntriples-log-size* (line-seq (io/reader in)))
             (reduce (fn [n chunk]
                       (.add conn (StringReader. (string/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
