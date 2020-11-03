@@ -4,7 +4,8 @@
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
-            [crux.lucene :as l])
+            [crux.lucene :as l]
+            [crux.rocksdb :as rocks])
   (:import org.apache.lucene.document.Document))
 
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
@@ -165,7 +166,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
 
-    (t/is (= 1 (l/doc-count)))
+    (t/is (= 2 (l/doc-count)))
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
@@ -194,6 +195,33 @@
     (with-open [before-db (c/open-db *api*)]
       (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
       (t/is (empty? (c/q before-db q))))))
+
+(t/deftest test-ensure-lucene-store-keeps-last-tx
+  (let [latest-tx (fn [] (l/latest-submitted-tx (:crux.lucene/lucene-store @(:!system *api*))))]
+    (t/is (not (latest-tx)))
+    (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivank"}]])
+
+    ;; todo intermittent:
+    (Thread/sleep 100)
+    (t/is (latest-tx))))
+
+(t/deftest test-ensure-lucene-store-keeps-up
+  (fix/with-tmp-dir "rocks" [rocks-tmp-dir]
+    (fix/with-tmp-dir "lucene" [lucene-tmp-dir]
+      (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                                                    :db-dir rocks-tmp-dir}}})]
+        (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+
+      ;; todo intermittent:
+      (Thread/sleep 100)
+
+      (try
+        (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                                                      :db-dir rocks-tmp-dir}}
+                                        :crux.lucene/lucene-store {:db-dir lucene-tmp-dir}})])
+        (t/is false "Exception expected")
+        (catch Exception t
+          (t/is (= "Lucene store lagging behind" (ex-message (ex-cause t)))))))))
 
 (comment
   (do
