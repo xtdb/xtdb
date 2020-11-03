@@ -9,7 +9,8 @@
                  [org.apache.lucene/lucene-core "8.6.1"]
                  [org.apache.lucene/lucene-queryparser "8.6.1"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [juxt/crux-test "crux-git-version"]]}}
+                                  [juxt/crux-test "crux-git-version"]
+                                  [juxt/crux-rocksdb "crux-git-version-beta"]]}}
   :middleware [leiningen.project-version/middleware]
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"

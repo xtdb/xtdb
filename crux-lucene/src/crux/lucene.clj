@@ -13,7 +13,7 @@
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           [org.apache.lucene.document Document Field Field$Store StringField TextField]
+           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
@@ -61,10 +61,13 @@
         directory-reader (DirectoryReader/open directory)]
     (.numDocs directory-reader)))
 
+(defn- ^IndexWriter index-writer [lucene-store]
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
+    (IndexWriter. directory, (IndexWriterConfig. analyzer))))
+
 (defn- index-docs! [document-store lucene-store doc-ids]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
-        docs (vals (db/fetch-docs document-store doc-ids))]
-    (with-open [index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
+  (let [docs (vals (db/fetch-docs document-store doc-ids))]
+    (with-open [index-writer (index-writer lucene-store)]
       (doseq [d docs t (crux-doc->triples d)]
         (.updateDocument index-writer (triple->term t) (triple->doc t))))))
 
@@ -83,9 +86,32 @@
                  (TermQuery. (Term. "id" (->hash-str (DocumentId. a v)))))]
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
-(defn search [node, k, v]
-  (assert node)
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
+(defn- index-tx! [lucene-store tx]
+  (let [t (Term. "meta" "latest-completed-tx")
+        d (doto (Document.)
+            (.add (StringField. "meta", "latest-completed-tx" Field$Store/NO))
+            (.add (StoredField. "latest-completed-tx" ^long (:crux.tx/tx-id tx))))]
+    (with-open [index-writer (index-writer lucene-store)]
+      (.updateDocument index-writer t d))))
+
+(defn latest-submitted-tx [lucene-store]
+  (let [{:keys [^Directory directory]} lucene-store]
+    (when (DirectoryReader/indexExists directory)
+      (with-open [directory-reader (DirectoryReader/open directory)]
+        (let [index-searcher (IndexSearcher. directory-reader)
+              q (TermQuery. (Term. "meta" "latest-completed-tx"))
+              d ^ScoreDoc (first (.-scoreDocs (.search index-searcher q 1)))]
+          (when d (.get (.doc index-searcher (.-doc d)) "latest-completed-tx")))))))
+
+(defn validate-lucene-store-up-to-date [index-store lucene-store]
+  (when-let [latest-tx (db/latest-completed-tx index-store)]
+    (let [latest-lucene-tx (latest-submitted-tx lucene-store)]
+      (when-not (= latest-tx latest-lucene-tx)
+        (throw (IllegalStateException. "Lucene store lagging behind"))))))
+
+(defn search [lucene-store, k, v]
+  (assert lucene-store)
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
         qp (if k
@@ -151,13 +177,16 @@
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
         lucene-store (LuceneNode. directory analyzer)]
+    (validate-lucene-store-up-to-date index-store lucene-store)
     (alter-var-root #'*lucene-store* (constantly lucene-store))
-    (bus/listen bus {:crux/event-types #{:crux.tx/indexed-docs :crux.tx/unindexing-eids}
+    (bus/listen bus {:crux/event-types #{:crux.tx/indexed-tx :crux.tx/indexed-docs :crux.tx/unindexing-eids}
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
                                             (.run f)))}
                 (fn [ev]
                   (case (:crux/event-type ev)
+                    :crux.tx/indexed-tx
+                    (index-tx! lucene-store (:crux.tx/submitted-tx ev))
                     :crux.tx/indexed-docs
                     (index-docs! document-store lucene-store (:doc-ids ev))
                     :crux.tx/unindexing-eids
