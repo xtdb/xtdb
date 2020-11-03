@@ -43,19 +43,6 @@
   (s/keys :req-un [::query]
           :opt-un [::args]))
 
-(def query-root-str
-  (string/join "\n"
-               [";; Welcome to the Crux Console!"
-                ";; To perform a query:"
-                ";; 1) Enter a query into this query editor, such as the following example"
-                ";; 2) Optionally, select a \"valid time\" and/or \"transaction time\" to query against"
-                ";; 3) Submit the query and the tuple results will be displayed in a table below"
-                ""
-                "{"
-                " :find [?e]                ;; return a set of tuples each consisting of a unique ?e value"
-                " :where [[?e :crux.db/id]] ;; select ?e as the entity id for all entities in the database"
-                "}"]))
-
 (defn with-entity-refs
   [results db]
   (let [entity-links (->> (apply concat results)
@@ -101,9 +88,9 @@
                                            :results (cond
                                                       no-query? nil
                                                       results (try
-                                                              {:query-results (iterator-seq results)}
-                                                              (finally
-                                                                (.close results)))
+                                                                {:query-results (iterator-seq results)}
+                                                                (finally
+                                                                  (.close results)))
                                                       :else {:query-results
                                                              {"error" res}})})]
           (.getBytes resp ^String charset))
@@ -190,12 +177,12 @@
 (defn data-browser-query [options]
   (fn [req]
     (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time transaction-time query-edn]} query-params
+          {:keys [valid-time transact-time query-edn]} query-params
           query (or query-edn (get body-params :query))]
       (-> (if (nil? query)
             (assoc options :no-query? true)
             (run-query (transform-req query req)
                        (assoc options
                               :valid-time valid-time
-                              :transaction-time transaction-time)))
+                              :transaction-time transact-time)))
           (transform-query-resp req)))))

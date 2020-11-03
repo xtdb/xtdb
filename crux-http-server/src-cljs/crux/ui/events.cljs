@@ -1,13 +1,12 @@
 (ns crux.ui.events
-  (:require
-   [ajax.edn :as ajax-edn]
-   [cljs.reader :as reader]
-   [clojure.string :as string]
-   [crux.ui.common :as common]
-   [crux.ui.http]
-   [re-frame.core :as rf]
-   [tick.alpha.api :as t]
-   [crux.http-server.entity-ref :as entity-ref]))
+  (:require [ajax.edn :as ajax-edn]
+            [cljs.reader :as reader]
+            [clojure.string :as string]
+            [crux.ui.common :as common]
+            [crux.ui.http]
+            [re-frame.core :as rf]
+            [tick.alpha.api :as t]
+            [crux.http-server.entity-ref :as entity-ref]))
 
 (rf/reg-fx
  :scroll-top
@@ -119,13 +118,13 @@
 (rf/reg-event-fx
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [q valid-time transaction-time]} values
-         query-params (->> {:query (reader/read-string q)
+   (let [{:strs [q valid-time transact-time]} values
+         query-params (->> {:query-edn (reader/read-string q)
                             :valid-time (some-> valid-time js/moment .toDate t/instant)
-                            :transaction-time (some-> transaction-time js/moment .toDate t/instant)}
+                            :transact-time (some-> transact-time js/moment .toDate t/instant)}
                            (remove #(nil? (second %)))
                            (into {}))
-         history-elem (dissoc query-params :valid-time :transaction-time)
+         history-elem (dissoc query-params :valid-time :transact-time)
          current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
          updated-history (conj (into [] (remove #(= history-elem %) current-storage)) history-elem)]
      {:db (assoc db :query-history updated-history)
@@ -167,7 +166,7 @@
  (fn [{:keys [db]} [_ tab]]
    {:dispatch [:navigate :entity nil (case tab
                                        :document (-> (get-in db [:current-route :query-params])
-                                                     (select-keys [:valid-time :transaction-time :eid]))
+                                                     (select-keys [:valid-time :transact-time :eid-edn]))
                                        :history (-> (get-in db [:current-route :query-params])
 
                                                     (assoc :history true)
@@ -181,10 +180,10 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [eid valid-time transaction-time]} :values}]]
+ (fn [{:keys [db]} [_ {{:strs [eid valid-time transact-time]} :values}]]
    (let [query-params (->>
                        {:valid-time (some-> valid-time js/moment .toDate t/instant)
-                        :transaction-time (some-> transaction-time js/moment .toDate t/instant)
+                        :transact-time (some-> transact-time js/moment .toDate t/instant)
                         :eid-edn eid}
                        (remove #(nil? (second %)))
                        (into {}))]

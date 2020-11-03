@@ -158,10 +158,10 @@
     (catch Exception e
       {:error e})))
 
-(defn search-entity [{:keys [crux-node]} {:keys [eid valid-time transaction-time link-entities?]}]
+(defn search-entity [{:keys [crux-node]} {:keys [eid valid-time transact-time link-entities?]}]
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transaction-time})
+                                             :transact-time transact-time})
           entity (crux/entity db eid)]
       (cond
         (empty? entity) {:eid eid :not-found? true}
