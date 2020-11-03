@@ -175,40 +175,42 @@
 
   (validTime [_] valid-time)
   (transactionTime [_] transact-time)
-  (transaction [_] {:crux.tx/tx-time transact-time, :crux.tx/tx-id tx-id}))
+  (dbBasis [this]
+    {:crux.db/valid-time valid-time
+     :crux.tx/tx {:crux.tx/tx-time transact-time, :crux.tx/tx-id tx-id}}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
-  (db [this] (let [^Map as-of {}] (.db this as-of)))
+  (db [this] (let [^Map db-basis {}] (.db this db-basis)))
   (^ICruxDatasource db [this ^Date valid-time]
-    (let [^Map as-of {:crux.db/valid-time valid-time}]
-      (.db this as-of)))
+   (let [^Map db-basis {:crux.db/valid-time valid-time}]
+     (.db this db-basis)))
 
   (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
-   (let [^Map as-of {:crux.db/valid-time valid-time
-                     :crux.tx/tx-time tx-time}]
-     (.db this as-of)))
+   (let [^Map db-basis {:crux.db/valid-time valid-time
+                        :crux.tx/tx-time tx-time}]
+     (.db this db-basis)))
 
-  (^ICruxDatasource db [this ^Map as-of]
-   (let [qps (temporal-qps {:valid-time (:crux.db/valid-time as-of)
-                            :transact-time (or (get-in as-of [:crux.tx/tx :crux.tx/tx-time])
-                                               (:crux.tx/tx-time as-of))
-                            :tx-id (or (get-in as-of [:crux.tx/tx :crux.tx/tx-id])
-                                       (:crux.tx/tx-id as-of))})
+  (^ICruxDatasource db [this ^Map db-basis]
+   (let [qps (temporal-qps {:valid-time (:crux.db/valid-time db-basis)
+                            :transact-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
+                                               (:crux.tx/tx-time db-basis))
+                            :tx-id (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-id])
+                                       (:crux.tx/tx-id db-basis))})
          resolved-tx (api-request-sync (str url "/_crux/db")
                                        {:http-opts {:method :get
                                                     :query-params qps}
                                         :->jwt-token ->jwt-token})]
      (->RemoteDatasource url
                          (:crux.db/valid-time resolved-tx)
-                         (:crux.tx/tx-time resolved-tx)
-                         (:crux.tx/tx-id resolved-tx)
+                         (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-time])
+                         (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-id])
                          ->jwt-token)))
 
   (openDB [this] (.db this))
   (^crux.api.ICruxDatasource openDB [this ^Date valid-time] (.db this valid-time))
   (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Date tx-time] (.db this valid-time tx-time))
-  (^crux.api.ICruxDatasource openDB [this ^Map as-of] (.db this as-of))
+  (^crux.api.ICruxDatasource openDB [this ^Map db-basis] (.db this db-basis))
 
   (status [_]
     (api-request-sync (str url "/_crux/status")

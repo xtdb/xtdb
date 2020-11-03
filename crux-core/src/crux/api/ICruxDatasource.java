@@ -100,11 +100,12 @@ public interface ICruxDatasource extends Closeable {
     public Date transactionTime();
 
     /**
-     * @return the latest transaction applied to this db value.
-     * If a transaction was specified when db value was acquired then returns
-     * the specified transaction.
+     * Returns the basis of this database snapshot - a map containing
+     * `:crux.db/valid-time` and `:crux.tx/tx`
+     *
+     * @return the basis of this database snapshot.
      */
-    public Map<Keyword, ?> transaction();
+    public Map<Keyword, ?> dbBasis();
 
     /**
      * Returns a new db value with the txOps speculatively applied.

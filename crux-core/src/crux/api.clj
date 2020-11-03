@@ -34,11 +34,11 @@
 (defprotocol DBProvider
   (db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
+    ^crux.api.ICruxDatasource [node valid-time-or-basis]
     ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
     "Returns a DB snapshot at the given time.
 
-  as-of: (optional map, all keys optional)
+  db-basis: (optional map, all keys optional)
     - `:crux.db/valid-time` (Date):
         If provided, DB won't return any data with a valid-time greater than the given time.
         Defaults to now.
@@ -55,11 +55,11 @@
 
   (open-db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
+    ^crux.api.ICruxDatasource [node valid-time-or-basis]
     ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
     "Opens a DB snapshot at the given time.
 
-  as-of: (optional map, all keys optional)
+  db-basis: (optional map, all keys optional)
     - `:crux.db/valid-time` (Date):
         If provided, DB won't return any data with a valid-time greater than the given time.
         Defaults to now.
@@ -79,7 +79,7 @@
   block)"))
 
 (let [db-args '(^crux.api.ICruxDatasource [node]
-                ^crux.api.ICruxDatasource [node as-of]
+                ^crux.api.ICruxDatasource [node db-basis]
                 ^crux.api.ICruxDatasource ^:deprecated [node valid-time]
                 ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time])]
   (alter-meta! #'db assoc :arglists db-args)
@@ -179,19 +179,19 @@
   ICruxAPI
   (db
     ([this] (.db this))
-    ([this valid-time-or-as-of]
-     (if (instance? Date valid-time-or-as-of)
-       (.db this ^Date valid-time-or-as-of)
-       (.openDB this ^Map valid-time-or-as-of)))
+    ([this valid-time-or-basis]
+     (if (instance? Date valid-time-or-basis)
+       (.db this ^Date valid-time-or-basis)
+       (.openDB this ^Map valid-time-or-basis)))
     ([this valid-time tx-time]
      (.db this valid-time tx-time)))
 
   (open-db
     ([this] (.openDB this))
-    ([this valid-time-or-as-of]
-     (if (instance? Date valid-time-or-as-of)
-       (.openDB this ^Date valid-time-or-as-of)
-       (.openDB this ^Map valid-time-or-as-of)))
+    ([this valid-time-or-basis]
+     (if (instance? Date valid-time-or-basis)
+       (.openDB this ^Date valid-time-or-basis)
+       (.openDB this ^Map valid-time-or-basis)))
     ([this valid-time tx-time]
      (.openDB this valid-time tx-time))))
 
@@ -319,10 +319,8 @@
   If a tx time was specified when db value was acquired then returns
   the specified time.")
 
-  (transaction [db]
-    "returns the latest transaction applied to this db value.
-  If a transaction was specified when db value was acquired then returns
-  the specified transaction.")
+  (db-basis [db]
+    "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`")
 
   (with-tx [db tx-ops]
     "Returns a new db value with the tx-ops speculatively applied.
@@ -387,7 +385,7 @@
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this))
-  (transaction [this] (.transaction this))
+  (db-basis [this] (.dbBasis this))
 
   (with-tx [this tx-ops] (.withTx this tx-ops)))
 

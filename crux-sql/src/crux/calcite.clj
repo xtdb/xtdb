@@ -365,12 +365,12 @@
       (first tuple)
       (to-array tuple))))
 
-(defn- ->enumerator [node as-of column-types q]
+(defn- ->enumerator [node db-basis column-types q]
   (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
       []
     (enumerator []
       (let [_ (log/debug "Executing query:" q)
-            results (crux/open-q (crux/db node as-of) q)
+            results (crux/open-q (crux/db node db-basis) q)
             next-results (atom (iterator-seq results))
             current (atom nil)]
         (proxy [org.apache.calcite.linq4j.Enumerator]

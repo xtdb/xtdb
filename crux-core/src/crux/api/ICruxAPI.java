@@ -64,7 +64,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     /**
      * Returns a db as of the given valid time and transaction.
      *
-     * asOf: (optional map, all keys optional)
+     * dbBasis: (optional map, all keys optional)
      * - `:crux.db/valid-time` (Date):
      *     If provided, DB won't return any data with a valid-time greater than the given time.
      *     Defaults to now.
@@ -74,15 +74,15 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * - `:crux.tx/tx-time` (Date):
      *     Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
      *
-     * @param asOf map specifying the as-of basis of the DB snapshot
+     * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    public ICruxDatasource db(Map<Keyword, ?> asOf) throws NodeOutOfSyncException;
+    public ICruxDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given valid time and transaction.
      *
-     * asOf: (optional map, all keys optional)
+     * dbBasis: (optional map, all keys optional)
      * - `:crux.db/valid-time` (Date):
      *     If provided, DB won't return any data with a valid-time greater than the given time.
      *     Defaults to now.
@@ -95,10 +95,10 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * This method returns a DB that opens resources shared between method calls
      * - it must be `.close`d when you've finished using it.
      *
-     * @param asOf map specifying the as-of basis of the DB snapshot
+     * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    public ICruxDatasource openDB(Map<Keyword, ?> asOf) throws NodeOutOfSyncException;
+    public ICruxDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns the status of this node as a map.

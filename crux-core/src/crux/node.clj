@@ -83,39 +83,39 @@
                      !running-queries close-fn !system closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
-    (let [^Map as-of {}]
-      (.db this as-of)))
+    (let [^Map basis {}]
+      (.db this basis)))
 
   (^ICruxDatasource db [this ^Date valid-time]
-   (let [^Map as-of {:crux.db/valid-time valid-time}]
-     (.db this as-of)))
+   (let [^Map basis {:crux.db/valid-time valid-time}]
+     (.db this basis)))
 
-  (^ICruxDatasource db [this ^Map as-of]
+  (^ICruxDatasource db [this ^Map basis]
    (cio/with-read-lock lock
      (ensure-node-open this)
-     (api/db query-engine as-of)))
+     (api/db query-engine basis)))
 
   (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
-   (let [^Map as-of {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}]
-     (.db this as-of)))
+   (let [^Map basis {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}]
+     (.db this basis)))
 
   (openDB [this]
-    (let [^Map as-of {}]
-      (.openDB this as-of)))
+    (let [^Map basis {}]
+      (.openDB this basis)))
 
   (^ICruxDatasource openDB [this ^Date valid-time]
-   (let [^Map as-of {:crux.db/valid-time valid-time}]
-     (.openDB this as-of)))
+   (let [^Map basis {:crux.db/valid-time valid-time}]
+     (.openDB this basis)))
 
   (^ICruxDatasource openDB [this ^Date valid-time ^Date tx-time]
-   (let [^Map as-of {:crux.db/valid-time valid-time
+   (let [^Map basis {:crux.db/valid-time valid-time
                      :crux.tx/tx-time tx-time}]
-     (.openDB this as-of)))
+     (.openDB this basis)))
 
-  (^ICruxDatasource openDB [this ^Map as-of]
+  (^ICruxDatasource openDB [this ^Map basis]
    (cio/with-read-lock lock
      (ensure-node-open this)
-     (api/open-db query-engine as-of)))
+     (api/open-db query-engine basis)))
 
   (status [this]
     (cio/with-read-lock lock

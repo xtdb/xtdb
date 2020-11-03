@@ -11,12 +11,13 @@ with few lifecycle members added.
 [source,clojure]
 ----
   (db
-    ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
-    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    [node]
+    [node db-basis]
+    ^:deprecated [node valid-time]
+    ^:deprecated [node valid-time tx-time]
     "Returns a DB snapshot at the given time.
 
-     as-of: (optional map, all keys optional)
+     db-basis: (optional map, all keys optional)
        - `:crux.db/valid-time` (Date):
            If provided, DB won't return any data with a valid-time greater than the given time.
            Defaults to now.
@@ -37,12 +38,13 @@ with few lifecycle members added.
 [source,clojure]
 ----
   (open-db
-    ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
-    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    [node]
+    [node db-basis]
+    ^:deprecated [node valid-time]
+    ^:deprecated [node valid-time tx-time]
     "Opens a DB snapshot at the given time.
 
-     as-of: (optional map, all keys optional)
+     db-basis: (optional map, all keys optional)
        - `:crux.db/valid-time` (Date):
            If provided, DB won't return any data with a valid-time greater than the given time.
            Defaults to now.
@@ -317,6 +319,14 @@ Represents the database as of a specific valid and transaction time.
     See `entity-history` for all the options")
 ----
 
+=== db-basis
+
+[source,clojure]
+----
+  (db-basis [db]
+    "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`"))
+----
+
 === valid-time
 
 [source,clojure]
@@ -325,16 +335,6 @@ Represents the database as of a specific valid and transaction time.
     "returns the valid time of the db.
     If valid time wasn't specified at the moment of the db value retrieval
     then valid time will be time of the latest transaction.")
-----
-
-=== transaction
-
-[source,clojure]
-----
-  (transaction [db]
-    "returns the latest transaction applied to this db value.
-    If a transaction was specified when db value was acquired then returns
-    the specified transaction."))
 ----
 
 === transaction-time
@@ -346,7 +346,6 @@ Represents the database as of a specific valid and transaction time.
     If a tx time was specified when db value was acquired then returns
     the specified time."))
 ----
-
 
 == Lifecycle members
 

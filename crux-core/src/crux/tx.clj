@@ -170,11 +170,11 @@
   api/DBProvider
   (db [ctx] (api/db db-provider))
   (db [ctx valid-time tx-time] (api/db db-provider valid-time tx-time))
-  (db [ctx valid-time-or-as-of] (api/db db-provider valid-time-or-as-of))
+  (db [ctx valid-time-or-basis] (api/db db-provider valid-time-or-basis))
 
   (open-db [ctx] (api/open-db db-provider))
   (open-db [ctx valid-time tx-time] (api/open-db db-provider valid-time tx-time))
-  (open-db [ctx valid-time-or-as-of] (api/open-db db-provider valid-time-or-as-of))
+  (open-db [ctx valid-time-or-basis] (api/open-db db-provider valid-time-or-basis))
 
   api/TransactionFnContext
   (indexing-tx [_] indexing-tx))
@@ -285,10 +285,10 @@
 
   api/DBProvider
   (db [ctx] (api/db query-engine tx))
-  (db [ctx valid-time-or-as-of] (api/db query-engine valid-time-or-as-of))
+  (db [ctx valid-time-or-basis] (api/db query-engine valid-time-or-basis))
   (db [ctx valid-time tx-time] (api/db query-engine valid-time tx-time))
   (open-db [ctx] (api/open-db query-engine tx))
-  (open-db [ctx valid-time-or-as-of] (api/open-db query-engine valid-time-or-as-of))
+  (open-db [ctx valid-time-or-basis] (api/open-db query-engine valid-time-or-basis))
   (open-db [ctx valid-time tx-time] (api/open-db query-engine valid-time tx-time))
 
   db/InFlightTx

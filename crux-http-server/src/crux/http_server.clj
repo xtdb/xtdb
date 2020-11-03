@@ -52,7 +52,7 @@
                                              :transact-time transact-time
                                              :tx-id tx-id})]
       (resp/response (merge {:crux.db/valid-time (crux/valid-time db)}
-                            (crux/transaction db))))))
+                            (crux/db-basis db))))))
 
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/transact-time ::util/tx-id]))
