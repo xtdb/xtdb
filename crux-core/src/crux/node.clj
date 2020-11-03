@@ -83,38 +83,39 @@
                      !running-queries close-fn !system closed? ^StampedLock lock]
   ICruxAPI
   (db [this]
-    (let [^Date valid-time nil]
-      (.db this valid-time)))
+    (let [^Map as-of {}]
+      (.db this as-of)))
 
   (^ICruxDatasource db [this ^Date valid-time]
-   (let [^Map tx nil]
-     (.db this valid-time tx)))
+   (let [^Map as-of {:crux.db/valid-time valid-time}]
+     (.db this as-of)))
 
-  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
-   (let [^Map tx {:crux.tx/tx-time tx-time}]
-     (.db this valid-time tx)))
-
-  (^ICruxDatasource db [this ^Date valid-time ^Map tx]
-   (cio/with-read-lock lock
-      (ensure-node-open this)
-      (api/db query-engine valid-time tx)))
-
-  (openDB [this]
-    (let [^Date valid-time nil]
-      (.openDB this valid-time)))
-
-  (^ICruxDatasource openDB [this ^Date valid-time]
-   (let [^Map tx nil]
-     (.openDB this valid-time tx)))
-
-  (^ICruxDatasource openDB [this ^Date valid-time ^Date tx-time]
-   (let [^Map tx {:crux.tx/tx-time tx-time}]
-     (.openDB this valid-time tx)))
-
-  (^ICruxDatasource openDB [this ^Date valid-time ^Map tx]
+  (^ICruxDatasource db [this ^Map as-of]
    (cio/with-read-lock lock
      (ensure-node-open this)
-     (api/open-db query-engine valid-time tx)))
+     (api/db query-engine as-of)))
+
+  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
+   (let [^Map as-of {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}]
+     (.db this as-of)))
+
+  (openDB [this]
+    (let [^Map as-of {}]
+      (.openDB this as-of)))
+
+  (^ICruxDatasource openDB [this ^Date valid-time]
+   (let [^Map as-of {:crux.db/valid-time valid-time}]
+     (.openDB this as-of)))
+
+  (^ICruxDatasource openDB [this ^Date valid-time ^Date tx-time]
+   (let [^Map as-of {:crux.db/valid-time valid-time
+                     :crux.tx/tx-time tx-time}]
+     (.openDB this as-of)))
+
+  (^ICruxDatasource openDB [this ^Map as-of]
+   (cio/with-read-lock lock
+     (ensure-node-open this)
+     (api/open-db query-engine as-of)))
 
   (status [this]
     (cio/with-read-lock lock

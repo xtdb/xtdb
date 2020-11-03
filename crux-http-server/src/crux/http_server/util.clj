@@ -109,9 +109,10 @@
                    :encoder [http-json/->json-encoder opts]}))))
 
 (defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time tx-id]}]
-  (let [^Map tx {:crux.tx/tx-time transact-time
-                 :crux.tx/tx-id tx-id}]
-    (.db crux-node ^Date valid-time tx)))
+  (let [^Map as-of {:crux.db/valid-time valid-time
+                    :crux.tx/tx-time transact-time
+                    :crux.tx/tx-id tx-id}]
+    (.db crux-node as-of)))
 
 (defn raw-html [{:keys [title crux-node http-options results]}]
   (let [latest-completed-tx (api/latest-completed-tx crux-node)]

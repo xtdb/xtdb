@@ -27,6 +27,7 @@
 
 (s/def ::tx-id nat-int?)
 (s/def ::tx-time date?)
+(s/def ::tx (s/keys :opt [::tx-id ::tx-time]))
 (s/def ::submitted-tx (s/keys :req [::tx-id ::tx-time]))
 (s/def ::committed? boolean?)
 (s/def ::av-count nat-int?)
@@ -167,12 +168,13 @@
 
 (defrecord TxFnContext [db-provider indexing-tx]
   api/DBProvider
-  (db [ctx] (api/db ctx (:crux.tx/tx-time indexing-tx)))
-  (db [ctx valid-time] (api/db ctx valid-time nil))
-  (db [ctx valid-time tx-or-tx-time] (api/db db-provider valid-time tx-or-tx-time))
-  (open-db [ctx] (api/open-db ctx (:crux.tx/tx-time indexing-tx)))
-  (open-db [ctx valid-time] (api/open-db ctx valid-time nil))
-  (open-db [ctx valid-time tx-or-tx-time] (api/open-db db-provider valid-time tx-or-tx-time))
+  (db [ctx] (api/db db-provider))
+  (db [ctx valid-time tx-time] (api/db db-provider valid-time tx-time))
+  (db [ctx valid-time-or-as-of] (api/db db-provider valid-time-or-as-of))
+
+  (open-db [ctx] (api/open-db db-provider))
+  (open-db [ctx valid-time tx-time] (api/open-db db-provider valid-time tx-time))
+  (open-db [ctx valid-time-or-as-of] (api/open-db db-provider valid-time-or-as-of))
 
   api/TransactionFnContext
   (indexing-tx [_] indexing-tx))
@@ -283,11 +285,11 @@
 
   api/DBProvider
   (db [ctx] (api/db query-engine tx))
-  (db [ctx valid-time] (api/db query-engine valid-time))
-  (db [ctx valid-time tx-or-tx-time] (api/db query-engine valid-time tx-or-tx-time))
+  (db [ctx valid-time-or-as-of] (api/db query-engine valid-time-or-as-of))
+  (db [ctx valid-time tx-time] (api/db query-engine valid-time tx-time))
   (open-db [ctx] (api/open-db query-engine tx))
-  (open-db [ctx valid-time] (api/open-db query-engine valid-time))
-  (open-db [ctx valid-time tx-or-tx-time] (api/open-db query-engine valid-time tx-or-tx-time))
+  (open-db [ctx valid-time-or-as-of] (api/open-db query-engine valid-time-or-as-of))
+  (open-db [ctx valid-time tx-time] (api/open-db query-engine valid-time tx-time))
 
   db/InFlightTx
   (index-tx-events [this tx-events]

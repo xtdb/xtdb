@@ -40,14 +40,14 @@
   (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}]
     (t/testing "put"
-      (let [{::tx/keys [tx-time] :as tx} (fix/submit+await-tx [[:crux.tx/put content-ivan valid-time]])]
+      (let [tx (fix/submit+await-tx [[:crux.tx/put content-ivan valid-time]])]
         (t/is (= {:crux.db/id :ivan :name "Ivan"}
-                 (api/entity (api/db *api* valid-time tx) :ivan)))))
+                 (api/entity (api/db *api* {:crux.db/valid-time valid-time, :crux.tx/tx tx}) :ivan)))))
 
     (t/testing "delete"
       (let [delete-tx (api/submit-tx *api* [[:crux.tx/delete :ivan valid-time]])]
         (api/await-tx *api* delete-tx)
-        (t/is (nil? (api/entity (api/db *api* valid-time delete-tx) :ivan)))))))
+        (t/is (nil? (api/entity (api/db *api* {:crux.db/valid-time valid-time, :crux.tx/tx delete-tx}) :ivan)))))))
 
 (t/deftest test-empty-db
   (let [empty-db (api/db *api*)]
@@ -328,11 +328,11 @@
           (t/is (= [v3 v2-corrected v1]
                    (iterator-seq history-desc)))))
 
-      (with-dbs [db (*api* #inst "2019-02-04" #inst "2019-01-31")]
+      (with-dbs [db (*api* {:crux.db/valid-time #inst "2019-02-04", :crux.tx/tx-time #inst "2019-01-31"})]
         (t/is (empty? (api/entity-history db :ivan :asc)))
         (t/is (empty? (api/entity-history db :ivan :desc))))
 
-      (with-dbs [db (*api* #inst "2019-02-02" v2)]
+      (with-dbs [db (*api* {:crux.db/valid-time #inst "2019-02-02", :crux.tx/tx v2})]
         (with-open [history-asc (api/open-entity-history db :ivan :asc {:with-docs? true})
                     history-desc (api/open-entity-history db :ivan :desc {:with-docs? true})]
           (t/is (= [v1 v2]
@@ -340,7 +340,7 @@
           (t/is (= [v2 v1]
                    (iterator-seq history-desc)))))
 
-      (with-dbs [db (*api* #inst "2019-02-03" v2)]
+      (with-dbs [db (*api* {:crux.db/valid-time #inst "2019-02-03", :crux.tx/tx v2})]
         (t/is (= [v1 v2]
                  (api/entity-history db :ivan :asc {:with-docs? true})))
         (t/is (= [v2 v1]

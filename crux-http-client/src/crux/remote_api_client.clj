@@ -179,19 +179,22 @@
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
-  (db [this] (.db this nil))
-  (db [this valid-time]
-    (let [^Map tx nil]
-      (.db this valid-time tx)))
+  (db [this] (let [^Map as-of {}] (.db this as-of)))
+  (^ICruxDatasource db [this ^Date valid-time]
+    (let [^Map as-of {:crux.db/valid-time valid-time}]
+      (.db this as-of)))
 
   (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
-   (let [^Map tx {:crux.tx/tx-time tx-time}]
-     (.db this valid-time tx)))
+   (let [^Map as-of {:crux.db/valid-time valid-time
+                     :crux.tx/tx-time tx-time}]
+     (.db this as-of)))
 
-  (^ICruxDatasource db [this ^Date valid-time ^Map tx]
-   (let [qps (temporal-qps {:valid-time valid-time
-                            :transact-time (:crux.tx/tx-time tx)
-                            :tx-id (:crux.tx/tx-id tx)})
+  (^ICruxDatasource db [this ^Map as-of]
+   (let [qps (temporal-qps {:valid-time (:crux.db/valid-time as-of)
+                            :transact-time (or (get-in as-of [:crux.tx/tx :crux.tx/tx-time])
+                                               (:crux.tx/tx-time as-of))
+                            :tx-id (or (get-in as-of [:crux.tx/tx :crux.tx/tx-id])
+                                       (:crux.tx/tx-id as-of))})
          resolved-tx (api-request-sync (str url "/_crux/db")
                                        {:http-opts {:method :get
                                                     :query-params qps}
@@ -203,9 +206,9 @@
                          ->jwt-token)))
 
   (openDB [this] (.db this))
-  (openDB [this valid-time] (.db this valid-time))
+  (^crux.api.ICruxDatasource openDB [this ^Date valid-time] (.db this valid-time))
   (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Date tx-time] (.db this valid-time tx-time))
-  (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Map tx] (.db this valid-time tx))
+  (^crux.api.ICruxDatasource openDB [this ^Map as-of] (.db this as-of))
 
   (status [_]
     (api-request-sync (str url "/_crux/status")

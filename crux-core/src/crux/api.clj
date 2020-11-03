@@ -34,40 +34,54 @@
 (defprotocol DBProvider
   (db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time]
-    ^crux.api.ICruxDatasource [node valid-time tx-time-or-tx]
-    "When a valid time is specified then returned db value contains only those
-  documents whose valid time is before the specified time.
+    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
+    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    "Returns a DB snapshot at the given time.
 
-  When both valid and transaction time are specified returns a db value as of
-  the valid time and the latest transaction time indexed at or before the
-  specified transaction time.
+  as-of: (optional map, all keys optional)
+    - `:crux.db/valid-time` (Date):
+        If provided, DB won't return any data with a valid-time greater than the given time.
+        Defaults to now.
+    - `:crux.tx/tx` (Map):
+        If provided, DB will be a snapshot as of the given transaction.
+        Defaults to the latest completed transaction.
+    - `:crux.tx/tx-time` (Date):
+        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-  If the node hasn't yet indexed a transaction at or past the given
-  transaction, this throws NodeOutOfSyncException")
+  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
 
   (open-db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time]
-    ^crux.api.ICruxDatasource [node valid-time tx-time-or-tx]
-    "When a valid time is specified then returned db value contains only those
-  documents whose valid time is before the specified time.
+    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
+    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    "Opens a DB snapshot at the given time.
 
-  When both valid and transaction time are specified returns a db value as of
-  the valid time and the latest transaction time indexed at or before the
-  specified transaction time.
+  as-of: (optional map, all keys optional)
+    - `:crux.db/valid-time` (Date):
+        If provided, DB won't return any data with a valid-time greater than the given time.
+        Defaults to now.
+    - `:crux.tx/tx` (Map):
+        If provided, DB will be a snapshot as of the given transaction.
+        Defaults to the latest completed transaction.
+    - `:crux.tx/tx-time` (Date):
+        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-  If the node hasn't yet indexed a transaction at or past the given
-  transaction, this throws NodeOutOfSyncException
+  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
 
   This DB opens up shared resources to make multiple requests faster - it must
   be `.close`d when you've finished using it (for example, in a `with-open`
   block)"))
 
 (let [db-args '(^crux.api.ICruxDatasource [node]
-                ^crux.api.ICruxDatasource [node valid-time]
-                ^crux.api.ICruxDatasource [node valid-time tx-time]
-                ^crux.api.ICruxDatasource [node valid-time tx])]
+                ^crux.api.ICruxDatasource [node as-of]
+                ^crux.api.ICruxDatasource ^:deprecated [node valid-time]
+                ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time])]
   (alter-meta! #'db assoc :arglists db-args)
   (alter-meta! #'open-db assoc :arglists db-args))
 
@@ -165,19 +179,21 @@
   ICruxAPI
   (db
     ([this] (.db this))
-    ([this valid-time] (.db this valid-time))
-    ([this ^Date valid-time tx-or-tx-time]
-     (if (inst? tx-or-tx-time)
-       (.db this valid-time ^Date tx-or-tx-time)
-       (.db this valid-time ^Map tx-or-tx-time))))
+    ([this valid-time-or-as-of]
+     (if (instance? Date valid-time-or-as-of)
+       (.db this ^Date valid-time-or-as-of)
+       (.openDB this ^Map valid-time-or-as-of)))
+    ([this valid-time tx-time]
+     (.db this valid-time tx-time)))
 
   (open-db
     ([this] (.openDB this))
-    ([this valid-time] (.openDB this valid-time))
-    ([this ^Date valid-time tx-or-tx-time]
-     (if (inst? tx-or-tx-time)
-       (.openDB this valid-time ^Date tx-or-tx-time)
-       (.openDB this valid-time ^Map tx-or-tx-time)))))
+    ([this valid-time-or-as-of]
+     (if (instance? Date valid-time-or-as-of)
+       (.openDB this ^Date valid-time-or-as-of)
+       (.openDB this ^Map valid-time-or-as-of)))
+    ([this valid-time tx-time]
+     (.openDB this valid-time tx-time))))
 
 (extend-protocol PCruxNode
   ICruxAPI

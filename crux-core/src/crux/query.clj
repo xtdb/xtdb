@@ -1831,19 +1831,24 @@
 (defmethod pp/simple-dispatch QueryDatasource [it]
   (print-method it *out*))
 
+(defn- ->as-of [valid-time-or-as-of]
+  (if (instance? Date valid-time-or-as-of)
+    {:crux.db/valid-time valid-time-or-as-of}
+    {:crux.db/valid-time (:crux.db/valid-time valid-time-or-as-of)
+     :crux.tx/tx (or (:crux.tx/tx valid-time-or-as-of)
+                     (select-keys valid-time-or-as-of [:crux.tx/tx-time :crux.tx/tx-id]))}))
+
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus
                         query-cache conform-cache projection-cache]
   api/DBProvider
-  (db [this] (api/db this nil nil))
-  (db [this valid-time] (api/db this valid-time nil))
-  (db [this valid-time tx-or-tx-time]
-    (let [valid-time (or valid-time (Date.))
+  (db [this] (api/db this nil))
+  (db [this valid-time tx-time] (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+  (db [this valid-time-or-as-of]
+    (let [{:keys [crux.db/valid-time] :as as-of} (->as-of valid-time-or-as-of)
+          valid-time (or valid-time (Date.))
           resolved-tx (with-open [index-snapshot (db/open-index-snapshot index-store)]
-                        (db/resolve-tx index-snapshot
-                                       (if (inst? tx-or-tx-time)
-                                         {:crux.tx/tx-time tx-or-tx-time}
-                                         tx-or-tx-time)))]
+                        (db/resolve-tx index-snapshot (:crux.tx/tx as-of)))]
 
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
@@ -1857,9 +1862,10 @@
                                    :tx-id (:crux.tx/tx-id resolved-tx)))))
 
   (open-db [this] (api/open-db this nil nil))
-  (open-db [this valid-time] (api/open-db this valid-time nil))
-  (open-db [this valid-time tx-time]
-    (let [db (api/db this valid-time tx-time)
+  (open-db [this valid-time tx-time] (api/open-db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+
+  (open-db [this valid-time-or-as-of]
+    (let [db (api/db this valid-time-or-as-of)
           index-snapshot (open-index-snapshot db)
           db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (new-entity-resolver-fn db)]

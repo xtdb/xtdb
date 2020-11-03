@@ -365,12 +365,12 @@
       (first tuple)
       (to-array tuple))))
 
-(defn- ->enumerator [node valid-time tx column-types q]
+(defn- ->enumerator [node as-of column-types q]
   (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
       []
     (enumerator []
       (let [_ (log/debug "Executing query:" q)
-            results (crux/open-q (crux/db node valid-time tx) q)
+            results (crux/open-q (crux/db node as-of) q)
             next-results (atom (iterator-seq results))
             current (atom nil)]
         (proxy [org.apache.calcite.linq4j.Enumerator]
@@ -400,8 +400,8 @@
           query (cond-> query
                   timeout (assoc :timeout timeout))]
       (->enumerator node
-                    (.get data-context "VALIDTIME")
-                    {:crux.tx/tx-time (.get data-context "TRANSACTIONTIME")
+                    {:crux.db/valid-time (.get data-context "VALIDTIME")
+                     :crux.tx/tx-time (.get data-context "TRANSACTIONTIME")
                      :crux.tx/tx-id (.get data-context "TRANSACTIONID")}
                     column-types query))
     (catch Throwable e

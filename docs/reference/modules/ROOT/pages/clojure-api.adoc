@@ -11,19 +11,25 @@ with few lifecycle members added.
 [source,clojure]
 ----
   (db
-    [node]
-    [node ^Date valid-time]
-    [node ^Date valid-time ^Map transaction]
-    ^:deprecated [node ^Date valid-time ^Date transaction-time]
-    "When a valid time is specified then returned db value contains only those
-     documents whose valid time is before the specified time.
+    ^crux.api.ICruxDatasource [node]
+    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
+    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    "Returns a DB snapshot at the given time.
 
-     When both valid and transaction time/transaction are specified returns a db value as of
-     the valid time and the latest transaction indexed at or before the
-     specified transaction.
+     as-of: (optional map, all keys optional)
+       - `:crux.db/valid-time` (Date):
+           If provided, DB won't return any data with a valid-time greater than the given time.
+           Defaults to now.
+       - `:crux.tx/tx` (Map):
+           If provided, DB will be a snapshot as of the given transaction.
+           Defaults to the latest completed transaction.
+       - `:crux.tx/tx-time` (Date):
+           Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-     If the node hasn't yet indexed a transaction at or past the given
-     transaction, this throws NodeOutOfSyncException")
+     Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+     Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+     If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
 ----
 
 === open-db
@@ -31,19 +37,25 @@ with few lifecycle members added.
 [source,clojure]
 ----
   (open-db
-    [node]
-    [node ^Date valid-time]
-    [node ^Date valid-time ^Map transaction]
-    ^:deprecated [node ^Date valid-time ^Date transaction-time]
-    "When a valid time is specified then returned db value contains only those
-     documents whose valid time is before the specified time.
+    ^crux.api.ICruxDatasource [node]
+    ^crux.api.ICruxDatasource [node valid-time-or-as-of]
+    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    "Opens a DB snapshot at the given time.
 
-     When both valid time and transaction are specified returns a db value as of
-     the valid time and the latest transaction indexed at or before the
-     specified transaction.
+     as-of: (optional map, all keys optional)
+       - `:crux.db/valid-time` (Date):
+           If provided, DB won't return any data with a valid-time greater than the given time.
+           Defaults to now.
+       - `:crux.tx/tx` (Map):
+           If provided, DB will be a snapshot as of the given transaction.
+           Defaults to the latest completed transaction.
+       - `:crux.tx/tx-time` (Date):
+           Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-     If the node hasn't yet indexed a transaction at or past the given
-     transaction, this throws NodeOutOfSyncException
+     Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+     Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+     If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
 
      This DB opens up shared resources to make multiple requests faster - it must
      be `.close`d when you've finished using it (for example, in a `with-open`
