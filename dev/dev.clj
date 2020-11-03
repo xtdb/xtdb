@@ -54,7 +54,7 @@
                        :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "tx-log")}}
                        :crux.metrics.jmx/reporter {}
                        :crux.http-server/server {}
-                       :crux.lucene/lucene-store {:db-dir (Files/createTempDirectory "lucene" (make-array FileAttribute 0))}}}})
+                       :crux.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
