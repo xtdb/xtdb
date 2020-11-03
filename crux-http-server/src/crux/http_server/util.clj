@@ -13,7 +13,8 @@
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
             [spec-tools.core :as st]
-            [crux.http-server.entity-ref :as entity-ref])
+            [crux.http-server.entity-ref :as entity-ref]
+            [clojure.instant :as inst])
   (:import [crux.api ICruxAPI ICruxDatasource]
            [crux.codec EDNId Id]
            crux.http_server.entity_ref.EntityRef
@@ -21,6 +22,10 @@
            (java.util Date Map)))
 
 (s/def ::eid (and string? c/valid-id?))
+
+(s/def ::date
+  (st/spec {:spec #(instance? Date %)
+            :decode/string (fn [_ d] (inst/read-instant-date d))}))
 
 (defn try-decode-edn [edn]
   (try
@@ -42,8 +47,8 @@
     :decode/string (fn [_ json] (http-json/try-decode-json json))}))
 
 (s/def ::link-entities? boolean?)
-(s/def ::valid-time inst?)
-(s/def ::transact-time inst?)
+(s/def ::valid-time ::date)
+(s/def ::transact-time ::date)
 (s/def ::timeout int?)
 (s/def ::tx-id int?)
 
