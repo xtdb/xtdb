@@ -618,7 +618,7 @@
                                         ignore-v?
                                         Double/MAX_VALUE
                                         self-join?
-                                        (Math/nextDown es)
+                                        (Math/nextUp es)
                                         :else
                                         (cardinality-for-var v (cond->> cardinality
                                                                  (literal? e) (/ 1.0))))]
