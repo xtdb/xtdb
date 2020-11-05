@@ -33,18 +33,18 @@
 
   (t/testing "retrieve data"
     (let [q "SELECT PERSON.NAME FROM PERSON"]
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query q)))
+      (t/is (= #{{:name "Ivan"}
+                 {:name "Malcolm"}}
+               (set (query q))))
       (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
                     "  CruxToEnumerableConverter\n"
                     "    CruxTableScan(table=[[crux, PERSON]])\n")
                (explain q))))
 
     (t/testing "retrieve data case insensitivity of table schema"
-      (t/is (= [{:name "Ivan"}
-                {:name "Malcolm"}]
-               (query "select person.name from person")))))
+      (t/is (= #{{:name "Ivan"}
+                 {:name "Malcolm"}}
+               (set (query "select person.name from person"))))))
 
   (t/testing "order by"
     (t/is (= [{:name "Ivan"}
@@ -55,9 +55,9 @@
              (query "SELECT PERSON.NAME FROM PERSON ORDER BY NAME DESC"))))
 
   (t/testing "multiple columns"
-    (t/is (= [{:name "Ivan" :homeworld "Earth"}
-              {:name "Malcolm" :homeworld "Mars"}]
-             (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON"))))
+    (t/is (= #{{:name "Ivan" :homeworld "Earth"}
+               {:name "Malcolm" :homeworld "Mars"}}
+             (set (query "SELECT PERSON.NAME,PERSON.HOMEWORLD FROM PERSON")))))
 
   (t/testing "wildcard columns"
     (t/is (= #{{:name "Ivan" :homeworld "Earth" :id ":ivan" :age 21 :alive true}

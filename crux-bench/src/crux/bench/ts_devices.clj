@@ -23,9 +23,9 @@
     (when device-info-csv-resource
       (with-open [rdr (io/reader device-info-csv-resource)]
         (vec (for [device-info (line-seq rdr)
-                   :let [[device-id crux-version manufacturer model os-name] (str/split device-info #",")]]
+                   :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")]]
                {:crux.db/id (keyword "device-info" device-id)
-                :device-info/crux-version crux-version
+                :device-info/api-version api-version
                 :device-info/manufacturer manufacturer
                 :device-info/model model
                 :device-info/os-name os-name}))))))

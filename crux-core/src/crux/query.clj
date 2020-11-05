@@ -406,7 +406,7 @@
   (cond-> clause
     (or (blank-var? v)
         (nil? v))
-    (assoc :v (gensym "_"))
+    (-> (assoc :v (gensym "_")) (with-meta {:ignore-v? true}))
     (blank-var? e)
     (assoc :e (gensym "_"))
     (nil? a)
@@ -570,45 +570,93 @@
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
 
-(defn- triple-joins [triple-clauses var->joins in-vars range-vars stats]
-  (let [var->frequency (->> (concat (map :e triple-clauses)
-                                    (map :v triple-clauses)
-                                    range-vars)
-                            (filter logic-var?)
-                            (frequencies))
-        triple-clauses (sort-triple-clauses stats triple-clauses)
-        literal-clauses (for [{:keys [e v] :as clause} triple-clauses
-                              :when (or (literal? e)
-                                        (literal? v))]
-                          clause)
-        literal-join-order (concat (for [{:keys [e v]} literal-clauses]
-                                     (if (literal? v)
-                                       v
-                                       e))
-                                   in-vars
-                                   (for [{:keys [e v]} literal-clauses]
-                                     (if (literal? v)
-                                       e
-                                       v)))
-        self-join-clauses (filter (comp :self-join? meta) triple-clauses)
-        self-join-vars (map :v self-join-clauses)
-        join-order (loop [join-order (concat literal-join-order self-join-vars)
-                          clauses (->> triple-clauses
-                                       (remove (set self-join-clauses))
-                                       (remove (set literal-clauses)))]
-                     (let [join-order-set (set join-order)
-                           clause (first (or (seq (for [{:keys [e v] :as clause} clauses
-                                                        :when (or (contains? join-order-set e)
-                                                                  (contains? join-order-set v))]
-                                                    clause))
-                                             clauses))]
-                       (if-let [{:keys [e a v]} clause]
-                         (recur (->> (sort-by var->frequency [v e])
-                                     (reverse)
-                                     (concat join-order))
-                                (remove #{clause} clauses))
-                         join-order)))]
-    (log/debug :triple-joins-var->frequency var->frequency)
+(defn- triple-joins [triple-clauses
+                     var->joins
+                     {range-clauses :range
+                      pred-clauses :pred
+                      :as type->clauses}
+                     in-vars
+                     stats]
+  (let [collected-vars (collect-vars type->clauses)
+        pred-var-frequencies (frequencies
+                              (for [{:keys [pred return]} pred-clauses
+                                    :when (not return)
+                                    arg (:args pred)
+                                    :when (logic-var? arg)]
+                                arg))
+        range-var-frequencies (frequencies
+                               (for [{:keys [sym sym-a sym-b]} range-clauses
+                                     sym [sym sym-a sym-b]
+                                     :when (logic-var? sym)]
+                                 sym))
+        cardinality-for-var (fn [var cardinality]
+                              (cond-> (double (cond
+                                                (literal? var)
+                                                0.0
+
+                                                (contains? in-vars var)
+                                                (/ 0.5 (double cardinality))
+
+                                                :else
+                                                cardinality))
+
+                                (or (contains? (:not-vars collected-vars) var)
+                                    (contains? (:pred-return-vars collected-vars) var))
+                                (Math/pow 0.25)
+
+                                (contains? pred-var-frequencies var)
+                                (Math/pow (/ 0.25 (double (get pred-var-frequencies var))))
+
+                                (contains? range-var-frequencies var)
+                                (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
+        update-cardinality (fn [acc {:keys [e a v] :as clause}]
+                             (let [{:keys [self-join? ignore-v?]} (meta clause)
+                                   cardinality (double (get stats a 0.0))
+                                   es (double (cardinality-for-var e (cond->> cardinality
+                                                                       (literal? v) (/ 1.0))))
+                                   vs (cond
+                                        ignore-v?
+                                        Double/MAX_VALUE
+                                        self-join?
+                                        (Math/nextUp es)
+                                        :else
+                                        (cardinality-for-var v (cond->> cardinality
+                                                                 (literal? e) (/ 1.0))))]
+                               (-> acc
+                                   (update v (fnil min Double/MAX_VALUE) vs)
+                                   (update e (fnil min Double/MAX_VALUE) es))))
+        var->cardinality (reduce update-cardinality {} triple-clauses)
+        var->clauses (merge-with into
+                                 (group-by :v triple-clauses)
+                                 (group-by :e triple-clauses))
+        literals (set (filter literal? (keys var->clauses)))
+        join-order (loop [vars (filter logic-var? (map key (sort-by val var->cardinality)))
+                          join-order (vec literals)
+                          reachable-var-groups (list)]
+                     (if (seq vars)
+                       (let [var (first (or (not-empty (for [reachable-var-group reachable-var-groups
+                                                             var (->> (filter reachable-var-group vars)
+                                                                      (partition-by var->cardinality)
+                                                                      (first)
+                                                                      (sort-by (comp count var->clauses))
+                                                                      (reverse))]
+                                                         var))
+                                            vars))
+                             new-reachable-vars (set (for [{:keys [e v]} (get var->clauses var)
+                                                           var [e v]
+                                                           :when (logic-var? var)]
+                                                       var))
+                             new-vars-to-add (->> (for [{:keys [v]} (get var->clauses var)
+                                                        :when (and (logic-var? v)
+                                                                   (= 1 (count (get var->clauses v))))]
+                                                    var)
+                                                  (sort-by var->cardinality)
+                                                  (cons var))]
+                         (recur (remove (set new-vars-to-add) vars)
+                                (vec (concat join-order new-vars-to-add))
+                                (cons (set/difference new-reachable-vars (set new-vars-to-add)) reachable-var-groups)))
+                       (vec (distinct join-order))))]
+    (log/debug :triple-joins-var->cardinality var->cardinality)
     (log/debug :triple-joins-join-order join-order)
     [(->> join-order
           (distinct)
@@ -639,7 +687,8 @@
                                                                    (new-literal-index index-snapshot v))}]})
                                 var->joins)]
                var->joins))
-           var->joins))]))
+           var->joins))
+     var->cardinality]))
 
 (defn- in-joins [in var->joins]
   (reduce
@@ -1111,7 +1160,7 @@
        (every? (fn [f]
                  (f index-snapshot db idx-id->idx join-keys)))))
 
-(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps]
+(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
                (reduce
                 (fn [g v]
@@ -1141,8 +1190,11 @@
                    g)))
            g
            or-clause+idx-id+or-branches)
-        join-order (dep/topo-sort g)]
-    (vec (remove #{::root} join-order))))
+        join-order (dep/topo-sort g)
+        join-order (vec (concat (remove (conj project-only-leaf-vars ::root) join-order)
+                                project-only-leaf-vars))]
+    (log/debug :project-only-leaf-vars project-only-leaf-vars)
+    join-order))
 
 (defn- rule-name->rules [rules]
   (group-by (comp :name :head) rules))
@@ -1244,23 +1296,35 @@
                           in-vars
                           stats]
   (let [collected-vars (collect-vars type->clauses)
-        invalid-leaf-vars (set (concat in-vars (:e-vars collected-vars)))
+        pred-vars (set (for [{:keys [pred return]} pred-clauses
+                             :when (not return)
+                             arg (:args pred)
+                             :when (logic-var? arg)]
+                         arg))
+        invalid-leaf-vars (set (concat in-vars (:e-vars collected-vars) (:range-vars collected-vars) (:not-vars collected-vars) pred-vars))
         non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
         potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
         leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
-                               :when (> (count leaf-group) 1)]
+                               :when (logic-var? e-var)]
                            [e-var (sort-triple-clauses stats leaf-group)])
                          (into {}))
-        leaf-triple-clauses (set (mapcat next (vals leaf-groups)))
+        leaf-triple-clauses (->> (for [[e-var leaf-group] leaf-groups]
+                                   leaf-group)
+                                 (reduce into #{}))
         triple-clauses (remove leaf-triple-clauses triple-clauses)
-        leaf-preds (for [{:keys [e a v]} leaf-triple-clauses]
+        new-triple-clauses (for [[e-var leaf-group] leaf-groups]
+                             (with-meta (first leaf-group) {:ignore-v? true}))
+        leaf-preds (for [[e-var leaf-group] leaf-groups
+                         {:keys [e a v]} (next leaf-group)]
                      {:pred {:pred-fn 'get-attr :args [e a]}
                       :return [:collection v]})]
-    (assoc type->clauses
-           :triple triple-clauses
-           :pred (vec (concat pred-clauses leaf-preds)))))
+    [(assoc type->clauses
+            :triple (vec (concat triple-clauses new-triple-clauses))
+            :pred (vec (concat pred-clauses leaf-preds)))
+     (set/difference (set (map :v leaf-triple-clauses))
+                     (reduce set/union (vals (dissoc collected-vars :v-vars))))]))
 
 (defn- update-depth->constraints [depth->join-depth constraints]
   (reduce
@@ -1272,6 +1336,7 @@
 (defn- compile-sub-query [encode-value-fn where in rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
         in-vars (set (find-binding-vars (:bindings in)))
+        [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars stats)
         {triple-clauses :triple
          range-clauses :range
          pred-clauses :pred
@@ -1279,18 +1344,18 @@
          not-join-clauses :not-join
          or-clauses :or
          or-join-clauses :or-join
-         :as type->clauses} (expand-leaf-preds (normalize-clauses where) in-vars stats)
+         :as type->clauses} type->clauses
         {:keys [e-vars
                 v-vars
                 range-vars
                 pred-vars
                 pred-return-vars]} (collect-vars type->clauses)
         var->joins {}
-        [triple-join-deps var->joins] (triple-joins triple-clauses
-                                                    var->joins
-                                                    in-vars
-                                                    range-vars
-                                                    stats)
+        [triple-join-deps var->joins var->cardinality] (triple-joins triple-clauses
+                                                                     var->joins
+                                                                     type->clauses
+                                                                     in-vars
+                                                                     stats)
         [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
         [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
         known-vars (set/union e-vars v-vars in-vars)
@@ -1308,7 +1373,7 @@
         or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                              or-join-clause+idx-id+or-branches)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars)
         var->values-result-index (zipmap vars-in-join-order (range))
         v-var->e (build-v-var->e triple-clauses var->values-result-index)
         e->v-var (set/map-invert v-var->e)
@@ -1351,6 +1416,7 @@
      :vars-in-join-order vars-in-join-order
      :var->joins var->joins
      :var->bindings var->bindings
+     :var->cardinality var->cardinality
      :in-bindings in-bindings
      :attr-stats (select-keys stats (vals var->attr))}))
 
@@ -1567,7 +1633,7 @@
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
-        stats (db/read-index-meta index-store :crux/attribute-stats)
+        stats (or (db/read-index-meta index-store :crux/attribute-stats) {})
         [in in-args] (add-legacy-args q-conformed in-args)]
     (when full-results?
       (defonce -full-results-deprecation-log

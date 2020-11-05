@@ -3478,7 +3478,8 @@
                                             [e :foo/id m]]
                                    :args [{'m 1}]}
                                   c/->value-buffer
-                                  {})
+                                  {:foo/type 1
+                                   :foo/id 1})
                 :vars-in-join-order
                 (filter #{'m 'e})))))
 
@@ -3566,6 +3567,60 @@
         (t/is (= expected result))
         (t/is (> (double (/ free-vars-ns bound-vars-ns)) expected-speedup-factor)
               (pr-str free-vars-ns " " bound-vars-ns))))))
+
+(t/deftest test-cardinality-join-slowdown
+  (fix/transact! *api* (fix/people
+                        (for [n (range 1000)]
+                          {:crux.db/id (keyword (str "dummy-" n))
+                           :my-name (str n)})))
+
+  (fix/transact! *api* (fix/people
+                        (for [n (range 1000)]
+                          {:crux.db/id (keyword (str "ivan-" n))
+                           :my-name "Ivan"
+                           :my-number n})))
+
+  (fix/transact! *api* (fix/people
+                        (for [n (range 1000)]
+                          {:crux.db/id (keyword (str "oleg-" n))
+                           :my-name "Oleg"
+                           :my-number n})))
+
+  (t/testing "join order avoids cross product"
+    (t/is (= '["Oleg" "Ivan" e1 n e2]
+             (:vars-in-join-order
+              (q/query-plan-for '{:find [e1]
+                                  :where [[e1 :my-name "Ivan"]
+                                          [e2 :my-name "Oleg"]
+                                          [e1 :my-number n]
+                                          [e2 :my-number n]]}
+                                c/->value-buffer
+                                (api/attribute-stats *api*))))))
+
+  ;; Kept low due to caches intervening between the runs, actual
+  ;; failure is way beyond this limit.
+  (let [acceptable-limit-slowdown 0.25
+        problematic-ns-start (System/nanoTime)]
+    (t/is (= 1000 (count (api/q (api/db *api*)
+                                '{:find [e1]
+                                  :where [[e1 :my-name "Ivan"]
+                                          [e2 :my-name "Oleg"]
+                                          [e1 :my-number n]
+                                          [e2 :my-number n]]}))))
+    (let [problematic-ns (- (System/nanoTime) problematic-ns-start)
+          workedaround-ns-start (System/nanoTime)]
+      (t/is (= 1000 (count (api/q (api/db *api*)
+                                  '{:find [e1]
+                                    :in [$ e2n]
+                                    :where [[e1 :my-name "Ivan"]
+                                            [e2 :my-name e2n]
+                                            [e1 :my-number n]
+                                            [e2 :my-number n]]}
+                                  "Oleg"))))
+      (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
+            slowdown (double (/ (min problematic-ns workedaround-ns)
+                                (max problematic-ns workedaround-ns)))]
+        (t/is (>= slowdown acceptable-limit-slowdown))))))
 
 (comment
   ;; repro for https://github.com/juxt/crux/issues/443, don't have a solution yet though
