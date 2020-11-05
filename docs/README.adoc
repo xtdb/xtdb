@@ -12,6 +12,7 @@ To build the website we are using [Antora](https://docs.antora.org/antora/2.3/) 
 
 Build the site with `./bin/build.sh`:
 * `--with-local-bundle` to use a local build of the ui-bundle (assuming you have `crux-site` checked out in the same directory as your `crux` repo)
+* `--with-blog` will build the site with the blog section (assuming, as above, you have `crux-site` checked out in the same directory as your `crux` repo)
 
 It's assumed that
 * branches prefixed with `docs-v*` will be included as previous versions
