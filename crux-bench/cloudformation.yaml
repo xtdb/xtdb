@@ -246,7 +246,7 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          echo ECS_CLUSTER= ${ECSCluster} >> /etc/ecs/ecs.config
+          echo ECS_CLUSTER=crux-bench >> /etc/ecs/ecs.config
       IamInstanceProfile: !Ref EC2InstanceProfile
 
   TaskSchedulerRole:
