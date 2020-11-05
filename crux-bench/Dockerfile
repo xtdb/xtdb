@@ -11,4 +11,5 @@ ADD data/devices_small_readings.csv crux-bench/data/
 
 ARG crux_commit='commit-not-found'
 ENV COMMIT_HASH=$crux_commit
+ENV MALLOC_ARENA_MAX=4
 ADD target/crux-bench-standalone.jar .
