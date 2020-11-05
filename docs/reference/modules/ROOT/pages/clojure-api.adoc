@@ -12,17 +12,25 @@ with few lifecycle members added.
 ----
   (db
     [node]
-    [node ^Date valid-time]
-    [node ^Date valid-time ^Date transaction-time]
-    "When a valid time is specified then returned db value contains only those
-     documents whose valid time is before the specified time.
+    [node db-basis]
+    ^:deprecated [node valid-time]
+    ^:deprecated [node valid-time tx-time]
+    "Returns a DB snapshot at the given time.
 
-     When both valid and transaction time are specified returns a db value as of
-     the valid time and the latest transaction time indexed at or before the
-     specified transaction time.
+     db-basis: (optional map, all keys optional)
+       - `:crux.db/valid-time` (Date):
+           If provided, DB won't return any data with a valid-time greater than the given time.
+           Defaults to now.
+       - `:crux.tx/tx` (Map):
+           If provided, DB will be a snapshot as of the given transaction.
+           Defaults to the latest completed transaction.
+       - `:crux.tx/tx-time` (Date):
+           Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-     If the node hasn't yet indexed a transaction at or past the given
-     transaction-time, this throws NodeOutOfSyncException")
+     Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+     Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+     If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
 ----
 
 === open-db
@@ -31,17 +39,25 @@ with few lifecycle members added.
 ----
   (open-db
     [node]
-    [node ^Date valid-time]
-    [node ^Date valid-time ^Date transaction-time]
-    "When a valid time is specified then returned db value contains only those
-     documents whose valid time is before the specified time.
+    [node db-basis]
+    ^:deprecated [node valid-time]
+    ^:deprecated [node valid-time tx-time]
+    "Opens a DB snapshot at the given time.
 
-     When both valid and transaction time are specified returns a db value as of
-     the valid time and the latest transaction time indexed at or before the
-     specified transaction time.
+     db-basis: (optional map, all keys optional)
+       - `:crux.db/valid-time` (Date):
+           If provided, DB won't return any data with a valid-time greater than the given time.
+           Defaults to now.
+       - `:crux.tx/tx` (Map):
+           If provided, DB will be a snapshot as of the given transaction.
+           Defaults to the latest completed transaction.
+       - `:crux.tx/tx-time` (Date):
+           Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-     If the node hasn't yet indexed a transaction at or past the given
-     transaction-time, this throws NodeOutOfSyncException
+     Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+     Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+     If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
 
      This DB opens up shared resources to make multiple requests faster - it must
      be `.close`d when you've finished using it (for example, in a `with-open`
@@ -264,19 +280,22 @@ Represents the database as of a specific valid and transaction time.
   (entity-history
     [db eid sort-order]
     [db eid sort-order {:keys [with-docs? with-corrections?]
-                        {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
-                        {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}]
+                        {start-vt :crux.db/valid-time,
+                         start-tt :crux.tx/tx-time
+                         start-tid :crux.tx/tx-id} :start
+                        {end-vt :crux.db/valid-time,
+                         end-tt :crux.tx/tx-time
+                         end-tid :crux.tx/tx-id} :end}]
     "Eagerly retrieves entity history for the given entity.
 
     Options:
     * `sort-order`: `#{:asc :desc}`
     * `:with-docs?`: specifies whether to include documents in the entries
-    * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
-    * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
-    * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
+    * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
+    * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time`, `:crux.tx/tx-time` and `:crux.tx/tx-id` to start at.
+    * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time`, `:crux.tx/tx-time` and `:crux.tx/tx-id` to stop at.
 
-    No matter what `:start` and `:end` parameters you specify, you won't receive
-    results later than the valid-time and transact-time of this DB value.
+    No matter what `:start` and `:end` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
     Each entry in the result contains the following keys:
      * `:crux.db/valid-time`,
@@ -300,6 +319,14 @@ Represents the database as of a specific valid and transaction time.
     See `entity-history` for all the options")
 ----
 
+=== db-basis
+
+[source,clojure]
+----
+  (db-basis [db]
+    "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`"))
+----
+
 === valid-time
 
 [source,clojure]
@@ -319,7 +346,6 @@ Represents the database as of a specific valid and transaction time.
     If a tx time was specified when db value was acquired then returns
     the specified time."))
 ----
-
 
 == Lifecycle members
 

@@ -11,6 +11,7 @@
             [crux.kv.index-store :as kvi]
             [crux.tx :as tx])
   (:import crux.codec.EntityTx
+           crux.api.NodeOutOfSyncException
            java.util.Date))
 
 (def ^:dynamic *index-store*)
@@ -27,159 +28,144 @@
 ;; histories of both valid and transaction time.
 
 (defn gen-date [start-date end-date]
-  (gen/fmap #(Date. (long %)) (gen/choose (inst-ms start-date) (inst-ms end-date))))
+  (->> (gen/choose (inst-ms start-date) (inst-ms end-date))
+       (gen/fmap #(Date. (long %)))))
 
-(defn gen-vt+tt+deleted? [start-date end-date]
-  (gen/tuple
-   (gen-date start-date end-date)
-   (gen-date start-date end-date)
-   (gen/frequency [[8 (gen/return false)]
-                   [2 (gen/return true)]])))
+(defn gen-vt+tid+deleted? [{:keys [start-vt end-vt start-tid end-tid]}]
+  (->> (gen/tuple (gen-date start-vt end-vt)
+                  (gen/choose start-tid end-tid)
+                  (gen/frequency [[8 (gen/return false)]
+                                  [2 (gen/return true)]]))
+       (gen/fmap #(zipmap [:valid-time :tx-id :deleted?] %))))
 
-(defn gen-query-vt+tt [start-date end-date]
-  (gen/tuple
-   (gen-date start-date end-date)
-   (gen-date start-date end-date)))
+(defn gen-query-vt+tid [{:keys [start-vt end-vt start-tid end-tid]}]
+  (->> (gen/tuple (gen-date start-vt end-vt)
+                  (gen/choose start-tid end-tid))
+       (gen/fmap #(zipmap [:valid-time :tx-id] %))))
 
-(defn- vt+tt+deleted?->vt+tt->etx [eid txs]
-  (->> (for [[tx-id [vt tt deleted?]] (map-indexed vector (sort-by second txs))]
-         [[(c/date->reverse-time-ms vt)
-           (c/date->reverse-time-ms tt)]
+(defn- vt+tid+deleted?->vt+tid->etx [eid txs]
+  (->> (for [{:keys [valid-time ^long tx-id deleted?]} txs]
+         [[(c/date->reverse-time-ms valid-time)
+           (c/descending-long tx-id)]
           (c/->EntityTx (c/new-id eid)
-                        vt
-                        tt
+                        valid-time
+                        (Date. tx-id)
                         tx-id
                         (if deleted?
                           (c/new-id nil)
                           (c/new-id (keyword (str tx-id)))))])
        (into (sorted-map))))
 
-
 (defn- write-etxs [etxs]
-  (db/index-entity-txs *index-store* {:crux.tx/tx-id Long/MAX_VALUE, :crux.tx/tx-time (Date.)} etxs))
+  (doseq [[^long tx-id etxs] (->> (group-by :tx-id etxs)
+                                  (sort-by key))]
+    (db/index-entity-txs *index-store*
+                         {:crux.tx/tx-id tx-id, :crux.tx/tx-time (Date. tx-id)}
+                         etxs)))
 
-(defn- entities-with-range [vt+tt->etx vt-start tt-start vt-end tt-end]
-  (->> (subseq vt+tt->etx >= [(c/date->reverse-time-ms vt-start)
-                                 (c/date->reverse-time-ms tt-start)])
+(defn- entities-with-range [vt+tid->etx {:keys [start-vt end-vt start-tid end-tid]}]
+  (->> (subseq vt+tid->etx >= [(c/date->reverse-time-ms start-vt)
+                               (c/descending-long start-tid)])
        vals
-       (take-while #(pos? (compare (.vt ^EntityTx %) vt-end)))
-       (filter #(pos? (compare (.tt ^EntityTx %) tt-end)))
-       (remove #(pos? (compare (.tt ^EntityTx %) tt-start)))
+       (take-while #(pos? (compare (.vt ^EntityTx %) end-vt)))
+       (filter #(pos? (compare (.tx-id ^EntityTx %) end-tid)))
+       (remove #(pos? (compare (.tx-id ^EntityTx %) start-tid)))
        set))
 
-(defn- entity-as-of ^crux.codec.EntityTx [vt+tt->entity vt tt]
-  (->> (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
-                                 (c/date->reverse-time-ms tt)])
+(defn- entity-as-of ^crux.codec.EntityTx [vt+tid->entity vt tx-id]
+  (->> (subseq vt+tid->entity >= [(c/date->reverse-time-ms vt)
+                                  (c/descending-long tx-id)])
        vals
-       (remove #(pos? (compare (.tt ^EntityTx %) tt)))
+       (remove #(pos? (compare (.tx-id ^EntityTx %) tx-id)))
        first))
 
 (tcct/defspec test-generative-stress-bitemporal-lookup-test 50
-  (let [eid (c/->id-buffer :foo)
-        start-date #inst "2019"
-        end-date #inst "2020"
-        query-start-date #inst "2018"
-        query-end-date #inst "2021"]
-    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
-                   queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
+  (let [eid (c/->id-buffer :foo)]
+    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tid+deleted? {:start-vt #inst "2019", :start-tid 0, :end-vt #inst "2020", :end-tid 100}) 50)
+                   queries (gen/vector (gen-query-vt+tid {:start-vt #inst "2018", :start-tid 0, :end-vt #inst "2021", :end-tid 100}) 100)]
                   (with-fresh-index-store
-                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
-
-                      (write-etxs (vals vt+tt->etx))
+                    (let [vt+tid->etx (vt+tid+deleted?->vt+tid->etx eid txs)]
+                      (write-etxs (vals vt+tid->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
-                        (->> (for [[vt tt] (concat txs queries)]
-                               (= (entity-as-of vt+tt->etx vt tt)
-                                  (db/entity-as-of index-snapshot eid vt tt)))
+                        (->> (for [{:keys [valid-time tx-id]} (concat txs queries)]
+                               (= (entity-as-of vt+tid->etx valid-time tx-id)
+                                  (db/entity-as-of index-snapshot eid valid-time tx-id)))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-range-test 50
-  (let [eid (c/->id-buffer :foo)
-        start-date #inst "2019"
-        end-date #inst "2020"
-        query-start-date #inst "2018"
-        query-end-date #inst "2021"]
-    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
-                   queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
+  (let [eid (c/->id-buffer :foo)]
+    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tid+deleted? {:start-vt #inst "2019", :start-tid 0, :end-vt #inst "2020", :end-tid 100}) 50)
+                   queries (gen/vector (gen-query-vt+tid {:start-vt #inst "2018", :start-tid 0, :end-vt #inst "2021", :end-tid 100}) 100)]
                   (with-fresh-index-store
-                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
-                      (write-etxs (vals vt+tt->etx))
+                    (let [vt+tid->etx (vt+tid+deleted?->vt+tid->etx eid txs)]
+                      (write-etxs (vals vt+tid->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
-                        (->> (for [[[vt1 tt1] [vt2 tt2]] (partition 2 (concat txs queries))
-                                   :let [[vt-end vt-start] (sort [vt1 vt2])
-                                         [tt-end tt-start] (sort [tt1 tt2])
-                                         expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
+                        (->> (for [time-pair (partition 2 (concat txs queries))
+                                   :let [[end-vt start-vt] (sort (map :valid-time time-pair))
+                                         [end-tid start-tid] (sort (map :tx-id time-pair))
+                                         expected (entities-with-range vt+tid->etx
+                                                                       {:start-vt start-vt, :start-tid start-tid
+                                                                        :end-vt end-vt, :end-tid end-tid})
                                          actual (->> (db/entity-history index-snapshot
                                                                         eid :desc
-                                                                        {:start {:crux.db/valid-time vt-start
-                                                                                 :crux.tx/tx-time tt-start}
-                                                                         :end {:crux.db/valid-time vt-end
-                                                                               :crux.tx/tx-time tt-end}})
+                                                                        {:start-valid-time start-vt
+                                                                         :start-tx-id start-tid
+                                                                         :end-valid-time end-vt
+                                                                         :end-tx-id end-tid})
                                                      (set))]]
                                (= expected actual))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-start-of-range-test 50
-  (let [eid (c/->id-buffer :foo)
-        start-date #inst "2019"
-        end-date #inst "2020"
-        query-start-date #inst "2018"
-        query-end-date #inst "2021"]
-    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
-                   queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
+  (let [eid (c/->id-buffer :foo)]
+    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tid+deleted? {:start-vt #inst "2019", :start-tid 0, :end-vt #inst "2020", :end-tid 100}) 50)
+                   queries (gen/vector (gen-query-vt+tid {:start-vt #inst "2018", :start-tid 0, :end-vt #inst "2021", :end-tid 100}) 100)]
                   (with-fresh-index-store
-                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
-                      (write-etxs (vals vt+tt->etx))
+                    (let [vt+tid->etx (vt+tid+deleted?->vt+tid->etx eid txs)]
+                      (write-etxs (vals vt+tid->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
-                        (->> (for [[vt-start tt-start] (concat txs queries)
-                                   :let [vt-end (Date. Long/MIN_VALUE)
-                                         tt-end (Date. Long/MIN_VALUE)
-                                         expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (->> (db/entity-history index-snapshot eid :desc
-                                                                        {:start {:crux.db/valid-time vt-start
-                                                                                 :crux.tx/tx-time tt-start}})
+                        (->> (for [{:keys [valid-time tx-id]} (concat txs queries)
+                                   :let [expected (entities-with-range vt+tid->etx
+                                                                       {:start-vt valid-time, :start-tid tx-id
+                                                                        :end-vt (Date. Long/MIN_VALUE), :end-tid Long/MIN_VALUE})
+                                         actual (->> (db/entity-history index-snapshot
+                                                                        eid :desc
+                                                                        {:start-valid-time valid-time
+                                                                         :start-tx-id tx-id})
                                                      (set))]]
                                (= expected actual))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-end-of-range-test 50
-  (let [eid (c/->id-buffer :foo)
-        start-date #inst "2019"
-        end-date #inst "2020"
-        query-start-date #inst "2018"
-        query-end-date #inst "2021"]
-    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
-                   queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
+  (let [eid (c/->id-buffer :foo)]
+    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tid+deleted? {:start-vt #inst "2019", :start-tid 0, :end-vt #inst "2020", :end-tid 100}) 50)
+                   queries (gen/vector (gen-query-vt+tid {:start-vt #inst "2018", :start-tid 0, :end-vt #inst "2021", :end-tid 100}) 100)]
                   (with-fresh-index-store
-                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
-                      (write-etxs (vals vt+tt->etx))
+                    (let [vt+tid->etx (vt+tid+deleted?->vt+tid->etx eid txs)]
+                      (write-etxs (vals vt+tid->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
-                        (->> (for [[vt-end tt-end] (concat txs queries)
-                                   :let [vt-start (Date. Long/MAX_VALUE)
-                                         tt-start (Date. Long/MAX_VALUE)
-                                         expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
-                                         actual (->> (db/entity-history index-snapshot eid :desc
-                                                                        {:end {:crux.db/valid-time vt-end
-                                                                               :crux.tx/tx-time tt-end}})
+                        (->> (for [{:keys [valid-time tx-id]} (concat txs queries)
+                                   :let [expected (entities-with-range vt+tid->etx
+                                                                       {:start-vt (Date. Long/MAX_VALUE), :start-tid Long/MAX_VALUE
+                                                                        :end-vt valid-time, :end-tid tx-id})
+                                         actual (->> (db/entity-history index-snapshot
+                                                                        eid :desc
+                                                                        {:end-valid-time valid-time
+                                                                         :end-tx-id tx-id})
                                                      (set))]]
                                (= expected actual))
                              (every? true?))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-full-range-test 50
-  (let [eid (c/->id-buffer :foo)
-        start-date #inst "2019"
-        end-date #inst "2020"
-        query-start-date #inst "2018"
-        query-end-date #inst "2021"]
-    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)]
+  (let [eid (c/->id-buffer :foo)]
+    (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tid+deleted? {:start-vt #inst "2019", :start-tid 0, :end-vt #inst "2020", :end-tid 100}) 50)]
                   (with-fresh-index-store
-                    (let [vt+tt->etx (vt+tt+deleted?->vt+tt->etx eid txs)]
-                      (write-etxs (vals vt+tt->etx))
+                    (let [vt+tid->etx (vt+tid+deleted?->vt+tid->etx eid txs)]
+                      (write-etxs (vals vt+tid->etx))
                       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
-                        (let [vt-start (Date. Long/MAX_VALUE)
-                              tt-start (Date. Long/MAX_VALUE)
-                              vt-end (Date. Long/MIN_VALUE)
-                              tt-end (Date. Long/MIN_VALUE)
-                              expected (entities-with-range vt+tt->etx vt-start tt-start vt-end tt-end)
+                        (let [expected (entities-with-range vt+tid->etx
+                                                            {:start-vt (Date. Long/MAX_VALUE), :start-tid Long/MAX_VALUE
+                                                             :end-vt (Date. Long/MIN_VALUE), :end-tid Long/MIN_VALUE})
                               actual (->> (db/entity-history index-snapshot eid :desc {})
                                           (set))]
                           (= expected actual))))))))
@@ -194,3 +180,35 @@
       ;; :bar 0062cdb7020ff920e5aa642c3d4066950dd1f01f4d
       ;; :foo 000beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33
       (t/is (nil? (db/read-index-meta *index-store* :foo))))))
+
+(t/deftest test-resolve-tx
+  (with-fresh-index-store
+    (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
+      (t/is (nil? (db/resolve-tx index-snapshot nil)))
+      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {:crux.tx/tx-time (Date.)})))
+      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {:crux.tx/tx-id 1}))))
+
+    (let [tx0 {:crux.tx/tx-time #inst "2020", :crux.tx/tx-id 0}
+          tx1 {:crux.tx/tx-time #inst "2022", :crux.tx/tx-id 1}]
+      (db/index-entity-txs *index-store* tx0 [])
+      (db/index-entity-txs *index-store* tx1 [])
+
+      (t/is (= tx1 (db/latest-completed-tx *index-store*)))
+
+      (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
+        (t/is (= tx0 (db/resolve-tx index-snapshot tx0)))
+        (t/is (= tx1 (db/resolve-tx index-snapshot tx1)))
+        (t/is (= tx1 (db/resolve-tx index-snapshot nil)))
+
+        (let [tx #::tx{:tx-time #inst "2021", :tx-id 0}]
+          (t/is (= tx (db/resolve-tx index-snapshot tx)))
+          (t/is (= tx (db/resolve-tx index-snapshot {::tx/tx-time #inst "2021"}))))
+
+        (t/is (thrown? IllegalArgumentException
+                       (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2021", :tx-id 1})))
+
+        (t/is (thrown? IllegalArgumentException
+                       (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2022", :tx-id 0})))
+
+        (t/is (thrown? NodeOutOfSyncException
+                       (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2023", :tx-id 1})))))))

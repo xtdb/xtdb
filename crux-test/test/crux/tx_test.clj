@@ -51,15 +51,15 @@
                                    :vt valid-time
                                    :tt tx-time
                                    :tx-id tx-id})
-                 (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-time))))
+                 (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-id))))
 
       (t/testing "cannot see entity before valid or transact time"
-        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" tx-time)))
-        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time #inst "2018-05-20"))))
+        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" tx-id)))
+        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time -1))))
 
       (t/testing "can see entity after valid or transact time"
-        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-22" tx-time)))
-        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-time))))
+        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-22" tx-id)))
+        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-id))))
 
       (t/testing "can see entity history"
         (t/is (= [(c/map->EntityTx {:eid picasso-eid
@@ -83,9 +83,9 @@
                                      :vt new-valid-time
                                      :tt new-tx-time
                                      :tx-id new-tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
+                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
 
-          (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" #inst "2018-05-21"))))))
+          (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" -1))))))
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
@@ -101,13 +101,13 @@
                                      :vt new-valid-time
                                      :tt new-tx-time
                                      :tx-id new-tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
+                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
           (t/is (= (c/map->EntityTx {:eid picasso-eid
                                      :content-hash content-hash
                                      :vt valid-time
                                      :tt tx-time
                                      :tx-id tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time tx-time))))
+                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time tx-id))))
 
         (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -125,10 +125,10 @@
                                          :vt new-valid-time
                                          :tt new-tx-time
                                          :tx-id new-tx-id})
-                       (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time)))
+                       (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
 
               (t/is (= prev-tx-id
-                       (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso prev-tx-time prev-tx-time)))))))
+                       (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso prev-tx-time prev-tx-id)))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
@@ -136,9 +136,9 @@
                  new-tx-id   :crux.tx/tx-id}
                 (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
             (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-              (t/is (nil? (.content-hash (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-time))))
+              (t/is (nil? (.content-hash (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id))))
               (t/testing "first version of entity is still visible in the past"
-                (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-time))))))))))
+                (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-id))))))))))
 
     (t/testing "can retrieve history of entity"
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -315,10 +315,15 @@
                (db/entity-history index-snapshot :ivan :desc {:with-corrections? true})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-               (db/entity-history index-snapshot :ivan :desc {:start {::tx/tx-time t, ::db/valid-time t}})))
+               (db/entity-history index-snapshot :ivan :desc {:start-valid-time t
+                                                              :start-tx-id 2})))
+
+      (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 1 (c/new-id ivan1))]
+               (db/entity-history index-snapshot :ivan :desc {:start-valid-time t
+                                                              :start-tx-id 1})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/new-id ivan2))]
-               (db/entity-history index-snapshot :ivan :asc {:start {::db/valid-time t}}))))))
+               (db/entity-history index-snapshot :ivan :asc {:start-valid-time t}))))))
 
 (t/deftest test-entity-history-seq-corner-cases
   (let [ivan {:crux.db/id :ivan}
@@ -333,7 +338,7 @@
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
     (index-tx {:crux.tx/tx-time t2, :crux.tx/tx-id 2}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2)) t1]
-                  [:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
+               [:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan2))]])
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [etx-v1-t1 (c/->EntityTx (c/new-id :ivan) t1 t1 1 (c/new-id ivan1))
@@ -347,33 +352,31 @@
           (t/testing "start is inclusive"
             (t/is (= [etx-v2-t2
                       etx-v1-t2]
-                     (history-desc {:start {::tx/tx-time t2, ::db/valid-time t2}})))
+                     (history-desc {:start-tx-id 2, :start-valid-time t2})))
 
             (t/is (= [etx-v1-t2]
-                     (history-desc {:start {::db/valid-time t1}})))
+                     (history-desc {:start-valid-time t1})))
 
             (t/is (= [etx-v1-t2 etx-v2-t2]
-                     (history-asc {:start {::tx/tx-time t2}})))
+                     (history-asc {:start-tx-id 2})))
 
             (t/is (= [etx-v1-t1 etx-v1-t2 etx-v2-t2]
-                     (history-asc {:start {::tx/tx-time t1
-                                          ::db/valid-time t1}
+                     (history-asc {:start-tx-id 1, :start-valid-time t1
                                    :with-corrections? true}))))
 
           (t/testing "end is exclusive"
             (t/is (= [etx-v2-t2]
-                     (history-desc {:start {::tx/tx-time t2, ::db/valid-time t2}
-                                    :end {::tx/tx-time t1, ::db/valid-time t1}})))
+                     (history-desc {:start-valid-time t2, :start-tx-id 2
+                                    :end-valid-time t1, :end-tx-id 1})))
 
             (t/is (= []
-                     (history-desc {:end {::db/valid-time t2}})))
+                     (history-desc {:end-valid-time t2})))
 
             (t/is (= [etx-v1-t1]
-                     (history-asc {:end {::tx/tx-time t2}})))
+                     (history-asc {:end-tx-id 2})))
 
             (t/is (= []
-                     (history-asc {:start {::db/valid-time t1},
-                                   :end {::tx/tx-time t1}})))))))))
+                     (history-asc {:start-valid-time t1, :end-tx-id 1})))))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))
@@ -497,13 +500,13 @@
       (let [baseline-time (let [start-time (System/nanoTime)
                                 valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
-                              (t/is (= valid-time (:vt (db/entity-as-of index-snapshot :ivan valid-time (Date.))))))
+                              (t/is (= valid-time (:vt (db/entity-as-of index-snapshot :ivan valid-time (::tx/tx-id tx))))))
                             (- (System/nanoTime) start-time))]
 
         (let [start-time (System/nanoTime)
               valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
           (t/testing "no version is visible before transactions"
-            (t/is (nil? (db/entity-as-of index-snapshot :ivan valid-time valid-time)))
+            (t/is (nil? (db/entity-as-of index-snapshot :ivan valid-time -1)))
             (let [corrections-time (- (System/nanoTime) start-time)]
               ;; TODO: This can be a bit flaky. This assertion was
               ;; mainly there to prove the opposite, but it has been

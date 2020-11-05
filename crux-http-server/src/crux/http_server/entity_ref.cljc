@@ -9,17 +9,15 @@
 
 (defrecord EntityRef [eid])
 
-(defn EntityRef->url [entity-ref {:keys [valid-time transaction-time]}]
+(defn EntityRef->url [entity-ref {:keys [valid-time tx-id]}]
   (let [eid (pr-str (:eid entity-ref))
         encoded-eid #?(:clj (URLEncoder/encode eid "UTF-8")
                        :cljs (string/urlEncode eid))
         vt #?(:clj (some-> ^Date valid-time .toInstant)
               :cljs (some-> valid-time tick/instant))
-        tt #?(:clj (some-> ^Date transaction-time .toInstant)
-              :cljs (some-> transaction-time tick/instant))
         query-params (cond-> (str "?eid-edn=" encoded-eid)
                        vt (str "&valid-time=" vt)
-                       tt (str "&transaction-time=" tt))]
+                       tx-id (str "&tx-id" tx-id))]
     (str "/_crux/entity" query-params)))
 
 #? (:clj

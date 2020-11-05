@@ -1,21 +1,39 @@
 package crux.api;
 
 import java.util.Date;
+import java.util.Map;
+import java.util.HashMap;
+import clojure.lang.IFn;
+import clojure.lang.Keyword;
+import clojure.lang.ILookup;
+import clojure.java.api.Clojure;
 
-public class HistoryOptions {
+public interface HistoryOptions extends ILookup {
     public enum SortOrder {
         ASC, DESC;
     }
 
-    public final SortOrder sortOrder;
+    class Builder {
+        private static final IFn REQUIRING_RESOLVE =
+            Clojure.var("clojure.core", "requiring-resolve");
+
+        static final IFn TO_HISTORY_OPTIONS =
+            (IFn) REQUIRING_RESOLVE.invoke(Clojure.read("crux.history-options/->history-options"));
+    }
+
+    public static HistoryOptions create(SortOrder sortOrder) {
+        return (HistoryOptions) Builder.TO_HISTORY_OPTIONS.invoke(sortOrder);
+    }
+
+    public HistoryOptions sortOrder(SortOrder sortOrder);
 
     /**
      * Specifies whether to return bitemporal corrections in the history response.
      *
      * If this is set to `true`, corrections will be returned within the
-     * sequence, sorted first by valid-time, then transaction-time.
+     * sequence, sorted first by valid-time, then tx-id.
      */
-    public final boolean withCorrections;
+    public HistoryOptions withCorrections(boolean withCorrections);
 
     /**
      * Specifies whether to return documents in the history response.
@@ -23,73 +41,47 @@ public class HistoryOptions {
      * If this is set to `true`, documents will be included under the
      * `:crux.db/doc` key.
      */
-    public final boolean withDocs;
+    public HistoryOptions withDocs(boolean withDocs);
 
     /**
      * Sets the starting valid time.
      *
      * The history response will include entries starting at this valid time (inclusive).
      */
-    public final Date startValidTime;
+    public HistoryOptions startValidTime(Date validTime);
+
+    /**
+     * Sets the starting transaction.
+     *
+     * The history response will include entries starting at this transaction (inclusive).
+     */
+    public HistoryOptions startTransaction(Map<Keyword, ?> startTransaction);
 
     /**
      * Sets the starting transaction time.
      *
-     * The history response will include entries starting at this transaction time (inclusive).
+     * The history response will include entries starting at this transaction (inclusive).
      */
-    public final Date startTransactionTime;
+    public HistoryOptions startTransactionTime(Date startTransactionTime);
 
     /**
      * Sets the end valid time.
      *
      * The history response will include entries up to this valid time (exclusive).
      */
-    public final Date endValidTime;
+    public HistoryOptions endValidTime(Date endValidTime);
 
     /**
-     * Sets the end transaction time.
+     * Sets the ending transaction.
      *
-     * The history response will include entries up to this transaction time (exclusive).
+     * The history response will include entries up to this transaction (exclusive).
      */
-    public final Date endTransactionTime;
+    public HistoryOptions endTransaction(Map<Keyword, ?> endTransaction);
 
-    public HistoryOptions(SortOrder sortOrder) {
-        this(sortOrder, false, true, null, null, null, null);
-    }
-
-    public HistoryOptions(SortOrder sortOrder, boolean withCorrections, boolean withDocs,
-                          Date startValidTime, Date startTransactionTime,
-                          Date endValidTime, Date endTransactionTime) {
-        this.sortOrder = sortOrder;
-        this.withCorrections = withCorrections;
-        this.withDocs = withDocs;
-        this.startValidTime = startValidTime;
-        this.startTransactionTime = startTransactionTime;
-        this.endValidTime = endValidTime;
-        this.endTransactionTime = endTransactionTime;
-    }
-
-    public HistoryOptions withCorrections(boolean withCorrections) {
-        return new HistoryOptions(sortOrder, withCorrections, withDocs, startValidTime, startTransactionTime, endValidTime, endTransactionTime);
-    }
-
-    public HistoryOptions withDocs(boolean withDocs) {
-        return new HistoryOptions(sortOrder, withCorrections, withDocs, startValidTime, startTransactionTime, endValidTime, endTransactionTime);
-    }
-
-    public HistoryOptions startValidTime(Date startValidTime) {
-        return new HistoryOptions(sortOrder, withCorrections, withDocs, startValidTime, startTransactionTime, endValidTime, endTransactionTime);
-    }
-
-    public HistoryOptions startTransactionTime(Date startTransactionTime) {
-        return new HistoryOptions(sortOrder, withCorrections, withDocs, startValidTime, startTransactionTime, endValidTime, endTransactionTime);
-    }
-
-    public HistoryOptions endValidTime(Date endValidTime) {
-        return new HistoryOptions(sortOrder, withCorrections, withDocs, startValidTime, startTransactionTime, endValidTime, endTransactionTime);
-    }
-
-    public HistoryOptions endTransactionTime(Date endTransactionTime) {
-        return new HistoryOptions(sortOrder, withCorrections, withDocs, startValidTime, startTransactionTime, endValidTime, endTransactionTime);
-    }
+    /**
+     * Sets the ending transaction time.
+     *
+     * The history response will include entries up to this transaction (exclusive).
+     */
+    public HistoryOptions endTransactionTime(Date endTransactionTime);
 }

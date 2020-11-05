@@ -8,9 +8,11 @@
             [crux.api :as crux]
             [crux.calcite.types]
             [crux.system :as sys]
-            [crux.error :as err])
+            [crux.error :as err]
+            [clojure.string :as str]
+            [clojure.instant :as inst])
   (:import clojure.lang.Symbol
-           crux.calcite.CruxTable
+           [crux.calcite CruxTable CruxCalcitePrepareImpl$PreparedSQL]
            [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
            java.util.UUID
            [java.lang.reflect Field Method]
@@ -36,6 +38,39 @@
            [org.apache.calcite.util BuiltInMethod Pair]))
 
 (defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
+
+(defrecord PreparedSQL [query params]
+  CruxCalcitePrepareImpl$PreparedSQL
+  (query [_] query)
+  (internalParameters [_] params))
+
+(defn- strip-leading-comments [s]
+  (let [s (string/trim s)]
+    (if (string/starts-with? s "--")
+      (recur (string/replace-first s #"--.*" ""))
+      s)))
+
+(defn prepare-sql [query]
+  (let [orig-query query]
+    (loop [query query
+           params {}]
+      (let [query (strip-leading-comments query)]
+        (if-let [[k-match k] (re-find #"^\s*(TRANSACTIONTIME|VALIDTIME|TRANSACTIONID)" query)]
+          (let [query (-> (subs query (count k-match)) strip-leading-comments)]
+            (case k
+              ("TRANSACTIONTIME" "VALIDTIME")
+              (if-let [[v-match v] (re-find #"^\s*\('(.+?)'\)" query)]
+                (recur (subs query (count v-match))
+                       (assoc params k (inst/read-instant-date v)))
+                (throw (err/illegal-arg :expected-arg {:query orig-query, :k k})))
+
+              "TRANSACTIONID"
+              (if-let [[v-match v] (re-find #"^\s*\((\d+)\)" query)]
+                (recur (subs query (count v-match))
+                       (assoc params k (Long/parseLong v)))
+                (throw (err/illegal-arg :expected-arg {:query orig-query, :k k})))))
+
+          (->PreparedSQL query params))))))
 
 ;; Datalog fns:
 
@@ -330,12 +365,12 @@
       (first tuple)
       (to-array tuple))))
 
-(defn- ->enumerator [node valid-time transaction-time column-types q]
+(defn- ->enumerator [node db-basis column-types q]
   (proxy [org.apache.calcite.linq4j.AbstractEnumerable]
       []
     (enumerator []
       (let [_ (log/debug "Executing query:" q)
-            results (crux/open-q (crux/db node valid-time transaction-time) q)
+            results (crux/open-q (crux/db node db-basis) q)
             next-results (atom (iterator-seq results))
             current (atom nil)]
         (proxy [org.apache.calcite.linq4j.Enumerator]
@@ -364,7 +399,11 @@
                                                                      (.-right schema+expressions))))]))
           query (cond-> query
                   timeout (assoc :timeout timeout))]
-      (->enumerator node (.get data-context "VALIDTIME") (.get data-context "TRANSACTIONTIME") column-types query))
+      (->enumerator node
+                    {:crux.db/valid-time (.get data-context "VALIDTIME")
+                     :crux.tx/tx-time (.get data-context "TRANSACTIONTIME")
+                     :crux.tx/tx-id (.get data-context "TRANSACTIONID")}
+                    column-types query))
     (catch Throwable e
       (log/error e)
       (throw e))))

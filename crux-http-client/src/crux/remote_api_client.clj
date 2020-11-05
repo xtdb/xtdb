@@ -4,12 +4,13 @@
             [crux.codec :as c]
             [crux.error :as err]
             [crux.io :as cio]
-            [crux.query-state :as qs])
+            [crux.query-state :as qs]
+            [crux.tx :as tx])
   (:import com.nimbusds.jwt.SignedJWT
-           [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource NodeOutOfSyncException RemoteClientOptions]
+           [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
            [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Instant
-           java.util.Date
+           (java.util Date Map)
            java.util.function.Supplier))
 
 (defn- edn-list->lazy-seq [in]
@@ -102,7 +103,12 @@
     (doseq [stream @streams-state]
       (.close ^Closeable stream))))
 
-(defrecord RemoteDatasource [url valid-time transact-time ->jwt-token]
+(defn- temporal-qps [{:keys [valid-time transact-time tx-id] :as db}]
+  {:valid-time (some-> valid-time (cio/format-rfc3339-date))
+   :transact-time (some-> transact-time (cio/format-rfc3339-date))
+   :tx-id tx-id})
+
+(defrecord RemoteDatasource [url valid-time transact-time tx-id ->jwt-token]
   Closeable
   (close [_])
 
@@ -111,16 +117,14 @@
     (api-request-sync (str url "/_crux/entity")
                       {:->jwt-token ->jwt-token
                        :http-opts {:method :get
-                                   :query-params {:eid-edn (pr-str eid)
-                                                  :valid-time (some-> valid-time (cio/format-rfc3339-date))
-                                                  :transact-time (some->  transact-time (cio/format-rfc3339-date))}}}))
+                                   :query-params (merge (temporal-qps this)
+                                                        {:eid-edn (pr-str eid)})}}))
 
   (entityTx [this eid]
     (api-request-sync (str url "/_crux/entity-tx")
                       {:http-opts {:method :get
-                                   :query-params {:eid-edn (pr-str eid)
-                                                  :valid-time (some-> valid-time (cio/format-rfc3339-date))
-                                                  :transact-time (some->  transact-time (cio/format-rfc3339-date))}}
+                                   :query-params (merge (temporal-qps this)
+                                                        {:eid-edn (pr-str eid)})}
                        :->jwt-token ->jwt-token}))
 
   (query [this q args]
@@ -134,8 +138,7 @@
                                {:->jwt-token ->jwt-token
                                 :http-opts {:as :stream
                                             :method :post
-                                            :query-params {:valid-time (some-> valid-time (cio/format-rfc3339-date))
-                                                           :transact-time (some->  transact-time (cio/format-rfc3339-date))}}
+                                            :query-params (temporal-qps this)}
                                 :body {:query (pr-str q)
                                        :args (vec args)}})]
       (cio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
@@ -145,19 +148,23 @@
       (vec (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (let [qps {:eid-edn (pr-str eid)
-               :history true
-               :sort-order (condp = (.sortOrder opts)
-                             HistoryOptions$SortOrder/ASC (name :asc)
-                             HistoryOptions$SortOrder/DESC (name :desc))
-               :with-corrections (.withCorrections opts)
-               :with-docs (.withDocs opts)
-               :start-valid-time (some-> (.startValidTime opts) (cio/format-rfc3339-date))
-               :start-transaction-time (some-> (.startTransactionTime opts) (cio/format-rfc3339-date))
-               :end-valid-time (some-> (.endValidTime opts) (cio/format-rfc3339-date))
-               :end-transaction-time (some-> (.endTransactionTime opts) (cio/format-rfc3339-date))
-               :valid-time (cio/format-rfc3339-date valid-time)
-               :transact-time (cio/format-rfc3339-date transact-time)}]
+    (let [qps (merge (temporal-qps this)
+                     {:eid-edn (pr-str eid)
+                      :history true
+
+                      :sort-order (name (:sort-order opts))
+                      :with-corrections (:with-corrections? opts)
+                      :with-docs (:with-docs? opts)
+
+                      :start-valid-time (some-> (:start-valid-time opts) (cio/format-rfc3339-date))
+                      :start-transaction-time (some-> (get-in opts [:start-tx ::tx/tx-time])
+                                                      (cio/format-rfc3339-date))
+                      :start-transaction-id (get-in opts [:start-tx ::tx/tx-id])
+
+                      :end-valid-time (some-> (:end-valid-time opts) (cio/format-rfc3339-date))
+                      :end-transaction-time (some-> (get-in opts [:end-tx ::tx/tx-time])
+                                                    (cio/format-rfc3339-date))
+                      :end-transaction-id (get-in opts [:end-tx ::tx/tx-id])})]
       (if-let [in (api-request-sync (str url "/_crux/entity")
                                     {:http-opts {:as :stream
                                                  :method :get
@@ -167,28 +174,43 @@
         cio/empty-cursor)))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time))
+  (transactionTime [_] transact-time)
+  (dbBasis [this]
+    {:crux.db/valid-time valid-time
+     :crux.tx/tx {:crux.tx/tx-time transact-time, :crux.tx/tx-id tx-id}}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
-  (db [this] (.db this nil))
-  (db [this valid-time] (.db this valid-time nil))
+  (db [this] (let [^Map db-basis {}] (.db this db-basis)))
+  (^ICruxDatasource db [this ^Date valid-time]
+   (let [^Map db-basis {:crux.db/valid-time valid-time}]
+     (.db this db-basis)))
 
-  (db [this valid-time tx-time]
-    (let [valid-time (or valid-time (Date.))
-          latest-tx-time (-> (api-request-sync (str url "/_crux/latest-completed-tx")
-                                               {:http-opts {:method :get}
-                                                :->jwt-token ->jwt-token})
-                             :crux.tx/tx-time)
-          tx-time (or tx-time latest-tx-time)]
-      (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
+  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
+   (let [^Map db-basis {:crux.db/valid-time valid-time
+                        :crux.tx/tx-time tx-time}]
+     (.db this db-basis)))
 
-      (->RemoteDatasource url valid-time tx-time ->jwt-token)))
+  (^ICruxDatasource db [this ^Map db-basis]
+   (let [qps (temporal-qps {:valid-time (:crux.db/valid-time db-basis)
+                            :transact-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
+                                               (:crux.tx/tx-time db-basis))
+                            :tx-id (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-id])
+                                       (:crux.tx/tx-id db-basis))})
+         resolved-tx (api-request-sync (str url "/_crux/db")
+                                       {:http-opts {:method :get
+                                                    :query-params qps}
+                                        :->jwt-token ->jwt-token})]
+     (->RemoteDatasource url
+                         (:crux.db/valid-time resolved-tx)
+                         (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-time])
+                         (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-id])
+                         ->jwt-token)))
 
   (openDB [this] (.db this))
-  (openDB [this valid-time] (.db this valid-time))
-  (openDB [this valid-time tx-time] (.db this valid-time tx-time))
+  (^crux.api.ICruxDatasource openDB [this ^Date valid-time] (.db this valid-time))
+  (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Date tx-time] (.db this valid-time tx-time))
+  (^crux.api.ICruxDatasource openDB [this ^Map db-basis] (.db this db-basis))
 
   (status [_]
     (api-request-sync (str url "/_crux/status")

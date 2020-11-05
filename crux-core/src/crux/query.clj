@@ -1502,8 +1502,8 @@
     (fn [k]
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
-(defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot] :as db}]
-  (with-entity-resolver-cache #(when transact-time (db/entity-as-of-resolver index-snapshot % valid-time transact-time)) db))
+(defn- new-entity-resolver-fn [{:keys [valid-time tx-id index-snapshot] :as db}]
+  (with-entity-resolver-cache #(when tx-id (db/entity-as-of-resolver index-snapshot % valid-time tx-id)) db))
 
 (defn- validate-in [in]
   (doseq [binding (:bindings in)
@@ -1676,9 +1676,9 @@
          limit (take limit)
          project? (project/->project-result db compiled-find q-conformed))))))
 
-(defn entity-tx [{:keys [valid-time transact-time] :as db} index-snapshot eid]
-  (when transact-time
-    (some-> (db/entity-as-of index-snapshot eid valid-time transact-time)
+(defn entity-tx [{:keys [valid-time tx-id] :as db} index-snapshot eid]
+  (when tx-id
+    (some-> (db/entity-as-of index-snapshot eid valid-time tx-id)
             (c/entity-tx->edn))))
 
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
@@ -1688,30 +1688,28 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
-(defn- <-history-opts [{:keys [transact-time valid-time]} ^HistoryOptions opts]
-  (letfn [(inc-date [^Date d]
-            (Date. (inc (.getTime d))))
-          (with-upper-bound [^Date d, ^Date upper-bound]
-            (if (and d (neg? (compare d upper-bound))) d upper-bound))]
-    (let [sort-order (condp = (.sortOrder opts)
-                       HistoryOptions$SortOrder/ASC :asc
-                       HistoryOptions$SortOrder/DESC :desc)]
-      {:sort-order sort-order
-       :with-docs? (.withDocs opts)
-       :with-corrections? (.withCorrections opts)
-       :start (let [desc? (= sort-order :desc)]
-                {:crux.db/valid-time (cond-> (.startValidTime opts)
-                                       desc? (with-upper-bound valid-time))
-                 :crux.tx/tx-time (cond-> (.startTransactionTime opts)
-                                    desc? (with-upper-bound transact-time))})
+(defn- with-history-bounds [{:keys [sort-order start-tx end-tx] :as opts}
+                            {:keys [^long tx-id ^Date valid-time]}
+                            index-snapshot]
+  (letfn [(with-upper-bound [v match-sort-order upper-bound]
+            (if (and (= sort-order match-sort-order)
+                     (or (nil? v) (pos? (compare v upper-bound))))
+              upper-bound
+              v))]
+    (-> opts
+        (update :start-valid-time with-upper-bound :desc valid-time)
+        (assoc :start-tx-id (-> (some->> start-tx (db/resolve-tx index-snapshot))
+                                :crux.tx/tx-id
+                                (with-upper-bound :desc tx-id)))
 
-       :end (let [asc? (= sort-order :asc)]
-              {:crux.db/valid-time (cond-> (.endValidTime opts)
-                                     asc? (with-upper-bound (inc-date valid-time)))
-               :crux.tx/tx-time (cond-> (.endTransactionTime opts)
-                                  asc? (with-upper-bound (inc-date transact-time)))})})))
+        (update :end-valid-time with-upper-bound :asc (Date. (inc (.getTime valid-time))))
+        (assoc :end-tx-id (-> (some->> end-tx (db/resolve-tx index-snapshot))
+                              :crux.tx/tx-id
+                              (with-upper-bound :asc (inc tx-id))))
+        (dissoc :start-tx :end-tx))))
+
 (defrecord QueryDatasource [document-store index-store bus tx-ingester
-                            ^Date valid-time ^Date transact-time
+                            ^Date valid-time ^Date tx-time ^Long tx-id
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache projection-cache
                             index-snapshot
@@ -1790,10 +1788,10 @@
       (into [] (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (if-not transact-time
+    (if-not tx-id
       cio/empty-cursor
       (let [index-snapshot (open-index-snapshot this)
-            {:keys [sort-order with-docs?] :as opts} (<-history-opts this opts)]
+            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
         (cio/->cursor #(.close index-snapshot)
                       (->> (db/entity-history index-snapshot eid sort-order opts)
                            (map (fn [^EntityTx etx]
@@ -1805,13 +1803,18 @@
                                                                        (get (.content-hash etx))))))))))))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time)
+  (transactionTime [_] tx-time)
+
+  (dbBasis [_]
+    {:crux.db/valid-time valid-time
+     :crux.tx/tx {:crux.tx/tx-time tx-time,
+                  :crux.tx/tx-id tx-id}})
 
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time
-                               ::tx/tx-time transact-time}
+                               ::tx/tx-time tx-time
+                               ::tx/tx-id tx-id}
                      ::db/valid-time valid-time}
-
                     (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
@@ -1826,25 +1829,30 @@
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
         (api/db in-flight-tx valid-time)))))
 
-(defmethod print-method QueryDatasource [{:keys [valid-time transact-time]} ^Writer w]
-  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-time transact-time}))))
+(defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
+  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-id tx-id}))))
 
 (defmethod pp/simple-dispatch QueryDatasource [it]
   (print-method it *out*))
+
+(defn- ->basis [valid-time-or-basis]
+  (if (instance? Date valid-time-or-basis)
+    {:crux.db/valid-time valid-time-or-basis}
+    {:crux.db/valid-time (:crux.db/valid-time valid-time-or-basis)
+     :crux.tx/tx (or (:crux.tx/tx valid-time-or-basis)
+                     (select-keys valid-time-or-basis [:crux.tx/tx-time :crux.tx/tx-id]))}))
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus
                         query-cache conform-cache projection-cache]
   api/DBProvider
-  (db [this] (api/db this nil nil))
-  (db [this valid-time] (api/db this valid-time nil))
-  (db [this valid-time tx-time]
-    (let [valid-time (or valid-time (Date.))
-          latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
-          tx-time (or tx-time latest-tx-time)]
-
-      (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
+  (db [this] (api/db this nil))
+  (db [this valid-time tx-time] (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+  (db [this valid-time-or-basis]
+    (let [{:keys [crux.db/valid-time] :as basis} (->basis valid-time-or-basis)
+          valid-time (or valid-time (Date.))
+          resolved-tx (with-open [index-snapshot (db/open-index-snapshot index-store)]
+                        (db/resolve-tx index-snapshot (:crux.tx/tx basis)))]
 
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
@@ -1854,12 +1862,14 @@
                                                                    :bus bus
                                                                    :query-engine this})
                                    :valid-time valid-time
-                                   :transact-time tx-time))))
+                                   :tx-time (:crux.tx/tx-time resolved-tx)
+                                   :tx-id (:crux.tx/tx-id resolved-tx)))))
 
   (open-db [this] (api/open-db this nil nil))
-  (open-db [this valid-time] (api/open-db this valid-time nil))
-  (open-db [this valid-time tx-time]
-    (let [db (api/db this valid-time tx-time)
+  (open-db [this valid-time tx-time] (api/open-db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+
+  (open-db [this valid-time-or-basis]
+    (let [db (api/db this valid-time-or-basis)
           index-snapshot (open-index-snapshot db)
           db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (new-entity-resolver-fn db)]

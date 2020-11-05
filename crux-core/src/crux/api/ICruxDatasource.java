@@ -63,7 +63,7 @@ public interface ICruxDatasource extends Closeable {
      *
      * If {@link HistoryOptions#withCorrections(boolean) withCorrections} is set
      * on the options, bitemporal corrections are also included in the sequence,
-     * sorted first by valid-time, then transaction-time.
+     * sorted first by valid-time, then tx-id.
      *
      * No matter what `start` and `end` parameters you specify, you won't receive
      * results later than the valid-time and transact-time of this DB value.
@@ -98,6 +98,14 @@ public interface ICruxDatasource extends Closeable {
      * the specified time.
      */
     public Date transactionTime();
+
+    /**
+     * Returns the basis of this database snapshot - a map containing
+     * `:crux.db/valid-time` and `:crux.tx/tx`
+     *
+     * @return the basis of this database snapshot.
+     */
+    public Map<Keyword, ?> dbBasis();
 
     /**
      * Returns a new db value with the txOps speculatively applied.

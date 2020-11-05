@@ -2,7 +2,7 @@
   (:require [crux.codec :as c]
             [crux.db :as db]
             [crux.error :as err])
-  (:import java.util.UUID))
+  (:import [java.util Date UUID]))
 
 (defn- check-eid [eid]
   (when-not (and (some? eid) (c/valid-id? eid))
@@ -20,7 +20,7 @@
 
 (defn- check-valid-time [valid-time {::keys [->valid-time], :or {->valid-time identity}}]
   (let [valid-time (->valid-time valid-time)]
-    (when-not (inst? valid-time)
+    (when-not (instance? Date valid-time)
       (throw (ex-info "invalid valid-time" {:valid-time valid-time})))
     valid-time))
 
@@ -181,7 +181,7 @@
   (zipmap [:op :eid :content-hash :valid-time] evt))
 
 (defmethod <-tx-event :crux.tx/evict [[op eid & args]]
-  (let [[start-valid-time end-valid-time] (filter inst? args)
+  (let [[start-valid-time end-valid-time] (filter #(instance? Date %) args)
         [keep-latest? keep-earliest?] (filter boolean? args)]
     {:op :crux.tx/evict
      :eid eid

@@ -14,12 +14,12 @@
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI ICursor]
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICursor]
            [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
            java.util.concurrent.TimeoutException
-           java.util.Date
+           [java.util Date Map]
            java.util.function.Consumer))
 
 (def crux-version
@@ -82,20 +82,40 @@
 (defrecord CruxNode [kv-store tx-log document-store index-store tx-ingester bus query-engine
                      !running-queries close-fn !system closed? ^StampedLock lock]
   ICruxAPI
-  (db [this] (.db this nil nil))
-  (db [this valid-time] (.db this valid-time nil))
+  (db [this]
+    (let [^Map basis {}]
+      (.db this basis)))
 
-  (db [this valid-time tx-time]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (api/db query-engine valid-time tx-time)))
+  (^ICruxDatasource db [this ^Date valid-time]
+   (let [^Map basis {:crux.db/valid-time valid-time}]
+     (.db this basis)))
 
-  (openDB [this] (.openDB this nil nil))
-  (openDB [this valid-time] (.openDB this valid-time nil))
-  (openDB [this valid-time tx-time]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (api/open-db query-engine valid-time tx-time)))
+  (^ICruxDatasource db [this ^Map basis]
+   (cio/with-read-lock lock
+     (ensure-node-open this)
+     (api/db query-engine basis)))
+
+  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
+   (let [^Map basis {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}]
+     (.db this basis)))
+
+  (openDB [this]
+    (let [^Map basis {}]
+      (.openDB this basis)))
+
+  (^ICruxDatasource openDB [this ^Date valid-time]
+   (let [^Map basis {:crux.db/valid-time valid-time}]
+     (.openDB this basis)))
+
+  (^ICruxDatasource openDB [this ^Date valid-time ^Date tx-time]
+   (let [^Map basis {:crux.db/valid-time valid-time
+                     :crux.tx/tx-time tx-time}]
+     (.openDB this basis)))
+
+  (^ICruxDatasource openDB [this ^Map basis]
+   (cio/with-read-lock lock
+     (ensure-node-open this)
+     (api/open-db query-engine basis)))
 
   (status [this]
     (cio/with-read-lock lock

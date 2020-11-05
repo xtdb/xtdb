@@ -8,7 +8,7 @@
            java.io.File
            java.nio.file.attribute.FileAttribute
            java.nio.file.Files
-           [java.util ArrayList List UUID]))
+           [java.util ArrayList Date List UUID]))
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
@@ -62,7 +62,7 @@
 (defn transact!
   "Helper fn for transacting entities "
   ([api entities]
-   (transact! api entities (cio/next-monotonic-date)))
+   (transact! api entities (Date.)))
   ([^ICruxAPI api entities ts]
    (doto (crux/submit-tx api (maps->tx-ops entities ts))
      (->> (crux/await-tx api)))

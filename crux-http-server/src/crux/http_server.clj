@@ -43,15 +43,27 @@
   (cond-> response
     date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
+(s/def ::db-spec (s/keys :opt-un [::util/valid-time ::util/transact-time ::util/tx-id]))
+
+(defn- db-handler [^ICruxAPI crux-node]
+  (fn [req]
+    (let [{:keys [valid-time transact-time tx-id]} (get-in req [:parameters :query])
+          db (util/db-for-request crux-node {:valid-time valid-time
+                                             :transact-time transact-time
+                                             :tx-id tx-id})]
+      (resp/response (merge {:crux.db/valid-time (crux/valid-time db)}
+                            (crux/db-basis db))))))
+
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
-                                :opt-un [::util/valid-time ::util/transact-time]))
+                                :opt-un [::util/valid-time ::util/transact-time ::util/tx-id]))
 
 (defn- entity-tx [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [eid eid-edn eid-json valid-time transact-time]} (get-in req [:parameters :query])
+    (let [{:keys [eid eid-edn eid-json valid-time transact-time tx-id]} (get-in req [:parameters :query])
           eid (or eid-edn eid-json eid)
           db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transact-time})
+                                             :transact-time transact-time
+                                             :tx-id tx-id})
           {::tx/keys [tx-time] :as entity-tx} (crux/entity-tx db eid)]
       (if entity-tx
         (-> {:status 200
@@ -317,6 +329,11 @@
     (rr/router [["/" {:no-doc true
                       :get (fn [_] (resp/redirect "/_crux/query"))}]
                 ["/_crux"
+                 ["/db" (-> {:get (db-handler crux-node)
+                             :parameters {:query ::db-spec}
+                             :summary "DB"
+                             :description "Get the resolved db-basis for the given valid-time/transactoin"}
+                            (with-example "db-response"))]
                  ["/status" (-> {:muuntaja (status/->status-muuntaja opts)
                                  :summary "Status"
                                  :description "Get status information from the node"

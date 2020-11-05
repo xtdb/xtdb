@@ -68,10 +68,10 @@
                                      "ⓘ"]]
       [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
-       [datetime-input props "transaction-time"]
-       (when (and (get touched "transaction-time")
-                  (get errors "transaction-time"))
-         [:p.input-error (get errors "transaction-time")])]]]))
+       [datetime-input props "transact-time"]
+       (when (and (get touched "transact-time")
+                  (get errors "transact-time"))
+         [:p.input-error (get errors "transact-time")])]]]))
 
 (defn vt-tt-entity-box
   [vt tt]
@@ -87,7 +87,7 @@
   [form-values component]
   (cond-> form-values
     (not @(rf/subscribe [::sub/show-vt? component])) (assoc-in [:values "valid-time"] nil)
-    (not @(rf/subscribe [::sub/show-tt? component])) (assoc-in [:values "transaction-time"] nil)))
+    (not @(rf/subscribe [::sub/show-tt? component])) (assoc-in [:values "transact-time"] nil)))
 
 (defn query-validation
   [values]
@@ -108,8 +108,8 @@
         validation {"q" invalid-query?
                     "valid-time" (when @(rf/subscribe [::sub/show-vt? :query])
                                    (invalid-time? "valid-time"))
-                    "transaction-time" (when @(rf/subscribe [::sub/show-tt? :query])
-                                         (invalid-time? "transaction-time"))}]
+                    "transact-time" (when @(rf/subscribe [::sub/show-tt? :query])
+                                      (invalid-time? "transact-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn- submit-form-on-keypress [evt form-id]
@@ -120,7 +120,7 @@
 (defn edit-query [_ props]
   ;; we need to create a cm instance holder to modify the CodeMirror code
   (let [cm-instance (atom nil)]
-    (fn [{:keys [values errors touched set-values set-touched form-id handle-submit] :as props}]
+    (fn [{:keys [values errors touched set-values set-touched] :as props}]
       [:<>
        [:div.input-textarea
         [cm/code-mirror (get values "q")
@@ -245,8 +245,8 @@
                             "Entity id is empty")
                     "valid-time" (when @(rf/subscribe [::sub/show-vt? :entity])
                                    (invalid-time? "valid-time"))
-                    "transaction-time" (when @(rf/subscribe [::sub/show-tt? :entity])
-                                         (invalid-time? "transaction-time"))}]
+                    "transact-time" (when @(rf/subscribe [::sub/show-tt? :entity])
+                                      (invalid-time? "transact-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn entity-form
@@ -413,7 +413,6 @@
         :document [entity-document]
         :history [entity-history-document])])])
 
-
 (defn render-status-map
   [status-map]
   [:div.node-info__content
@@ -439,8 +438,8 @@
         [:tr.table__row.body__row
          [:td.table__cell.body__cell
           [:a
-           {:href (common/route->url :query nil {:query {:find [(symbol (name key))]
-                                                         :where [['e key (symbol (name key))]]}})}
+           {:href (common/route->url :query nil {:query-edn {:find [(symbol (name key))]
+                                                             :where [['e key (symbol (name key))]]}})}
            (common/edn->pretty-string key)]]
          [:td.table__cell.body__cell (common/edn->pretty-string value)]])]]]])
 

@@ -37,19 +37,19 @@
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
-   (let [{:keys [valid-time transaction-time query]} (get-in db [:current-route :query-params])
+   (let [{:keys [valid-time transact-time query-edn]} (get-in db [:current-route :query-params])
          query-string (some-> (try
-                                (reader/read-string query)
-                                (catch js/Error e nil))
+                                (reader/read-string query-edn)
+                                (catch js/Error _ nil))
                               common/query->formatted-query-string)
          valid-time (str (or valid-time (t/now)))
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))
-         transaction-time (str (or transaction-time latest-tx-time))]
+         transact-time (str (or transact-time latest-tx-time))]
      {"q" (or query-string query-root-str)
       "valid-time" (js/moment valid-time)
-      "transaction-time" (js/moment transaction-time)})))
+      "transact-time" (js/moment transact-time)})))
 
 (rf/reg-sub
  ::valid-time
@@ -62,7 +62,7 @@
    (let [latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))]
-     (get-in db [:current-route :query-params :transaction-time] latest-tx-time))))
+     (get-in db [:current-route :query-params :transact-time] latest-tx-time))))
 
 (rf/reg-sub
  ::initial-values-entity
@@ -72,10 +72,10 @@
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))
-         transaction-time (str (:transaction-time query-params latest-tx-time))]
+         transact-time (str (:transact-time query-params latest-tx-time))]
      {"eid" (:eid-edn query-params)
       "valid-time" (js/moment valid-time)
-      "transaction-time" (js/moment transaction-time)})))
+      "transact-time" (js/moment transact-time)})))
 
 ;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
@@ -84,14 +84,14 @@
    (if-let [error (get-in db [:query :error])]
      {:error error}
      (let [query-results (get-in db [:query :http])
-           query (reader/read-string (get-in db [:current-route :query-params :query]))
+           query (reader/read-string (get-in db [:current-route :query-params :query-edn]))
            find-clause (:find query)
            table-loading? (get-in db [:query :result-pane :loading?])
            latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                   (:crux.tx/tx-time)
                                   (t/instant))
            time-info {:valid-time (get-in db [:current-route :query-params :valid-time] (t/now))
-                      :transaction-time (get-in db [:current-route :query-params :transaction-time] latest-tx-time)}
+                      :transact-time (get-in db [:current-route :query-params :transact-time] latest-tx-time)}
            columns (map (fn [column]
                           {:column-key column
                            :column-name (str column)
@@ -185,7 +185,7 @@
      (let [query-params (get-in db [:current-route :query-params])]
        {:eid (:eid-edn query-params)
         :vt (common/iso-format-datetime (or (:valid-time query-params) (t/now)))
-        :tt (or (common/iso-format-datetime (:transaction-time query-params)) "Using Latest")
+        :tt (or (common/iso-format-datetime (:transact-time query-params)) "Using Latest")
         :document (get-in db [:entity :http :document])}))))
 
 (rf/reg-sub
@@ -244,7 +244,7 @@
    ;; Get newest first
    (mapv
     (fn [x]
-      {"q" (common/query->formatted-query-string (:query x))})
+      {"q" (common/query->formatted-query-string (:query-edn x))})
     (:query-history db))))
 
 (rf/reg-sub
@@ -256,7 +256,7 @@
 (rf/reg-sub
  ::show-tt?
  (fn [db [_ component]]
-   (let [url-has-tt? (contains? (get-in db [:current-route :query-params]) :transaction-time)]
+   (let [url-has-tt? (contains? (get-in db [:current-route :query-params]) :transact-time)]
      (get-in db [:form-pane :show-tt? component] url-has-tt?))))
 
 (rf/reg-sub

@@ -2,19 +2,19 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.error :as err]
+            [crux.api :as api]
             [crux.bus :as bus]
             [crux.cache.nop :as nop-cache]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.io :as cio]
-            [crux.tx.conform :as txc]
-            [crux.tx.event :as txe]
-            [crux.api :as api]
+            [crux.error :as err]
             [crux.fork :as fork]
+            [crux.io :as cio]
             [crux.kv.index-store :as kvi]
             [crux.mem-kv :as mem-kv]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.tx.conform :as txc]
+            [crux.tx.event :as txe])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
@@ -27,6 +27,7 @@
 
 (s/def ::tx-id nat-int?)
 (s/def ::tx-time date?)
+(s/def ::tx (s/keys :opt [::tx-id ::tx-time]))
 (s/def ::submitted-tx (s/keys :req [::tx-id ::tx-time]))
 (s/def ::committed? boolean?)
 (s/def ::av-count nat-int?)
@@ -70,7 +71,7 @@
 
     (if end-valid-time
       (when-not (= start-valid-time end-valid-time)
-        (let [entity-history (db/entity-history index-snapshot eid :desc {:start {:crux.db/valid-time end-valid-time}})]
+        (let [entity-history (db/entity-history index-snapshot eid :desc {:start-valid-time end-valid-time})]
           (into (->> (cons start-valid-time
                            (->> (map etx->vt entity-history)
                                 (take-while #(neg? (compare start-valid-time %)))))
@@ -84,10 +85,10 @@
                    (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))])))
 
       (->> (cons start-valid-time
-                 (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-time)
+                 (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-id)
 
                                                    (select-keys [:tx-time :tx-id :content-hash]))]
-                   (->> (db/entity-history index-snapshot eid :asc {:start {:crux.db/valid-time start-valid-time}})
+                   (->> (db/entity-history index-snapshot eid :asc {:start-valid-time start-valid-time})
                         (remove (comp #{start-valid-time} :valid-time))
                         (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
                         (mapv etx->vt))))
@@ -106,7 +107,7 @@
   {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot
                                                                 (c/new-id k)
                                                                 (or at-valid-time valid-time tx-time)
-                                                                tx-time)]
+                                                                tx-id)]
                      (or (= (c/new-id content-hash) (c/new-id v))
                          (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash))))})
 
@@ -116,7 +117,7 @@
   (let [eid (c/new-id k)
         valid-time (or at-valid-time valid-time tx-time)]
 
-    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-time)
+    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)
                            current-id (c/new-id content-hash)
                            expected-id (c/new-id old-v)]
                        ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
@@ -167,12 +168,13 @@
 
 (defrecord TxFnContext [db-provider indexing-tx]
   api/DBProvider
-  (db [ctx] (api/db db-provider (:crux.tx/tx-time indexing-tx)))
-  (db [ctx valid-time] (api/db db-provider valid-time))
+  (db [ctx] (api/db db-provider))
   (db [ctx valid-time tx-time] (api/db db-provider valid-time tx-time))
-  (open-db [ctx] (api/open-db db-provider (:crux.tx/tx-time indexing-tx)))
-  (open-db [ctx valid-time] (api/open-db db-provider valid-time))
+  (db [ctx valid-time-or-basis] (api/db db-provider valid-time-or-basis))
+
+  (open-db [ctx] (api/open-db db-provider))
   (open-db [ctx valid-time tx-time] (api/open-db db-provider valid-time tx-time))
+  (open-db [ctx valid-time-or-basis] (api/open-db db-provider valid-time-or-basis))
 
   api/TransactionFnContext
   (indexing-tx [_] indexing-tx))
@@ -199,7 +201,7 @@
 
           :else (try
                   (let [ctx (->TxFnContext query-engine tx)
-                        db (api/db query-engine tx-time)
+                        db (api/db ctx tx-time)
                         res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
                     (if (false? res)
                       {:failed? true}
@@ -282,11 +284,11 @@
     (db/fetch-docs forked-document-store ids))
 
   api/DBProvider
-  (db [ctx] (api/db query-engine (:crux.tx/tx-time tx)))
-  (db [ctx valid-time] (api/db query-engine valid-time))
+  (db [ctx] (api/db query-engine tx))
+  (db [ctx valid-time-or-basis] (api/db query-engine valid-time-or-basis))
   (db [ctx valid-time tx-time] (api/db query-engine valid-time tx-time))
-  (open-db [ctx] (api/open-db query-engine (:crux.tx/tx-time tx)))
-  (open-db [ctx valid-time] (api/open-db query-engine valid-time))
+  (open-db [ctx] (api/open-db query-engine tx))
+  (open-db [ctx valid-time-or-basis] (api/open-db query-engine valid-time-or-basis))
   (open-db [ctx valid-time tx-time] (api/open-db query-engine valid-time tx-time))
 
   db/InFlightTx
@@ -395,7 +397,7 @@
                                                                                            :cav-cache (nop-cache/->nop-cache {})
                                                                                            :canonical-buffer-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
-                                                        (::tx-time fork-at))
+                                                        (get fork-at ::tx-id (::tx-id tx)))
           forked-document-store (fork/->forked-document-store document-store)]
       (->InFlightTx tx (atom :open) (atom []) !error
                     forked-index-store

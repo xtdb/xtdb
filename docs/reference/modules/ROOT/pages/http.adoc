@@ -196,7 +196,8 @@ curl -X GET \
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transaction-time` (date, defaulting to latest transaction time)
+* `tx-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
 
@@ -261,10 +262,10 @@ curl -X GET \
 * `sort-order` (either `asc` or `desc`)
 
 .*Optional Parameters*
-* `with-corrections` (boolean, default false): includes bitemporal corrections in the response, inline, orted by valid-time then transaction-time
+* `with-corrections` (boolean, default false): includes bitemporal corrections in the response, inline, sorted by valid-time then tx-id
 * `with-docs` (boolean, default false): includes the documents in the response sequence, under the `doc` key
-* `start-valid-time`, `start-transaction-time` (inclusive, default unbounded): bitemporal co-ordinates to start at
-* `end-valid-time`, `end-transaction-time` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+* `start-valid-time`, `start-transaction-time`, `start-transaction-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
+* `end-valid-time`, `end-transaction-time`, `end-transaction-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
 
 ==== Response
 
@@ -353,7 +354,8 @@ curl -X GET \
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transaction-time` (date, defaulting to latest transaction time)
+* `transact-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
 
@@ -421,7 +423,8 @@ curl -g \
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transaction-time` (date, defaulting to latest transaction time)
+* `transact-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
 
@@ -478,7 +481,8 @@ You can also accept `application/json` from this endpoint, but currently the onl
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transaction-time` (date, defaulting to latest transaction time)
+* `transact-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
 

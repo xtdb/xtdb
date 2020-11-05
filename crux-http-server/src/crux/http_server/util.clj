@@ -13,13 +13,19 @@
             [muuntaja.format.edn :as mfe]
             [muuntaja.format.transit :as mft]
             [spec-tools.core :as st]
-            [crux.http-server.entity-ref :as entity-ref])
+            [crux.http-server.entity-ref :as entity-ref]
+            [clojure.instant :as inst])
   (:import [crux.api ICruxAPI ICruxDatasource]
            [crux.codec EDNId Id]
            crux.http_server.entity_ref.EntityRef
-           [java.io ByteArrayOutputStream OutputStream]))
+           [java.io ByteArrayOutputStream OutputStream]
+           (java.util Date Map)))
 
 (s/def ::eid (and string? c/valid-id?))
+
+(s/def ::date
+  (st/spec {:spec #(instance? Date %)
+            :decode/string (fn [_ d] (inst/read-instant-date d))}))
 
 (defn try-decode-edn [edn]
   (try
@@ -41,8 +47,8 @@
     :decode/string (fn [_ json] (http-json/try-decode-json json))}))
 
 (s/def ::link-entities? boolean?)
-(s/def ::valid-time inst?)
-(s/def ::transact-time inst?)
+(s/def ::valid-time ::date)
+(s/def ::transact-time ::date)
 (s/def ::timeout int?)
 (s/def ::tx-id int?)
 
@@ -107,21 +113,11 @@
        (m/install {:name "application/json"
                    :encoder [http-json/->json-encoder opts]}))))
 
-(defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
-  (cond
-    (and valid-time transact-time)
-    (.db crux-node valid-time transact-time)
-
-    valid-time
-    (.db crux-node valid-time)
-
-    ;; TODO: This could also be an error, depending how you see it,
-    ;; not supported via the Java API itself.
-    transact-time
-    (.db crux-node (cio/next-monotonic-date) transact-time)
-
-    :else
-    (.db crux-node)))
+(defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time tx-id]}]
+  (let [^Map db-basis {:crux.db/valid-time valid-time
+                       :crux.tx/tx-time transact-time
+                       :crux.tx/tx-id tx-id}]
+    (.db crux-node db-basis)))
 
 (defn raw-html [{:keys [title crux-node http-options results]}]
   (let [latest-completed-tx (api/latest-completed-tx crux-node)]

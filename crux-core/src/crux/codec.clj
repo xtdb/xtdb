@@ -20,7 +20,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def index-version 14)
+(def index-version 15)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -48,6 +48,8 @@
 ;; prefix indexes
 (def ^:const av-index-id 10)
 (def ^:const ae-index-id 11)
+
+(def ^:const tx-time-mapping-id 12)
 
 (def ^:const value-type-id-size Byte/BYTES)
 

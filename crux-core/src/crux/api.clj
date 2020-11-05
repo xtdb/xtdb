@@ -2,18 +2,17 @@
   "Public API of Crux."
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.query-state :as qs]
+            [crux.history-options :as hopts]
             [crux.ingest-client :as ic]
-            [crux.system :as sys]
-            [clojure.tools.logging :as log])
-  (:import (crux.api Crux ICruxAPI ICruxIngestAPI
-                     ICruxAsyncIngestAPI ICruxDatasource
-                     HistoryOptions HistoryOptions$SortOrder RemoteClientOptions)
+            [crux.query-state :as qs]
+            [crux.system :as sys])
+  (:import [crux.api Crux HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICruxIngestAPI RemoteClientOptions]
            java.lang.AutoCloseable
-           (java.util Date)
            java.time.Duration
-           [java.util.function Supplier Consumer]))
+           [java.util Date Map]
+           [java.util.function Consumer Supplier]))
 
 (s/def :crux.db/id c/valid-id?)
 (s/def :crux.db/evicted? boolean?)
@@ -35,35 +34,56 @@
 (defprotocol DBProvider
   (db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node ^Date valid-time]
-    ^crux.api.ICruxDatasource [node ^Date valid-time ^Date transaction-time]
-    "When a valid time is specified then returned db value contains only those
-  documents whose valid time is before the specified time.
+    ^crux.api.ICruxDatasource [node valid-time-or-basis]
+    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    "Returns a DB snapshot at the given time.
 
-  When both valid and transaction time are specified returns a db value as of
-  the valid time and the latest transaction time indexed at or before the
-  specified transaction time.
+  db-basis: (optional map, all keys optional)
+    - `:crux.db/valid-time` (Date):
+        If provided, DB won't return any data with a valid-time greater than the given time.
+        Defaults to now.
+    - `:crux.tx/tx` (Map):
+        If provided, DB will be a snapshot as of the given transaction.
+        Defaults to the latest completed transaction.
+    - `:crux.tx/tx-time` (Date):
+        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-  If the node hasn't yet indexed a transaction at or past the given
-  transaction-time, this throws NodeOutOfSyncException")
+  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
 
   (open-db
     ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node ^Date valid-time]
-    ^crux.api.ICruxDatasource [node ^Date valid-time ^Date transaction-time]
-    "When a valid time is specified then returned db value contains only those
-  documents whose valid time is before the specified time.
+    ^crux.api.ICruxDatasource [node valid-time-or-basis]
+    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
+    "Opens a DB snapshot at the given time.
 
-  When both valid and transaction time are specified returns a db value as of
-  the valid time and the latest transaction time indexed at or before the
-  specified transaction time.
+  db-basis: (optional map, all keys optional)
+    - `:crux.db/valid-time` (Date):
+        If provided, DB won't return any data with a valid-time greater than the given time.
+        Defaults to now.
+    - `:crux.tx/tx` (Map):
+        If provided, DB will be a snapshot as of the given transaction.
+        Defaults to the latest completed transaction.
+    - `:crux.tx/tx-time` (Date):
+        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
 
-  If the node hasn't yet indexed a transaction at or past the given
-  transaction-time, this throws NodeOutOfSyncException
+  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
 
   This DB opens up shared resources to make multiple requests faster - it must
   be `.close`d when you've finished using it (for example, in a `with-open`
   block)"))
+
+(let [db-args '(^crux.api.ICruxDatasource [node]
+                ^crux.api.ICruxDatasource [node db-basis]
+                ^crux.api.ICruxDatasource ^:deprecated [node valid-time]
+                ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time])]
+  (alter-meta! #'db assoc :arglists db-args)
+  (alter-meta! #'open-db assoc :arglists db-args))
 
 (defprotocol TransactionFnContext
   (indexing-tx [tx-fn-ctx]))
@@ -86,7 +106,7 @@
     "Blocks until the node has caught up indexing to the latest tx available at
   the time this method is called. Will throw an exception on timeout. The
   returned date is the latest transaction time indexed by this node. This can be
-  used as the second parameter in (db valid-time, transaction-time) for
+  used as the second parameter in (db valid-time transaction-time) for
   consistent reads.
 
   timeout – max time to wait, can be nil for the default.
@@ -155,30 +175,25 @@
 
   Returns an iterator of the TxLog"))
 
-(defn- ->HistoryOptions [sort-order
-                         {:keys [with-corrections? with-docs? start end]
-                          :or {with-corrections? false, with-docs false}}]
-  (HistoryOptions. (case sort-order
-                     :asc HistoryOptions$SortOrder/ASC
-                     :desc HistoryOptions$SortOrder/DESC)
-                   (boolean with-corrections?)
-                   (boolean with-docs?)
-                   (:crux.db/valid-time start)
-                   (:crux.tx/tx-time start)
-                   (:crux.db/valid-time end)
-                   (:crux.tx/tx-time end)))
-
 (extend-protocol DBProvider
   ICruxAPI
   (db
     ([this] (.db this))
-    ([this ^Date valid-time] (.db this valid-time))
-    ([this ^Date valid-time ^Date transaction-time] (.db this valid-time transaction-time)))
+    ([this valid-time-or-basis]
+     (if (instance? Date valid-time-or-basis)
+       (.db this ^Date valid-time-or-basis)
+       (.openDB this ^Map valid-time-or-basis)))
+    ([this valid-time tx-time]
+     (.db this valid-time tx-time)))
 
   (open-db
     ([this] (.openDB this))
-    ([this ^Date valid-time] (.openDB this valid-time))
-    ([this ^Date valid-time ^Date transaction-time] (.openDB this valid-time transaction-time))))
+    ([this valid-time-or-basis]
+     (if (instance? Date valid-time-or-basis)
+       (.openDB this ^Date valid-time-or-basis)
+       (.openDB this ^Map valid-time-or-basis)))
+    ([this valid-time tx-time]
+     (.openDB this valid-time tx-time))))
 
 (extend-protocol PCruxNode
   ICruxAPI
@@ -273,7 +288,7 @@
   Options:
   * `sort-order` (parameter): `#{:asc :desc}`
   * `:with-docs?`: specifies whether to include documents in the entries
-  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then transaction-time.
+  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
   * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
   * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
 
@@ -303,6 +318,9 @@
     "returns the time of the latest transaction applied to this db value.
   If a tx time was specified when db value was acquired then returns
   the specified time.")
+
+  (db-basis [db]
+    "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`")
 
   (with-tx [db tx-ops]
     "Returns a new db value with the tx-ops speculatively applied.
@@ -338,8 +356,12 @@
                  [db eid sort-order]
                  ^crux.api.ICursor
                  [db eid sort-order {:keys [with-docs? with-corrections?]
-                                     {start-vt :crux.db/valid-time, start-tt :crux.tx/tx-time} :start
-                                     {end-vt :crux.db/valid-time, end-tt :crux.tx/tx-time} :end}])]
+                                     {start-vt :crux.db/valid-time
+                                      start-tt :crux.tx/tx-time
+                                      start-tx-id :crux.tx/tx-id} :start
+                                     {end-vt :crux.db/valid-time
+                                      end-tt :crux.tx/tx-time
+                                      end-tx-id :crux.tx/tx-id} :end}])]
   (alter-meta! #'entity-history assoc :arglists arglists)
   (alter-meta! #'open-entity-history assoc :arglists arglists))
 
@@ -351,16 +373,19 @@
   (q* [this query args] (.query this query (object-array args)))
   (open-q* [this query args] (.openQuery this query (object-array args)))
 
+  ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
+  ;; as the new Java ones?
   (entity-history
     ([this eid sort-order] (entity-history this eid sort-order {}))
-    ([this eid sort-order opts] (.entityHistory this eid (->HistoryOptions sort-order opts))))
+    ([this eid sort-order opts] (.entityHistory this eid (hopts/->history-options sort-order opts))))
 
   (open-entity-history
     ([this eid sort-order] (open-entity-history this eid sort-order {}))
-    ([this eid sort-order opts] (.openEntityHistory this eid (->HistoryOptions sort-order opts))))
+    ([this eid sort-order opts] (.openEntityHistory this eid (hopts/->history-options sort-order opts))))
 
   (valid-time [this] (.validTime this))
   (transaction-time [this] (.transactionTime this))
+  (db-basis [this] (.dbBasis this))
 
   (with-tx [this tx-ops] (.withTx this tx-ops)))
 
