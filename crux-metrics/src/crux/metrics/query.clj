@@ -12,8 +12,11 @@
     (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
                 (fn [event]
                   (swap! !timer-store assoc (:crux.query/query-id event) (dropwizard/start query-timer))))
-
     (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
+                (fn [event]
+                  (dropwizard/stop (get @!timer-store (:crux.query/query-id event)))
+                  (swap! !timer-store dissoc (:crux.query/query-id event))))
+    (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
                 (fn [event]
                   (dropwizard/stop (get @!timer-store (:crux.query/query-id event)))
                   (swap! !timer-store dissoc (:crux.query/query-id event))))
