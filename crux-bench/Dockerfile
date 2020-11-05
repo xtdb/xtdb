@@ -1,7 +1,7 @@
 FROM clojure:openjdk-11-lein-2.9.0
 
 WORKDIR /usr/local/lib/crux
-ENTRYPOINT ["java","-cp","crux-bench-standalone.jar","-Xms3g","-Xmx3g","clojure.main", "-m"]
+ENTRYPOINT ["java","-cp","crux-bench-standalone.jar","-Dclojure.main.report=stderr","-Xms3g","-Xmx3g","clojure.main", "-m"]
 CMD ["crux.bench.main"]
 
 ADD data/weather_small_locations.csv crux-bench/data/
