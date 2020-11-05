@@ -62,7 +62,7 @@
                                                              [:crux.tx/put condition-doc time]))))
                                      nil))))]
         (api/await-tx node last-tx (Duration/ofMinutes 20))
-        {}))))
+        {:success? true}))))
 
 (defn test-last-10-readings [node]
   ;; NOTE: Does not work with range, takes latest values.
@@ -91,55 +91,55 @@
   ;; (10 rows)
 
   (bench/run-bench :last-10-readings
-    (let [successful? (= (api/q (api/db node)
-                                '{:find [time device-id temperature humidity]
-                                  :where [[c :condition/time time]
-                                          [c :condition/device-id device-id]
-                                          [c :condition/temperature temperature]
-                                          [c :condition/humidity humidity]]
-                                  :order-by [[time :desc] [device-id :asc]]
-                                  :limit 10})
-                         [[#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000000
-                           42.0
-                           54.600000000000094]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000001
-                           42.0
-                           54.49999999999998]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000002
-                           42.0
-                           55.200000000000074]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000003
-                           42.0
-                           52.70000000000004]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000004
-                           70.00000000000004
-                           49.000000000000014]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000005
-                           70.30000000000014
-                           48.60000000000001]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000006
-                           42.0
-                           50.00000000000003]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000007
-                           69.89999999999998
-                           49.50000000000002]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000008
-                           42.0
-                           53.70000000000008]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000009
-                           91.0
-                           92.40000000000006]])]
-      {:successful? successful?})))
+    (let [success? (= (api/q (api/db node)
+                             '{:find [time device-id temperature humidity]
+                               :where [[c :condition/time time]
+                                       [c :condition/device-id device-id]
+                                       [c :condition/temperature temperature]
+                                       [c :condition/humidity humidity]]
+                               :order-by [[time :desc] [device-id :asc]]
+                               :limit 10})
+                      [[#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000000
+                        42.0
+                        54.600000000000094]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000001
+                        42.0
+                        54.49999999999998]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000002
+                        42.0
+                        55.200000000000074]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000003
+                        42.0
+                        52.70000000000004]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000004
+                        70.00000000000004
+                        49.000000000000014]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000005
+                        70.30000000000014
+                        48.60000000000001]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000006
+                        42.0
+                        50.00000000000003]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000007
+                        69.89999999999998
+                        49.50000000000002]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000008
+                        42.0
+                        53.70000000000008]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000009
+                        91.0
+                        92.40000000000006]])]
+      {:success? success?})))
 
 (defn trunc ^double [d ^long scale]
   (.doubleValue (.setScale (bigdec d) scale RoundingMode/HALF_UP)))
@@ -182,62 +182,62 @@
                   :limit 10
                   :timeout 120000}
 
-          successful? (= (for [[time device-id location temperature humidity]
-                               (api/q (api/db node) query)]
-                           [time device-id location (trunc temperature 2) (trunc humidity 2)])
+          success? (= (for [[time device-id location temperature humidity]
+                            (api/q (api/db node) query)]
+                        [time device-id location (trunc temperature 2) (trunc humidity 2)])
 
-                         [[#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000000
-                           :arctic-000000
-                           42.0
-                           54.6]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000001
-                           :arctic-000001
-                           42.0
-                           54.5]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000002
-                           :arctic-000002
-                           42.0
-                           55.2]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000003
-                           :arctic-000003
-                           42.0
-                           52.7]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000006
-                           :arctic-000004
-                           42.0
-                           50.0]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000008
-                           :arctic-000005
-                           42.0
-                           53.7]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000009
-                           :swamp-000000
-                           91.0
-                           92.4]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000012
-                           :swamp-000001
-                           91.0
-                           94.3]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000017
-                           :swamp-000002
-                           91.0
-                           90.5]
-                          [#inst "2016-11-16T21:18:00.000-00:00"
-                           :location/weather-pro-000018
-                           :swamp-000003
-                           91.0
-                           96.9]])]
+                      [[#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000000
+                        :arctic-000000
+                        42.0
+                        54.6]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000001
+                        :arctic-000001
+                        42.0
+                        54.5]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000002
+                        :arctic-000002
+                        42.0
+                        55.2]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000003
+                        :arctic-000003
+                        42.0
+                        52.7]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000006
+                        :arctic-000004
+                        42.0
+                        50.0]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000008
+                        :arctic-000005
+                        42.0
+                        53.7]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000009
+                        :swamp-000000
+                        91.0
+                        92.4]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000012
+                        :swamp-000001
+                        91.0
+                        94.3]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000017
+                        :swamp-000002
+                        91.0
+                        90.5]
+                       [#inst "2016-11-16T21:18:00.000-00:00"
+                        :location/weather-pro-000018
+                        :swamp-000003
+                        91.0
+                        96.9]])]
 
-      {:successful? successful?})))
+      {:success? success?})))
 
 (defn kw-starts-with? [kw prefix]
   (str/starts-with? (name kw) prefix))
@@ -318,33 +318,33 @@
                        (finally
                          (run! cio/try-close histories))))
 
-            successful? (= result
-                           [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
-                            [#inst "2016-11-15T13:00:00.000-00:00" 74.43 68.7 80.4]
-                            [#inst "2016-11-15T14:00:00.000-00:00" 75.44 69.5 81.4]
-                            [#inst "2016-11-15T15:00:00.000-00:00" 76.47 70.5 82.7]
-                            [#inst "2016-11-15T16:00:00.000-00:00" 77.48 71.5 83.4]
-                            [#inst "2016-11-15T17:00:00.000-00:00" 78.46 72.5 84.6]
-                            [#inst "2016-11-15T18:00:00.000-00:00" 79.45 73.5 85.5]
-                            [#inst "2016-11-15T19:00:00.000-00:00" 80.42 74.8 86.5]
-                            [#inst "2016-11-15T20:00:00.000-00:00" 81.41 75.6 87.4]
-                            [#inst "2016-11-15T21:00:00.000-00:00" 82.42 76.1 88.4]
-                            [#inst "2016-11-15T22:00:00.000-00:00" 83.4 77.0 89.5]
-                            [#inst "2016-11-15T23:00:00.000-00:00" 84.38 78.3 90.0]
-                            [#inst "2016-11-16T00:00:00.000-00:00" 85.35 79.3 90.0]
-                            [#inst "2016-11-16T01:00:00.000-00:00" 85.27 78.8 90.0]
-                            [#inst "2016-11-16T02:00:00.000-00:00" 84.26 77.7 89.4]
-                            [#inst "2016-11-16T03:00:00.000-00:00" 83.25 76.5 88.5]
-                            [#inst "2016-11-16T04:00:00.000-00:00" 82.24 75.3 87.9]
-                            [#inst "2016-11-16T05:00:00.000-00:00" 81.23 74.1 87.2]
-                            [#inst "2016-11-16T06:00:00.000-00:00" 80.21 72.6 86.3]
-                            [#inst "2016-11-16T07:00:00.000-00:00" 79.19 71.5 84.9]
-                            [#inst "2016-11-16T08:00:00.000-00:00" 78.17 71.1 84.2]
-                            [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
-                            [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
-                            [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]])]
+            success? (= result
+                        [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
+                         [#inst "2016-11-15T13:00:00.000-00:00" 74.43 68.7 80.4]
+                         [#inst "2016-11-15T14:00:00.000-00:00" 75.44 69.5 81.4]
+                         [#inst "2016-11-15T15:00:00.000-00:00" 76.47 70.5 82.7]
+                         [#inst "2016-11-15T16:00:00.000-00:00" 77.48 71.5 83.4]
+                         [#inst "2016-11-15T17:00:00.000-00:00" 78.46 72.5 84.6]
+                         [#inst "2016-11-15T18:00:00.000-00:00" 79.45 73.5 85.5]
+                         [#inst "2016-11-15T19:00:00.000-00:00" 80.42 74.8 86.5]
+                         [#inst "2016-11-15T20:00:00.000-00:00" 81.41 75.6 87.4]
+                         [#inst "2016-11-15T21:00:00.000-00:00" 82.42 76.1 88.4]
+                         [#inst "2016-11-15T22:00:00.000-00:00" 83.4 77.0 89.5]
+                         [#inst "2016-11-15T23:00:00.000-00:00" 84.38 78.3 90.0]
+                         [#inst "2016-11-16T00:00:00.000-00:00" 85.35 79.3 90.0]
+                         [#inst "2016-11-16T01:00:00.000-00:00" 85.27 78.8 90.0]
+                         [#inst "2016-11-16T02:00:00.000-00:00" 84.26 77.7 89.4]
+                         [#inst "2016-11-16T03:00:00.000-00:00" 83.25 76.5 88.5]
+                         [#inst "2016-11-16T04:00:00.000-00:00" 82.24 75.3 87.9]
+                         [#inst "2016-11-16T05:00:00.000-00:00" 81.23 74.1 87.2]
+                         [#inst "2016-11-16T06:00:00.000-00:00" 80.21 72.6 86.3]
+                         [#inst "2016-11-16T07:00:00.000-00:00" 79.19 71.5 84.9]
+                         [#inst "2016-11-16T08:00:00.000-00:00" 78.17 71.1 84.2]
+                         [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
+                         [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
+                         [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]])]
 
-        {:successful? successful?}))))
+        {:success? success?}))))
 
 (defn run-weather-bench [node]
   (bench/with-bench-ns :ts-weather

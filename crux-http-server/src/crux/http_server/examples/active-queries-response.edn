@@ -1,0 +1,6 @@
+({:status :in-progress
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at nil
+  :error nil})

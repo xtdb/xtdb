@@ -22,9 +22,9 @@
                                               :default TimeUnit/MILLISECONDS
                                               :spec ::sys/time-unit}}}
   ^com.codahale.metrics.ConsoleReporter
-  [{:keys [^MetricRegistry reg stream metric-filter locale clock report-frequency rate-unit duration-unit]}]
+  [{:keys [^MetricRegistry registry stream metric-filter locale clock report-frequency rate-unit duration-unit]}]
 
-  (-> (ConsoleReporter/forRegistry reg)
+  (-> (ConsoleReporter/forRegistry registry)
       (cond-> stream (.outputTo stream)
               locale (.formattedFor ^Locale locale)
               clock (.withClock clock)

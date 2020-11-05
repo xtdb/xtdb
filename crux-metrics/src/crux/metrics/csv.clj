@@ -9,9 +9,9 @@
 
 (defn ->reporter {::sys/deps {:registry ::metrics/registry
                               :metrics ::metrics/metrics}
-                  ::sys/args {:file-name {:doc "Output file name"
-                                          :required? true
-                                          :spec ::sys/string}
+                  ::sys/args {:output-file {:doc "Output file name"
+                                            :required? true
+                                            :spec ::sys/path}
                               :report-frequency {:doc "Frequency of reporting metrics"
                                                  :default (Duration/ofSeconds 1)
                                                  :spec ::sys/duration}
@@ -25,7 +25,6 @@
                                               :spec ::sys/time-unit}}}
   ^com.codahale.metrics.CsvReporter
   [{:keys [^MetricRegistry registry report-frequency rate-unit duration-unit ^Path output-file]}]
-
   (let [output-file (doto (.toFile output-file)
                       (io/make-parents))]
     (-> (CsvReporter/forRegistry registry)

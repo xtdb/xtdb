@@ -7,12 +7,17 @@ To build the website we are using [Antora](https://docs.antora.org/antora/2.3/) 
 * Node/NPM
 * `npm i -g @antora/cli @antora/site-generator-default`
 * AWS CLI to deploy
-* `git submodule update --init crux-site`
 
 == Building
 
-* Build the UI bundle with `./crux-site/bin/build-bundle.sh`
-* Build the site with `./bin/build.sh`
+Build the site with `./bin/build.sh`:
+* `--with-local-bundle` to use a local build of the ui-bundle (assuming you have `crux-site` checked out in the same directory as your `crux` repo)
+
+It's assumed that
+* branches prefixed with `docs-v*` will be included as previous versions
+  * When you release Crux, create one of these `docs-v*` branches on `origin`, and update the version in `reference/antora.yml`
+  * To remove a version from the site, delete the branch
+* you have `https://github.com/juxt/crux` as `origin` - so that if you don't have the `docs-v*` branches locally, Antora will still find them
 
 == Deploying
 

@@ -21,7 +21,7 @@
             [crux.system :as sys]
             [clojure.pprint :as pp])
   (:import clojure.lang.Box
-           (crux.api ICruxDatasource HistoryOptions$SortOrder NodeOutOfSyncException)
+           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
            crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
@@ -1503,14 +1503,7 @@
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
 (defn- new-entity-resolver-fn [{:keys [valid-time transact-time index-snapshot] :as db}]
-  (with-entity-resolver-cache #(db/entity-as-of-resolver index-snapshot % valid-time transact-time) db))
-
-(defn- validate-args [args]
-  (let [ks (keys (first args))]
-    (doseq [m args]
-      (when-not (every? #(contains? m %) ks)
-        (throw (err/illegal-arg :arg-maps-need-same-keys-as-first-map
-                                {::err/message (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))}))))))
+  (with-entity-resolver-cache #(when transact-time (db/entity-as-of-resolver index-snapshot % valid-time transact-time)) db))
 
 (defn- validate-in [in]
   (doseq [binding (:bindings in)
@@ -1636,7 +1629,7 @@
         [in in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
 
-(defn query [{:keys [valid-time transact-time document-store index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
+(defn query [{:keys [index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
@@ -1684,8 +1677,9 @@
          project? (project/->project-result db compiled-find q-conformed))))))
 
 (defn entity-tx [{:keys [valid-time transact-time] :as db} index-snapshot eid]
-  (some-> (db/entity-as-of index-snapshot eid valid-time transact-time)
-          (c/entity-tx->edn)))
+  (when transact-time
+    (some-> (db/entity-as-of index-snapshot eid valid-time transact-time)
+            (c/entity-tx->edn))))
 
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
   (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
@@ -1694,6 +1688,28 @@
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
+(defn- <-history-opts [{:keys [transact-time valid-time]} ^HistoryOptions opts]
+  (letfn [(inc-date [^Date d]
+            (Date. (inc (.getTime d))))
+          (with-upper-bound [^Date d, ^Date upper-bound]
+            (if (and d (neg? (compare d upper-bound))) d upper-bound))]
+    (let [sort-order (condp = (.sortOrder opts)
+                       HistoryOptions$SortOrder/ASC :asc
+                       HistoryOptions$SortOrder/DESC :desc)]
+      {:sort-order sort-order
+       :with-docs? (.withDocs opts)
+       :with-corrections? (.withCorrections opts)
+       :start (let [desc? (= sort-order :desc)]
+                {:crux.db/valid-time (cond-> (.startValidTime opts)
+                                       desc? (with-upper-bound valid-time))
+                 :crux.tx/tx-time (cond-> (.startTransactionTime opts)
+                                    desc? (with-upper-bound transact-time))})
+
+       :end (let [asc? (= sort-order :asc)]
+              {:crux.db/valid-time (cond-> (.endValidTime opts)
+                                     asc? (with-upper-bound (inc-date valid-time)))
+               :crux.tx/tx-time (cond-> (.endTransactionTime opts)
+                                  asc? (with-upper-bound (inc-date transact-time)))})})))
 (defrecord QueryDatasource [document-store index-store bus tx-ingester
                             ^Date valid-time ^Date transact-time
                             ^ScheduledExecutorService interrupt-executor
@@ -1774,33 +1790,10 @@
       (into [] (iterator-seq history))))
 
   (openEntityHistory [this eid opts]
-    (letfn [(inc-date [^Date d] (Date. (inc (.getTime d))))
-            (with-upper-bound [^Date d, ^Date upper-bound]
-              (if (and d (neg? (compare d upper-bound))) d upper-bound))]
-      (let [sort-order (condp = (.sortOrder opts)
-                         HistoryOptions$SortOrder/ASC :asc
-                         HistoryOptions$SortOrder/DESC :desc)
-            with-docs? (.withDocs opts)
-            index-snapshot (open-index-snapshot this)
-
-            opts (cond-> {:with-corrections? (.withCorrections opts)
-                          :with-docs? with-docs?
-                          :start {:crux.db/valid-time (.startValidTime opts)
-                                  :crux.tx/tx-time (.startTransactionTime opts)}
-                          :end {:crux.db/valid-time (.endValidTime opts)
-                                :crux.tx/tx-time (.endTransactionTime opts)}}
-                   (= sort-order :asc)
-                   (-> (update-in [:end :crux.db/valid-time]
-                                  with-upper-bound (inc-date valid-time))
-                       (update-in [:end :crux.tx/tx-time]
-                                  with-upper-bound (inc-date transact-time)))
-
-                   (= sort-order :desc)
-                   (-> (update-in [:start :crux.db/valid-time]
-                                  with-upper-bound valid-time)
-                       (update-in [:start :crux.tx/tx-time]
-                                  with-upper-bound transact-time)))]
-
+    (if-not transact-time
+      cio/empty-cursor
+      (let [index-snapshot (open-index-snapshot this)
+            {:keys [sort-order with-docs?] :as opts} (<-history-opts this opts)]
         (cio/->cursor #(.close index-snapshot)
                       (->> (db/entity-history index-snapshot eid sort-order opts)
                            (map (fn [^EntityTx etx]
@@ -1816,12 +1809,13 @@
 
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time
-                               ::tx/tx-time transact-time}}
+                               ::tx/tx-time transact-time}
+                     ::db/valid-time valid-time}
+
                     (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
-                                                (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))
-                       ::db/valid-time valid-time}
+                                                (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))}
                       {::tx/tx-time (Date.)
                        ::tx/tx-id 0}))
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
@@ -1845,13 +1839,12 @@
   (db [this] (api/db this nil nil))
   (db [this valid-time] (api/db this valid-time nil))
   (db [this valid-time tx-time]
-    (let [latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
-          _ (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
-              (throw (NodeOutOfSyncException. (format "node hasn't indexed the requested transaction: requested: %s, available: %s"
-                                                      tx-time latest-tx-time)
-                                              tx-time latest-tx-time)))
-          valid-time (or valid-time (cio/next-monotonic-date))
-          tx-time (or tx-time latest-tx-time valid-time)]
+    (let [valid-time (or valid-time (Date.))
+          latest-tx-time (:crux.tx/tx-time (db/latest-completed-tx index-store))
+          tx-time (or tx-time latest-tx-time)]
+
+      (when (and tx-time (or (nil? latest-tx-time) (pos? (compare tx-time latest-tx-time))))
+        (throw (err/node-out-of-sync {:requested {:crux.tx/tx-time tx-time}, :available {:crux.tx/tx-time latest-tx-time}})))
 
       ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
       ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency

@@ -11,7 +11,8 @@
             [crux.io :as cio]
             [jsonista.core :as j]
             [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc])
+            [muuntaja.format.core :as mfc]
+            [spec-tools.core :as st])
   (:import crux.codec.Id
            crux.http_server.entity_ref.EntityRef
            crux.io.Cursor
@@ -40,6 +41,10 @@
                    ::with-corrections
                    ::with-docs
                    ::util/link-entities?]))
+
+(s/def ::response-spec
+  (st/spec
+   {:spec map?}))
 
 (defn entity-links
   [db result]

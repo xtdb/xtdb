@@ -50,10 +50,16 @@
         (t/is (nil? (api/entity (api/db *api* valid-time tx-time) :ivan)))))))
 
 (t/deftest test-empty-db
-  (t/is (api/db *api*))
+  (let [empty-db (api/db *api*)]
+    (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo} #inst "2020"]])
+    (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo)))
 
-  (t/testing "syncing empty db"
-    (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))))
+    ;; TODO we don't currently distinguish between 'give me empty DB'
+    ;; and 'give me latest tx-time' on the HTTP API when the tx-time QP is nil/missing
+    (when-not (= *node-type* :remote)
+      (t/is (nil? (api/entity empty-db :foo)))
+      (t/is (empty? (api/entity-history empty-db :foo :asc))))))
 
 (t/deftest test-status
   (t/is (= (merge {:crux.index/index-version 14}
@@ -345,6 +351,19 @@
   (let [{:keys [^Date crux.tx/tx-time]} (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
+
+(t/deftest test-db-is-a-snapshot
+  (let [tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 0}]])
+        db (api/db *api*)]
+    (t/is (= (:crux.tx/tx-time tx)
+             (api/transaction-time db)))
+    (t/is (= {:crux.db/id :foo, :count 0}
+             (api/entity db :foo)))
+
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 1}]])
+
+    (t/is (= {:crux.db/id :foo, :count 0}
+             (api/entity db :foo)))))
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (.latestSubmittedTx *api*)))

@@ -94,13 +94,14 @@
   ([node sf]
    (load-docs! node sf tpch-entity->doc))
   ([node sf doc-fn]
+   (println "Transacting TPC-H tables...")
    (doseq [^TpchTable t (TpchTable/getTables)]
-     (let [docs (tpch-table->docs t sf doc-fn)]
-       (println "Transacting" (count docs) (.getTableName t))
-       (let [last-tx (->> docs
-                          (partition-all 1000)
-                          (reduce (fn [last-tx chunk]
-                                    (c/submit-tx node (vec (for [doc chunk]
-                                                             [:crux.tx/put doc]))))
-                                  nil))]
-         (c/await-tx node last-tx))))))
+     (let [[last-tx doc-count] (->> (tpch-table->docs t sf doc-fn)
+                                    (partition-all 1000)
+                                    (reduce (fn [[last-tx last-doc-count] chunk]
+                                              [(c/submit-tx node (vec (for [doc chunk]
+                                                                        [:crux.tx/put doc])))
+                                               (+ last-doc-count (count chunk))])
+                                            [nil 0]))]
+       (println "Transacted" doc-count (.getTableName t))
+       (c/await-tx node last-tx)))))

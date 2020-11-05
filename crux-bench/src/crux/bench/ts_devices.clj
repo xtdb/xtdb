@@ -75,7 +75,7 @@
                                                                    [:crux.tx/put reading-doc time]))))
                                      nil))))]
         (crux/await-tx node last-tx (Duration/ofMinutes 20))
-        {}))))
+        {:success? true}))))
 
 (defn test-battery-readings [node]
   ;; 10 most recent battery temperature readings for charging devices
@@ -105,18 +105,18 @@
                           [r :reading/battery-temperature battery-temperature]]
                   :order-by [[time :desc] [device-id :desc]]
                   :limit 10}
-          successful? (= (crux/q (crux/db node) query)
-                         [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000998 93.1]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000997 90.7]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000996 92.8]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000995 91.9]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000994 92.0]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000993 92.8]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
-                          [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
-      {:successful? successful?})))
+          success? (= (crux/q (crux/db node) query)
+                      [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000998 93.1]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000997 90.7]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000996 92.8]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000995 91.9]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000994 92.0]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000993 92.8]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
+                       [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])]
+      {:success? success?})))
 
 (defn test-busiest-devices [node]
   ;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
@@ -153,38 +153,38 @@
                   :order-by [[cpu-avg-1min :desc] [time :desc]]
                   :limit 5}
 
-          successful? (= (crux/q (crux/db node) query)
-                         [[#inst "2016-11-15T20:19:30.000-00:00"
-                           :device-info/demo000818
-                           33.45
-                           26.0
-                           :discharging
-                           "focus"]
-                          [#inst "2016-11-15T20:19:30.000-00:00"
-                           :device-info/demo000278
-                           32.59
-                           14.0
-                           :discharging
-                           "focus"]
-                          [#inst "2016-11-15T20:19:30.000-00:00"
-                           :device-info/demo000418
-                           32.11
-                           18.0
-                           :discharging
-                           "mustang"]
-                          [#inst "2016-11-15T20:19:30.000-00:00"
-                           :device-info/demo000942
-                           31.72
-                           26.0
-                           :discharging
-                           "pinto"]
-                          [#inst "2016-11-15T20:19:30.000-00:00"
-                           :device-info/demo000800
-                           31.34
-                           25.0
-                           :discharging
-                           "focus"]])]
-      {:successful? successful?})))
+          success? (= (crux/q (crux/db node) query)
+                      [[#inst "2016-11-15T20:19:30.000-00:00"
+                        :device-info/demo000818
+                        33.45
+                        26.0
+                        :discharging
+                        "focus"]
+                       [#inst "2016-11-15T20:19:30.000-00:00"
+                        :device-info/demo000278
+                        32.59
+                        14.0
+                        :discharging
+                        "focus"]
+                       [#inst "2016-11-15T20:19:30.000-00:00"
+                        :device-info/demo000418
+                        32.11
+                        18.0
+                        :discharging
+                        "mustang"]
+                       [#inst "2016-11-15T20:19:30.000-00:00"
+                        :device-info/demo000942
+                        31.72
+                        26.0
+                        :discharging
+                        "pinto"]
+                       [#inst "2016-11-15T20:19:30.000-00:00"
+                        :device-info/demo000800
+                        31.34
+                        25.0
+                        :discharging
+                        "focus"]])]
+      {:success? success?})))
 
 
 (defn test-min-max-battery-level-per-hour [node]
@@ -242,18 +242,18 @@
                        (finally
                          (run! cio/try-close histories))))
 
-            successful? (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
-                            [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
-                            [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
-                            [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
-                            [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
-                            [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
-                            [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
-                            [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
-                            [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
-                           result)]
+            success? (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
+                         [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
+                         [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
+                         [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
+                         [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
+                         [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
+                         [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
+                         [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
+                         [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
+                        result)]
 
-        {:successful? successful?}))))
+        {:success? success?}))))
 
 (defn run-devices-bench [node]
   (bench/with-bench-ns :ts-devices

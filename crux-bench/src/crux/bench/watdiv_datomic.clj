@@ -331,7 +331,8 @@
                                                   (vec)))
                            (reset! done? true)))
                        (+ n (count entities))))
-                   0)))))
+                   0))
+      {:success? true})))
 
 (defn run-watdiv-bench [{:keys [test-count] :as opts}]
   (with-datomic

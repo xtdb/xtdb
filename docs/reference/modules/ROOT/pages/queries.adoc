@@ -95,21 +95,16 @@ include::example$src/docs/examples.clj[tags=basic-query-r]
 [#arguments]
 == Arguments
 
-For the next set of queries we will again use the same set of documents for our database as used in the previous section:
+Crux queries can take a set of additional arguments, binding them to variables under the `:in` key within the query. Below we have some examples of queries with the various kinds of bindings that `:in` supports (ran on the data as entered into the database above).
 
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-input]
-----
-
-=== Query: "Match on entity ID and value"
+=== Scalar binding
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments1]
 ----
 
-Our first query supplies two arguments to the query via a map within the `:args` vector. The effect of this is to make sure that regardless of whether other `:name` values in the database also equal `"Ivan"`, that only the entity with an ID matching our specific `:ivan` ID is considered within the query. Use of arguments means we can avoid hard-coding values directly into the query clauses.
+In the above query, we parameterize the `first-name` symbol, and pass in "Ivan" as our input, binding "Ivan" to `first-name` in the query.
 
 Result Set:
 [source,clj]
@@ -117,14 +112,14 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments1-r]
 ----
 
-=== Query: "Match entities with given values"
+=== Collection binding
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments2]
 ----
 
-This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parameterise the input to a query such that we do not have to rerun a single query multiple times (which would be significantly less efficient!).
+This query shows binding to a collection of inputs - in this case, binding `first-name` to all of the different values in a collection of first-names.
 
 Result Set:
 [source,clj]
@@ -132,14 +127,14 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments2-r]
 ----
 
-=== Query: "Match entities with given value tuples"
+=== Tuple Binding
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-arguments3]
 ----
 
-Here we see how we can extend the parameterisation to match using multiple fields at once.
+In this query we are binding a set of variables to a single value each, passing in a collection as our input. In this case, we are passing a collection with a `first-name` followed by a `last-name`.
 
 Result Set:
 [source,clj]
@@ -147,19 +142,19 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments3-r]
 ----
 
-=== Query: "Use range constraints with arguments"
+=== Relation Binding
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-with-arguments5]
+include::example$src/docs/examples.clj[tags=query-with-arguments4]
 ----
 
-Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database.
+Here we see how we can extend the parameterisation to match using multiple fields at once by passing and destructuring a relation containing multiple tuples.
 
 Result Set:
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
+include::example$src/docs/examples.clj[tags=query-with-arguments4-r]
 ----
 
 [#predicates]
@@ -169,17 +164,25 @@ Something else we can do with arguments is apply *predicates* to them directly w
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-with-arguments4]
+include::example$src/docs/examples.clj[tags=query-with-arguments5]
 ----
 
-In this case only `:name "Ivan"` satisfies `[(re-find #"I" n)]` (which returns true for any values that begin with "I"). Any *fully qualified* Clojure function that returns a boolean can be used in place of `re-find`, for example:
+In this case, we have a list of ages as our input, and only `22` satisfies the predicate, `(> age 21)`.
+
+Result set:
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
+----
+
+Any fully qualified Clojure function that returns a boolean can be used in place of `>`, for example:
 
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-pred-1]
 ----
 
-Result:
+Result set:
 [source,clj]
 ----
 include::example$src/docs/examples.clj[tags=query-with-pred-1-r]
@@ -190,18 +193,8 @@ include::example$src/docs/examples.clj[tags=query-with-pred-1-r]
 
 [source,clojure]
 ----
-{:find [(sum ?heads)
-        (min ?heads)
-        (max ?heads)
-        (count ?heads)
-        (count-distinct ?heads)]
- :where [[(identity [["Cerberus" 3]
-                     ["Medusa" 1]
-                     ["Cyclops" 1]
-                     ["Chimera" 1]])
-                    [[?monster ?heads]]]}
-
-;;=> #{[6 1 3 4 2]}
+include::example$src/docs/examples.clj[tags=query-aggregates]
+include::example$src/docs/examples.clj[tags=query-aggregates-r]
 ----
 
 The following built-in aggregates are provided as additional syntax for use within the `:find` clause and each accept at most one logical variable (e.g. `?lvar` in these examples):
@@ -343,6 +336,57 @@ include::example$src/docs/examples.clj[tags=join2-r]
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
+[#subqueries]
+== Subqueries
+
+Within Crux queries, you can nest a subquery - and bind the results for further use in the query.
+
+=== Binding results as a scalar
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-1]
+----
+
+In the above query, we perform a subquery doing some arithmetic operations and returning the result - and bind the resulting relation as a scalar.
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-1-r]
+----
+
+=== Binding results as a tuple
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-2]
+----
+
+Similar to the previous query, except we bind the resulting relation as a tuple.
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-2-r]
+----
+
+In this example, we bind the results of a subquery and use them to return another result.
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-3]
+----
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-3-r]
+----
+
 [#eql-projection]
 == EQL Projection
 
@@ -355,20 +399,11 @@ To specify what data you'd like about each entity, include a `(eql/project ?logi
 
 [source,clojure]
 ----
-;; with just 'query':
-{:find [?uid ?name ?profession]
- :where [[?user :user/id ?uid]
-         [?user :user/name ?name]
-         [?user :user/profession ?profession]]}
-;; => [[1 "Ivan" :doctor] [2 "Sergei" :lawyer], [3 "Petr" :doctor]]
+include::example$src/docs/examples.clj[tags=eql-query-1]
+include::example$src/docs/examples.clj[tags=eql-query-1-r]
 
-;; using `eql/project`:
-{:find [(eql/project ?user [:user/name :user/profession]]
- :where [[?user :user/id ?uid]]}
-
-;; => [{:user/id 1, :user/name "Ivan", :user/profession :doctor},
-;;     {:user/id 2, :user/name "Sergei", :user/profession :lawyer},
-;;     {:user/id 3, :user/name "Petr", :user/profession :doctor}]
+include::example$src/docs/examples.clj[tags=eql-query-2]
+include::example$src/docs/examples.clj[tags=eql-query-2-r]
 ----
 
 We can navigate to other entities (and hence build up nested results) using 'joins'.
@@ -376,34 +411,19 @@ Joins are specified in `{}` braces in the projection-spec - each one maps one jo
 
 [source,clojure]
 ----
-;; with just 'query':
-{:find [?uid ?name ?profession-name]
- :where [[?user :user/id ?uid]
-         [?user :user/name ?name]
-         [?user :user/profession ?profession]
-         [?profession :profession/name ?profession-name]]}
-;; => [[1 "Ivan" "Doctor"] [2 "Sergei" "Lawyer"], [3 "Petr" "Doctor"]]
+include::example$src/docs/examples.clj[tags=eql-query-3]
+include::example$src/docs/examples.clj[tags=eql-query-3-r]
 
-{:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}]
- :where [[?user :user/id ?uid]]}
-
-;; => [{:user/id 1, :user/name "Ivan", :user/profession {:profession/name "Doctor"}},
-;;     {:user/id 2, :user/name "Sergei", :user/profession {:profession/name "Lawyer"}}
-;;     {:user/id 3, :user/name "Petr", :user/profession {:profession/name "Doctor"}}]
+include::example$src/docs/examples.clj[tags=eql-query-4]
+include::example$src/docs/examples.clj[tags=eql-query-4-r]
 ----
 
 We can also navigate in the reverse direction, looking for entities that refer to this one, by prepending `_` to the attribute name:
 
 [source,clojure]
 ----
-{:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
- :where [[?profession :profession/name]]}
-
-;; => [{:profession/name "Doctor",
-;;      :user/_profession [{:user/id 1, :user/name "Ivan"},
-;;                         {:user/id 3, :user/name "Petr"}]},
-;;     {:profession/name "Lawyer",
-;;      :user/_profession [{:user/id 2, :user/name "Sergei"}]}]
+include::example$src/docs/examples.clj[tags=eql-query-5]
+include::example$src/docs/examples.clj[tags=eql-query-5-r]
 ----
 
 To rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
@@ -424,10 +444,8 @@ You can quickly grab the whole document by specifying `*` in the projection spec
 
 [source,clojure]
 ----
-{:find [(eql/project ?user [*])]
- :where [[?user :user/id 1]]}
-
-;; => [{:user/id 1, :user/name "Ivan", :user/profession :doctor, ...}]
+include::example$src/docs/examples.clj[tags=eql-query-6]
+include::example$src/docs/examples.clj[tags=eql-query-6-r]
 ----
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
@@ -445,12 +463,7 @@ control the result order.
 
 [source,clj]
 ----
-'{:find [time device-id temperature humidity]
-  :where [[c :condition/time time]
-          [c :condition/device-id device-id]
-          [c :condition/temperature temperature]
-          [c :condition/humidity humidity]]
-  :order-by [[time :desc] [device-id :asc]]}
+include::example$src/docs/examples.clj[tags=order-and-pagination-1]
 ----
 
 Use of `:order-by` will typically require that results are fully-realised by
@@ -463,14 +476,7 @@ naively scroll through the initial result set each time.
 
 [source,clj]
 ----
-'{:find [time device-id temperature humidity]
-  :where [[c :condition/time time]
-          [c :condition/device-id device-id]
-          [c :condition/temperature temperature]
-          [c :condition/humidity humidity]]
-  :order-by [[device-id :asc]]
-  :limit 10
-  :offset 90}
+include::example$src/docs/examples.clj[tags=order-and-pagination-2]
 ----
 
 Pagination relies on efficient retrieval of explicitly ordered documents and
@@ -480,15 +486,7 @@ queries to apply range filters using predicates.
 
 [source,clj]
 ----
-{:find '[time device-id temperature humidity]
- :where '[[c :condition/time time]
-          [c :condition/device-id device-id]
-          [(>= device-id my-offset)]
-          [c :condition/temperature temperature]
-          [c :condition/humidity humidity]]
- :order-by '[[device-id :asc]]
- :limit 10
- :args [{'my-offset 990}]}
+include::example$src/docs/examples.clj[tags=order-and-pagination-3]
 ----
 
 Additionally, since Crux stores documents and can traverse arbitrary keys as
@@ -506,14 +504,7 @@ connected to a given entity via the `:follow` attribute.
 
 [source,clj]
 ----
-'{:find [?e2]
-  :where [(follow ?e1 ?e2)]
-  :args [{?e1 :1}]
-  :rules [[(follow ?e1 ?e2)
-           [?e1 :follow ?e2]]
-          [(follow ?e1 ?e2)
-           [?e1 :follow ?t]
-           (follow ?t ?e2)]]})
+include::example$src/docs/examples.clj[tags=rules]
 ----
 
 [#streaming-queries]

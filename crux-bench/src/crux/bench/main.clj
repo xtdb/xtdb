@@ -3,12 +3,11 @@
             [clojure.tools.cli :as cli]
             [crux.bench :as bench]
             [crux.bench.sorted-maps-microbench :as sorted-maps]
-            [crux.bench.ts-devices :as devices]
-            [crux.bench.ts-weather :as weather]
-            [crux.bench.watdiv-crux :as watdiv-crux]
             [crux.bench.tpch-stress-test :as tpch-stress]
             [crux.bench.tpch-test :as tpch]
-            [clojure.set :as set]))
+            [crux.bench.ts-devices :as devices]
+            [crux.bench.ts-weather :as weather]
+            [crux.bench.watdiv-crux :as watdiv-crux]))
 
 (defn post-to-slack [results]
   (doto results
@@ -41,12 +40,14 @@
                              (watdiv-crux/summarise-query-results query-results))
                      (bench/with-comparison-times)
                      (doto post-to-slack)))))
+
    :tpch-stress (fn [nodes {:keys [tpch-query-count tpch-field-count] :as opts}]
                   (bench/with-nodes [node nodes]
                     (-> (bench/with-comparison-times
                           (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
                                                                   :field-count tpch-field-count}))
                         (doto post-to-slack))))
+
    :tpch (fn [nodes {:keys [tpch-scale-factor] :as opts}]
            (bench/with-nodes [node nodes]
              (-> (bench/with-comparison-times

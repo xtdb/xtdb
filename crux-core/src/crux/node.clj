@@ -1,31 +1,26 @@
 (ns crux.node
   (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
-            [com.stuartsierra.dependency :as dep]
+            [clojure.pprint :as pp]
             [crux.api :as api]
+            [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.error :as err]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.query :as q]
-            [crux.status :as status]
             [crux.query-state :as qs]
+            [crux.status :as status]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [crux.tx.event :as txe]
-            [crux.bus :as bus]
             [crux.tx.conform :as txc]
-            [clojure.pprint :as pp])
-  (:import (crux.api ICruxAPI ICruxAsyncIngestAPI NodeOutOfSyncException ICursor
-                     QueryState QueryState$QueryStatus QueryState$QueryError)
-           (java.io Closeable Writer)
-           (java.lang AutoCloseable)
-           java.util.function.Consumer
-           java.util.Date
-           [java.util.concurrent Executors TimeoutException]
+            [crux.tx.event :as txe])
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI ICursor]
+           [java.io Closeable Writer]
+           [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
-           (java.time Duration Instant)))
+           java.util.concurrent.TimeoutException
+           java.util.Date
+           java.util.function.Consumer))
 
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
@@ -127,12 +122,9 @@
   (hasTxCommitted [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [{latest-tx-id ::tx/tx-id, latest-tx-time ::tx/tx-time} (.latestCompletedTx this)]
+      (let [{latest-tx-id ::tx/tx-id, :as latest-tx} (.latestCompletedTx this)]
         (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
-          (throw
-           (NodeOutOfSyncException.
-            (format "Node hasn't indexed the transaction: requested: %s, available: %s" tx-time latest-tx-time)
-            tx-time latest-tx-time))
+          (throw (err/node-out-of-sync {:requested submitted-tx, :available latest-tx}))
           (not (db/tx-failed? index-store tx-id))))))
 
   (openTxLog ^ICursor [this after-tx-id with-ops?]
@@ -141,7 +133,7 @@
       (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
             (or (nil? latest-submitted-tx-id)
                 (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
-        (cio/->cursor #() [])
+        cio/empty-cursor
 
         (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
               tx-log-iterator (db/open-tx-log tx-log after-tx-id)
