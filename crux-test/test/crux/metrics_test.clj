@@ -36,10 +36,13 @@
       (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))
 
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
-
-    (api/q (api/db *api*) {:find ['e] :where [['e :crux.db/id '_]]})
-
+    (t/is (= #{[:test]}
+             (api/q (api/db *api*) '{:find [e] :where [[e :crux.db/id _]]})))
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Find refers to unknown variable:"
+           (api/q (api/db *api*) '{:find [e] :where [[f :crux.db/id _]]})))
     (.close ^Closeable bus)
-
     (t/testing "post query timer values"
-      (t/is (not (zero? (dropwizard/meter-count (:query-timer mets))))))))
+      (t/is (not (zero? (dropwizard/meter-count (:query-timer mets)))))
+      (t/is (zero? (dropwizard/value (:current-query-count mets)))))))
