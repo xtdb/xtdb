@@ -1,13 +1,16 @@
 (ns ^:no-doc crux.io
   (:require [clojure.instant :as instant]
             [clojure.java.io :as io]
+            [clojure.java.shell :as sh]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [clojure.string :as str]
             [taoensso.nippy :as nippy])
   (:import [crux.api ICursor]
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
+           [java.lang.management BufferPoolMXBean ManagementFactory]
            java.net.ServerSocket
            [java.nio.file Files FileVisitResult SimpleFileVisitor]
            java.nio.file.attribute.FileAttribute
@@ -219,6 +222,31 @@
             *print-level* nil
             *print-namespace-maps* false]
     (pr-str xs)))
+
+(defn pid ^long []
+  (let [[pid] (str/split (.getName (ManagementFactory/getRuntimeMXBean)) #"@")]
+    (Long/parseLong pid)))
+
+(defn statm []
+  (let [os (System/getProperty "os.name")]
+    (if (re-find #"(?i)linux" os)
+      (let [page-size (Long/parseLong (str/trim (:out (sh/sh "getconf" "PAGESIZE"))))]
+        (zipmap
+         [:size :resident :share :text :lib :data :dt]
+         (for [stat (str/split (:out (sh/sh "cat" (str "/proc/" (pid) "/statm"))) #"\s+")]
+           (* page-size (Long/parseLong stat)))))
+      (throw (UnsupportedOperationException. (str "cannot get memory statistics on: " os))))))
+
+(defn buffer-pool-usage []
+  (vec (for [^BufferPoolMXBean b (ManagementFactory/getPlatformMXBeans BufferPoolMXBean)]
+         {:name (.getName b)
+          :count (.getCount b)
+          :memory-used (.getMemoryUsed b)
+          :total-capacity (.getTotalCapacity b)})))
+
+(defn memory-usage []
+  [(assoc (dissoc (bean (.getNonHeapMemoryUsage (ManagementFactory/getMemoryMXBean))) :class) :name "non-heap")
+   (assoc (dissoc (bean (.getHeapMemoryUsage (ManagementFactory/getMemoryMXBean))) :class) :name "heap")])
 
 (def uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
