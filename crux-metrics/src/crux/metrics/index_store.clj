@@ -52,18 +52,18 @@
 
 (defn assign-tx-timer [registry {:crux/keys [bus]}]
   (let [timer (dropwizard/timer registry ["index-store" "indexed-txs"])
-        !timer (atom nil)]
+        !timer-store (atom {})]
     (bus/listen bus
-                {:crux/event-types #{:crux.tx/indexing-tx}}
-                (fn [_]
-                  (reset! !timer (dropwizard/start timer))))
+                {:crux/event-types #{:crux.tx/indexing-tx :crux.tx/indexed-tx}}
+                (fn [{:keys [crux/event-type crux.tx/submitted-tx]}]
+                  (case event-type
+                    :crux.tx/indexing-tx
+                    (swap! !timer-store assoc submitted-tx (dropwizard/start timer))
 
-    (bus/listen bus
-                {:crux/event-types #{:crux.tx/indexed-tx}}
-                (fn [_]
-                  (let [[ctx _] (reset-vals! !timer nil)]
-                    (dropwizard/stop ctx))))
-
+                    :crux.tx/indexed-tx
+                    (do
+                      (dropwizard/stop (get @!timer-store submitted-tx))
+                      (swap! !timer-store dissoc submitted-tx)))))
     timer))
 
 (defn assign-listeners
