@@ -5,6 +5,7 @@
 orbs:
   aws-ecr: circleci/aws-ecr@6.7.0
   aws-s3: circleci/aws-s3@1.0.15
+  node: circleci/node@1.1.6
   crux:
     orbs:
       go: circleci/go@0.2.0
@@ -161,7 +162,7 @@ jobs:
           deps-edn: "deps-in-memory.edn"
           artifact-name: "crux-in-memory"
 
-  create-javadocs:
+  create-api-docs:
     docker:
       - image: circleci/clojure:lein-2.9.1
     working_directory: ~/crux
@@ -176,6 +177,20 @@ jobs:
           from: crux-javadoc
           overwrite: true
           to: 's3://crux-doc/crux-javadoc/${CIRCLE_TAG}'
+      - node/install
+      - run:
+          command: |
+            lein run -m crux.http-server.get-swagger
+            npm install redoc-cli
+            mkdir swagger-doc
+            ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/crux-redoc.html
+      - aws-s3/sync:
+          arguments: |
+            --acl public-read
+          from: redoc
+          overwrite: true
+          to: 's3://crux-doc/redoc/${CIRCLE_TAG}'
+
 
 workflows:
   version: 2.1
@@ -217,7 +232,7 @@ workflows:
               only: /.*/
             branches:
               ignore: /.*/
-      - create-javadocs:
+      - create-api-docs:
           requires:
             - hold
           filters:
