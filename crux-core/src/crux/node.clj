@@ -237,29 +237,31 @@
                          :query query}))))))
 
 (defn attach-current-query-listeners [!running-queries {:keys [bus] :as node-opts}]
-  (bus/listen bus {:crux/event-types #{:crux.query/submitted-query}}
-              (fn [{::q/keys [query-id query]}]
-                (swap! !running-queries assoc-in [:in-progress query-id] {:query-id query-id
-                                                                          :started-at (Date.)
-                                                                          :query query
-                                                                          :status :in-progress})))
+  (bus/listen bus {:crux/event-types #{:crux.query/submitted-query
+                                       :crux.query/completed-query
+                                       :crux.query/failed-query}}
+              (fn [{::q/keys [query-id query error] :keys [crux/event-type]}]
+                (case event-type
+                  :crux.query/submitted-query
+                  (swap! !running-queries assoc-in [:in-progress query-id] {:query-id query-id
+                                                                            :started-at (Date.)
+                                                                            :query query
+                                                                            :status :in-progress})
 
-  (bus/listen bus {:crux/event-types #{:crux.query/failed-query}}
-              (fn [{::q/keys [query-id error]}]
-                (swap-finished-query! !running-queries
-                                      {:query-id query-id
-                                       :finished-at (Date.)
-                                       :status :failed
-                                       :error error}
-                                      node-opts)))
+                  :crux.query/failed-query
+                  (swap-finished-query! !running-queries
+                                        {:query-id query-id
+                                         :finished-at (Date.)
+                                         :status :failed
+                                         :error error}
+                                        node-opts)
 
-  (bus/listen bus {:crux/event-types #{:crux.query/completed-query}}
-              (fn [{::q/keys [query-id]}]
-                (swap-finished-query! !running-queries
-                                      {:query-id query-id
-                                       :finished-at (Date.)
-                                       :status :completed}
-                                      node-opts))))
+                  :crux.query/completed-query
+                  (swap-finished-query! !running-queries
+                                        {:query-id query-id
+                                         :finished-at (Date.)
+                                         :status :completed}
+                                        node-opts)))))
 
 (defn- ->node {::sys/deps {:index-store :crux/index-store
                            :tx-ingester :crux/tx-ingester
