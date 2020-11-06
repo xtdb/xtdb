@@ -70,18 +70,22 @@
   (when-not (every? empty? [props special forward-joins unions])
     (let [forward-join-child-fns (for [{:keys [dispatch-key] :as join} forward-joins]
                                    (let [into-coll (get-in join [:params :into])
+                                         limit (get-in join [:params :limit])
                                          next-recurse-state (->next-recurse-state-fn join)
                                          k (or (get-in join [:params :as] dispatch-key))]
                                      (fn [doc db recurse-state]
                                        (when-let [v (get doc dispatch-key)]
                                          (when-let [recurse-state (next-recurse-state recurse-state)]
                                            (->> (if (c/multiple-values? v)
-                                                  (->> (into [] (map #(project-child % db recurse-state)) v)
+                                                  (->> (cond->> v
+                                                         limit (take limit))
+                                                       (mapv #(project-child % db recurse-state))
                                                        (raise-doc-lookup-out-of-coll))
                                                   (project-child v db recurse-state))
                                                 (after-doc-lookup (fn [res]
                                                                     (MapEntry/create k (cond->> res
                                                                                          into-coll (into into-coll)))))))))))
+
           union-child-fns (for [{:keys [dispatch-key children]} unions
                                 {:keys [union-key] :as child} (get-in children [0 :children])]
                             (let [next-recurse-state (->next-recurse-state-fn child)]
@@ -91,17 +95,20 @@
                                              (when (= v union-key)
                                                (when-let [recurse-state (next-recurse-state recurse-state)]
                                                  (project-child value db recurse-state)))))))))
-          prop-dispatch-keys (into #{} (map :dispatch-key) props)
-          project-star? (contains? (into #{} (map :dispatch-key) special) '*)
 
-          with-renamed-props (if-let [rename-mapping (->> props
-                                                          (into {}
-                                                                (keep (fn [{:keys [dispatch-key] :as prop}]
-                                                                        (when-let [as (get-in prop [:params :as])]
-                                                                          (MapEntry/create dispatch-key as)))))
-                                                          not-empty)]
-                               #(set/rename-keys % rename-mapping)
-                               identity)]
+          prop-child-fns (->> (for [{:keys [dispatch-key params]} props]
+                                (let [{into-coll :into, :keys [as limit]} params
+                                      k (or as dispatch-key)]
+                                  (MapEntry/create dispatch-key
+                                                   (fn [_ v]
+                                                     (MapEntry/create k (-> v
+                                                                            (cond->> limit (take limit)
+                                                                                     into-coll (into into-coll))))))))
+                              (into {}))
+
+          default-prop-fn (if (contains? (into #{} (map :dispatch-key) special) '*)
+                            (fn [k v] (MapEntry/create k v))
+                            (fn [_k _v] nil))]
 
       (fn [value {:keys [entity-resolver-fn] :as db} recurse-state]
         (when-let [content-hash (entity-resolver-fn (c/->id-buffer value))]
@@ -112,16 +119,17 @@
                    (raise-doc-lookup-out-of-coll)
                    (after-doc-lookup (fn [res]
                                        ;; TODO do we need a deeper merge here?
-                                       (-> (into (if project-star?
-                                                   doc
-                                                   (select-keys doc prop-dispatch-keys))
-                                                 res)
-                                           with-renamed-props)))))))))))
+                                       (into (into {}
+                                                   (keep (fn [[k v]]
+                                                           ((get prop-child-fns k default-prop-fn) k v)))
+                                                   doc)
+                                              res)))))))))))
 
 (defn- reverse-joins-child-fn [reverse-joins]
   (when-not (empty? reverse-joins)
     (let [reverse-join-child-fns (for [{:keys [dispatch-key] :as join} reverse-joins]
                                    (let [into-coll (get-in join [:params :into])
+                                         limit (get-in join [:params :limit])
                                          forward-key (keyword (namespace dispatch-key)
                                                               (subs (name dispatch-key) 1))
                                          one? (= :one (get-in join [:params :cardinality]))
@@ -131,6 +139,7 @@
                                        (when-let [recurse-state (next-recurse-state recurse-state)]
                                          (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) value-buffer nil entity-resolver-fn)
                                                              one? (take 1)
+                                                             limit (take limit)
                                                              :always vec)]
                                                      (project-child (db/decode-value index-snapshot v) db recurse-state)))
                                               (raise-doc-lookup-out-of-coll)
