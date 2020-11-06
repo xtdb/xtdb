@@ -63,13 +63,13 @@
                        :film/name "Die Another Day"
                        :film/bond {:person/name "Pierce Brosnan"},
                        :film/director {:person/name "Lee Tamahori"},
-                       :film/vehicles [{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
-                                       {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
-                                       {:vehicle/brand "Ford", :vehicle/model "Thunderbird"}
-                                       {:vehicle/brand "Ford", :vehicle/model "Fairlane"}]}]}
+                       :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
+                                        {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
+                                        {:vehicle/brand "Ford", :vehicle/model "Thunderbird"}
+                                        {:vehicle/brand "Ford", :vehicle/model "Fairlane"}}}]}
                    (crux/q db '{:find [(eql/project ?f [{:film/bond [:person/name]}
                                                         {:film/director [:person/name]}
-                                                        {:film/vehicles [:vehicle/brand :vehicle/model]}
+                                                        {(:film/vehicles {:into #{}}) [:vehicle/brand :vehicle/model]}
                                                         :film/name :film/year])]
                                 :where [[?f :film/name "Die Another Day"]]})))
           (t/is (= [1 6] @!lookup-counts) "batching lookups"))))
@@ -78,12 +78,12 @@
       (let [!lookup-counts (atom [])]
         (with-redefs [project/lookup-docs (->lookup-docs !lookup-counts)]
           (t/is (= #{[{:person/name "Daniel Craig",
-                       :film/_bond [#:film{:name "Skyfall", :year "2012"}
-                                    #:film{:name "Spectre", :year "2015"}
-                                    #:film{:name "Casino Royale", :year "2006"}
-                                    #:film{:name "Quantum of Solace", :year "2008"}]}]}
+                       :film/_bond #{#:film{:name "Skyfall", :year "2012"}
+                                     #:film{:name "Spectre", :year "2015"}
+                                     #:film{:name "Casino Royale", :year "2006"}
+                                     #:film{:name "Quantum of Solace", :year "2008"}}}]}
                    (crux/q db '{:find [(eql/project ?dc [:person/name
-                                                         {:film/_bond [:film/name :film/year]}])]
+                                                         {(:film/_bond {:into #{}}) [:film/name :film/year]}])]
                                 :where [[?dc :person/name "Daniel Craig"]]})))
           (t/is (= [5] @!lookup-counts) "batching lookups"))))
 

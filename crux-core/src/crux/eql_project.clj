@@ -69,7 +69,8 @@
 (defn- forward-joins-child-fn [{:keys [props special forward-joins unions]}]
   (when-not (every? empty? [props special forward-joins unions])
     (let [forward-join-child-fns (for [{:keys [dispatch-key] :as join} forward-joins]
-                                   (let [next-recurse-state (->next-recurse-state-fn join)
+                                   (let [into-coll (get-in join [:params :into])
+                                         next-recurse-state (->next-recurse-state-fn join)
                                          k (or (get-in join [:params :as] dispatch-key))]
                                      (fn [doc db recurse-state]
                                        (when-let [v (get doc dispatch-key)]
@@ -79,7 +80,8 @@
                                                        (raise-doc-lookup-out-of-coll))
                                                   (project-child v db recurse-state))
                                                 (after-doc-lookup (fn [res]
-                                                                    (MapEntry/create k res)))))))))
+                                                                    (MapEntry/create k (cond->> res
+                                                                                         into-coll (into into-coll)))))))))))
           union-child-fns (for [{:keys [dispatch-key children]} unions
                                 {:keys [union-key] :as child} (get-in children [0 :children])]
                             (let [next-recurse-state (->next-recurse-state-fn child)]
@@ -119,9 +121,10 @@
 (defn- reverse-joins-child-fn [reverse-joins]
   (when-not (empty? reverse-joins)
     (let [reverse-join-child-fns (for [{:keys [dispatch-key] :as join} reverse-joins]
-                                   (let [forward-key (keyword (namespace dispatch-key)
+                                   (let [into-coll (get-in join [:params :into])
+                                         forward-key (keyword (namespace dispatch-key)
                                                               (subs (name dispatch-key) 1))
-                                         one? (= :one (get-in join [:params :crux/cardinality]))
+                                         one? (= :one (get-in join [:params :cardinality]))
                                          next-recurse-state (->next-recurse-state-fn join)
                                          k (or (get-in join [:params :as]) dispatch-key)]
                                      (fn [value-buffer {:keys [index-snapshot entity-resolver-fn] :as db} recurse-state]
@@ -134,6 +137,7 @@
                                               (after-doc-lookup (fn [res]
                                                                   (when (seq res)
                                                                     (MapEntry/create k (cond->> res
+                                                                                         into-coll (into into-coll)
                                                                                          one? first))))))))))]
       (fn [value db recurse-state]
         (let [value-buffer (c/->value-buffer value)]
