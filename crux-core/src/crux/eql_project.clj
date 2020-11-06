@@ -108,7 +108,12 @@
 
           default-prop-fn (if (contains? (into #{} (map :dispatch-key) special) '*)
                             (fn [k v] (MapEntry/create k v))
-                            (fn [_k _v] nil))]
+                            (fn [_k _v] nil))
+
+          prop-defaults (->> (for [{:keys [dispatch-key], {:keys [default as]} :params} props
+                                   :when default]
+                               (MapEntry/create (or as dispatch-key) default))
+                             (into {}))]
 
       (fn [value {:keys [entity-resolver-fn] :as db} recurse-state]
         (when-let [content-hash (entity-resolver-fn (c/->id-buffer value))]
@@ -119,7 +124,7 @@
                    (raise-doc-lookup-out-of-coll)
                    (after-doc-lookup (fn [res]
                                        ;; TODO do we need a deeper merge here?
-                                       (into (into {}
+                                       (into (into prop-defaults
                                                    (keep (fn [[k v]]
                                                            ((get prop-child-fns k default-prop-fn) k v)))
                                                    doc)

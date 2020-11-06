@@ -68,53 +68,6 @@
              (crux/q db '{:find [(eql/project ?e [:name {:_parent [:name]}])]
                           :where [[?e :crux.db/id :petr]]})))))
 
-;; we don't have the concept of 'components'
-#_
-(t/deftest test-pull-component-attr
-  (let [parts {:name "Part A",
-               :part
-               [{:db/id 11
-                 :name "Part A.A",
-                 :part
-                 [{:db/id 12
-                   :name "Part A.A.A",
-                   :part
-                   [{:db/id 13 :name "Part A.A.A.A"}
-                    {:db/id 14 :name "Part A.A.A.B"}]}]}
-                {:db/id 15
-                 :name "Part A.B",
-                 :part
-                 [{:db/id 16
-                   :name "Part A.B.A",
-                   :part
-                   [{:db/id 17 :name "Part A.B.A.A"}
-                    {:db/id 18 :name "Part A.B.A.B"}]}]}]}
-        rpart (update-in parts [:part 0 :part 0 :part]
-                         (partial into [{:db/id 10}]))
-        recdb (d/init-db
-               (concat test-datoms [(d/datom 12 :part 10)])
-               test-schema)
-
-        mutdb (d/init-db
-               (concat test-datoms [(d/datom 12 :part 10)
-                                    (d/datom 12 :spec 10)
-                                    (d/datom 10 :spec 13)
-                                    (d/datom 13 :spec 12)])
-               test-schema)]
-
-    (t/testing "Component entities are expanded recursively"
-      (t/is (= parts (d/pull test-db '[:name :part] 10))))
-
-    (t/testing "Reverse component references yield a single result"
-      (t/is (= {:name "Part A.A" :_part {:db/id 10}}
-               (d/pull test-db [:name :_part] 11)))
-
-      (t/is (= {:name "Part A.A" :_part {:name "Part A"}}
-             (d/pull test-db [:name {:_part [:name]}] 11))))
-
-    (t/testing "Like explicit recursion, expansion will not allow loops"
-      (t/is (= rpart (d/pull recdb '[:name :part] 10))))))
-
 (t/deftest test-pull-wildcard
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{:crux.db/id :petr :name "Petr" :aka #{"Devil" "Tupen"}}]}
@@ -168,8 +121,6 @@
                           :where [[?e :crux.db/id :petr]]}))
           "Missing attrs return empty map")
 
-    ;; TODO `:default`
-    #_
     (t/is (= #{[{:foo "bar"}]}
              (crux/q db '{:find [(eql/project ?e [(:foo {:default "bar"})])]
                           :where [[?e :crux.db/id :petr]]}))
@@ -182,8 +133,6 @@
                                                   (:aka {:as :alias})])]
                           :where [[?e :crux.db/id :petr]]})))))
 
-;; TODO `:default`
-#_
 (t/deftest test-pull-attr-with-opts
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{"Name" "Nothing"}]}
