@@ -14,11 +14,15 @@
 
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
   (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
-    (let [start (long (rand-int (alength table)))]
+    (let [len (alength table)
+          start (long (rand-int len))]
       (loop [i start]
         (if-let [^Map$Entry e (aget table i)]
           e
-          (let [next (rem (inc i) (alength table))]
+          (let [next (inc i)
+                next (if (= next len)
+                       0
+                       next)]
             (when-not (= next start)
               (recur next))))))))
 
@@ -72,7 +76,7 @@
         cooling ^Queue (.cooling cache)]
     (while (< (.size cooling)
               (long (Math/ceil (* (.cooling-factor cache) (.size hot)))))
-      (when-let [e (random-entry (.hot cache))]
+      (when-let [e (random-entry hot)]
         (when-let [vp ^ValuePointer (.getValue e)]
           (when (and (.isSwizzled vp)
                      (.offer cooling vp))
@@ -144,7 +148,7 @@
                             cooling-factor 0.1
                             adaptive-break-even-level 0.8}
                        :as opts}]
-  (let [hot (ConcurrentHashMap. cache-size)
+  (let [hot (ConcurrentHashMap.)
         cooling (LinkedBlockingQueue.)
         cold (or cold-cache (crux.cache.nop/->nop-cache opts))]
     (when adaptive-sizing?
