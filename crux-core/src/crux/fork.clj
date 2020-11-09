@@ -118,9 +118,10 @@
     (cio/try-close mem-index-snapshot)
     (cio/try-close inner-index-snapshot)))
 
-(defrecord ForkedIndexStore [inner-index-store mem-index-store !evicted-eids !etxs capped-valid-time capped-tx-id]
+(defrecord ForkedIndexStore [inner-index-store mem-index-store !indexed-docs !evicted-eids !etxs capped-valid-time capped-tx-id]
   db/IndexStore
   (index-docs [this docs]
+    (swap! !indexed-docs merge docs)
     (db/index-docs mem-index-store docs))
 
   (unindex-eids [this eids]
@@ -177,6 +178,9 @@
                            capped-valid-time
                            capped-tx-id)))
 
+(defn indexed-docs [index-store]
+  @(:!indexed-docs index-store))
+
 (defn newly-evicted-eids [index-store]
   @(:!evicted-eids index-store))
 
@@ -186,7 +190,7 @@
 (defn ->forked-index-store [inner-index-store mem-index-store
                             capped-valid-time capped-tx-id]
   (->ForkedIndexStore inner-index-store mem-index-store
-                      (atom #{}) (atom {})
+                      (atom {}) (atom #{}) (atom {})
                       capped-valid-time capped-tx-id))
 
 (defrecord ForkedDocumentStore [doc-store !docs]
