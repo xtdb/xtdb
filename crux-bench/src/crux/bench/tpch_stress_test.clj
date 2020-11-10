@@ -7,8 +7,8 @@
 (defn- load-tpch-docs [node]
   (bench/run-bench :ingest
     (bench/with-additional-index-metrics node
-      (tpch/load-docs! node))
-    {:success? true}))
+      (tpch/load-docs! node)
+      {:success? true})))
 
 (def fields '{:l_orderkey l_orderkey
               :l_partkey l_partkey
