@@ -200,6 +200,12 @@ workflows:
       - test:
           requires:
             - build
+      - create-api-docs:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
       - deploy-commit:
           requires:
             - build
