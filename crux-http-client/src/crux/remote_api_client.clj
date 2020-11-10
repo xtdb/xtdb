@@ -103,12 +103,12 @@
     (doseq [stream @streams-state]
       (.close ^Closeable stream))))
 
-(defn- temporal-qps [{:keys [valid-time transact-time tx-id] :as db}]
+(defn- temporal-qps [{:keys [valid-time tx-time tx-id] :as db}]
   {:valid-time (some-> valid-time (cio/format-rfc3339-date))
-   :transact-time (some-> transact-time (cio/format-rfc3339-date))
+   :tx-time (some-> tx-time (cio/format-rfc3339-date))
    :tx-id tx-id})
 
-(defrecord RemoteDatasource [url valid-time transact-time tx-id ->jwt-token]
+(defrecord RemoteDatasource [url valid-time tx-time tx-id ->jwt-token]
   Closeable
   (close [_])
 
@@ -174,10 +174,10 @@
         cio/empty-cursor)))
 
   (validTime [_] valid-time)
-  (transactionTime [_] transact-time)
+  (transactionTime [_] tx-time)
   (dbBasis [this]
     {:crux.db/valid-time valid-time
-     :crux.tx/tx {:crux.tx/tx-time transact-time, :crux.tx/tx-id tx-id}}))
+     :crux.tx/tx {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id}}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
@@ -193,8 +193,8 @@
 
   (^ICruxDatasource db [this ^Map db-basis]
    (let [qps (temporal-qps {:valid-time (:crux.db/valid-time db-basis)
-                            :transact-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
-                                               (:crux.tx/tx-time db-basis))
+                            :tx-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
+                                         (:crux.tx/tx-time db-basis))
                             :tx-id (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-id])
                                        (:crux.tx/tx-id db-basis))})
          resolved-tx (api-request-sync (str url "/_crux/db")

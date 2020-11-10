@@ -43,34 +43,34 @@
   (cond-> response
     date (assoc-in [:headers "Last-Modified"] (rt/format-date date))))
 
-(s/def ::db-spec (s/keys :opt-un [::util/valid-time ::util/transact-time ::util/tx-id]))
+(s/def ::db-spec (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
 
 (defn- db-handler [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [valid-time transact-time tx-id]} (get-in req [:parameters :query])
+    (let [{:keys [valid-time tx-time tx-id]} (get-in req [:parameters :query])
           db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transact-time
+                                             :tx-time tx-time
                                              :tx-id tx-id})]
       (resp/response (merge {:crux.db/valid-time (crux/valid-time db)}
                             (crux/db-basis db))))))
 
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
-                                :opt-un [::util/valid-time ::util/transact-time ::util/tx-id]))
+                                :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
 
 (defn- entity-tx [^ICruxAPI crux-node]
   (fn [req]
-    (let [{:keys [eid eid-edn eid-json valid-time transact-time tx-id]} (get-in req [:parameters :query])
+    (let [{:keys [eid eid-edn eid-json valid-time tx-time tx-id]} (get-in req [:parameters :query])
           eid (or eid-edn eid-json eid)
           db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transact-time
+                                             :tx-time tx-time
                                              :tx-id tx-id})
-          {::tx/keys [tx-time] :as entity-tx} (crux/entity-tx db eid)]
+          entity-tx (crux/entity-tx db eid)]
       (if entity-tx
         (-> {:status 200
              :body entity-tx}
-            (add-last-modified tx-time))
+            (add-last-modified (::tx/tx-time entity-tx)))
         {:status 404
-         :body {:error (str eid " entity-tx not found") }}))))
+         :body {:error (str eid " entity-tx not found")}}))))
 
 (defn- ->submit-json-decoder [_]
   (let [decoders {::txc/->doc #(cio/update-if % :crux.db/fn edn/read-string)
@@ -134,8 +134,7 @@
            :return :output-stream}
           (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
 
-(s/def ::tx-time ::util/transact-time)
-(s/def ::sync-spec (s/keys :opt-un [::tx-time ::util/timeout]))
+(s/def ::sync-spec (s/keys :opt-un [::util/tx-time ::util/timeout]))
 
 (defn- sync-handler [^ICruxAPI crux-node]
   (fn [req]
@@ -148,7 +147,7 @@
            :body {:crux.tx/tx-time last-modified}}
           (add-last-modified last-modified)))))
 
-(s/def ::await-tx-time-spec (s/keys :req-un [::tx-time] :opt-un [::util/timeout]))
+(s/def ::await-tx-time-spec (s/keys :req-un [::util/tx-time] :opt-un [::util/timeout]))
 
 (defn- await-tx-time-handler [^ICruxAPI crux-node]
   (fn [req]

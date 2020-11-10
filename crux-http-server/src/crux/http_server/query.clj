@@ -35,7 +35,7 @@
 
 ;; TODO: Need to ensure all query clauses are present + coerced properly
 (s/def ::query-params
-  (s/keys :opt-un [::util/valid-time ::util/transact-time ::util/link-entities? ::query-edn]))
+  (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/link-entities? ::query-edn]))
 
 (s/def ::args (s/coll-of any? :kind vector?))
 
@@ -55,12 +55,12 @@
                              (cond-> el
                                (get entity-links el) (entity-ref/->EntityRef))))))))))
 
-(defn run-query [{:keys [link-entities? query]} {:keys [crux-node valid-time transaction-time]}]
+(defn run-query [{:keys [link-entities? query]} {:keys [crux-node valid-time tx-time]}]
   (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                           :transact-time transaction-time})]
+                                           :tx-time tx-time})]
     {:query query
      :valid-time (crux/valid-time db)
-     :transaction-time (crux/transaction-time db)
+     :tx-time (crux/transaction-time db)
      :results (if link-entities?
                 (let [results (crux/q db query)]
                   (cio/->cursor (fn []) (with-entity-refs results db)))
@@ -147,11 +147,11 @@
   (-> (DateTimeFormatter/ofPattern "yyyyMMdd'T'HHmmssXXX")
       (.withZone (ZoneId/of "Z"))))
 
-(defn with-download-header [resp {:keys [results transaction-time]} ext]
+(defn with-download-header [resp {:keys [results tx-time]} ext]
   (-> resp
       (assoc-in [:headers "Content-Disposition"]
                 (format "attachment; filename=query-%s.%s"
-                        (.format csv-date-formatter ^Instant (.toInstant ^Date transaction-time))
+                        (.format csv-date-formatter ^Instant (.toInstant ^Date tx-time))
                         ext))))
 
 (defmethod transform-query-resp "text/csv" [{:keys [no-query?] :as res} _]
@@ -177,12 +177,12 @@
 (defn data-browser-query [options]
   (fn [req]
     (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time transact-time query-edn]} query-params
+          {:keys [valid-time tx-time query-edn]} query-params
           query (or query-edn (get body-params :query))]
       (-> (if (nil? query)
             (assoc options :no-query? true)
             (run-query (transform-req query req)
                        (assoc options
                               :valid-time valid-time
-                              :transaction-time transact-time)))
+                              :tx-time tx-time)))
           (transform-query-resp req)))))

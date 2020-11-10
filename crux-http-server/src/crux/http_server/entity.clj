@@ -32,7 +32,7 @@
                    ::history
                    ::sort-order
                    ::util/valid-time
-                   ::util/transact-time
+                   ::util/tx-time
                    ::util/tx-id
                    ::start-valid-time
                    ::start-transaction-time
@@ -133,12 +133,12 @@
                 (m/install {:name "application/json"
                             :encoder [->json-encoder]}))))
 
-(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time transact-time tx-id sort-order with-corrections with-docs
+(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time tx-time tx-id sort-order with-corrections with-docs
                                                          start-valid-time start-transaction-time start-transaction-id
                                                          end-valid-time end-transaction-time end-transaction-id]}]
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transact-time
+                                             :tx-time tx-time
                                              :tx-id tx-id})
           history-opts (hopts/->history-options sort-order
                                                 {:with-corrections? with-corrections
@@ -158,10 +158,10 @@
     (catch Exception e
       {:error e})))
 
-(defn search-entity [{:keys [crux-node]} {:keys [eid valid-time transact-time link-entities?]}]
+(defn search-entity [{:keys [crux-node]} {:keys [eid valid-time tx-time link-entities?]}]
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
-                                             :transact-time transact-time})
+                                             :tx-time tx-time})
           entity (crux/entity db eid)]
       (cond
         (empty? entity) {:eid eid :not-found? true}
