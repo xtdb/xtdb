@@ -338,7 +338,7 @@
 
   (commit [this]
     (when-not (compare-and-set! !state :open :committed)
-      (throw (IllegalStateException. "Transaction marked as " (name @!state))))
+      (throw (IllegalStateException. (str "Transaction marked as " (name @!state)))))
 
     (when (:fork-at tx)
       (throw (IllegalStateException. "Can't commit from fork.")))
