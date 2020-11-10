@@ -118,13 +118,13 @@
 (rf/reg-event-fx
  ::go-to-query-view
  (fn [{:keys [db]} [_ {:keys [values]}]]
-   (let [{:strs [q valid-time transact-time]} values
+   (let [{:strs [q valid-time tx-time]} values
          query-params (->> {:query-edn (reader/read-string q)
                             :valid-time (some-> valid-time js/moment .toDate t/instant)
-                            :transact-time (some-> transact-time js/moment .toDate t/instant)}
+                            :tx-time (some-> tx-time js/moment .toDate t/instant)}
                            (remove #(nil? (second %)))
                            (into {}))
-         history-elem (dissoc query-params :valid-time :transact-time)
+         history-elem (dissoc query-params :valid-time :tx-time)
          current-storage (or (reader/read-string (.getItem js/window.localStorage "query")) [])
          updated-history (conj (into [] (remove #(= history-elem %) current-storage)) history-elem)]
      {:db (assoc db :query-history updated-history)
@@ -166,7 +166,7 @@
  (fn [{:keys [db]} [_ tab]]
    {:dispatch [:navigate :entity nil (case tab
                                        :document (-> (get-in db [:current-route :query-params])
-                                                     (select-keys [:valid-time :transact-time :eid-edn]))
+                                                     (select-keys [:valid-time :tx-time :eid-edn]))
                                        :history (-> (get-in db [:current-route :query-params])
 
                                                     (assoc :history true)
@@ -180,10 +180,10 @@
 
 (rf/reg-event-fx
  ::go-to-entity-view
- (fn [{:keys [db]} [_ {{:strs [eid valid-time transact-time]} :values}]]
+ (fn [{:keys [db]} [_ {{:strs [eid valid-time tx-time]} :values}]]
    (let [query-params (->>
                        {:valid-time (some-> valid-time js/moment .toDate t/instant)
-                        :transact-time (some-> transact-time js/moment .toDate t/instant)
+                        :tx-time (some-> tx-time js/moment .toDate t/instant)
                         :eid-edn eid}
                        (remove #(nil? (second %)))
                        (into {}))]

@@ -68,10 +68,10 @@
                                      "ⓘ"]]
       [:div.date-time-input
        {:class (when-not show-tt? "hidden")}
-       [datetime-input props "transact-time"]
-       (when (and (get touched "transact-time")
-                  (get errors "transact-time"))
-         [:p.input-error (get errors "transact-time")])]]]))
+       [datetime-input props "tx-time"]
+       (when (and (get touched "tx-time")
+                  (get errors "tx-time"))
+         [:p.input-error (get errors "tx-time")])]]]))
 
 (defn vt-tt-entity-box
   [vt tt]
@@ -87,7 +87,7 @@
   [form-values component]
   (cond-> form-values
     (not @(rf/subscribe [::sub/show-vt? component])) (assoc-in [:values "valid-time"] nil)
-    (not @(rf/subscribe [::sub/show-tt? component])) (assoc-in [:values "transact-time"] nil)))
+    (not @(rf/subscribe [::sub/show-tt? component])) (assoc-in [:values "tx-time"] nil)))
 
 (defn query-validation
   [values]
@@ -108,8 +108,8 @@
         validation {"q" invalid-query?
                     "valid-time" (when @(rf/subscribe [::sub/show-vt? :query])
                                    (invalid-time? "valid-time"))
-                    "transact-time" (when @(rf/subscribe [::sub/show-tt? :query])
-                                      (invalid-time? "transact-time"))}]
+                    "tx-time" (when @(rf/subscribe [::sub/show-tt? :query])
+                                      (invalid-time? "tx-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn- submit-form-on-keypress [evt form-id]
@@ -245,8 +245,8 @@
                             "Entity id is empty")
                     "valid-time" (when @(rf/subscribe [::sub/show-vt? :entity])
                                    (invalid-time? "valid-time"))
-                    "transact-time" (when @(rf/subscribe [::sub/show-tt? :entity])
-                                      (invalid-time? "transact-time"))}]
+                    "tx-time" (when @(rf/subscribe [::sub/show-tt? :entity])
+                                      (invalid-time? "tx-time"))}]
     (when (some some? (vals validation)) validation)))
 
 (defn entity-form

@@ -165,7 +165,7 @@
   (let [state (r/atom nil)]
     (fn [m links]
       (let [time-info {:valid-time @(rf/subscribe [::sub/valid-time])
-                       :transaction-time  @(rf/subscribe [::sub/transaction-time])}
+                       :tx-time @(rf/subscribe [::sub/tx-time])}
             generate-snippet
             (fn generate-snippet [parent-keys m]
               (let [level (inc (count parent-keys))]
