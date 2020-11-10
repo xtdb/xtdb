@@ -1,6 +1,5 @@
 (ns ^:no-doc crux.fork
   (:require [clojure.set :as set]
-            [crux.api :as api]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -9,21 +8,21 @@
            java.util.Date))
 
 (defn- merge-seqs
-  ([inner mem] (merge-seqs inner mem #(.compare mem/buffer-comparator %1 %2)))
-  ([inner mem compare]
-   (letfn [(merge-seqs* [inner mem]
+  ([persistent transient] (merge-seqs persistent transient #(.compare mem/buffer-comparator %1 %2)))
+  ([persistent transient compare]
+   (letfn [(merge-seqs* [persistent transient]
              (lazy-seq
-              (let [[i1 & more-inner] inner
-                    [m1 & more-mem] mem]
+              (let [[i1 & more-persistent] persistent
+                    [m1 & more-transient] transient]
                 (cond
-                  (empty? inner) mem
-                  (empty? mem) inner
+                  (empty? persistent) transient
+                  (empty? transient) persistent
                   :else (let [cmp (compare i1 m1)]
                           (cond
-                            (neg? cmp) (cons i1 (merge-seqs* more-inner mem))
-                            (zero? cmp) (cons m1 (merge-seqs* more-inner more-mem))
-                            :else (cons m1 (merge-seqs* inner more-mem))))))))]
-     (merge-seqs* inner mem))))
+                            (neg? cmp) (cons i1 (merge-seqs* more-persistent transient))
+                            (zero? cmp) (cons m1 (merge-seqs* more-persistent more-transient))
+                            :else (cons m1 (merge-seqs* persistent more-transient))))))))]
+     (merge-seqs* persistent transient))))
 
 (defn- date-min [^Date d1, ^Date d2]
   (if (and d1 d2)
@@ -38,25 +37,25 @@
 (defn- inc-date [^Date d1]
   (Date. (inc (.getTime d1))))
 
-(defrecord ForkedIndexSnapshot [inner-index-snapshot mem-index-snapshot
+(defrecord ForkedIndexSnapshot [persistent-index-snapshot transient-index-snapshot
                                 evicted-eids
                                 capped-valid-time capped-tx-id]
   db/IndexSnapshot
   (av [this a min-v]
-    (merge-seqs (db/av inner-index-snapshot a min-v)
-                (db/av mem-index-snapshot a min-v)))
+    (merge-seqs (db/av persistent-index-snapshot a min-v)
+                (db/av transient-index-snapshot a min-v)))
 
   (ave [this a v min-e entity-resolver-fn]
-    (merge-seqs (db/ave inner-index-snapshot a v min-e entity-resolver-fn)
-                (db/ave mem-index-snapshot a v min-e entity-resolver-fn)))
+    (merge-seqs (db/ave persistent-index-snapshot a v min-e entity-resolver-fn)
+                (db/ave transient-index-snapshot a v min-e entity-resolver-fn)))
 
   (ae [this a min-e]
-    (merge-seqs (db/ae inner-index-snapshot a min-e)
-                (db/ae mem-index-snapshot a min-e)))
+    (merge-seqs (db/ae persistent-index-snapshot a min-e)
+                (db/ae transient-index-snapshot a min-e)))
 
   (aev [this a e min-v entity-resolver-fn]
-    (merge-seqs (db/aev inner-index-snapshot a e min-v entity-resolver-fn)
-                (db/aev mem-index-snapshot a e min-v entity-resolver-fn)))
+    (merge-seqs (db/aev persistent-index-snapshot a e min-v entity-resolver-fn)
+                (db/aev transient-index-snapshot a e min-v entity-resolver-fn)))
 
   (entity-as-of-resolver [this eid valid-time tx-id]
     (some-> ^EntityTx (db/entity-as-of this eid valid-time tx-id)
@@ -66,10 +65,10 @@
   (entity-as-of [this eid valid-time tx-id]
     (->> [(when capped-tx-id
             (when-not (contains? (into #{} (map #(c/->id-buffer %)) evicted-eids) eid)
-              (db/entity-as-of inner-index-snapshot eid
+              (db/entity-as-of persistent-index-snapshot eid
                                (date-min valid-time capped-valid-time)
                                (long-min tx-id capped-tx-id))))
-          (db/entity-as-of mem-index-snapshot eid valid-time tx-id)]
+          (db/entity-as-of transient-index-snapshot eid valid-time tx-id)]
          (remove nil?)
          (sort-by (juxt #(.vt ^EntityTx %) #(.tx-id ^EntityTx %)))
          last))
@@ -77,7 +76,7 @@
   (entity-history [this eid sort-order opts]
     (merge-seqs (when capped-tx-id
                   (when-not (contains? evicted-eids eid)
-                    (db/entity-history inner-index-snapshot eid sort-order
+                    (db/entity-history persistent-index-snapshot eid sort-order
                                        (case sort-order
                                          :asc (-> opts
                                                   (cond-> capped-valid-time (update :end-valid-time date-min (inc-date capped-valid-time)))
@@ -85,7 +84,7 @@
                                          :desc (-> opts
                                                    (cond-> capped-valid-time (update :start-valid-time date-min capped-valid-time))
                                                    (update :start-tx-id long-min capped-tx-id))))))
-                (db/entity-history mem-index-snapshot eid sort-order opts)
+                (db/entity-history transient-index-snapshot eid sort-order opts)
 
                 (case [sort-order (boolean (:with-corrections? opts))]
                   [:asc false] #(compare (.vt ^EntityTx %1) (.vt ^EntityTx %2))
@@ -96,44 +95,44 @@
                                          [(.vt ^EntityTx %1) (.tx-id ^EntityTx %1)]))))
 
   (decode-value [this value-buffer]
-    (or (db/decode-value mem-index-snapshot value-buffer)
-        (db/decode-value inner-index-snapshot value-buffer)))
+    (or (db/decode-value transient-index-snapshot value-buffer)
+        (db/decode-value persistent-index-snapshot value-buffer)))
 
   (encode-value [this value]
-    (db/encode-value mem-index-snapshot value))
+    (db/encode-value transient-index-snapshot value))
 
   (resolve-tx [this tx]
-    (or (db/resolve-tx mem-index-snapshot tx)
-        (db/resolve-tx inner-index-snapshot tx)))
+    (or (db/resolve-tx transient-index-snapshot tx)
+        (db/resolve-tx persistent-index-snapshot tx)))
 
   (open-nested-index-snapshot ^java.io.Closeable [this]
-    (->ForkedIndexSnapshot (db/open-nested-index-snapshot inner-index-snapshot)
-                           (db/open-nested-index-snapshot mem-index-snapshot)
+    (->ForkedIndexSnapshot (db/open-nested-index-snapshot persistent-index-snapshot)
+                           (db/open-nested-index-snapshot transient-index-snapshot)
                            evicted-eids
                            capped-valid-time
                            capped-tx-id))
 
   java.io.Closeable
   (close [_]
-    (cio/try-close mem-index-snapshot)
-    (cio/try-close inner-index-snapshot)))
+    (cio/try-close transient-index-snapshot)
+    (cio/try-close persistent-index-snapshot)))
 
-(defrecord ForkedIndexStore [inner-index-store mem-index-store !indexed-docs !evicted-eids !etxs capped-valid-time capped-tx-id]
+(defrecord ForkedIndexStore [persistent-index-store transient-index-store !indexed-docs !evicted-eids !etxs capped-valid-time capped-tx-id]
   db/IndexStore
   (index-docs [this docs]
     (swap! !indexed-docs merge docs)
-    (db/index-docs mem-index-store docs))
+    (db/index-docs transient-index-store docs))
 
   (unindex-eids [this eids]
     (swap! !evicted-eids set/union (set eids))
-    (db/unindex-eids mem-index-store eids)
+    (db/unindex-eids transient-index-store eids)
 
-    (with-open [inner-index-snapshot (db/open-index-snapshot inner-index-store)
-                mem-index-snapshot (db/open-index-snapshot mem-index-store)]
+    (with-open [persistent-index-snapshot (db/open-index-snapshot persistent-index-store)
+                transient-index-snapshot (db/open-index-snapshot transient-index-store)]
       (let [tombstones (->> (for [eid eids
-                                  etx (concat (db/entity-history inner-index-snapshot eid :asc
+                                  etx (concat (db/entity-history persistent-index-snapshot eid :asc
                                                                  {:with-corrections? true})
-                                              (db/entity-history mem-index-snapshot eid :asc
+                                              (db/entity-history transient-index-snapshot eid :asc
                                                                  {:with-corrections? true}))
                                   :let [content-hash (.content-hash ^EntityTx etx)]
                                   :when content-hash]
@@ -146,34 +145,34 @@
                             (into {} (map (juxt (fn [^EntityTx etx]
                                                   [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
                                                 identity)))))
-    (db/index-entity-txs mem-index-store tx entity-txs))
+    (db/index-entity-txs transient-index-store tx entity-txs))
 
   (store-index-meta [this k v]
-    (db/store-index-meta mem-index-store k v))
+    (db/store-index-meta transient-index-store k v))
 
   (read-index-meta [this k]
     (db/read-index-meta this k nil))
 
   (read-index-meta [this k not-found]
-    (let [v (db/read-index-meta mem-index-store k ::not-found)]
+    (let [v (db/read-index-meta transient-index-store k ::not-found)]
       (if (not= v ::not-found)
         v
-        (db/read-index-meta inner-index-store k not-found))))
+        (db/read-index-meta persistent-index-store k not-found))))
 
   (latest-completed-tx [this]
-    (or (db/latest-completed-tx mem-index-store)
-        (db/latest-completed-tx inner-index-store)))
+    (or (db/latest-completed-tx transient-index-store)
+        (db/latest-completed-tx persistent-index-store)))
 
   (mark-tx-as-failed [this tx]
-    (db/mark-tx-as-failed mem-index-store tx))
+    (db/mark-tx-as-failed transient-index-store tx))
 
   (tx-failed? [this tx-id]
-    (or (db/tx-failed? mem-index-store tx-id)
-        (db/tx-failed? inner-index-store tx-id)))
+    (or (db/tx-failed? transient-index-store tx-id)
+        (db/tx-failed? persistent-index-store tx-id)))
 
   (open-index-snapshot ^java.io.Closeable [this]
-    (->ForkedIndexSnapshot (db/open-index-snapshot inner-index-store)
-                           (db/open-index-snapshot mem-index-store)
+    (->ForkedIndexSnapshot (db/open-index-snapshot persistent-index-store)
+                           (db/open-index-snapshot transient-index-store)
                            @!evicted-eids
                            capped-valid-time
                            capped-tx-id)))
@@ -187,9 +186,9 @@
 (defn new-etxs [index-store]
   (vals @(:!etxs index-store)))
 
-(defn ->forked-index-store [inner-index-store mem-index-store
+(defn ->forked-index-store [persistent-index-store transient-index-store
                             capped-valid-time capped-tx-id]
-  (->ForkedIndexStore inner-index-store mem-index-store
+  (->ForkedIndexStore persistent-index-store transient-index-store
                       (atom {}) (atom #{}) (atom {})
                       capped-valid-time capped-tx-id))
 
