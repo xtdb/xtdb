@@ -37,7 +37,7 @@
 (defn- inc-date [^Date d1]
   (Date. (inc (.getTime d1))))
 
-(defrecord ForkedIndexSnapshot [persistent-index-snapshot transient-index-snapshot
+(defrecord ForkedIndexSnapshot [persistent-index-snapshot close-persistent-index-snapshot? transient-index-snapshot
                                 evicted-eids
                                 capped-valid-time capped-tx-id]
   db/IndexSnapshot
@@ -107,6 +107,7 @@
 
   (open-nested-index-snapshot ^java.io.Closeable [this]
     (->ForkedIndexSnapshot (db/open-nested-index-snapshot persistent-index-snapshot)
+                           true
                            (db/open-nested-index-snapshot transient-index-snapshot)
                            evicted-eids
                            capped-valid-time
@@ -115,9 +116,12 @@
   java.io.Closeable
   (close [_]
     (cio/try-close transient-index-snapshot)
-    (cio/try-close persistent-index-snapshot)))
+    (when close-persistent-index-snapshot?
+      (cio/try-close persistent-index-snapshot))))
 
-(defrecord ForkedIndexStore [persistent-index-store transient-index-store !indexed-docs !evicted-eids !etxs capped-valid-time capped-tx-id]
+(defrecord ForkedIndexStore [persistent-index-store persistent-index-snapshot transient-index-store
+                             !indexed-docs !evicted-eids !etxs
+                             capped-valid-time capped-tx-id]
   db/IndexStore
   (index-docs [this docs]
     (swap! !indexed-docs merge docs)
@@ -171,7 +175,8 @@
         (db/tx-failed? persistent-index-store tx-id)))
 
   (open-index-snapshot ^java.io.Closeable [this]
-    (->ForkedIndexSnapshot (db/open-index-snapshot persistent-index-store)
+    (->ForkedIndexSnapshot (or persistent-index-snapshot (db/open-index-snapshot persistent-index-store))
+                           (nil? persistent-index-snapshot)
                            (db/open-index-snapshot transient-index-store)
                            @!evicted-eids
                            capped-valid-time
@@ -188,7 +193,7 @@
 
 (defn ->forked-index-store [persistent-index-store transient-index-store
                             capped-valid-time capped-tx-id]
-  (->ForkedIndexStore persistent-index-store transient-index-store
+  (->ForkedIndexStore persistent-index-store nil transient-index-store
                       (atom {}) (atom #{}) (atom {})
                       capped-valid-time capped-tx-id))
 
