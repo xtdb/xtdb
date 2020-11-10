@@ -218,13 +218,17 @@
 (defmacro with-bench-ns [bench-ns & body]
   `(with-bench-ns* ~bench-ns (fn [] ~@body)))
 
+(def cw-reporter-opts
+  {:jvm-metrics? true
+   :dry-run-report-frequency (Duration/ofMinutes 1)})
+
 (def nodes
   {"standalone-rocksdb"
    (fn [data-dir]
      {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}})
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "standalone-rocksdb-with-metrics"
    (fn [data-dir]
@@ -233,7 +237,7 @@
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
                                     :db-dir (io/file data-dir "indexes")
                                     :metrics `crux.rocksdb.metrics/->metrics}}
-      :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}})
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "h2-rocksdb"
    (fn [data-dir]
@@ -242,7 +246,7 @@
       :crux/tx-log {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
       :crux/document-store {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}})
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "sqlite-rocksdb"
    (fn [data-dir]
@@ -251,7 +255,7 @@
       :crux/tx-log {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
       :crux/document-store {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}})
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "kafka-rocksdb"
    (fn [data-dir]
@@ -266,7 +270,7 @@
                               :local-document-store {:kv-store {:crux/module `rocks/->kv-store
                                                                 :db-dir (io/file data-dir "doc-store")}}}
         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
-        :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}}))
+        :crux.metrics.cloudwatch/reporter cw-reporter-opts}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
@@ -281,14 +285,14 @@
                               :local-document-store {:kv-store {:crux/module `rocks/->kv-store
                                                                 :db-dir (io/file data-dir "doc-store")}}}
         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
-        :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}}))
+        :crux.metrics.cloudwatch/reporter cw-reporter-opts}))
 
    "standalone-lmdb"
    (fn [data-dir]
      {:crux/tx-log {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
       :crux/document-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
       :crux/index-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
-      :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}})
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "kafka-lmdb"
    (fn [data-dir]
@@ -303,7 +307,7 @@
                               :local-document-store {:kv-store {:crux/module `lmdb/->kv-store
                                                                 :db-dir (io/file data-dir "doc-store")}}}
         :crux/index-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "index-store")}}
-        :crux.metrics.cloudwatch/reporter {:jvm-metrics? true}}))})
+        :crux.metrics.cloudwatch/reporter cw-reporter-opts}))})
 
 (defn with-embedded-kafka* [f]
   (f/with-tmp-dir "embedded-kafka" [data-dir]
