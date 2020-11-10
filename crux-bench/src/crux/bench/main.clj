@@ -80,7 +80,12 @@
                          [nil "--tpch-scale-factor 0.01" "Scale factor for regular TPCH test"
                           :id :tpch-scale-factor
                           :default 0.01
-                          :parse-fn #(Double/parseDouble %)]])]
+                          :parse-fn #(Double/parseDouble %)]
+
+                         [nil "--repeat 10" "Number of times to repeat the current bench run"
+                          :id :repetitions
+                          :default 1
+                          :parse-fn #(Long/parseLong %)]])]
     (if errors
       (binding [*out* *err*]
         (run! println errors)
@@ -88,10 +93,11 @@
 
       options)))
 
-(defn run-benches [{:keys [selected-nodes selected-tests] :as opts}]
+(defn run-benches [{:keys [selected-nodes selected-tests repetitions] :as opts}]
   (let [nodes (select-keys bench/nodes selected-nodes)]
     (bench/with-embedded-kafka
-      (->> (for [test-fn (vals (select-keys bench-tests selected-tests))]
+      (->> (for [n (range repetitions)
+                 test-fn (vals (select-keys bench-tests selected-tests))]
              (test-fn nodes opts))
            (into [] (mapcat identity))))))
 
