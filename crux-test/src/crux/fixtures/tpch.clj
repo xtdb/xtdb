@@ -88,11 +88,11 @@
   (fix/transact! *api* (tpch-tables->crux-sql-schemas))
   (f))
 
-(defn load-docs!
+(defn submit-docs!
   ([node]
-   (load-docs! node default-scale-factor))
+   (submit-docs! node default-scale-factor))
   ([node sf]
-   (load-docs! node sf tpch-entity->doc))
+   (submit-docs! node sf tpch-entity->doc))
   ([node sf doc-fn]
    (println "Transacting TPC-H tables...")
    (doseq [^TpchTable t (TpchTable/getTables)]
@@ -104,4 +104,7 @@
                                                (+ last-doc-count (count chunk))])
                                             [nil 0]))]
        (println "Transacted" doc-count (.getTableName t))
-       (c/await-tx node last-tx)))))
+       last-tx))))
+
+(defn load-docs! [node & args]
+  (c/await-tx node (apply submit-docs! node args)))
