@@ -951,6 +951,23 @@
                    (get arg-doc-id)
                    (dissoc :crux.db/id))))))
 
+  (t/testing "replaces fn with no args"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :no-args
+                                         :crux.db/fn '(fn [ctx]
+                                                        [[:crux.tx/put {:crux.db/id :no-fn-args-doc}]])}]])
+    (fix/submit+await-tx [[:crux.tx/fn :no-args]])
+
+    (t/is (= {:crux.db/id :no-fn-args-doc}
+             (api/entity (api/db *api*) :no-fn-args-doc)))
+
+    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
+                       (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
+
+      (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :no-fn-args-doc) (c/new-id {:crux.db/id :no-fn-args-doc})]]}
+               (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+                   (get arg-doc-id)
+                   (dissoc :crux.db/id))))))
+
   (t/testing "nested tx-fn"
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-bob-and-ivan
                                          :crux.db/fn '(fn [ctx bob ivan]
@@ -1011,6 +1028,23 @@
                (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
                    (get arg-doc-id)
                    (dissoc :crux.db/id)))))))
+
+(t/deftest handles-legacy-tx-fns-with-no-args-doc
+  ;; we used to not submit args docs if the tx-fn was 0-arg, and hence had nothing to replace
+  ;; we don't want the fix to assume that all tx-fns on the tx-log have an arg-doc
+  (let [tx-fn {:crux.db/id :tx-fn,
+               :crux.db/fn '(fn [ctx]
+                              [[:crux.tx/put {:crux.db/id :ivan}]])}]
+    (db/submit-docs (:document-store *api*) {(c/new-id tx-fn) tx-fn})
+
+    (index-tx {:crux.tx/tx-time (Date.), :crux.tx/tx-id 0}
+              [[:crux.tx/put (c/new-id :tx-fn) tx-fn]])
+
+    (index-tx {:crux.tx/tx-time (Date.), :crux.tx/tx-id 1}
+              [[:crux.tx/fn :tx-fn]])
+
+    (t/is (= {:crux.db/id :ivan}
+             (api/entity (api/db *api*) :ivan)))))
 
 (t/deftest test-tx-fn-doc-race-1049
   (let [put-fn {:crux.db/id :put-fn

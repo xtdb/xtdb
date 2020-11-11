@@ -80,14 +80,13 @@
    :eid (check-eid eid)})
 
 (defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid & args :as _op] _decoders]
-  (merge {:op :crux.tx/fn
-          :fn-eid (check-eid fn-eid)}
-         (when (seq args)
-           (let [arg-doc {:crux.db/id (UUID/randomUUID)
-                          :crux.db.fn/args args}
-                 arg-doc-id (c/new-id arg-doc)]
-             {:arg-doc-id arg-doc-id
-              :docs {arg-doc-id arg-doc}}))))
+  (let [arg-doc {:crux.db/id (UUID/randomUUID)
+                 :crux.db.fn/args args}
+        arg-doc-id (c/new-id arg-doc)]
+    {:op :crux.tx/fn
+     :fn-eid (check-eid fn-eid)
+     :arg-doc-id arg-doc-id
+     :docs {arg-doc-id arg-doc}}))
 
 (defn conform-tx-op
   ([op] (conform-tx-op op {}))
