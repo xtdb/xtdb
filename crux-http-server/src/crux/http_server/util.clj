@@ -48,7 +48,7 @@
 
 (s/def ::link-entities? boolean?)
 (s/def ::valid-time ::date)
-(s/def ::transact-time ::date)
+(s/def ::tx-time ::date)
 (s/def ::timeout int?)
 (s/def ::tx-id int?)
 
@@ -113,9 +113,9 @@
        (m/install {:name "application/json"
                    :encoder [http-json/->json-encoder opts]}))))
 
-(defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time tx-id]}]
+(defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time tx-time tx-id]}]
   (let [^Map db-basis {:crux.db/valid-time valid-time
-                       :crux.tx/tx-time transact-time
+                       :crux.tx/tx-time tx-time
                        :crux.tx/tx-id tx-id}]
     (.db crux-node db-basis)))
 

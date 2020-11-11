@@ -37,7 +37,7 @@
 (rf/reg-sub
  ::initial-values-query
  (fn [db _]
-   (let [{:keys [valid-time transact-time query-edn]} (get-in db [:current-route :query-params])
+   (let [{:keys [valid-time tx-time query-edn]} (get-in db [:current-route :query-params])
          query-string (some-> (try
                                 (reader/read-string query-edn)
                                 (catch js/Error _ nil))
@@ -46,10 +46,10 @@
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))
-         transact-time (str (or transact-time latest-tx-time))]
+         tx-time (str (or tx-time latest-tx-time))]
      {"q" (or query-string query-root-str)
       "valid-time" (js/moment valid-time)
-      "transact-time" (js/moment transact-time)})))
+      "tx-time" (js/moment tx-time)})))
 
 (rf/reg-sub
  ::valid-time
@@ -57,12 +57,12 @@
    (get-in db [:current-route :query-params :valid-time] (t/now))))
 
 (rf/reg-sub
- ::transaction-time
+ ::tx-time
  (fn [db _]
    (let [latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))]
-     (get-in db [:current-route :query-params :transact-time] latest-tx-time))))
+     (get-in db [:current-route :query-params :tx-time] latest-tx-time))))
 
 (rf/reg-sub
  ::initial-values-entity
@@ -72,10 +72,10 @@
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
                                 (:crux.tx/tx-time)
                                 (t/instant))
-         transact-time (str (:transact-time query-params latest-tx-time))]
+         tx-time (str (:tx-time query-params latest-tx-time))]
      {"eid" (:eid-edn query-params)
       "valid-time" (js/moment valid-time)
-      "transact-time" (js/moment transact-time)})))
+      "tx-time" (js/moment tx-time)})))
 
 ;; wrap this in reg-sub-raw and replace get-in with subs
 (rf/reg-sub
@@ -91,7 +91,7 @@
                                   (:crux.tx/tx-time)
                                   (t/instant))
            time-info {:valid-time (get-in db [:current-route :query-params :valid-time] (t/now))
-                      :transact-time (get-in db [:current-route :query-params :transact-time] latest-tx-time)}
+                      :tx-time (get-in db [:current-route :query-params :tx-time] latest-tx-time)}
            columns (map (fn [column]
                           {:column-key column
                            :column-name (str column)
@@ -185,7 +185,7 @@
      (let [query-params (get-in db [:current-route :query-params])]
        {:eid (:eid-edn query-params)
         :vt (common/iso-format-datetime (or (:valid-time query-params) (t/now)))
-        :tt (or (common/iso-format-datetime (:transact-time query-params)) "Using Latest")
+        :tt (or (common/iso-format-datetime (:tx-time query-params)) "Using Latest")
         :document (get-in db [:entity :http :document])}))))
 
 (rf/reg-sub
@@ -256,7 +256,7 @@
 (rf/reg-sub
  ::show-tt?
  (fn [db [_ component]]
-   (let [url-has-tt? (contains? (get-in db [:current-route :query-params]) :transact-time)]
+   (let [url-has-tt? (contains? (get-in db [:current-route :query-params]) :tx-time)]
      (get-in db [:form-pane :show-tt? component] url-has-tt?))))
 
 (rf/reg-sub

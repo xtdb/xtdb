@@ -265,8 +265,8 @@ curl -X GET \
 .*Optional Parameters*
 * `with-corrections` (boolean, default false): includes bitemporal corrections in the response, inline, sorted by valid-time then tx-id
 * `with-docs` (boolean, default false): includes the documents in the response sequence, under the `doc` key
-* `start-valid-time`, `start-transaction-time`, `start-transaction-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
-* `end-valid-time`, `end-transaction-time`, `end-transaction-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+* `start-valid-time`, `start-tx-time`, `start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
+* `end-valid-time`, `end-tx-time`, `end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
 
 ==== Response
 
@@ -355,7 +355,7 @@ curl -X GET \
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transact-time` (date, defaulting to latest transaction time)
+* `tx-time` (date, defaulting to latest transaction time)
 * `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
@@ -424,7 +424,7 @@ curl -g \
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transact-time` (date, defaulting to latest transaction time)
+* `tx-time` (date, defaulting to latest transaction time)
 * `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
@@ -482,7 +482,7 @@ You can also accept `application/json` from this endpoint, but currently the onl
 
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
-* `transact-time` (date, defaulting to latest transaction time)
+* `tx-time` (date, defaulting to latest transaction time)
 * `tx-id` (date, defaulting to latest transaction id)
 
 ==== Response
