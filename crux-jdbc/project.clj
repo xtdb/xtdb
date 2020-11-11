@@ -9,8 +9,7 @@
                  [seancorfield/next.jdbc "1.1.582"]
                  [org.clojure/java.data "1.0.86"]
                  [com.zaxxer/HikariCP "3.4.5"]
-                 [com.taoensso/nippy "2.15.1"]
-
+                 [com.taoensso/nippy "3.1.1"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
                  [com.h2database/h2 "1.4.200" :scope "provided"]
                  [com.opentable.components/otj-pg-embedded "0.13.1" :scope "provided"]

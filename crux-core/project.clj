@@ -8,7 +8,7 @@
                  [org.slf4j/slf4j-api "1.7.30"]
                  [org.clojure/spec.alpha "0.2.176"]
                  [com.stuartsierra/dependency "0.2.0"]
-                 [com.taoensso/nippy "2.15.1"]
+                 [com.taoensso/nippy "3.1.1"]
                  [org.clojure/tools.reader "1.3.2"]
                  [org.clojure/data.json "1.0.0"]
                  [org.clojure/tools.cli "1.0.194"]
