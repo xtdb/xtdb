@@ -275,3 +275,25 @@
   (if (contains? m k)
     (apply update m k f args)
     m))
+
+(defn jnr-available? []
+  (try
+    (import 'jnr.ffi.Pointer)
+    true
+    (catch ClassNotFoundException e
+      false)))
+
+(definterface GLibC
+  (^int mallopt [^int param ^int value]))
+
+(def ^:private ^:const M_ARENA_MAX -8)
+
+(defn try-set-malloc-arena-max [^long malloc-arena-max]
+  (when (and (nil? (System/getenv "MALLOC_ARENA_MAX"))
+             (jnr-available?))
+    (try
+      (let [^GLibC glibc (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
+            result (.mallopt glibc M_ARENA_MAX malloc-arena-max)]
+        (assert (= 1 result)))
+      (catch UnsatisfiedLinkError e
+        (log/debug "Could not call glibc mallopt")))))

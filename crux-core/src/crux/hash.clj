@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.hash
   (:require [clojure.tools.logging :as log]
+            [crux.io :as cio]
             [crux.memory :as mem])
   (:import [org.agrona DirectBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -25,13 +26,6 @@
     (doto ^MutableDirectBuffer (mem/limit-buffer to id-hash-size)
       (.putBytes 0 (.digest md (mem/->on-heap buffer))))))
 
-(defn- jnr-available? []
-  (try
-    (import 'jnr.ffi.Pointer)
-    true
-    (catch ClassNotFoundException e
-      false)))
-
 (defn byte-utils-id-hash-buffer [to buffer]
   (ByteUtils/sha1 to buffer))
 
@@ -41,12 +35,12 @@
     (do (log/debug "Using ByteUtils/sha1 for ID hashing.")
         byte-utils-id-hash-buffer)
     (if-let [openssl-id-hash-buffer (and openssl-enabled?
-                                         (jnr-available?)
+                                         (cio/jnr-available?)
                                          (some-> 'crux.hash.jnr/openssl-id-hash-buffer requiring-resolve var-get))]
       (do (log/debug "Using libcrypto (OpenSSL) for ID hashing.")
           openssl-id-hash-buffer)
       (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
-                                          (jnr-available?)
+                                          (cio/jnr-available?)
                                           (some-> 'crux.hash.jnr/gcrypt-id-hash-buffer requiring-resolve var-get))]
         (do (log/debug "Using libgcrypt for ID hashing.")
             gcrypt-id-hash-buffer)
