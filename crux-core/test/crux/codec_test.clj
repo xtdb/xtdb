@@ -9,39 +9,70 @@
             [crux.api :as crux]
             [taoensso.nippy :as nippy])
   (:import crux.codec.Id
+           java.math.BigDecimal
+           org.agrona.MutableDirectBuffer
            [java.util Arrays Date]
            java.net.URL))
 
 (t/use-fixtures :each fix/with-silent-test-check)
 
-(t/deftest test-ordering-of-values
-  (t/testing "longs"
-    (let [values (shuffle [nil -33 -1 0 1 33])
-          value+buffer (for [v values]
-                         [v (c/->value-buffer v)])]
-      (t/is (= (sort-by first value+buffer)
-               (sort-by second mem/buffer-comparator value+buffer)))))
+(def ^:private gen-date
+  (->> gen/large-integer (gen/fmap #(Date. ^long %))))
 
-  (t/testing "doubles"
-    (let [values (shuffle [nil -33.0 -1.0 0.0 1.0 33.0])
-          value+buffer (for [v values]
-                         [v (c/->value-buffer v)])]
-      (t/is (= (sort-by first value+buffer)
-               (sort-by second mem/buffer-comparator value+buffer)))))
+(def ^:private primitive-generators
+  [(gen/return nil)
+   gen/large-integer
+   (->> gen/double (gen/such-that #(Double/isFinite %)))
+   gen-date
+   gen/string
+   gen/char
+   gen/boolean
+   (-> gen/keyword (vary-meta assoc ::sortable? false))
+   (-> gen/uuid (vary-meta assoc ::sortable? false))
+   (-> gen/bytes (vary-meta assoc ::sortable? false))
+   (->> gen/double
+        (gen/such-that #(Double/isFinite %))
+        (gen/fmap #(BigDecimal/valueOf ^double %)))])
 
-  (t/testing "dates"
-    (let [values (shuffle [nil #inst "1900" #inst "1970" #inst "2018"])
-          value+buffer (for [v values]
-                         [v (c/->value-buffer v)])]
-      (t/is (= (sort-by first value+buffer)
-               (sort-by second mem/buffer-comparator value+buffer)))))
+(t/deftest test-double-nan
+  (let [encoded-nan (c/->value-buffer ##NaN)]
+    (t/is (c/can-decode-value-buffer? encoded-nan))
+    (t/is (Double/isNaN (c/decode-value-buffer encoded-nan)))))
 
-   (t/testing "strings"
-    (let [values (shuffle [nil "a" "ad" "c" "delta" "eq" "foo" "" "0" "året" "漢字" "यूनिकोड"])
-          value+buffer (for [v values]
-                         [v (c/->value-buffer v)])]
-      (t/is (= (sort-by first value+buffer)
-               (sort-by second mem/buffer-comparator value+buffer))))))
+(tcct/defspec test-generative-primitive-value-decoder 1000
+  (prop/for-all [v (gen/one-of primitive-generators)]
+                (let [buffer (c/->value-buffer v)]
+                  (if (c/can-decode-value-buffer? buffer)
+                    (if (bytes? v)
+                      (Arrays/equals ^bytes v ^bytes (c/decode-value-buffer buffer))
+                      (= v (c/decode-value-buffer buffer)))
+
+                    (cond
+                      (and (string? v)
+                           (< @#'c/max-value-index-length (alength (.getBytes ^String v "UTF-8"))))
+                      (= @#'c/clob-value-type-id
+                         (.getByte (c/value-buffer-type-id buffer) 0))
+
+                      (and (bytes? v)
+                           (< @#'c/max-value-index-length (alength ^bytes (mem/->on-heap (mem/->nippy-buffer v)))))
+                      (= @#'c/object-value-type-id
+                         (.getByte (c/value-buffer-type-id buffer) 0))
+
+                      :else false)))))
+
+(def ^:private byte-array-class
+  (Class/forName "[B"))
+
+(tcct/defspec test-ordering-of-values 100
+  (prop/for-all [values (gen/one-of (->> primitive-generators
+                                         (remove (comp false? ::sortable? meta))
+                                         (map #(gen/vector % 10))))]
+                (let [values (shuffle values)
+                      value+buffer (for [v values]
+                                     [v (c/->value-buffer v)])]
+
+                  (t/is (= (sort-by first value+buffer)
+                           (sort-by second mem/buffer-comparator value+buffer))))))
 
 (t/deftest test-string-prefix
   (t/testing "string encoding size overhead"
@@ -98,42 +129,6 @@
 (t/deftest test-base64-reader
   (t/is (Arrays/equals (byte-array [1 2 3])
                        ^bytes (c/read-edn-string-with-readers "#crux/base64 \"AQID\""))))
-
-(tcct/defspec test-generative-primitive-value-decoder 1000
-  (prop/for-all [v (gen/one-of [(gen/return nil)
-                                gen/large-integer
-                                gen/double
-                                (gen/fmap #(Date. (long %)) gen/large-integer)
-                                gen/string
-                                gen/char
-                                gen/boolean
-                                gen/keyword
-                                gen/uuid
-                                gen/bytes])]
-                (let [buffer (c/->value-buffer v)]
-                  (if (c/can-decode-value-buffer? buffer)
-                    (cond
-                      (and (double? v) (Double/isNaN v))
-                      (Double/isNaN (c/decode-value-buffer buffer))
-
-                      (bytes? v)
-                      (Arrays/equals ^bytes v ^bytes (c/decode-value-buffer buffer))
-
-                      :else
-                      (= v (c/decode-value-buffer buffer)))
-                    (cond
-                      (and (string? v)
-                           (< @#'c/max-value-index-length (alength (.getBytes ^String v "UTF-8"))))
-                      (= @#'c/clob-value-type-id
-                         (.getByte (c/value-buffer-type-id buffer) 0))
-
-                      (and (bytes? v)
-                           (< @#'c/max-value-index-length (alength ^bytes (mem/->on-heap (mem/->nippy-buffer v)))))
-                      (= @#'c/object-value-type-id
-                         (.getByte (c/value-buffer-type-id buffer) 0))
-
-                      :else
-                      false)))))
 
 (t/deftest test-unordered-coll-hashing-1001
   (let [foo-a {{:foo 1} :foo1

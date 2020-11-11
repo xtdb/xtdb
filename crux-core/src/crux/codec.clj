@@ -7,12 +7,14 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang APersistentMap APersistentSet IHashEq Keyword]
+           crux.codec.MathCodec
            java.io.Writer
+           java.math.BigDecimal
            [java.net MalformedURLException URI URL]
            [java.nio ByteBuffer ByteOrder]
            java.nio.charset.StandardCharsets
            [java.util Base64 Date Map Set UUID]
-           [org.agrona DirectBuffer ExpandableArrayBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -82,6 +84,7 @@
 (def ^:private string-value-type-id 8)
 (def ^:private char-value-type-id 9)
 (def ^:private nippy-value-type-id 10)
+(def ^:private bigdec-value-type-id 11)
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
@@ -229,6 +232,28 @@
                 (.putByte to (inc idx) (unchecked-byte (+ offset b)))
                 (recur (inc idx)))))))))
 
+  BigDecimal
+  (value->buffer [this ^MutableDirectBuffer to]
+    (let [this (.stripTrailingZeros this)
+          signum (.signum this)]
+
+      (-> to
+          (doto (.putByte 0 bigdec-value-type-id))
+          (doto (.putByte value-type-id-size (inc (.signum this)))))
+
+      (if (zero? signum)
+        (-> to (mem/limit-buffer (+ value-type-id-size Byte/BYTES)))
+
+        (let [bcd-len (MathCodec/putBinaryCodedDecimal signum
+                                                       (str (.abs (.unscaledValue this)))
+                                                       to
+                                                       (+ value-type-id-size Byte/BYTES Integer/BYTES))]
+          (-> to
+              (doto (.putInt (+ value-type-id-size Byte/BYTES)
+                             (MathCodec/encodeExponent this)
+                             ByteOrder/BIG_ENDIAN))
+              (mem/limit-buffer (+ value-type-id-size Byte/BYTES Integer/BYTES bcd-len)))))))
+
   Class
   (value->buffer [this ^MutableDirectBuffer to]
     (doto (id-function to (mem/->nippy-buffer this))
@@ -292,10 +317,24 @@
 (defn- decode-nippy [^DirectBuffer buffer]
   (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
 
+(defn- decode-bigdec [^DirectBuffer buffer]
+  (let [signum (dec (.getByte buffer value-type-id-size))]
+    (if (zero? signum)
+      0M
+
+      (let [prefix-len (+ value-type-id-size Byte/BYTES Integer/BYTES)
+            decoded-bcd (MathCodec/getBinaryCodedDecimal
+                         (-> buffer
+                             (mem/slice-buffer prefix-len (- (.capacity buffer) prefix-len)))
+                         signum)]
+        (MathCodec/decodeBigDecimal signum
+                                    (.getInt buffer (+ value-type-id-size Byte/BYTES) ByteOrder/BIG_ENDIAN)
+                                    decoded-bcd)))))
+
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (3 4 5 6 7 8 9 10) true
+      (3 4 5 6 7 8 9 10 11) true
       false)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
@@ -309,6 +348,7 @@
       8 (decode-string buffer) ;; string-value-type-id
       9 (decode-char buffer) ;; char-value-type-id
       10 (decode-nippy buffer) ;; nippy-value-type-id
+      11 (decode-bigdec buffer) ;; bigdec-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 
