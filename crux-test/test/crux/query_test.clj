@@ -3662,3 +3662,31 @@
            (api/q (api/db *api*)
                   '{:find [?e]
                     :where [[?e :a-list (1 2 3)]]}))))
+
+(t/deftest falsey-values-bind-with-rules
+  ;; resolved in 20.05-1.8.4-alpha
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :a :att nil}]
+                        [:crux.tx/put {:crux.db/id :b :att :foo}]
+                        [:crux.tx/put {:crux.db/id :c :att false}]
+                        [:crux.tx/put {:crux.db/id :d}]])
+  (t/is (= #{[:a] [:b] [:c]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :att ?v]
+                            [(any? ?v)]
+                            (or [(nil? ?v)]
+                                [(false? ?v)]
+                                [(some? ?v)])
+                            (or-join [?v]
+                                     (and
+                                      [(any? ?v)]
+                                      [(some? ?v)])
+                                     (not [(some? ?v)]))]
+                    :rules [[(is-false? [?v])
+                             [(false? ?v)]]
+                            [(is-nil? [?v])
+                             [(nil? ?v)]]
+                            [(is-truthy? [?v])
+                             (not (is-nil? ?v)
+                                  (is-false? ?v)
+                                  (not (some? ?v)))]]}))))
