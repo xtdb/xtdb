@@ -3678,15 +3678,12 @@
                                 [(false? ?v)]
                                 [(some? ?v)])
                             (or-join [?v]
-                                     (and
-                                      [(any? ?v)]
-                                      [(some? ?v)])
-                                     (not [(some? ?v)]))]
+                                     (is-truthy? ?v)
+                                     [(!= :foo ?v)])]
                     :rules [[(is-false? [?v])
                              [(false? ?v)]]
                             [(is-nil? [?v])
                              [(nil? ?v)]]
                             [(is-truthy? [?v])
-                             (not (is-nil? ?v)
-                                  (is-false? ?v)
-                                  (not (some? ?v)))]]}))))
+                             (not (is-nil? ?v))
+                             (not (is-false? ?v))]]}))))
