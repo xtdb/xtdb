@@ -170,13 +170,21 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
+      - run:
+          command: |
+            if [ -n "${CIRCLE_TAG}" ];
+            then
+              echo 'export DOCS_PREFIX="${CIRCLE_TAG}"' >> $BASH_ENV
+            else
+              echo 'export DOCS_PREFIX="${CIRCLE_BRANCH}"' >> $BASH_ENV
+            fi
       - run: javadoc -Xdoclint:none -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
       - aws-s3/sync:
           arguments: |
             --acl public-read
           from: crux-javadoc
           overwrite: true
-          to: 's3://crux-doc/crux-javadoc/${CIRCLE_TAG}'
+          to: 's3://crux-doc/crux-javadoc/${DOCS_PREFIX}'
       - node/install
       - run:
           command: |
@@ -189,7 +197,7 @@ jobs:
             --acl public-read
           from: redoc
           overwrite: true
-          to: 's3://crux-doc/redoc/${CIRCLE_TAG}'
+          to: 's3://crux-doc/redoc/${DOCS_PREFIX}'
 
 
 workflows:
