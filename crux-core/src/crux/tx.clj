@@ -209,10 +209,12 @@
                       (let [conformed-tx-ops (mapv txc/conform-tx-op res)
                             tx-events (mapv txc/->tx-event conformed-tx-ops)]
                         {:tx-events tx-events
-                         :docs (into {args-content-hash {:crux.db/id args-doc-id
-                                                         :crux.db.fn/tx-events tx-events}}
-                                     (mapcat :docs)
-                                     conformed-tx-ops)})))
+                         :docs (merge (when args-doc-id
+                                        {args-content-hash {:crux.db/id args-doc-id
+                                                            :crux.db.fn/tx-events tx-events}})
+                                      (into {}
+                                            (mapcat :docs)
+                                            conformed-tx-ops))})))
 
                   (catch Throwable t
                     (reset! !last-tx-fn-error t)
@@ -220,10 +222,11 @@
 
                     {:failed? true
                      :fn-error t
-                     :docs {args-content-hash {:crux.db.fn/failed? true
-                                               :crux.db.fn/exception (symbol (.getName (class t)))
-                                               :crux.db.fn/message (ex-message t)
-                                               :crux.db.fn/ex-data (ex-data t)}}})))]
+                     :docs (when args-doc-id
+                             {args-content-hash {:crux.db.fn/failed? true
+                                                 :crux.db.fn/exception (symbol (.getName (class t)))
+                                                 :crux.db.fn/message (ex-message t)
+                                                 :crux.db.fn/ex-data (ex-data t)}})})))]
     (if failed?
       {:pre-commit-fn (constantly false)
        :docs docs}
@@ -299,7 +302,7 @@
     (swap! !tx-events into tx-events)
 
     (try
-      (index-docs this (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
+      (db/index-docs forked-index-store (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
       (let [forked-deps {:index-store forked-index-store
                          :document-store forked-document-store
                          :query-engine (assoc query-engine :index-store forked-index-store)}
@@ -343,18 +346,17 @@
     (when (:fork-at tx)
       (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
-      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
-        (db/submit-docs document-store tombstones)))
-
-    (when-let [new-docs (fork/new-docs forked-document-store)]
-      (db/index-docs index-store new-docs)
-      (update-stats this (map doc-predicate-stats (vals new-docs)))
-
+    (when-let [new-docs (not-empty (fork/new-docs forked-document-store))]
       (db/submit-docs document-store new-docs)
 
       ;; ensure the docs are available before we commit the tx, see #1175
       (fetch-docs document-store (keys new-docs)))
+
+    (index-docs this (fork/indexed-docs forked-index-store))
+
+    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
+      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
+        (db/submit-docs document-store tombstones)))
 
     (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
 
@@ -363,7 +365,7 @@
                    :committed? true
                    ::txe/tx-events @!tx-events}))
 
-  (abort [_]
+  (abort [this]
     (swap! !state (fn [state]
                     (if-not (contains? #{:open :abort-only} state)
                       (throw (IllegalStateException. "Transaction marked as " (name @!state)))
@@ -377,6 +379,8 @@
     (db/submit-docs document-store
                     (->> (fork/new-docs forked-document-store)
                          (into {} (filter (comp :crux.db.fn/failed? val)))))
+
+    (index-docs this (fork/indexed-docs forked-index-store))
 
     (db/mark-tx-as-failed index-store tx)
 
