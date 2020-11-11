@@ -294,6 +294,7 @@
     (try
       (let [^GLibC glibc (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
             result (.mallopt glibc M_ARENA_MAX malloc-arena-max)]
-        (assert (= 1 result)))
+        (when (not= 1 result)
+          (log/warn "Error when calling mallopt:" result)))
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc mallopt")))))
