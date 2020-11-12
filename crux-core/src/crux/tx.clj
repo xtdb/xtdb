@@ -38,6 +38,7 @@
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
 (defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
+(defmethod bus/event-spec ::indexing-tx-pre-commit [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
 (defmethod bus/event-spec ::unindexing-eids [_] (s/keys :req-un [::eids]))
 
@@ -367,6 +368,8 @@
     (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
       (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
         (db/submit-docs document-store tombstones)))
+
+    (bus/send bus {:crux/event-type ::indexing-tx-pre-commit, ::submitted-tx tx})
 
     (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
 
