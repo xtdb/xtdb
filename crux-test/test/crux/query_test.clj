@@ -406,32 +406,57 @@
                                            [(+ 1 bah)]]})))
 
     (t/is (thrown-with-msg?
-           RuntimeException
-           #"Circular dependency between bah and bah"
-           (api/q (api/db *api*) '{:find [x]
-                                   :where [[x :foo]
-                                           [(+ 1 bah) bah]]})))
-
-    (t/is (thrown-with-msg?
-           RuntimeException
-           #"Circular dependency between bar and foo"
-           (api/q (api/db *api*) '{:find [foo]
-                                   :where [[(+ 1 bar) foo]
-                                           [(+ 1 foo) bar]]})))
-
-    (t/is (thrown-with-msg?
-           RuntimeException
-           #"Circular dependency between foo and bar"
-           (api/q (api/db *api*) '{:find [foo]
-                                   :where [[(+ 1 foo) bar]
-                                           [(+ 1 bar) foo]]})))
-
-    (t/is (thrown-with-msg?
            IllegalArgumentException
            #"Range constraint refers to unknown variable: x"
            (api/q (api/db *api*) '{:find [e]
                                    :where [[e :name v]
                                            [(> 2 x)]]})))))
+
+(t/deftest test-circular-dependencies
+  (t/is (empty?
+         (api/q (api/db *api*)
+                '{:find [bah]
+                  :in [$ bah]
+                  :where [[(+ 1 bah) bah]]}
+                1)))
+
+  (t/is (= #{[1]}
+           (api/q (api/db *api*)
+                  '{:find [bah]
+                    :in [$ bah]
+                    :where [[(identity bah) bah]]}
+                  1)))
+
+  (t/is (= #{[1]}
+           (api/q (api/db *api*)
+                  '{:find [bar]
+                    :in [$ [[bar foo]]]
+                    :where [[(identity foo) bar]
+                            [(identity bar) foo]]}
+                  [[1 1]
+                   [1 2]])))
+
+  (t/is (= #{[0 1]
+             [1 2]}
+           (api/q (api/db *api*)
+                  '{:find [bar foo]
+                    :in [$ [[bar foo]]]
+                    :where [[(+ 1 bar) foo]
+                            [(- foo 1) bar]]}
+                  [[0 1]
+                   [1 2]
+                   [1 3]])))
+
+  (t/is (= #{[1 0]
+             [2 1]}
+           (api/q (api/db *api*)
+                  '{:find [bar foo]
+                    :in [$ [[bar foo]]]
+                    :where [[(+ 1 foo) bar]
+                            [(- bar 1) foo]]}
+                  [[1 0]
+                   [2 1]
+                   [3 1]]))))
 
 (t/deftest test-not-query
   (t/is (= '[[:triple {:e e :a :name :v name}]
