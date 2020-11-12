@@ -107,7 +107,7 @@
   (when-let [latest-tx (db/latest-completed-tx index-store)]
     (let [latest-lucene-tx (latest-submitted-tx lucene-store)]
       (when-not (= latest-tx latest-lucene-tx)
-        (throw (IllegalStateException. "Lucene store lagging behind"))))))
+        (throw (IllegalStateException. "Lucene store latest tx mismatch"))))))
 
 (defn search [lucene-store, k, v]
   (assert lucene-store)
@@ -179,13 +179,13 @@
         lucene-store (LuceneNode. directory analyzer)]
     (validate-lucene-store-up-to-date index-store lucene-store)
     (alter-var-root #'*lucene-store* (constantly lucene-store))
-    (bus/listen bus {:crux/event-types #{:crux.tx/indexed-tx :crux.tx/indexed-docs :crux.tx/unindexing-eids}
+    (bus/listen bus {:crux/event-types #{:crux.tx/indexing-tx-pre-commit :crux.tx/indexed-docs :crux.tx/unindexing-eids}
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
                                             (.run f)))}
                 (fn [ev]
                   (case (:crux/event-type ev)
-                    :crux.tx/indexed-tx
+                    :crux.tx/indexing-tx-pre-commit
                     (index-tx! lucene-store (:crux.tx/submitted-tx ev))
                     :crux.tx/indexed-docs
                     (index-docs! document-store lucene-store (:doc-ids ev))

@@ -201,8 +201,6 @@
     (t/is (not (latest-tx)))
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivank"}]])
 
-    ;; todo intermittent:
-    (Thread/sleep 100)
     (t/is (latest-tx))))
 
 (t/deftest test-ensure-lucene-store-keeps-up
@@ -212,16 +210,13 @@
                                                                     :db-dir rocks-tmp-dir}}})]
         (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
 
-      ;; todo intermittent:
-      (Thread/sleep 100)
-
       (try
         (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
                                                                       :db-dir rocks-tmp-dir}}
                                         :crux.lucene/lucene-store {:db-dir lucene-tmp-dir}})])
         (t/is false "Exception expected")
         (catch Exception t
-          (t/is (= "Lucene store lagging behind" (ex-message (ex-cause t)))))))))
+          (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t)))))))))
 
 (comment
   (do
