@@ -1,4 +1,8 @@
 (defproject juxt/crux-azure-blobs "crux-git-version-alpha"
+  :description "Crux Azure Blobs Document Store"
+  :url "https://github.com/juxt/crux"
+  :license {:name "The MIT License"
+            :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "1.1.0"]
                  [juxt/crux-core "crux-git-version-beta"]
