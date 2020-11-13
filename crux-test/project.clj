@@ -75,6 +75,8 @@
                                    [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
                                    [javax.servlet/javax.servlet-api "4.0.1"]]}}
 
-  :aliases {"test" ["with-profile" "+test" "run" "-m" "circleci.test/dir" :project/test-paths]
-            "tests" ["with-profile" "+test" "run" "-m" "circleci.test"]
-            "retest" ["with-profile" "+test" "run" "-m" "circleci.test.retest"]})
+  ;; :aliases {"test" ["with-profile" "+test" "run" "-m" "circleci.test/dir" :project/test-paths]
+  ;;           "tests" ["with-profile" "+test" "run" "-m" "circleci.test"]
+  ;;           "retest" ["with-profile" "+test" "run" "-m" "circleci.test.retest"]
+  ;;           }
+  )
