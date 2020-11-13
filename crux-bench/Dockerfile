@@ -1,4 +1,4 @@
-FROM clojure:openjdk-11-lein-2.9.0
+FROM clojure:openjdk-11-lein-2.9.3
 
 WORKDIR /usr/local/lib/crux
 ENTRYPOINT ["java","-cp","crux-bench-standalone.jar","-Dclojure.main.report=stderr","-Xms3g","-Xmx3g","clojure.main", "-m"]
