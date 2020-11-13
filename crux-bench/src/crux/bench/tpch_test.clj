@@ -22,7 +22,7 @@
                       (boolean actual))))))
 
 (defn run-tpch-test [node {:keys [scale-factor] :as opts}]
-  (let [scale-factor (or scale-factor 0.01)]
+  (let [{:keys [scale-factor] :as opts} (assoc opts :scale-factor (or scale-factor 0.01))]
     (bench/with-bench-ns :tpch-test
       (bench/with-crux-dimensions
         (bench/run-bench :ingest
@@ -33,10 +33,10 @@
         ;; TODO we may want to split this up, à la WatDiv, so that we can see if
         ;; specific queries are slower than our comparison databases
         (bench/run-bench :queries
-                         {:success? (run-tpch-queries node opts)})
+          {:success? (run-tpch-queries node opts)})
 
         (bench/run-bench :queries-warm
-                         {:success? (run-tpch-queries node opts)})))))
+          {:success? (run-tpch-queries node opts)})))))
 
 ;; "Elapsed time: 21994.835831 msecs"
 (def q1 '{:find [l_returnflag

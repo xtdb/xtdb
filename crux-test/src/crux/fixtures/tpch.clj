@@ -95,16 +95,19 @@
    (submit-docs! node sf tpch-entity->doc))
   ([node sf doc-fn]
    (println "Transacting TPC-H tables...")
-   (doseq [^TpchTable t (TpchTable/getTables)]
-     (let [[last-tx doc-count] (->> (tpch-table->docs t sf doc-fn)
-                                    (partition-all 1000)
-                                    (reduce (fn [[last-tx last-doc-count] chunk]
-                                              [(c/submit-tx node (vec (for [doc chunk]
-                                                                        [:crux.tx/put doc])))
-                                               (+ last-doc-count (count chunk))])
-                                            [nil 0]))]
-       (println "Transacted" doc-count (.getTableName t))
-       last-tx))))
+   (reduce
+    (fn [last-tx ^TpchTable t]
+      (let [[last-tx doc-count] (->> (tpch-table->docs t sf doc-fn)
+                                     (partition-all 1000)
+                                     (reduce (fn [[last-tx last-doc-count] chunk]
+                                               [(c/submit-tx node (vec (for [doc chunk]
+                                                                         [:crux.tx/put doc])))
+                                                (+ last-doc-count (count chunk))])
+                                             [nil 0]))]
+        (println "Transacted" doc-count (.getTableName t))
+        last-tx))
+    nil
+    (TpchTable/getTables))))
 
 (defn load-docs! [node & args]
   (c/await-tx node (apply submit-docs! node args)))
