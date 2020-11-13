@@ -34,8 +34,7 @@
   :global-vars {*warn-on-reflection* true}
   :pedantic? :warn
 
-  :profiles {:dev {:dependencies [[circleci/circleci.test "0.4.3"]]}
-             :test {:dependencies [[juxt/crux-rocksdb "crux-git-version-beta"]
+  :profiles {:test {:dependencies [[juxt/crux-rocksdb "crux-git-version-beta"]
                                    [juxt/crux-lmdb "crux-git-version-alpha"]
                                    [juxt/crux-kafka "crux-git-version-beta"]
                                    [juxt/crux-kafka-connect "crux-git-version-beta"]
@@ -73,10 +72,4 @@
                                    [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
                                    [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
                                    [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
-                                   [javax.servlet/javax.servlet-api "4.0.1"]]}}
-
-  ;; :aliases {"test" ["with-profile" "+test" "run" "-m" "circleci.test/dir" :project/test-paths]
-  ;;           "tests" ["with-profile" "+test" "run" "-m" "circleci.test"]
-  ;;           "retest" ["with-profile" "+test" "run" "-m" "circleci.test.retest"]
-  ;;           }
-  )
+                                   [javax.servlet/javax.servlet-api "4.0.1"]]}})
