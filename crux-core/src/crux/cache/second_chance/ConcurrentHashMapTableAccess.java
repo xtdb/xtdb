@@ -21,7 +21,7 @@ public final class ConcurrentHashMapTableAccess {
                 Object thisModule = getModule.invoke(ConcurrentHashMapTableAccess.class);
                 if (!(boolean) isNamed.invoke(thisModule)) {
                     Object javaBaseModule = getModule.invoke(ConcurrentHashMap.class);
-                    addOpens.invoke(javaBaseModule, ConcurrentHashMap.class.getPackageName(), thisModule);
+                    addOpens.invoke(javaBaseModule, ConcurrentHashMap.class.getPackage().getName(), thisModule);
                 }
             } catch (Exception ignore) {
             }
