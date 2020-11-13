@@ -55,7 +55,7 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: circleci/clojure:lein-2.9.4
+      - image: circleci/clojure:lein-2.9.3
 
     working_directory: ~/crux
 
@@ -87,7 +87,7 @@ jobs:
 
   test:
     docker:
-      - image: circleci/clojure:lein-2.9.4
+      - image: circleci/clojure:lein-2.9.3
 
     working_directory: ~/crux
     steps:
@@ -105,7 +105,7 @@ jobs:
 
   deploy-commit:
     docker:
-      - image: circleci/clojure:lein-2.9.4
+      - image: circleci/clojure:lein-2.9.3
 
     working_directory: ~/crux
     steps:
@@ -164,7 +164,7 @@ jobs:
 
   create-api-docs:
     docker:
-      - image: circleci/clojure:lein-2.9.4
+      - image: circleci/clojure:lein-2.9.3
     working_directory: ~/crux
     steps:
       - checkout
