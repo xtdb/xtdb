@@ -91,6 +91,9 @@
                                flags
                                0664)))
 
+(defn- env-set-maxreaders [^long env ^long maxreaders]
+  (success? (LMDB/mdb_env_set_maxreaders env maxreaders)))
+
 (defn- env-close [^long env]
   (LMDB/mdb_env_close env))
 
@@ -298,8 +301,11 @@
                                   :env-flags {:doc "LMDB Flags"
                                               :spec ::sys/nat-int}
                                   :env-mapsize {:doc "LMDB Map size"
-                                                :spec ::sys/nat-int}})}
-  [{:keys [^Path db-dir checkpointer sync? env-flags env-mapsize]}]
+                                                :spec ::sys/nat-int}
+                                  :env-maxreaders {:doc "LMDB Max readers"
+                                                   :default 1024
+                                                   :spec ::sys/nat-int}})}
+  [{:keys [^Path db-dir checkpointer sync? env-flags env-mapsize env-maxreaders]}]
 
   (some-> checkpointer (cp/try-restore (.toFile db-dir) cp-format))
 
@@ -311,6 +317,8 @@
         env (env-create)
         mapsize-lock (StampedLock.)]
     (try
+      (when env-set-maxreaders
+        (env-set-maxreaders env env-maxreaders))
       (env-open env db-dir env-flags)
       (when env-mapsize
         (env-set-mapsize env env-mapsize))
