@@ -8,4 +8,5 @@ EXPOSE 3000
 ADD deps.edn deps.edn
 RUN clojure -Sforce -Spath >/dev/null
 
+ENV MALLOC_ARENA_MAX=2
 ADD crux.edn crux.edn
