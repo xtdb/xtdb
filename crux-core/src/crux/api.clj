@@ -6,6 +6,7 @@
             [crux.codec :as c]
             [crux.history-options :as hopts]
             [crux.ingest-client :as ic]
+            [crux.io :as cio]
             [crux.query-state :as qs]
             [crux.system :as sys])
   (:import [crux.api Crux HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICruxIngestAPI RemoteClientOptions]
@@ -423,6 +424,10 @@
                                             :crux/query-engine 'crux.query/->query-engine}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
+    (when (and (nil? @cio/malloc-arena-max)
+               (cio/glibc?))
+      (defonce warn-on-malloc-arena-max
+        (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for Crux is 2")))
     (reset! (get-in system [:crux/node :!system]) system)
     (-> (:crux/node system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))

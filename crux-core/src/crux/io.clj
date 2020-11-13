@@ -284,17 +284,33 @@
       false)))
 
 (definterface GLibC
-  (^int mallopt [^int param ^int value]))
+  (^int mallopt [^int param ^int value])
+  (^String gnu_get_libc_version []))
 
 (def ^:private ^:const M_ARENA_MAX -8)
+(def malloc-arena-max (atom (System/getenv "MALLOC_ARENA_MAX")))
 
-(defn try-set-malloc-arena-max [^long malloc-arena-max]
-  (when (and (nil? (System/getenv "MALLOC_ARENA_MAX"))
-             (jnr-available?))
+(defn glibc? []
+  (if (jnr-available?)
     (try
       (let [^GLibC glibc (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
-            result (.mallopt glibc M_ARENA_MAX malloc-arena-max)]
+            glibc-version (.gnu_get_libc_version glibc)]
+        true)
+      (catch UnsatisfiedLinkError e
+        (log/debug "Could not call glibc gnu_get_libc_version")
+        false))
+    false))
+
+(defn try-set-malloc-arena-max [^long m-arena-max]
+  (when (and (nil? @malloc-arena-max)
+             (jnr-available?)
+             (glibc?))
+    (try
+      (let [^GLibC glibc (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
+            result (.mallopt glibc M_ARENA_MAX m-arena-max)]
         (when (not= 1 result)
-          (log/warn "Error when calling mallopt:" result)))
+          (log/warn "Error when calling mallopt:" result "glibc version:" (.gnu_get_libc_version glibc)))
+        (reset! malloc-arena-max m-arena-max)
+        result)
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc mallopt")))))
