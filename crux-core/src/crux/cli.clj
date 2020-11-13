@@ -68,7 +68,6 @@
     shutdown?))
 
 (defn start-node-from-command-line [args]
-  (cio/try-set-malloc-arena-max 2)
   (cio/install-uncaught-exception-handler!)
 
   (let [{::keys [errors help node-opts]} (parse-args args)]

@@ -290,12 +290,19 @@
 (def ^:private ^:const M_ARENA_MAX -8)
 (def malloc-arena-max (atom (System/getenv "MALLOC_ARENA_MAX")))
 
+(def ^:private glibc
+  (memoize (fn ^crux.io.GLibC []
+             (when (jnr-available?)
+               (try
+                 (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
+                 (catch UnsatisfiedLinkError e
+                   (log/debug "Could not load glibc")))))))
+
 (defn glibc? []
-  (if (jnr-available?)
+  (if-let [glibc ^GLibC (glibc)]
     (try
-      (let [^GLibC glibc (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
-            glibc-version (.gnu_get_libc_version glibc)]
-        true)
+      (.gnu_get_libc_version glibc)
+      true
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc gnu_get_libc_version")
         false))
@@ -306,7 +313,7 @@
              (jnr-available?)
              (glibc?))
     (try
-      (let [^GLibC glibc (eval `(.load (jnr.ffi.LibraryLoader/create GLibC) "c"))
+      (let [glibc ^GLibC (glibc)
             result (.mallopt glibc M_ARENA_MAX m-arena-max)]
         (when (not= 1 result)
           (log/warn "Error when calling mallopt:" result "glibc version:" (.gnu_get_libc_version glibc)))
