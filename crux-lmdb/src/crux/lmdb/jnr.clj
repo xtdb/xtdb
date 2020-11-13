@@ -148,11 +148,15 @@
                                     {:env-flags {:doc "LMDB Flags"
                                                  :spec ::sys/nat-int}
                                      :env-mapsize {:doc "LMDB Map size"
-                                                   :spec ::sys/nat-int}})}
-  [{:keys [^Path db-dir checkpointer sync? env-flags env-mapsize]}]
+                                                   :spec ::sys/nat-int}
+                                     :env-maxreaders {:doc "LMDB Max readers"
+                                                      :default 1024
+                                                      :spec ::sys/nat-int}})}
+  [{:keys [^Path db-dir checkpointer sync? env-flags env-mapsize env-maxreaders]}]
   (let [db-dir (.toFile db-dir)
         _ (some-> checkpointer (cp/try-restore db-dir cp-format))
-        env (.open (Env/create DirectBufferProxy/PROXY_DB)
+        env (.open (cond-> (Env/create DirectBufferProxy/PROXY_DB)
+                     env-maxreaders (.setMaxReaders env-maxreaders))
                    (doto db-dir (.mkdirs))
                    (into-array EnvFlags (cond-> default-env-flags
                                           (not sync?) (concat no-sync-env-flags))))
