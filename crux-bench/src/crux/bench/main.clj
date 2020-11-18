@@ -52,7 +52,12 @@
            (bench/with-nodes [node nodes]
              (-> (bench/with-comparison-times
                    (tpch/run-tpch-test node {:scale-factor tpch-scale-factor}))
-                 (doto post-to-slack))))})
+                 (doto post-to-slack))))
+   :lmdb-tpch-test (fn [_ _]
+                     (bench/with-nodes [node (select-keys bench/nodes ["standalone-lmdb" "kafka-lmdb"])]
+                       (-> (bench/with-comparison-times
+                             (tpch/run-tpch-test node {:scale-factor 0.01}))
+                           (doto post-to-slack))))})
 
 (defn parse-args [args]
   (let [{:keys [options summary errors]}
