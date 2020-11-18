@@ -9,7 +9,7 @@
                  [org.clojure/spec.alpha "0.2.176"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "3.1.1"]
-                 [org.clojure/tools.reader "1.3.2"]
+                 [org.clojure/tools.reader "1.3.4"]
                  [org.clojure/data.json "1.0.0"]
                  [org.clojure/tools.cli "1.0.194"]
                  [org.agrona/agrona "1.7.2"]
