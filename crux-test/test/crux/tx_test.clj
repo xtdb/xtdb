@@ -902,6 +902,8 @@
                 {:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
                 {:crux/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
+                 :indexed-docs {(c/new-id doc-1) doc-1
+                                (c/new-id doc-2) doc-2}
                  :av-count 4}
                 {:crux/event-type ::tx/indexed-tx,
                  ::tx/submitted-tx submitted-tx,

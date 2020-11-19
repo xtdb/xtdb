@@ -267,6 +267,7 @@
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids doc-ids
+                       :indexed-docs indexed-docs
                        :av-count (->> (vals indexed-docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})))))
 

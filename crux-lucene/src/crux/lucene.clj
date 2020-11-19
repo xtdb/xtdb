@@ -65,11 +65,10 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
-(defn- index-docs! [document-store lucene-store doc-ids]
-  (let [docs (vals (db/fetch-docs document-store doc-ids))]
-    (with-open [index-writer (index-writer lucene-store)]
-      (doseq [d docs t (crux-doc->triples d)]
-        (.updateDocument index-writer (triple->term t) (triple->doc t))))))
+(defn- index-docs! [document-store lucene-store docs]
+  (with-open [index-writer (index-writer lucene-store)]
+    (doseq [d docs t (crux-doc->triples d)]
+      (.updateDocument index-writer (triple->term t) (triple->doc t)))))
 
 (defn- evict! [indexer, node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
@@ -183,12 +182,12 @@
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
                                             (.run f)))}
-                (fn [ev]
-                  (case (:crux/event-type ev)
+                (fn [{:keys [crux/event-type crux.tx/submitted-tx indexed-docs eids] :as event}]
+                  (case event-type
                     :crux.tx/indexing-tx-pre-commit
-                    (index-tx! lucene-store (:crux.tx/submitted-tx ev))
+                    (index-tx! lucene-store submitted-tx)
                     :crux.tx/indexed-docs
-                    (index-docs! document-store lucene-store (:doc-ids ev))
+                    (index-docs! document-store lucene-store (vals indexed-docs))
                     :crux.tx/unindexing-eids
-                    (evict! index-store lucene-store (:eids ev)))))
+                    (evict! index-store lucene-store eids))))
     lucene-store))
