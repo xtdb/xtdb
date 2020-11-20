@@ -238,8 +238,8 @@
    (fn [data-dir]
      {::j/connection-pool {:dialect 'crux.jdbc.h2/->dialect
                            :db-spec {:dbname (str (io/file data-dir "h2"))}}
-      :crux/tx-log {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
-      :crux/document-store {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
+      :crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+      :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
@@ -247,8 +247,8 @@
    (fn [data-dir]
      {::j/connection-pool {:dialect 'crux.jdbc.sqlite/->dialect
                            :db-spec {:dbname (str (io/file data-dir "sqlite"))}}
-      :crux/tx-log {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
-      :crux/document-store {:crux/module `jdbc/->tx-log, :connection-pool ::j/connection-pool}
+      :crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+      :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
