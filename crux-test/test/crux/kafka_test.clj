@@ -4,7 +4,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* *opts*]]
-            [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kafka :as fk :refer [*kafka-config*]]
             [crux.kafka :as k]
             [crux.rdf :as rdf]
             [crux.tx :as tx]
@@ -103,3 +103,26 @@
                 (as-> tx (api/await-tx *api* tx (Duration/ofSeconds 5))))
               (t/is (api/entity (api/db *api*) :foo))
               (t/is (api/entity (api/db *api*) :bar)))))))))
+
+(t/deftest submit-oversized-doc
+  (let [with-fixtures (t/join-fixtures [(partial
+                                         fk/with-kafka-config
+                                         {:properties-map {"max.partition.fetch.bytes" "1024"
+                                                           "max.request.size" "1024"}})
+                                        fk/with-cluster-tx-log-opts
+                                        fk/with-cluster-doc-store-opts
+                                        fix/with-node])]
+    (with-fixtures
+      (fn []
+        (t/testing "submitting an oversized document returns proper exception"
+          (t/is
+           (thrown-with-msg?
+            java.util.concurrent.ExecutionException
+            #"The message is 19912 bytes when serialized which is larger than the maximum request size you have configured with the max.request.size configuration."
+            (api/submit-tx
+             *api*
+             [[:crux.tx/put
+               (into {:crux.db/id :test}
+                     (for [n (range 1000)]
+                       [(keyword (str "key-" n))
+                        (str "value-" n)]))]]))))))))
