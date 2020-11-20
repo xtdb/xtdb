@@ -224,12 +224,13 @@
                              (cio/try-close consumer)))))))
 
 ;;;; DocumentStore
-
 (defn- submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
-  (doseq [[content-hash doc] id-and-docs]
-    (->> (ProducerRecord. doc-topic content-hash doc)
-         (.send producer)))
-  (.flush producer))
+  (let [fs (doall (for [[content-hash doc] id-and-docs]
+                    (->> (ProducerRecord. doc-topic content-hash doc)
+                         (.send producer))))]
+    (.flush producer)
+    (doseq [f fs]
+      @f)))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
                                local-document-store
