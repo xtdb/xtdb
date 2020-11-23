@@ -33,9 +33,8 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defn- await-tx [{:keys [bus] :as node} tx-k tx ^Duration timeout]
-  (let [tx-v (get tx tx-k)
-
+(defn- await-tx [{:keys [bus] :as node} tx-k awaited-tx ^Duration timeout]
+  (let [tx-v (get awaited-tx tx-k)
         {:keys [timeout? ingester-error node-closed? tx] :as res}
         (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closed}
                         :->result (letfn [(tx->result [tx]
@@ -52,7 +51,7 @@
                         :timeout-value {:timeout? true}})]
     (cond
       ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
-      timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str tx)
+      timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
                                               ", index has: " (pr-str (api/latest-completed-tx node)))))
       node-closed? (throw (InterruptedException. "Node closed."))
       tx tx)))
