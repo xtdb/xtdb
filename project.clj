@@ -41,7 +41,7 @@
    [juxt/crux-test "crux-git-version"]
    [juxt/crux-bench "crux-git-version"]
 
-   [org.apache.kafka/connect-api "2.3.0" :scope "provided"]
+   [org.apache.kafka/connect-api "2.6.0" :scope "provided"]
 
    [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
    [com.h2database/h2 "1.4.200"]
