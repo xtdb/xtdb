@@ -902,8 +902,7 @@
                 {:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
                 {:crux/event-type ::tx/indexed-docs
                  :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
-                 :indexed-docs {(c/new-id doc-1) doc-1
-                                (c/new-id doc-2) doc-2}
+                 :docs #{doc-1 doc-2}
                  :av-count 4}
                 {:crux/event-type ::tx/indexed-tx,
                  ::tx/submitted-tx submitted-tx,
@@ -915,7 +914,8 @@
                                    #crux/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
                                    #crux/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
-                   (update 2 dissoc :bytes-indexed)))))))
+                   (update 2 dissoc :bytes-indexed)
+                   (update 2 update :docs set)))))))
 
 
 (t/deftest await-fails-quickly-738

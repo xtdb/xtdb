@@ -34,9 +34,10 @@
 (s/def ::bytes-indexed nat-int?)
 (s/def ::doc-ids (s/coll-of #(instance? crux.codec.Id %) :kind set?))
 (s/def ::eids (s/coll-of c/valid-id? :kind set?))
+(s/def ::docs (s/nilable (s/coll-of map?)))
 
 (defmethod bus/event-spec ::indexing-docs [_] (s/keys :req-un [::doc-ids]))
-(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed]))
+(defmethod bus/event-spec ::indexed-docs [_] (s/keys :req-un [::doc-ids ::av-count ::bytes-indexed ::docs]))
 (defmethod bus/event-spec ::indexing-tx [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexing-tx-pre-commit [_] (s/keys :req [::submitted-tx]))
 (defmethod bus/event-spec ::indexed-tx [_] (s/keys :req [::submitted-tx ::txe/tx-events], :req-un [::committed?]))
@@ -267,7 +268,7 @@
 
         (bus/send bus {:crux/event-type ::indexed-docs,
                        :doc-ids doc-ids
-                       :indexed-docs indexed-docs
+                       :docs (vals indexed-docs)
                        :av-count (->> (vals indexed-docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})))))
 

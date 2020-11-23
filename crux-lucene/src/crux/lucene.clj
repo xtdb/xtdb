@@ -182,12 +182,12 @@
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
                                             (.run f)))}
-                (fn [{:keys [crux/event-type crux.tx/submitted-tx indexed-docs eids] :as event}]
+                (fn [{:keys [crux/event-type crux.tx/submitted-tx docs eids] :as event}]
                   (case event-type
                     :crux.tx/indexing-tx-pre-commit
                     (index-tx! lucene-store submitted-tx)
                     :crux.tx/indexed-docs
-                    (index-docs! document-store lucene-store (vals indexed-docs))
+                    (index-docs! document-store lucene-store docs)
                     :crux.tx/unindexing-eids
                     (evict! index-store lucene-store eids))))
     lucene-store))
