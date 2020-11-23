@@ -44,8 +44,9 @@
                  [org.ow2.asm/asm-tree "7.2"]
                  [org.ow2.asm/asm "7.2"]
                  [org.ow2.asm/asm-analysis "7.2"]
-                 [com.github.luben/zstd-jni "1.4.3-1"]
+                 [com.github.luben/zstd-jni "1.4.4-7"]
                  [com.google.guava/guava "28.2-jre"]
+                 [org.slf4j/slf4j-api "1.7.30"]
                  [org.apache.httpcomponents/httpclient "4.5.12"]
                  [org.apache.httpcomponents/httpcore "4.4.13"]
                  [com.fasterxml.jackson.core/jackson-core "2.10.2"]
@@ -53,7 +54,9 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                  [com.github.spotbugs/spotbugs-annotations "3.1.9"]
                  [org.reactivestreams/reactive-streams "1.0.3"]
-                 [org.codehaus.janino/commons-compiler "3.0.11"]]
+                 [org.codehaus.janino/commons-compiler "3.0.11"]
+                 [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
+                 [javax.servlet/javax.servlet-api "4.0.1"]]
 
   :middleware [leiningen.project-version/middleware]
 

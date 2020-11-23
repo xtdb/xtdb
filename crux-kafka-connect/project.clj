@@ -9,8 +9,9 @@
                  [org.clojure/tools.logging "1.1.0"]
                  [cheshire "5.9.0"]
                  [com.taoensso/nippy "2.15.1"]
-                 [com.cognitect/transit-clj "1.0.324"]]
-  :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
+                 [com.cognitect/transit-clj "1.0.324"]
+                 [org.slf4j/slf4j-api "1.7.30"]]
+  :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.6.0"]]}}
   :middleware [leiningen.project-version/middleware]
   :aliases {"package" ["do" ["inline-deps"] ["with-profile" "+plugin.mranderson/config" "uberjar"] ["archive"]]}
   :confluent-hub-manifest {:component_types ["sink" "source"]

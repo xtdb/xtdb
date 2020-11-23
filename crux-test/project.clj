@@ -64,7 +64,7 @@
                                    [net.minidev/json-smart "2.3"]
 
                                    ;; Kafka connect tests
-                                   [org.apache.kafka/connect-api "2.3.0"]
+                                   [org.apache.kafka/connect-api "2.6.0"]
 
                                    ;; dependency conflict resolution
                                    [com.fasterxml.jackson.core/jackson-core "2.10.2"]
