@@ -360,7 +360,7 @@
 
       (db/submit-docs document-store new-docs)
 
-      ;; ensure the docs are available before we commit the tx, see #1175
+      ;; ensure the docs are available before we commit the tx, see #1105
       (fetch-docs document-store (keys new-docs)))
 
     (index-docs this (fork/indexed-docs forked-index-store))
