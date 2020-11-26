@@ -425,3 +425,13 @@
                  (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
                      (get arg-doc-id)
                      (dissoc :crux.db/id))))))))
+
+(t/deftest test-await-tx
+  (when-not (= *node-type* :remote)
+    (t/testing "timeout outputs properly"
+      (let [tx (api/submit-tx *api* (for [n (range 100)] [:crux.tx/put {:crux.db/id (str "test-" n)}]))]
+        (t/is
+         (thrown-with-msg?
+          java.util.concurrent.TimeoutException
+          #"Timed out waiting for: #:crux.tx"
+          (api/await-tx *api* tx (Duration/ofNanos 1))))))))
