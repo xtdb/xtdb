@@ -12,13 +12,16 @@
 
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
+(defn- -query [a v]
+  (let [{:keys [analyzer]} (:crux.lucene/lucene-store @(:!system *api*))]
+    (l/build-query analyzer [a v])))
+
 (t/deftest test-can-search-string
   (let [doc {:crux.db/id :ivan :name "Ivan"}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
 
     (t/testing "using Lucene directly"
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) :name "Ivan")]
-        (let [docs (iterator-seq search-results)]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-sto        (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (ffirst docs) "_crux_val"))))))
 
@@ -60,9 +63,9 @@
                                :where
                                '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) :name "Ivan")]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) (-query  "name" "Ivan"))]
         (t/is (empty? (iterator-seq search-results))))
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) :name "Derek")]
+      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) (-query "name" "Derek"))]
         (t/is (seq (iterator-seq search-results)))))
 
     (t/testing "Scores"
@@ -74,7 +77,7 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
                  (c/q db {:find '[?e ?v ?score]
-                          :where '[[(text-search :name "ivan*") [[?e ?v ?score]]]
+                          :where '[[(text-search :name "ivan*") [[?e ?v ?a ?score]]]
                                    [?e :crux.db/id]]})))))
 
     (t/testing "cardinality many"

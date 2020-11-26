@@ -18,6 +18,7 @@
            [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
+           org.apache.lucene.search.Query
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery]
            [org.apache.lucene.store Directory FSDirectory]))
@@ -123,17 +124,24 @@
                    (> tx-id latest-lucene-tx-id)))
       (throw (IllegalStateException. "Lucene store latest tx mismatch")))))
 
-(defn search [lucene-store, k, v]
-  (assert lucene-store)
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
-        directory-reader (DirectoryReader/open directory)
-        index-searcher (IndexSearcher. directory-reader)
+(defn ^Query build-query
+  "Standard build query fn, taking a single field/val lucene term string."
+  [^Analyzer analyzer, query-args]
+  (let [[k, v] (if (= 1 (count query-args)) [nil (first query-args)] query-args)
+        _  (when-not (string? v)
+             (throw (IllegalArgumentException. "Lucene text search values must be String")))
         qp (if k
              (QueryParser. (keyword->k k) analyzer)
              (QueryParser. field-crux-val analyzer))
         b (doto (BooleanQuery$Builder.)
-            (.add (.parse qp v) BooleanClause$Occur/MUST))
-        q (.build b)
+            (.add (.parse qp v) BooleanClause$Occur/MUST))]
+    (.build b)))
+
+(defn search [lucene-store, ^Query q]
+  (assert lucene-store)
+  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
+        directory-reader (DirectoryReader/open directory)
+        index-searcher (IndexSearcher. directory-reader)
         q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
         score-docs (.-scoreDocs (.search index-searcher q 1000))]
 
@@ -146,40 +154,37 @@
                          (vector (.doc index-searcher (.-doc d))
                                  (.-score d))) score-docs))))
 
-(defn- full-text [node index-snapshot entity-resolver-fn attr arg-v]
-  (when-not (string? arg-v)
-    (throw (IllegalArgumentException. "Lucene text search values must be String")))
-  (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
+(defn- full-text [node index-snapshot entity-resolver-fn query]
+  (with-open [search-results ^crux.api.ICursor (search node query)]
     (->> (iterator-seq search-results)
          (mapcat (fn [[^Document doc score]]
                    (let [v (.get ^Document doc field-crux-val)
                          a (keyword (.get ^Document doc field-crux-attr))]
                      (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
-                       (if attr
-                         [(db/decode-value index-snapshot eid) v score]
-                         [(db/decode-value index-snapshot eid) v a score])))))
+                       [(db/decode-value index-snapshot eid) v a score]))))
          (into []))))
 
-(defn- pred-constraint [attr vval {:keys [encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
+(defn pred-constraint [query-builder {:keys [arg-bindings encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
   (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-    (let [vval (if (instance? VarBinding vval)
-                 (q/bound-result-for-var index-snapshot vval join-keys)
-                 vval)]
-      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn attr vval)))))
+    (let [arg-bindings (map (fn [a]
+                              (if (instance? VarBinding a)
+                                (q/bound-result-for-var index-snapshot a join-keys)
+                                a))
+                            (rest arg-bindings))
+          query (query-builder (:analyzer *lucene-store*) arg-bindings)]
+      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn query)))))
 
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
-  (let [[attr vval] (rest (:arg-bindings pred-ctx))]
-    (pred-constraint attr vval pred-ctx)))
+  (pred-constraint #'build-query pred-ctx))
 
 (defmethod q/pred-args-spec 'wildcard-text-search [_]
   (s/cat :pred-fn  #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
-  (let [[vval] (rest (:arg-bindings pred-ctx))]
-    (pred-constraint nil vval pred-ctx)))
+  (pred-constraint #'build-query pred-ctx))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
