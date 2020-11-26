@@ -7,10 +7,12 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [crux.api :as crux]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [clojure.spec.alpha :as s])
   (:import crux.codec.Id
            java.math.BigDecimal
            org.agrona.MutableDirectBuffer
+           [java.time Instant ZonedDateTime LocalDate ZoneId Duration]
            [java.util Arrays Date]
            java.net.URL))
 
@@ -18,6 +20,19 @@
 
 (def ^:private gen-date
   (->> gen/large-integer (gen/fmap #(Date. ^long %))))
+
+(def ^:private gen-instant
+  (->> (gen/tuple (gen/large-integer* {:min (.getEpochSecond Instant/MIN)
+                                       :max (.getEpochSecond Instant/MAX)})
+                  (gen/large-integer* {:min (- (dec 1e9))
+                                       :max (dec 1e9)}))
+       (gen/fmap (fn [[s ns]]
+                   (Instant/ofEpochSecond s ns)))))
+
+(def ^:private gen-zdt
+  (let [utc (ZoneId/of "UTC")]
+    (->> gen-instant
+         (gen/fmap #(ZonedDateTime/ofInstant % utc)))))
 
 (def ^:private primitive-generators
   [(gen/return nil)
@@ -32,7 +47,14 @@
    (-> gen/bytes (vary-meta assoc ::sortable? false))
    (->> gen/double
         (gen/such-that #(Double/isFinite %))
-        (gen/fmap #(BigDecimal/valueOf ^double %)))])
+        (gen/fmap #(BigDecimal/valueOf ^double %)))
+   (->> gen-zdt (gen/fmap #(.toLocalDate ^ZonedDateTime %)))
+   (->> gen-zdt (gen/fmap #(.toLocalTime ^ZonedDateTime %)))
+   (->> gen-zdt (gen/fmap #(.toLocalDateTime ^ZonedDateTime %)))
+   gen-instant
+   (->> (gen/tuple gen/large-integer gen/small-integer)
+        (gen/fmap (fn [[s ns]]
+                    (Duration/ofSeconds s ns))))])
 
 (t/deftest test-double-nan
   (let [encoded-nan (c/->value-buffer ##NaN)]
