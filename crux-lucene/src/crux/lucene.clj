@@ -7,7 +7,8 @@
             [crux.io :as cio]
             [crux.memory :as mem]
             [crux.query :as q]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [clojure.string])
   (:import crux.codec.EntityTx
            java.io.Closeable
            java.nio.file.Path
@@ -42,16 +43,19 @@
 
 (defrecord DocumentId [a v])
 
+(defn- ^String keyword->k [k]
+  (subs (str k) 1))
+
 (defn- ^Document triple->doc [[k ^String v]]
   (doto (Document.)
     ;; To search for triples by a-v for deduping
     (.add (StringField. "id", (->hash-str (DocumentId. k v)), Field$Store/NO))
     ;; The actual term, which will be tokenized
-    (.add (TextField. (name k), v, Field$Store/YES))
+    (.add (TextField. (keyword->k k), v, Field$Store/YES))
     ;; Uses for wildcard searches
     (.add (TextField. "_val", v, Field$Store/YES))
     ;; The Attr (storage only, for temporal resolution)
-    (.add (StringField. "_attr", (name k), Field$Store/YES))))
+    (.add (StringField. "_attr", (keyword->k k), Field$Store/YES))))
 
 (defn- ^Term triple->term [[k ^String v]]
   (Term. "id" (->hash-str (DocumentId. k v))))
@@ -115,7 +119,7 @@
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
         qp (if k
-             (QueryParser. (name k) analyzer)
+             (QueryParser. (keyword->k k) analyzer)
              (QueryParser. "_val" analyzer))
         b (doto (BooleanQuery$Builder.)
             (.add (.parse qp v) BooleanClause$Occur/MUST))
