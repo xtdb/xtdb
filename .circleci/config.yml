@@ -183,7 +183,6 @@ jobs:
           arguments: |
             --acl public-read
           from: crux-javadoc
-          overwrite: true
           to: 's3://crux-doc/crux-javadoc/${DOCS_PREFIX}'
       - node/install
       - run:
@@ -196,7 +195,6 @@ jobs:
           arguments: |
             --acl public-read
           from: redoc
-          overwrite: true
           to: 's3://crux-doc/redoc/${DOCS_PREFIX}'
 
 
