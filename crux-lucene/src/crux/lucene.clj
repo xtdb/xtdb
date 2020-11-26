@@ -76,7 +76,7 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
-(defn- index-docs! [document-store lucene-store docs]
+(defn index-docs! [document-store lucene-store docs]
   (with-open [index-writer (index-writer lucene-store)]
     (doseq [d docs, t (crux-doc->triples d)]
       (.updateDocument index-writer (triple->term t) (triple->doc t)))))
@@ -124,19 +124,6 @@
                    (> tx-id latest-lucene-tx-id)))
       (throw (IllegalStateException. "Lucene store latest tx mismatch")))))
 
-(defn ^Query build-query
-  "Standard build query fn, taking a single field/val lucene term string."
-  [^Analyzer analyzer, query-args]
-  (let [[k, v] (if (= 1 (count query-args)) [nil (first query-args)] query-args)
-        _  (when-not (string? v)
-             (throw (IllegalArgumentException. "Lucene text search values must be String")))
-        qp (if k
-             (QueryParser. (keyword->k k) analyzer)
-             (QueryParser. field-crux-val analyzer))
-        b (doto (BooleanQuery$Builder.)
-            (.add (.parse qp v) BooleanClause$Occur/MUST))]
-    (.build b)))
-
 (defn search [lucene-store, ^Query q]
   (assert lucene-store)
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
@@ -174,17 +161,37 @@
           query (query-builder (:analyzer *lucene-store*) arg-bindings)]
       (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn query)))))
 
+(defn ^Query build-query
+  "Standard build query fn, taking a single field/val lucene term string."
+  [^Analyzer analyzer, [k v]]
+  (when-not (string? v)
+    (throw (IllegalArgumentException. "Lucene text search values must be String")))
+  (let [qp (QueryParser. (keyword->k k) analyzer)
+        b (doto (BooleanQuery$Builder.)
+            (.add (.parse qp v) BooleanClause$Occur/MUST))]
+    (.build b)))
+
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
   (pred-constraint #'build-query pred-ctx))
 
+(defn ^Query build-query-wildcard
+  "Wildcard query builder"
+  [^Analyzer analyzer, [v]]
+  (when-not (string? v)
+    (throw (IllegalArgumentException. "Lucene text search values must be String")))
+  (let [qp (QueryParser. field-crux-val analyzer)
+        b (doto (BooleanQuery$Builder.)
+            (.add (.parse qp v) BooleanClause$Occur/MUST))]
+    (.build b)))
+
 (defmethod q/pred-args-spec 'wildcard-text-search [_]
-  (s/cat :pred-fn  #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
-  (pred-constraint #'build-query pred-ctx))
+  (pred-constraint #'build-query-wildcard pred-ctx))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
