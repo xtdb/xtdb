@@ -349,15 +349,7 @@
     (when (:fork-at tx)
       (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
-      (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
-      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
-        (db/submit-docs document-store tombstones)))
-
     (when-let [new-docs (fork/new-docs forked-document-store)]
-      (db/index-docs index-store new-docs)
-      (update-stats this (map doc-predicate-stats (vals new-docs)))
-
       (db/submit-docs document-store new-docs)
 
       ;; ensure the docs are available before we commit the tx, see #1105
@@ -366,6 +358,7 @@
     (index-docs this (fork/indexed-docs forked-index-store))
 
     (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
+      (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
       (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
         (db/submit-docs document-store tombstones)))
 
