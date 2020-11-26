@@ -276,3 +276,5 @@
                           (instance? TimeUnit t) t
                           (string? t) (TimeUnit/valueOf (str/upper-case t)))))
          #(instance? TimeUnit %)))
+
+(s/def ::fn fn?)
