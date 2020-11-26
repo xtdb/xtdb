@@ -18,7 +18,7 @@
       (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) :name "Ivan")]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
-          (t/is (= "Ivan" (.get ^Document (ffirst docs) "_val"))))))
+          (t/is (= "Ivan" (.get ^Document (ffirst docs) "_crux_val"))))))
 
     (t/testing "using in-built function"
       (with-open [db (c/open-db *api*)]
@@ -224,6 +224,9 @@
         (t/is false "Exception expected")
         (catch Exception t
           (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t)))))))))
+
+(t/deftest test-id-can-be-key-1274
+  (t/is (c/tx-committed? *api* (c/await-tx *api* (c/submit-tx *api* [[:crux.tx/put {:crux.db/id 512 :id "1"}]])))))
 
 (comment
   (do

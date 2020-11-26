@@ -46,19 +46,24 @@
 (defn- ^String keyword->k [k]
   (subs (str k) 1))
 
+(def ^:const ^:private field-crux-id "_crux_id")
+(def ^:const ^:private field-crux-val "_crux_val")
+(def ^:const ^:private field-crux-attr "_crux_attr")
+
 (defn- ^Document triple->doc [[k ^String v]]
   (doto (Document.)
     ;; To search for triples by a-v for deduping
-    (.add (StringField. "id", (->hash-str (DocumentId. k v)), Field$Store/NO))
+    (.add (StringField. field-crux-id, (->hash-str (DocumentId. k v)), Field$Store/NO))
     ;; The actual term, which will be tokenized
     (.add (TextField. (keyword->k k), v, Field$Store/YES))
     ;; Uses for wildcard searches
-    (.add (TextField. "_val", v, Field$Store/YES))
-    ;; The Attr (storage only, for temporal resolution)
-    (.add (StringField. "_attr", (keyword->k k), Field$Store/YES))))
+    (.add (TextField. field-crux-val, v, Field$Store/YES))
+    ;; The Attr (storage only, for temporal resolution, could
+    ;; potentially remove for non-wildcard usage)
+    (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES))))
 
 (defn- ^Term triple->term [[k ^String v]]
-  (Term. "id" (->hash-str (DocumentId. k v))))
+  (Term. field-crux-id (->hash-str (DocumentId. k v))))
 
 (defn doc-count []
   (let [{:keys [^Directory directory]} *lucene-store*
@@ -70,10 +75,15 @@
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
 (defn- index-docs! [document-store lucene-store doc-ids]
-  (let [docs (vals (db/fetch-docs document-store doc-ids))]
-    (with-open [index-writer (index-writer lucene-store)]
-      (doseq [d docs t (crux-doc->triples d)]
-        (.updateDocument index-writer (triple->term t) (triple->doc t))))))
+  (try
+    (let [docs (vals (db/fetch-docs document-store doc-ids))]
+      (with-open [index-writer (index-writer lucene-store)]
+        (doseq [d docs t (crux-doc->triples d)]
+          (.updateDocument index-writer (triple->term t) (triple->doc t)))))
+    (catch Throwable t
+      ;; TODO until #1275 is fixed
+      (log/error t)
+      (throw t))))
 
 (defn- evict! [indexer, node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
@@ -87,7 +97,7 @@
                      :let [a (attrs-id->attr (->hash-str a))
                            v (db/decode-value index-snapshot v)]
                      :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. "id" (->hash-str (DocumentId. a v)))))]
+                 (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
         (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn- index-tx! [lucene-store tx]
@@ -120,7 +130,7 @@
         index-searcher (IndexSearcher. directory-reader)
         qp (if k
              (QueryParser. (keyword->k k) analyzer)
-             (QueryParser. "_val" analyzer))
+             (QueryParser. field-crux-val analyzer))
         b (doto (BooleanQuery$Builder.)
             (.add (.parse qp v) BooleanClause$Occur/MUST))
         q (.build b)
@@ -140,8 +150,8 @@
   (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
     (->> (iterator-seq search-results)
          (mapcat (fn [[^Document doc score]]
-                   (let [v (.get ^Document doc "_val")
-                         a (keyword (.get ^Document doc "_attr"))]
+                   (let [v (.get ^Document doc field-crux-val)
+                         a (keyword (.get ^Document doc field-crux-attr))]
                      (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
                        (if attr
                          [(db/decode-value index-snapshot eid) v score]
