@@ -189,7 +189,7 @@ Clojure/EDN::
 === Transaction log (`+crux.jdbc/->tx-log+`)
 
 * `connection-pool`
-* `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
+* `poll-sleep-duration` (string/`Duration`, default 100 milliseconds, `"PT0.1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
 [#ingest-only-tx-log]
 === Ingest-only transaction log (`+crux.jdbc/->ingest-only-tx-log+`)
