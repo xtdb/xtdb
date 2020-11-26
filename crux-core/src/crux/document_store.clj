@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.document-store
   (:require [clojure.java.io :as io]
+            [crux.io :as cio]
             [clojure.set :as set]
             [crux.codec :as c]
             [crux.db :as db]
@@ -14,19 +15,20 @@
 (defrecord FileDocumentStore [dir]
   db/DocumentStore
   (fetch-docs [this ids]
-    (persistent!
-     (reduce
-      (fn [acc id]
-        (let [doc-key (str (c/new-id id))
-              doc-file (io/file dir doc-key)]
-          (if-let [doc (when (.exists doc-file)
-                         (with-open [in (FileInputStream. doc-file)]
-                           (some->> in
-                                    (DataInputStream.)
-                                    (nippy/thaw-from-in!))))]
-            (assoc! acc id doc)
-            acc)))
-      (transient {}) ids)))
+    (cio/with-nippy-thaw-all
+      (persistent!
+       (reduce
+        (fn [acc id]
+          (let [doc-key (str (c/new-id id))
+                doc-file (io/file dir doc-key)]
+            (if-let [doc (when (.exists doc-file)
+                           (with-open [in (FileInputStream. doc-file)]
+                             (some->> in
+                                      (DataInputStream.)
+                                      (nippy/thaw-from-in!))))]
+              (assoc! acc id doc)
+              acc)))
+        (transient {}) ids))))
 
   (submit-docs [this id-and-docs]
     (doseq [[id doc] id-and-docs

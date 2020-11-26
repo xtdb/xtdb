@@ -24,10 +24,11 @@
          (nippy/freeze-to-file (io/file file "memkv")))))
 
 (defn- restore-db [dir]
-  (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memkv"))]
-         [(mem/->off-heap k)
-          (mem/->off-heap v)])
-       (into (sorted-map-by mem/buffer-comparator))))
+  (cio/with-nippy-thaw-all
+    (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memkv"))]
+           [(mem/->off-heap k)
+            (mem/->off-heap v)])
+         (into (sorted-map-by mem/buffer-comparator)))))
 
 ;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
 ;; unusable in practice.
