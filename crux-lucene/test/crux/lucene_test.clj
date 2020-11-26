@@ -1,14 +1,19 @@
 (ns crux.lucene-test
-  (:require [clojure.test :as t]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :as t]
             [crux.api :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
             [crux.rocksdb :as rocks]
-            [clojure.java.io :as io])
-  (:import org.apache.lucene.document.Document
-           crux.api.ICruxAPI))
+            [clojure.java.io :as io]
+            [crux.query :as q]
+  (:import org.apache.lucene.analysis.Analyzer
+           org.apache.lucene.document.Document
+           crux.api.ICruxAPI
+           org.apache.lucene.queryparser.classic.QueryParser
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]))
 
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
@@ -284,6 +289,32 @@
 
 (t/deftest test-id-can-be-key-1274
   (t/is (c/tx-committed? *api* (c/await-tx *api* (c/submit-tx *api* [[:crux.tx/put {:crux.db/id 512 :id "1"}]])))))
+
+(defn ^Query build-or-query
+  [^Analyzer analyzer, query-args]
+  (let [[k, vs] query-args
+        qp (QueryParser. (name k) analyzer)
+        b  (BooleanQuery$Builder.)]
+    (doseq [v vs]
+      (.add b (.parse qp v) BooleanClause$Occur/SHOULD))
+    (.build b)))
+
+(defmethod q/pred-args-spec 'or-text-search [_]
+  (s/cat :pred-fn #{'or-text-search} :args (s/spec (s/cat :attr keyword? :v (s/coll-of string?))) :return (s/? :crux.query/binding)))
+
+(defmethod q/pred-constraint 'or-text-search [_ pred-ctx]
+  (l/pred-constraint #'build-or-query pred-ctx))
+
+(t/deftest test-or-text-search
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :fred :name "Fred"}]])
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :matt :name "Matt"}]])
+  (with-open [db (c/open-db *api*)]
+    (t/is (= #{[:ivan]} (c/q db {:find '[?e]
+                                 :where '[[(or-text-search :name #{"Ivan"}) [[?e ?v]]]]})))
+
+    (t/is (= #{[:ivan] [:fred]} (c/q db {:find '[?e]
+                                         :where '[[(or-text-search :name #{"Ivan" "Fred"}) [[?e ?v]]]]})))))
 
 (comment
   (do
