@@ -907,7 +907,7 @@
                                  true)}))]})
        (apply merge-with into {})))
 
-(defn- bound-result-for-var [index-snapshot ^VarBinding var-binding ^List join-keys]
+(defn bound-result-for-var [index-snapshot ^VarBinding var-binding ^List join-keys]
   (->> (.get join-keys (.result-index var-binding))
        (db/decode-value index-snapshot)))
 

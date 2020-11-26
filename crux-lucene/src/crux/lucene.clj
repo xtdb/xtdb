@@ -10,6 +10,7 @@
             [crux.system :as sys]
             [clojure.string])
   (:import crux.codec.EntityTx
+           crux.query.VarBinding
            java.io.Closeable
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
@@ -147,6 +148,8 @@
                                  (.-score d))) score-docs))))
 
 (defn- full-text [node index-snapshot entity-resolver-fn attr arg-v]
+  (when-not (string? arg-v)
+    (throw (IllegalArgumentException. "Lucene text search values must be String")))
   (with-open [search-results ^crux.api.ICursor (search node attr arg-v)]
     (->> (iterator-seq search-results)
          (mapcat (fn [[^Document doc score]]
@@ -160,10 +163,13 @@
 
 (defn- pred-constraint [attr vval {:keys [encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
   (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
-    (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn attr vval))))
+    (let [vval (if (instance? VarBinding vval)
+                 (q/bound-result-for-var index-snapshot vval join-keys)
+                 vval)]
+      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn attr vval)))))
 
 (defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v string?)) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
   (let [[attr vval] (rest (:arg-bindings pred-ctx))]
