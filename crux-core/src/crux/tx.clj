@@ -270,7 +270,7 @@
                        :av-count (->> (vals indexed-docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})))))
 
-(defn- with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
+(defn- with-tx-fn-args [[op & args :as evt] {:keys [document-store index-store]}]
   (case op
     :crux.tx/fn (let [[fn-eid arg-doc-id] args]
                   (cond-> [op fn-eid]
@@ -304,43 +304,46 @@
 
     (swap! !tx-events into tx-events)
 
-    (try
-      (db/index-docs forked-index-store (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
-      (let [forked-deps {:index-store forked-index-store
-                         :document-store forked-document-store
-                         :query-engine (assoc query-engine :index-store forked-index-store)}
-            abort? (loop [[tx-event & more-tx-events] tx-events]
-                     (when tx-event
-                       (let [{:keys [new-tx-events abort?]}
-                             (with-open [index-snapshot (db/open-index-snapshot forked-index-store)]
-                               (let [{:keys [pre-commit-fn tx-events evict-eids etxs docs]}
-                                     (index-tx-event (-> tx-event
-                                                         (with-tx-fn-args forked-deps))
-                                                     tx
-                                                     (assoc forked-deps :index-snapshot index-snapshot))]
-                                 (db/submit-docs forked-document-store docs)
+    (with-open [index-snapshot (db/open-index-snapshot index-store)]
+      (try
+        (let [forked-index-store (assoc forked-index-store :persistent-index-snapshot index-snapshot)]
+          (db/index-docs forked-index-store (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
 
-                                 (if (and pre-commit-fn (not (pre-commit-fn)))
-                                   {:abort? true}
+          (let [forked-deps {:index-store forked-index-store
+                             :document-store forked-document-store
+                             :query-engine (assoc query-engine :index-store forked-index-store)}
+                abort? (loop [[tx-event & more-tx-events] tx-events]
+                         (when tx-event
+                           (let [{new-tx-events :tx-events, :keys [abort? evict-eids etxs docs]}
+                                 (with-open [index-snapshot (db/open-index-snapshot forked-index-store)]
+                                   (let [{:keys [docs pre-commit-fn] :as res} (index-tx-event (-> tx-event
+                                                                                                  (with-tx-fn-args forked-deps))
+                                                                                              tx
+                                                                                              (assoc forked-deps :index-snapshot index-snapshot))]
+                                     (if (and pre-commit-fn (not (pre-commit-fn)))
+                                       {:abort? true
+                                        :docs docs}
+                                       res)))]
+                             (db/submit-docs forked-document-store docs)
 
-                                   (do
-                                     (doto forked-index-store
-                                       (db/index-docs docs)
-                                       (db/unindex-eids evict-eids)
-                                       (db/index-entity-txs tx etxs))
-                                     {:new-tx-events tx-events}))))]
-                         (or abort?
-                             (recur (concat new-tx-events more-tx-events))))))]
-        (when abort?
-          (reset! !state :abort-only))
+                             (when-not abort?
+                               (doto forked-index-store
+                                 (db/index-docs docs)
+                                 (db/unindex-eids evict-eids)
+                                 (db/index-entity-txs tx etxs)))
 
-        (not abort?))
+                             (or abort?
+                                 (recur (concat new-tx-events more-tx-events))))))]
+            (when abort?
+              (reset! !state :abort-only))
 
-      (catch Throwable e
-        (reset! !error e)
-        (reset! !state :abort-only)
-        (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
-        (throw e))))
+            (not abort?)))
+
+        (catch Throwable e
+          (reset! !error e)
+          (reset! !state :abort-only)
+          (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
+          (throw e)))))
 
   (commit [this]
     (when-not (compare-and-set! !state :open :committed)
