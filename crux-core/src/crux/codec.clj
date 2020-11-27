@@ -7,12 +7,15 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang APersistentMap APersistentSet IHashEq Keyword]
+           crux.codec.MathCodec
            java.io.Writer
+           java.math.BigDecimal
            [java.net MalformedURLException URI URL]
            [java.nio ByteBuffer ByteOrder]
            java.nio.charset.StandardCharsets
+           [java.time LocalDate LocalTime LocalDateTime Instant Duration]
            [java.util Base64 Date Map Set UUID]
-           [org.agrona DirectBuffer ExpandableArrayBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -82,9 +85,17 @@
 (def ^:private string-value-type-id 8)
 (def ^:private char-value-type-id 9)
 (def ^:private nippy-value-type-id 10)
+(def ^:private bigdec-value-type-id 11)
+(def ^:private localdate-value-type-id 12)
+(def ^:private localtime-value-type-id 13)
+(def ^:private localdatetime-value-type-id 14)
+(def ^:private instant-value-type-id 15)
+(def ^:private duration-value-type-id 16)
 
-(def nil-id-bytes (doto (byte-array id-size)
-                    (aset 0 (byte id-value-type-id))))
+(def nil-id-bytes
+  (doto (byte-array id-size)
+    (aset 0 (byte id-value-type-id))))
+
 (def nil-id-buffer
   (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
 
@@ -229,6 +240,72 @@
                 (.putByte to (inc idx) (unchecked-byte (+ offset b)))
                 (recur (inc idx)))))))))
 
+  BigDecimal
+  (value->buffer [this ^MutableDirectBuffer to]
+    (let [this (.stripTrailingZeros this)
+          signum (.signum this)]
+
+      (-> to
+          (doto (.putByte 0 bigdec-value-type-id))
+          (doto (.putByte value-type-id-size (inc (.signum this)))))
+
+      (if (zero? signum)
+        (-> to (mem/limit-buffer (+ value-type-id-size Byte/BYTES)))
+
+        (let [bcd-len (MathCodec/putBinaryCodedDecimal signum
+                                                       (str (.abs (.unscaledValue this)))
+                                                       to
+                                                       (+ value-type-id-size Byte/BYTES Integer/BYTES))]
+          (-> to
+              (doto (.putInt (+ value-type-id-size Byte/BYTES)
+                             (MathCodec/encodeExponent this)
+                             ByteOrder/BIG_ENDIAN))
+              (mem/limit-buffer (+ value-type-id-size Byte/BYTES Integer/BYTES bcd-len)))))))
+
+  LocalDate
+  (value->buffer [this ^MutableDirectBuffer to]
+    (-> to
+        (doto (.putByte 0 localdate-value-type-id))
+        (doto (.putInt value-type-id-size (-> (.getYear this) (bit-xor Integer/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
+        (doto (.putByte (+ value-type-id-size Integer/BYTES) (.getMonthValue this)))
+        (doto (.putByte (+ value-type-id-size Integer/BYTES Byte/BYTES) (.getDayOfMonth this)))
+        (mem/limit-buffer (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES))))
+
+  LocalTime
+  (value->buffer [this ^MutableDirectBuffer to]
+    (-> to
+        (doto (.putByte 0 localtime-value-type-id))
+        (doto (.putLong value-type-id-size (.toNanoOfDay this) ByteOrder/BIG_ENDIAN))
+        (mem/limit-buffer (+ value-type-id-size Long/BYTES))))
+
+  LocalDateTime
+  (value->buffer [this ^MutableDirectBuffer to]
+    (-> to
+        (doto (.putByte 0 localdatetime-value-type-id))
+        (doto (.putInt value-type-id-size (-> (.getYear this) (bit-xor Integer/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
+        (doto (.putByte (+ value-type-id-size Integer/BYTES) (.getMonthValue this)))
+        (doto (.putByte (+ value-type-id-size Integer/BYTES Byte/BYTES) (.getDayOfMonth this)))
+        (doto (.putLong (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES)
+                        (.toNanoOfDay (.toLocalTime this))
+                        ByteOrder/BIG_ENDIAN))
+        (mem/limit-buffer (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES Long/BYTES))))
+
+  Instant
+  (value->buffer [this ^MutableDirectBuffer to]
+    (-> to
+        (doto (.putByte 0 instant-value-type-id))
+        (doto (.putLong value-type-id-size (-> (.getEpochSecond this) (bit-xor Long/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
+        (doto (.putInt (+ value-type-id-size Long/BYTES) (.getNano this) ByteOrder/BIG_ENDIAN))
+        (mem/limit-buffer (+ value-type-id-size Long/BYTES Integer/BYTES))))
+
+  Duration
+  (value->buffer [this ^MutableDirectBuffer to]
+    (-> to
+        (doto (.putByte 0 duration-value-type-id))
+        (doto (.putLong value-type-id-size (-> (.getSeconds this) (bit-xor Long/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
+        (doto (.putInt (+ value-type-id-size Long/BYTES) (.getNano this) ByteOrder/BIG_ENDIAN))
+        (mem/limit-buffer (+ value-type-id-size Long/BYTES Integer/BYTES))))
+
   Class
   (value->buffer [this ^MutableDirectBuffer to]
     (doto (id-function to (mem/->nippy-buffer this))
@@ -292,23 +369,66 @@
 (defn- decode-nippy [^DirectBuffer buffer]
   (mem/<-nippy-buffer (mem/slice-buffer buffer value-type-id-size (- (.capacity buffer) value-type-id-size))))
 
+(defn- decode-bigdec [^DirectBuffer buffer]
+  (let [signum (dec (.getByte buffer value-type-id-size))]
+    (if (zero? signum)
+      0M
+
+      (let [prefix-len (+ value-type-id-size Byte/BYTES Integer/BYTES)
+            decoded-bcd (MathCodec/getBinaryCodedDecimal
+                         (-> buffer
+                             (mem/slice-buffer prefix-len (- (.capacity buffer) prefix-len)))
+                         signum)]
+        (MathCodec/decodeBigDecimal signum
+                                    (.getInt buffer (+ value-type-id-size Byte/BYTES) ByteOrder/BIG_ENDIAN)
+                                    decoded-bcd)))))
+
+(defn- decode-localdate [^DirectBuffer buffer]
+  (LocalDate/of (-> (.getInt buffer value-type-id-size ByteOrder/BIG_ENDIAN) (bit-xor Integer/MIN_VALUE))
+                (.getByte buffer (+ value-type-id-size Integer/BYTES))
+                (.getByte buffer (+ value-type-id-size Integer/BYTES Byte/BYTES))))
+
+(defn- decode-localtime [^DirectBuffer buffer]
+  (LocalTime/ofNanoOfDay (.getLong buffer value-type-id-size ByteOrder/BIG_ENDIAN)))
+
+(defn- decode-localdatetime [^DirectBuffer buffer]
+  (LocalDateTime/of
+   (LocalDate/of (-> (.getInt buffer value-type-id-size ByteOrder/BIG_ENDIAN) (bit-xor Integer/MIN_VALUE))
+                 (.getByte buffer (+ value-type-id-size Integer/BYTES))
+                 (.getByte buffer (+ value-type-id-size Integer/BYTES Byte/BYTES)))
+   (LocalTime/ofNanoOfDay (.getLong buffer (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES) ByteOrder/BIG_ENDIAN))))
+
+(defn- decode-instant [^DirectBuffer buffer]
+  (Instant/ofEpochSecond (-> (.getLong buffer value-type-id-size ByteOrder/BIG_ENDIAN) (bit-xor Long/MIN_VALUE))
+                         (.getInt buffer (+ value-type-id-size Long/BYTES) ByteOrder/BIG_ENDIAN)))
+
+(defn- decode-duration [^DirectBuffer buffer]
+  (Duration/ofSeconds (-> (.getLong buffer value-type-id-size ByteOrder/BIG_ENDIAN) (bit-xor Long/MIN_VALUE))
+                      (.getInt buffer (+ value-type-id-size Long/BYTES) ByteOrder/BIG_ENDIAN)))
+
 (defn can-decode-value-buffer? [^DirectBuffer buffer]
   (when (and buffer (pos? (.capacity buffer)))
     (case (.getByte buffer 0)
-      (3 4 5 6 7 8 9 10) true
-      false)))
+      (0 1 2) false
+      true)))
 
 (defn decode-value-buffer [^DirectBuffer buffer]
   (let [type-id (.getByte buffer 0)]
     (case type-id
-      3 nil ;; nil-value-type-id
-      4 (decode-boolean buffer) ;; boolean-value-type-id
-      5 (decode-long buffer) ;; long-value-type-id
-      6 (decode-double buffer) ;; double-value-type-id
-      7 (Date. (decode-long buffer)) ;; date-value-type-id
-      8 (decode-string buffer) ;; string-value-type-id
-      9 (decode-char buffer) ;; char-value-type-id
-      10 (decode-nippy buffer) ;; nippy-value-type-id
+      3 nil ; nil-value-type-id
+      4 (decode-boolean buffer) ; boolean-value-type-id
+      5 (decode-long buffer) ; long-value-type-id
+      6 (decode-double buffer) ; double-value-type-id
+      7 (Date. (decode-long buffer)) ; date-value-type-id
+      8 (decode-string buffer) ; string-value-type-id
+      9 (decode-char buffer) ; char-value-type-id
+      10 (decode-nippy buffer) ; nippy-value-type-id
+      11 (decode-bigdec buffer) ; bigdec-value-type-id
+      12 (decode-localdate buffer) ; localdate-value-type-id
+      13 (decode-localtime buffer) ; localtime-value-type-id
+      14 (decode-localdatetime buffer) ; localdatetime-value-type-id
+      15 (decode-instant buffer) ; instant-value-type-id
+      16 (decode-duration buffer) ; duration-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 
