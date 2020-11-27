@@ -5,10 +5,8 @@
             [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
-            [crux.memory :as mem]
             [crux.query :as q]
-            [crux.system :as sys]
-            [clojure.string])
+            [crux.system :as sys])
   (:import crux.codec.EntityTx
            crux.query.VarBinding
            java.io.Closeable
@@ -18,7 +16,6 @@
            [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
-           org.apache.lucene.search.Query
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery]
            [org.apache.lucene.store Directory FSDirectory]))
@@ -29,9 +26,6 @@
   java.io.Closeable
   (close [this]
     (cio/try-close directory)))
-
-(defn- id->stored-bytes [eid]
-  (mem/->on-heap (cc/->value-buffer eid)))
 
 (defn- ^String ->hash-str [eid]
   (str (cc/new-id eid)))
@@ -45,7 +39,7 @@
 
 (defrecord DocumentId [a v])
 
-(defn- ^String keyword->k [k]
+(defn ^String keyword->k [k]
   (subs (str k) 1))
 
 (def ^:const ^:private field-crux-id "_crux_id")
@@ -76,10 +70,9 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
-(defn index-docs! [document-store lucene-store docs]
-  (with-open [index-writer (index-writer lucene-store)]
-    (doseq [d docs, t (crux-doc->triples d)]
-      (.updateDocument index-writer (triple->term t) (triple->doc t)))))
+(defn index-docs! [^IndexWriter index-writer docs]
+  (doseq [d (vals docs), t (crux-doc->triples d)]
+    (.updateDocument index-writer (triple->term t) (triple->doc t))))
 
 (defn- evict! [index-store, node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
@@ -141,25 +134,31 @@
                          (vector (.doc index-searcher (.-doc d))
                                  (.-score d))) score-docs))))
 
-(defn- full-text [node index-snapshot entity-resolver-fn query]
-  (with-open [search-results ^crux.api.ICursor (search node query)]
-    (->> (iterator-seq search-results)
-         (mapcat (fn [[^Document doc score]]
-                   (let [v (.get ^Document doc field-crux-val)
-                         a (keyword (.get ^Document doc field-crux-attr))]
-                     (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
-                       [(db/decode-value index-snapshot eid) v a score]))))
-         (into []))))
+(defn- resolve-search-results-a-v
+  "Given search results each containing a single A/V pair document,
+  perform a temporal resolution against A/V to resolve the eid."
+  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
+  (mapcat (fn [[^Document doc score]]
+            (let [v (.get ^Document doc field-crux-val)
+                  a (keyword (.get ^Document doc field-crux-attr))]
+              (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
+                [(db/decode-value index-snapshot eid) v a score])))
+          search-results))
 
-(defn pred-constraint [query-builder {:keys [arg-bindings encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
-  (fn pred-get-attr-constraint [index-snapshot {:keys [entity-resolver-fn] :as db} idx-id->idx join-keys]
+(defn pred-constraint [query-builder results-resolver {:keys [arg-bindings encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
+  (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
     (let [arg-bindings (map (fn [a]
                               (if (instance? VarBinding a)
                                 (q/bound-result-for-var index-snapshot a join-keys)
                                 a))
                             (rest arg-bindings))
-          query (query-builder (:analyzer *lucene-store*) arg-bindings)]
-      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (full-text *lucene-store* index-snapshot entity-resolver-fn query)))))
+          query (query-builder (:analyzer *lucene-store*) arg-bindings)
+          tuples (with-open [search-results ^crux.api.ICursor (search *lucene-store* query)]
+                   (->> search-results
+                        iterator-seq
+                        (results-resolver index-snapshot db)
+                        (into [])))]
+      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
 
 (defn ^Query build-query
   "Standard build query fn, taking a single field/val lucene term string."
@@ -175,7 +174,7 @@
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
-  (pred-constraint #'build-query pred-ctx))
+  (pred-constraint #'build-query #'resolve-search-results-a-v pred-ctx))
 
 (defn ^Query build-query-wildcard
   "Wildcard query builder"
@@ -191,7 +190,7 @@
   (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
-  (pred-constraint #'build-query-wildcard pred-ctx))
+  (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v pred-ctx))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
@@ -206,7 +205,7 @@
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
                :index-store :crux/index-store}}
-  [{:keys [^Path db-dir index-store document-store bus] :as opts}]
+  [{:keys [^Path db-dir index-docs index-store document-store bus] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
         lucene-store (LuceneNode. directory analyzer)]
@@ -221,8 +220,9 @@
                     :crux.tx/indexing-tx-pre-commit
                     (index-tx! lucene-store (:crux.tx/submitted-tx ev))
                     :crux.tx/indexed-docs
-                    (let [docs (vals (db/fetch-docs document-store (:doc-ids ev)))]
-                      (index-docs! document-store lucene-store docs))
+                    (let [docs (db/fetch-docs document-store (:doc-ids ev))]
+                      (with-open [index-writer (index-writer lucene-store)]
+                        (index-docs index-writer docs)))
                     :crux.tx/unindexing-eids
                     (evict! index-store lucene-store (:eids ev)))))
     lucene-store))

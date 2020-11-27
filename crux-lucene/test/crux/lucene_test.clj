@@ -304,7 +304,7 @@
   (s/cat :pred-fn #{'or-text-search} :args (s/spec (s/cat :attr keyword? :v (s/coll-of string?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'or-text-search [_ pred-ctx]
-  (l/pred-constraint #'build-or-query pred-ctx))
+  (l/pred-constraint #'build-or-query #'l/resolve-search-results-a-v pred-ctx))
 
 (t/deftest test-or-text-search
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
