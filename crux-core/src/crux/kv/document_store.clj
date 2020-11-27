@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.kv.document-store
   (:require [crux.codec :as c]
+            [crux.io :as cio]
             [crux.db :as db]
             [crux.document-store :as ds]
             [crux.memory :as mem]
@@ -37,15 +38,16 @@
 (defrecord KvDocumentStore [kv-store]
   db/DocumentStore
   (fetch-docs [this ids]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
-      (persistent!
-       (reduce
-        (fn [acc id]
-          (let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))]
-            (if-let [doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
-              (assoc! acc id doc)
-              acc)))
-        (transient {}) ids))))
+    (cio/with-nippy-thaw-all
+      (with-open [snapshot (kv/new-snapshot kv-store)]
+        (persistent!
+         (reduce
+          (fn [acc id]
+            (let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))]
+              (if-let [doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
+                (assoc! acc id doc)
+                acc)))
+          (transient {}) ids)))))
 
   (submit-docs [this id-and-docs]
     (kv/store kv-store (for [[id doc] id-and-docs]

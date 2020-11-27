@@ -2,6 +2,7 @@
   (:require [clj-http.client :as http]
             [taoensso.nippy :as nippy]
             [crux.db :as db]
+            [crux.io :as cio]
             [crux.system :as sys]
             [crux.document-store :as ds]))
 
@@ -34,12 +35,13 @@
          (run! deref)))
 
   (fetch-docs [_ docs]
-    (reduce
-     #(if-let [doc (get-blob sas-token storage-account container (str %2))]
-        (assoc %1 %2 (nippy/thaw doc))
-        %1)
-     {}
-     docs)))
+    (cio/with-nippy-thaw-all
+      (reduce
+       #(if-let [doc (get-blob sas-token storage-account container (str %2))]
+          (assoc %1 %2 (nippy/thaw doc))
+          %1)
+       {}
+       docs))))
 
 (defn ->document-store {::sys/deps {:document-cache 'crux.cache/->cache}
                         ::sys/args {:sas-token {:required? true

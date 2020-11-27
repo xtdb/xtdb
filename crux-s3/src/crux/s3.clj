@@ -1,5 +1,6 @@
 (ns crux.s3
   (:require [crux.db :as db]
+            [crux.io :as cio]
             [crux.document-store :as ds]
             [crux.node :as n]
             [clojure.spec.alpha :as s]
@@ -91,12 +92,13 @@
                         (MapEntry/create id (AsyncRequestBody/fromBytes (.freeze configurator doc))))))
 
   (fetch-docs [this ids]
-    (->> (get-objects this (for [id ids]
-                             (MapEntry/create id (AsyncResponseTransformer/toBytes))))
+    (cio/with-nippy-thaw-all
+      (->> (get-objects this (for [id ids]
+                               (MapEntry/create id (AsyncResponseTransformer/toBytes))))
 
-         (into {} (map (fn [[id ^ResponseBytes resp]]
-                         [id (-> (.asByteArray ^ResponseBytes resp)
-                                 (->> (.thaw configurator)))])))))
+           (into {} (map (fn [[id ^ResponseBytes resp]]
+                           [id (-> (.asByteArray ^ResponseBytes resp)
+                                   (->> (.thaw configurator)))]))))))
 
   Closeable
   (close [_]

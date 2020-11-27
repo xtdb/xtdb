@@ -148,47 +148,55 @@
 
 (def ^:const default-external-sort-part-size (* 1024 1024))
 
+(defn with-nippy-thaw-all* [f]
+  (binding [nippy/*thaw-serializable-allowlist* #{"*"}]
+    (f)))
+
+(defmacro with-nippy-thaw-all [& body]
+  `(with-nippy-thaw-all* (fn [] ~@body)))
+
 (defn external-sort
   ([seq]
    (external-sort compare seq))
   ([comp seq]
    (external-sort comp seq default-external-sort-part-size))
   ([comp seq external-sort-part-size]
-   (let [parts (partition-all external-sort-part-size seq)]
-     (if (nil? (second parts))
-       (sort comp (first parts))
-       (let [files (->> parts
-                        (reduce
-                         (fn [acc part]
-                           (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
-                                        (.deleteOnExit))]
-                             (with-open [out (DataOutputStream. (io/output-stream file))]
-                               (doseq [x (sort comp part)]
-                                 (nippy/freeze-to-out! out x)))
-                             (conj acc file)))
-                         []))
-             seq+cleaner-actions (for [^File file files]
-                                   (let [in (DataInputStream. (io/input-stream file))
-                                         cleaner-action (fn []
-                                                          (.close in)
-                                                          (.delete file))
-                                         seq ((fn step []
-                                                (lazy-seq
-                                                 (try
-                                                   (when-let [x (nippy/thaw-from-in! in)]
-                                                     (cons x (step)))
-                                                   (catch Exception e
-                                                     (cleaner-action)
-                                                     (if (or (instance? IOException e)
-                                                             (instance? IOException (.getCause e)))
-                                                       nil
-                                                       (throw e)))))))]
-                                     [seq cleaner-action]))
-             pq (->> (map first seq+cleaner-actions)
-                     (new-merge-sort-priority-queue comp))]
-         (doseq [[_ cleaner-action] seq+cleaner-actions]
-           (register-cleaner pq cleaner-action))
-         (merge-sort-priority-queue->seq pq))))))
+   (with-nippy-thaw-all
+     (let [parts (partition-all external-sort-part-size seq)]
+       (if (nil? (second parts))
+         (sort comp (first parts))
+         (let [files (->> parts
+                          (reduce
+                           (fn [acc part]
+                             (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
+                                          (.deleteOnExit))]
+                               (with-open [out (DataOutputStream. (io/output-stream file))]
+                                 (doseq [x (sort comp part)]
+                                   (nippy/freeze-to-out! out x)))
+                               (conj acc file)))
+                           []))
+               seq+cleaner-actions (for [^File file files]
+                                     (let [in (DataInputStream. (io/input-stream file))
+                                           cleaner-action (fn []
+                                                            (.close in)
+                                                            (.delete file))
+                                           seq ((fn step []
+                                                  (lazy-seq
+                                                   (try
+                                                     (when-let [x (nippy/thaw-from-in! in)]
+                                                       (cons x (step)))
+                                                     (catch Exception e
+                                                       (cleaner-action)
+                                                       (if (or (instance? IOException e)
+                                                               (instance? IOException (.getCause e)))
+                                                         nil
+                                                         (throw e)))))))]
+                                       [seq cleaner-action]))
+               pq (->> (map first seq+cleaner-actions)
+                       (new-merge-sort-priority-queue comp))]
+           (doseq [[_ cleaner-action] seq+cleaner-actions]
+             (register-cleaner pq cleaner-action))
+           (merge-sort-priority-queue->seq pq)))))))
 
 (defmacro with-read-lock [lock & body]
   `(let [^StampedLock lock# ~lock

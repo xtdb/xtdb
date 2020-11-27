@@ -659,7 +659,8 @@
       (or (.get temp-hash-cache value-buffer)
           (let [i @decode-value-iterator-delay]
             (when (advance-iterator-to-hash-cache-value i value-buffer)
-              (some-> (kv/value i) (mem/<-nippy-buffer)))))))
+              (cio/with-nippy-thaw-all
+                (some-> (kv/value i) (mem/<-nippy-buffer))))))))
 
   (encode-value [this value]
     (let [value-buffer (c/->value-buffer value)]
