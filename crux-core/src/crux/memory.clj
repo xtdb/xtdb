@@ -199,6 +199,11 @@
    (some-> b (ByteUtils/hexToBuffer to))))
 
 (defn compare-buffers
+  {:inline (fn [a b & [max-length]]
+             (if max-length
+               `(ByteUtils/compareBuffers ~a ~b ~max-length)
+               `(ByteUtils/compareBuffers ~a ~b)))
+   :inline-arities #{2 3}}
   (^long [^DirectBuffer a ^DirectBuffer b]
    (ByteUtils/compareBuffers a b))
   (^long [^DirectBuffer a ^DirectBuffer b ^long max-length]
@@ -208,6 +213,11 @@
   ByteUtils/UNSIGNED_BUFFER_COMPARATOR)
 
 (defn buffers=?
+  {:inline (fn [a b & [max-length]]
+             (if max-length
+               `(ByteUtils/equalBuffers ~a ~b ~max-length)
+               `(ByteUtils/equalBuffers ~a ~b)))
+   :inline-arities #{2 3}}
   ([^DirectBuffer a ^DirectBuffer b]
    (ByteUtils/equalBuffers a b))
   ([^DirectBuffer a ^DirectBuffer b ^long max-length]
