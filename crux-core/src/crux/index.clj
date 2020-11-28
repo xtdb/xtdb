@@ -1,9 +1,8 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
             [crux.memory :as mem])
-  (:import [crux.index IndexStoreIndexState NAryJoinLayeredVirtualIndexState NAryWalkState
-            RelationVirtualIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState UnaryJoinIteratorsThunkState]
-           clojure.lang.Box
+  (:import [crux.index UnaryJoinIteratorState UnaryJoinIteratorsThunkState]
+           [clojure.lang Box IDeref]
            java.util.function.Function
            [java.util Collection Comparator Iterator NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
@@ -12,26 +11,30 @@
 
 ;; Index Store
 
-(defrecord IndexStoreIndex [seek-fn ^IndexStoreIndexState state]
+(deftype IndexStoreIndex [seek-fn ^:unsynchronized-mutable xs ^:unsynchronized-mutable x]
   db/Index
   (seek-values [this k]
     (let [[v & vs] (seq (seek-fn k))]
-      (set! (.-seq state) vs)
-      (set! (.-key state) v)
+      (set! xs vs)
+      (set! x v)
       v))
 
   (next-values [this]
-    (when-let [[v & vs] (.-seq state)]
-      (set! (.-seq state) vs)
-      (set! (.-key state) v)
-      v)))
+    (when-let [[v & vs] xs]
+      (set! xs vs)
+      (set! x v)
+      v))
+
+  IDeref
+  (deref [_]
+    x))
 
 (defn new-index-store-index ^crux.index.IndexStoreIndex [seek-fn]
-  (->IndexStoreIndex seek-fn (IndexStoreIndexState. nil nil)))
+  (->IndexStoreIndex seek-fn nil nil))
 
 ;; Range Constraints
 
-(defrecord PredicateVirtualIndex [idx pred seek-k-fn]
+(deftype PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
   (seek-values [this k]
     (when-let [v (db/seek-values idx (seek-k-fn k))]
@@ -85,7 +88,7 @@
                                           k
                                           (.val min-v))))))
 
-(defrecord GreaterThanVirtualIndex [idx]
+(deftype GreaterThanVirtualIndex [idx]
   db/Index
   (seek-values [this k]
     (or (db/seek-values idx k)
@@ -160,10 +163,10 @@
       m
       (+ m div))))
 
-(defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
+(deftype UnaryJoinVirtualIndex [indexes ^:unsynchronized-mutable thunk]
   db/Index
   (seek-values [this k]
-    (set! (.thunk state)
+    (set! thunk
           (fn []
             (let [iterators (for [idx indexes]
                               (new-unary-join-iterator-state idx (db/seek-values idx k)))]
@@ -175,8 +178,8 @@
     (db/next-values this))
 
   (next-values [this]
-    (when-let [iterators-thunk (.thunk state)]
-      (when-let [iterators-thunk ^UnaryJoinIteratorsThunkState (iterators-thunk)]
+    (when thunk
+      (when-let [iterators-thunk ^UnaryJoinIteratorsThunkState (thunk)]
         (let [iterators ^objects (.iterators iterators-thunk)
               index (.index iterators-thunk)
               iterator-state ^UnaryJoinIteratorState (aget iterators index)
@@ -184,7 +187,7 @@
               max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
               match? (mem/buffers=? (.key iterator-state) max-k)
               idx (.idx iterator-state)]
-          (set! (.thunk state)
+          (set! thunk
                 (fn []
                   (let [v (if match?
                             (db/next-values idx)
@@ -212,32 +215,32 @@
 (defn new-unary-join-virtual-index [indexes]
   (if (= 1 (count indexes))
     (first indexes)
-    (->UnaryJoinVirtualIndex indexes (UnaryJoinIteratorsThunkFnState. nil))))
+    (->UnaryJoinVirtualIndex indexes nil)))
 
-(defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes ^NAryJoinLayeredVirtualIndexState state]
+(deftype NAryJoinLayeredVirtualIndex [unary-join-indexes ^:unsynchronized-mutable ^long depth]
   db/Index
   (seek-values [this k]
-    (db/seek-values (nth unary-join-indexes (.depth state) nil) k))
+    (db/seek-values (nth unary-join-indexes depth nil) k))
 
   (next-values [this]
-    (db/next-values (nth unary-join-indexes (.depth state) nil)))
+    (db/next-values (nth unary-join-indexes depth nil)))
 
   db/LayeredIndex
   (open-level [this]
-    (db/open-level (nth unary-join-indexes (.depth state) nil))
-    (set! (.depth state) (inc (.depth state)))
+    (db/open-level (nth unary-join-indexes depth nil))
+    (set! depth (inc depth))
     nil)
 
   (close-level [this]
-    (db/close-level (nth unary-join-indexes (dec (long (.depth state))) nil))
-    (set! (.depth state) (dec (.depth state)))
+    (db/close-level (nth unary-join-indexes (dec depth) nil))
+    (set! depth (dec depth))
     nil)
 
   (max-depth [this]
     (count unary-join-indexes)))
 
 (defn new-n-ary-join-layered-virtual-index [indexes]
-  (->NAryJoinLayeredVirtualIndex indexes (NAryJoinLayeredVirtualIndexState. 0)))
+  (->NAryJoinLayeredVirtualIndex indexes 0))
 
 (defn- build-constrained-result [constrain-result-fn result-stack max-k]
   (let [max-ks (last result-stack)
@@ -245,38 +248,38 @@
     (when (constrain-result-fn join-keys)
       (conj result-stack join-keys))))
 
-(defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn ^NAryWalkState state]
+(deftype NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn  ^:unsynchronized-mutable result-stack ^:unsynchronized-mutable last-result]
   db/Index
   (seek-values [this k]
     (when-let [v (db/seek-values n-ary-index k)]
-      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) v)]
-        (do (set! (.last state) result)
+      (if-let [result (build-constrained-result constrain-result-fn result-stack v)]
+        (do (set! last-result result)
             v)
         (db/next-values this))))
 
   (next-values [this]
     (when-let [v (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) v)]
-        (do (set! (.last state) result)
+      (if-let [result (build-constrained-result constrain-result-fn result-stack v)]
+        (do (set! last-result result)
             v)
         (recur))))
 
   db/LayeredIndex
   (open-level [this]
     (db/open-level n-ary-index)
-    (set! (.result-stack state) (.last state))
+    (set! result-stack last-result)
     nil)
 
   (close-level [this]
     (db/close-level n-ary-index)
-    (set! (.result-stack state) (pop (.result-stack state)))
+    (set! result-stack (pop result-stack))
     nil)
 
   (max-depth [this]
     (db/max-depth n-ary-index)))
 
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
-  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (NAryWalkState. [] nil)))
+  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn [] nil))
 
 (defn layered-idx->seq [idx]
   (when idx
@@ -302,56 +305,70 @@
       (when (pos? max-depth)
         (step [] 0 true)))))
 
-(defrecord SortedVirtualIndex [^NavigableSet s ^SortedVirtualIndexState state]
+(deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
   (seek-values [this k]
-    (set! (.iterator state) (.iterator (.tailSet s (or k mem/empty-buffer))))
+    (set! iterator (.iterator (.tailSet s (or k mem/empty-buffer))))
     (db/next-values this))
 
   (next-values [this]
-    (when-let [iterator ^Iterator (.iterator state)]
-      (when (.hasNext iterator)
-        (.next iterator)))))
+    (when (and iterator (.hasNext iterator))
+      (.next iterator))))
 
 (defn- new-sorted-virtual-index [s]
-  (->SortedVirtualIndex s (SortedVirtualIndexState. nil)))
+  (->SortedVirtualIndex s nil))
 
-(defrecord RelationVirtualIndex [max-depth ^RelationVirtualIndexState state encode-value-fn]
+(definterface IRelationVirtualIndexUpdate
+  (^void updateIndex [tree indexes]))
+
+(deftype RelationVirtualIndex [max-depth
+                               encode-value-fn
+                               ^:unsynchronized-mutable tree
+                               ^:unsynchronized-mutable path
+                               ^:unsynchronized-mutable indexes
+                               ^:unsynchronized-mutable key]
   db/Index
   (seek-values [this k]
-    (when-let [k (db/seek-values (last (.indexes state)) (or k mem/empty-buffer))]
-      (set! (.key state) k)
+    (when-let [k (db/seek-values (last indexes) (or k mem/empty-buffer))]
+      (set! key k)
       k))
 
   (next-values [this]
-    (when-let [k (db/next-values (last (.indexes state)))]
-      (set! (.key state) k)
+    (when-let [k (db/next-values (last indexes))]
+      (set! key k)
       k))
 
   db/LayeredIndex
   (open-level [this]
-    (when (= max-depth (count (.path state)))
+    (when (= max-depth (count path))
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (let [path (conj (.path state) (.key state))
-          level (count path)]
-      (set! (.path state) path)
-      (set! (.indexes state) (conj (.indexes state)
-                                   (some->  ^NavigableMap (get-in (.tree state) path)
-                                            (.navigableKeySet)
-                                            (new-sorted-virtual-index))))
-      (set! (.key state) nil))
+    (let [new-path (conj path key)
+          level (count new-path)]
+      (set! path new-path)
+      (set! indexes (conj indexes
+                          (some->  ^NavigableMap (get-in tree new-path)
+                                   (.navigableKeySet)
+                                   (new-sorted-virtual-index))))
+      (set! key nil))
     nil)
 
   (close-level [this]
-    (when (zero? (count (.path state)))
+    (when (zero? (count path))
       (throw (IllegalStateException. "Cannot close level at root.")))
-    (set! (.path state) (pop (.path state)))
-    (set! (.indexes state) (pop (.indexes state)))
-    (set! (.key state) nil)
+    (set! path (pop path))
+    (set! indexes (pop indexes))
+    (set! key nil)
     nil)
 
   (max-depth [_]
-    max-depth))
+    max-depth)
+
+  IRelationVirtualIndexUpdate
+  (updateIndex [_ new-tree new-indexes]
+    (set! tree new-tree)
+    (set! path [])
+    (set! indexes new-indexes)
+    (set! key nil)))
 
 (defn- tree-map-put-in [^TreeMap m [k & ks] v]
   (if ks
@@ -379,21 +396,17 @@
                                                   tuples
                                                   (doto (TreeSet. mem/buffer-comparator)
                                                     (.addAll (mapv encode-value-fn tuples)))))
-                      (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))
-         state ^RelationVirtualIndexState (.state relation)]
-     (set! (.tree state) tree)
-     (set! (.path state) [])
-     (set! (.indexes state) [root-level])
-     (set! (.key state) nil)
+                      (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
+     (.updateIndex relation tree [root-level])
      relation)))
 
 (defn new-relation-virtual-index [tuples max-depth encode-value-fn]
   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
-                                                          (RelationVirtualIndexState. nil nil nil nil)
-                                                          encode-value-fn)
+                                                          encode-value-fn
+                                                          nil nil nil nil)
                                   tuples))
 
-(defrecord SingletonVirtualIndex [v]
+(deftype SingletonVirtualIndex [v]
   db/Index
   (seek-values [_ k]
     (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))

@@ -548,7 +548,7 @@
                      (db/av nested-index-snapshot attr-buffer k)))
             e-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/ave nested-index-snapshot attr-buffer (.key ^IndexStoreIndexState (.state v-idx)) k entity-resolver-fn)))]
+                     (db/ave nested-index-snapshot attr-buffer @v-idx k entity-resolver-fn)))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
       (let [e-idx (idx/new-index-store-index
@@ -556,7 +556,7 @@
                      (db/ae nested-index-snapshot attr-buffer k)))
             v-idx (idx/new-index-store-index
                    (fn [k]
-                     (db/aev nested-index-snapshot attr-buffer (.key ^IndexStoreIndexState (.state e-idx)) k entity-resolver-fn)))]
+                     (db/aev nested-index-snapshot attr-buffer @e-idx k entity-resolver-fn)))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
 
