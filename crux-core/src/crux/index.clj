@@ -159,10 +159,12 @@
 
 (defn- long-mod
   {:inline (fn [num div]
-             `(let [m# (rem ~num ~div)]
-                (if (or (zero? m#) (= (pos? ~num) (pos? ~div)))
+             `(let [num# ~num
+                    div# ~div
+                    m# (rem num# div#)]
+                (if (or (zero? m#) (= (pos? num#) (pos? div#)))
                   m#
-                  (+ m# ~div))))
+                  (+ m# div#))))
    :inline-arities #{2}}
   ^long [^long num ^long div]
   (let [m (rem num div)]
