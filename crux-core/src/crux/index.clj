@@ -157,7 +157,14 @@
 (defn- new-unary-join-iterator-state [idx value]
   (UnaryJoinIteratorState. idx value))
 
-(defn- long-mod ^long [^long num ^long div]
+(defn- long-mod
+  {:inline (fn [num div]
+             `(let [m# (rem ~num ~div)]
+                (if (or (zero? m#) (= (pos? ~num) (pos? ~div)))
+                  m#
+                  (+ m# ~div))))
+   :inline-arities #{2}}
+  ^long [^long num ^long div]
   (let [m (rem num div)]
     (if (or (zero? m) (= (pos? num) (pos? div)))
       m
@@ -189,13 +196,12 @@
               idx (.idx iterator-state)]
           (set! thunk
                 (fn []
-                  (let [v (if match?
-                            (db/next-values idx)
-                            (db/seek-values idx max-k))]
-                    (when v
-                      (set! (.-key iterator-state) v)
-                      (set! (.index iterators-thunk) (long-mod (inc index) (alength iterators)))
-                      iterators-thunk))))
+                  (when-let [v (if match?
+                                 (db/next-values idx)
+                                 (db/seek-values idx max-k))]
+                    (set! (.key iterator-state) v)
+                    (set! (.index iterators-thunk) (long-mod (inc index) (alength iterators)))
+                    iterators-thunk)))
           (if match?
             max-k
             (recur))))))
