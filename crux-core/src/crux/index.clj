@@ -35,6 +35,11 @@
   (deref [_]
     x))
 
+(defn new-deref-index ^crux.index.DerefIndex [idx]
+  (if (instance? DerefIndex idx)
+    idx
+    (->DerefIndex idx nil)))
+
 (deftype SeekFnIndex [seek-fn ^:unsynchronized-mutable xs]
   db/Index
   (seek-values [this k]
@@ -47,8 +52,8 @@
       (set! xs vs)
       v)))
 
-(defn new-index-store-index ^crux.index.DerefIndex [seek-fn]
-  (->DerefIndex (->SeekFnIndex seek-fn nil) nil))
+(defn new-seek-fn-index ^crux.index.SeekFnIndex [seek-fn]
+  (->SeekFnIndex seek-fn nil))
 
 ;; Range Constraints
 
@@ -240,7 +245,7 @@
     (first indexes)
     (->UnaryJoinVirtualIndex
      (object-array (for [idx indexes]
-                     (->DerefIndex idx nil)))
+                     (new-deref-index idx)))
      0
      nil)))
 
