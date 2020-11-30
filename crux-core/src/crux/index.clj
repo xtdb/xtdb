@@ -9,28 +9,46 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; Index Store
-
-(deftype IndexStoreIndex [seek-fn ^:unsynchronized-mutable xs ^:unsynchronized-mutable x]
+(deftype DerefIndex [idx ^:unsynchronized-mutable x]
   db/Index
   (seek-values [this k]
-    (let [[v & vs] (seq (seek-fn k))]
-      (set! xs vs)
+    (let [v (db/seek-values idx k)]
       (set! x v)
       v))
 
   (next-values [this]
-    (when-let [[v & vs] xs]
-      (set! xs vs)
+    (let [v (db/next-values idx)]
       (set! x v)
       v))
+
+  db/LayeredIndex
+  (open-level [_]
+    (db/open-level idx))
+
+  (close-level [_]
+    (db/close-level idx))
+
+  (max-depth [_]
+    (db/max-depth idx))
 
   IDeref
   (deref [_]
     x))
 
-(defn new-index-store-index ^crux.index.IndexStoreIndex [seek-fn]
-  (->IndexStoreIndex seek-fn nil nil))
+(deftype SeekFnIndex [seek-fn ^:unsynchronized-mutable xs]
+  db/Index
+  (seek-values [this k]
+    (let [[v & vs] (seq (seek-fn k))]
+      (set! xs vs)
+      v))
+
+  (next-values [this]
+    (when-let [[v & vs] xs]
+      (set! xs vs)
+      v)))
+
+(defn new-index-store-index ^crux.index.DerefIndex [seek-fn]
+  (->DerefIndex (->SeekFnIndex seek-fn nil) nil))
 
 ;; Range Constraints
 
@@ -157,23 +175,22 @@
 (def ^:private ^Comparator unary-join-iterator-state-comparator
   (reify Comparator
     (compare [_ x y]
-      (mem/compare-buffers (.key ^UnaryJoinIteratorState x)
-                           (.key ^UnaryJoinIteratorState y)))))
+      (mem/compare-buffers (.deref ^IDeref x)
+                           (.deref ^IDeref y)))))
 
-(deftype UnaryJoinVirtualIndex [^objects iterators
+(deftype UnaryJoinVirtualIndex [^objects indexes
                                 ^:unsynchronized-mutable ^long index
                                 ^:unsynchronized-mutable last-match]
   db/Index
   (seek-values [this k]
-    (if-let [iterators (loop [n 0
-                              acc iterators]
-                         (if (= n (alength acc))
-                           acc
-                           (let [idx ^UnaryJoinIteratorState (aget iterators n)]
-                             (when-let [v (db/seek-values (.idx idx) k)]
-                               (set! (.key idx) v)
-                               (recur (inc n) acc)))))]
-      (do (doto iterators
+    (if-let [indexes (loop [n 0
+                            acc indexes]
+                       (if (= n (alength acc))
+                         acc
+                         (let [idx ^DerefIndex (aget indexes n)]
+                           (when-let [v (db/seek-values idx k)]
+                             (recur (inc n) acc)))))]
+      (do (doto indexes
             (Arrays/sort unary-join-iterator-state-comparator))
           (set! index 0)
           (set! last-match ::init)
@@ -181,26 +198,24 @@
       (set! last-match nil)))
 
   (next-values [this]
-    (when (and last-match (not (= ::init last-match)))
-      (let [iterator-state ^UnaryJoinIteratorState (aget iterators index)
-            idx (.idx iterator-state)]
-        (if-let [v (if (= ::next last-match)
-                     (db/next-values idx)
-                     (db/seek-values idx last-match))]
+    (when (and last-match (not= ::init last-match))
+      (let [idx (aget indexes index)]
+        (if (if (= ::next last-match)
+              (db/next-values idx)
+              (db/seek-values idx last-match))
           (let [index (inc index)
-                index (if (= index (alength iterators))
+                index (if (= index (alength indexes))
                         0
                         index)]
-            (set! (.key iterator-state) v)
             (set! (.index this) index))
           (set! last-match nil))))
     (when last-match
-      (let [iterator-state ^UnaryJoinIteratorState (aget iterators index)
+      (let [idx ^DerefIndex (aget indexes index)
             max-index (if (zero? index)
-                        (dec (alength iterators))
+                        (dec (alength indexes))
                         (dec index))
-            max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
-            match? (mem/buffers=? (.key iterator-state) max-k)]
+            max-k (.deref ^DerefIndex (aget indexes max-index))
+            match? (mem/buffers=? (.deref idx) max-k)]
         (set! last-match (if match?
                            ::next
                            max-k))
@@ -210,12 +225,12 @@
 
   db/LayeredIndex
   (open-level [this]
-    (doseq [idx iterators]
-      (db/open-level (.idx ^UnaryJoinIteratorState idx))))
+    (doseq [idx indexes]
+      (db/open-level idx)))
 
   (close-level [this]
-    (doseq [idx iterators]
-      (db/close-level (.idx ^UnaryJoinIteratorState idx))))
+    (doseq [idx indexes]
+      (db/close-level idx)))
 
   (max-depth [this]
     1))
@@ -225,7 +240,7 @@
     (first indexes)
     (->UnaryJoinVirtualIndex
      (object-array (for [idx indexes]
-                     (UnaryJoinIteratorState. idx nil)))
+                     (->DerefIndex idx nil)))
      0
      nil)))
 
