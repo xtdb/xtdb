@@ -23,7 +23,6 @@
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
-           crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
            (java.util Collection Comparator Date List UUID)
            (java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit)))
