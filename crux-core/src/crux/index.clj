@@ -1,8 +1,7 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
             [crux.memory :as mem])
-  (:import [crux.index UnaryJoinIteratorState UnaryJoinIteratorsThunkState]
-           [clojure.lang Box IDeref]
+  (:import [clojure.lang Box IDeref]
            java.util.function.Function
            [java.util Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
