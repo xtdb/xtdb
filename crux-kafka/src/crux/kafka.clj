@@ -82,7 +82,7 @@
   (AdminClient/create ^Map kafka-config))
 
 (defn- create-topic [^AdminClient admin-client {:keys [topic-name num-partitions replication-factor topic-config]}]
-  (let [new-topic (doto (NewTopic. topic-name num-partitions (short replication-factor))
+  (let [new-topic (doto (NewTopic. ^String topic-name ^int num-partitions ^short (short replication-factor))
                     (.configs topic-config))]
     (try
       @(.all (.createTopics admin-client [new-topic]))
