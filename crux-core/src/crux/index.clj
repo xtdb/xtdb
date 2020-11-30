@@ -3,7 +3,7 @@
             [crux.memory :as mem])
   (:import [clojure.lang Box IDeref]
            java.util.function.Function
-           [java.util Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
+           [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -248,69 +248,48 @@
      0
      nil)))
 
-(deftype NAryJoinLayeredVirtualIndex [^objects unary-join-indexes ^:unsynchronized-mutable ^long depth]
+(deftype NAryJoinLayeredVirtualIndex [^objects indexes
+                                      ^:unsynchronized-mutable ^long depth
+                                      constrain-result-fn
+                                      ^:unsynchronized-mutable ^List join-keys]
   db/Index
   (seek-values [this k]
-    (db/seek-values (aget unary-join-indexes depth) k))
-
-  (next-values [this]
-    (db/next-values (aget unary-join-indexes depth)))
-
-  db/LayeredIndex
-  (open-level [this]
-    (db/open-level (aget unary-join-indexes depth))
-    (set! depth (inc depth))
-    nil)
-
-  (close-level [this]
-    (db/close-level (aget unary-join-indexes (dec depth)))
-    (set! depth (dec depth))
-    nil)
-
-  (max-depth [this]
-    (alength unary-join-indexes)))
-
-(defn new-n-ary-join-layered-virtual-index [indexes]
-  (->NAryJoinLayeredVirtualIndex (object-array indexes) 0))
-
-(defn- build-constrained-result [constrain-result-fn result-stack max-k]
-  (let [max-ks (last result-stack)
-        join-keys (conj (or max-ks []) max-k)]
-    (when (constrain-result-fn join-keys)
-      (conj result-stack join-keys))))
-
-(deftype NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn  ^:unsynchronized-mutable result-stack ^:unsynchronized-mutable last-result]
-  db/Index
-  (seek-values [this k]
-    (when-let [v (db/seek-values n-ary-index k)]
-      (if-let [result (build-constrained-result constrain-result-fn result-stack v)]
-        (do (set! last-result result)
-            v)
+    (when-let [v (db/seek-values (aget indexes depth) k)]
+      (if (constrain-result-fn (doto join-keys
+                                 (.set depth v)) (inc depth))
+        v
         (db/next-values this))))
 
   (next-values [this]
-    (when-let [v (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn result-stack v)]
-        (do (set! last-result result)
-            v)
+    (when-let [v (db/next-values (aget indexes depth))]
+      (if (constrain-result-fn (doto join-keys
+                                 (.set depth v)) (inc depth))
+        v
         (recur))))
 
   db/LayeredIndex
   (open-level [this]
-    (db/open-level n-ary-index)
-    (set! result-stack last-result)
+    (db/open-level (aget indexes depth))
+    (set! depth (inc depth))
     nil)
 
   (close-level [this]
-    (db/close-level n-ary-index)
-    (set! result-stack (pop result-stack))
+    (db/close-level (aget indexes (dec depth)))
+    (set! depth (dec depth))
     nil)
 
   (max-depth [this]
-    (db/max-depth n-ary-index)))
+    (alength indexes)))
 
-(defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
-  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn [] nil))
+(defn new-n-ary-join-layered-virtual-index
+  ([indexes]
+   (new-n-ary-join-layered-virtual-index indexes (constantly true)))
+  ([indexes constrain-result-fn]
+   (->NAryJoinLayeredVirtualIndex (object-array indexes)
+                                  0
+                                  constrain-result-fn
+                                  (doto (ArrayList.)
+                                    (.addAll (repeat (count indexes) nil))))))
 
 (defn layered-idx->seq [idx]
   (when idx
