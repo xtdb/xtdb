@@ -248,30 +248,30 @@
      0
      nil)))
 
-(deftype NAryJoinLayeredVirtualIndex [unary-join-indexes ^:unsynchronized-mutable ^long depth]
+(deftype NAryJoinLayeredVirtualIndex [^objects unary-join-indexes ^:unsynchronized-mutable ^long depth]
   db/Index
   (seek-values [this k]
-    (db/seek-values (nth unary-join-indexes depth nil) k))
+    (db/seek-values (aget unary-join-indexes depth) k))
 
   (next-values [this]
-    (db/next-values (nth unary-join-indexes depth nil)))
+    (db/next-values (aget unary-join-indexes depth)))
 
   db/LayeredIndex
   (open-level [this]
-    (db/open-level (nth unary-join-indexes depth nil))
+    (db/open-level (aget unary-join-indexes depth))
     (set! depth (inc depth))
     nil)
 
   (close-level [this]
-    (db/close-level (nth unary-join-indexes (dec depth) nil))
+    (db/close-level (aget unary-join-indexes (dec depth)))
     (set! depth (dec depth))
     nil)
 
   (max-depth [this]
-    (count unary-join-indexes)))
+    (alength unary-join-indexes)))
 
 (defn new-n-ary-join-layered-virtual-index [indexes]
-  (->NAryJoinLayeredVirtualIndex indexes 0))
+  (->NAryJoinLayeredVirtualIndex (object-array indexes) 0))
 
 (defn- build-constrained-result [constrain-result-fn result-stack max-k]
   (let [max-ks (last result-stack)
