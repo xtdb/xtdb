@@ -6,7 +6,7 @@
             [crux.io :as cio]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import [clojure.lang APersistentMap APersistentSet IHashEq Keyword]
+  (:import [clojure.lang APersistentMap APersistentSet BigInt IHashEq Keyword]
            crux.codec.MathCodec
            java.io.Writer
            java.math.BigDecimal
@@ -24,7 +24,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def index-version 15)
+(def index-version 16)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -87,11 +87,13 @@
 (def ^:private char-value-type-id 9)
 (def ^:private nippy-value-type-id 10)
 (def ^:private bigdec-value-type-id 11)
-(def ^:private localdate-value-type-id 12)
-(def ^:private localtime-value-type-id 13)
-(def ^:private localdatetime-value-type-id 14)
-(def ^:private instant-value-type-id 15)
-(def ^:private duration-value-type-id 16)
+(def ^:private bigint-value-type-id 12)
+(def ^:private biginteger-value-type-id 13)
+(def ^:private localdate-value-type-id 14)
+(def ^:private localtime-value-type-id 15)
+(def ^:private localdatetime-value-type-id 16)
+(def ^:private instant-value-type-id 17)
+(def ^:private duration-value-type-id 18)
 
 (def nil-id-bytes
   (doto (byte-array id-size)
@@ -163,6 +165,26 @@
   APersistentMap
   (-freeze-without-meta! [this out]
     (freeze-map out this)))
+
+(defn- biginteger->buffer [^BigInteger x type-id ^MutableDirectBuffer to]
+  (let [signum (.signum x)]
+    (-> to
+        (doto (.putByte 0 type-id))
+        (doto (.putByte value-type-id-size (inc (.signum x)))))
+
+    (if (zero? signum)
+      (-> to (mem/limit-buffer (+ value-type-id-size Byte/BYTES)))
+
+      (let [s (str (.abs x))
+            bcd-len (MathCodec/putBinaryCodedDecimal signum
+                                                     s
+                                                     to
+                                                     (+ value-type-id-size Byte/BYTES Integer/BYTES))]
+        (-> to
+            (doto (.putInt (+ value-type-id-size Byte/BYTES)
+                           (-> (* signum (count s)) (bit-xor Integer/MIN_VALUE))
+                           ByteOrder/BIG_ENDIAN))
+            (mem/limit-buffer (+ value-type-id-size Byte/BYTES Integer/BYTES bcd-len)))))))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
@@ -262,6 +284,14 @@
                              (MathCodec/encodeExponent this)
                              ByteOrder/BIG_ENDIAN))
               (mem/limit-buffer (+ value-type-id-size Byte/BYTES Integer/BYTES bcd-len)))))))
+
+  BigInteger
+  (value->buffer [this ^MutableDirectBuffer to]
+    (biginteger->buffer this biginteger-value-type-id to))
+
+  BigInt
+  (value->buffer [this ^MutableDirectBuffer to]
+    (biginteger->buffer (biginteger this) bigint-value-type-id to))
 
   LocalDate
   (value->buffer [this ^MutableDirectBuffer to]
@@ -390,6 +420,18 @@
                                     (.getInt buffer (+ value-type-id-size Byte/BYTES) ByteOrder/BIG_ENDIAN)
                                     decoded-bcd)))))
 
+(defn- decode-biginteger ^BigInteger [^DirectBuffer buffer]
+  (let [signum (dec (.getByte buffer value-type-id-size))]
+    (if (zero? signum)
+      BigInteger/ZERO
+
+      (let [prefix-len (+ value-type-id-size Byte/BYTES Integer/BYTES)]
+        (cond-> (BigInteger. (MathCodec/getBinaryCodedDecimal
+                              (-> buffer
+                                  (mem/slice-buffer prefix-len (- (.capacity buffer) prefix-len)))
+                              signum))
+          (neg? signum) (.negate))))))
+
 (defn- decode-localdate [^DirectBuffer buffer]
   (LocalDate/of (-> (.getInt buffer value-type-id-size ByteOrder/BIG_ENDIAN) (bit-xor Integer/MIN_VALUE))
                 (.getByte buffer (+ value-type-id-size Integer/BYTES))
@@ -431,11 +473,13 @@
       9 (decode-char buffer) ; char-value-type-id
       10 (decode-nippy buffer) ; nippy-value-type-id
       11 (decode-bigdec buffer) ; bigdec-value-type-id
-      12 (decode-localdate buffer) ; localdate-value-type-id
-      13 (decode-localtime buffer) ; localtime-value-type-id
-      14 (decode-localdatetime buffer) ; localdatetime-value-type-id
-      15 (decode-instant buffer) ; instant-value-type-id
-      16 (decode-duration buffer) ; duration-value-type-id
+      12 (bigint (decode-biginteger buffer)) ; bigint-value-type-id
+      13 (decode-biginteger buffer) ; biginteger-value-type-id
+      14 (decode-localdate buffer) ; localdate-value-type-id
+      15 (decode-localtime buffer) ; localtime-value-type-id
+      16 (decode-localdatetime buffer) ; localdatetime-value-type-id
+      17 (decode-instant buffer) ; instant-value-type-id
+      18 (decode-duration buffer) ; duration-value-type-id
       (throw (err/illegal-arg :unknown-type-id
                               {::err/message (str "Unknown type id: " type-id)})))))
 

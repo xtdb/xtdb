@@ -48,6 +48,8 @@
    (->> gen/double
         (gen/such-that #(Double/isFinite %))
         (gen/fmap #(BigDecimal/valueOf ^double %)))
+   (->> gen/large-integer (gen/fmap biginteger))
+   (->> gen/large-integer (gen/fmap bigint))
    (->> gen-zdt (gen/fmap #(.toLocalDate ^ZonedDateTime %)))
    (->> gen-zdt (gen/fmap #(.toLocalTime ^ZonedDateTime %)))
    (->> gen-zdt (gen/fmap #(.toLocalDateTime ^ZonedDateTime %)))
