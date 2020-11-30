@@ -4,7 +4,7 @@
   (:import [crux.index UnaryJoinIteratorState UnaryJoinIteratorsThunkState]
            [clojure.lang Box IDeref]
            java.util.function.Function
-           [java.util Collection Comparator Iterator NavigableSet NavigableMap TreeMap TreeSet]
+           [java.util Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -154,68 +154,68 @@
   (close-level [_])
   (max-depth [_] 1))
 
-(defn- new-unary-join-iterator-state [idx value]
-  (UnaryJoinIteratorState. idx value))
+(def ^:private ^Comparator unary-join-iterator-state-comparator
+  (reify Comparator
+    (compare [_ x y]
+      (mem/compare-buffers (.key ^UnaryJoinIteratorState x)
+                           (.key ^UnaryJoinIteratorState y)))))
 
-(defn- long-mod
-  {:inline (fn [num div]
-             `(let [num# ~num
-                    div# ~div
-                    m# (rem num# div#)]
-                (if (or (zero? m#) (= (pos? num#) (pos? div#)))
-                  m#
-                  (+ m# div#))))
-   :inline-arities #{2}}
-  ^long [^long num ^long div]
-  (let [m (rem num div)]
-    (if (or (zero? m) (= (pos? num) (pos? div)))
-      m
-      (+ m div))))
-
-(deftype UnaryJoinVirtualIndex [indexes ^:unsynchronized-mutable thunk]
+(deftype UnaryJoinVirtualIndex [^objects iterators
+                                ^:unsynchronized-mutable ^long index
+                                ^:unsynchronized-mutable last-match]
   db/Index
   (seek-values [this k]
-    (set! thunk
-          (fn []
-            (let [iterators (for [idx indexes]
-                              (new-unary-join-iterator-state idx (db/seek-values idx k)))]
-              (when (every? #(.key ^UnaryJoinIteratorState %) iterators)
-                (UnaryJoinIteratorsThunkState. (->> iterators
-                                                    (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
-                                                    (to-array))
-                                               0)))))
-    (db/next-values this))
+    (if-let [iterators (loop [n 0
+                              acc iterators]
+                         (if (= n (alength acc))
+                           acc
+                           (let [idx ^UnaryJoinIteratorState (aget iterators n)]
+                             (when-let [v (db/seek-values (.idx idx) k)]
+                               (set! (.key idx) v)
+                               (recur (inc n) acc)))))]
+      (do (doto iterators
+            (Arrays/sort unary-join-iterator-state-comparator))
+          (set! index 0)
+          (set! last-match ::init)
+          (db/next-values this))
+      (set! last-match nil)))
 
   (next-values [this]
-    (when thunk
-      (when-let [iterators-thunk ^UnaryJoinIteratorsThunkState (thunk)]
-        (let [iterators ^objects (.iterators iterators-thunk)
-              index (.index iterators-thunk)
-              iterator-state ^UnaryJoinIteratorState (aget iterators index)
-              max-index (long-mod (dec index) (alength iterators))
-              max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
-              match? (mem/buffers=? (.key iterator-state) max-k)
-              idx (.idx iterator-state)]
-          (set! thunk
-                (fn []
-                  (when-let [v (if match?
-                                 (db/next-values idx)
-                                 (db/seek-values idx max-k))]
-                    (set! (.key iterator-state) v)
-                    (set! (.index iterators-thunk) (long-mod (inc index) (alength iterators)))
-                    iterators-thunk)))
-          (if match?
-            max-k
-            (recur))))))
+    (when (and last-match (not (= ::init last-match)))
+      (let [iterator-state ^UnaryJoinIteratorState (aget iterators index)
+            idx (.idx iterator-state)]
+        (if-let [v (if (= ::next last-match)
+                     (db/next-values idx)
+                     (db/seek-values idx last-match))]
+          (let [index (inc index)
+                index (if (= index (alength iterators))
+                        0
+                        index)]
+            (set! (.key iterator-state) v)
+            (set! (.index this) index))
+          (set! last-match nil))))
+    (when last-match
+      (let [iterator-state ^UnaryJoinIteratorState (aget iterators index)
+            max-index (if (zero? index)
+                        (dec (alength iterators))
+                        (dec index))
+            max-k (.key ^UnaryJoinIteratorState (aget iterators max-index))
+            match? (mem/buffers=? (.key iterator-state) max-k)]
+        (set! last-match (if match?
+                           ::next
+                           max-k))
+        (if match?
+          max-k
+          (recur)))))
 
   db/LayeredIndex
   (open-level [this]
-    (doseq [idx indexes]
-      (db/open-level idx)))
+    (doseq [idx iterators]
+      (db/open-level (.idx ^UnaryJoinIteratorState idx))))
 
   (close-level [this]
-    (doseq [idx indexes]
-      (db/close-level idx)))
+    (doseq [idx iterators]
+      (db/close-level (.idx ^UnaryJoinIteratorState idx))))
 
   (max-depth [this]
     1))
@@ -223,7 +223,11 @@
 (defn new-unary-join-virtual-index [indexes]
   (if (= 1 (count indexes))
     (first indexes)
-    (->UnaryJoinVirtualIndex indexes nil)))
+    (->UnaryJoinVirtualIndex
+     (object-array (for [idx indexes]
+                     (UnaryJoinIteratorState. idx nil)))
+     0
+     nil)))
 
 (deftype NAryJoinLayeredVirtualIndex [unary-join-indexes ^:unsynchronized-mutable ^long depth]
   db/Index
