@@ -701,15 +701,15 @@
  [data-input]
  (id-edn-reader (nippy/thaw-from-in! data-input)))
 
-(defn valid-id? [x]
-  (try
-    (= id-size (.capacity (->id-buffer x)))
-    (catch IllegalArgumentException _
-      false)))
-
 (defn id-buffer? [^DirectBuffer buffer]
   (and (= id-size (.capacity buffer))
        (= id-value-type-id (.getByte buffer 0))))
+
+(defn valid-id? [x]
+  (try
+    (id-buffer? (->id-buffer x))
+    (catch IllegalArgumentException _
+      false)))
 
 (nippy/extend-freeze
  Id

@@ -14,34 +14,15 @@
            java.nio.ByteBuffer
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           java.util.function.ToIntFunction
            (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
                         Options ReadOptions RocksDB RocksIterator
                         WriteBatch WriteOptions Statistics StatsLevel)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:const ^:private initial-read-buffer-limit 128)
-
-(defn- read-value [^ToIntFunction f]
-  (loop [limit initial-read-buffer-limit]
-    (let [out (ByteBuffer/allocateDirect limit)
-          result (.applyAsInt f out)]
-      (cond
-        (= result RocksDB/NOT_FOUND)
-        nil
-
-        (< limit result)
-        (recur result)
-
-        :else
-        (mem/as-buffer out)))))
-
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
-    (read-value (reify ToIntFunction
-                  (applyAsInt [_ out]
-                    (.key i ^ByteBuffer out))))))
+    (mem/as-buffer (.key i))))
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
@@ -58,9 +39,7 @@
     (iterator->key i))
 
   (value [this]
-    (read-value (reify ToIntFunction
-                  (applyAsInt [_ out]
-                    (.value i ^ByteBuffer out)))))
+    (mem/as-buffer (.value i)))
 
   Closeable
   (close [this]
@@ -72,9 +51,8 @@
     (->RocksKvIterator (.newIterator db read-options)))
 
   (get-value [this k]
-    (read-value (reify ToIntFunction
-                  (applyAsInt [_ out]
-                    (.get db read-options (mem/direct-byte-buffer k) ^ByteBuffer out)))))
+    (some-> (.get db read-options (mem/->on-heap k))
+            (mem/as-buffer)))
 
   Closeable
   (close [_]

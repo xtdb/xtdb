@@ -23,7 +23,6 @@
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
-           crux.index.IndexStoreIndexState
            (java.io Closeable Writer)
            (java.util Collection Comparator Date List UUID)
            (java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit)))
@@ -543,20 +542,22 @@
         nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)
         attr-buffer (mem/copy-to-unpooled-buffer (c/->id-buffer a))]
     (if (= v (first order))
-      (let [v-idx (idx/new-index-store-index
+      (let [v-idx (idx/new-deref-index
+                   (idx/new-seek-fn-index
+                    (fn [k]
+                      (db/av nested-index-snapshot attr-buffer k))))
+            e-idx (idx/new-seek-fn-index
                    (fn [k]
-                     (db/av nested-index-snapshot attr-buffer k)))
-            e-idx (idx/new-index-store-index
-                   (fn [k]
-                     (db/ave nested-index-snapshot attr-buffer (.key ^IndexStoreIndexState (.state v-idx)) k entity-resolver-fn)))]
+                     (db/ave nested-index-snapshot attr-buffer (.deref v-idx) k entity-resolver-fn)))]
         (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
-      (let [e-idx (idx/new-index-store-index
+      (let [e-idx (idx/new-deref-index
+                   (idx/new-seek-fn-index
+                    (fn [k]
+                      (db/ae nested-index-snapshot attr-buffer k))))
+            v-idx (idx/new-seek-fn-index
                    (fn [k]
-                     (db/ae nested-index-snapshot attr-buffer k)))
-            v-idx (idx/new-index-store-index
-                   (fn [k]
-                     (db/aev nested-index-snapshot attr-buffer (.key ^IndexStoreIndexState (.state e-idx)) k entity-resolver-fn)))]
+                     (db/aev nested-index-snapshot attr-buffer (.deref e-idx) k entity-resolver-fn)))]
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
 
@@ -1155,11 +1156,6 @@
                    {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
-(defn- constrain-join-result-by-constraints [index-snapshot db idx-id->idx depth->constraints join-keys]
-  (->> (get depth->constraints (count join-keys))
-       (every? (fn [f]
-                 (f index-snapshot db idx-id->idx join-keys)))))
-
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
                (reduce
@@ -1419,7 +1415,7 @@
                                           not-constraints
                                           not-join-constraints
                                           or-constraints)
-                                  (update-depth->constraints (vec (repeat join-depth nil))))
+                                  (update-depth->constraints (vec (repeat (inc join-depth) nil))))
           in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
                                  :let [bind-vars (find-binding-vars binding)]]
                              {:idx-id idx-id
@@ -1497,8 +1493,10 @@
                                          (or (get idx-id->idx id)
                                              (idx-fn db index-snapshot compiled-query)))))
                                  (idx/wrap-with-range-constraints (get var->range-constraints v))))
-        constrain-result-fn (fn [join-keys]
-                              (constrain-join-result-by-constraints index-snapshot db idx-id->idx depth->constraints join-keys))]
+        constrain-result-fn (fn [join-keys ^long depth]
+                              (every? (fn [f]
+                                        (f index-snapshot db idx-id->idx join-keys))
+                                      (.get ^List depth->constraints depth)))]
     (binding [nippy/*freeze-fallback* :write-unfreezable]
       (doseq [[{:keys [idx-id bind-type tuple-idxs-in-join-order]} in-arg] (map vector in-bindings in-args)]
         (bind-binding bind-type
@@ -1509,9 +1507,8 @@
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :attr-stats (cio/pr-edn-str attr-stats))
     (log/debug :var->bindings (cio/pr-edn-str var->bindings))
-    {:n-ary-join (when (constrain-result-fn [])
-                   (-> (idx/new-n-ary-join-layered-virtual-index unary-join-indexes)
-                       (idx/new-n-ary-constraining-layered-virtual-index constrain-result-fn)))
+    {:n-ary-join (when (constrain-result-fn [] 0)
+                   (idx/new-n-ary-join-layered-virtual-index unary-join-indexes constrain-result-fn))
      :var->bindings var->bindings}))
 
 (defn- open-index-snapshot ^java.io.Closeable [{:keys [index-store index-snapshot] :as db}]
