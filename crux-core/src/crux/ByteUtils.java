@@ -102,21 +102,24 @@ public class ByteUtils {
         for (; i < maxStrideOffset; i += Long.BYTES) {
             final long aLong = UNSAFE.getLong(aOffset + i);
             final long bLong = UNSAFE.getLong(bOffset + i);
-            if (aLong != bLong) {
-                if (IS_LITTLE_ENDIAN) {
-                    return Long.compareUnsigned(Long.reverseBytes(aLong),
-                                                Long.reverseBytes(bLong));
-                } else {
-                    return Long.compareUnsigned(aLong, bLong);
-                }
+            if (aLong == bLong) {
+                continue;
+            }
+            if (IS_LITTLE_ENDIAN) {
+                return Long.compareUnsigned(Long.reverseBytes(aLong),
+                                            Long.reverseBytes(bLong));
+            } else {
+                return Long.compareUnsigned(aLong, bLong);
             }
         }
+
         for (; i < length; i++) {
             final byte aByte = UNSAFE.getByte(aOffset + i);
             final byte bByte = UNSAFE.getByte(bOffset + i);
-            if (aByte != bByte) {
-                return (aByte & 0xff) - (bByte & 0xff);
+            if (aByte == bByte) {
+                continue;
             }
+            return (aByte & 0xff) - (bByte & 0xff);
         }
 
         if (i == maxLength) {
@@ -139,21 +142,24 @@ public class ByteUtils {
         for (; i < maxStrideOffset; i += Long.BYTES) {
             final long aLong = UNSAFE.getLong(aByteArray, aOffset + i);
             final long bLong = UNSAFE.getLong(bByteArray, bOffset + i);
-            if (aLong != bLong) {
-                if (IS_LITTLE_ENDIAN) {
-                    return Long.compareUnsigned(Long.reverseBytes(aLong),
-                                                Long.reverseBytes(bLong));
-                } else {
-                    return Long.compareUnsigned(aLong, bLong);
-                }
+            if (aLong == bLong) {
+                continue;
+            }
+            if (IS_LITTLE_ENDIAN) {
+                return Long.compareUnsigned(Long.reverseBytes(aLong),
+                                            Long.reverseBytes(bLong));
+            } else {
+                return Long.compareUnsigned(aLong, bLong);
             }
         }
+
         for (; i < length; i++) {
             final byte aByte = UNSAFE.getByte(aByteArray, aOffset + i);
             final byte bByte = UNSAFE.getByte(bByteArray, bOffset + i);
-            if (aByte != bByte) {
-                return (aByte & 0xff) - (bByte & 0xff);
+            if (aByte == bByte) {
+                continue;
             }
+            return (aByte & 0xff) - (bByte & 0xff);
         }
 
         if (i == maxLength) {
