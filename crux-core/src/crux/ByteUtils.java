@@ -119,7 +119,7 @@ public class ByteUtils {
             if (aByte == bByte) {
                 continue;
             }
-            return (aByte & 0xff) - (bByte & 0xff);
+            return (aByte & 0xFF) - (bByte & 0xFF);
         }
 
         if (i == maxLength) {
@@ -159,7 +159,7 @@ public class ByteUtils {
             if (aByte == bByte) {
                 continue;
             }
-            return (aByte & 0xff) - (bByte & 0xff);
+            return (aByte & 0xFF) - (bByte & 0xFF);
         }
 
         if (i == maxLength) {
